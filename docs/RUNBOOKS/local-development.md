@@ -49,3 +49,5 @@ curl -X POST http://localhost:8000/api/v1/public/seller-leads \
   -H 'Content-Type: application/json' \
   -d '{"property_address":"123 Peachtree St","property_city":"Atlanta","property_state":"GA","property_postal_code":"30303","name":"Jane Seller","phone":"4045551212","preferred_contact_method":"phone","consent_to_contact":true,"attribution":{"landing_page":"/get-a-cash-offer","utm_source":"google_ppc","utm_medium":"cpc"}}'
 ```
+
+Submitting the same email/phone/address again should return `duplicate_status: "matched_existing_lead"` and reuse the existing active lead.

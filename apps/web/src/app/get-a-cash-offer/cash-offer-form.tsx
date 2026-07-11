@@ -75,10 +75,11 @@ export function CashOfferForm() {
         throw new Error("The form could not be submitted.");
       }
 
+      const result = (await response.json()) as { message?: string };
       event.currentTarget.reset();
       setSubmitState({
         status: "success",
-        message: "Thanks. Your information was received.",
+        message: result.message ?? "Thanks. Your information was received.",
       });
     } catch {
       setSubmitState({

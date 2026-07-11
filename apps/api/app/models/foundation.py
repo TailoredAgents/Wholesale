@@ -88,6 +88,19 @@ class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
+class ContactMethod(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "contact_methods"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    method_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    value: Mapped[str] = mapped_column(String(320), nullable=False)
+    normalized_value: Mapped[str] = mapped_column(String(320), nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+
 class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "properties"
 
@@ -100,6 +113,7 @@ class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
     postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
     county: Mapped[str | None] = mapped_column(String(120), nullable=True)
     property_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    normalized_address_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
 class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):

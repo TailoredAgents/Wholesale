@@ -65,6 +65,8 @@ Open:
 - Dashboard summary API: http://localhost:8000/api/v1/dashboard/summary
 - Public seller intake API: http://localhost:8000/api/v1/public/seller-leads
 
+Public intake performs basic duplicate detection using normalized email, phone, and property address. Duplicate active submissions preserve new consent, form, and attribution evidence while matching the existing lead.
+
 Protected local endpoints use a temporary development-only header until the production auth provider is selected:
 
 ```bash

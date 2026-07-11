@@ -16,5 +16,5 @@
 1. Public website shell. Started locally.
 2. Seller cash-offer form. Done locally.
 3. Consent and attribution. Done locally.
-4. Duplicate detection.
+4. Duplicate detection. Started locally.
 5. Speed-to-lead queue.

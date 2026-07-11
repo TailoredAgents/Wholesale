@@ -52,5 +52,7 @@ class SellerIntakeResponse(BaseModel):
     lead_id: UUID
     contact_id: UUID
     property_id: UUID
+    duplicate_status: str
+    matched_existing_lead: bool
     consent_wording_version: str
     message: str

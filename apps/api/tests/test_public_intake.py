@@ -6,8 +6,11 @@ from app.main import app
 from app.models.foundation import (
     AttributionTouch,
     ConsentRecord,
+    Contact,
+    ContactMethod,
     Lead,
     LeadFormSubmission,
+    Property,
 )
 from app.services.bootstrap import bootstrap_foundation
 
@@ -64,7 +67,10 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert response.status_code == 201
     payload = response.json()
     assert payload["message"] == "Thanks. Your information was received."
+    assert payload["duplicate_status"] == "created"
+    assert payload["matched_existing_lead"] is False
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
@@ -73,6 +79,9 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert consent is not None
     assert consent.status == "granted"
     assert consent.captured_ip == "203.0.113.10"
+    property_record = db_session.scalar(select(Property))
+    assert property_record is not None
+    assert property_record.normalized_address_key == "55 auburn ave atlanta ga 30303"
 
 
 def test_public_seller_intake_requires_consent(
@@ -88,3 +97,33 @@ def test_public_seller_intake_requires_consent(
 
     assert response.status_code == 422
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+def test_public_seller_intake_matches_duplicate_active_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+
+    first_response = client.post("/api/v1/public/seller-leads", json=public_payload())
+    second_payload = public_payload()
+    second_payload["name"] = "Sam Seller Updated"
+    second_payload["phone"] = "(404) 555-1212"
+    second_response = client.post("/api/v1/public/seller-leads", json=second_payload)
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 201
+    first = first_response.json()
+    second = second_response.json()
+    assert second["duplicate_status"] == "matched_existing_lead"
+    assert second["matched_existing_lead"] is True
+    assert second["lead_id"] == first["lead_id"]
+    assert second["contact_id"] == first["contact_id"]
+    assert second["property_id"] == first["property_id"]
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4

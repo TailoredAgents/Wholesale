@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.models.foundation import (
     AuditEvent,
     ConsentRecord,
     Contact,
+    ContactMethod,
     Lead,
     LeadFormSubmission,
     Organization,
@@ -21,6 +23,31 @@ from app.schemas.public_intake import (
     SellerIntakeResponse,
 )
 
+ACTIVE_LEAD_STAGES = {
+    "new",
+    "contact_attempt_due",
+    "attempting_contact",
+    "contacted",
+    "qualification_in_progress",
+    "qualified",
+    "appointment_scheduled",
+    "underwriting",
+    "offer_pending_approval",
+    "offer_ready",
+    "offer_presented",
+    "negotiating",
+    "long_term_follow_up",
+    "under_contract",
+    "reopened",
+}
+
+
+@dataclass(frozen=True)
+class DuplicateMatch:
+    contact: Contact | None
+    property_record: Property | None
+    lead: Lead | None
+
 
 def create_public_seller_lead(
     db: Session,
@@ -30,39 +57,12 @@ def create_public_seller_lead(
     user_agent: str | None,
 ) -> SellerIntakeResponse:
     organization = get_default_organization(db)
-    contact = Contact(
-        organization_id=organization.id,
-        legal_name=payload.name,
-        preferred_name=None,
-        contact_type="seller",
-        assigned_user_id=None,
-    )
-    db.add(contact)
-    db.flush()
-
-    property_record = Property(
-        organization_id=organization.id,
-        street_address=payload.property_address,
-        city=payload.property_city,
-        state=payload.property_state.upper(),
-        postal_code=payload.property_postal_code,
-        county=None,
-        property_type=None,
-    )
-    db.add(property_record)
-    db.flush()
-
-    lead = Lead(
-        organization_id=organization.id,
-        contact_id=contact.id,
-        property_id=property_record.id,
-        assigned_user_id=None,
-        source=payload.attribution.utm_source or "website",
-        stage_key="new",
-        lead_temperature=None,
-    )
-    db.add(lead)
-    db.flush()
+    duplicate_match = find_duplicate_match(db, organization, payload)
+    contact = duplicate_match.contact or create_contact(db, organization, payload)
+    ensure_contact_methods(db, organization, contact, payload)
+    property_record = duplicate_match.property_record or create_property(db, organization, payload)
+    lead = duplicate_match.lead or create_lead(db, organization, contact, property_record, payload)
+    matched_existing_lead = duplicate_match.lead is not None
 
     db.add(
         ConsentRecord(
@@ -100,8 +100,16 @@ def create_public_seller_lead(
             actor_user_id=None,
             entity_type="lead",
             entity_id=lead.id,
-            event_type="lead.public_form_submitted",
-            summary=f"Website seller form submitted by {contact.legal_name}.",
+            event_type=(
+                "lead.public_duplicate_submitted"
+                if matched_existing_lead
+                else "lead.public_form_submitted"
+            ),
+            summary=(
+                f"Duplicate website seller form matched {contact.legal_name}."
+                if matched_existing_lead
+                else f"Website seller form submitted by {contact.legal_name}."
+            ),
         )
     )
     db.add(
@@ -109,7 +117,7 @@ def create_public_seller_lead(
             organization_id=organization.id,
             actor_user_id=None,
             actor_type="public",
-            action="lead.public_create",
+            action="lead.public_duplicate" if matched_existing_lead else "lead.public_create",
             entity_type="lead",
             entity_id=lead.id,
             previous_value=None,
@@ -117,6 +125,7 @@ def create_public_seller_lead(
                 "source": lead.source,
                 "stage_key": lead.stage_key,
                 "consent_wording_version": payload.consent_wording_version,
+                "matched_existing_lead": matched_existing_lead,
             },
             reason="Public seller website form submission",
         )
@@ -126,9 +135,189 @@ def create_public_seller_lead(
         lead_id=lead.id,
         contact_id=contact.id,
         property_id=property_record.id,
+        duplicate_status="matched_existing_lead" if matched_existing_lead else "created",
+        matched_existing_lead=matched_existing_lead,
         consent_wording_version=payload.consent_wording_version,
-        message="Thanks. Your information was received.",
+        message=(
+            "Thanks. We matched your submission to an existing lead."
+            if matched_existing_lead
+            else "Thanks. Your information was received."
+        ),
     )
+
+
+def find_duplicate_match(
+    db: Session,
+    organization: Organization,
+    payload: SellerIntakeCreate,
+) -> DuplicateMatch:
+    contact = find_matching_contact(db, organization, payload)
+    property_record = find_matching_property(db, organization, payload)
+    lead = None
+    if contact is not None and property_record is not None:
+        lead = db.scalar(
+            select(Lead).where(
+                Lead.organization_id == organization.id,
+                Lead.contact_id == contact.id,
+                Lead.property_id == property_record.id,
+                Lead.stage_key.in_(ACTIVE_LEAD_STAGES),
+            )
+        )
+    return DuplicateMatch(contact=contact, property_record=property_record, lead=lead)
+
+
+def find_matching_contact(
+    db: Session,
+    organization: Organization,
+    payload: SellerIntakeCreate,
+) -> Contact | None:
+    normalized_values = []
+    if payload.email:
+        normalized_values.append(("email", normalize_email(str(payload.email))))
+    if payload.phone:
+        normalized_values.append(("phone", normalize_phone(payload.phone)))
+
+    for method_type, normalized_value in normalized_values:
+        if not normalized_value:
+            continue
+        contact_method = db.scalar(
+            select(ContactMethod).where(
+                ContactMethod.organization_id == organization.id,
+                ContactMethod.method_type == method_type,
+                ContactMethod.normalized_value == normalized_value,
+            )
+        )
+        if contact_method is not None:
+            return db.get(Contact, contact_method.contact_id)
+    return None
+
+
+def find_matching_property(
+    db: Session,
+    organization: Organization,
+    payload: SellerIntakeCreate,
+) -> Property | None:
+    normalized_address_key = normalize_address_key(payload)
+    return db.scalar(
+        select(Property).where(
+            Property.organization_id == organization.id,
+            Property.normalized_address_key == normalized_address_key,
+        )
+    )
+
+
+def create_contact(db: Session, organization: Organization, payload: SellerIntakeCreate) -> Contact:
+    contact = Contact(
+        organization_id=organization.id,
+        legal_name=payload.name,
+        preferred_name=None,
+        contact_type="seller",
+        assigned_user_id=None,
+    )
+    db.add(contact)
+    db.flush()
+    return contact
+
+
+def ensure_contact_methods(
+    db: Session,
+    organization: Organization,
+    contact: Contact,
+    payload: SellerIntakeCreate,
+) -> None:
+    if payload.email:
+        ensure_contact_method(
+            db,
+            organization,
+            contact,
+            method_type="email",
+            value=str(payload.email),
+            normalized_value=normalize_email(str(payload.email)),
+        )
+    if payload.phone:
+        ensure_contact_method(
+            db,
+            organization,
+            contact,
+            method_type="phone",
+            value=payload.phone,
+            normalized_value=normalize_phone(payload.phone),
+        )
+
+
+def ensure_contact_method(
+    db: Session,
+    organization: Organization,
+    contact: Contact,
+    *,
+    method_type: str,
+    value: str,
+    normalized_value: str,
+) -> None:
+    if not normalized_value:
+        return
+    existing = db.scalar(
+        select(ContactMethod).where(
+            ContactMethod.organization_id == organization.id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == method_type,
+            ContactMethod.normalized_value == normalized_value,
+        )
+    )
+    if existing is not None:
+        return
+    db.add(
+        ContactMethod(
+            organization_id=organization.id,
+            contact_id=contact.id,
+            method_type=method_type,
+            value=value,
+            normalized_value=normalized_value,
+            is_primary=True,
+        )
+    )
+    db.flush()
+
+
+def create_property(
+    db: Session,
+    organization: Organization,
+    payload: SellerIntakeCreate,
+) -> Property:
+    property_record = Property(
+        organization_id=organization.id,
+        street_address=payload.property_address,
+        city=payload.property_city,
+        state=payload.property_state.upper(),
+        postal_code=payload.property_postal_code,
+        county=None,
+        property_type=None,
+        normalized_address_key=normalize_address_key(payload),
+    )
+    db.add(property_record)
+    db.flush()
+    return property_record
+
+
+def create_lead(
+    db: Session,
+    organization: Organization,
+    contact: Contact,
+    property_record: Property,
+    payload: SellerIntakeCreate,
+) -> Lead:
+    lead = Lead(
+        organization_id=organization.id,
+        contact_id=contact.id,
+        property_id=property_record.id,
+        assigned_user_id=None,
+        source=payload.attribution.utm_source or "website",
+        stage_key="new",
+        lead_temperature=None,
+    )
+    db.add(lead)
+    db.flush()
+    return lead
 
 
 def create_attribution_touch(
@@ -152,6 +341,27 @@ def create_attribution_touch(
         landing_page=attribution.landing_page,
         referrer=attribution.referrer,
     )
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+def normalize_phone(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def normalize_address_key(payload: SellerIntakeCreate) -> str:
+    raw = "|".join(
+        [
+            payload.property_address,
+            payload.property_city,
+            payload.property_state,
+            payload.property_postal_code,
+        ]
+    )
+    normalized = "".join(character.lower() if character.isalnum() else " " for character in raw)
+    return " ".join(normalized.split())
 
 
 def get_default_organization(db: Session) -> Organization:
