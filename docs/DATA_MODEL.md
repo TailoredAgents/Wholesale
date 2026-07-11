@@ -5,6 +5,8 @@
 - `organizations`
 - `users`
 - `roles`
+- `permissions`
+- `role_permissions`
 - `role_assignments`
 - `contacts`
 - `properties`
@@ -16,8 +18,6 @@
 
 ## Next Tables
 
-- `permissions`
-- `role_permissions`
 - `contact_methods`
 - `consent_records`
 - `suppression_records`

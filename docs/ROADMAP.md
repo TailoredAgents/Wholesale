@@ -6,9 +6,9 @@
 2. API, web, and worker skeletons.
 3. Local Postgres and Alembic.
 4. Organization, users, roles, contacts, properties, leads, deals, tasks, activities, and audit.
-5. Seed/bootstrap data.
-6. Auth provider.
-7. RBAC enforcement.
+5. Seed/bootstrap data. Done locally.
+6. RBAC permission catalog and protected route pattern. Done locally.
+7. Auth provider.
 8. Lead CRUD and dashboard data.
 
 ## Phase 2 Lead Generation

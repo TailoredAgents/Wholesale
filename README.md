@@ -36,6 +36,12 @@ uv sync
 uv run alembic upgrade head
 ```
 
+Bootstrap the first local organization and owner:
+
+```bash
+npm run bootstrap:api -- --admin-email richardaustindugger@users.noreply.github.com --admin-name "Richard Austin Dugger"
+```
+
 Run the API:
 
 ```bash
@@ -53,6 +59,14 @@ Open:
 - Web: http://localhost:3000
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
+- Protected local API example: http://localhost:8000/api/v1/me
+
+Protected local endpoints use a temporary development-only header until the production auth provider is selected:
+
+```bash
+curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
+  http://localhost:8000/api/v1/me
+```
 
 ## Checks
 

@@ -46,6 +46,27 @@ class Role(UuidPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
 
+class Permission(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "permissions"
+
+    key: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False)
+
+
+class RolePermission(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "role_permissions"
+    __table_args__ = (
+        UniqueConstraint("role_id", "permission_id", name="uq_role_permissions_role_permission"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("roles.id"))
+    permission_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("permissions.id"))
+
+
 class RoleAssignment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "role_assignments"
     __table_args__ = (UniqueConstraint("user_id", "role_id", name="uq_role_assignments_user_role"),)
