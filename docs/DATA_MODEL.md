@@ -8,6 +8,9 @@
 - `permissions`
 - `role_permissions`
 - `role_assignments`
+- `consent_records`
+- `lead_form_submissions`
+- `attribution_touches`
 - `contacts`
 - `properties`
 - `leads`
@@ -19,7 +22,6 @@
 ## Next Tables
 
 - `contact_methods`
-- `consent_records`
 - `suppression_records`
 - `communications`
 - `documents`

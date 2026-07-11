@@ -66,6 +66,7 @@ export default async function Home() {
           <a className={styles.activeNav} href="#dashboard">
             Dashboard
           </a>
+          <a href="/get-a-cash-offer">Cash offer form</a>
           <a href="#leads">Leads</a>
           <a href="#underwriting">Underwriting</a>
           <a href="#approvals">Approvals</a>

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import dashboard, health, leads, me
+from app.routers import dashboard, health, leads, me, public
 
 
 def create_app() -> FastAPI:
@@ -26,6 +26,7 @@ def create_app() -> FastAPI:
     app.include_router(dashboard.router)
     app.include_router(leads.router)
     app.include_router(me.router)
+    app.include_router(public.router)
     return app
 
 

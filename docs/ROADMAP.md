@@ -13,8 +13,8 @@
 
 ## Phase 2 Lead Generation
 
-1. Public website shell.
-2. Seller cash-offer form.
-3. Consent and attribution.
+1. Public website shell. Started locally.
+2. Seller cash-offer form. Done locally.
+3. Consent and attribution. Done locally.
 4. Duplicate detection.
 5. Speed-to-lead queue.

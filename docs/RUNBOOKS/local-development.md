@@ -45,8 +45,7 @@ curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
 Create a local lead:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/leads \
+curl -X POST http://localhost:8000/api/v1/public/seller-leads \
   -H 'Content-Type: application/json' \
-  -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
-  -d '{"contact":{"legal_name":"Jane Seller"},"property":{"street_address":"123 Peachtree St","city":"Atlanta","state":"GA","postal_code":"30303"},"source":"google_ppc","stage_key":"new"}'
+  -d '{"property_address":"123 Peachtree St","property_city":"Atlanta","property_state":"GA","property_postal_code":"30303","name":"Jane Seller","phone":"4045551212","preferred_contact_method":"phone","consent_to_contact":true,"attribution":{"landing_page":"/get-a-cash-offer","utm_source":"google_ppc","utm_medium":"cpc"}}'
 ```

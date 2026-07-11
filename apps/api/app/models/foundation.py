@@ -116,6 +116,55 @@ class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     lead_temperature: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
+class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "consent_records"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    wording_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    wording: Mapped[str] = mapped_column(String(1000), nullable=False)
+    captured_ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
+class LeadFormSubmission(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_form_submissions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
+    landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class AttributionTouch(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "attribution_touches"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    touch_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    medium: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    term: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "deals"
 

@@ -57,11 +57,13 @@ npm run dev:web
 Open:
 
 - Web: http://localhost:3000
+- Public cash-offer form: http://localhost:3000/get-a-cash-offer
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
 - Protected local API example: http://localhost:8000/api/v1/me
 - Lead list API: http://localhost:8000/api/v1/leads
 - Dashboard summary API: http://localhost:8000/api/v1/dashboard/summary
+- Public seller intake API: http://localhost:8000/api/v1/public/seller-leads
 
 Protected local endpoints use a temporary development-only header until the production auth provider is selected:
 
@@ -73,20 +75,22 @@ curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
 Create a local test lead:
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/leads \
+curl -X POST http://localhost:8000/api/v1/public/seller-leads \
   -H 'Content-Type: application/json' \
-  -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
   -d '{
-    "contact": {"legal_name": "Jane Seller", "contact_type": "seller"},
-    "property": {
-      "street_address": "123 Peachtree St",
-      "city": "Atlanta",
-      "state": "GA",
-      "postal_code": "30303"
-    },
-    "source": "google_ppc",
-    "stage_key": "new",
-    "lead_temperature": "hot"
+    "property_address": "123 Peachtree St",
+    "property_city": "Atlanta",
+    "property_state": "GA",
+    "property_postal_code": "30303",
+    "name": "Jane Seller",
+    "phone": "4045551212",
+    "preferred_contact_method": "phone",
+    "consent_to_contact": true,
+    "attribution": {
+      "landing_page": "/get-a-cash-offer",
+      "utm_source": "google_ppc",
+      "utm_medium": "cpc"
+    }
   }'
 ```
 
