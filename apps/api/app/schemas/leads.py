@@ -44,6 +44,53 @@ class LeadListResponse(BaseModel):
     items: list[LeadRead]
 
 
+class ContactMethodRead(BaseModel):
+    method_type: str
+    value: str
+    is_primary: bool
+
+
+class ConsentRecordRead(BaseModel):
+    channel: str
+    status: str
+    source: str
+    wording_version: str
+    captured_ip: str | None
+    created_at: datetime
+
+
+class AttributionTouchRead(BaseModel):
+    touch_type: str
+    source: str | None
+    medium: str | None
+    campaign: str | None
+    term: str | None
+    content: str | None
+    gclid: str | None
+    fbclid: str | None
+    landing_page: str | None
+    referrer: str | None
+    created_at: datetime
+
+
+class ActivityEventRead(BaseModel):
+    event_type: str
+    summary: str
+    created_at: datetime
+
+
+class LeadDetail(LeadRead):
+    contact_methods: list[ContactMethodRead]
+    consent_records: list[ConsentRecordRead]
+    attribution_touches: list[AttributionTouchRead]
+    recent_activity: list[ActivityEventRead]
+
+
+class LeadStageUpdate(BaseModel):
+    stage_key: str = Field(min_length=1, max_length=120)
+    reason: str | None = Field(default=None, max_length=500)
+
+
 class PipelineStageCount(BaseModel):
     stage_key: str
     count: int

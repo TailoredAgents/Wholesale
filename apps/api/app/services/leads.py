@@ -1,13 +1,55 @@
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.models.foundation import ActivityEvent, AuditEvent, Contact, Deal, Lead, Property, User
-from app.schemas.leads import DashboardSummary, LeadCreate, LeadRead, PipelineStageCount
+from app.models.foundation import (
+    ActivityEvent,
+    AttributionTouch,
+    AuditEvent,
+    ConsentRecord,
+    Contact,
+    ContactMethod,
+    Deal,
+    Lead,
+    Property,
+    User,
+)
+from app.schemas.leads import (
+    ActivityEventRead,
+    AttributionTouchRead,
+    ConsentRecordRead,
+    ContactMethodRead,
+    DashboardSummary,
+    LeadCreate,
+    LeadDetail,
+    LeadRead,
+    LeadStageUpdate,
+    PipelineStageCount,
+)
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
+SELLER_PIPELINE_STAGES = {
+    "new",
+    "contact_attempt_due",
+    "attempting_contact",
+    "contacted",
+    "qualification_in_progress",
+    "qualified",
+    "appointment_scheduled",
+    "underwriting",
+    "offer_pending_approval",
+    "offer_ready",
+    "offer_presented",
+    "negotiating",
+    "long_term_follow_up",
+    "under_contract",
+    "disqualified",
+    "dead",
+    "reopened",
+}
 
 
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
@@ -83,6 +125,139 @@ def list_leads(db: Session, principal: Principal, limit: int = 25) -> list[LeadR
     return [lead_to_read(db, lead) for lead in leads]
 
 
+def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDetail | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    base = lead_to_read(db, lead)
+    contact_methods = db.scalars(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == lead.contact_id,
+        )
+        .order_by(ContactMethod.created_at.asc())
+    ).all()
+    consent_records = db.scalars(
+        select(ConsentRecord)
+        .where(
+            ConsentRecord.organization_id == principal.organization_id,
+            ConsentRecord.contact_id == lead.contact_id,
+        )
+        .order_by(ConsentRecord.created_at.desc())
+    ).all()
+    attribution_touches = db.scalars(
+        select(AttributionTouch)
+        .where(
+            AttributionTouch.organization_id == principal.organization_id,
+            AttributionTouch.lead_id == lead.id,
+        )
+        .order_by(AttributionTouch.created_at.desc())
+    ).all()
+    recent_activity = db.scalars(
+        select(ActivityEvent)
+        .where(
+            ActivityEvent.organization_id == principal.organization_id,
+            ActivityEvent.entity_type == "lead",
+            ActivityEvent.entity_id == lead.id,
+        )
+        .order_by(ActivityEvent.created_at.desc(), ActivityEvent.id.desc())
+        .limit(20)
+    ).all()
+
+    return LeadDetail(
+        **base.model_dump(),
+        contact_methods=[
+            ContactMethodRead(
+                method_type=method.method_type,
+                value=method.value,
+                is_primary=method.is_primary,
+            )
+            for method in contact_methods
+        ],
+        consent_records=[
+            ConsentRecordRead(
+                channel=record.channel,
+                status=record.status,
+                source=record.source,
+                wording_version=record.wording_version,
+                captured_ip=record.captured_ip,
+                created_at=record.created_at,
+            )
+            for record in consent_records
+        ],
+        attribution_touches=[
+            AttributionTouchRead(
+                touch_type=touch.touch_type,
+                source=touch.source,
+                medium=touch.medium,
+                campaign=touch.campaign,
+                term=touch.term,
+                content=touch.content,
+                gclid=touch.gclid,
+                fbclid=touch.fbclid,
+                landing_page=touch.landing_page,
+                referrer=touch.referrer,
+                created_at=touch.created_at,
+            )
+            for touch in attribution_touches
+        ],
+        recent_activity=[
+            ActivityEventRead(
+                event_type=activity.event_type,
+                summary=activity.summary,
+                created_at=activity.created_at,
+            )
+            for activity in recent_activity
+        ],
+    )
+
+
+def update_lead_stage(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadStageUpdate,
+) -> LeadDetail | None:
+    if payload.stage_key not in SELLER_PIPELINE_STAGES:
+        raise ValueError(f"Unsupported seller pipeline stage: {payload.stage_key}")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    previous_stage = lead.stage_key
+    if previous_stage == payload.stage_key:
+        return get_lead_detail(db, principal, lead_id)
+
+    lead.stage_key = payload.stage_key
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.stage_changed",
+            summary=f"Lead stage changed from {previous_stage} to {payload.stage_key}.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.stage_update",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value={"stage_key": previous_stage},
+            new_value={"stage_key": payload.stage_key},
+            reason=payload.reason,
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    return get_lead_detail(db, principal, lead_id)
+
+
 def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary:
     total_leads = count_scalar(db, select(func.count(Lead.id)).where(
         Lead.organization_id == principal.organization_id
@@ -127,6 +302,15 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
 
 def count_scalar(db: Session, statement: Any) -> int:
     return int(db.scalar(statement) or 0)
+
+
+def get_scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
+    return db.scalar(
+        select(Lead).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == lead_id,
+        )
+    )
 
 
 def lead_to_read(db: Session, lead: Lead) -> LeadRead:

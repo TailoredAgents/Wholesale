@@ -18,6 +18,40 @@ export type LeadListItem = {
   created_at: string;
 };
 
+export type LeadDetail = LeadListItem & {
+  contact_methods: Array<{
+    method_type: string;
+    value: string;
+    is_primary: boolean;
+  }>;
+  consent_records: Array<{
+    channel: string;
+    status: string;
+    source: string;
+    wording_version: string;
+    captured_ip: string | null;
+    created_at: string;
+  }>;
+  attribution_touches: Array<{
+    touch_type: string;
+    source: string | null;
+    medium: string | null;
+    campaign: string | null;
+    term: string | null;
+    content: string | null;
+    gclid: string | null;
+    fbclid: string | null;
+    landing_page: string | null;
+    referrer: string | null;
+    created_at: string;
+  }>;
+  recent_activity: Array<{
+    event_type: string;
+    summary: string;
+    created_at: string;
+  }>;
+};
+
 type LeadListResponse = {
   items: LeadListItem[];
 };
@@ -64,5 +98,29 @@ export async function getDashboardData(): Promise<DashboardData> {
     return { summary, leads, apiConnected: true };
   } catch {
     return { summary: emptySummary, leads: [], apiConnected: false };
+  }
+}
+
+export async function getLeadDetail(leadId: string): Promise<{
+  lead: LeadDetail | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const devUserEmail =
+    process.env.DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com";
+
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}`, {
+      headers: { "X-Dev-User-Email": devUserEmail },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return { lead: (await response.json()) as LeadDetail, apiConnected: true };
+  } catch {
+    return { lead: null, apiConnected: false };
   }
 }

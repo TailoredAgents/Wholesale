@@ -177,6 +177,15 @@
   text-transform: uppercase;
 }
 
+.tableLink {
+  color: #245f43;
+  font-weight: 700;
+}
+
+.tableLink:hover {
+  text-decoration: underline;
+}
+
 .pipeline {
   list-style: none;
   display: grid;

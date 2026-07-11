@@ -58,10 +58,13 @@ Open:
 
 - Web: http://localhost:3000
 - Public cash-offer form: http://localhost:3000/get-a-cash-offer
+- Lead detail pages: `http://localhost:3000/leads/{lead_id}`
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
 - Protected local API example: http://localhost:8000/api/v1/me
 - Lead list API: http://localhost:8000/api/v1/leads
+- Lead detail API: `http://localhost:8000/api/v1/leads/{lead_id}`
+- Lead stage update API: `PATCH http://localhost:8000/api/v1/leads/{lead_id}/stage`
 - Dashboard summary API: http://localhost:8000/api/v1/dashboard/summary
 - Public seller intake API: http://localhost:8000/api/v1/public/seller-leads
 

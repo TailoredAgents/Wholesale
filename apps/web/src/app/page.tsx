@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import styles from "./page.module.css";
 import { getDashboardData } from "./lib/api";
 
@@ -125,7 +127,11 @@ export default async function Home() {
                   ) : null}
                   {dashboard.leads.map((lead) => (
                     <tr key={lead.id}>
-                      <td>{lead.seller_name}</td>
+                      <td>
+                        <Link className={styles.tableLink} href={`/leads/${lead.id}`}>
+                          {lead.seller_name}
+                        </Link>
+                      </td>
                       <td>{labelize(lead.source)}</td>
                       <td>{labelize(lead.stage_key)}</td>
                       <td>{lead.assigned_user_email ?? "Unassigned"}</td>

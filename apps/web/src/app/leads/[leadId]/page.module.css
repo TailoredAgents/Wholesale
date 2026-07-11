@@ -1,0 +1,212 @@
+.page {
+  min-height: 100vh;
+  padding: 28px;
+  background: #f4f2ee;
+  color: #161a1d;
+}
+
+.backLink {
+  color: #245f43;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.header {
+  margin-top: 22px;
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.eyebrow {
+  color: #2f6f4e;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  margin-top: 8px;
+  font-size: 34px;
+  line-height: 1.15;
+}
+
+.header p {
+  margin-top: 6px;
+  color: #4f5658;
+}
+
+.statusBox {
+  min-width: 220px;
+  padding: 14px;
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 4px;
+}
+
+.statusBox span {
+  color: #5d6365;
+  font-size: 13px;
+}
+
+.statusBox strong {
+  color: #245f43;
+}
+
+.grid {
+  margin-top: 24px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.panel,
+.panelWide,
+.empty {
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.panelWide {
+  grid-column: 1 / -1;
+}
+
+.empty {
+  margin-top: 24px;
+  padding: 24px;
+}
+
+.panelHeader {
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.panelHeader h2 {
+  font-size: 17px;
+}
+
+.details {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.details div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.details dt {
+  color: #5d6365;
+  font-size: 13px;
+}
+
+.details dd {
+  font-weight: 700;
+}
+
+.list,
+.timeline {
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.list p,
+.timeline p {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 4px;
+}
+
+.list span,
+.timeline span,
+.timeline small {
+  color: #4f5658;
+  font-size: 14px;
+}
+
+.stageForm {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.stageForm label {
+  display: grid;
+  gap: 7px;
+  color: #343a3d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stageForm select,
+.stageForm input {
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cfc8bc;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.stageForm button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.saving,
+.saved,
+.error {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.saving {
+  color: #5d6365;
+}
+
+.saved {
+  color: #2f6f4e;
+}
+
+.error {
+  color: #a13c2f;
+}
+
+@media (max-width: 820px) {
+  .page {
+    padding: 18px;
+  }
+
+  .header,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .statusBox {
+    width: 100%;
+  }
+}

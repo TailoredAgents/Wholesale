@@ -51,3 +51,11 @@ curl -X POST http://localhost:8000/api/v1/public/seller-leads \
 ```
 
 Submitting the same email/phone/address again should return `duplicate_status: "matched_existing_lead"` and reuse the existing active lead.
+
+Open a lead detail page from the dashboard or directly at:
+
+```text
+http://localhost:3000/leads/{lead_id}
+```
+
+The stage update control uses the same development-only user email header and writes activity plus audit records.

@@ -10,6 +10,7 @@
 6. RBAC permission catalog and protected route pattern. Done locally.
 7. Auth provider.
 8. Lead create/list API and dashboard data. Done locally.
+9. Lead detail and stage update workflow. Done locally.
 
 ## Phase 2 Lead Generation
 
