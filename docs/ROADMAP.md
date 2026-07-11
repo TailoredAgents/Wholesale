@@ -9,7 +9,7 @@
 5. Seed/bootstrap data. Done locally.
 6. RBAC permission catalog and protected route pattern. Done locally.
 7. Auth provider.
-8. Lead CRUD and dashboard data.
+8. Lead create/list API and dashboard data. Done locally.
 
 ## Phase 2 Lead Generation
 

@@ -6,7 +6,7 @@
     "dev:web": "npm --prefix apps/web run dev",
     "build:web": "npm --prefix apps/web run build",
     "lint:web": "npm --prefix apps/web run lint",
-    "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000",
+    "dev:api": "cd apps/api && uv run uvicorn app.main:app --reload --reload-exclude '.venv/*' --host 0.0.0.0 --port 8000",
     "test:api": "cd apps/api && uv run pytest",
     "lint:api": "cd apps/api && uv run ruff check .",
     "typecheck:api": "cd apps/api && uv run mypy app tests",

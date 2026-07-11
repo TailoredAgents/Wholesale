@@ -41,3 +41,12 @@ Development-only auth uses the seeded email header. This is disabled in producti
 curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
   http://localhost:8000/api/v1/me
 ```
+
+Create a local lead:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/leads \
+  -H 'Content-Type: application/json' \
+  -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
+  -d '{"contact":{"legal_name":"Jane Seller"},"property":{"street_address":"123 Peachtree St","city":"Atlanta","state":"GA","postal_code":"30303"},"source":"google_ppc","stage_key":"new"}'
+```

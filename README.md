@@ -60,12 +60,34 @@ Open:
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
 - Protected local API example: http://localhost:8000/api/v1/me
+- Lead list API: http://localhost:8000/api/v1/leads
+- Dashboard summary API: http://localhost:8000/api/v1/dashboard/summary
 
 Protected local endpoints use a temporary development-only header until the production auth provider is selected:
 
 ```bash
 curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
   http://localhost:8000/api/v1/me
+```
+
+Create a local test lead:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/leads \
+  -H 'Content-Type: application/json' \
+  -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
+  -d '{
+    "contact": {"legal_name": "Jane Seller", "contact_type": "seller"},
+    "property": {
+      "street_address": "123 Peachtree St",
+      "city": "Atlanta",
+      "state": "GA",
+      "postal_code": "30303"
+    },
+    "source": "google_ppc",
+    "stage_key": "new",
+    "lead_temperature": "hot"
+  }'
 ```
 
 ## Checks

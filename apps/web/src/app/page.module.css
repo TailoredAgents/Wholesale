@@ -81,8 +81,12 @@
   font-size: 13px;
 }
 
-.statusGroup strong {
+.ready {
   color: #2f6f4e;
+}
+
+.warning {
+  color: #9a5b19;
 }
 
 .metrics {

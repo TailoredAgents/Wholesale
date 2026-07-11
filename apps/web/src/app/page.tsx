@@ -1,43 +1,60 @@
 import styles from "./page.module.css";
+import { getDashboardData } from "./lib/api";
 
-const metrics = [
-  { label: "New paid leads", value: "0", detail: "Speed-to-lead queue" },
-  { label: "Offers pending", value: "0", detail: "Manager approval" },
-  { label: "Active contracts", value: "0", detail: "Transaction pipeline" },
-  { label: "Collected revenue", value: "$0", detail: "Current month" },
-];
+export const dynamic = "force-dynamic";
 
 const pipelineStages = [
-  "New",
-  "Contacted",
-  "Underwriting",
-  "Offer ready",
-  "Under contract",
-  "Closed",
+  { key: "new", label: "New" },
+  { key: "contacted", label: "Contacted" },
+  { key: "underwriting", label: "Underwriting" },
+  { key: "offer_ready", label: "Offer ready" },
+  { key: "under_contract", label: "Under contract" },
+  { key: "closed", label: "Closed" },
 ];
 
-const queueRows = [
-  {
-    name: "No live seller leads yet",
-    source: "Website",
-    stage: "Waiting for first submission",
-    owner: "Unassigned",
-  },
-  {
-    name: "Local API",
-    source: "FastAPI",
-    stage: "Health: /health",
-    owner: "Port 8000",
-  },
-  {
-    name: "Local database",
-    source: "PostgreSQL",
-    stage: "Foundation migrated",
-    owner: "Postgres 18",
-  },
-];
+function formatMoney(cents: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
 
-export default function Home() {
+function labelize(value: string) {
+  return value
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+export default async function Home() {
+  const dashboard = await getDashboardData();
+  const pipelineCounts = new Map(
+    dashboard.summary.pipeline.map((stage) => [stage.stage_key, stage.count]),
+  );
+  const metrics = [
+    {
+      label: "New paid leads",
+      value: String(dashboard.summary.new_paid_leads),
+      detail: "Speed-to-lead queue",
+    },
+    {
+      label: "Offers pending",
+      value: String(dashboard.summary.offers_pending),
+      detail: "Manager approval",
+    },
+    {
+      label: "Active contracts",
+      value: String(dashboard.summary.active_contracts),
+      detail: "Transaction pipeline",
+    },
+    {
+      label: "Collected revenue",
+      value: formatMoney(dashboard.summary.collected_revenue_cents),
+      detail: "Current month",
+    },
+  ];
+
   return (
     <main className={styles.shell}>
       <aside className={styles.sidebar} aria-label="Primary navigation">
@@ -64,7 +81,9 @@ export default function Home() {
           </div>
           <div className={styles.statusGroup} aria-label="System status">
             <span>API localhost:8000</span>
-            <strong>Postgres ready</strong>
+            <strong className={dashboard.apiConnected ? styles.ready : styles.warning}>
+              {dashboard.apiConnected ? "Live database data" : "API fallback view"}
+            </strong>
           </div>
         </header>
 
@@ -95,12 +114,20 @@ export default function Home() {
                   </tr>
                 </thead>
                 <tbody>
-                  {queueRows.map((row) => (
-                    <tr key={row.name}>
-                      <td>{row.name}</td>
-                      <td>{row.source}</td>
-                      <td>{row.stage}</td>
-                      <td>{row.owner}</td>
+                  {dashboard.leads.length === 0 ? (
+                    <tr>
+                      <td>No live seller leads yet</td>
+                      <td>Website</td>
+                      <td>Waiting for first submission</td>
+                      <td>Unassigned</td>
+                    </tr>
+                  ) : null}
+                  {dashboard.leads.map((lead) => (
+                    <tr key={lead.id}>
+                      <td>{lead.seller_name}</td>
+                      <td>{labelize(lead.source)}</td>
+                      <td>{labelize(lead.stage_key)}</td>
+                      <td>{lead.assigned_user_email ?? "Unassigned"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -115,9 +142,9 @@ export default function Home() {
             </div>
             <ol className={styles.pipeline}>
               {pipelineStages.map((stage) => (
-                <li key={stage}>
-                  <span>{stage}</span>
-                  <strong>0</strong>
+                <li key={stage.key}>
+                  <span>{stage.label}</span>
+                  <strong>{pipelineCounts.get(stage.key) ?? 0}</strong>
                 </li>
               ))}
             </ol>
