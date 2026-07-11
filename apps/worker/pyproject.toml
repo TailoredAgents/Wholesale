@@ -1,0 +1,14 @@
+[project]
+name = "real-estate-wholesale-worker"
+version = "0.1.0"
+description = "Background worker scaffold for the real estate wholesaling operating system."
+requires-python = ">=3.12"
+dependencies = [
+  "pydantic-settings>=2.12.0",
+  "structlog>=25.5.0"
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.14.0"
+]

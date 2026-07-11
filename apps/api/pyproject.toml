@@ -1,0 +1,40 @@
+[project]
+name = "real-estate-wholesale-api"
+version = "0.1.0"
+description = "FastAPI backend for the real estate wholesaling operating system."
+requires-python = ">=3.12"
+dependencies = [
+  "alembic>=1.17.0",
+  "fastapi>=0.124.0",
+  "psycopg[binary]>=3.3.0",
+  "pydantic-settings>=2.12.0",
+  "sqlalchemy>=2.0.45",
+  "structlog>=25.5.0",
+  "uvicorn[standard]>=0.38.0"
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0",
+  "mypy>=1.19.0",
+  "pytest>=9.0.0",
+  "pytest-cov>=7.0.0",
+  "ruff>=0.14.0"
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["sqlalchemy.ext.mypy.plugin"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+pythonpath = ["."]
