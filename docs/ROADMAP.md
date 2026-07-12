@@ -1,21 +1,427 @@
 # Roadmap
 
-## Phase 1 Foundation
+## Current Strategy
 
-1. Monorepo scaffold.
-2. API, web, and worker skeletons.
-3. Local Postgres and Alembic.
-4. Organization, users, roles, contacts, properties, leads, deals, tasks, activities, and audit.
-5. Seed/bootstrap data. Done locally.
-6. RBAC permission catalog and protected route pattern. Done locally.
-7. Auth provider.
-8. Lead create/list API and dashboard data. Done locally.
-9. Lead detail and stage update workflow. Done locally.
+Build locally first, keep the system testable at each milestone, then push to GitHub after the local staff lead workflow and speed-to-lead queue are in place. After GitHub is set up, create a Render staging deployment early so deployment issues are discovered before the product surface becomes large.
 
-## Phase 2 Lead Generation
+Current assumptions:
 
-1. Public website shell. Started locally.
-2. Seller cash-offer form. Done locally.
-3. Consent and attribution. Done locally.
-4. Duplicate detection. Started locally.
-5. Speed-to-lead queue.
+- Authentication provider: Clerk.
+- GitHub push timing: after staff lead editing and speed-to-lead workflow.
+- Render staging timing: soon after GitHub push.
+- Business-facing company name: placeholder until confirmed.
+- Current placeholder organization: `Georgia Wholesale Operating Company`.
+
+## Completed Local Milestones
+
+### M0: Local Monorepo Foundation
+
+Status: Done.
+
+Delivered:
+
+- Root git repository.
+- Next.js web app.
+- FastAPI API app.
+- Python worker scaffold.
+- PostgreSQL local development database.
+- Alembic migrations.
+- Render Blueprint draft.
+- Local README and runbook.
+
+Acceptance met:
+
+- Web app builds.
+- API health/readiness works.
+- Worker starts.
+- Local database migrates.
+- Baseline committed.
+
+### M1: RBAC And Bootstrap Foundation
+
+Status: Done.
+
+Delivered:
+
+- Organization seed.
+- Owner bootstrap command.
+- 14 default roles.
+- 22 default permissions.
+- Role-permission mappings.
+- Development-only protected route pattern.
+- `/api/v1/me`.
+
+Acceptance met:
+
+- Bootstrap is idempotent.
+- Protected route returns 401 without dev identity.
+- Seeded owner resolves with permissions.
+- Tests cover bootstrap and principal resolution.
+
+### M2: Lead API And Live Dashboard
+
+Status: Done.
+
+Delivered:
+
+- Protected lead create/list API.
+- Dashboard summary API.
+- Dashboard connected to live Postgres counts.
+- Lead create writes activity and audit events.
+
+Acceptance met:
+
+- Leads can be created through API.
+- Dashboard reads live lead and pipeline counts.
+- Tests cover lead creation, listing, dashboard counts, and auth requirement.
+
+### M3: Public Seller Intake
+
+Status: Done.
+
+Delivered:
+
+- Public cash-offer form at `/get-a-cash-offer`.
+- Public seller lead intake API.
+- Consent records.
+- Raw form submissions.
+- Attribution touches.
+- UTM, GCLID, FBCLID, landing page, referrer, IP, and user-agent capture.
+
+Acceptance met:
+
+- Public form/API creates contact, property, lead, consent, form submission, attribution, activity, and audit records.
+- Consent is required.
+- Tests cover consent and record creation.
+
+### M4: Duplicate Detection
+
+Status: Started and functional locally.
+
+Delivered:
+
+- Contact methods for normalized email/phone.
+- Normalized property address key.
+- Public intake duplicate matching.
+- Duplicate submissions reuse existing active lead when contact and property match.
+- Duplicate submissions still preserve consent, form, attribution, activity, and audit evidence.
+
+Acceptance met:
+
+- Repeat email/phone/address returns `matched_existing_lead`.
+- Repeat submission does not create another active lead.
+- Tests cover duplicate matching.
+
+Remaining hardening:
+
+- More robust address normalization.
+- Fuzzy duplicate review queue.
+- Manual merge workflow.
+- Duplicate confidence/explanation fields.
+
+### M5: Lead Detail And Stage Workflow
+
+Status: Done.
+
+Delivered:
+
+- Protected lead detail API.
+- Protected stage update API.
+- Internal lead detail page.
+- Dashboard lead links.
+- Stage update control.
+- Lead detail shows contact methods, consent, attribution, and recent activity.
+- Stage updates write activity and audit events.
+
+Acceptance met:
+
+- Lead detail API returns complete context.
+- Stage update changes the pipeline stage.
+- Stage update is audited.
+- Web detail route renders.
+- Tests cover detail, stage update, invalid stage rejection.
+
+## Current Phase
+
+Phase 1B: Staff Lead Operations.
+
+Objective:
+
+Turn the lead foundation into a usable internal acquisition workspace before pushing to GitHub.
+
+## Next Milestones
+
+### M6: Staff Lead Editing
+
+Goal:
+
+Allow internal users to edit core lead, seller, and property fields while preserving audit history.
+
+Scope:
+
+- Internal edit API for seller/contact basics.
+- Internal edit API for property basics.
+- Internal edit API for lead fields such as source, temperature, assignment, and stage-adjacent fields.
+- Lead detail UI edit controls.
+- Audit events for material changes.
+- Activity timeline entries where useful.
+
+Acceptance criteria:
+
+- Staff can update seller name and contact methods.
+- Staff can update property address basics.
+- Staff can update lead source and temperature.
+- Every material update writes an audit event with previous and new values.
+- Organization scoping is enforced.
+- Unauthorized users are denied.
+- Tests cover successful edits, audit writes, and auth enforcement.
+
+Test expectations:
+
+- API unit/integration tests for edit services.
+- Web lint/build.
+- Existing test suite remains green.
+
+### M7: Speed-To-Lead Queue
+
+Goal:
+
+Make paid/new leads difficult to ignore.
+
+Scope:
+
+- Task creation for public seller submissions.
+- Speed-to-lead queue endpoint.
+- Dashboard queue panel backed by real tasks.
+- Overdue indicator based on configurable threshold.
+- Activity event when a task is created.
+- Basic task completion endpoint.
+
+Acceptance criteria:
+
+- Public lead submission creates an acquisition follow-up task.
+- Dashboard shows new/paid leads needing contact.
+- Queue distinguishes new, due, and overdue leads.
+- Staff can mark speed-to-lead task complete.
+- Completion is audited or recorded as activity.
+- Tests cover task creation and queue behavior.
+
+Test expectations:
+
+- API tests for task creation and completion.
+- Dashboard build still passes.
+
+### M8: Clerk Authentication
+
+Goal:
+
+Replace the development-only identity header with real authentication while preserving RBAC.
+
+Scope:
+
+- Clerk app setup.
+- Next.js Clerk provider.
+- FastAPI token/session verification.
+- User mapping from Clerk identity to local `users`.
+- MFA requirement documented for privileged users.
+- Development header removed from production paths.
+
+Acceptance criteria:
+
+- Signed-in user can access dashboard.
+- Signed-out user cannot access protected internal pages.
+- API validates Clerk identity.
+- Local user permissions still control authorization.
+- Production cannot use `X-Dev-User-Email`.
+- Tests cover unauthorized and authorized API access.
+
+Test expectations:
+
+- Auth verification tests use mocks or Clerk test tokens.
+- Existing RBAC tests remain valid.
+
+Blocking inputs:
+
+- Clerk project credentials.
+- Local/staging Clerk URLs.
+
+### M9: Local Pre-GitHub Hardening
+
+Goal:
+
+Prepare the repository for a clean GitHub push.
+
+Scope:
+
+- Remove any generated placeholder docs from app scaffold that conflict with project docs.
+- Add CI workflow draft.
+- Add secret scanning guidance.
+- Confirm `.gitignore`.
+- Confirm no local secrets committed.
+- Add initial issue/backlog labels in docs.
+- Review Render Blueprint for current service commands.
+
+Acceptance criteria:
+
+- Working tree clean.
+- Full local verification passes.
+- `git log` has clean milestone commits.
+- No secrets in repository.
+- README can bootstrap from a clean checkout.
+
+### M10: Push To GitHub
+
+Goal:
+
+Create the remote repository and push `main`.
+
+Scope:
+
+- Create GitHub repo.
+- Add remote.
+- Push current history.
+- Confirm branch protection plan.
+- Add initial GitHub Actions workflow if not already added.
+
+Acceptance criteria:
+
+- GitHub remote exists.
+- `main` is pushed.
+- CI runs or is ready to run.
+- README instructions are visible in GitHub.
+
+### M11: Render Staging
+
+Goal:
+
+Deploy an early staging environment soon after GitHub push.
+
+Scope:
+
+- Render PostgreSQL staging database.
+- Render API service.
+- Render web service.
+- Render worker service.
+- Render Key Value staging resource.
+- Staging environment variables.
+- Run migrations in staging.
+- Bootstrap staging owner.
+
+Acceptance criteria:
+
+- Staging web URL loads.
+- Staging API `/health` and `/ready` pass.
+- Staging database migrations apply.
+- Staging login path works after Clerk is configured.
+- No secrets are committed.
+
+Blocking inputs:
+
+- Render account/project access.
+- Staging domain decision, if any.
+- Clerk staging credentials.
+
+## Later Product Phases
+
+### Phase 2B: Lead Generation Hardening
+
+- Address validation/autocomplete provider.
+- Spam protection.
+- Content pages for seller situations.
+- PPC landing page templates.
+- Form abandonment events.
+- Consent wording management.
+- Suppression records and opt-out enforcement.
+
+### Phase 3: Communications And Intake
+
+- Twilio adapter.
+- Webhook signature validation.
+- Inbound SMS/call records.
+- Outbound communication compliance gate.
+- Unified communication timeline.
+- Initial AI intake summary/extraction.
+- Call/lead follow-up tasks.
+
+### Phase 4: Acquisition Workspace
+
+- Acquisition daily workspace.
+- Saved filters.
+- Lead assignment.
+- Appointments.
+- Follow-up plans.
+- Call notes and activity timeline.
+- Missing-field prompts.
+
+### Phase 5: Underwriting Foundation
+
+- Property data provider abstraction.
+- Underwriting versions.
+- Comparable sale candidate records.
+- Human comp review.
+- ARV range.
+- Repair estimate.
+- Offer scenarios.
+- ARV/offer approval queue.
+
+### Phase 6: Contracts And Transactions
+
+- Template records.
+- Contract approval request.
+- E-signature adapter.
+- Transaction checklist.
+- Closing attorney/status fields.
+- Deadline tracking.
+
+### Phase 7: Buyers And Dispositions
+
+- Buyer CRM.
+- Buyer criteria.
+- Proof-of-funds records.
+- Deal room.
+- Buyer offer collection.
+- Buyer selection approval.
+
+### Phase 8: Finance And Compensation
+
+- Revenue records.
+- Direct deal deductions.
+- Effective-dated compensation rules.
+- Compensation calculation.
+- Monthly advertising spend.
+- Advertising percentage reporting.
+
+### Phase 9: Marketing Intelligence
+
+- Google conversion event upload adapter.
+- Meta conversions adapter.
+- Campaign/click performance reporting.
+- Offline conversion export/retry tracking.
+
+### Phase 10: AI Control Center
+
+- Agent definitions.
+- Prompt versions.
+- Tool-call logs.
+- Approval queue integration.
+- Evaluation datasets.
+- Cost and latency tracking.
+
+## Open Decisions
+
+- Business-facing company name.
+- Object storage provider.
+- Address validation/geocoding provider.
+- Initial property data provider.
+- E-signature provider.
+- Queue library.
+- Error monitoring provider.
+
+## Non-Negotiables
+
+- PostgreSQL remains the source of truth.
+- Material actions are audited.
+- AI does not make binding offers, send contracts, or bypass approvals.
+- Consent/suppression checks are deterministic.
+- No real seller communications from automated tests.
+- No secrets in git.

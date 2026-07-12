@@ -22,7 +22,12 @@ Build a local-first operating system for a Georgia real-estate wholesaling compa
 
 ## Blocking Decisions
 
-- Authentication provider.
 - Initial company/organization name.
 - Object storage provider.
 - Render staging resource configuration.
+
+Resolved:
+
+- Authentication provider: Clerk.
+- GitHub timing: after staff lead editing and speed-to-lead workflow.
+- Render staging timing: soon after GitHub push.

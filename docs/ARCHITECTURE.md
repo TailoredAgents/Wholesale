@@ -4,6 +4,7 @@
 
 - Frontend: Next.js App Router, React, TypeScript.
 - Backend: FastAPI, Pydantic, SQLAlchemy, Alembic.
+- Authentication: Clerk, with local RBAC remaining authoritative for permissions.
 - Database: PostgreSQL.
 - Worker: Python background worker.
 - Queue/cache later: Render Key Value-compatible Redis.
