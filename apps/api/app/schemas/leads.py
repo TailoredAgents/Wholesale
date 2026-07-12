@@ -35,7 +35,14 @@ class LeadRead(BaseModel):
     stage_key: str
     lead_temperature: str | None
     seller_name: str
+    preferred_name: str | None
     property_address: str
+    property_street_address: str
+    property_city: str
+    property_state: str
+    property_postal_code: str
+    property_county: str | None
+    property_type: str | None
     assigned_user_email: str | None
     created_at: datetime
 
@@ -88,6 +95,22 @@ class LeadDetail(LeadRead):
 
 class LeadStageUpdate(BaseModel):
     stage_key: str = Field(min_length=1, max_length=120)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class LeadStaffUpdate(BaseModel):
+    seller_name: str | None = Field(default=None, min_length=1, max_length=255)
+    preferred_name: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=320)
+    property_street_address: str | None = Field(default=None, min_length=1, max_length=255)
+    property_city: str | None = Field(default=None, min_length=1, max_length=120)
+    property_state: str | None = Field(default=None, min_length=2, max_length=2)
+    property_postal_code: str | None = Field(default=None, min_length=1, max_length=20)
+    property_county: str | None = Field(default=None, max_length=120)
+    property_type: str | None = Field(default=None, max_length=80)
+    source: str | None = Field(default=None, min_length=1, max_length=120)
+    lead_temperature: str | None = Field(default=None, max_length=80)
     reason: str | None = Field(default=None, max_length=500)
 
 

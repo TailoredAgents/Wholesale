@@ -141,6 +141,33 @@ Acceptance met:
 - Web detail route renders.
 - Tests cover detail, stage update, invalid stage rejection.
 
+### M6: Staff Lead Editing
+
+Status: Implemented locally; full suite rerun pending local tooling issue.
+
+Delivered:
+
+- Protected staff lead edit API.
+- Seller legal/preferred name editing.
+- Email and phone contact method add/update.
+- Property address, county, and property type editing.
+- Lead source and temperature editing.
+- Structured property fields returned by lead APIs for edit prefill.
+- Lead detail edit form.
+- Audit events with previous and new values for material edits.
+- Activity timeline entry for material edits.
+- Tests added for successful edit/audit behavior and auth requirement.
+
+Verification completed:
+
+- API lint.
+- API typecheck.
+- Python compile check.
+
+Verification blocked:
+
+- `pytest`, broad web lint, Next build, TypeScript compiler, and Next dev server hung before producing diagnostics in this local shell.
+
 ## Current Phase
 
 Phase 1B: Staff Lead Operations.
@@ -150,37 +177,6 @@ Objective:
 Turn the lead foundation into a usable internal acquisition workspace before pushing to GitHub.
 
 ## Next Milestones
-
-### M6: Staff Lead Editing
-
-Goal:
-
-Allow internal users to edit core lead, seller, and property fields while preserving audit history.
-
-Scope:
-
-- Internal edit API for seller/contact basics.
-- Internal edit API for property basics.
-- Internal edit API for lead fields such as source, temperature, assignment, and stage-adjacent fields.
-- Lead detail UI edit controls.
-- Audit events for material changes.
-- Activity timeline entries where useful.
-
-Acceptance criteria:
-
-- Staff can update seller name and contact methods.
-- Staff can update property address basics.
-- Staff can update lead source and temperature.
-- Every material update writes an audit event with previous and new values.
-- Organization scoping is enforced.
-- Unauthorized users are denied.
-- Tests cover successful edits, audit writes, and auth enforcement.
-
-Test expectations:
-
-- API unit/integration tests for edit services.
-- Web lint/build.
-- Existing test suite remains green.
 
 ### M7: Speed-To-Lead Queue
 

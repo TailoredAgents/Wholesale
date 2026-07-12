@@ -139,12 +139,33 @@
   font-size: 14px;
 }
 
+.editForm,
 .stageForm {
   padding: 18px;
   display: grid;
   gap: 12px;
 }
 
+.editForm {
+  padding-bottom: 14px;
+}
+
+.editGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.editWide {
+  grid-column: 1 / -1;
+}
+
+.formDivider {
+  height: 1px;
+  background: #e8e3d8;
+}
+
+.editForm label,
 .stageForm label {
   display: grid;
   gap: 7px;
@@ -153,6 +174,8 @@
   font-weight: 700;
 }
 
+.editForm select,
+.editForm input,
 .stageForm select,
 .stageForm input {
   min-height: 42px;
@@ -162,6 +185,7 @@
   font: inherit;
 }
 
+.editForm button,
 .stageForm button {
   min-height: 44px;
   border: 0;
@@ -208,5 +232,13 @@
 
   .statusBox {
     width: 100%;
+  }
+
+  .editGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .editWide {
+    grid-column: auto;
   }
 }

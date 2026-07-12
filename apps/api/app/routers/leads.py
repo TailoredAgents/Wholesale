@@ -7,8 +7,21 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
-from app.schemas.leads import LeadCreate, LeadDetail, LeadListResponse, LeadRead, LeadStageUpdate
-from app.services.leads import create_lead, get_lead_detail, list_leads, update_lead_stage
+from app.schemas.leads import (
+    LeadCreate,
+    LeadDetail,
+    LeadListResponse,
+    LeadRead,
+    LeadStaffUpdate,
+    LeadStageUpdate,
+)
+from app.services.leads import (
+    create_lead,
+    get_lead_detail,
+    list_leads,
+    update_lead_staff_details,
+    update_lead_stage,
+)
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
 view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
@@ -39,6 +52,19 @@ def read_lead_detail(
     principal: Annotated[Principal, Depends(view_leads_dependency)],
 ) -> LeadDetail:
     lead = get_lead_detail(db, principal, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.patch("/{lead_id}")
+def update_seller_lead_details(
+    lead_id: UUID,
+    payload: LeadStaffUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    lead = update_lead_staff_details(db, principal, lead_id, payload)
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

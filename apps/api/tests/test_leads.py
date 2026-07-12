@@ -56,6 +56,8 @@ def test_create_and_list_lead(
     created = create_response.json()
     assert created["seller_name"] == "Jane Seller"
     assert created["property_address"] == "123 Peachtree St, Atlanta, GA 30303"
+    assert created["property_state"] == "GA"
+    assert created["property_county"] == "Fulton"
     assert created["source"] == "google_ppc"
 
     list_response = client.get("/api/v1/leads", headers={"X-Dev-User-Email": OWNER_EMAIL})
@@ -161,6 +163,77 @@ def test_update_lead_stage_rejects_unknown_stage(
     )
 
     assert response.status_code == 422
+
+
+def test_update_lead_staff_details_records_audit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "seller_name": "Janet Seller",
+            "preferred_name": "Janet",
+            "phone": "(404) 555-0101",
+            "email": "JANET@example.com",
+            "property_street_address": "500 Edgewood Ave",
+            "property_city": "Atlanta",
+            "property_state": "ga",
+            "property_postal_code": "30312",
+            "property_county": "Fulton",
+            "property_type": "duplex",
+            "source": "referral",
+            "lead_temperature": "warm",
+            "reason": "Corrected seller intake after phone call.",
+        },
+    )
+
+    assert response.status_code == 200
+    updated = response.json()
+    assert updated["seller_name"] == "Janet Seller"
+    assert updated["source"] == "referral"
+    assert updated["lead_temperature"] == "warm"
+    assert updated["property_address"] == "500 Edgewood Ave, Atlanta, GA 30312"
+    assert updated["property_type"] == "duplex"
+    assert {
+        (method["method_type"], method["value"])
+        for method in updated["contact_methods"]
+    } == {
+        ("email", "JANET@example.com"),
+        ("phone", "(404) 555-0101"),
+    }
+    assert "lead.staff_updated" in [
+        activity["event_type"] for activity in updated["recent_activity"]
+    ]
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "lead.staff_update"
+            )
+        )
+        or 0
+    ) == 1
+
+
+def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:
+    client = TestClient(app)
+
+    response = client.patch(
+        "/api/v1/leads/00000000-0000-0000-0000-000000000000",
+        json={"seller_name": "Jane Seller"},
+    )
+
+    assert response.status_code == 401
 
 
 def test_create_lead_requires_permission(api_db_override: None) -> None:

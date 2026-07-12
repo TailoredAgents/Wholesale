@@ -13,7 +13,14 @@ export type LeadListItem = {
   stage_key: string;
   lead_temperature: string | null;
   seller_name: string;
+  preferred_name: string | null;
   property_address: string;
+  property_street_address: string;
+  property_city: string;
+  property_state: string;
+  property_postal_code: string;
+  property_county: string | null;
+  property_type: string | null;
   assigned_user_email: string | null;
   created_at: string;
 };

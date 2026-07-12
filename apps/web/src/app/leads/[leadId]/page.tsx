@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { getLeadDetail } from "../../lib/api";
+import { LeadEditForm } from "./lead-edit-form";
 import { StageUpdateForm } from "./stage-update-form";
 import styles from "./page.module.css";
 
@@ -64,6 +65,8 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <div className={styles.panelHeader}>
             <h2>Lead Controls</h2>
           </div>
+          <LeadEditForm lead={lead} />
+          <div className={styles.formDivider} />
           <StageUpdateForm leadId={lead.id} currentStage={lead.stage_key} />
         </article>
 

@@ -26,6 +26,7 @@ from app.schemas.leads import (
     LeadCreate,
     LeadDetail,
     LeadRead,
+    LeadStaffUpdate,
     LeadStageUpdate,
     PipelineStageCount,
 )
@@ -258,6 +259,142 @@ def update_lead_stage(
     return get_lead_detail(db, principal, lead_id)
 
 
+def update_lead_staff_details(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadStaffUpdate,
+) -> LeadDetail | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    contact = db.get(Contact, lead.contact_id)
+    property_record = db.get(Property, lead.property_id)
+    if contact is None or property_record is None:
+        raise RuntimeError("lead is missing required contact or property")
+
+    previous_values: dict[str, Any] = {}
+    new_values: dict[str, Any] = {}
+
+    provided_fields = payload.model_fields_set
+
+    update_value(previous_values, new_values, contact, "legal_name", payload.seller_name)
+    update_nullable_value(
+        previous_values,
+        new_values,
+        contact,
+        "preferred_name",
+        payload.preferred_name,
+        provided_fields,
+    )
+    update_value(previous_values, new_values, lead, "source", payload.source)
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "lead_temperature",
+        payload.lead_temperature,
+        provided_fields,
+    )
+    update_value(
+        previous_values,
+        new_values,
+        property_record,
+        "street_address",
+        payload.property_street_address,
+    )
+    update_value(previous_values, new_values, property_record, "city", payload.property_city)
+    if payload.property_state is not None:
+        update_value(
+            previous_values,
+            new_values,
+            property_record,
+            "state",
+            payload.property_state.upper(),
+        )
+    update_value(
+        previous_values,
+        new_values,
+        property_record,
+        "postal_code",
+        payload.property_postal_code,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        property_record,
+        "county",
+        payload.property_county,
+        provided_fields,
+        provided_field_name="property_county",
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        property_record,
+        "property_type",
+        payload.property_type,
+        provided_fields,
+    )
+
+    phone_changed = update_contact_method(
+        db,
+        principal,
+        contact,
+        previous_values,
+        new_values,
+        method_type="phone",
+        value=payload.phone,
+    )
+    email_changed = update_contact_method(
+        db,
+        principal,
+        contact,
+        previous_values,
+        new_values,
+        method_type="email",
+        value=payload.email,
+    )
+
+    if property_fields_changed(previous_values) or property_fields_changed(new_values):
+        property_record.normalized_address_key = normalize_address_key(
+            property_record.street_address,
+            property_record.city,
+            property_record.state,
+            property_record.postal_code,
+        )
+
+    if previous_values or new_values or phone_changed or email_changed:
+        db.add(
+            ActivityEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type="lead.staff_updated",
+                summary=f"Lead details updated for {contact.legal_name}.",
+            )
+        )
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="lead.staff_update",
+                entity_type="lead",
+                entity_id=lead.id,
+                previous_value=previous_values,
+                new_value=new_values,
+                reason=payload.reason,
+            )
+        )
+        db.commit()
+        db.refresh(lead)
+
+    return get_lead_detail(db, principal, lead_id)
+
+
 def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary:
     total_leads = count_scalar(db, select(func.count(Lead.id)).where(
         Lead.organization_id == principal.organization_id
@@ -313,6 +450,136 @@ def get_scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | 
     )
 
 
+def update_value(
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+    target: Any,
+    field_name: str,
+    value: str | None,
+) -> None:
+    if value is None:
+        return
+    cleaned_value = value.strip()
+    if not cleaned_value:
+        return
+    current_value = getattr(target, field_name)
+    if current_value == cleaned_value:
+        return
+    previous_values[field_name] = current_value
+    new_values[field_name] = cleaned_value
+    setattr(target, field_name, cleaned_value)
+
+
+def update_nullable_value(
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+    target: Any,
+    field_name: str,
+    value: str | None,
+    provided_fields: set[str],
+    *,
+    provided_field_name: str | None = None,
+) -> None:
+    if (provided_field_name or field_name) not in provided_fields:
+        return
+    cleaned_value = normalize_blank(value) if value is not None else None
+    current_value = getattr(target, field_name)
+    if current_value == cleaned_value:
+        return
+    previous_values[field_name] = current_value
+    new_values[field_name] = cleaned_value
+    setattr(target, field_name, cleaned_value)
+
+
+def update_contact_method(
+    db: Session,
+    principal: Principal,
+    contact: Contact,
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+    *,
+    method_type: str,
+    value: str | None,
+) -> bool:
+    if value is None:
+        return False
+
+    cleaned_value = value.strip()
+    if not cleaned_value:
+        return False
+
+    normalized_value = (
+        normalize_email(cleaned_value)
+        if method_type == "email"
+        else normalize_phone(cleaned_value)
+    )
+    if not normalized_value:
+        return False
+
+    existing = db.scalar(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == method_type,
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    )
+    audit_key = f"{method_type}_contact_method"
+    if existing is not None:
+        if existing.value == cleaned_value and existing.normalized_value == normalized_value:
+            return False
+        previous_values[audit_key] = existing.value
+        new_values[audit_key] = cleaned_value
+        existing.value = cleaned_value
+        existing.normalized_value = normalized_value
+        existing.is_primary = True
+        return True
+
+    db.add(
+        ContactMethod(
+            organization_id=principal.organization_id,
+            contact_id=contact.id,
+            method_type=method_type,
+            value=cleaned_value,
+            normalized_value=normalized_value,
+            is_primary=True,
+        )
+    )
+    previous_values[audit_key] = None
+    new_values[audit_key] = cleaned_value
+    return True
+
+
+def normalize_blank(value: str) -> str | None:
+    cleaned_value = value.strip()
+    return cleaned_value or None
+
+
+def normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
+def normalize_phone(value: str) -> str:
+    return "".join(character for character in value if character.isdigit())
+
+
+def normalize_address_key(
+    street_address: str,
+    city: str,
+    state: str,
+    postal_code: str,
+) -> str:
+    raw = "|".join([street_address, city, state, postal_code])
+    normalized = "".join(character.lower() if character.isalnum() else " " for character in raw)
+    return " ".join(normalized.split())
+
+
+def property_fields_changed(values: dict[str, Any]) -> bool:
+    property_keys = {"street_address", "city", "state", "postal_code"}
+    return any(key in values for key in property_keys)
+
+
 def lead_to_read(db: Session, lead: Lead) -> LeadRead:
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
@@ -328,10 +595,17 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         stage_key=lead.stage_key,
         lead_temperature=lead.lead_temperature,
         seller_name=contact.legal_name,
+        preferred_name=contact.preferred_name,
         property_address=(
             f"{property_record.street_address}, {property_record.city}, "
             f"{property_record.state} {property_record.postal_code}"
         ),
+        property_street_address=property_record.street_address,
+        property_city=property_record.city,
+        property_state=property_record.state,
+        property_postal_code=property_record.postal_code,
+        property_county=property_record.county,
+        property_type=property_record.property_type,
         assigned_user_email=assigned_user.email if assigned_user else None,
         created_at=lead.created_at,
     )
