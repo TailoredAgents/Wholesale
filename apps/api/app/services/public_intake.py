@@ -22,6 +22,7 @@ from app.schemas.public_intake import (
     SellerIntakeCreate,
     SellerIntakeResponse,
 )
+from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
     "new",
@@ -63,6 +64,7 @@ def create_public_seller_lead(
     property_record = duplicate_match.property_record or create_property(db, organization, payload)
     lead = duplicate_match.lead or create_lead(db, organization, contact, property_record, payload)
     matched_existing_lead = duplicate_match.lead is not None
+    ensure_speed_to_lead_task(db, lead, contact)
 
     db.add(
         ConsentRecord(

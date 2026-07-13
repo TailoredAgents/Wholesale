@@ -59,13 +59,33 @@ export type LeadDetail = LeadListItem & {
   }>;
 };
 
+export type SpeedToLeadTask = {
+  task_id: string;
+  lead_id: string;
+  seller_name: string;
+  property_address: string;
+  source: string;
+  stage_key: string;
+  priority: string;
+  status: string;
+  due_at: string | null;
+  created_at: string;
+  assigned_user_email: string | null;
+  due_status: string;
+};
+
 type LeadListResponse = {
   items: LeadListItem[];
+};
+
+type SpeedToLeadQueueResponse = {
+  items: SpeedToLeadTask[];
 };
 
 export type DashboardData = {
   summary: DashboardSummary;
   leads: LeadListItem[];
+  speedToLeadQueue: SpeedToLeadTask[];
   apiConnected: boolean;
 };
 
@@ -85,7 +105,7 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   try {
     const headers = { "X-Dev-User-Email": devUserEmail };
-    const [summaryResponse, leadsResponse] = await Promise.all([
+    const [summaryResponse, leadsResponse, speedToLeadResponse] = await Promise.all([
       fetch(`${apiBaseUrl}/api/v1/dashboard/summary`, {
         headers,
         cache: "no-store",
@@ -94,17 +114,22 @@ export async function getDashboardData(): Promise<DashboardData> {
         headers,
         cache: "no-store",
       }),
+      fetch(`${apiBaseUrl}/api/v1/tasks/speed-to-lead`, {
+        headers,
+        cache: "no-store",
+      }),
     ]);
 
-    if (!summaryResponse.ok || !leadsResponse.ok) {
+    if (!summaryResponse.ok || !leadsResponse.ok || !speedToLeadResponse.ok) {
       throw new Error("API returned a non-OK response");
     }
 
     const summary = (await summaryResponse.json()) as DashboardSummary;
     const leads = ((await leadsResponse.json()) as LeadListResponse).items;
-    return { summary, leads, apiConnected: true };
+    const speedToLeadQueue = ((await speedToLeadResponse.json()) as SpeedToLeadQueueResponse).items;
+    return { summary, leads, speedToLeadQueue, apiConnected: true };
   } catch {
-    return { summary: emptySummary, leads: [], apiConnected: false };
+    return { summary: emptySummary, leads: [], speedToLeadQueue: [], apiConnected: false };
   }
 }
 

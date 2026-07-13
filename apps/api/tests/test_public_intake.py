@@ -4,13 +4,16 @@ from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
     AttributionTouch,
+    AuditEvent,
     ConsentRecord,
     Contact,
     ContactMethod,
     Lead,
     LeadFormSubmission,
     Property,
+    Task,
 )
 from app.services.bootstrap import bootstrap_foundation
 
@@ -70,6 +73,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert payload["duplicate_status"] == "created"
     assert payload["matched_existing_lead"] is False
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
@@ -82,6 +86,12 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
     assert property_record.normalized_address_key == "55 auburn ave atlanta ga 30303"
+    task = db_session.scalar(select(Task))
+    assert task is not None
+    assert task.task_type == "speed_to_lead"
+    assert task.status == "open"
+    assert task.priority == "urgent"
+    assert str(task.lead_id) == payload["lead_id"]
 
 
 def test_public_seller_intake_requires_consent(
@@ -124,6 +134,59 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
+
+
+def test_speed_to_lead_queue_and_completion(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    intake_response = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert intake_response.status_code == 201
+
+    queue_response = client.get(
+        "/api/v1/tasks/speed-to-lead",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+
+    assert queue_response.status_code == 200
+    queue = queue_response.json()["items"]
+    assert len(queue) == 1
+    assert queue[0]["seller_name"] == "Sam Seller"
+    assert queue[0]["source"] == "google_ppc"
+    assert queue[0]["due_status"] in {"due", "overdue"}
+
+    complete_response = client.patch(
+        f"/api/v1/tasks/{queue[0]['task_id']}/complete",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+        json={"reason": "Seller contacted by phone."},
+    )
+
+    assert complete_response.status_code == 200
+    assert complete_response.json()["status"] == "completed"
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "task.complete")
+        )
+        or 0
+    ) == 1
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(ActivityEvent).where(
+                ActivityEvent.event_type == "task.completed"
+            )
+        )
+        or 0
+    ) == 1
+
+    completed_queue_response = client.get(
+        "/api/v1/tasks/speed-to-lead",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+    assert completed_queue_response.status_code == 200
+    assert completed_queue_response.json()["items"] == []

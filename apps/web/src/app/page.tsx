@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { CompleteTaskButton } from "./complete-task-button";
 import styles from "./page.module.css";
 import { getDashboardData } from "./lib/api";
 
@@ -29,6 +30,16 @@ function labelize(value: string) {
     .join(" ");
 }
 
+function formatTime(value: string | null) {
+  if (!value) {
+    return "Unscheduled";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 export default async function Home() {
   const dashboard = await getDashboardData();
   const pipelineCounts = new Map(
@@ -39,6 +50,11 @@ export default async function Home() {
       label: "New paid leads",
       value: String(dashboard.summary.new_paid_leads),
       detail: "Speed-to-lead queue",
+    },
+    {
+      label: "Contact tasks",
+      value: String(dashboard.speedToLeadQueue.length),
+      detail: "Open seller follow-up",
     },
     {
       label: "Offers pending",
@@ -103,8 +119,57 @@ export default async function Home() {
         <section className={styles.contentGrid}>
           <div className={styles.panel} id="leads">
             <div className={styles.panelHeader}>
-              <h3>Lead Queue</h3>
-              <span>Speed to lead</span>
+              <h3>Speed-To-Lead Queue</h3>
+              <span>Open contact tasks</span>
+            </div>
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Source</th>
+                    <th>Due</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dashboard.speedToLeadQueue.length === 0 ? (
+                    <tr>
+                      <td>No open contact tasks</td>
+                      <td>Waiting for seller submissions</td>
+                      <td>Clear</td>
+                      <td>Ready</td>
+                      <td></td>
+                    </tr>
+                  ) : null}
+                  {dashboard.speedToLeadQueue.map((task) => (
+                    <tr key={task.task_id}>
+                      <td>
+                        <Link className={styles.tableLink} href={`/leads/${task.lead_id}`}>
+                          {task.seller_name}
+                        </Link>
+                        <small className={styles.tableSubtext}>{task.property_address}</small>
+                      </td>
+                      <td>{labelize(task.source)}</td>
+                      <td>{formatTime(task.due_at)}</td>
+                      <td>
+                        <span className={styles[task.due_status]}>{labelize(task.due_status)}</span>
+                      </td>
+                      <td>
+                        <CompleteTaskButton taskId={task.task_id} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <h3>Lead List</h3>
+              <span>Recent sellers</span>
             </div>
             <div className={styles.tableWrap}>
               <table>

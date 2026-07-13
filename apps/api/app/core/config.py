@@ -21,6 +21,10 @@ class Settings(BaseSettings):
         default="Georgia Wholesale Operating Company",
         validation_alias="DEFAULT_ORGANIZATION_NAME",
     )
+    speed_to_lead_due_minutes: int = Field(
+        default=5,
+        validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
+    )
 
     @field_validator("database_url")
     @classmethod

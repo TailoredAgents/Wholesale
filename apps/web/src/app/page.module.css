@@ -91,7 +91,7 @@
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -184,6 +184,59 @@
 
 .tableLink:hover {
   text-decoration: underline;
+}
+
+.tableSubtext {
+  display: block;
+  margin-top: 3px;
+  color: #5d6365;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.due,
+.overdue,
+.unscheduled {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.due {
+  background: #eef5f1;
+  color: #245f43;
+}
+
+.overdue {
+  background: #f8e9e5;
+  color: #a13c2f;
+}
+
+.unscheduled {
+  background: #f1eee8;
+  color: #5d6365;
+}
+
+.smallButton {
+  min-height: 34px;
+  min-width: 68px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.smallButton:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .pipeline {

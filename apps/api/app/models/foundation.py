@@ -198,11 +198,14 @@ class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    task_type: Mapped[str] = mapped_column(String(120), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     priority: Mapped[str] = mapped_column(String(80), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ActivityEvent(UuidPrimaryKeyMixin, Base):

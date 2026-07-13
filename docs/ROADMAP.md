@@ -143,7 +143,7 @@ Acceptance met:
 
 ### M6: Staff Lead Editing
 
-Status: Implemented locally; full suite rerun pending local tooling issue.
+Status: Done.
 
 Delivered:
 
@@ -163,49 +163,62 @@ Verification completed:
 - API lint.
 - API typecheck.
 - Python compile check.
+- Full API test suite.
 
 Verification blocked:
 
-- `pytest`, broad web lint, Next build, TypeScript compiler, and Next dev server hung before producing diagnostics in this local shell.
-
-## Current Phase
-
-Phase 1B: Staff Lead Operations.
-
-Objective:
-
-Turn the lead foundation into a usable internal acquisition workspace before pushing to GitHub.
-
-## Next Milestones
+- Broad web lint, Next build, TypeScript compiler, and Next dev server hung before producing diagnostics in this local shell.
 
 ### M7: Speed-To-Lead Queue
 
-Goal:
+Status: Implemented locally.
 
-Make paid/new leads difficult to ignore.
+Delivered:
 
-Scope:
+- Lead-linked task metadata and Alembic migration.
+- Configurable speed-to-lead due threshold through `SPEED_TO_LEAD_DUE_MINUTES`.
+- Idempotent speed-to-lead task creation for public seller submissions.
+- Protected speed-to-lead queue API.
+- Protected task completion API.
+- Dashboard queue panel backed by real open tasks.
+- Due/overdue/unscheduled queue state labels.
+- Dashboard task completion action.
+- Activity event when a speed-to-lead task is created.
+- Audit and activity events when a task is completed.
+- Tests for task creation, duplicate suppression, queue retrieval, completion, audit, and activity.
 
-- Task creation for public seller submissions.
-- Speed-to-lead queue endpoint.
-- Dashboard queue panel backed by real tasks.
-- Overdue indicator based on configurable threshold.
-- Activity event when a task is created.
-- Basic task completion endpoint.
-
-Acceptance criteria:
+Acceptance met:
 
 - Public lead submission creates an acquisition follow-up task.
-- Dashboard shows new/paid leads needing contact.
-- Queue distinguishes new, due, and overdue leads.
-- Staff can mark speed-to-lead task complete.
-- Completion is audited or recorded as activity.
+- Duplicate public submissions do not create duplicate open speed-to-lead tasks.
+- Dashboard fetches and displays the live speed-to-lead queue.
+- Queue distinguishes due and overdue tasks.
+- Staff can mark a speed-to-lead task complete.
+- Completion is audited and recorded as activity.
 - Tests cover task creation and queue behavior.
 
-Test expectations:
+Verification completed:
 
-- API tests for task creation and completion.
-- Dashboard build still passes.
+- Alembic migration applied locally.
+- API lint.
+- API typecheck.
+- Python compile check.
+- Targeted M7 API tests.
+- Full API test suite.
+
+Verification blocked:
+
+- Broad web lint, Next build, and TypeScript compiler hung before producing diagnostics in this local shell.
+
+## Current Phase
+
+Phase 1C: Auth And Pre-GitHub Hardening.
+
+Objective:
+
+Replace development-only auth, harden the repository, then push to GitHub and prepare Render staging.
+
+## Next Milestones
 
 ### M8: Clerk Authentication
 
