@@ -2,7 +2,7 @@ import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
 export const metadata = {
-  title: "Get a Cash Offer | Georgia Wholesale OS",
+  title: "Get a Cash Offer | Oakwell Home Buyers",
   description: "Request a cash offer for a Georgia property.",
 };
 

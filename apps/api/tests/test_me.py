@@ -20,7 +20,7 @@ def test_read_me_returns_seeded_principal_permissions(
 ) -> None:
     bootstrap_foundation(
         db_session,
-        organization_name="Georgia Wholesale Operating Company",
+        organization_name="Oakwell Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )

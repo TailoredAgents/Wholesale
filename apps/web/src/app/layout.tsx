@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Georgia Wholesale OS",
+  title: "Oakwell Home Buyers OS",
   description: "Real estate wholesaling operating system",
 };
 

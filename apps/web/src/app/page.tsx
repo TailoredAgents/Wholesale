@@ -77,7 +77,7 @@ export default async function Home() {
     <main className={styles.shell}>
       <aside className={styles.sidebar} aria-label="Primary navigation">
         <div>
-          <p className={styles.eyebrow}>Georgia wholesale</p>
+          <p className={styles.eyebrow}>Oakwell Home Buyers</p>
           <h1>Operating System</h1>
         </div>
         <nav className={styles.nav}>

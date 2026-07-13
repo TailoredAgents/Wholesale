@@ -9,8 +9,8 @@ Current assumptions:
 - Authentication provider: Clerk.
 - GitHub push timing: after staff lead editing and speed-to-lead workflow.
 - Render staging timing: soon after GitHub push.
-- Business-facing company name: placeholder until confirmed.
-- Current placeholder organization: `Georgia Wholesale Operating Company`.
+- Business-facing company name: `Oakwell Home Buyers`.
+- Current local organization: `Oakwell Home Buyers`.
 
 ## Completed Local Milestones
 

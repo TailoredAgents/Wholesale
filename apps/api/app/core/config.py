@@ -18,7 +18,7 @@ class Settings(BaseSettings):
         default="http://localhost:3000", validation_alias="API_CORS_ORIGINS"
     )
     default_organization_name: str = Field(
-        default="Georgia Wholesale Operating Company",
+        default="Oakwell Home Buyers",
         validation_alias="DEFAULT_ORGANIZATION_NAME",
     )
     speed_to_lead_due_minutes: int = Field(

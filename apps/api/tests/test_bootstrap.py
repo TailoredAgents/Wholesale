@@ -21,7 +21,7 @@ def count_rows(db: Session, model: type[object]) -> int:
 def test_bootstrap_foundation_is_idempotent(db_session: Session) -> None:
     first = bootstrap_foundation(
         db_session,
-        organization_name="Georgia Wholesale Operating Company",
+        organization_name="Oakwell Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )
@@ -37,7 +37,7 @@ def test_bootstrap_foundation_is_idempotent(db_session: Session) -> None:
 
     second = bootstrap_foundation(
         db_session,
-        organization_name="Georgia Wholesale Operating Company",
+        organization_name="Oakwell Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )
