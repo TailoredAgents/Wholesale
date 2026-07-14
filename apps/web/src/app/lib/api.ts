@@ -1,3 +1,5 @@
+import { auth } from "@clerk/nextjs/server";
+
 export type DashboardSummary = {
   total_leads: number;
   new_paid_leads: number;
@@ -98,13 +100,33 @@ const emptySummary: DashboardSummary = {
   pipeline: [],
 };
 
-export async function getDashboardData(): Promise<DashboardData> {
-  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+async function getServerApiHeaders(): Promise<Record<string, string>> {
+  const token = await getClerkToken();
+  if (token) {
+    return { Authorization: `Bearer ${token}` };
+  }
   const devUserEmail =
     process.env.DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com";
+  return { "X-Dev-User-Email": devUserEmail };
+}
+
+async function getClerkToken() {
+  if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    return null;
+  }
+  try {
+    const session = await auth();
+    return await session.getToken();
+  } catch {
+    return null;
+  }
+}
+
+export async function getDashboardData(): Promise<DashboardData> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
 
   try {
-    const headers = { "X-Dev-User-Email": devUserEmail };
+    const headers = await getServerApiHeaders();
     const [summaryResponse, leadsResponse, speedToLeadResponse] = await Promise.all([
       fetch(`${apiBaseUrl}/api/v1/dashboard/summary`, {
         headers,
@@ -138,12 +160,11 @@ export async function getLeadDetail(leadId: string): Promise<{
   apiConnected: boolean;
 }> {
   const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
-  const devUserEmail =
-    process.env.DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com";
 
   try {
+    const headers = await getServerApiHeaders();
     const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}`, {
-      headers: { "X-Dev-User-Email": devUserEmail },
+      headers,
       cache: "no-store",
     });
 

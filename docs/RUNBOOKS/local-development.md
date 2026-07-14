@@ -9,6 +9,14 @@ uv sync
 uv run alembic upgrade head
 ```
 
+Copy the local environment template:
+
+```bash
+cp .env.example .env
+```
+
+Clerk values may stay blank for local-only development. Add them when testing real sign-in.
+
 ## Bootstrap
 
 ```bash
@@ -35,7 +43,8 @@ npm run test:api
 
 ## Local Protected Endpoints
 
-Development-only auth uses the seeded email header. This is disabled in production until the real auth provider is selected.
+Clerk bearer tokens are supported for protected endpoints. Local-only development can still use
+the seeded email header. Production rejects the development header and requires Clerk auth.
 
 ```bash
 curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
@@ -58,4 +67,5 @@ Open a lead detail page from the dashboard or directly at:
 http://localhost:3000/leads/{lead_id}
 ```
 
-The stage update control uses the same development-only user email header and writes activity plus audit records.
+The staff controls send a Clerk bearer token when available, otherwise they use the local
+development email header. Stage updates and task completions write activity plus audit records.

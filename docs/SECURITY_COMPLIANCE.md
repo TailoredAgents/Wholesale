@@ -19,9 +19,9 @@
 - Use service identities for AI and integrations.
 - Audit material reads/writes.
 
-## Current Local Auth Pattern
+## Current Auth Pattern
 
-Local development has a seeded user and a protected route pattern using `X-Dev-User-Email`. This is explicitly disabled in production. The production auth provider remains a blocking decision before deployment.
+Clerk is the selected authentication provider. FastAPI verifies Clerk session JWTs and maps Clerk subjects to local RBAC users. Local development can still use `X-Dev-User-Email`; production rejects that header and requires a Clerk bearer token.
 
 ## Communication Compliance
 

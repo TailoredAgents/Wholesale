@@ -25,6 +25,14 @@ class Settings(BaseSettings):
         default=5,
         validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
     )
+    clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")
+    clerk_jwks_url: str | None = Field(default=None, validation_alias="CLERK_JWKS_URL")
+    clerk_audience: str | None = Field(default=None, validation_alias="CLERK_AUDIENCE")
+    clerk_authorized_parties_raw: str = Field(
+        default="http://localhost:3000",
+        validation_alias="CLERK_AUTHORIZED_PARTIES",
+    )
+    clerk_secret_key: str | None = Field(default=None, validation_alias="CLERK_SECRET_KEY")
 
     @field_validator("database_url")
     @classmethod
@@ -38,6 +46,14 @@ class Settings(BaseSettings):
     @property
     def api_cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.api_cors_origins_raw.split(",") if origin.strip()]
+
+    @property
+    def clerk_authorized_parties(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.clerk_authorized_parties_raw.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

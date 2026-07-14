@@ -171,7 +171,7 @@ Verification blocked:
 
 ### M7: Speed-To-Lead Queue
 
-Status: Implemented locally.
+Status: Done.
 
 Delivered:
 
@@ -210,6 +210,51 @@ Verification blocked:
 
 - Broad web lint, Next build, and TypeScript compiler hung before producing diagnostics in this local shell.
 
+### M8: Clerk Authentication
+
+Status: Implemented locally; Clerk project credentials still required for live sign-in.
+
+Delivered:
+
+- Clerk dependency installed in the Next.js app.
+- `ClerkProvider` added at the app root.
+- Clerk middleware added for internal dashboard and lead routes.
+- Clerk sign-in and sign-up routes.
+- Server-rendered API requests send Clerk bearer tokens when available.
+- Client-side staff actions send Clerk bearer tokens when available.
+- FastAPI verifies Clerk JWTs through JWKS.
+- Clerk subject maps to local `users.external_auth_id`.
+- Existing local user can be linked by email after token verification.
+- Production rejects development header auth.
+- Local development can still use `X-Dev-User-Email` when no Clerk token is present.
+- Clerk environment variables documented in `.env.example`.
+
+Acceptance met:
+
+- Signed-in Clerk users can be mapped to local RBAC users.
+- API validates Clerk identity before resolving local permissions.
+- Local user permissions remain the authorization source.
+- Production cannot use `X-Dev-User-Email`.
+- Tests cover production rejection of dev auth and mapped Clerk principal access.
+
+Verification completed:
+
+- API lint.
+- API typecheck.
+- Full API test suite.
+- Web production build using `next build --webpack`.
+
+Verification blocked:
+
+- Broad web lint still hangs before producing diagnostics in this local shell.
+
+Remaining setup:
+
+- Create Clerk project.
+- Add local and Render Clerk environment variables.
+- Map the first Clerk user to the existing owner user.
+- Require MFA for owner/admin users in Clerk.
+
 ## Current Phase
 
 Phase 1C: Auth And Pre-GitHub Hardening.
@@ -219,40 +264,6 @@ Objective:
 Replace development-only auth, harden the repository, then push to GitHub and prepare Render staging.
 
 ## Next Milestones
-
-### M8: Clerk Authentication
-
-Goal:
-
-Replace the development-only identity header with real authentication while preserving RBAC.
-
-Scope:
-
-- Clerk app setup.
-- Next.js Clerk provider.
-- FastAPI token/session verification.
-- User mapping from Clerk identity to local `users`.
-- MFA requirement documented for privileged users.
-- Development header removed from production paths.
-
-Acceptance criteria:
-
-- Signed-in user can access dashboard.
-- Signed-out user cannot access protected internal pages.
-- API validates Clerk identity.
-- Local user permissions still control authorization.
-- Production cannot use `X-Dev-User-Email`.
-- Tests cover unauthorized and authorized API access.
-
-Test expectations:
-
-- Auth verification tests use mocks or Clerk test tokens.
-- Existing RBAC tests remain valid.
-
-Blocking inputs:
-
-- Clerk project credentials.
-- Local/staging Clerk URLs.
 
 ### M9: Local Pre-GitHub Hardening
 

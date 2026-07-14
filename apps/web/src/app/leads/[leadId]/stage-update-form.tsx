@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import styles from "./page.module.css";
@@ -34,6 +35,7 @@ export function StageUpdateForm({
   currentStage: string;
 }) {
   const router = useRouter();
+  const { getToken } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -50,12 +52,16 @@ export function StageUpdateForm({
     setStatus("saving");
 
     try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      } else {
+        headers["X-Dev-User-Email"] = devUserEmail;
+      }
       const response = await fetch(`${apiBaseUrl}/api/v1/leads/${leadId}/stage`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Dev-User-Email": devUserEmail,
-        },
+        headers,
         body: JSON.stringify({
           stage_key: String(formData.get("stage_key") ?? currentStage),
           reason: String(formData.get("reason") ?? "").trim() || null,

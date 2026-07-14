@@ -36,6 +36,9 @@ uv sync
 uv run alembic upgrade head
 ```
 
+Copy `.env.example` to `.env` for local defaults. Clerk values can stay blank for local
+development; protected API calls will use the development email header until Clerk keys are added.
+
 Bootstrap the first local organization and owner:
 
 ```bash
@@ -70,7 +73,8 @@ Open:
 
 Public intake performs basic duplicate detection using normalized email, phone, and property address. Duplicate active submissions preserve new consent, form, and attribution evidence while matching the existing lead.
 
-Protected local endpoints use a temporary development-only header until the production auth provider is selected:
+Protected endpoints support Clerk bearer tokens. Local development may use the development-only
+email header; production rejects that header and requires Clerk authentication:
 
 ```bash
 curl -H 'X-Dev-User-Email: richardaustindugger@users.noreply.github.com' \
