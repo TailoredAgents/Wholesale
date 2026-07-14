@@ -1,12 +1,21 @@
 # Render Deployment
 
-Planned resources:
+The Render Blueprint is in `infra/render.yaml`.
 
-- Frontend web service.
-- API web service.
-- Background worker.
-- Cron jobs.
-- PostgreSQL.
-- Key Value.
+Planned staging resources:
 
-Deploy after local foundation is stable, pushed to GitHub, and staging secrets are configured outside the repository.
+- `oakwell-web`: Next.js web service.
+- `oakwell-api`: FastAPI web service.
+- `oakwell-worker`: background worker.
+- `oakwell-postgres`: PostgreSQL database.
+- `oakwell-key-value`: Render Key Value instance.
+
+Deployment requirements:
+
+- GitHub repo connected to Render.
+- Clerk staging project created.
+- All `sync: false` environment variables set in Render.
+- API service can run `alembic upgrade head` on startup.
+- Owner user bootstrapped in the staging database.
+
+Use `docs/RUNBOOKS/render-staging-checklist.md` before creating staging.

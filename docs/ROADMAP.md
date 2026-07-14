@@ -257,64 +257,81 @@ Remaining setup:
 
 ## Current Phase
 
-Phase 1C: Auth And Pre-GitHub Hardening.
+Phase 1D: Render Staging Preparation.
 
 Objective:
 
-Replace development-only auth, harden the repository, then push to GitHub and prepare Render staging.
+Harden the GitHub repository, configure Render staging, and validate the first hosted deployment.
 
 ## Next Milestones
 
-### M9: Local Pre-GitHub Hardening
+### M9: Local Pre-Render Hardening
+
+Status: Done.
 
 Goal:
 
-Prepare the repository for a clean GitHub push.
+Prepare the repository for CI and Render staging.
 
-Scope:
+Delivered:
 
-- Remove any generated placeholder docs from app scaffold that conflict with project docs.
-- Add CI workflow draft.
-- Add secret scanning guidance.
-- Confirm `.gitignore`.
-- Confirm no local secrets committed.
-- Add initial issue/backlog labels in docs.
-- Review Render Blueprint for current service commands.
+- Removed generated create-next-app README copy that conflicted with project docs.
+- Removed unused create-next-app SVG assets.
+- Added GitHub Actions CI for API lint/typecheck/tests and web production build.
+- Added secret scanning guidance.
+- Confirmed `.gitignore` covers env files, dependency installs, build output, caches, and local conflict artifacts.
+- Added GitHub branch protection and issue-label plan.
+- Added Render staging checklist.
+- Reviewed and updated Render Blueprint for current service commands, Oakwell service names, migrations, and Clerk env vars.
 
-Acceptance criteria:
+Acceptance met:
 
-- Working tree clean.
-- Full local verification passes.
-- `git log` has clean milestone commits.
-- No secrets in repository.
+- Local verification passes for API and web build.
+- No tracked local secrets found by pattern scan.
 - README can bootstrap from a clean checkout.
+- GitHub CI is ready to run.
+
+Verification completed:
+
+- API lint.
+- API typecheck.
+- Full API test suite.
+- Web production build.
+- `git diff --check`.
+
+Remaining caveat:
+
+- Web lint still hangs before diagnostics and is excluded from CI for now.
 
 ### M10: Push To GitHub
+
+Status: Done.
 
 Goal:
 
 Create the remote repository and push `main`.
 
-Scope:
+Delivered:
 
-- Create GitHub repo.
-- Add remote.
-- Push current history.
-- Confirm branch protection plan.
-- Add initial GitHub Actions workflow if not already added.
+- GitHub remote added: `https://github.com/TailoredAgents/Wholesale.git`.
+- `main` pushed and tracking `origin/main`.
+- CI workflow added.
+- Branch protection plan documented.
 
-Acceptance criteria:
+Acceptance met:
 
 - GitHub remote exists.
 - `main` is pushed.
-- CI runs or is ready to run.
+- CI is ready to run.
 - README instructions are visible in GitHub.
 
 ### M11: Render Staging
 
+Status: Next.
+
 Goal:
 
-Deploy an early staging environment soon after GitHub push.
+Deploy an early staging environment.
 
 Scope:
 

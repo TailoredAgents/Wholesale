@@ -1,38 +1,66 @@
 services:
   - type: web
-    name: wholesale-web
+    name: oakwell-web
     runtime: node
     rootDir: apps/web
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --workspaces=false && npm run build
     startCommand: npm run start
     envVars:
+      - key: API_BASE_URL
+        sync: false
       - key: NEXT_PUBLIC_API_BASE_URL
         sync: false
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+        value: /
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+        value: /
 
   - type: web
-    name: wholesale-api
+    name: oakwell-api
     runtime: python
     rootDir: apps/api
     buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run alembic upgrade head && uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: APP_ENV
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: wholesale-postgres
+          name: oakwell-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: wholesale-key-value
+          name: oakwell-key-value
           property: connectionString
       - key: API_CORS_ORIGINS
         sync: false
+      - key: DEFAULT_ORGANIZATION_NAME
+        value: Oakwell Home Buyers
+      - key: SPEED_TO_LEAD_DUE_MINUTES
+        value: 5
+      - key: CLERK_ISSUER
+        sync: false
+      - key: CLERK_JWKS_URL
+        sync: false
+      - key: CLERK_AUDIENCE
+        sync: false
+      - key: CLERK_AUTHORIZED_PARTIES
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
 
   - type: worker
-    name: wholesale-worker
+    name: oakwell-worker
     runtime: python
     rootDir: apps/worker
     buildCommand: pip install uv && uv sync --frozen
@@ -42,19 +70,19 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: wholesale-postgres
+          name: oakwell-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: wholesale-key-value
+          name: oakwell-key-value
           property: connectionString
 
 databases:
-  - name: wholesale-postgres
+  - name: oakwell-postgres
     plan: basic-256mb
 
 keyValue:
-  - name: wholesale-key-value
+  - name: oakwell-key-value
     plan: starter
     ipAllowList: []

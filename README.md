@@ -8,7 +8,7 @@ Local-first monorepo for a Georgia real-estate wholesaling operating system.
 - `apps/api`: FastAPI / SQLAlchemy / Alembic foundation API.
 - `apps/worker`: Python worker scaffold.
 - `docs`: Phase 0 product, architecture, data, workflow, AI, security, deployment, and roadmap docs.
-- `infra/render.yaml`: draft Render Blueprint with no secrets.
+- `infra/render.yaml`: Render Blueprint with no secrets.
 
 ## Prerequisites
 
@@ -106,13 +106,27 @@ curl -X POST http://localhost:8000/api/v1/public/seller-leads \
 ## Checks
 
 ```bash
-npm run lint:web
 npm run build:web
 npm run lint:api
 npm run typecheck:api
 npm run test:api
 ```
 
+`npm run lint:web` is not currently part of CI because ESLint hangs locally before diagnostics.
+
+## GitHub
+
+The repository is pushed to:
+
+```text
+https://github.com/TailoredAgents/Wholesale.git
+```
+
+CI is defined in `.github/workflows/ci.yml`. Branch protection and labels are documented in
+`docs/GITHUB_SETUP.md`.
+
 ## Deployment Direction
 
-Build and test locally first. Then push to GitHub. Render deployment comes after staging environment variables, database, key-value service, and object storage decisions are confirmed.
+Build and test locally first. Render deployment comes after staging environment variables, database,
+key-value service, and Clerk credentials are configured outside the repository. Use
+`docs/RUNBOOKS/render-staging-checklist.md`.
