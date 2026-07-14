@@ -33,7 +33,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   if (!lead) {
     return (
       <main className={styles.page}>
-        <Link className={styles.backLink} href="/">
+        <Link className={styles.backLink} href="/os">
           Back to dashboard
         </Link>
         <section className={styles.empty}>
@@ -45,7 +45,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
 
   return (
     <main className={styles.page}>
-      <Link className={styles.backLink} href="/">
+      <Link className={styles.backLink} href="/os">
         Back to dashboard
       </Link>
       <header className={styles.header}>

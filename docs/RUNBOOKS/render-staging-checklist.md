@@ -16,8 +16,8 @@
 - `CLERK_SECRET_KEY`: Clerk secret key.
 - `NEXT_PUBLIC_CLERK_SIGN_IN_URL`: `/sign-in`.
 - `NEXT_PUBLIC_CLERK_SIGN_UP_URL`: `/sign-up`.
-- `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`: `/`.
-- `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`: `/`.
+- `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL`: `/os`.
+- `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL`: `/os`.
 
 ## API Environment Variables
 
@@ -49,7 +49,7 @@ DATABASE_URL="<render database url>" uv run python -m app.cli.bootstrap \
 
 5. Sign in through Clerk.
 6. Map the Clerk user to the local owner if email auto-linking did not set `external_auth_id`.
-7. Confirm `/health`, `/ready`, dashboard, public intake, and speed-to-lead queue.
+7. Confirm `/health`, `/ready`, public website, public intake, `/os`, and speed-to-lead queue.
 
 ## Clerk Requirements
 

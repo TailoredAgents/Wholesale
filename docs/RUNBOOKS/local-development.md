@@ -61,7 +61,13 @@ curl -X POST http://localhost:8000/api/v1/public/seller-leads \
 
 Submitting the same email/phone/address again should return `duplicate_status: "matched_existing_lead"` and reuse the existing active lead.
 
-Open a lead detail page from the dashboard or directly at:
+Open the internal operating system at:
+
+```text
+http://localhost:3000/os
+```
+
+Open a lead detail page from the OS dashboard or directly at:
 
 ```text
 http://localhost:3000/leads/{lead_id}

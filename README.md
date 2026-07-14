@@ -4,7 +4,7 @@ Local-first monorepo for a Georgia real-estate wholesaling operating system.
 
 ## Current State
 
-- `apps/web`: Next.js 16 / React 19 / TypeScript dashboard shell.
+- `apps/web`: Next.js 16 / React 19 / TypeScript public site and internal OS shell.
 - `apps/api`: FastAPI / SQLAlchemy / Alembic foundation API.
 - `apps/worker`: Python worker scaffold.
 - `docs`: Phase 0 product, architecture, data, workflow, AI, security, deployment, and roadmap docs.
@@ -59,8 +59,9 @@ npm run dev:web
 
 Open:
 
-- Web: http://localhost:3000
+- Public website: http://localhost:3000
 - Public cash-offer form: http://localhost:3000/get-a-cash-offer
+- Internal operating system: http://localhost:3000/os
 - Lead detail pages: `http://localhost:3000/leads/{lead_id}`
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
