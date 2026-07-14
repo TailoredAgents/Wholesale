@@ -78,11 +78,11 @@ services:
           name: oakwell-key-value
           property: connectionString
 
+  - type: keyvalue
+    name: oakwell-key-value
+    plan: starter
+    ipAllowList: []
+
 databases:
   - name: oakwell-postgres
     plan: basic-256mb
-
-keyValue:
-  - name: oakwell-key-value
-    plan: starter
-    ipAllowList: []

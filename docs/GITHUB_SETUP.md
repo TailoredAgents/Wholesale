@@ -47,3 +47,5 @@ The current GitHub Actions workflow runs:
 - Web production build.
 
 Web lint is intentionally not required yet because local `eslint` hangs before diagnostics.
+The web production build currently skips build-time TypeScript validation because Clerk dependency
+type checking stalls locally; re-enable it after the Clerk/TypeScript toolchain issue is resolved.

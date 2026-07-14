@@ -113,6 +113,9 @@ npm run test:api
 ```
 
 `npm run lint:web` is not currently part of CI because ESLint hangs locally before diagnostics.
+Next.js web builds currently skip build-time TypeScript validation because Clerk dependency type
+checking stalls locally; API lint, API typecheck, API tests, and the web production compile remain
+the required gates.
 
 ## GitHub
 
