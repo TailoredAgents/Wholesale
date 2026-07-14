@@ -8,6 +8,8 @@ Local-first monorepo for a Georgia real-estate wholesaling operating system.
 - `apps/api`: FastAPI / SQLAlchemy / Alembic foundation API.
 - `apps/worker`: Python worker scaffold.
 - `docs`: Phase 0 product, architecture, data, workflow, AI, security, deployment, and roadmap docs.
+- `docs/UNIFIED_BUILD_PLAN.md`: current unified build plan for public site, OS, software stack,
+  bookkeeping, and AI agents.
 - `render.yaml`: Render Blueprint with no secrets.
 
 ## Prerequisites

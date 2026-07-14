@@ -257,11 +257,12 @@ Remaining setup:
 
 ## Current Phase
 
-Phase 1D: Render Staging Preparation.
+Phase 2A: Staging Stabilization And Public Conversion Foundation.
 
 Objective:
 
-Harden the GitHub repository, configure Render staging, and validate the first hosted deployment.
+Use the live staging deployment to harden the public seller conversion flow and the internal OS
+workspace. The unified product direction is documented in `docs/UNIFIED_BUILD_PLAN.md`.
 
 ## Next Milestones
 
@@ -329,7 +330,7 @@ Acceptance met:
 
 ### M11: Render Staging
 
-Status: Next.
+Status: Done.
 
 Goal:
 
@@ -354,11 +355,39 @@ Acceptance criteria:
 - Staging login path works after Clerk is configured.
 - No secrets are committed.
 
-Blocking inputs:
+Delivered:
 
-- Render account/project access.
-- Staging domain decision, if any.
-- Clerk staging credentials.
+- Render Blueprint deployment.
+- Public website at `/`.
+- Public cash-offer form at `/get-a-cash-offer`.
+- Protected internal OS route at `/os`.
+- API health and readiness endpoints live.
+- Clerk redirects configured to return staff users to `/os`.
+
+### M12: Public Conversion Foundation
+
+Status: Next.
+
+Goal:
+
+Make the front-facing Oakwell site ready for real seller traffic and paid lead generation.
+
+Scope:
+
+- Conversion-focused homepage copy.
+- Seller situation pages.
+- Trust and process sections.
+- Cash-offer form UX tightening.
+- Conversion event model.
+- Form start, abandonment, submit, duplicate, and call-click tracking.
+- Source/campaign reporting in the OS.
+
+Acceptance criteria:
+
+- Public pages have one seller CTA and no internal OS links.
+- Conversion events are stored in PostgreSQL.
+- OS shows source/campaign performance and speed-to-lead by source.
+- Paid traffic can be launched without losing attribution or consent evidence.
 
 ## Later Product Phases
 
