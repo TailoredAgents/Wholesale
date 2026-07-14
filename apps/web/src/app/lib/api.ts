@@ -7,6 +7,16 @@ export type DashboardSummary = {
   offers_pending: number;
   collected_revenue_cents: number;
   pipeline: Array<{ stage_key: string; count: number }>;
+  source_performance: Array<{
+    source: string;
+    medium: string;
+    campaign: string;
+    page_views: number;
+    form_starts: number;
+    form_submits: number;
+    call_clicks: number;
+    leads_created: number;
+  }>;
 };
 
 export type LeadListItem = {
@@ -98,6 +108,7 @@ const emptySummary: DashboardSummary = {
   offers_pending: 0,
   collected_revenue_cents: 0,
   pipeline: [],
+  source_performance: [],
 };
 
 async function getServerApiHeaders(): Promise<Record<string, string>> {

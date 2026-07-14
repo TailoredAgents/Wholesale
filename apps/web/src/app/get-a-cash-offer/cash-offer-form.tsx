@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
+
+import { getConversionAttribution, recordConversionEvent } from "../lib/conversion-events";
 import styles from "./page.module.css";
 
 const consentWording =
@@ -16,30 +18,24 @@ function getValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-function getAttribution() {
-  const params = new URLSearchParams(window.location.search);
-  return {
-    landing_page: window.location.pathname,
-    referrer: document.referrer || null,
-    utm_source: params.get("utm_source"),
-    utm_medium: params.get("utm_medium"),
-    utm_campaign: params.get("utm_campaign"),
-    utm_term: params.get("utm_term"),
-    utm_content: params.get("utm_content"),
-    gclid: params.get("gclid"),
-    fbclid: params.get("fbclid"),
-  };
-}
-
 export function CashOfferForm() {
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
   );
+  const hasTrackedFormStart = useRef(false);
   const [submitState, setSubmitState] = useState<SubmitState>({
     status: "idle",
     message: "",
   });
+
+  function handleFormStart() {
+    if (hasTrackedFormStart.current) {
+      return;
+    }
+    hasTrackedFormStart.current = true;
+    void recordConversionEvent(apiBaseUrl, "form_start", { form: "cash_offer" });
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -59,7 +55,7 @@ export function CashOfferForm() {
       comments: getValue(formData, "comments") || null,
       consent_to_contact: formData.get("consent_to_contact") === "on",
       consent_wording_version: "seller-web-v1",
-      attribution: getAttribution(),
+      attribution: getConversionAttribution(),
     };
 
     setSubmitState({ status: "submitting", message: "Submitting..." });
@@ -90,7 +86,7 @@ export function CashOfferForm() {
   }
 
   return (
-    <form className={styles.form} onSubmit={handleSubmit}>
+    <form className={styles.form} onFocusCapture={handleFormStart} onSubmit={handleSubmit}>
       <div className={styles.gridTwo}>
         <label>
           <span>Property address</span>
@@ -172,7 +168,7 @@ export function CashOfferForm() {
       </label>
 
       <button disabled={submitState.status === "submitting"} type="submit">
-        Request offer
+        Get my cash offer
       </button>
 
       {submitState.message ? (

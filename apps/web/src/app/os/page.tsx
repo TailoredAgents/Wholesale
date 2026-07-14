@@ -46,6 +46,7 @@ export default async function Home() {
   const pipelineCounts = new Map(
     dashboard.summary.pipeline.map((stage) => [stage.stage_key, stage.count]),
   );
+  const sourcePerformance = dashboard.summary.source_performance;
   const metrics = [
     {
       label: "New paid leads",
@@ -201,6 +202,57 @@ export default async function Home() {
                       <td>{labelize(lead.source)}</td>
                       <td>{labelize(lead.stage_key)}</td>
                       <td>{lead.assigned_user_email ?? "Unassigned"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className={styles.panel}>
+            <div className={styles.panelHeader}>
+              <h3>Source Performance</h3>
+              <span>Public site conversion events</span>
+            </div>
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th>Views</th>
+                    <th>Starts</th>
+                    <th>Submits</th>
+                    <th>Calls</th>
+                    <th>Leads</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sourcePerformance.length === 0 ? (
+                    <tr>
+                      <td>No source data yet</td>
+                      <td>0</td>
+                      <td>0</td>
+                      <td>0</td>
+                      <td>0</td>
+                      <td>0</td>
+                    </tr>
+                  ) : null}
+                  {sourcePerformance.map((source) => (
+                    <tr key={`${source.source}-${source.medium}-${source.campaign}`}>
+                      <td>
+                        {labelize(source.source)}
+                        <small className={styles.tableSubtext}>
+                          {[source.medium, source.campaign]
+                            .filter((value) => !["unknown", "uncategorized"].includes(value))
+                            .map(labelize)
+                            .join(" / ") || "No campaign"}
+                        </small>
+                      </td>
+                      <td>{source.page_views}</td>
+                      <td>{source.form_starts}</td>
+                      <td>{source.form_submits}</td>
+                      <td>{source.call_clicks}</td>
+                      <td>{source.leads_created}</td>
                     </tr>
                   ))}
                 </tbody>

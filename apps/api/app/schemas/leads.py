@@ -119,6 +119,17 @@ class PipelineStageCount(BaseModel):
     count: int
 
 
+class SourcePerformance(BaseModel):
+    source: str
+    medium: str
+    campaign: str
+    page_views: int
+    form_starts: int
+    form_submits: int
+    call_clicks: int
+    leads_created: int
+
+
 class DashboardSummary(BaseModel):
     total_leads: int
     new_paid_leads: int
@@ -126,3 +137,4 @@ class DashboardSummary(BaseModel):
     offers_pending: int
     collected_revenue_cents: int
     pipeline: list[PipelineStageCount]
+    source_performance: list[SourcePerformance]

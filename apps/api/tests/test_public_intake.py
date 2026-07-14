@@ -10,6 +10,7 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    ConversionEvent,
     Lead,
     LeadFormSubmission,
     Property,
@@ -78,6 +79,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 1
 
     consent = db_session.scalar(select(ConsentRecord))
     assert consent is not None
@@ -92,6 +94,50 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert task.status == "open"
     assert task.priority == "urgent"
     assert str(task.lead_id) == payload["lead_id"]
+    conversion_event = db_session.scalar(select(ConversionEvent))
+    assert conversion_event is not None
+    assert conversion_event.event_type == "form_submit"
+    assert str(conversion_event.lead_id) == payload["lead_id"]
+    assert conversion_event.source == "google_ppc"
+    assert conversion_event.medium == "cpc"
+    assert conversion_event.event_metadata == {"matched_existing_lead": False}
+
+
+def test_public_conversion_event_endpoint_records_attribution(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/public/conversion-events",
+        json={
+            "event_type": "form_start",
+            "session_id": "session-123",
+            "metadata": {"field": "property_address"},
+            "attribution": {
+                "landing_page": "/get-a-cash-offer",
+                "referrer": "https://example.com",
+                "utm_source": "meta_ads",
+                "utm_medium": "paid_social",
+                "utm_campaign": "seller-leads",
+                "fbclid": "fbclid-test",
+            },
+        },
+        headers={"User-Agent": "pytest", "X-Forwarded-For": "203.0.113.11"},
+    )
+
+    assert response.status_code == 201
+    event = db_session.scalar(select(ConversionEvent))
+    assert event is not None
+    assert response.json()["id"] == str(event.id)
+    assert event.event_type == "form_start"
+    assert event.session_id == "session-123"
+    assert event.ip_address == "203.0.113.11"
+    assert event.source == "meta_ads"
+    assert event.medium == "paid_social"
+    assert event.event_metadata == {"field": "property_address"}
 
 
 def test_public_seller_intake_requires_consent(
@@ -138,6 +184,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
 
 
 def test_speed_to_lead_queue_and_completion(

@@ -1,10 +1,13 @@
 import Link from "next/link";
 
+import { PublicConversionTracker } from "./public-conversion-tracker";
 import styles from "./page.module.css";
+import { TrackedPhoneLink } from "./tracked-phone-link";
 
 export default function PublicHomePage() {
   return (
     <main className={styles.page}>
+      <PublicConversionTracker metadata={{ page: "home" }} />
       <header className={styles.header}>
         <Link className={styles.brand} href="/">
           Oakwell Home Buyers
@@ -26,9 +29,9 @@ export default function PublicHomePage() {
             <Link className={styles.primaryAction} href="/get-a-cash-offer">
               Get my cash offer
             </Link>
-            <a className={styles.secondaryAction} href="tel:+14045550100">
+            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+14045550100">
               Call Oakwell
-            </a>
+            </TrackedPhoneLink>
           </div>
         </div>
         <div className={styles.heroPanel} aria-label="Seller benefits">

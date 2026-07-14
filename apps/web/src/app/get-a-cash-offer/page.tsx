@@ -1,3 +1,4 @@
+import { PublicConversionTracker } from "../public-conversion-tracker";
 import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
@@ -9,6 +10,7 @@ export const metadata = {
 export default function GetCashOfferPage() {
   return (
     <main className={styles.page}>
+      <PublicConversionTracker metadata={{ page: "cash_offer" }} />
       <section className={styles.hero}>
         <div className={styles.copy}>
           <p className={styles.eyebrow}>Georgia home buyers</p>

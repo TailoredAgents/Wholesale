@@ -22,6 +22,18 @@ class SellerIntakeAttribution(BaseModel):
     fbclid: str | None = Field(default=None, max_length=255)
 
 
+class ConversionEventCreate(BaseModel):
+    event_type: str = Field(min_length=1, max_length=80)
+    session_id: str | None = Field(default=None, max_length=120)
+    metadata: dict[str, object] | None = None
+    attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
+
+
+class ConversionEventResponse(BaseModel):
+    id: UUID
+    event_type: str
+
+
 class SellerIntakeCreate(BaseModel):
     property_address: str = Field(min_length=3, max_length=255)
     property_city: str = Field(min_length=1, max_length=120)

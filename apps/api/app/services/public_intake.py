@@ -22,6 +22,7 @@ from app.schemas.public_intake import (
     SellerIntakeCreate,
     SellerIntakeResponse,
 )
+from app.services.conversion_events import record_conversion_event
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -95,6 +96,16 @@ def create_public_seller_lead(
             create_attribution_touch(organization.id, lead.id, "first_touch", payload),
             create_attribution_touch(organization.id, lead.id, "lead_creation", payload),
         ]
+    )
+    record_conversion_event(
+        db,
+        organization_id=organization.id,
+        lead_id=lead.id,
+        event_type="form_submit",
+        attribution=payload.attribution,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        metadata={"matched_existing_lead": matched_existing_lead},
     )
     db.add(
         ActivityEvent(

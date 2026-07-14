@@ -179,6 +179,31 @@ class AttributionTouch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversion_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    landing_page: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    medium: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    term: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    content: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    event_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "deals"
 

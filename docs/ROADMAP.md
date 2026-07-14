@@ -366,7 +366,7 @@ Delivered:
 
 ### M12: Public Conversion Foundation
 
-Status: Next.
+Status: In progress.
 
 Goal:
 
@@ -388,6 +388,21 @@ Acceptance criteria:
 - Conversion events are stored in PostgreSQL.
 - OS shows source/campaign performance and speed-to-lead by source.
 - Paid traffic can be launched without losing attribution or consent evidence.
+
+Delivered so far:
+
+- Added PostgreSQL conversion event model and migration.
+- Added public conversion event API for page views, form starts, and call clicks.
+- Added definitive cash-offer form submit events tied to leads.
+- Preserved UTM, click ID, landing page, referrer, session, IP, and user-agent context.
+- Added OS source performance reporting for views, starts, submits, calls, and created leads.
+- Instrumented the public homepage and cash-offer form without adding internal OS links.
+
+Remaining:
+
+- Add seller situation pages.
+- Add deeper trust/proof/process sections.
+- Add explicit abandonment event handling after the form flow is more mature.
 
 ## Later Product Phases
 

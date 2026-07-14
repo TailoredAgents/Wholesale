@@ -12,6 +12,7 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    ConversionEvent,
     Deal,
     Lead,
     Property,
@@ -29,6 +30,7 @@ from app.schemas.leads import (
     LeadStaffUpdate,
     LeadStageUpdate,
     PipelineStageCount,
+    SourcePerformance,
 )
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
@@ -434,7 +436,97 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
             PipelineStageCount(stage_key=str(stage_key), count=int(count))
             for stage_key, count in pipeline_rows
         ],
+        source_performance=get_source_performance(db, principal),
     )
+
+
+def get_source_performance(db: Session, principal: Principal) -> list[SourcePerformance]:
+    source_rows: dict[tuple[str, str, str], dict[str, int | str]] = {}
+    event_rows = db.execute(
+        select(
+            ConversionEvent.source,
+            ConversionEvent.medium,
+            ConversionEvent.campaign,
+            ConversionEvent.event_type,
+            func.count(ConversionEvent.id),
+        )
+        .where(ConversionEvent.organization_id == principal.organization_id)
+        .group_by(
+            ConversionEvent.source,
+            ConversionEvent.medium,
+            ConversionEvent.campaign,
+            ConversionEvent.event_type,
+        )
+    ).all()
+
+    for source, medium, campaign, event_type, count in event_rows:
+        row = ensure_source_performance_row(source_rows, source, medium, campaign)
+        count_value = int(count)
+        if event_type == "page_view":
+            row["page_views"] = int(row["page_views"]) + count_value
+        elif event_type == "form_start":
+            row["form_starts"] = int(row["form_starts"]) + count_value
+        elif event_type == "form_submit":
+            row["form_submits"] = int(row["form_submits"]) + count_value
+        elif event_type == "call_click":
+            row["call_clicks"] = int(row["call_clicks"]) + count_value
+
+    lead_rows = db.execute(
+        select(Lead.source, func.count(Lead.id))
+        .where(Lead.organization_id == principal.organization_id)
+        .group_by(Lead.source)
+    ).all()
+    for source, count in lead_rows:
+        row = ensure_source_performance_row(source_rows, source, None, None)
+        row["leads_created"] = int(row["leads_created"]) + int(count)
+
+    return [
+        SourcePerformance(
+            source=str(row["source"]),
+            medium=str(row["medium"]),
+            campaign=str(row["campaign"]),
+            page_views=int(row["page_views"]),
+            form_starts=int(row["form_starts"]),
+            form_submits=int(row["form_submits"]),
+            call_clicks=int(row["call_clicks"]),
+            leads_created=int(row["leads_created"]),
+        )
+        for row in sorted(
+            source_rows.values(),
+            key=lambda item: (
+                -int(item["leads_created"]),
+                -int(item["form_submits"]),
+                -int(item["form_starts"]),
+                -int(item["page_views"]),
+                str(item["source"]),
+            ),
+        )
+    ][:10]
+
+
+def ensure_source_performance_row(
+    source_rows: dict[tuple[str, str, str], dict[str, int | str]],
+    source: str | None,
+    medium: str | None,
+    campaign: str | None,
+) -> dict[str, int | str]:
+    key = (
+        source or "direct",
+        medium or "unknown",
+        campaign or "uncategorized",
+    )
+    if key not in source_rows:
+        source_rows[key] = {
+            "source": key[0],
+            "medium": key[1],
+            "campaign": key[2],
+            "page_views": 0,
+            "form_starts": 0,
+            "form_submits": 0,
+            "call_clicks": 0,
+            "leads_created": 0,
+        }
+    return source_rows[key]
 
 
 def count_scalar(db: Session, statement: Any) -> int:
