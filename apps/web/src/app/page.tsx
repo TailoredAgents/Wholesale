@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AuthControls } from "./auth-controls";
 import { CompleteTaskButton } from "./complete-task-button";
 import styles from "./page.module.css";
 import { getDashboardData } from "./lib/api";
@@ -90,6 +91,7 @@ export default async function Home() {
           <a href="#approvals">Approvals</a>
           <a href="#buyers">Buyers</a>
         </nav>
+        <AuthControls />
       </aside>
 
       <section className={styles.workspace} id="dashboard">

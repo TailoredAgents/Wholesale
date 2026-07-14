@@ -17,5 +17,5 @@ export default clerkConfigured
     };
 
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)", "/"],
+  matcher: ["/((?!_next|.*\\..*).*)", "/", "/(api|trpc)(.*)", "/__clerk/:path*"],
 };

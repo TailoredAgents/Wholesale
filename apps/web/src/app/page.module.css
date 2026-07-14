@@ -51,6 +51,41 @@
   color: #ffffff;
 }
 
+.authControls {
+  margin-top: auto;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.authButton,
+.authButtonSecondary {
+  min-height: 40px;
+  width: 100%;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.authButton {
+  border: 0;
+  background: #f7f7f2;
+  color: #101820;
+}
+
+.authButtonSecondary {
+  border: 1px solid #3a4b54;
+  background: transparent;
+  color: #f7f7f2;
+}
+
+.authButton:hover,
+.authButtonSecondary:hover {
+  filter: brightness(0.95);
+}
+
 .workspace {
   min-width: 0;
   padding: 28px;
