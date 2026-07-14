@@ -4,6 +4,35 @@
   color: #161a1d;
 }
 
+.header {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 32px;
+  border-bottom: 1px solid #ded8cc;
+  background: #ffffff;
+}
+
+.brand {
+  color: #101820;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nav a {
+  color: #2f6f4e;
+}
+
 .hero {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -129,6 +158,16 @@
 }
 
 @media (max-width: 860px) {
+  .header,
+  .nav {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header {
+    padding: 18px;
+  }
+
   .hero,
   .gridTwo {
     grid-template-columns: 1fr;

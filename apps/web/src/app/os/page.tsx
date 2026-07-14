@@ -6,6 +6,10 @@ import styles from "./page.module.css";
 import { getDashboardData } from "../lib/api";
 
 export const dynamic = "force-dynamic";
+export const metadata = {
+  title: "Oakwell Operating System",
+  description: "Internal acquisitions workspace for Oakwell Home Buyers.",
+};
 
 const pipelineStages = [
   { key: "new", label: "New" },

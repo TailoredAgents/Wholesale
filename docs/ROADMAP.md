@@ -397,10 +397,12 @@ Delivered so far:
 - Preserved UTM, click ID, landing page, referrer, session, IP, and user-agent context.
 - Added OS source performance reporting for views, starts, submits, calls, and created leads.
 - Instrumented the public homepage and cash-offer form without adding internal OS links.
+- Added seller situation pages for inherited houses, repairs-needed houses, and fast-sale timelines.
+- Expanded the homepage with public trust cues, process content, visual property media, and stronger seller CTAs.
+- Removed internal operating-system wording from the public cash-offer page.
 
 Remaining:
 
-- Add seller situation pages.
 - Add deeper trust/proof/process sections.
 - Add explicit abandonment event handling after the form flow is more mature.
 
