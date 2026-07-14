@@ -11,7 +11,6 @@ export default function PublicHomePage() {
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
           <Link href="/get-a-cash-offer">Get a cash offer</Link>
-          <Link href="/sign-in">Staff sign in</Link>
         </nav>
       </header>
 
