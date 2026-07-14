@@ -35,7 +35,7 @@
 
 ## Deploy Steps
 
-1. Create Render resources from `infra/render.yaml`.
+1. Create Render resources from `render.yaml`.
 2. Set all synced secret/env values in Render.
 3. Deploy API; startup runs `alembic upgrade head`.
 4. Bootstrap the owner user against staging:

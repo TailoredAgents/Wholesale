@@ -1,6 +1,6 @@
 # Render Deployment
 
-The Render Blueprint is in `infra/render.yaml`.
+The Render Blueprint is in `render.yaml`.
 
 Planned staging resources:
 
