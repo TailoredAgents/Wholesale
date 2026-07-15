@@ -13,11 +13,19 @@ export default function OsLayout({ children }: { children: ReactNode }) {
   return (
     <main className={styles.shell}>
       <aside className={styles.sidebar} aria-label="Primary navigation">
-        <div>
-          <p className={styles.eyebrow}>Oakwell Home Buyers</p>
-          <h1>Operating System</h1>
+        <div className={styles.brandBlock}>
+          <span className={styles.brandMark} aria-hidden="true" />
+          <div className={styles.brandCopy}>
+            <p className={styles.eyebrow}>Oakwell Home Buyers</p>
+            <h1>Operating System</h1>
+            <span>Acquisitions, finance, buyers, marketing, and AI control.</span>
+          </div>
         </div>
         <OsNav />
+        <div className={styles.sidebarStatus} aria-label="Workspace status">
+          <span>System mode</span>
+          <strong>Command workspace</strong>
+        </div>
         <AuthControls />
       </aside>
 
