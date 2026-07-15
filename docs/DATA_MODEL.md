@@ -36,6 +36,12 @@
 - `compensation_calculations`
 - `marketing_spend`
 - `offline_conversion_exports`
+- `approval_requests`
+- `ai_agent_definitions`
+- `ai_prompt_versions`
+- `ai_tool_permissions`
+- `ai_run_logs`
+- `ai_tool_call_logs`
 
 ## Rules
 

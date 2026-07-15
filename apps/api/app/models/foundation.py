@@ -521,6 +521,137 @@ class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
+class ApprovalRequest(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "approval_requests"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    request_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    summary: Mapped[str] = mapped_column(String(2000), nullable=False)
+    decision_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approval_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class AiAgentDefinition(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_agent_definitions"
+    __table_args__ = (UniqueConstraint("organization_id", "key", name="uq_ai_agents_org_key"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    risk_level: Mapped[str] = mapped_column(String(80), nullable=False)
+    requires_human_approval: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+
+
+class AiPromptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_prompt_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "agent_definition_id",
+            "version_number",
+            name="uq_ai_prompt_versions_agent_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    prompt_text: Mapped[str] = mapped_column(String(8000), nullable=False)
+    change_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class AiToolPermission(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_tool_permissions"
+    __table_args__ = (
+        UniqueConstraint(
+            "agent_definition_id",
+            "tool_key",
+            name="uq_ai_tool_permissions_agent_tool",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    tool_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    permission_level: Mapped[str] = mapped_column(String(80), nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    requires_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_run_logs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    prompt_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_prompt_versions.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    input_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
+    output_summary: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_tool_call_logs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    ai_run_log_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id"), index=True
+    )
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("approval_requests.id"), index=True
+    )
+    tool_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    requires_approval: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    input_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
 

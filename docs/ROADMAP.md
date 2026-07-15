@@ -585,12 +585,22 @@ Remaining expansion:
 
 ### Phase 10: AI Control Center
 
+Delivered foundation:
+
 - Agent definitions.
 - Prompt versions.
-- Tool-call logs.
-- Approval queue integration.
-- Evaluation datasets.
+- Tool permission policy.
+- Run and tool-call logs.
+- Approval queue integration for proposed AI tool actions.
 - Cost and latency tracking.
+- OS AI Control page.
+
+Remaining expansion:
+
+- Evaluation datasets.
+- Model-backed agent execution.
+- OpenAI agent/tool integration.
+- Automated approval workflow routing.
 
 ## Open Decisions
 

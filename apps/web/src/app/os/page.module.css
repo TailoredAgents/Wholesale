@@ -526,6 +526,12 @@
   gap: 10px;
 }
 
+.inlineActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .financeForm h3 {
   font-size: 15px;
 }
@@ -565,7 +571,8 @@
 
 .buyerForm button,
 .financeForm button,
-.actionPanel button {
+.actionPanel button,
+.inlineActions button {
   min-height: 44px;
   border: 0;
   border-radius: 8px;
@@ -574,6 +581,12 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.inlineActions button {
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .buyerList {

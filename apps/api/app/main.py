@@ -2,7 +2,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.routers import buyers, dashboard, finance, health, leads, marketing, me, public, tasks
+from app.routers import (
+    ai,
+    approvals,
+    buyers,
+    dashboard,
+    finance,
+    health,
+    leads,
+    marketing,
+    me,
+    public,
+    tasks,
+)
 
 
 def create_app() -> FastAPI:
@@ -23,6 +35,8 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(health.router)
+    app.include_router(ai.router)
+    app.include_router(approvals.router)
     app.include_router(buyers.router)
     app.include_router(dashboard.router)
     app.include_router(finance.router)

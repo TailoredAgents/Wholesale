@@ -328,6 +328,90 @@ export type MarketingOverview = {
   }>;
 };
 
+export type ApprovalRequestItem = {
+  id: string;
+  request_type: string;
+  entity_type: string;
+  entity_id: string | null;
+  status: string;
+  title: string;
+  summary: string;
+  decision_notes: string | null;
+  due_at: string | null;
+  decided_at: string | null;
+  created_at: string;
+};
+
+export type AiControlOverview = {
+  summary: {
+    agent_count: number;
+    active_agent_count: number;
+    prompt_version_count: number;
+    run_count: number;
+    pending_approval_count: number;
+    total_cost_cents: number;
+    average_latency_ms: number | null;
+  };
+  agents: Array<{
+    id: string;
+    key: string;
+    name: string;
+    description: string;
+    status: string;
+    model_name: string;
+    risk_level: string;
+    requires_human_approval: boolean;
+    tool_permissions: Array<{
+      id: string;
+      tool_key: string;
+      tool_name: string;
+      permission_level: string;
+      is_enabled: boolean;
+      requires_approval: boolean;
+      created_at: string;
+    }>;
+    created_at: string;
+  }>;
+  prompt_versions: Array<{
+    id: string;
+    agent_definition_id: string;
+    version_number: number;
+    status: string;
+    prompt_text: string;
+    change_notes: string | null;
+    created_at: string;
+  }>;
+  runs: Array<{
+    id: string;
+    agent_definition_id: string;
+    prompt_version_id: string | null;
+    lead_id: string | null;
+    status: string;
+    model_name: string;
+    input_summary: string;
+    output_summary: string | null;
+    total_tokens: number | null;
+    cost_cents: number | null;
+    latency_ms: number | null;
+    started_at: string;
+    completed_at: string | null;
+    error_message: string | null;
+    tool_calls: Array<{
+      id: string;
+      ai_run_log_id: string;
+      approval_request_id: string | null;
+      tool_key: string;
+      status: string;
+      requires_approval: boolean;
+      input_payload: Record<string, unknown> | null;
+      output_payload: Record<string, unknown> | null;
+      error_message: string | null;
+      created_at: string;
+    }>;
+    created_at: string;
+  }>;
+};
+
 export type SpeedToLeadTask = {
   task_id: string;
   lead_id: string;
@@ -572,5 +656,69 @@ export async function getMarketingOverview(): Promise<{
     return { marketing: (await response.json()) as MarketingOverview, apiConnected: true };
   } catch {
     return { marketing: emptyMarketingOverview, apiConnected: false };
+  }
+}
+
+const emptyAiControlOverview: AiControlOverview = {
+  summary: {
+    agent_count: 0,
+    active_agent_count: 0,
+    prompt_version_count: 0,
+    run_count: 0,
+    pending_approval_count: 0,
+    total_cost_cents: 0,
+    average_latency_ms: null,
+  },
+  agents: [],
+  prompt_versions: [],
+  runs: [],
+};
+
+export async function getAiControlOverview(): Promise<{
+  ai: AiControlOverview;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/ai`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return { ai: (await response.json()) as AiControlOverview, apiConnected: true };
+  } catch {
+    return { ai: emptyAiControlOverview, apiConnected: false };
+  }
+}
+
+export async function getApprovalRequests(): Promise<{
+  approvals: ApprovalRequestItem[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/approvals`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return {
+      approvals: ((await response.json()) as { items: ApprovalRequestItem[] }).items,
+      apiConnected: true,
+    };
+  } catch {
+    return { approvals: [], apiConnected: false };
   }
 }

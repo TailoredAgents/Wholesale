@@ -15,6 +15,7 @@ const navItems = [
   { href: "/os/buyers", label: "Buyers" },
   { href: "/os/finance", label: "Finance" },
   { href: "/os/marketing", label: "Marketing" },
+  { href: "/os/ai", label: "AI Control" },
 ];
 
 export function OsNav() {
