@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.models.foundation import (
     ActivityEvent,
+    Appointment,
     AttributionTouch,
     AuditEvent,
     CommunicationRecord,
@@ -23,12 +24,14 @@ from app.models.foundation import (
 )
 from app.schemas.leads import (
     ActivityEventRead,
+    AppointmentRead,
     AttributionTouchRead,
     CommunicationRecordRead,
     ConsentRecordRead,
     ContactMethodRead,
     DashboardSummary,
     LeadAiReadySummary,
+    LeadAppointmentCreate,
     LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
@@ -49,6 +52,9 @@ PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", 
 COMMUNICATION_DIRECTIONS = {"inbound", "outbound", "internal"}
 COMMUNICATION_CHANNELS = {"call", "sms", "email", "voicemail", "note"}
 COMMUNICATION_STATUSES = {"logged", "draft", "sent", "received", "failed", "blocked"}
+APPOINTMENT_TYPES = {"seller_call", "walkthrough", "offer_review", "follow_up"}
+APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "rescheduled"}
+APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
 QUALIFICATION_FIELDS = [
@@ -255,6 +261,15 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         .order_by(CommunicationRecord.occurred_at.desc(), CommunicationRecord.created_at.desc())
         .limit(20)
     ).all()
+    appointments = db.scalars(
+        select(Appointment)
+        .where(
+            Appointment.organization_id == principal.organization_id,
+            Appointment.lead_id == lead.id,
+        )
+        .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.desc())
+        .limit(20)
+    ).all()
 
     return LeadDetail(
         **base.model_dump(),
@@ -319,6 +334,21 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 created_at=communication.created_at,
             )
             for communication in communications
+        ],
+        appointments=[
+            AppointmentRead(
+                id=appointment.id,
+                appointment_type=appointment.appointment_type,
+                status=appointment.status,
+                scheduled_start_at=appointment.scheduled_start_at,
+                scheduled_end_at=appointment.scheduled_end_at,
+                location_type=appointment.location_type,
+                location=appointment.location,
+                notes=appointment.notes,
+                outcome=appointment.outcome,
+                created_at=appointment.created_at,
+            )
+            for appointment in appointments
         ],
         recent_activity=[
             ActivityEventRead(
@@ -755,6 +785,110 @@ def add_lead_communication(
                 "occurred_at": communication.occurred_at.isoformat(),
             },
             reason="Manual communication log",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
+def create_lead_appointment(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadAppointmentCreate,
+) -> LeadDetail | None:
+    if payload.appointment_type not in APPOINTMENT_TYPES:
+        raise ValueError(f"Unsupported appointment type: {payload.appointment_type}")
+    if payload.status not in APPOINTMENT_STATUSES:
+        raise ValueError(f"Unsupported appointment status: {payload.status}")
+    if payload.location_type not in APPOINTMENT_LOCATION_TYPES:
+        raise ValueError(f"Unsupported appointment location type: {payload.location_type}")
+    if (
+        payload.scheduled_end_at is not None
+        and payload.scheduled_end_at <= payload.scheduled_start_at
+    ):
+        raise ValueError("Appointment end time must be after start time.")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    previous_values = {
+        "appointment_status": lead.appointment_status,
+        "next_follow_up_at": lead.next_follow_up_at.isoformat()
+        if lead.next_follow_up_at
+        else None,
+        "stage_key": lead.stage_key,
+    }
+    appointment = Appointment(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        property_id=lead.property_id,
+        owner_user_id=lead.assigned_user_id or principal.user_id,
+        appointment_type=payload.appointment_type,
+        status=payload.status,
+        scheduled_start_at=payload.scheduled_start_at,
+        scheduled_end_at=payload.scheduled_end_at,
+        location_type=payload.location_type,
+        location=payload.location,
+        notes=payload.notes,
+        outcome=None,
+        external_calendar_id=None,
+        appointment_metadata={
+            "source": "manual_schedule",
+            "calendar_synced": False,
+        },
+    )
+    db.add(appointment)
+
+    lead.appointment_status = payload.status
+    lead.next_follow_up_at = payload.scheduled_start_at
+    if lead.stage_key in {
+        "new",
+        "contact_attempt_due",
+        "attempting_contact",
+        "contacted",
+        "qualification_in_progress",
+        "qualified",
+    }:
+        lead.stage_key = "appointment_scheduled"
+
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.appointment_scheduled",
+            summary=(
+                f"{payload.appointment_type} appointment scheduled for "
+                f"{payload.scheduled_start_at.isoformat()}."
+            ),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="appointment.create",
+            entity_type="appointment",
+            entity_id=appointment.id,
+            previous_value=previous_values,
+            new_value={
+                "lead_id": str(lead.id),
+                "appointment_type": appointment.appointment_type,
+                "status": appointment.status,
+                "scheduled_start_at": appointment.scheduled_start_at.isoformat(),
+                "scheduled_end_at": appointment.scheduled_end_at.isoformat()
+                if appointment.scheduled_end_at
+                else None,
+                "location_type": appointment.location_type,
+                "stage_key": lead.stage_key,
+            },
+            reason="Manual appointment scheduling",
         )
     )
     db.commit()

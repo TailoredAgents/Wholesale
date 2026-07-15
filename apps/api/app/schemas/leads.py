@@ -125,6 +125,19 @@ class CommunicationRecordRead(BaseModel):
     created_at: datetime
 
 
+class AppointmentRead(BaseModel):
+    id: UUID
+    appointment_type: str
+    status: str
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime | None
+    location_type: str
+    location: str | None
+    notes: str | None
+    outcome: str | None
+    created_at: datetime
+
+
 class LeadMissingField(BaseModel):
     field_key: str
     label: str
@@ -162,6 +175,7 @@ class LeadDetail(LeadRead):
     attribution_touches: list[AttributionTouchRead]
     open_tasks: list[LeadTaskRead]
     communications: list[CommunicationRecordRead]
+    appointments: list[AppointmentRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
 
@@ -212,6 +226,16 @@ class LeadCommunicationCreate(BaseModel):
     subject: str | None = Field(default=None, max_length=255)
     body: str = Field(min_length=1, max_length=4000)
     occurred_at: datetime | None = None
+
+
+class LeadAppointmentCreate(BaseModel):
+    appointment_type: str = Field(default="seller_call", max_length=80)
+    status: str = Field(default="scheduled", max_length=80)
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime | None = None
+    location_type: str = Field(default="phone", max_length=80)
+    location: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=1000)
 
 
 class PipelineStageCount(BaseModel):

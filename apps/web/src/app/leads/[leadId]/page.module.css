@@ -299,6 +299,7 @@
 .stageForm,
 .noteForm,
 .taskForm,
+.appointmentForm,
 .communicationForm {
   padding: 18px;
   display: grid;
@@ -343,6 +344,7 @@
 .stageForm label,
 .noteForm label,
 .taskForm label,
+.appointmentForm label,
 .communicationForm label {
   display: grid;
   gap: 7px;
@@ -358,6 +360,9 @@
 .noteForm textarea,
 .taskForm select,
 .taskForm input,
+.appointmentForm select,
+.appointmentForm input,
+.appointmentForm textarea,
 .communicationForm select,
 .communicationForm input,
 .communicationForm textarea {
@@ -369,6 +374,7 @@
 }
 
 .noteForm textarea,
+.appointmentForm textarea,
 .communicationForm textarea {
   resize: vertical;
 }
@@ -377,6 +383,7 @@
 .stageForm button,
 .noteForm button,
 .taskForm button,
+.appointmentForm button,
 .communicationForm button {
   min-height: 44px;
   border: 0;
@@ -388,16 +395,19 @@
   cursor: pointer;
 }
 
+.appointmentGrid,
 .communicationGrid {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
   gap: 0;
 }
 
+.appointmentForm,
 .communicationForm {
   border-right: 1px solid #e8e3d8;
 }
 
+.appointmentList,
 .communicationList {
   padding: 18px;
   display: grid;
@@ -405,12 +415,14 @@
   gap: 10px;
 }
 
+.appointmentList > p,
 .communicationList > p {
   margin: 0;
   color: #5d6365;
   font-size: 14px;
 }
 
+.appointmentList article,
 .communicationList article {
   padding: 12px;
   border: 1px solid #e4ded4;
@@ -420,21 +432,28 @@
   gap: 7px;
 }
 
+.appointmentList article div,
 .communicationList article div {
   display: flex;
   justify-content: space-between;
   gap: 12px;
 }
 
+.appointmentList h3,
 .communicationList h3,
+.appointmentList p,
 .communicationList p {
   margin: 0;
 }
 
+.appointmentList h3,
 .communicationList h3 {
   font-size: 15px;
 }
 
+.appointmentList span,
+.appointmentList p,
+.appointmentList small,
 .communicationList span,
 .communicationList p,
 .communicationList small {
@@ -496,10 +515,12 @@
     flex-direction: column;
   }
 
+  .appointmentGrid,
   .communicationGrid {
     grid-template-columns: 1fr;
   }
 
+  .appointmentForm,
   .communicationForm {
     border-right: 0;
     border-bottom: 1px solid #e8e3d8;

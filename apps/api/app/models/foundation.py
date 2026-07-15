@@ -237,6 +237,32 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class Appointment(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "appointments"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    appointment_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    scheduled_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scheduled_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    location_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    outcome: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    external_calendar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    appointment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "deals"
 

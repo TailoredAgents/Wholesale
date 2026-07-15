@@ -8,6 +8,7 @@ from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
+    LeadAppointmentCreate,
     LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
@@ -22,6 +23,7 @@ from app.services.leads import (
     add_lead_communication,
     add_lead_note,
     create_lead,
+    create_lead_appointment,
     create_lead_follow_up_task,
     get_lead_detail,
     list_leads,
@@ -98,6 +100,25 @@ def create_lead_communication(
 ) -> LeadDetail:
     try:
         lead = add_lead_communication(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/appointments", status_code=201)
+def schedule_lead_appointment(
+    lead_id: UUID,
+    payload: LeadAppointmentCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    try:
+        lead = create_lead_appointment(db, principal, lead_id, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

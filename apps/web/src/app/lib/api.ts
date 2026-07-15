@@ -99,6 +99,18 @@ export type LeadDetail = LeadListItem & {
     occurred_at: string;
     created_at: string;
   }>;
+  appointments: Array<{
+    id: string;
+    appointment_type: string;
+    status: string;
+    scheduled_start_at: string;
+    scheduled_end_at: string | null;
+    location_type: string;
+    location: string | null;
+    notes: string | null;
+    outcome: string | null;
+    created_at: string;
+  }>;
   intelligence: {
     quality_score: number;
     urgency_score: number;

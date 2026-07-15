@@ -451,11 +451,16 @@ Delivered so far:
 - Added protected lead communication logging API with audit and activity events.
 - Added a communications panel to the lead workspace.
 - Added a communication provider adapter contract for future Twilio/Gmail-style integrations.
+- Added appointment records with scheduled windows, type, status, location, notes, audit trail,
+  and activity timeline entries.
+- Added protected appointment scheduling API and lead workspace appointment panel.
+- Scheduling an appointment now updates lead appointment status, next follow-up, and appointment
+  pipeline stage when appropriate.
 
 Remaining:
 
 - Persist user-specific saved view definitions after team/user preferences exist.
-- Add appointment records instead of only appointment status.
+- Add appointment status update/reschedule outcomes and calendar sync after provider selection.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
 - Add inbound provider webhooks, suppression checks, and send approval gates before live

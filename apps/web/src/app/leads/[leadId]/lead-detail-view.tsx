@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
 import { getLeadDetail } from "../../lib/api";
+import { AppointmentForm } from "./appointment-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
@@ -194,6 +195,37 @@ export async function LeadDetailView({ params }: LeadPageProps) {
                 <CompleteTaskButton taskId={task.id} />
               </div>
             ))}
+          </div>
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Appointments</h2>
+          </div>
+          <div className={styles.appointmentGrid}>
+            <AppointmentForm leadId={lead.id} />
+            <div className={styles.appointmentList}>
+              {lead.appointments.length === 0 ? <p>No appointments scheduled yet.</p> : null}
+              {lead.appointments.map((appointment) => (
+                <article key={appointment.id}>
+                  <div>
+                    <strong>{labelize(appointment.appointment_type)}</strong>
+                    <span>{labelize(appointment.status)}</span>
+                  </div>
+                  <p>
+                    {formatDate(appointment.scheduled_start_at)}
+                    {appointment.scheduled_end_at
+                      ? ` to ${formatDate(appointment.scheduled_end_at)}`
+                      : ""}
+                  </p>
+                  <small>
+                    {labelize(appointment.location_type)}
+                    {appointment.location ? ` / ${appointment.location}` : ""}
+                  </small>
+                  {appointment.notes ? <p>{appointment.notes}</p> : null}
+                </article>
+              ))}
+            </div>
           </div>
         </article>
 

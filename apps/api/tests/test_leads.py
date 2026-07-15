@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import ActivityEvent, AuditEvent, CommunicationRecord, Task
+from app.models.foundation import ActivityEvent, Appointment, AuditEvent, CommunicationRecord, Task
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -148,6 +148,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["seller_name"] == "Jane Seller"
     assert detail["open_tasks"] == []
     assert detail["communications"] == []
+    assert detail["appointments"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
     assert detail["intelligence"]["urgency_score"] == 88
@@ -411,6 +412,83 @@ def test_add_lead_communication_rejects_unknown_channel(
             "channel": "fax",
             "status": "logged",
             "body": "Unsupported channel.",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_schedule_lead_appointment_updates_lead_and_records_audit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "appointment_type": "walkthrough",
+            "status": "scheduled",
+            "scheduled_start_at": "2026-07-17T15:00:00Z",
+            "scheduled_end_at": "2026-07-17T16:00:00Z",
+            "location_type": "property",
+            "location": "123 Peachtree St, Atlanta, GA 30303",
+            "notes": "Seller wants us to look at roof and kitchen first.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["stage_key"] == "appointment_scheduled"
+    assert payload["appointment_status"] == "scheduled"
+    assert payload["next_follow_up_at"].startswith("2026-07-17T15:00:00")
+    assert payload["appointments"][0]["appointment_type"] == "walkthrough"
+    assert payload["appointments"][0]["status"] == "scheduled"
+    assert payload["appointments"][0]["location_type"] == "property"
+    assert "lead.appointment_scheduled" in [
+        activity["event_type"] for activity in payload["recent_activity"]
+    ]
+    assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 1
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "appointment.create"
+            )
+        )
+        or 0
+    ) == 1
+
+
+def test_schedule_lead_appointment_rejects_invalid_time_window(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "appointment_type": "seller_call",
+            "status": "scheduled",
+            "scheduled_start_at": "2026-07-17T15:00:00Z",
+            "scheduled_end_at": "2026-07-17T14:00:00Z",
+            "location_type": "phone",
         },
     )
 
