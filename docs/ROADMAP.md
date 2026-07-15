@@ -569,10 +569,19 @@ Remaining expansion:
 
 ### Phase 9: Marketing Intelligence
 
-- Google conversion event upload adapter.
-- Meta conversions adapter.
+Delivered foundation:
+
 - Campaign/click performance reporting.
-- Offline conversion export/retry tracking.
+- Spend, lead, contract, and revenue attribution by source/campaign.
+- Cost-per-lead and cost-per-contract reporting.
+- ROAS reporting.
+- Offline conversion export queue for Google/Meta click IDs.
+
+Remaining expansion:
+
+- Google Ads upload adapter.
+- Meta conversions API adapter.
+- Export retry and failure workflow.
 
 ### Phase 10: AI Control Center
 

@@ -35,6 +35,7 @@
 - `compensation_rules`
 - `compensation_calculations`
 - `marketing_spend`
+- `offline_conversion_exports`
 
 ## Rules
 

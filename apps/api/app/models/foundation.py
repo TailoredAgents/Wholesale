@@ -488,6 +488,39 @@ class MarketingSpend(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
+class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "offline_conversion_exports"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "platform",
+            "revenue_record_id",
+            name="uq_offline_exports_org_platform_revenue",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    platform: Mapped[str] = mapped_column(String(80), nullable=False)
+    conversion_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("conversion_events.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    revenue_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("revenue_records.id"), index=True
+    )
+    event_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    click_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    click_id_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    value_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
 

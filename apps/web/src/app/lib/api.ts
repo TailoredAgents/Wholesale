@@ -281,6 +281,53 @@ export type FinanceOverview = {
   }>;
 };
 
+export type MarketingOverview = {
+  summary: {
+    total_spend_cents: number;
+    collected_revenue_cents: number;
+    leads_created: number;
+    contracted_leads: number;
+    cost_per_lead_cents: number | null;
+    cost_per_contract_cents: number | null;
+    return_on_ad_spend_basis_points: number | null;
+    pending_offline_exports: number;
+  };
+  campaigns: Array<{
+    source: string;
+    medium: string;
+    campaign: string;
+    page_views: number;
+    form_starts: number;
+    form_abandons: number;
+    form_submits: number;
+    call_clicks: number;
+    leads_created: number;
+    contracted_leads: number;
+    collected_revenue_cents: number;
+    marketing_spend_cents: number;
+    cost_per_lead_cents: number | null;
+    cost_per_contract_cents: number | null;
+    return_on_ad_spend_basis_points: number | null;
+  }>;
+  offline_exports: Array<{
+    id: string;
+    platform: string;
+    conversion_event_id: string | null;
+    lead_id: string | null;
+    revenue_record_id: string | null;
+    event_name: string;
+    click_id: string;
+    click_id_type: string;
+    value_cents: number | null;
+    currency: string;
+    status: string;
+    attempt_count: number;
+    exported_at: string | null;
+    last_error: string | null;
+    created_at: string;
+  }>;
+};
+
 export type SpeedToLeadTask = {
   task_id: string;
   lead_id: string;
@@ -487,5 +534,43 @@ export async function getFinanceOverview(): Promise<{
     return { finance: (await response.json()) as FinanceOverview, apiConnected: true };
   } catch {
     return { finance: emptyFinanceOverview, apiConnected: false };
+  }
+}
+
+const emptyMarketingOverview: MarketingOverview = {
+  summary: {
+    total_spend_cents: 0,
+    collected_revenue_cents: 0,
+    leads_created: 0,
+    contracted_leads: 0,
+    cost_per_lead_cents: null,
+    cost_per_contract_cents: null,
+    return_on_ad_spend_basis_points: null,
+    pending_offline_exports: 0,
+  },
+  campaigns: [],
+  offline_exports: [],
+};
+
+export async function getMarketingOverview(): Promise<{
+  marketing: MarketingOverview;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/marketing`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return { marketing: (await response.json()) as MarketingOverview, apiConnected: true };
+  } catch {
+    return { marketing: emptyMarketingOverview, apiConnected: false };
   }
 }
