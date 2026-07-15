@@ -310,6 +310,19 @@ def test_add_lead_note_and_follow_up_task(
     assert task_payload["next_follow_up_at"].startswith("2026-07-16T14:30:00")
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
 
+    queue_response = client.get(
+        "/api/v1/tasks/open",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert queue_response.status_code == 200
+    queue = queue_response.json()["items"]
+    assert len(queue) == 1
+    assert queue[0]["lead_id"] == lead_id
+    assert queue[0]["task_type"] == "follow_up"
+    assert queue[0]["title"] == "Call seller about appointment window"
+    assert queue[0]["seller_name"] == "Jane Seller"
+
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:
     client = TestClient(app)

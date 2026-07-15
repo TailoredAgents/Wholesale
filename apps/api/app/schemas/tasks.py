@@ -4,9 +4,11 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class SpeedToLeadTaskRead(BaseModel):
+class TaskQueueItemRead(BaseModel):
     task_id: UUID
     lead_id: UUID
+    task_type: str
+    title: str
     seller_name: str
     property_address: str
     source: str
@@ -20,7 +22,11 @@ class SpeedToLeadTaskRead(BaseModel):
 
 
 class SpeedToLeadQueueResponse(BaseModel):
-    items: list[SpeedToLeadTaskRead]
+    items: list[TaskQueueItemRead]
+
+
+class TaskQueueResponse(BaseModel):
+    items: list[TaskQueueItemRead]
 
 
 class TaskCompleteRequest(BaseModel):

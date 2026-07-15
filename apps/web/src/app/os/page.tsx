@@ -13,12 +13,17 @@ export const metadata = {
 
 const pipelineStages = [
   { key: "new", label: "New" },
+  { key: "attempting_contact", label: "Attempting contact" },
   { key: "contacted", label: "Contacted" },
+  { key: "qualification_in_progress", label: "Qualifying" },
+  { key: "qualified", label: "Qualified" },
+  { key: "appointment_scheduled", label: "Appointment" },
   { key: "underwriting", label: "Underwriting" },
   { key: "offer_ready", label: "Offer ready" },
   { key: "under_contract", label: "Under contract" },
-  { key: "closed", label: "Closed" },
 ];
+
+const boardStages = pipelineStages.slice(0, 6);
 
 function formatMoney(cents: number) {
   return new Intl.NumberFormat("en-US", {
@@ -45,12 +50,58 @@ function formatTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) {
+    return "Unscheduled";
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function missingQualificationFields(lead: {
+  motivation: string | null;
+  desired_timeline: string | null;
+  property_condition: string | null;
+}) {
+  return [lead.motivation, lead.desired_timeline, lead.property_condition].filter(Boolean).length;
+}
+
 export default async function Home() {
   const dashboard = await getDashboardData();
   const pipelineCounts = new Map(
     dashboard.summary.pipeline.map((stage) => [stage.stage_key, stage.count]),
   );
   const sourcePerformance = dashboard.summary.source_performance;
+  const openTasks = dashboard.openTaskQueue;
+  const overdueTasks = openTasks.filter((task) => task.due_status === "overdue");
+  const dueTasks = openTasks.filter((task) => task.due_status === "due");
+  const needsQualification = dashboard.leads.filter(
+    (lead) =>
+      ["new", "contacted", "qualification_in_progress"].includes(lead.stage_key) &&
+      missingQualificationFields(lead) < 3,
+  );
+  const appointmentQueue = dashboard.leads.filter(
+    (lead) =>
+      ["qualified", "appointment_scheduled"].includes(lead.stage_key) ||
+      ["appointment_requested", "not_scheduled"].includes(lead.appointment_status ?? ""),
+  );
+  const offerQueue = dashboard.leads.filter((lead) =>
+    ["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key),
+  );
+  const leadsByStage = new Map(
+    boardStages.map((stage) => [
+      stage.key,
+      dashboard.leads.filter((lead) => lead.stage_key === stage.key).slice(0, 5),
+    ]),
+  );
+  const openTaskCountsByLead = openTasks.reduce((counts, task) => {
+    counts.set(task.lead_id, (counts.get(task.lead_id) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>());
   const metrics = [
     {
       label: "New paid leads",
@@ -58,9 +109,9 @@ export default async function Home() {
       detail: "Speed-to-lead queue",
     },
     {
-      label: "Contact tasks",
-      value: String(dashboard.speedToLeadQueue.length),
-      detail: "Open seller follow-up",
+      label: "Open tasks",
+      value: String(openTasks.length),
+      detail: `${overdueTasks.length} overdue / ${dueTasks.length} due`,
     },
     {
       label: "Offers pending",
@@ -90,10 +141,10 @@ export default async function Home() {
           <a className={styles.activeNav} href="#dashboard">
             Dashboard
           </a>
+          <a href="#work">Work Queue</a>
+          <a href="#pipeline">Pipeline</a>
           <a href="#leads">Leads</a>
           <a href="#underwriting">Underwriting</a>
-          <a href="#approvals">Approvals</a>
-          <a href="#buyers">Buyers</a>
         </nav>
         <AuthControls />
       </aside>
@@ -120,6 +171,121 @@ export default async function Home() {
               <small>{metric.detail}</small>
             </article>
           ))}
+        </section>
+
+        <section className={styles.workQueues} id="work" aria-label="Acquisition work queues">
+          <article className={styles.queuePanel}>
+            <div className={styles.panelHeader}>
+              <h3>Overdue Follow-Up</h3>
+              <span>{overdueTasks.length} tasks</span>
+            </div>
+            <div className={styles.queueList}>
+              {overdueTasks.length === 0 ? <p>No overdue follow-up.</p> : null}
+              {overdueTasks.slice(0, 5).map((task) => (
+                <div className={styles.queueItem} key={task.task_id}>
+                  <div>
+                    <Link className={styles.tableLink} href={`/leads/${task.lead_id}`}>
+                      {task.seller_name}
+                    </Link>
+                    <span>{task.title}</span>
+                    <small>{formatDateTime(task.due_at)}</small>
+                  </div>
+                  <CompleteTaskButton taskId={task.task_id} />
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.queuePanel}>
+            <div className={styles.panelHeader}>
+              <h3>Needs Qualification</h3>
+              <span>{needsQualification.length} leads</span>
+            </div>
+            <div className={styles.queueList}>
+              {needsQualification.length === 0 ? <p>No qualification gaps.</p> : null}
+              {needsQualification.slice(0, 5).map((lead) => (
+                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                  <strong>{lead.seller_name}</strong>
+                  <span>{lead.property_address}</span>
+                  <small>
+                    {missingQualificationFields(lead)}/3 fields captured · {labelize(lead.source)}
+                  </small>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.queuePanel}>
+            <div className={styles.panelHeader}>
+              <h3>Appointments</h3>
+              <span>{appointmentQueue.length} leads</span>
+            </div>
+            <div className={styles.queueList}>
+              {appointmentQueue.length === 0 ? <p>No appointment work queued.</p> : null}
+              {appointmentQueue.slice(0, 5).map((lead) => (
+                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                  <strong>{lead.seller_name}</strong>
+                  <span>{labelize(lead.appointment_status ?? "not_scheduled")}</span>
+                  <small>{lead.property_address}</small>
+                </Link>
+              ))}
+            </div>
+          </article>
+
+          <article className={styles.queuePanel}>
+            <div className={styles.panelHeader}>
+              <h3>Offers To Prepare</h3>
+              <span>{offerQueue.length} leads</span>
+            </div>
+            <div className={styles.queueList}>
+              {offerQueue.length === 0 ? <p>No offers waiting.</p> : null}
+              {offerQueue.slice(0, 5).map((lead) => (
+                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                  <strong>{lead.seller_name}</strong>
+                  <span>{labelize(lead.stage_key)}</span>
+                  <small>{lead.property_address}</small>
+                </Link>
+              ))}
+            </div>
+          </article>
+        </section>
+
+        <section className={styles.boardSection} id="pipeline" aria-label="Acquisition pipeline">
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.eyebrow}>Pipeline</p>
+              <h3>Seller acquisition board</h3>
+            </div>
+            <span>{dashboard.leads.length} active leads</span>
+          </div>
+          <div className={styles.pipelineBoard}>
+            {boardStages.map((stage) => (
+              <article className={styles.pipelineColumn} key={stage.key}>
+                <div className={styles.columnHeader}>
+                  <h4>{stage.label}</h4>
+                  <span>{pipelineCounts.get(stage.key) ?? 0}</span>
+                </div>
+                <div className={styles.leadCards}>
+                  {(leadsByStage.get(stage.key) ?? []).length === 0 ? (
+                    <p className={styles.emptyColumn}>No leads</p>
+                  ) : null}
+                  {(leadsByStage.get(stage.key) ?? []).map((lead) => (
+                    <Link className={styles.leadCard} href={`/leads/${lead.id}`} key={lead.id}>
+                      <strong>{lead.seller_name}</strong>
+                      <span>{lead.property_address}</span>
+                      <small>
+                        {labelize(lead.source)} · {labelize(lead.lead_temperature ?? "no_temp")}
+                      </small>
+                      <small>
+                        Next: {formatDateTime(lead.next_follow_up_at)} · Tasks:{" "}
+                        {openTaskCountsByLead.get(lead.id) ?? 0}
+                      </small>
+                    </Link>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className={styles.contentGrid}>

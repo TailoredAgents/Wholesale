@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -7,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import get_settings
 from app.models.foundation import ActivityEvent, AuditEvent, Contact, Lead, Property, Task, User
-from app.schemas.tasks import SpeedToLeadTaskRead, TaskRead
+from app.schemas.tasks import TaskQueueItemRead, TaskRead
 
 SPEED_TO_LEAD_TASK_TYPE = "speed_to_lead"
 OPEN_TASK_STATUSES = ("open", "in_progress")
@@ -56,42 +57,77 @@ def list_speed_to_lead_queue(
     db: Session,
     principal: Principal,
     limit: int = 25,
-) -> list[SpeedToLeadTaskRead]:
+) -> list[TaskQueueItemRead]:
+    rows = get_open_task_rows(
+        db,
+        principal,
+        limit=limit,
+        task_type=SPEED_TO_LEAD_TASK_TYPE,
+    )
+    now = datetime.now(UTC)
+    return [task_queue_item_read(row, now) for row in rows]
+
+
+def list_open_task_queue(
+    db: Session,
+    principal: Principal,
+    limit: int = 50,
+) -> list[TaskQueueItemRead]:
+    rows = get_open_task_rows(db, principal, limit=limit)
+    now = datetime.now(UTC)
+    return [task_queue_item_read(row, now) for row in rows]
+
+
+def get_open_task_rows(
+    db: Session,
+    principal: Principal,
+    *,
+    limit: int,
+    task_type: str | None = None,
+) -> list[Any]:
+    filters = [
+        Task.organization_id == principal.organization_id,
+        Task.status.in_(OPEN_TASK_STATUSES),
+    ]
+    if task_type is not None:
+        filters.append(Task.task_type == task_type)
     rows = db.execute(
         select(Task, Lead, Contact, Property, User)
         .join(Lead, Lead.id == Task.lead_id)
         .join(Contact, Contact.id == Lead.contact_id)
         .join(Property, Property.id == Lead.property_id)
         .outerjoin(User, User.id == Task.responsible_user_id)
-        .where(
-            Task.organization_id == principal.organization_id,
-            Task.task_type == SPEED_TO_LEAD_TASK_TYPE,
-            Task.status.in_(OPEN_TASK_STATUSES),
-        )
-        .order_by(Task.due_at.asc(), Task.created_at.asc())
+        .where(*filters)
+        .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
         .limit(limit)
     ).all()
-    now = datetime.now(UTC)
-    return [
-        SpeedToLeadTaskRead(
-            task_id=task.id,
-            lead_id=lead.id,
-            seller_name=contact.legal_name,
-            property_address=(
-                f"{property_record.street_address}, {property_record.city}, "
-                f"{property_record.state} {property_record.postal_code}"
-            ),
-            source=lead.source,
-            stage_key=lead.stage_key,
-            priority=task.priority,
-            status=task.status,
-            due_at=task.due_at,
-            created_at=task.created_at,
-            assigned_user_email=user.email if user else None,
-            due_status=get_due_status(task, now),
-        )
-        for task, lead, contact, property_record, user in rows
-    ]
+    return list(rows)
+
+
+def task_queue_item_read(
+    row: Any,
+    now: datetime,
+) -> TaskQueueItemRead:
+    task, lead, contact, property_record, user = row
+    return TaskQueueItemRead(
+        task_id=task.id,
+        lead_id=lead.id,
+        task_type=task.task_type,
+        title=task.title,
+        seller_name=contact.legal_name,
+        property_address=(
+            f"{property_record.street_address}, {property_record.city}, "
+            f"{property_record.state} {property_record.postal_code}"
+        ),
+        source=lead.source,
+        stage_key=lead.stage_key,
+        priority=task.priority,
+        status=task.status,
+        due_at=task.due_at,
+        created_at=task.created_at,
+        assigned_user_email=user.email if user else None,
+        due_status=get_due_status(task, now),
+    )
 
 
 def complete_task(

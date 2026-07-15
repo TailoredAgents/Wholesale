@@ -154,6 +154,135 @@
   line-height: 1;
 }
 
+.workQueues {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.queuePanel,
+.boardSection {
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.queueList {
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.queueList p,
+.emptyColumn {
+  color: #5d6365;
+  font-size: 14px;
+}
+
+.queueItem,
+.queueLead,
+.leadCard {
+  padding: 12px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+}
+
+.queueItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.queueItem div,
+.queueLead,
+.leadCard {
+  display: grid;
+  gap: 4px;
+}
+
+.queueItem span,
+.queueItem small,
+.queueLead span,
+.queueLead small,
+.leadCard span,
+.leadCard small {
+  color: #4f5658;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.boardSection {
+  margin-bottom: 16px;
+}
+
+.sectionHeader {
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.sectionHeader h3 {
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.sectionHeader span {
+  color: #5d6365;
+  font-size: 13px;
+}
+
+.pipelineBoard {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 14px;
+  overflow-x: auto;
+}
+
+.pipelineColumn {
+  min-height: 260px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #f7f5f0;
+}
+
+.columnHeader {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 12px;
+  border-bottom: 1px solid #e4ded4;
+}
+
+.columnHeader h4 {
+  font-size: 14px;
+}
+
+.columnHeader span {
+  color: #2f6f4e;
+  font-weight: 800;
+}
+
+.leadCards {
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.leadCard {
+  background: #ffffff;
+}
+
 .contentGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.8fr);
@@ -347,6 +476,10 @@
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .workQueues {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -359,7 +492,13 @@
   }
 
   .metrics,
-  .approvals {
+  .approvals,
+  .workQueues {
     grid-template-columns: 1fr;
+  }
+
+  .queueItem {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

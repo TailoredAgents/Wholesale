@@ -434,10 +434,13 @@ Delivered so far:
 - Added manual follow-up task creation from the lead page.
 - Added open task visibility and completion from the lead page.
 - Expanded the lead detail page into an acquisition workspace with a qualification snapshot.
+- Added a generic open task queue API for all acquisition task types.
+- Added OS daily work queues for overdue follow-up, qualification gaps, appointments, and offers.
+- Added a seller acquisition board grouped by pipeline stage with task and follow-up context.
 
 Remaining:
 
-- Add saved acquisition views and filters.
+- Add saved acquisition views and filters beyond the first dashboard queues.
 - Add appointment records instead of only appointment status.
 - Add missing-field prompts and AI intake summary support.
 - Add communication records once Twilio/Gmail integrations are introduced.

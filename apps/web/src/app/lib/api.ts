@@ -92,6 +92,8 @@ export type LeadDetail = LeadListItem & {
 export type SpeedToLeadTask = {
   task_id: string;
   lead_id: string;
+  task_type: string;
+  title: string;
   seller_name: string;
   property_address: string;
   source: string;
@@ -112,10 +114,15 @@ type SpeedToLeadQueueResponse = {
   items: SpeedToLeadTask[];
 };
 
+type TaskQueueResponse = {
+  items: SpeedToLeadTask[];
+};
+
 export type DashboardData = {
   summary: DashboardSummary;
   leads: LeadListItem[];
   speedToLeadQueue: SpeedToLeadTask[];
+  openTaskQueue: SpeedToLeadTask[];
   apiConnected: boolean;
 };
 
@@ -156,7 +163,8 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   try {
     const headers = await getServerApiHeaders();
-    const [summaryResponse, leadsResponse, speedToLeadResponse] = await Promise.all([
+    const [summaryResponse, leadsResponse, speedToLeadResponse, openTaskResponse] =
+      await Promise.all([
       fetch(`${apiBaseUrl}/api/v1/dashboard/summary`, {
         headers,
         cache: "no-store",
@@ -169,18 +177,34 @@ export async function getDashboardData(): Promise<DashboardData> {
         headers,
         cache: "no-store",
       }),
+      fetch(`${apiBaseUrl}/api/v1/tasks/open`, {
+        headers,
+        cache: "no-store",
+      }),
     ]);
 
-    if (!summaryResponse.ok || !leadsResponse.ok || !speedToLeadResponse.ok) {
+    if (
+      !summaryResponse.ok ||
+      !leadsResponse.ok ||
+      !speedToLeadResponse.ok ||
+      !openTaskResponse.ok
+    ) {
       throw new Error("API returned a non-OK response");
     }
 
     const summary = (await summaryResponse.json()) as DashboardSummary;
     const leads = ((await leadsResponse.json()) as LeadListResponse).items;
     const speedToLeadQueue = ((await speedToLeadResponse.json()) as SpeedToLeadQueueResponse).items;
-    return { summary, leads, speedToLeadQueue, apiConnected: true };
+    const openTaskQueue = ((await openTaskResponse.json()) as TaskQueueResponse).items;
+    return { summary, leads, speedToLeadQueue, openTaskQueue, apiConnected: true };
   } catch {
-    return { summary: emptySummary, leads: [], speedToLeadQueue: [], apiConnected: false };
+    return {
+      summary: emptySummary,
+      leads: [],
+      speedToLeadQueue: [],
+      openTaskQueue: [],
+      apiConnected: false,
+    };
   }
 }
 
