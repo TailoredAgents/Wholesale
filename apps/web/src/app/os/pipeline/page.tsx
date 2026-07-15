@@ -51,7 +51,7 @@ export default async function PipelinePage() {
                 <div className={styles.leadCards}>
                   {stageLeads.length === 0 ? <p className={styles.emptyColumn}>No leads</p> : null}
                   {stageLeads.map((lead) => (
-                    <Link className={styles.leadCard} href={`/leads/${lead.id}`} key={lead.id}>
+                    <Link className={styles.leadCard} href={`/os/leads/${lead.id}`} key={lead.id}>
                       <strong>{lead.seller_name}</strong>
                       <span>{lead.property_address}</span>
                       <small>

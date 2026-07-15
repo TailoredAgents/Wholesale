@@ -161,6 +161,44 @@
   margin-bottom: 16px;
 }
 
+.savedViews {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.viewTab,
+.activeViewTab {
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.viewTab span,
+.activeViewTab span {
+  color: #343a3d;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.viewTab strong,
+.activeViewTab strong {
+  color: #2f6f4e;
+  font-size: 22px;
+}
+
+.activeViewTab {
+  border-color: #2f6f4e;
+  background: #eef5f1;
+}
+
 .queuePanel,
 .boardSection {
   border: 1px solid #d8d3c8;
@@ -314,6 +352,13 @@
   font-size: 17px;
 }
 
+.panelHeader small {
+  display: block;
+  margin-top: 3px;
+  color: #5d6365;
+  font-size: 13px;
+}
+
 .tableWrap {
   width: 100%;
   overflow-x: auto;
@@ -383,6 +428,19 @@
 .unscheduled {
   background: #f1eee8;
   color: #5d6365;
+}
+
+.leadStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #fbfaf7;
+  color: #343a3d;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .smallButton {
@@ -480,6 +538,10 @@
   .workQueues {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .savedViews {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 560px) {
@@ -493,6 +555,7 @@
 
   .metrics,
   .approvals,
+  .savedViews,
   .workQueues {
     grid-template-columns: 1fr;
   }

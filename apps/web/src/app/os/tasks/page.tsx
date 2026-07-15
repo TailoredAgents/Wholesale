@@ -82,7 +82,7 @@ export default async function TasksPage() {
                     <small className={styles.tableSubtext}>{labelize(task.task_type)}</small>
                   </td>
                   <td>
-                    <Link className={styles.tableLink} href={`/leads/${task.lead_id}`}>
+                    <Link className={styles.tableLink} href={`/os/leads/${task.lead_id}`}>
                       {task.seller_name}
                     </Link>
                     <small className={styles.tableSubtext}>{task.property_address}</small>

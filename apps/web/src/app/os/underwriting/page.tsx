@@ -57,7 +57,7 @@ export default async function UnderwritingPage() {
                 {underwritingLeads.map((lead) => (
                   <tr key={lead.id}>
                     <td>
-                      <Link className={styles.tableLink} href={`/leads/${lead.id}`}>
+                      <Link className={styles.tableLink} href={`/os/leads/${lead.id}`}>
                         {lead.seller_name}
                       </Link>
                       <small className={styles.tableSubtext}>{lead.property_address}</small>

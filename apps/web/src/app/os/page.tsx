@@ -13,6 +13,7 @@ import {
   labelize,
   pipelineStages,
   qualificationFieldCount,
+  qualificationFieldTarget,
 } from "./os-utils";
 
 export const dynamic = "force-dynamic";
@@ -97,7 +98,7 @@ export default async function Home() {
               {overdueTasks.slice(0, 5).map((task) => (
                 <div className={styles.queueItem} key={task.task_id}>
                   <div>
-                    <Link className={styles.tableLink} href={`/leads/${task.lead_id}`}>
+                    <Link className={styles.tableLink} href={`/os/leads/${task.lead_id}`}>
                       {task.seller_name}
                     </Link>
                     <span>{task.title}</span>
@@ -117,11 +118,12 @@ export default async function Home() {
             <div className={styles.queueList}>
               {needsQualification.length === 0 ? <p>No qualification gaps.</p> : null}
               {needsQualification.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
                   <strong>{lead.seller_name}</strong>
                   <span>{lead.property_address}</span>
                   <small>
-                    {qualificationFieldCount(lead)}/3 fields captured · {labelize(lead.source)}
+                    {qualificationFieldCount(lead)}/{qualificationFieldTarget} fields captured ·{" "}
+                    {labelize(lead.source)}
                   </small>
                 </Link>
               ))}
@@ -136,7 +138,7 @@ export default async function Home() {
             <div className={styles.queueList}>
               {appointmentQueue.length === 0 ? <p>No appointment work queued.</p> : null}
               {appointmentQueue.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
                   <strong>{lead.seller_name}</strong>
                   <span>{labelize(lead.appointment_status ?? "not_scheduled")}</span>
                   <small>{lead.property_address}</small>
@@ -153,7 +155,7 @@ export default async function Home() {
             <div className={styles.queueList}>
               {offerQueue.length === 0 ? <p>No offers waiting.</p> : null}
               {offerQueue.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/leads/${lead.id}`} key={lead.id}>
+                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
                   <strong>{lead.seller_name}</strong>
                   <span>{labelize(lead.stage_key)}</span>
                   <small>{lead.property_address}</small>
@@ -183,7 +185,7 @@ export default async function Home() {
                     <p className={styles.emptyColumn}>No leads</p>
                   ) : null}
                   {(leadsByStage.get(stage.key) ?? []).map((lead) => (
-                    <Link className={styles.leadCard} href={`/leads/${lead.id}`} key={lead.id}>
+                    <Link className={styles.leadCard} href={`/os/leads/${lead.id}`} key={lead.id}>
                       <strong>{lead.seller_name}</strong>
                       <span>{lead.property_address}</span>
                       <small>
@@ -231,7 +233,7 @@ export default async function Home() {
                   {dashboard.speedToLeadQueue.map((task) => (
                     <tr key={task.task_id}>
                       <td>
-                        <Link className={styles.tableLink} href={`/leads/${task.lead_id}`}>
+                        <Link className={styles.tableLink} href={`/os/leads/${task.lead_id}`}>
                           {task.seller_name}
                         </Link>
                         <small className={styles.tableSubtext}>{task.property_address}</small>
@@ -278,7 +280,7 @@ export default async function Home() {
                   {dashboard.leads.map((lead) => (
                     <tr key={lead.id}>
                       <td>
-                        <Link className={styles.tableLink} href={`/leads/${lead.id}`}>
+                        <Link className={styles.tableLink} href={`/os/leads/${lead.id}`}>
                           {lead.seller_name}
                         </Link>
                       </td>

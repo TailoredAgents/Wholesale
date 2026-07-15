@@ -442,10 +442,15 @@ Delivered so far:
 - Added deterministic lead intelligence with quality score, urgency score, priority label,
   missing-field prompts, next best action, and AI-ready summary support.
 - Added an AI-ready intelligence panel to the lead workspace.
+- Added saved OS lead views for urgent leads, qualification gaps, missing follow-up,
+  appointments, offer prep, paid sources, and nurture.
+- Added operating status labels and seven-field qualification progress to the OS lead database.
+- Added `/os/leads/{leadId}` lead detail routing and updated OS links to stay inside the
+  operating-system surface.
 
 Remaining:
 
-- Add saved acquisition views and filters beyond the first dashboard queues.
+- Persist user-specific saved view definitions after team/user preferences exist.
 - Add appointment records instead of only appointment status.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
