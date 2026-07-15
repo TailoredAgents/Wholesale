@@ -27,7 +27,12 @@ export function OsNav() {
         const isActive =
           item.href === "/os" ? pathname === "/os" : pathname.startsWith(item.href);
         return (
-          <Link className={isActive ? styles.activeNav : undefined} href={item.href} key={item.href}>
+          <Link
+            aria-current={isActive ? "page" : undefined}
+            className={isActive ? styles.activeNav : undefined}
+            href={item.href}
+            key={item.href}
+          >
             {item.label}
           </Link>
         );
