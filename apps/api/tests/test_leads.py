@@ -3,7 +3,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import ActivityEvent, Appointment, AuditEvent, CommunicationRecord, Task
+from app.models.foundation import (
+    ActivityEvent,
+    Appointment,
+    AuditEvent,
+    CommunicationRecord,
+    Task,
+    UnderwritingVersion,
+)
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -149,6 +156,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["open_tasks"] == []
     assert detail["communications"] == []
     assert detail["appointments"] == []
+    assert detail["underwriting_versions"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
     assert detail["intelligence"]["urgency_score"] == 88
@@ -489,6 +497,101 @@ def test_schedule_lead_appointment_rejects_invalid_time_window(
             "scheduled_start_at": "2026-07-17T15:00:00Z",
             "scheduled_end_at": "2026-07-17T14:00:00Z",
             "location_type": "phone",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_create_lead_underwriting_version_updates_stage_and_records_audit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "needs_review",
+            "arv_low_cents": 26000000,
+            "arv_high_cents": 28500000,
+            "repair_low_cents": 3500000,
+            "repair_high_cents": 5000000,
+            "max_offer_cents": 17000000,
+            "recommended_offer_cents": 16250000,
+            "offer_strategy": "cash_offer",
+            "notes": "Manual first-pass underwriting before comp review.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["stage_key"] == "underwriting"
+    assert payload["underwriting_versions"][0]["version_number"] == 1
+    assert payload["underwriting_versions"][0]["status"] == "needs_review"
+    assert payload["underwriting_versions"][0]["recommended_offer_cents"] == 16250000
+    assert "lead.underwriting_created" in [
+        activity["event_type"] for activity in payload["recent_activity"]
+    ]
+    assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 1
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "underwriting.create"
+            )
+        )
+        or 0
+    ) == 1
+
+    second_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "approved",
+            "arv_low_cents": 27000000,
+            "arv_high_cents": 29000000,
+            "repair_low_cents": 3000000,
+            "repair_high_cents": 4500000,
+            "max_offer_cents": 17500000,
+            "recommended_offer_cents": 17000000,
+            "offer_strategy": "cash_offer",
+        },
+    )
+
+    assert second_response.status_code == 201
+    second_payload = second_response.json()
+    assert second_payload["stage_key"] == "offer_ready"
+    assert second_payload["underwriting_versions"][0]["version_number"] == 2
+
+
+def test_create_lead_underwriting_rejects_invalid_ranges(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "draft",
+            "arv_low_cents": 30000000,
+            "arv_high_cents": 25000000,
         },
     )
 

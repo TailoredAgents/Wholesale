@@ -20,6 +20,7 @@ from app.models.foundation import (
     Lead,
     Property,
     Task,
+    UnderwritingVersion,
     User,
 )
 from app.schemas.leads import (
@@ -44,8 +45,10 @@ from app.schemas.leads import (
     LeadStaffUpdate,
     LeadStageUpdate,
     LeadTaskRead,
+    LeadUnderwritingCreate,
     PipelineStageCount,
     SourcePerformance,
+    UnderwritingVersionRead,
 )
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
@@ -55,6 +58,7 @@ COMMUNICATION_STATUSES = {"logged", "draft", "sent", "received", "failed", "bloc
 APPOINTMENT_TYPES = {"seller_call", "walkthrough", "offer_review", "follow_up"}
 APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "rescheduled"}
 APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
+UNDERWRITING_STATUSES = {"draft", "needs_review", "approved", "rejected"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
 QUALIFICATION_FIELDS = [
@@ -270,6 +274,18 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.desc())
         .limit(20)
     ).all()
+    underwriting_versions = db.scalars(
+        select(UnderwritingVersion)
+        .where(
+            UnderwritingVersion.organization_id == principal.organization_id,
+            UnderwritingVersion.lead_id == lead.id,
+        )
+        .order_by(
+            UnderwritingVersion.version_number.desc(),
+            UnderwritingVersion.created_at.desc(),
+        )
+        .limit(20)
+    ).all()
 
     return LeadDetail(
         **base.model_dump(),
@@ -349,6 +365,24 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 created_at=appointment.created_at,
             )
             for appointment in appointments
+        ],
+        underwriting_versions=[
+            UnderwritingVersionRead(
+                id=version.id,
+                version_number=version.version_number,
+                status=version.status,
+                arv_low_cents=version.arv_low_cents,
+                arv_high_cents=version.arv_high_cents,
+                repair_low_cents=version.repair_low_cents,
+                repair_high_cents=version.repair_high_cents,
+                max_offer_cents=version.max_offer_cents,
+                recommended_offer_cents=version.recommended_offer_cents,
+                offer_strategy=version.offer_strategy,
+                notes=version.notes,
+                source=version.source,
+                created_at=version.created_at,
+            )
+            for version in underwriting_versions
         ],
         recent_activity=[
             ActivityEventRead(
@@ -895,6 +929,100 @@ def create_lead_appointment(
     return get_lead_detail(db, principal, lead_id)
 
 
+def create_lead_underwriting_version(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadUnderwritingCreate,
+) -> LeadDetail | None:
+    if payload.status not in UNDERWRITING_STATUSES:
+        raise ValueError(f"Unsupported underwriting status: {payload.status}")
+    validate_money_range("ARV", payload.arv_low_cents, payload.arv_high_cents)
+    validate_money_range("repair", payload.repair_low_cents, payload.repair_high_cents)
+    if (
+        payload.recommended_offer_cents is not None
+        and payload.max_offer_cents is not None
+        and payload.recommended_offer_cents > payload.max_offer_cents
+    ):
+        raise ValueError("Recommended offer cannot exceed maximum offer.")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    latest_version = db.scalar(
+        select(func.max(UnderwritingVersion.version_number)).where(
+            UnderwritingVersion.organization_id == principal.organization_id,
+            UnderwritingVersion.lead_id == lead.id,
+        )
+    )
+    version_number = int(latest_version or 0) + 1
+    previous_stage = lead.stage_key
+    version = UnderwritingVersion(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        created_by_user_id=principal.user_id,
+        version_number=version_number,
+        status=payload.status,
+        arv_low_cents=payload.arv_low_cents,
+        arv_high_cents=payload.arv_high_cents,
+        repair_low_cents=payload.repair_low_cents,
+        repair_high_cents=payload.repair_high_cents,
+        max_offer_cents=payload.max_offer_cents,
+        recommended_offer_cents=payload.recommended_offer_cents,
+        offer_strategy=payload.offer_strategy,
+        notes=payload.notes,
+        source="manual",
+        underwriting_metadata={
+            "provider_imported": False,
+            "human_review_required": payload.status != "approved",
+        },
+    )
+    db.add(version)
+
+    if lead.stage_key not in {"offer_presented", "negotiating", "under_contract"}:
+        lead.stage_key = "offer_ready" if payload.status == "approved" else "underwriting"
+
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.underwriting_created",
+            summary=f"Underwriting version {version_number} created with {payload.status} status.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="underwriting.create",
+            entity_type="underwriting_version",
+            entity_id=version.id,
+            previous_value={"stage_key": previous_stage},
+            new_value={
+                "lead_id": str(lead.id),
+                "version_number": version.version_number,
+                "status": version.status,
+                "arv_low_cents": version.arv_low_cents,
+                "arv_high_cents": version.arv_high_cents,
+                "repair_low_cents": version.repair_low_cents,
+                "repair_high_cents": version.repair_high_cents,
+                "max_offer_cents": version.max_offer_cents,
+                "recommended_offer_cents": version.recommended_offer_cents,
+                "stage_key": lead.stage_key,
+            },
+            reason="Manual underwriting version",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
 def update_lead_staff_details(
     db: Session,
     principal: Principal,
@@ -1307,6 +1435,11 @@ def serialize_audit_value(value: Any) -> Any:
     if hasattr(value, "isoformat"):
         return value.isoformat()
     return value
+
+
+def validate_money_range(label: str, low_cents: int | None, high_cents: int | None) -> None:
+    if low_cents is not None and high_cents is not None and low_cents > high_cents:
+        raise ValueError(f"{label} low value cannot be greater than high value.")
 
 
 def update_contact_method(

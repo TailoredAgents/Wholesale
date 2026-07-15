@@ -138,6 +138,22 @@ class AppointmentRead(BaseModel):
     created_at: datetime
 
 
+class UnderwritingVersionRead(BaseModel):
+    id: UUID
+    version_number: int
+    status: str
+    arv_low_cents: int | None
+    arv_high_cents: int | None
+    repair_low_cents: int | None
+    repair_high_cents: int | None
+    max_offer_cents: int | None
+    recommended_offer_cents: int | None
+    offer_strategy: str | None
+    notes: str | None
+    source: str
+    created_at: datetime
+
+
 class LeadMissingField(BaseModel):
     field_key: str
     label: str
@@ -176,6 +192,7 @@ class LeadDetail(LeadRead):
     open_tasks: list[LeadTaskRead]
     communications: list[CommunicationRecordRead]
     appointments: list[AppointmentRead]
+    underwriting_versions: list[UnderwritingVersionRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
 
@@ -236,6 +253,18 @@ class LeadAppointmentCreate(BaseModel):
     location_type: str = Field(default="phone", max_length=80)
     location: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
+
+
+class LeadUnderwritingCreate(BaseModel):
+    status: str = Field(default="draft", max_length=80)
+    arv_low_cents: int | None = Field(default=None, ge=0)
+    arv_high_cents: int | None = Field(default=None, ge=0)
+    repair_low_cents: int | None = Field(default=None, ge=0)
+    repair_high_cents: int | None = Field(default=None, ge=0)
+    max_offer_cents: int | None = Field(default=None, ge=0)
+    recommended_offer_cents: int | None = Field(default=None, ge=0)
+    offer_strategy: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class PipelineStageCount(BaseModel):

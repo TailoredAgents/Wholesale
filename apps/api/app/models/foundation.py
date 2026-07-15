@@ -8,6 +8,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Integer,
     String,
     UniqueConstraint,
     func,
@@ -259,6 +260,31 @@ class Appointment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     outcome: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     external_calendar_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     appointment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_versions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    arv_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    repair_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    repair_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    max_offer_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    recommended_offer_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    offer_strategy: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    underwriting_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
 

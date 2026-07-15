@@ -18,6 +18,7 @@ from app.schemas.leads import (
     LeadRead,
     LeadStaffUpdate,
     LeadStageUpdate,
+    LeadUnderwritingCreate,
 )
 from app.services.leads import (
     add_lead_communication,
@@ -25,6 +26,7 @@ from app.services.leads import (
     create_lead,
     create_lead_appointment,
     create_lead_follow_up_task,
+    create_lead_underwriting_version,
     get_lead_detail,
     list_leads,
     update_lead_staff_details,
@@ -119,6 +121,25 @@ def schedule_lead_appointment(
 ) -> LeadDetail:
     try:
         lead = create_lead_appointment(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/underwriting", status_code=201)
+def create_underwriting_version(
+    lead_id: UUID,
+    payload: LeadUnderwritingCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    try:
+        lead = create_lead_underwriting_version(db, principal, lead_id, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

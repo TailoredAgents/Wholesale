@@ -7,6 +7,7 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { StageUpdateForm } from "./stage-update-form";
+import { UnderwritingForm } from "./underwriting-form";
 import styles from "./page.module.css";
 
 type LeadPageProps = {
@@ -32,6 +33,17 @@ function formatDate(value: string) {
 
 function formatOptionalDate(value: string | null) {
   return value ? formatDate(value) : "Not scheduled";
+}
+
+function formatMoney(cents: number | null) {
+  if (cents === null) {
+    return "Unknown";
+  }
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 }
 
 export async function LeadDetailView({ params }: LeadPageProps) {
@@ -223,6 +235,54 @@ export async function LeadDetailView({ params }: LeadPageProps) {
                     {appointment.location ? ` / ${appointment.location}` : ""}
                   </small>
                   {appointment.notes ? <p>{appointment.notes}</p> : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Underwriting</h2>
+          </div>
+          <div className={styles.underwritingGrid}>
+            <UnderwritingForm leadId={lead.id} />
+            <div className={styles.underwritingList}>
+              {lead.underwriting_versions.length === 0 ? (
+                <p>No underwriting versions saved yet.</p>
+              ) : null}
+              {lead.underwriting_versions.map((version) => (
+                <article key={version.id}>
+                  <div>
+                    <strong>Version {version.version_number}</strong>
+                    <span>{labelize(version.status)}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>ARV</dt>
+                      <dd>
+                        {formatMoney(version.arv_low_cents)} to{" "}
+                        {formatMoney(version.arv_high_cents)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Repairs</dt>
+                      <dd>
+                        {formatMoney(version.repair_low_cents)} to{" "}
+                        {formatMoney(version.repair_high_cents)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>MAO</dt>
+                      <dd>{formatMoney(version.max_offer_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Recommended</dt>
+                      <dd>{formatMoney(version.recommended_offer_cents)}</dd>
+                    </div>
+                  </dl>
+                  <small>{labelize(version.offer_strategy)} / Manual</small>
+                  {version.notes ? <p>{version.notes}</p> : null}
                 </article>
               ))}
             </div>

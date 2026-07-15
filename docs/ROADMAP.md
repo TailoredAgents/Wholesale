@@ -456,11 +456,17 @@ Delivered so far:
 - Added protected appointment scheduling API and lead workspace appointment panel.
 - Scheduling an appointment now updates lead appointment status, next follow-up, and appointment
   pipeline stage when appropriate.
+- Added underwriting version records for manual ARV range, repair range, max offer, recommended
+  offer, strategy, notes, and review status.
+- Added protected underwriting API and lead workspace underwriting panel.
+- Creating underwriting versions now writes audit/activity events and moves leads into underwriting
+  or offer-ready stages when appropriate.
 
 Remaining:
 
 - Persist user-specific saved view definitions after team/user preferences exist.
 - Add appointment status update/reschedule outcomes and calendar sync after provider selection.
+- Add comp candidate records, provider import adapters, and approval request records.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
 - Add inbound provider webhooks, suppression checks, and send approval gates before live

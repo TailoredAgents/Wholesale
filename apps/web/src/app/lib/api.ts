@@ -111,6 +111,21 @@ export type LeadDetail = LeadListItem & {
     outcome: string | null;
     created_at: string;
   }>;
+  underwriting_versions: Array<{
+    id: string;
+    version_number: number;
+    status: string;
+    arv_low_cents: number | null;
+    arv_high_cents: number | null;
+    repair_low_cents: number | null;
+    repair_high_cents: number | null;
+    max_offer_cents: number | null;
+    recommended_offer_cents: number | null;
+    offer_strategy: string | null;
+    notes: string | null;
+    source: string;
+    created_at: string;
+  }>;
   intelligence: {
     quality_score: number;
     urgency_score: number;
