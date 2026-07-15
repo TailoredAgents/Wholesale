@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -25,9 +26,13 @@ from app.schemas.leads import (
     ConsentRecordRead,
     ContactMethodRead,
     DashboardSummary,
+    LeadAiReadySummary,
     LeadCreate,
     LeadDetail,
     LeadFollowUpTaskCreate,
+    LeadIntelligence,
+    LeadMissingField,
+    LeadNextBestAction,
     LeadNoteCreate,
     LeadRead,
     LeadStaffUpdate,
@@ -38,6 +43,52 @@ from app.schemas.leads import (
 )
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
+HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
+MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
+QUALIFICATION_FIELDS = [
+    (
+        "motivation",
+        "Motivation",
+        "Why is the seller considering a sale now?",
+        "high",
+    ),
+    (
+        "desired_timeline",
+        "Timeline",
+        "When does the seller want to close or decide?",
+        "high",
+    ),
+    (
+        "property_condition",
+        "Property condition",
+        "What repairs, updates, or condition issues should underwriting know?",
+        "medium",
+    ),
+    (
+        "occupancy_status",
+        "Occupancy",
+        "Is the property vacant, owner occupied, or tenant occupied?",
+        "medium",
+    ),
+    (
+        "asking_price",
+        "Asking price",
+        "What price or net number is the seller hoping for?",
+        "medium",
+    ),
+    (
+        "mortgage_balance",
+        "Mortgage balance",
+        "Is there a mortgage, lien, or payoff amount to consider?",
+        "medium",
+    ),
+    (
+        "appointment_status",
+        "Appointment status",
+        "Has an appointment or walkthrough been requested or scheduled?",
+        "high",
+    ),
+]
 SELLER_PIPELINE_STAGES = {
     "new",
     "contact_attempt_due",
@@ -247,6 +298,215 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             )
             for activity in recent_activity
         ],
+        intelligence=build_lead_intelligence(
+            lead=lead,
+            contact_methods=list(contact_methods),
+            open_tasks=list(open_tasks),
+        ),
+    )
+
+
+def build_lead_intelligence(
+    *,
+    lead: Lead,
+    contact_methods: list[ContactMethod],
+    open_tasks: list[Task],
+) -> LeadIntelligence:
+    missing_fields = get_missing_fields(lead, contact_methods)
+    quality_score = get_quality_score(missing_fields)
+    urgency_score = get_urgency_score(lead, open_tasks)
+    next_best_action = get_next_best_action(lead, missing_fields, open_tasks, quality_score)
+    return LeadIntelligence(
+        quality_score=quality_score,
+        urgency_score=urgency_score,
+        priority_label=get_priority_label(urgency_score),
+        missing_fields=missing_fields,
+        next_best_action=next_best_action,
+        ai_ready_summary=get_ai_ready_summary(
+            lead,
+            missing_fields,
+            next_best_action,
+            urgency_score,
+        ),
+    )
+
+
+def get_missing_fields(lead: Lead, contact_methods: list[ContactMethod]) -> list[LeadMissingField]:
+    missing_fields: list[LeadMissingField] = []
+    if not contact_methods:
+        missing_fields.append(
+            LeadMissingField(
+                field_key="contact_method",
+                label="Contact method",
+                question="What is the best phone number or email for seller follow-up?",
+                severity="high",
+            )
+        )
+    for field_key, label, question, severity in QUALIFICATION_FIELDS:
+        value = getattr(lead, field_key)
+        if value is None or (isinstance(value, str) and not value.strip()):
+            missing_fields.append(
+                LeadMissingField(
+                    field_key=field_key,
+                    label=label,
+                    question=question,
+                    severity=severity,
+                )
+            )
+    return missing_fields
+
+
+def get_quality_score(missing_fields: list[LeadMissingField]) -> int:
+    total_fields = len(QUALIFICATION_FIELDS) + 1
+    high_penalty = sum(15 for field in missing_fields if field.severity == "high")
+    medium_penalty = sum(10 for field in missing_fields if field.severity == "medium")
+    raw_score = 100 - high_penalty - medium_penalty
+    if len(missing_fields) == total_fields:
+        return 0
+    return max(0, min(100, raw_score))
+
+
+def get_urgency_score(lead: Lead, open_tasks: list[Task]) -> int:
+    score = 0
+    if lead.lead_temperature == "hot":
+        score += 30
+    elif lead.lead_temperature == "warm":
+        score += 18
+
+    timeline = (lead.desired_timeline or "").strip().lower()
+    if timeline in HIGH_URGENCY_TIMELINES or "asap" in timeline or "30" in timeline:
+        score += 30
+    elif timeline in MEDIUM_URGENCY_TIMELINES or "60" in timeline or "90" in timeline:
+        score += 15
+
+    now = datetime.now(UTC)
+    for task in open_tasks:
+        if task.due_at is None:
+            continue
+        due_at = task.due_at if task.due_at.tzinfo else task.due_at.replace(tzinfo=UTC)
+        if due_at <= now:
+            score += 25
+            break
+
+    if lead.stage_key in {"new", "contact_attempt_due", "attempting_contact"}:
+        score += 12
+    if lead.source in PAID_LEAD_SOURCES:
+        score += 8
+    if lead.next_follow_up_at is None and lead.stage_key not in {"dead", "disqualified"}:
+        score += 8
+    return max(0, min(100, score))
+
+
+def get_priority_label(urgency_score: int) -> str:
+    if urgency_score >= 80:
+        return "critical"
+    if urgency_score >= 60:
+        return "high"
+    if urgency_score >= 35:
+        return "medium"
+    return "routine"
+
+
+def get_next_best_action(
+    lead: Lead,
+    missing_fields: list[LeadMissingField],
+    open_tasks: list[Task],
+    quality_score: int,
+) -> LeadNextBestAction:
+    overdue_task = get_first_overdue_task(open_tasks)
+    if overdue_task is not None:
+        return LeadNextBestAction(
+            action_type="complete_overdue_task",
+            label="Complete overdue follow-up",
+            description=f"Work the overdue task: {overdue_task.title}.",
+            priority="urgent",
+        )
+
+    high_missing_field = next(
+        (field for field in missing_fields if field.severity == "high"),
+        None,
+    )
+    if high_missing_field is not None:
+        return LeadNextBestAction(
+            action_type="ask_missing_question",
+            label=f"Ask about {high_missing_field.label.lower()}",
+            description=high_missing_field.question,
+            priority="high",
+        )
+
+    if lead.appointment_status in {None, "", "not_scheduled", "appointment_requested"}:
+        return LeadNextBestAction(
+            action_type="schedule_appointment",
+            label="Schedule seller appointment",
+            description=(
+                "Qualification is strong enough to move toward a walkthrough or seller call."
+            ),
+            priority="high" if quality_score >= 70 else "normal",
+        )
+
+    if lead.stage_key in {"qualified", "appointment_scheduled", "underwriting"}:
+        return LeadNextBestAction(
+            action_type="prepare_underwriting",
+            label="Prepare underwriting review",
+            description="Move known property facts into offer analysis and identify pricing gaps.",
+            priority="normal",
+        )
+
+    return LeadNextBestAction(
+        action_type="create_follow_up",
+        label="Create next follow-up",
+        description="Set the next dated task so the lead does not fall through the cracks.",
+        priority="normal",
+    )
+
+
+def get_first_overdue_task(open_tasks: list[Task]) -> Task | None:
+    now = datetime.now(UTC)
+    for task in open_tasks:
+        if task.due_at is None:
+            continue
+        due_at = task.due_at if task.due_at.tzinfo else task.due_at.replace(tzinfo=UTC)
+        if due_at <= now:
+            return task
+    return None
+
+
+def get_ai_ready_summary(
+    lead: Lead,
+    missing_fields: list[LeadMissingField],
+    next_best_action: LeadNextBestAction,
+    urgency_score: int,
+) -> LeadAiReadySummary:
+    known_facts = [
+        f"Stage: {lead.stage_key}.",
+        f"Source: {lead.source}.",
+    ]
+    optional_facts = [
+        ("Temperature", lead.lead_temperature),
+        ("Motivation", lead.motivation),
+        ("Timeline", lead.desired_timeline),
+        ("Condition", lead.property_condition),
+        ("Occupancy", lead.occupancy_status),
+        ("Asking price", lead.asking_price),
+        ("Mortgage balance", lead.mortgage_balance),
+        ("Appointment", lead.appointment_status),
+    ]
+    known_facts.extend(
+        f"{label}: {value}." for label, value in optional_facts if value is not None and value != ""
+    )
+    if urgency_score >= 60:
+        urgency = "High urgency lead."
+    elif urgency_score >= 35:
+        urgency = "Moderate urgency lead."
+    else:
+        urgency = "Routine urgency lead."
+    situation = lead.motivation or "Seller motivation has not been captured yet."
+    return LeadAiReadySummary(
+        situation=situation,
+        urgency=urgency,
+        known_facts=known_facts,
+        missing_questions=[field.question for field in missing_fields],
+        recommended_next_action=next_best_action.label,
     )
 
 

@@ -108,6 +108,57 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </dl>
         </article>
 
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>AI-Ready Lead Intelligence</h2>
+          </div>
+          <div className={styles.intelligenceGrid}>
+            <div className={styles.scoreCard}>
+              <span>Lead quality</span>
+              <strong>{lead.intelligence.quality_score}</strong>
+              <small>Qualification completeness</small>
+            </div>
+            <div className={styles.scoreCard}>
+              <span>Urgency</span>
+              <strong>{lead.intelligence.urgency_score}</strong>
+              <small>{labelize(lead.intelligence.priority_label)} priority</small>
+            </div>
+            <div className={styles.actionCallout}>
+              <span>Next best action</span>
+              <strong>{lead.intelligence.next_best_action.label}</strong>
+              <p>{lead.intelligence.next_best_action.description}</p>
+            </div>
+          </div>
+          <div className={styles.intelligenceColumns}>
+            <section>
+              <h3>Missing Questions</h3>
+              <div className={styles.missingList}>
+                {lead.intelligence.missing_fields.length === 0 ? (
+                  <p>No required qualification gaps.</p>
+                ) : null}
+                {lead.intelligence.missing_fields.slice(0, 6).map((field) => (
+                  <p key={field.field_key}>
+                    <strong>{field.label}</strong>
+                    <span>{field.question}</span>
+                  </p>
+                ))}
+              </div>
+            </section>
+            <section>
+              <h3>Agent Summary</h3>
+              <div className={styles.summaryBlock}>
+                <p>{lead.intelligence.ai_ready_summary.situation}</p>
+                <strong>{lead.intelligence.ai_ready_summary.urgency}</strong>
+                <ul>
+                  {lead.intelligence.ai_ready_summary.known_facts.slice(0, 6).map((fact) => (
+                    <li key={fact}>{fact}</li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+          </div>
+        </article>
+
         <article className={styles.panel}>
           <div className={styles.panelHeader}>
             <h2>Lead Controls</h2>

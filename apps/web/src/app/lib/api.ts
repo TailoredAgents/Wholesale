@@ -87,6 +87,30 @@ export type LeadDetail = LeadListItem & {
     due_at: string | null;
     completed_at: string | null;
   }>;
+  intelligence: {
+    quality_score: number;
+    urgency_score: number;
+    priority_label: string;
+    missing_fields: Array<{
+      field_key: string;
+      label: string;
+      question: string;
+      severity: string;
+    }>;
+    next_best_action: {
+      action_type: string;
+      label: string;
+      description: string;
+      priority: string;
+    };
+    ai_ready_summary: {
+      situation: string;
+      urgency: string;
+      known_facts: string[];
+      missing_questions: string[];
+      recommended_next_action: string;
+    };
+  };
 };
 
 export type SpeedToLeadTask = {

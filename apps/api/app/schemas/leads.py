@@ -112,12 +112,44 @@ class LeadTaskRead(BaseModel):
     completed_at: datetime | None
 
 
+class LeadMissingField(BaseModel):
+    field_key: str
+    label: str
+    question: str
+    severity: str
+
+
+class LeadNextBestAction(BaseModel):
+    action_type: str
+    label: str
+    description: str
+    priority: str
+
+
+class LeadAiReadySummary(BaseModel):
+    situation: str
+    urgency: str
+    known_facts: list[str]
+    missing_questions: list[str]
+    recommended_next_action: str
+
+
+class LeadIntelligence(BaseModel):
+    quality_score: int
+    urgency_score: int
+    priority_label: str
+    missing_fields: list[LeadMissingField]
+    next_best_action: LeadNextBestAction
+    ai_ready_summary: LeadAiReadySummary
+
+
 class LeadDetail(LeadRead):
     contact_methods: list[ContactMethodRead]
     consent_records: list[ConsentRecordRead]
     attribution_touches: list[AttributionTouchRead]
     open_tasks: list[LeadTaskRead]
     recent_activity: list[ActivityEventRead]
+    intelligence: LeadIntelligence
 
 
 class LeadStageUpdate(BaseModel):

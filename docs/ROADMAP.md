@@ -439,12 +439,16 @@ Delivered so far:
 - Added a seller acquisition board grouped by pipeline stage with task and follow-up context.
 - Split the OS into real routed pages for dashboard, tasks, pipeline, leads, underwriting,
   approvals, and buyers.
+- Added deterministic lead intelligence with quality score, urgency score, priority label,
+  missing-field prompts, next best action, and AI-ready summary support.
+- Added an AI-ready intelligence panel to the lead workspace.
 
 Remaining:
 
 - Add saved acquisition views and filters beyond the first dashboard queues.
 - Add appointment records instead of only appointment status.
-- Add missing-field prompts and AI intake summary support.
+- Connect the AI-ready summary to model-backed agents after communications and underwriting data
+  are available.
 - Add communication records once Twilio/Gmail integrations are introduced.
 - Move lead detail pages under `/os/leads/{leadId}` when route history/redirect handling is added.
 

@@ -140,6 +140,109 @@
   font-weight: 700;
 }
 
+.intelligenceGrid {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 180px 180px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.scoreCard,
+.actionCallout {
+  min-height: 132px;
+  padding: 14px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
+.scoreCard span,
+.actionCallout span {
+  color: #5d6365;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scoreCard strong {
+  color: #245f43;
+  font-size: 40px;
+  line-height: 1;
+}
+
+.scoreCard small,
+.actionCallout p {
+  margin: 0;
+  color: #4f5658;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.actionCallout strong {
+  color: #161a1d;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.intelligenceColumns {
+  padding: 0 18px 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.intelligenceColumns section {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.intelligenceColumns h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.missingList,
+.summaryBlock {
+  display: grid;
+  gap: 10px;
+}
+
+.missingList p,
+.summaryBlock p {
+  margin: 0;
+}
+
+.missingList p {
+  padding: 11px;
+  border: 1px solid #e8e3d8;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 4px;
+}
+
+.missingList span,
+.summaryBlock,
+.summaryBlock li {
+  color: #4f5658;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.summaryBlock strong {
+  color: #245f43;
+}
+
+.summaryBlock ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
 .list,
 .timeline {
   padding: 18px;
@@ -320,6 +423,8 @@
   }
 
   .snapshot,
+  .intelligenceGrid,
+  .intelligenceColumns,
   .taskGrid {
     grid-template-columns: 1fr;
   }

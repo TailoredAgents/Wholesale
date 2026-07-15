@@ -148,6 +148,22 @@ def test_read_lead_detail_and_update_stage(
     assert detail["seller_name"] == "Jane Seller"
     assert detail["open_tasks"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
+    assert detail["intelligence"]["quality_score"] == 85
+    assert detail["intelligence"]["urgency_score"] == 88
+    assert detail["intelligence"]["priority_label"] == "critical"
+    assert detail["intelligence"]["next_best_action"]["action_type"] == "ask_missing_question"
+    assert detail["intelligence"]["missing_fields"] == [
+        {
+            "field_key": "contact_method",
+            "label": "Contact method",
+            "question": "What is the best phone number or email for seller follow-up?",
+            "severity": "high",
+        }
+    ]
+    assert detail["intelligence"]["ai_ready_summary"]["known_facts"][:2] == [
+        "Stage: new.",
+        "Source: google_ppc.",
+    ]
 
     update_response = client.patch(
         f"/api/v1/leads/{lead_id}/stage",
@@ -158,6 +174,7 @@ def test_read_lead_detail_and_update_stage(
     assert update_response.status_code == 200
     updated = update_response.json()
     assert updated["stage_key"] == "contacted"
+    assert updated["intelligence"]["urgency_score"] == 76
     assert "lead.stage_changed" in [
         activity["event_type"] for activity in updated["recent_activity"]
     ]
