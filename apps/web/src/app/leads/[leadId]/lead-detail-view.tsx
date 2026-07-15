@@ -1,8 +1,9 @@
 import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
-import { getLeadDetail } from "../../lib/api";
+import { getBuyers, getLeadDetail } from "../../lib/api";
 import { AppointmentForm } from "./appointment-form";
+import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
@@ -49,7 +50,10 @@ function formatMoney(cents: number | null) {
 
 export async function LeadDetailView({ params }: LeadPageProps) {
   const { leadId } = await params;
-  const { lead, apiConnected } = await getLeadDetail(leadId);
+  const [{ lead, apiConnected }, { buyers }] = await Promise.all([
+    getLeadDetail(leadId),
+    getBuyers(),
+  ]);
 
   if (!lead) {
     return (
@@ -332,6 +336,46 @@ export async function LeadDetailView({ params }: LeadPageProps) {
                       </p>
                     ))}
                   </div>
+                </article>
+              ))}
+            </div>
+          </div>
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Buyer Offers</h2>
+          </div>
+          <div className={styles.buyerOfferGrid}>
+            <BuyerOfferForm buyers={buyers} leadId={lead.id} />
+            <div className={styles.buyerOfferList}>
+              {lead.buyer_offers.length === 0 ? <p>No buyer offers recorded yet.</p> : null}
+              {lead.buyer_offers.map((offer) => (
+                <article key={offer.id}>
+                  <div>
+                    <strong>{offer.buyer_name}</strong>
+                    <span>{labelize(offer.status)}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Offer</dt>
+                      <dd>{formatMoney(offer.amount_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Earnest money</dt>
+                      <dd>{formatMoney(offer.earnest_money_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Financing</dt>
+                      <dd>{labelize(offer.financing_type)}</dd>
+                    </div>
+                    <div>
+                      <dt>POF</dt>
+                      <dd>{offer.proof_of_funds_received ? "Received" : "Not received"}</dd>
+                    </div>
+                  </dl>
+                  <small>Received {formatDate(offer.received_at)}</small>
+                  {offer.notes ? <p>{offer.notes}</p> : null}
                 </article>
               ))}
             </div>

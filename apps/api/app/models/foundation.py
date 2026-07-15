@@ -350,6 +350,58 @@ class TransactionChecklistItem(UuidPrimaryKeyMixin, TimestampMixin, Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyers"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    buyer_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    proof_of_funds_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    max_purchase_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class BuyerCriteria(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_criteria"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
+    markets: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    property_types: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    min_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    max_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    rehab_levels: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_offers"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    earnest_money_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    financing_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    proof_of_funds_received: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
 

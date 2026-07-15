@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
     LeadAppointmentCreate,
+    LeadBuyerOfferCreate,
     LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
@@ -26,6 +27,7 @@ from app.services.leads import (
     add_lead_note,
     create_lead,
     create_lead_appointment,
+    create_lead_buyer_offer,
     create_lead_follow_up_task,
     create_lead_transaction,
     create_lead_underwriting_version,
@@ -161,6 +163,25 @@ def open_lead_transaction(
 ) -> LeadDetail:
     try:
         lead = create_lead_transaction(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/buyer-offers", status_code=201)
+def record_lead_buyer_offer(
+    lead_id: UUID,
+    payload: LeadBuyerOfferCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    try:
+        lead = create_lead_buyer_offer(db, principal, lead_id, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

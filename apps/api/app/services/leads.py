@@ -11,6 +11,8 @@ from app.models.foundation import (
     Appointment,
     AttributionTouch,
     AuditEvent,
+    Buyer,
+    BuyerOffer,
     CommunicationRecord,
     ConsentRecord,
     Contact,
@@ -29,12 +31,14 @@ from app.schemas.leads import (
     ActivityEventRead,
     AppointmentRead,
     AttributionTouchRead,
+    BuyerOfferRead,
     CommunicationRecordRead,
     ConsentRecordRead,
     ContactMethodRead,
     DashboardSummary,
     LeadAiReadySummary,
     LeadAppointmentCreate,
+    LeadBuyerOfferCreate,
     LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
@@ -65,6 +69,8 @@ APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "resch
 APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
 UNDERWRITING_STATUSES = {"draft", "needs_review", "approved", "rejected"}
 TRANSACTION_CONTRACT_TYPES = {"purchase_agreement", "assignment_contract", "novation"}
+BUYER_OFFER_STATUSES = {"received", "countered", "accepted", "rejected", "withdrawn"}
+BUYER_OFFER_FINANCING_TYPES = {"cash", "hard_money", "private_money", "conventional", "other"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
 QUALIFICATION_FIELDS = [
@@ -319,6 +325,25 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         ).all()
         for item in checklist_items:
             checklist_items_by_transaction[item.transaction_id].append(item)
+    buyer_offers = db.scalars(
+        select(BuyerOffer)
+        .where(
+            BuyerOffer.organization_id == principal.organization_id,
+            BuyerOffer.lead_id == lead.id,
+        )
+        .order_by(BuyerOffer.received_at.desc(), BuyerOffer.created_at.desc())
+        .limit(20)
+    ).all()
+    buyer_ids = [offer.buyer_id for offer in buyer_offers]
+    buyers_by_id = {
+        buyer.id: buyer
+        for buyer in db.scalars(
+            select(Buyer).where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.id.in_(buyer_ids),
+            )
+        ).all()
+    } if buyer_ids else {}
 
     return LeadDetail(
         **base.model_dump(),
@@ -446,6 +471,24 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 created_at=transaction.created_at,
             )
             for transaction in transactions
+        ],
+        buyer_offers=[
+            BuyerOfferRead(
+                id=offer.id,
+                buyer_id=offer.buyer_id,
+                buyer_name=buyers_by_id[offer.buyer_id].name
+                if offer.buyer_id in buyers_by_id
+                else "Unknown buyer",
+                amount_cents=offer.amount_cents,
+                earnest_money_cents=offer.earnest_money_cents,
+                financing_type=offer.financing_type,
+                status=offer.status,
+                proof_of_funds_received=offer.proof_of_funds_received,
+                notes=offer.notes,
+                received_at=offer.received_at,
+                created_at=offer.created_at,
+            )
+            for offer in buyer_offers
         ],
         recent_activity=[
             ActivityEventRead(
@@ -1210,6 +1253,89 @@ def create_lead_transaction(
                 "stage_key": lead.stage_key,
             },
             reason="Manual transaction opening",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
+def create_lead_buyer_offer(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadBuyerOfferCreate,
+) -> LeadDetail | None:
+    if payload.status not in BUYER_OFFER_STATUSES:
+        raise ValueError(f"Unsupported buyer offer status: {payload.status}")
+    if payload.financing_type not in BUYER_OFFER_FINANCING_TYPES:
+        raise ValueError(f"Unsupported buyer offer financing type: {payload.financing_type}")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    buyer = db.scalar(
+        select(Buyer).where(
+            Buyer.organization_id == principal.organization_id,
+            Buyer.id == payload.buyer_id,
+        )
+    )
+    if buyer is None:
+        raise ValueError("Buyer not found.")
+
+    deal = db.scalar(
+        select(Deal)
+        .where(
+            Deal.organization_id == principal.organization_id,
+            Deal.lead_id == lead.id,
+        )
+        .order_by(Deal.created_at.desc())
+    )
+    offer = BuyerOffer(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        deal_id=deal.id if deal is not None else None,
+        buyer_id=buyer.id,
+        amount_cents=payload.amount_cents,
+        earnest_money_cents=payload.earnest_money_cents,
+        financing_type=payload.financing_type,
+        status=payload.status,
+        proof_of_funds_received=payload.proof_of_funds_received,
+        notes=payload.notes,
+        received_at=payload.received_at or datetime.now(UTC),
+    )
+    db.add(offer)
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.buyer_offer_received",
+            summary=f"Buyer offer received from {buyer.name} for {payload.amount_cents / 100:.0f}.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="buyer_offer.create",
+            entity_type="buyer_offer",
+            entity_id=offer.id,
+            previous_value=None,
+            new_value={
+                "lead_id": str(lead.id),
+                "deal_id": str(offer.deal_id) if offer.deal_id else None,
+                "buyer_id": str(buyer.id),
+                "amount_cents": offer.amount_cents,
+                "earnest_money_cents": offer.earnest_money_cents,
+                "financing_type": offer.financing_type,
+                "status": offer.status,
+                "proof_of_funds_received": offer.proof_of_funds_received,
+            },
+            reason="Manual buyer offer entry",
         )
     )
     db.commit()

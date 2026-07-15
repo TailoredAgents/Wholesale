@@ -181,6 +181,20 @@ class TransactionRead(BaseModel):
     created_at: datetime
 
 
+class BuyerOfferRead(BaseModel):
+    id: UUID
+    buyer_id: UUID
+    buyer_name: str
+    amount_cents: int
+    earnest_money_cents: int | None
+    financing_type: str
+    status: str
+    proof_of_funds_received: bool
+    notes: str | None
+    received_at: datetime
+    created_at: datetime
+
+
 class LeadMissingField(BaseModel):
     field_key: str
     label: str
@@ -221,6 +235,7 @@ class LeadDetail(LeadRead):
     appointments: list[AppointmentRead]
     underwriting_versions: list[UnderwritingVersionRead]
     transactions: list[TransactionRead]
+    buyer_offers: list[BuyerOfferRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
 
@@ -304,6 +319,17 @@ class LeadTransactionCreate(BaseModel):
     closing_date: datetime | None = None
     inspection_period_days: int | None = Field(default=None, ge=0, le=120)
     notes: str | None = Field(default=None, max_length=2000)
+
+
+class LeadBuyerOfferCreate(BaseModel):
+    buyer_id: UUID
+    amount_cents: int = Field(ge=1)
+    earnest_money_cents: int | None = Field(default=None, ge=0)
+    financing_type: str = Field(default="cash", max_length=80)
+    status: str = Field(default="received", max_length=80)
+    proof_of_funds_received: bool = False
+    notes: str | None = Field(default=None, max_length=2000)
+    received_at: datetime | None = None
 
 
 class PipelineStageCount(BaseModel):

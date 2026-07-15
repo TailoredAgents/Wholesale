@@ -499,6 +499,123 @@
   font-size: 14px;
 }
 
+.buyerForm {
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.buyerForm label {
+  display: grid;
+  gap: 7px;
+  color: #343a3d;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.buyerForm input,
+.buyerForm select,
+.buyerForm textarea {
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #cfc8bc;
+  border-radius: 8px;
+  font: inherit;
+}
+
+.buyerForm textarea {
+  resize: vertical;
+}
+
+.buyerForm button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.buyerList {
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.buyerList > p {
+  margin: 0;
+  color: #5d6365;
+  font-size: 14px;
+}
+
+.buyerList article {
+  padding: 12px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 8px;
+}
+
+.buyerList article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.buyerList span,
+.buyerList small,
+.buyerList dt {
+  color: #4f5658;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.buyerList dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.buyerList dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.buyerList dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.saving,
+.saved,
+.error {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.saving {
+  color: #5d6365;
+}
+
+.saved {
+  color: #2f6f4e;
+}
+
+.error {
+  color: #a13c2f;
+}
+
 @media (max-width: 920px) {
   .shell {
     grid-template-columns: 1fr;
@@ -555,6 +672,8 @@
 
   .metrics,
   .approvals,
+  .formGrid,
+  .buyerList dl,
   .savedViews,
   .workQueues {
     grid-template-columns: 1fr;

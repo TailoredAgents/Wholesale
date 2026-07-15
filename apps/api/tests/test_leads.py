@@ -7,6 +7,7 @@ from app.models.foundation import (
     ActivityEvent,
     Appointment,
     AuditEvent,
+    BuyerOffer,
     CommunicationRecord,
     Deal,
     Task,
@@ -161,6 +162,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["appointments"] == []
     assert detail["underwriting_versions"] == []
     assert detail["transactions"] == []
+    assert detail["buyer_offers"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
     assert detail["intelligence"]["urgency_score"] == 88
@@ -685,6 +687,76 @@ def test_open_lead_transaction_rejects_duplicate_active_transaction(
 
     assert first_response.status_code == 201
     assert second_response.status_code == 422
+
+
+def test_record_lead_buyer_offer_creates_offer_and_audit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    transaction_response = client.post(
+        f"/api/v1/leads/{lead_id}/transactions",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contract_type": "purchase_agreement",
+            "purchase_price_cents": 17000000,
+        },
+    )
+    buyer_response = client.post(
+        "/api/v1/buyers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "name": "Acme Cash Buyer",
+            "company_name": "Acme Holdings",
+            "email": "buyer@example.com",
+            "buyer_type": "cash_buyer",
+            "status": "active",
+            "proof_of_funds_status": "received",
+            "max_purchase_price_cents": 24000000,
+        },
+    )
+
+    assert transaction_response.status_code == 201
+    assert buyer_response.status_code == 201
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/buyer-offers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "buyer_id": buyer_response.json()["id"],
+            "amount_cents": 19500000,
+            "earnest_money_cents": 500000,
+            "financing_type": "cash",
+            "status": "received",
+            "proof_of_funds_received": True,
+            "notes": "Can close in 10 days.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["buyer_offers"][0]["buyer_name"] == "Acme Cash Buyer"
+    assert payload["buyer_offers"][0]["amount_cents"] == 19500000
+    assert payload["buyer_offers"][0]["earnest_money_cents"] == 500000
+    assert payload["buyer_offers"][0]["proof_of_funds_received"] is True
+    assert "lead.buyer_offer_received" in [
+        activity["event_type"] for activity in payload["recent_activity"]
+    ]
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerOffer)) or 0) == 1
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "buyer_offer.create"
+            )
+        )
+        or 0
+    ) == 1
 
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:

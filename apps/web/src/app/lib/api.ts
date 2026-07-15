@@ -150,6 +150,19 @@ export type LeadDetail = LeadListItem & {
     }>;
     created_at: string;
   }>;
+  buyer_offers: Array<{
+    id: string;
+    buyer_id: string;
+    buyer_name: string;
+    amount_cents: number;
+    earnest_money_cents: number | null;
+    financing_type: string;
+    status: string;
+    proof_of_funds_received: boolean;
+    notes: string | null;
+    received_at: string;
+    created_at: string;
+  }>;
   intelligence: {
     quality_score: number;
     urgency_score: number;
@@ -174,6 +187,28 @@ export type LeadDetail = LeadListItem & {
       recommended_next_action: string;
     };
   };
+};
+
+export type BuyerListItem = {
+  id: string;
+  name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  buyer_type: string;
+  status: string;
+  proof_of_funds_status: string;
+  max_purchase_price_cents: number | null;
+  notes: string | null;
+  criteria: {
+    markets: string | null;
+    property_types: string | null;
+    min_price_cents: number | null;
+    max_price_cents: number | null;
+    rehab_levels: string | null;
+    notes: string | null;
+  } | null;
+  created_at: string;
 };
 
 export type SpeedToLeadTask = {
@@ -203,6 +238,10 @@ type SpeedToLeadQueueResponse = {
 
 type TaskQueueResponse = {
   items: SpeedToLeadTask[];
+};
+
+type BuyerListResponse = {
+  items: BuyerListItem[];
 };
 
 export type DashboardData = {
@@ -315,5 +354,28 @@ export async function getLeadDetail(leadId: string): Promise<{
     return { lead: (await response.json()) as LeadDetail, apiConnected: true };
   } catch {
     return { lead: null, apiConnected: false };
+  }
+}
+
+export async function getBuyers(): Promise<{
+  buyers: BuyerListItem[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/buyers`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return { buyers: ((await response.json()) as BuyerListResponse).items, apiConnected: true };
+  } catch {
+    return { buyers: [], apiConnected: false };
   }
 }

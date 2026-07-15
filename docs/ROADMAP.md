@@ -535,12 +535,19 @@ Remaining:
 
 ### Phase 7: Buyers And Dispositions
 
-- Buyer CRM.
+Delivered foundation:
+
+- Buyer CRM records.
 - Buyer criteria.
-- Proof-of-funds records.
-- Deal room.
-- Buyer offer collection.
-- Buyer selection approval.
+- Proof-of-funds status.
+- Deal room queue for contracted leads.
+- Buyer offer collection tied to lead workspaces.
+
+Remaining expansion:
+
+- Buyer proof-of-funds document records.
+- Buyer selection approval workflow.
+- Deal blast campaigns and response automation.
 
 ### Phase 8: Finance And Compensation
 
