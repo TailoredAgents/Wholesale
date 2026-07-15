@@ -327,6 +327,14 @@ def create_lead(
         source=payload.attribution.utm_source or "website",
         stage_key="new",
         lead_temperature=None,
+        motivation=payload.reason_for_selling,
+        desired_timeline=payload.desired_timeline,
+        property_condition=None,
+        occupancy_status=None,
+        asking_price=payload.asking_price,
+        mortgage_balance=None,
+        appointment_status=None,
+        next_follow_up_at=None,
     )
     db.add(lead)
     db.flush()

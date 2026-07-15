@@ -10,13 +10,17 @@ from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
     LeadCreate,
     LeadDetail,
+    LeadFollowUpTaskCreate,
     LeadListResponse,
+    LeadNoteCreate,
     LeadRead,
     LeadStaffUpdate,
     LeadStageUpdate,
 )
 from app.services.leads import (
+    add_lead_note,
     create_lead,
+    create_lead_follow_up_task,
     get_lead_detail,
     list_leads,
     update_lead_staff_details,
@@ -52,6 +56,32 @@ def read_lead_detail(
     principal: Annotated[Principal, Depends(view_leads_dependency)],
 ) -> LeadDetail:
     lead = get_lead_detail(db, principal, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/notes", status_code=201)
+def create_lead_note(
+    lead_id: UUID,
+    payload: LeadNoteCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    lead = add_lead_note(db, principal, lead_id, payload)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/tasks", status_code=201)
+def create_follow_up_task(
+    lead_id: UUID,
+    payload: LeadFollowUpTaskCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    lead = create_lead_follow_up_task(db, principal, lead_id, payload)
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

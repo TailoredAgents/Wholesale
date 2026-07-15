@@ -128,6 +128,16 @@ class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     stage_key: Mapped[str] = mapped_column(String(120), nullable=False)
     lead_temperature: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    motivation: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    desired_timeline: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    property_condition: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    occupancy_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    asking_price: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    mortgage_balance: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    appointment_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    next_follow_up_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):

@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import ActivityEvent, AuditEvent
+from app.models.foundation import ActivityEvent, AuditEvent, Task
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -36,6 +36,13 @@ def lead_payload() -> dict[str, object]:
         "source": "google_ppc",
         "stage_key": "new",
         "lead_temperature": "hot",
+        "motivation": "Seller wants a fast close.",
+        "desired_timeline": "30_days",
+        "property_condition": "needs_repairs",
+        "occupancy_status": "vacant",
+        "asking_price": "185000",
+        "mortgage_balance": "90000",
+        "appointment_status": "not_scheduled",
     }
 
 
@@ -59,6 +66,13 @@ def test_create_and_list_lead(
     assert created["property_state"] == "GA"
     assert created["property_county"] == "Fulton"
     assert created["source"] == "google_ppc"
+    assert created["motivation"] == "Seller wants a fast close."
+    assert created["desired_timeline"] == "30_days"
+    assert created["property_condition"] == "needs_repairs"
+    assert created["occupancy_status"] == "vacant"
+    assert created["asking_price"] == "185000"
+    assert created["mortgage_balance"] == "90000"
+    assert created["appointment_status"] == "not_scheduled"
 
     list_response = client.get("/api/v1/leads", headers={"X-Dev-User-Email": OWNER_EMAIL})
 
@@ -132,6 +146,7 @@ def test_read_lead_detail_and_update_stage(
     detail = detail_response.json()
     assert detail["id"] == lead_id
     assert detail["seller_name"] == "Jane Seller"
+    assert detail["open_tasks"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
 
     update_response = client.patch(
@@ -207,6 +222,13 @@ def test_update_lead_staff_details_records_audit(
             "property_type": "duplex",
             "source": "referral",
             "lead_temperature": "warm",
+            "motivation": "Needs certainty before relocating.",
+            "desired_timeline": "asap",
+            "property_condition": "dated",
+            "occupancy_status": "owner_occupied",
+            "asking_price": "210000",
+            "mortgage_balance": "120000",
+            "appointment_status": "appointment_requested",
             "reason": "Corrected seller intake after phone call.",
         },
     )
@@ -216,6 +238,13 @@ def test_update_lead_staff_details_records_audit(
     assert updated["seller_name"] == "Janet Seller"
     assert updated["source"] == "referral"
     assert updated["lead_temperature"] == "warm"
+    assert updated["motivation"] == "Needs certainty before relocating."
+    assert updated["desired_timeline"] == "asap"
+    assert updated["property_condition"] == "dated"
+    assert updated["occupancy_status"] == "owner_occupied"
+    assert updated["asking_price"] == "210000"
+    assert updated["mortgage_balance"] == "120000"
+    assert updated["appointment_status"] == "appointment_requested"
     assert updated["property_address"] == "500 Edgewood Ave, Atlanta, GA 30312"
     assert updated["property_type"] == "duplex"
     assert {
@@ -236,6 +265,50 @@ def test_update_lead_staff_details_records_audit(
         )
         or 0
     ) == 1
+
+
+def test_add_lead_note_and_follow_up_task(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    note_response = client.post(
+        f"/api/v1/leads/{lead_id}/notes",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"note": "Seller said roof is older but HVAC is newer."},
+    )
+
+    assert note_response.status_code == 201
+    note_payload = note_response.json()
+    assert {
+        (activity["event_type"], activity["summary"])
+        for activity in note_payload["recent_activity"]
+    } >= {("lead.note_added", "Seller said roof is older but HVAC is newer.")}
+
+    task_response = client.post(
+        f"/api/v1/leads/{lead_id}/tasks",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "title": "Call seller about appointment window",
+            "priority": "high",
+            "due_at": "2026-07-16T14:30:00Z",
+        },
+    )
+
+    assert task_response.status_code == 201
+    task_payload = task_response.json()
+    assert task_payload["open_tasks"][0]["title"] == "Call seller about appointment window"
+    assert task_payload["open_tasks"][0]["priority"] == "high"
+    assert task_payload["next_follow_up_at"].startswith("2026-07-16T14:30:00")
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
 
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:

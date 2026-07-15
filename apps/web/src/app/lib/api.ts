@@ -35,6 +35,14 @@ export type LeadListItem = {
   property_county: string | null;
   property_type: string | null;
   assigned_user_email: string | null;
+  motivation: string | null;
+  desired_timeline: string | null;
+  property_condition: string | null;
+  occupancy_status: string | null;
+  asking_price: string | null;
+  mortgage_balance: string | null;
+  appointment_status: string | null;
+  next_follow_up_at: string | null;
   created_at: string;
 };
 
@@ -69,6 +77,15 @@ export type LeadDetail = LeadListItem & {
     event_type: string;
     summary: string;
     created_at: string;
+  }>;
+  open_tasks: Array<{
+    id: string;
+    task_type: string;
+    title: string;
+    status: string;
+    priority: string;
+    due_at: string | null;
+    completed_at: string | null;
   }>;
 };
 

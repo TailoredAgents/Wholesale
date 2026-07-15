@@ -28,6 +28,32 @@ const temperatures = [
   ["cold", "Cold"],
 ];
 
+const conditionOptions = [
+  ["", "Unknown"],
+  ["move_in_ready", "Move-in ready"],
+  ["dated", "Dated"],
+  ["needs_repairs", "Needs repairs"],
+  ["major_repairs", "Major repairs"],
+  ["tear_down", "Tear down"],
+];
+
+const occupancyOptions = [
+  ["", "Unknown"],
+  ["owner_occupied", "Owner occupied"],
+  ["tenant_occupied", "Tenant occupied"],
+  ["vacant", "Vacant"],
+  ["unknown", "Unknown"],
+];
+
+const appointmentOptions = [
+  ["", "None"],
+  ["not_scheduled", "Not scheduled"],
+  ["appointment_requested", "Appointment requested"],
+  ["appointment_scheduled", "Appointment scheduled"],
+  ["completed", "Completed"],
+  ["no_show", "No show"],
+];
+
 function primaryContactValue(lead: LeadDetail, methodType: string) {
   const primary = lead.contact_methods.find(
     (method) => method.method_type === methodType && method.is_primary,
@@ -43,6 +69,23 @@ function formString(formData: FormData, key: string) {
 function optionalFormString(formData: FormData, key: string) {
   const value = formString(formData, key);
   return value || null;
+}
+
+function optionalDateTime(formData: FormData, key: string) {
+  const value = formString(formData, key);
+  return value ? new Date(value).toISOString() : null;
+}
+
+function dateTimeLocalValue(value: string | null) {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const offsetMs = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16);
 }
 
 export function LeadEditForm({ lead }: { lead: LeadDetail }) {
@@ -93,6 +136,14 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
           property_type: optionalFormString(formData, "property_type"),
           source: formString(formData, "source"),
           lead_temperature: optionalFormString(formData, "lead_temperature"),
+          motivation: optionalFormString(formData, "motivation"),
+          desired_timeline: optionalFormString(formData, "desired_timeline"),
+          property_condition: optionalFormString(formData, "property_condition"),
+          occupancy_status: optionalFormString(formData, "occupancy_status"),
+          asking_price: optionalFormString(formData, "asking_price"),
+          mortgage_balance: optionalFormString(formData, "mortgage_balance"),
+          appointment_status: optionalFormString(formData, "appointment_status"),
+          next_follow_up_at: optionalDateTime(formData, "next_follow_up_at"),
           reason: optionalFormString(formData, "reason"),
         }),
       });
@@ -191,6 +242,74 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
               </option>
             ))}
           </select>
+        </label>
+        <label className={styles.editWide}>
+          <span>Motivation</span>
+          <input
+            name="motivation"
+            defaultValue={lead.motivation ?? ""}
+            maxLength={500}
+            placeholder="Why the seller is considering a cash offer"
+          />
+        </label>
+        <label>
+          <span>Timeline</span>
+          <input
+            name="desired_timeline"
+            defaultValue={lead.desired_timeline ?? ""}
+            maxLength={120}
+            placeholder="ASAP, 30 days, just exploring"
+          />
+        </label>
+        <label>
+          <span>Condition</span>
+          <select name="property_condition" defaultValue={lead.property_condition ?? ""}>
+            {conditionOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Occupancy</span>
+          <select name="occupancy_status" defaultValue={lead.occupancy_status ?? ""}>
+            {occupancyOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Appointment</span>
+          <select name="appointment_status" defaultValue={lead.appointment_status ?? ""}>
+            {appointmentOptions.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Asking price</span>
+          <input name="asking_price" defaultValue={lead.asking_price ?? ""} maxLength={120} />
+        </label>
+        <label>
+          <span>Mortgage balance</span>
+          <input
+            name="mortgage_balance"
+            defaultValue={lead.mortgage_balance ?? ""}
+            maxLength={120}
+          />
+        </label>
+        <label>
+          <span>Next follow-up</span>
+          <input
+            name="next_follow_up_at"
+            defaultValue={dateTimeLocalValue(lead.next_follow_up_at)}
+            type="datetime-local"
+          />
         </label>
         <label className={styles.editWide}>
           <span>Reason</span>

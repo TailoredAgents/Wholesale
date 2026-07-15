@@ -88,6 +88,11 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
     assert property_record.normalized_address_key == "55 auburn ave atlanta ga 30303"
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    assert lead.motivation == "Inherited property"
+    assert lead.desired_timeline == "30 days"
+    assert lead.asking_price == "180000"
     task = db_session.scalar(select(Task))
     assert task is not None
     assert task.task_type == "speed_to_lead"

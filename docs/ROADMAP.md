@@ -409,6 +409,39 @@ Remaining:
 - Add deeper trust/proof/process sections.
 - Add stronger spam protection after traffic volume justifies it.
 
+### M13: Acquisition Lead Workspace
+
+Status: In progress.
+
+Goal:
+
+Turn each seller lead into a usable acquisition workspace for qualification, follow-up,
+appointments, and next actions.
+
+Research basis:
+
+- Modern investor CRMs emphasize qualification fields for motivation, timeline, condition,
+  appointment setting, follow-up, and pipeline accountability.
+- Strong real estate CRMs centralize source context, contact details, notes, tasks, and timeline
+  history so the rep can work from one screen.
+
+Delivered so far:
+
+- Added acquisition fields to leads: motivation, timeline, condition, occupancy, asking price,
+  mortgage balance, appointment status, and next follow-up.
+- Public cash-offer submissions now populate motivation, timeline, and asking price.
+- Added lead notes that appear in the lead activity timeline.
+- Added manual follow-up task creation from the lead page.
+- Added open task visibility and completion from the lead page.
+- Expanded the lead detail page into an acquisition workspace with a qualification snapshot.
+
+Remaining:
+
+- Add saved acquisition views and filters.
+- Add appointment records instead of only appointment status.
+- Add missing-field prompts and AI intake summary support.
+- Add communication records once Twilio/Gmail integrations are introduced.
+
 ## Later Product Phases
 
 ### Phase 2B: Lead Generation Hardening

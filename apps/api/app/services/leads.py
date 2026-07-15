@@ -16,6 +16,7 @@ from app.models.foundation import (
     Deal,
     Lead,
     Property,
+    Task,
     User,
 )
 from app.schemas.leads import (
@@ -26,9 +27,12 @@ from app.schemas.leads import (
     DashboardSummary,
     LeadCreate,
     LeadDetail,
+    LeadFollowUpTaskCreate,
+    LeadNoteCreate,
     LeadRead,
     LeadStaffUpdate,
     LeadStageUpdate,
+    LeadTaskRead,
     PipelineStageCount,
     SourcePerformance,
 )
@@ -86,6 +90,14 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         source=payload.source,
         stage_key=payload.stage_key,
         lead_temperature=payload.lead_temperature,
+        motivation=payload.motivation,
+        desired_timeline=payload.desired_timeline,
+        property_condition=payload.property_condition,
+        occupancy_status=payload.occupancy_status,
+        asking_price=payload.asking_price,
+        mortgage_balance=payload.mortgage_balance,
+        appointment_status=payload.appointment_status,
+        next_follow_up_at=payload.next_follow_up_at,
     )
     db.add(lead)
     db.flush()
@@ -167,6 +179,16 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         .order_by(ActivityEvent.created_at.desc(), ActivityEvent.id.desc())
         .limit(20)
     ).all()
+    open_tasks = db.scalars(
+        select(Task)
+        .where(
+            Task.organization_id == principal.organization_id,
+            Task.lead_id == lead.id,
+            Task.status.in_(("open", "in_progress")),
+        )
+        .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
+        .limit(20)
+    ).all()
 
     return LeadDetail(
         **base.model_dump(),
@@ -204,6 +226,18 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 created_at=touch.created_at,
             )
             for touch in attribution_touches
+        ],
+        open_tasks=[
+            LeadTaskRead(
+                id=task.id,
+                task_type=task.task_type,
+                title=task.title,
+                status=task.status,
+                priority=task.priority,
+                due_at=task.due_at,
+                completed_at=task.completed_at,
+            )
+            for task in open_tasks
         ],
         recent_activity=[
             ActivityEventRead(
@@ -261,6 +295,105 @@ def update_lead_stage(
     return get_lead_detail(db, principal, lead_id)
 
 
+def add_lead_note(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadNoteCreate,
+) -> LeadDetail | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.note_added",
+            summary=payload.note,
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.note_create",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=None,
+            new_value={"note": payload.note},
+            reason="Lead note added",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
+def create_lead_follow_up_task(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadFollowUpTaskCreate,
+) -> LeadDetail | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    task = Task(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        responsible_user_id=lead.assigned_user_id or principal.user_id,
+        task_type="follow_up",
+        title=payload.title,
+        status="open",
+        priority=payload.priority,
+        due_at=payload.due_at,
+        completed_at=None,
+    )
+    db.add(task)
+    if payload.due_at is not None:
+        previous_follow_up = lead.next_follow_up_at
+        lead.next_follow_up_at = payload.due_at
+    else:
+        previous_follow_up = None
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="task.follow_up_created",
+            summary=f"Follow-up task created: {task.title}.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="task.follow_up_create",
+            entity_type="task",
+            entity_id=task.id,
+            previous_value={"next_follow_up_at": previous_follow_up.isoformat()}
+            if previous_follow_up
+            else None,
+            new_value={
+                "lead_id": str(lead.id),
+                "title": task.title,
+                "priority": task.priority,
+                "due_at": task.due_at.isoformat() if task.due_at else None,
+            },
+            reason="Manual lead follow-up task",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
 def update_lead_staff_details(
     db: Session,
     principal: Principal,
@@ -297,6 +430,70 @@ def update_lead_staff_details(
         lead,
         "lead_temperature",
         payload.lead_temperature,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "motivation",
+        payload.motivation,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "desired_timeline",
+        payload.desired_timeline,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "property_condition",
+        payload.property_condition,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "occupancy_status",
+        payload.occupancy_status,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "asking_price",
+        payload.asking_price,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "mortgage_balance",
+        payload.mortgage_balance,
+        provided_fields,
+    )
+    update_nullable_value(
+        previous_values,
+        new_values,
+        lead,
+        "appointment_status",
+        payload.appointment_status,
+        provided_fields,
+    )
+    update_nullable_raw_value(
+        previous_values,
+        new_values,
+        lead,
+        "next_follow_up_at",
+        payload.next_follow_up_at,
         provided_fields,
     )
     update_value(
@@ -587,6 +784,30 @@ def update_nullable_value(
     setattr(target, field_name, cleaned_value)
 
 
+def update_nullable_raw_value(
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+    target: Any,
+    field_name: str,
+    value: Any,
+    provided_fields: set[str],
+) -> None:
+    if field_name not in provided_fields:
+        return
+    current_value = getattr(target, field_name)
+    if current_value == value:
+        return
+    previous_values[field_name] = serialize_audit_value(current_value)
+    new_values[field_name] = serialize_audit_value(value)
+    setattr(target, field_name, value)
+
+
+def serialize_audit_value(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
 def update_contact_method(
     db: Session,
     principal: Principal,
@@ -703,5 +924,13 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         property_county=property_record.county,
         property_type=property_record.property_type,
         assigned_user_email=assigned_user.email if assigned_user else None,
+        motivation=lead.motivation,
+        desired_timeline=lead.desired_timeline,
+        property_condition=lead.property_condition,
+        occupancy_status=lead.occupancy_status,
+        asking_price=lead.asking_price,
+        mortgage_balance=lead.mortgage_balance,
+        appointment_status=lead.appointment_status,
+        next_follow_up_at=lead.next_follow_up_at,
         created_at=lead.created_at,
     )

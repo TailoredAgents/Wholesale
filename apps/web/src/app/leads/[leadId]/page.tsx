@@ -1,6 +1,8 @@
 import Link from "next/link";
 
+import { CompleteTaskButton } from "../../complete-task-button";
 import { getLeadDetail } from "../../lib/api";
+import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { StageUpdateForm } from "./stage-update-form";
 import styles from "./page.module.css";
@@ -24,6 +26,10 @@ function formatDate(value: string) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
+}
+
+function formatOptionalDate(value: string | null) {
+  return value ? formatDate(value) : "Not scheduled";
 }
 
 export default async function LeadDetailPage({ params }: LeadPageProps) {
@@ -57,10 +63,51 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <div className={styles.statusBox}>
           <span>Current stage</span>
           <strong>{labelize(lead.stage_key)}</strong>
+          <small>Next follow-up: {formatOptionalDate(lead.next_follow_up_at)}</small>
         </div>
       </header>
 
       <section className={styles.grid}>
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Acquisition Snapshot</h2>
+          </div>
+          <dl className={styles.snapshot}>
+            <div>
+              <dt>Motivation</dt>
+              <dd>{lead.motivation ?? "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Timeline</dt>
+              <dd>{lead.desired_timeline ?? "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Condition</dt>
+              <dd>{labelize(lead.property_condition)}</dd>
+            </div>
+            <div>
+              <dt>Occupancy</dt>
+              <dd>{labelize(lead.occupancy_status)}</dd>
+            </div>
+            <div>
+              <dt>Asking price</dt>
+              <dd>{lead.asking_price ?? "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Mortgage balance</dt>
+              <dd>{lead.mortgage_balance ?? "Unknown"}</dd>
+            </div>
+            <div>
+              <dt>Appointment</dt>
+              <dd>{labelize(lead.appointment_status)}</dd>
+            </div>
+            <div>
+              <dt>Next follow-up</dt>
+              <dd>{formatOptionalDate(lead.next_follow_up_at)}</dd>
+            </div>
+          </dl>
+        </article>
+
         <article className={styles.panel}>
           <div className={styles.panelHeader}>
             <h2>Lead Controls</h2>
@@ -68,6 +115,34 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <LeadEditForm lead={lead} />
           <div className={styles.formDivider} />
           <StageUpdateForm leadId={lead.id} currentStage={lead.stage_key} />
+        </article>
+
+        <article className={styles.panel}>
+          <div className={styles.panelHeader}>
+            <h2>Notes And Follow-Up</h2>
+          </div>
+          <LeadActionForm leadId={lead.id} />
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Open Tasks</h2>
+          </div>
+          <div className={styles.taskList}>
+            {lead.open_tasks.length === 0 ? <p>No open tasks for this lead.</p> : null}
+            {lead.open_tasks.map((task) => (
+              <div key={task.id} className={styles.taskItem}>
+                <div>
+                  <strong>{task.title}</strong>
+                  <span>
+                    {labelize(task.task_type)} / {labelize(task.priority)} /{" "}
+                    {task.due_at ? formatDate(task.due_at) : "No due date"}
+                  </span>
+                </div>
+                <CompleteTaskButton taskId={task.id} />
+              </div>
+            ))}
+          </div>
         </article>
 
         <article className={styles.panel}>

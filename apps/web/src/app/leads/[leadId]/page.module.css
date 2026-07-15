@@ -56,6 +56,12 @@
   color: #245f43;
 }
 
+.statusBox small {
+  color: #5d6365;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .grid {
   margin-top: 24px;
   display: grid;
@@ -99,18 +105,38 @@
   gap: 12px;
 }
 
+.snapshot {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.snapshot div {
+  min-height: 84px;
+  padding: 14px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+}
+
 .details div {
   display: flex;
   justify-content: space-between;
   gap: 16px;
 }
 
-.details dt {
+.details dt,
+.snapshot dt {
   color: #5d6365;
   font-size: 13px;
 }
 
-.details dd {
+.details dd,
+.snapshot dd {
   font-weight: 700;
 }
 
@@ -139,8 +165,37 @@
   font-size: 14px;
 }
 
+.taskList {
+  padding: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.taskItem {
+  padding: 12px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.taskItem div {
+  display: grid;
+  gap: 4px;
+}
+
+.taskItem span {
+  color: #4f5658;
+  font-size: 14px;
+}
+
 .editForm,
-.stageForm {
+.stageForm,
+.noteForm,
+.taskForm {
   padding: 18px;
   display: grid;
   gap: 12px;
@@ -160,13 +215,30 @@
   grid-column: 1 / -1;
 }
 
+.actionForms {
+  display: grid;
+  gap: 0;
+}
+
+.noteForm {
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.taskGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .formDivider {
   height: 1px;
   background: #e8e3d8;
 }
 
 .editForm label,
-.stageForm label {
+.stageForm label,
+.noteForm label,
+.taskForm label {
   display: grid;
   gap: 7px;
   color: #343a3d;
@@ -177,7 +249,10 @@
 .editForm select,
 .editForm input,
 .stageForm select,
-.stageForm input {
+.stageForm input,
+.noteForm textarea,
+.taskForm select,
+.taskForm input {
   min-height: 42px;
   padding: 9px 11px;
   border: 1px solid #cfc8bc;
@@ -185,8 +260,14 @@
   font: inherit;
 }
 
+.noteForm textarea {
+  resize: vertical;
+}
+
 .editForm button,
-.stageForm button {
+.stageForm button,
+.noteForm button,
+.taskForm button {
   min-height: 44px;
   border: 0;
   border-radius: 8px;
@@ -236,6 +317,16 @@
 
   .editGrid {
     grid-template-columns: 1fr;
+  }
+
+  .snapshot,
+  .taskGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .taskItem {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .editWide {

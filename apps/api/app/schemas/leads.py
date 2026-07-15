@@ -25,6 +25,14 @@ class LeadCreate(BaseModel):
     source: str = Field(default="manual", max_length=120)
     stage_key: str = Field(default="new", max_length=120)
     lead_temperature: str | None = Field(default=None, max_length=80)
+    motivation: str | None = Field(default=None, max_length=500)
+    desired_timeline: str | None = Field(default=None, max_length=120)
+    property_condition: str | None = Field(default=None, max_length=120)
+    occupancy_status: str | None = Field(default=None, max_length=120)
+    asking_price: str | None = Field(default=None, max_length=120)
+    mortgage_balance: str | None = Field(default=None, max_length=120)
+    appointment_status: str | None = Field(default=None, max_length=120)
+    next_follow_up_at: datetime | None = None
 
 
 class LeadRead(BaseModel):
@@ -44,6 +52,14 @@ class LeadRead(BaseModel):
     property_county: str | None
     property_type: str | None
     assigned_user_email: str | None
+    motivation: str | None
+    desired_timeline: str | None
+    property_condition: str | None
+    occupancy_status: str | None
+    asking_price: str | None
+    mortgage_balance: str | None
+    appointment_status: str | None
+    next_follow_up_at: datetime | None
     created_at: datetime
 
 
@@ -86,10 +102,21 @@ class ActivityEventRead(BaseModel):
     created_at: datetime
 
 
+class LeadTaskRead(BaseModel):
+    id: UUID
+    task_type: str
+    title: str
+    status: str
+    priority: str
+    due_at: datetime | None
+    completed_at: datetime | None
+
+
 class LeadDetail(LeadRead):
     contact_methods: list[ContactMethodRead]
     consent_records: list[ConsentRecordRead]
     attribution_touches: list[AttributionTouchRead]
+    open_tasks: list[LeadTaskRead]
     recent_activity: list[ActivityEventRead]
 
 
@@ -111,7 +138,25 @@ class LeadStaffUpdate(BaseModel):
     property_type: str | None = Field(default=None, max_length=80)
     source: str | None = Field(default=None, min_length=1, max_length=120)
     lead_temperature: str | None = Field(default=None, max_length=80)
+    motivation: str | None = Field(default=None, max_length=500)
+    desired_timeline: str | None = Field(default=None, max_length=120)
+    property_condition: str | None = Field(default=None, max_length=120)
+    occupancy_status: str | None = Field(default=None, max_length=120)
+    asking_price: str | None = Field(default=None, max_length=120)
+    mortgage_balance: str | None = Field(default=None, max_length=120)
+    appointment_status: str | None = Field(default=None, max_length=120)
+    next_follow_up_at: datetime | None = None
     reason: str | None = Field(default=None, max_length=500)
+
+
+class LeadNoteCreate(BaseModel):
+    note: str = Field(min_length=1, max_length=500)
+
+
+class LeadFollowUpTaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    due_at: datetime | None = None
+    priority: str = Field(default="normal", max_length=80)
 
 
 class PipelineStageCount(BaseModel):
