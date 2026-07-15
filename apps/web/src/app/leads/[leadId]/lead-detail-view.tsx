@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
 import { getLeadDetail } from "../../lib/api";
+import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { StageUpdateForm } from "./stage-update-form";
@@ -193,6 +194,33 @@ export async function LeadDetailView({ params }: LeadPageProps) {
                 <CompleteTaskButton taskId={task.id} />
               </div>
             ))}
+          </div>
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Communications</h2>
+          </div>
+          <div className={styles.communicationGrid}>
+            <CommunicationLogForm leadId={lead.id} />
+            <div className={styles.communicationList}>
+              {lead.communications.length === 0 ? <p>No communications logged yet.</p> : null}
+              {lead.communications.map((communication) => (
+                <article key={communication.id}>
+                  <div>
+                    <strong>
+                      {labelize(communication.direction)} {labelize(communication.channel)}
+                    </strong>
+                    <span>
+                      {labelize(communication.status)} via {labelize(communication.provider)}
+                    </span>
+                  </div>
+                  {communication.subject ? <h3>{communication.subject}</h3> : null}
+                  <p>{communication.body}</p>
+                  <small>{formatDate(communication.occurred_at)}</small>
+                </article>
+              ))}
+            </div>
           </div>
         </article>
 

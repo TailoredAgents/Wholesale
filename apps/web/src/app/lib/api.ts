@@ -87,6 +87,18 @@ export type LeadDetail = LeadListItem & {
     due_at: string | null;
     completed_at: string | null;
   }>;
+  communications: Array<{
+    id: string;
+    direction: string;
+    channel: string;
+    status: string;
+    provider: string;
+    provider_message_id: string | null;
+    subject: string | null;
+    body: string;
+    occurred_at: string;
+    created_at: string;
+  }>;
   intelligence: {
     quality_score: number;
     urgency_score: number;

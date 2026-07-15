@@ -10,6 +10,7 @@ from app.models.foundation import (
     ActivityEvent,
     AttributionTouch,
     AuditEvent,
+    CommunicationRecord,
     ConsentRecord,
     Contact,
     ContactMethod,
@@ -23,10 +24,12 @@ from app.models.foundation import (
 from app.schemas.leads import (
     ActivityEventRead,
     AttributionTouchRead,
+    CommunicationRecordRead,
     ConsentRecordRead,
     ContactMethodRead,
     DashboardSummary,
     LeadAiReadySummary,
+    LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
     LeadFollowUpTaskCreate,
@@ -43,6 +46,9 @@ from app.schemas.leads import (
 )
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
+COMMUNICATION_DIRECTIONS = {"inbound", "outbound", "internal"}
+COMMUNICATION_CHANNELS = {"call", "sms", "email", "voicemail", "note"}
+COMMUNICATION_STATUSES = {"logged", "draft", "sent", "received", "failed", "blocked"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
 QUALIFICATION_FIELDS = [
@@ -240,6 +246,15 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
         .limit(20)
     ).all()
+    communications = db.scalars(
+        select(CommunicationRecord)
+        .where(
+            CommunicationRecord.organization_id == principal.organization_id,
+            CommunicationRecord.lead_id == lead.id,
+        )
+        .order_by(CommunicationRecord.occurred_at.desc(), CommunicationRecord.created_at.desc())
+        .limit(20)
+    ).all()
 
     return LeadDetail(
         **base.model_dump(),
@@ -289,6 +304,21 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 completed_at=task.completed_at,
             )
             for task in open_tasks
+        ],
+        communications=[
+            CommunicationRecordRead(
+                id=communication.id,
+                direction=communication.direction,
+                channel=communication.channel,
+                status=communication.status,
+                provider=communication.provider,
+                provider_message_id=communication.provider_message_id,
+                subject=communication.subject,
+                body=communication.body,
+                occurred_at=communication.occurred_at,
+                created_at=communication.created_at,
+            )
+            for communication in communications
         ],
         recent_activity=[
             ActivityEventRead(
@@ -648,6 +678,83 @@ def create_lead_follow_up_task(
                 "due_at": task.due_at.isoformat() if task.due_at else None,
             },
             reason="Manual lead follow-up task",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
+def add_lead_communication(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadCommunicationCreate,
+) -> LeadDetail | None:
+    if payload.direction not in COMMUNICATION_DIRECTIONS:
+        raise ValueError(f"Unsupported communication direction: {payload.direction}")
+    if payload.channel not in COMMUNICATION_CHANNELS:
+        raise ValueError(f"Unsupported communication channel: {payload.channel}")
+    if payload.status not in COMMUNICATION_STATUSES:
+        raise ValueError(f"Unsupported communication status: {payload.status}")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    communication = CommunicationRecord(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        actor_user_id=principal.user_id,
+        direction=payload.direction,
+        channel=payload.channel,
+        status=payload.status,
+        provider="manual",
+        provider_message_id=None,
+        subject=payload.subject,
+        body=payload.body,
+        occurred_at=payload.occurred_at or datetime.now(UTC),
+        external_payload=None,
+        communication_metadata={
+            "source": "manual_log",
+            "automation_allowed": False,
+        },
+    )
+    db.add(communication)
+    db.flush()
+
+    summary = (
+        f"{payload.direction.title()} {payload.channel} {payload.status}: "
+        f"{payload.body[:160]}"
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.communication_logged",
+            summary=summary,
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="communication.log",
+            entity_type="communication_record",
+            entity_id=communication.id,
+            previous_value=None,
+            new_value={
+                "lead_id": str(lead.id),
+                "direction": communication.direction,
+                "channel": communication.channel,
+                "status": communication.status,
+                "provider": communication.provider,
+                "occurred_at": communication.occurred_at.isoformat(),
+            },
+            reason="Manual communication log",
         )
     )
     db.commit()

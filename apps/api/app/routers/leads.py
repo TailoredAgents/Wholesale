@@ -8,6 +8,7 @@ from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
+    LeadCommunicationCreate,
     LeadCreate,
     LeadDetail,
     LeadFollowUpTaskCreate,
@@ -18,6 +19,7 @@ from app.schemas.leads import (
     LeadStageUpdate,
 )
 from app.services.leads import (
+    add_lead_communication,
     add_lead_note,
     create_lead,
     create_lead_follow_up_task,
@@ -82,6 +84,25 @@ def create_follow_up_task(
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadDetail:
     lead = create_lead_follow_up_task(db, principal, lead_id, payload)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/communications", status_code=201)
+def create_lead_communication(
+    lead_id: UUID,
+    payload: LeadCommunicationCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadDetail:
+    try:
+        lead = add_lead_communication(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

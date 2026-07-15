@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import ActivityEvent, AuditEvent, Task
+from app.models.foundation import ActivityEvent, AuditEvent, CommunicationRecord, Task
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -147,6 +147,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["id"] == lead_id
     assert detail["seller_name"] == "Jane Seller"
     assert detail["open_tasks"] == []
+    assert detail["communications"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
     assert detail["intelligence"]["urgency_score"] == 88
@@ -339,6 +340,81 @@ def test_add_lead_note_and_follow_up_task(
     assert queue[0]["task_type"] == "follow_up"
     assert queue[0]["title"] == "Call seller about appointment window"
     assert queue[0]["seller_name"] == "Jane Seller"
+
+
+def test_add_lead_communication_records_audit_and_activity(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/communications",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "direction": "outbound",
+            "channel": "call",
+            "status": "logged",
+            "subject": "First contact attempt",
+            "body": "Left voicemail and will follow up by text.",
+            "occurred_at": "2026-07-16T14:30:00Z",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["communications"][0]["direction"] == "outbound"
+    assert payload["communications"][0]["channel"] == "call"
+    assert payload["communications"][0]["status"] == "logged"
+    assert payload["communications"][0]["provider"] == "manual"
+    assert payload["communications"][0]["subject"] == "First contact attempt"
+    assert payload["communications"][0]["body"] == "Left voicemail and will follow up by text."
+    assert "lead.communication_logged" in [
+        activity["event_type"] for activity in payload["recent_activity"]
+    ]
+    assert int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0) == 1
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "communication.log"
+            )
+        )
+        or 0
+    ) == 1
+
+
+def test_add_lead_communication_rejects_unknown_channel(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/communications",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "direction": "outbound",
+            "channel": "fax",
+            "status": "logged",
+            "body": "Unsupported channel.",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:

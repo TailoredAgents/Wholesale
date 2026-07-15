@@ -298,7 +298,8 @@
 .editForm,
 .stageForm,
 .noteForm,
-.taskForm {
+.taskForm,
+.communicationForm {
   padding: 18px;
   display: grid;
   gap: 12px;
@@ -341,7 +342,8 @@
 .editForm label,
 .stageForm label,
 .noteForm label,
-.taskForm label {
+.taskForm label,
+.communicationForm label {
   display: grid;
   gap: 7px;
   color: #343a3d;
@@ -355,7 +357,10 @@
 .stageForm input,
 .noteForm textarea,
 .taskForm select,
-.taskForm input {
+.taskForm input,
+.communicationForm select,
+.communicationForm input,
+.communicationForm textarea {
   min-height: 42px;
   padding: 9px 11px;
   border: 1px solid #cfc8bc;
@@ -363,14 +368,16 @@
   font: inherit;
 }
 
-.noteForm textarea {
+.noteForm textarea,
+.communicationForm textarea {
   resize: vertical;
 }
 
 .editForm button,
 .stageForm button,
 .noteForm button,
-.taskForm button {
+.taskForm button,
+.communicationForm button {
   min-height: 44px;
   border: 0;
   border-radius: 8px;
@@ -379,6 +386,61 @@
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+}
+
+.communicationGrid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+  gap: 0;
+}
+
+.communicationForm {
+  border-right: 1px solid #e8e3d8;
+}
+
+.communicationList {
+  padding: 18px;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.communicationList > p {
+  margin: 0;
+  color: #5d6365;
+  font-size: 14px;
+}
+
+.communicationList article {
+  padding: 12px;
+  border: 1px solid #e4ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 7px;
+}
+
+.communicationList article div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.communicationList h3,
+.communicationList p {
+  margin: 0;
+}
+
+.communicationList h3 {
+  font-size: 15px;
+}
+
+.communicationList span,
+.communicationList p,
+.communicationList small {
+  color: #4f5658;
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 .saving,
@@ -432,6 +494,15 @@
   .taskItem {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .communicationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .communicationForm {
+    border-right: 0;
+    border-bottom: 1px solid #e8e3d8;
   }
 
   .editWide {

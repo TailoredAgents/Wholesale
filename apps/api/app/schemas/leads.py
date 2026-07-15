@@ -112,6 +112,19 @@ class LeadTaskRead(BaseModel):
     completed_at: datetime | None
 
 
+class CommunicationRecordRead(BaseModel):
+    id: UUID
+    direction: str
+    channel: str
+    status: str
+    provider: str
+    provider_message_id: str | None
+    subject: str | None
+    body: str
+    occurred_at: datetime
+    created_at: datetime
+
+
 class LeadMissingField(BaseModel):
     field_key: str
     label: str
@@ -148,6 +161,7 @@ class LeadDetail(LeadRead):
     consent_records: list[ConsentRecordRead]
     attribution_touches: list[AttributionTouchRead]
     open_tasks: list[LeadTaskRead]
+    communications: list[CommunicationRecordRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
 
@@ -189,6 +203,15 @@ class LeadFollowUpTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     due_at: datetime | None = None
     priority: str = Field(default="normal", max_length=80)
+
+
+class LeadCommunicationCreate(BaseModel):
+    direction: str = Field(default="outbound", max_length=40)
+    channel: str = Field(default="call", max_length=40)
+    status: str = Field(default="logged", max_length=80)
+    subject: str | None = Field(default=None, max_length=255)
+    body: str = Field(min_length=1, max_length=4000)
+    occurred_at: datetime | None = None
 
 
 class PipelineStageCount(BaseModel):

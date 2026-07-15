@@ -447,6 +447,10 @@ Delivered so far:
 - Added operating status labels and seven-field qualification progress to the OS lead database.
 - Added `/os/leads/{leadId}` lead detail routing and updated OS links to stay inside the
   operating-system surface.
+- Added communication records for manual call, SMS, email, voicemail, and internal-note logging.
+- Added protected lead communication logging API with audit and activity events.
+- Added a communications panel to the lead workspace.
+- Added a communication provider adapter contract for future Twilio/Gmail-style integrations.
 
 Remaining:
 
@@ -454,8 +458,10 @@ Remaining:
 - Add appointment records instead of only appointment status.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
-- Add communication records once Twilio/Gmail integrations are introduced.
-- Move lead detail pages under `/os/leads/{leadId}` when route history/redirect handling is added.
+- Add inbound provider webhooks, suppression checks, and send approval gates before live
+  seller-facing automation.
+- Decide whether to keep or redirect the legacy `/leads/{leadId}` route after staff bookmarks
+  have moved to `/os/leads/{leadId}`.
 
 ## Later Product Phases
 
