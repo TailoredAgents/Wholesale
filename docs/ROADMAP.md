@@ -551,12 +551,21 @@ Remaining expansion:
 
 ### Phase 8: Finance And Compensation
 
+Delivered foundation:
+
 - Revenue records.
 - Direct deal deductions.
 - Effective-dated compensation rules.
-- Compensation calculation.
-- Monthly advertising spend.
+- Automatic compensation calculations.
+- Manual marketing spend records.
+- OS finance page for ledger entry and reporting.
+
+Remaining expansion:
+
+- Payment status workflow.
+- Monthly close process.
 - Advertising percentage reporting.
+- QuickBooks/Xero export or sync.
 
 ### Phase 9: Marketing Intelligence
 

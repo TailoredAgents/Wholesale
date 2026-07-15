@@ -30,6 +30,11 @@
 - `approval_requests`
 - `buyers`
 - `buyer_offers`
+- `revenue_records`
+- `deal_deductions`
+- `compensation_rules`
+- `compensation_calculations`
+- `marketing_spend`
 
 ## Rules
 

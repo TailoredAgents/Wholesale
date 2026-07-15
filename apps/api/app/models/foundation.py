@@ -402,6 +402,92 @@ class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class RevenueRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "revenue_records"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class DealDeduction(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "deal_deductions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    category: Mapped[str] = mapped_column(String(120), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    incurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class CompensationRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compensation_rules"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    applies_to: Mapped[str] = mapped_column(String(120), nullable=False)
+    effective_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    effective_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class CompensationCalculation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compensation_calculations"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    revenue_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("revenue_records.id"), index=True
+    )
+    compensation_rule_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_rules.id"), index=True
+    )
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    basis_amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    calculated_amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class MarketingSpend(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "marketing_spend"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    campaign: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    spend_month_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
 

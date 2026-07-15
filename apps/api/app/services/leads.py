@@ -21,6 +21,7 @@ from app.models.foundation import (
     Deal,
     Lead,
     Property,
+    RevenueRecord,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -1557,9 +1558,9 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
     ))
     collected_revenue_cents = int(
         db.scalar(
-            select(func.coalesce(func.sum(Deal.assignment_fee_cents), 0)).where(
-                Deal.organization_id == principal.organization_id,
-                Deal.stage_key == "closed",
+            select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
+                RevenueRecord.organization_id == principal.organization_id,
+                RevenueRecord.status == "collected",
             )
         )
         or 0

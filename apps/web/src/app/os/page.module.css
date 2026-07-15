@@ -499,10 +499,28 @@
   font-size: 14px;
 }
 
-.buyerForm {
+.buyerForm,
+.financeForm {
   padding: 18px;
   display: grid;
   gap: 12px;
+}
+
+.financeForms {
+  display: grid;
+  gap: 0;
+}
+
+.financeForm {
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.financeForm:last-child {
+  border-bottom: 0;
+}
+
+.financeForm h3 {
+  font-size: 15px;
 }
 
 .formGrid {
@@ -511,7 +529,8 @@
   gap: 12px;
 }
 
-.buyerForm label {
+.buyerForm label,
+.financeForm label {
   display: grid;
   gap: 7px;
   color: #343a3d;
@@ -521,7 +540,10 @@
 
 .buyerForm input,
 .buyerForm select,
-.buyerForm textarea {
+.buyerForm textarea,
+.financeForm input,
+.financeForm select,
+.financeForm textarea {
   min-height: 42px;
   padding: 9px 11px;
   border: 1px solid #cfc8bc;
@@ -529,11 +551,13 @@
   font: inherit;
 }
 
-.buyerForm textarea {
+.buyerForm textarea,
+.financeForm textarea {
   resize: vertical;
 }
 
-.buyerForm button {
+.buyerForm button,
+.financeForm button {
   min-height: 44px;
   border: 0;
   border-radius: 8px;

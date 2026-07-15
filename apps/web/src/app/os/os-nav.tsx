@@ -13,6 +13,7 @@ const navItems = [
   { href: "/os/underwriting", label: "Underwriting" },
   { href: "/os/approvals", label: "Approvals" },
   { href: "/os/buyers", label: "Buyers" },
+  { href: "/os/finance", label: "Finance" },
 ];
 
 export function OsNav() {

@@ -211,6 +211,76 @@ export type BuyerListItem = {
   created_at: string;
 };
 
+export type FinanceOverview = {
+  summary: {
+    collected_revenue_cents: number;
+    pending_revenue_cents: number;
+    deductions_cents: number;
+    net_revenue_cents: number;
+    compensation_cents: number;
+    marketing_spend_cents: number;
+    company_net_cents: number;
+  };
+  revenue_records: Array<{
+    id: string;
+    lead_id: string | null;
+    deal_id: string | null;
+    transaction_id: string | null;
+    seller_name: string | null;
+    property_address: string | null;
+    source: string;
+    status: string;
+    amount_cents: number;
+    received_at: string;
+    notes: string | null;
+    created_at: string;
+  }>;
+  deductions: Array<{
+    id: string;
+    lead_id: string | null;
+    deal_id: string | null;
+    transaction_id: string | null;
+    category: string;
+    amount_cents: number;
+    incurred_at: string;
+    notes: string | null;
+    created_at: string;
+  }>;
+  compensation_rules: Array<{
+    id: string;
+    name: string;
+    role_key: string;
+    basis_points: number;
+    applies_to: string;
+    effective_start_at: string;
+    effective_end_at: string | null;
+    is_active: boolean;
+    notes: string | null;
+    created_at: string;
+  }>;
+  compensation_calculations: Array<{
+    id: string;
+    revenue_record_id: string;
+    compensation_rule_id: string;
+    role_key: string;
+    basis_amount_cents: number;
+    basis_points: number;
+    calculated_amount_cents: number;
+    status: string;
+    notes: string | null;
+    created_at: string;
+  }>;
+  marketing_spend: Array<{
+    id: string;
+    source: string;
+    campaign: string | null;
+    amount_cents: number;
+    spend_month_at: string;
+    notes: string | null;
+    created_at: string;
+  }>;
+};
+
 export type SpeedToLeadTask = {
   task_id: string;
   lead_id: string;
@@ -377,5 +447,45 @@ export async function getBuyers(): Promise<{
     return { buyers: ((await response.json()) as BuyerListResponse).items, apiConnected: true };
   } catch {
     return { buyers: [], apiConnected: false };
+  }
+}
+
+const emptyFinanceOverview: FinanceOverview = {
+  summary: {
+    collected_revenue_cents: 0,
+    pending_revenue_cents: 0,
+    deductions_cents: 0,
+    net_revenue_cents: 0,
+    compensation_cents: 0,
+    marketing_spend_cents: 0,
+    company_net_cents: 0,
+  },
+  revenue_records: [],
+  deductions: [],
+  compensation_rules: [],
+  compensation_calculations: [],
+  marketing_spend: [],
+};
+
+export async function getFinanceOverview(): Promise<{
+  finance: FinanceOverview;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance`, {
+      headers,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      throw new Error("API returned a non-OK response");
+    }
+
+    return { finance: (await response.json()) as FinanceOverview, apiConnected: true };
+  } catch {
+    return { finance: emptyFinanceOverview, apiConnected: false };
   }
 }
