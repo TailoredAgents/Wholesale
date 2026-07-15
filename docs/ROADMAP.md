@@ -461,12 +461,19 @@ Delivered so far:
 - Added protected underwriting API and lead workspace underwriting panel.
 - Creating underwriting versions now writes audit/activity events and moves leads into underwriting
   or offer-ready stages when appropriate.
+- Added transaction records connected to deals, leads, properties, sellers, title/closing details,
+  contract terms, and deadline metadata.
+- Added default transaction checklist items for contract approval, signature, earnest money, title,
+  disclosure/payoff collection, due diligence, closing, and assignment planning.
+- Added protected transaction opening API and lead workspace contract/transaction panel.
 
 Remaining:
 
 - Persist user-specific saved view definitions after team/user preferences exist.
 - Add appointment status update/reschedule outcomes and calendar sync after provider selection.
 - Add comp candidate records, provider import adapters, and approval request records.
+- Add contract template records, e-signature adapter, checklist completion actions, and explicit
+  approval request workflow.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
 - Add inbound provider webhooks, suppression checks, and send approval gates before live

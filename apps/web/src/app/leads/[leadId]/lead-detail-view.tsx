@@ -7,6 +7,7 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { StageUpdateForm } from "./stage-update-form";
+import { TransactionForm } from "./transaction-form";
 import { UnderwritingForm } from "./underwriting-form";
 import styles from "./page.module.css";
 
@@ -283,6 +284,54 @@ export async function LeadDetailView({ params }: LeadPageProps) {
                   </dl>
                   <small>{labelize(version.offer_strategy)} / Manual</small>
                   {version.notes ? <p>{version.notes}</p> : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        </article>
+
+        <article className={styles.panelWide}>
+          <div className={styles.panelHeader}>
+            <h2>Contract And Transaction</h2>
+          </div>
+          <div className={styles.transactionGrid}>
+            <TransactionForm leadId={lead.id} />
+            <div className={styles.transactionList}>
+              {lead.transactions.length === 0 ? <p>No transaction opened yet.</p> : null}
+              {lead.transactions.map((transaction) => (
+                <article key={transaction.id}>
+                  <div>
+                    <strong>{labelize(transaction.contract_type)}</strong>
+                    <span>{labelize(transaction.status)}</span>
+                  </div>
+                  <dl>
+                    <div>
+                      <dt>Purchase</dt>
+                      <dd>{formatMoney(transaction.purchase_price_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Assignment fee</dt>
+                      <dd>{formatMoney(transaction.assignment_fee_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Earnest money</dt>
+                      <dd>{formatMoney(transaction.earnest_money_cents)}</dd>
+                    </div>
+                    <div>
+                      <dt>Closing</dt>
+                      <dd>{formatOptionalDate(transaction.closing_date)}</dd>
+                    </div>
+                  </dl>
+                  <small>{transaction.title_company ?? "No title company recorded"}</small>
+                  {transaction.notes ? <p>{transaction.notes}</p> : null}
+                  <div className={styles.checklist}>
+                    {transaction.checklist_items.map((item) => (
+                      <p key={item.id}>
+                        <strong>{item.title}</strong>
+                        <span>{labelize(item.status)}</span>
+                      </p>
+                    ))}
+                  </div>
                 </article>
               ))}
             </div>

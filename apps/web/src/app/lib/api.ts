@@ -126,6 +126,30 @@ export type LeadDetail = LeadListItem & {
     source: string;
     created_at: string;
   }>;
+  transactions: Array<{
+    id: string;
+    deal_id: string;
+    status: string;
+    contract_type: string;
+    purchase_price_cents: number;
+    assignment_fee_cents: number | null;
+    earnest_money_cents: number | null;
+    title_company: string | null;
+    closing_date: string | null;
+    inspection_period_days: number | null;
+    contract_sent_at: string | null;
+    contract_executed_at: string | null;
+    notes: string | null;
+    checklist_items: Array<{
+      id: string;
+      title: string;
+      status: string;
+      due_at: string | null;
+      completed_at: string | null;
+      sort_order: number;
+    }>;
+    created_at: string;
+  }>;
   intelligence: {
     quality_score: number;
     urgency_score: number;

@@ -301,6 +301,7 @@
 .taskForm,
 .appointmentForm,
 .communicationForm,
+.transactionForm,
 .underwritingForm {
   padding: 18px;
   display: grid;
@@ -347,6 +348,7 @@
 .taskForm label,
 .appointmentForm label,
 .communicationForm label,
+.transactionForm label,
 .underwritingForm label {
   display: grid;
   gap: 7px;
@@ -368,6 +370,9 @@
 .communicationForm select,
 .communicationForm input,
 .communicationForm textarea,
+.transactionForm select,
+.transactionForm input,
+.transactionForm textarea,
 .underwritingForm select,
 .underwritingForm input,
 .underwritingForm textarea {
@@ -381,6 +386,7 @@
 .noteForm textarea,
 .appointmentForm textarea,
 .communicationForm textarea,
+.transactionForm textarea,
 .underwritingForm textarea {
   resize: vertical;
 }
@@ -391,6 +397,7 @@
 .taskForm button,
 .appointmentForm button,
 .communicationForm button,
+.transactionForm button,
 .underwritingForm button {
   min-height: 44px;
   border: 0;
@@ -404,6 +411,7 @@
 
 .appointmentGrid,
 .communicationGrid,
+.transactionGrid,
 .underwritingGrid {
   display: grid;
   grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
@@ -412,12 +420,14 @@
 
 .appointmentForm,
 .communicationForm,
+.transactionForm,
 .underwritingForm {
   border-right: 1px solid #e8e3d8;
 }
 
 .appointmentList,
 .communicationList,
+.transactionList,
 .underwritingList {
   padding: 18px;
   display: grid;
@@ -427,6 +437,7 @@
 
 .appointmentList > p,
 .communicationList > p,
+.transactionList > p,
 .underwritingList > p {
   margin: 0;
   color: #5d6365;
@@ -435,6 +446,7 @@
 
 .appointmentList article,
 .communicationList article,
+.transactionList article,
 .underwritingList article {
   padding: 12px;
   border: 1px solid #e4ded4;
@@ -446,6 +458,7 @@
 
 .appointmentList article div,
 .communicationList article div,
+.transactionList article div,
 .underwritingList article div {
   display: flex;
   justify-content: space-between;
@@ -456,6 +469,8 @@
 .communicationList h3,
 .appointmentList p,
 .communicationList p,
+.transactionList p,
+.transactionList dl,
 .underwritingList p,
 .underwritingList dl {
   margin: 0;
@@ -472,6 +487,10 @@
 .communicationList span,
 .communicationList p,
 .communicationList small,
+.transactionList span,
+.transactionList p,
+.transactionList small,
+.transactionList dt,
 .underwritingList span,
 .underwritingList p,
 .underwritingList small,
@@ -481,21 +500,41 @@
   line-height: 1.45;
 }
 
+.transactionList dl,
 .underwritingList dl {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
+.transactionList dl div,
 .underwritingList dl div {
   display: grid;
   gap: 2px;
 }
 
+.transactionList dd,
 .underwritingList dd {
   margin: 0;
   font-size: 14px;
   font-weight: 700;
+}
+
+.checklist {
+  display: grid;
+  gap: 6px;
+}
+
+.checklist p {
+  min-height: 36px;
+  padding: 8px;
+  border: 1px solid #e8e3d8;
+  border-radius: 8px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .saving,
@@ -553,12 +592,14 @@
 
   .appointmentGrid,
   .communicationGrid,
+  .transactionGrid,
   .underwritingGrid {
     grid-template-columns: 1fr;
   }
 
   .appointmentForm,
   .communicationForm,
+  .transactionForm,
   .underwritingForm {
     border-right: 0;
     border-bottom: 1px solid #e8e3d8;

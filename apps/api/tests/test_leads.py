@@ -8,7 +8,10 @@ from app.models.foundation import (
     Appointment,
     AuditEvent,
     CommunicationRecord,
+    Deal,
     Task,
+    Transaction,
+    TransactionChecklistItem,
     UnderwritingVersion,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -157,6 +160,7 @@ def test_read_lead_detail_and_update_stage(
     assert detail["communications"] == []
     assert detail["appointments"] == []
     assert detail["underwriting_versions"] == []
+    assert detail["transactions"] == []
     assert detail["recent_activity"][0]["event_type"] == "lead.created"
     assert detail["intelligence"]["quality_score"] == 85
     assert detail["intelligence"]["urgency_score"] == 88
@@ -596,6 +600,91 @@ def test_create_lead_underwriting_rejects_invalid_ranges(
     )
 
     assert response.status_code == 422
+
+
+def test_open_lead_transaction_creates_deal_checklist_and_audit(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/transactions",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contract_type": "purchase_agreement",
+            "purchase_price_cents": 17000000,
+            "assignment_fee_cents": 2500000,
+            "earnest_money_cents": 100000,
+            "title_company": "Oakwell Title Partner",
+            "closing_date": "2026-08-14T21:00:00Z",
+            "inspection_period_days": 7,
+            "notes": "Seller accepted the approved offer.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["stage_key"] == "under_contract"
+    assert payload["transactions"][0]["status"] == "contract_prep"
+    assert payload["transactions"][0]["contract_type"] == "purchase_agreement"
+    assert payload["transactions"][0]["purchase_price_cents"] == 17000000
+    assert len(payload["transactions"][0]["checklist_items"]) == 8
+    assert "lead.transaction_opened" in [
+        activity["event_type"] for activity in payload["recent_activity"]
+    ]
+    assert int(db_session.scalar(select(func.count()).select_from(Deal)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Transaction)) or 0) == 1
+    assert int(
+        db_session.scalar(select(func.count()).select_from(TransactionChecklistItem)) or 0
+    ) == 8
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "transaction.create"
+            )
+        )
+        or 0
+    ) == 1
+
+
+def test_open_lead_transaction_rejects_duplicate_active_transaction(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    payload = {
+        "contract_type": "purchase_agreement",
+        "purchase_price_cents": 17000000,
+    }
+
+    first_response = client.post(
+        f"/api/v1/leads/{lead_id}/transactions",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    second_response = client.post(
+        f"/api/v1/leads/{lead_id}/transactions",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+
+    assert first_response.status_code == 201
+    assert second_response.status_code == 422
 
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:

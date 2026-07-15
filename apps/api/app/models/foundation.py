@@ -302,6 +302,54 @@ class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     assignment_fee_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
 
 
+class Transaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transactions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    deal_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    contract_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    purchase_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    assignment_fee_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    earnest_money_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    title_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    closing_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    inspection_period_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    contract_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    contract_executed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    transaction_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class TransactionChecklistItem(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_checklist_items"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
 

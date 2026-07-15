@@ -154,6 +154,33 @@ class UnderwritingVersionRead(BaseModel):
     created_at: datetime
 
 
+class TransactionChecklistItemRead(BaseModel):
+    id: UUID
+    title: str
+    status: str
+    due_at: datetime | None
+    completed_at: datetime | None
+    sort_order: int
+
+
+class TransactionRead(BaseModel):
+    id: UUID
+    deal_id: UUID
+    status: str
+    contract_type: str
+    purchase_price_cents: int
+    assignment_fee_cents: int | None
+    earnest_money_cents: int | None
+    title_company: str | None
+    closing_date: datetime | None
+    inspection_period_days: int | None
+    contract_sent_at: datetime | None
+    contract_executed_at: datetime | None
+    notes: str | None
+    checklist_items: list[TransactionChecklistItemRead]
+    created_at: datetime
+
+
 class LeadMissingField(BaseModel):
     field_key: str
     label: str
@@ -193,6 +220,7 @@ class LeadDetail(LeadRead):
     communications: list[CommunicationRecordRead]
     appointments: list[AppointmentRead]
     underwriting_versions: list[UnderwritingVersionRead]
+    transactions: list[TransactionRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
 
@@ -264,6 +292,17 @@ class LeadUnderwritingCreate(BaseModel):
     max_offer_cents: int | None = Field(default=None, ge=0)
     recommended_offer_cents: int | None = Field(default=None, ge=0)
     offer_strategy: str | None = Field(default=None, max_length=120)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class LeadTransactionCreate(BaseModel):
+    contract_type: str = Field(default="purchase_agreement", max_length=120)
+    purchase_price_cents: int = Field(ge=1)
+    assignment_fee_cents: int | None = Field(default=None, ge=0)
+    earnest_money_cents: int | None = Field(default=None, ge=0)
+    title_company: str | None = Field(default=None, max_length=255)
+    closing_date: datetime | None = None
+    inspection_period_days: int | None = Field(default=None, ge=0, le=120)
     notes: str | None = Field(default=None, max_length=2000)
 
 

@@ -20,6 +20,8 @@ from app.models.foundation import (
     Lead,
     Property,
     Task,
+    Transaction,
+    TransactionChecklistItem,
     UnderwritingVersion,
     User,
 )
@@ -45,9 +47,12 @@ from app.schemas.leads import (
     LeadStaffUpdate,
     LeadStageUpdate,
     LeadTaskRead,
+    LeadTransactionCreate,
     LeadUnderwritingCreate,
     PipelineStageCount,
     SourcePerformance,
+    TransactionChecklistItemRead,
+    TransactionRead,
     UnderwritingVersionRead,
 )
 
@@ -59,6 +64,7 @@ APPOINTMENT_TYPES = {"seller_call", "walkthrough", "offer_review", "follow_up"}
 APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "rescheduled"}
 APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
 UNDERWRITING_STATUSES = {"draft", "needs_review", "approved", "rejected"}
+TRANSACTION_CONTRACT_TYPES = {"purchase_agreement", "assignment_contract", "novation"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
 QUALIFICATION_FIELDS = [
@@ -286,6 +292,33 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         )
         .limit(20)
     ).all()
+    transactions = db.scalars(
+        select(Transaction)
+        .where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.lead_id == lead.id,
+        )
+        .order_by(Transaction.created_at.desc())
+        .limit(10)
+    ).all()
+    transaction_ids = [transaction.id for transaction in transactions]
+    checklist_items_by_transaction: dict[UUID, list[TransactionChecklistItem]] = {
+        transaction_id: [] for transaction_id in transaction_ids
+    }
+    if transaction_ids:
+        checklist_items = db.scalars(
+            select(TransactionChecklistItem)
+            .where(
+                TransactionChecklistItem.organization_id == principal.organization_id,
+                TransactionChecklistItem.transaction_id.in_(transaction_ids),
+            )
+            .order_by(
+                TransactionChecklistItem.sort_order.asc(),
+                TransactionChecklistItem.created_at.asc(),
+            )
+        ).all()
+        for item in checklist_items:
+            checklist_items_by_transaction[item.transaction_id].append(item)
 
     return LeadDetail(
         **base.model_dump(),
@@ -383,6 +416,36 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 created_at=version.created_at,
             )
             for version in underwriting_versions
+        ],
+        transactions=[
+            TransactionRead(
+                id=transaction.id,
+                deal_id=transaction.deal_id,
+                status=transaction.status,
+                contract_type=transaction.contract_type,
+                purchase_price_cents=transaction.purchase_price_cents,
+                assignment_fee_cents=transaction.assignment_fee_cents,
+                earnest_money_cents=transaction.earnest_money_cents,
+                title_company=transaction.title_company,
+                closing_date=transaction.closing_date,
+                inspection_period_days=transaction.inspection_period_days,
+                contract_sent_at=transaction.contract_sent_at,
+                contract_executed_at=transaction.contract_executed_at,
+                notes=transaction.notes,
+                checklist_items=[
+                    TransactionChecklistItemRead(
+                        id=item.id,
+                        title=item.title,
+                        status=item.status,
+                        due_at=item.due_at,
+                        completed_at=item.completed_at,
+                        sort_order=item.sort_order,
+                    )
+                    for item in checklist_items_by_transaction[transaction.id]
+                ],
+                created_at=transaction.created_at,
+            )
+            for transaction in transactions
         ],
         recent_activity=[
             ActivityEventRead(
@@ -1023,6 +1086,136 @@ def create_lead_underwriting_version(
     return get_lead_detail(db, principal, lead_id)
 
 
+def create_lead_transaction(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadTransactionCreate,
+) -> LeadDetail | None:
+    if payload.contract_type not in TRANSACTION_CONTRACT_TYPES:
+        raise ValueError(f"Unsupported contract type: {payload.contract_type}")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    existing_transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.lead_id == lead.id,
+            Transaction.status.in_(("contract_prep", "sent", "executed", "closing")),
+        )
+    )
+    if existing_transaction is not None:
+        raise ValueError("An active transaction already exists for this lead.")
+
+    deal = db.scalar(
+        select(Deal)
+        .where(
+            Deal.organization_id == principal.organization_id,
+            Deal.lead_id == lead.id,
+        )
+        .order_by(Deal.created_at.desc())
+    )
+    if deal is None:
+        deal = Deal(
+            organization_id=principal.organization_id,
+            lead_id=lead.id,
+            property_id=lead.property_id,
+            stage_key="contract_prep",
+            contract_price_cents=payload.purchase_price_cents,
+            assignment_fee_cents=payload.assignment_fee_cents,
+        )
+        db.add(deal)
+        db.flush()
+    else:
+        deal.stage_key = "contract_prep"
+        deal.contract_price_cents = payload.purchase_price_cents
+        deal.assignment_fee_cents = payload.assignment_fee_cents
+
+    previous_stage = lead.stage_key
+    lead.stage_key = "under_contract"
+    transaction = Transaction(
+        organization_id=principal.organization_id,
+        deal_id=deal.id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        contact_id=lead.contact_id,
+        owner_user_id=lead.assigned_user_id or principal.user_id,
+        status="contract_prep",
+        contract_type=payload.contract_type,
+        purchase_price_cents=payload.purchase_price_cents,
+        assignment_fee_cents=payload.assignment_fee_cents,
+        earnest_money_cents=payload.earnest_money_cents,
+        title_company=payload.title_company,
+        closing_date=payload.closing_date,
+        inspection_period_days=payload.inspection_period_days,
+        contract_sent_at=None,
+        contract_executed_at=None,
+        notes=payload.notes,
+        transaction_metadata={
+            "source": "manual_open",
+            "esign_synced": False,
+        },
+    )
+    db.add(transaction)
+    db.flush()
+    for index, title in enumerate(default_transaction_checklist_titles(), start=1):
+        db.add(
+            TransactionChecklistItem(
+                organization_id=principal.organization_id,
+                transaction_id=transaction.id,
+                responsible_user_id=transaction.owner_user_id,
+                title=title,
+                status="open",
+                due_at=payload.closing_date if "closing" in title.lower() else None,
+                completed_at=None,
+                sort_order=index,
+            )
+        )
+
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.transaction_opened",
+            summary=(
+                f"Transaction opened at {payload.purchase_price_cents / 100:.0f} "
+                "purchase price."
+            ),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="transaction.create",
+            entity_type="transaction",
+            entity_id=transaction.id,
+            previous_value={"stage_key": previous_stage},
+            new_value={
+                "lead_id": str(lead.id),
+                "deal_id": str(deal.id),
+                "status": transaction.status,
+                "contract_type": transaction.contract_type,
+                "purchase_price_cents": transaction.purchase_price_cents,
+                "assignment_fee_cents": transaction.assignment_fee_cents,
+                "earnest_money_cents": transaction.earnest_money_cents,
+                "closing_date": transaction.closing_date.isoformat()
+                if transaction.closing_date
+                else None,
+                "stage_key": lead.stage_key,
+            },
+            reason="Manual transaction opening",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
 def update_lead_staff_details(
     db: Session,
     principal: Principal,
@@ -1440,6 +1633,19 @@ def serialize_audit_value(value: Any) -> Any:
 def validate_money_range(label: str, low_cents: int | None, high_cents: int | None) -> None:
     if low_cents is not None and high_cents is not None and low_cents > high_cents:
         raise ValueError(f"{label} low value cannot be greater than high value.")
+
+
+def default_transaction_checklist_titles() -> tuple[str, ...]:
+    return (
+        "Manager approves contract package",
+        "Prepare seller purchase agreement",
+        "Send contract for signature",
+        "Confirm earnest money details",
+        "Open file with title company",
+        "Collect seller disclosures and payoff details",
+        "Track inspection and due diligence period",
+        "Confirm closing date and assignment plan",
+    )
 
 
 def update_contact_method(
