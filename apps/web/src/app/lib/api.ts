@@ -13,6 +13,7 @@ export type DashboardSummary = {
     campaign: string;
     page_views: number;
     form_starts: number;
+    form_abandons: number;
     form_submits: number;
     call_clicks: number;
     leads_created: number;

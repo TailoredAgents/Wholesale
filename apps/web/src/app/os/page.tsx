@@ -225,6 +225,7 @@ export default async function Home() {
                     <th>Source</th>
                     <th>Views</th>
                     <th>Starts</th>
+                    <th>Abandons</th>
                     <th>Submits</th>
                     <th>Calls</th>
                     <th>Leads</th>
@@ -234,6 +235,7 @@ export default async function Home() {
                   {sourcePerformance.length === 0 ? (
                     <tr>
                       <td>No source data yet</td>
+                      <td>0</td>
                       <td>0</td>
                       <td>0</td>
                       <td>0</td>
@@ -254,6 +256,7 @@ export default async function Home() {
                       </td>
                       <td>{source.page_views}</td>
                       <td>{source.form_starts}</td>
+                      <td>{source.form_abandons}</td>
                       <td>{source.form_submits}</td>
                       <td>{source.call_clicks}</td>
                       <td>{source.leads_created}</td>

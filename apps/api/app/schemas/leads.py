@@ -125,6 +125,7 @@ class SourcePerformance(BaseModel):
     campaign: str
     page_views: int
     form_starts: int
+    form_abandons: int
     form_submits: int
     call_clicks: int
     leads_created: int

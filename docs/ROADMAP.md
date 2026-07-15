@@ -400,11 +400,14 @@ Delivered so far:
 - Added seller situation pages for inherited houses, repairs-needed houses, and fast-sale timelines.
 - Expanded the homepage with public trust cues, process content, visual property media, and stronger seller CTAs.
 - Removed internal operating-system wording from the public cash-offer page.
+- Improved the cash-offer form with clearer sections, helper text, and a stronger confirmation state.
+- Added honeypot spam protection for public seller intake.
+- Added form abandonment tracking and OS reporting.
 
 Remaining:
 
 - Add deeper trust/proof/process sections.
-- Add explicit abandonment event handling after the form flow is more mature.
+- Add stronger spam protection after traffic volume justifies it.
 
 ## Later Product Phases
 

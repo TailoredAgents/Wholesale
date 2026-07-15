@@ -140,6 +140,35 @@ def test_public_conversion_event_endpoint_records_attribution(
     assert event.event_metadata == {"field": "property_address"}
 
 
+def test_public_conversion_event_endpoint_records_form_abandonment(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/public/conversion-events",
+        json={
+            "event_type": "form_abandon",
+            "session_id": "session-abandoned",
+            "metadata": {"form": "cash_offer"},
+            "attribution": {
+                "landing_page": "/get-a-cash-offer",
+                "utm_source": "google_ppc",
+                "utm_medium": "cpc",
+            },
+        },
+    )
+
+    assert response.status_code == 201
+    event = db_session.scalar(select(ConversionEvent))
+    assert event is not None
+    assert event.event_type == "form_abandon"
+    assert event.session_id == "session-abandoned"
+    assert event.source == "google_ppc"
+
+
 def test_public_seller_intake_requires_consent(
     db_session: Session,
     api_db_override: None,
@@ -153,6 +182,22 @@ def test_public_seller_intake_requires_consent(
 
     assert response.status_code == 422
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+def test_public_seller_intake_rejects_honeypot_submission(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["company_website"] = "https://spam.example"
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 0
 
 
 def test_public_seller_intake_matches_duplicate_active_lead(

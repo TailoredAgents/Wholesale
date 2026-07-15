@@ -466,6 +466,8 @@ def get_source_performance(db: Session, principal: Principal) -> list[SourcePerf
             row["page_views"] = int(row["page_views"]) + count_value
         elif event_type == "form_start":
             row["form_starts"] = int(row["form_starts"]) + count_value
+        elif event_type == "form_abandon":
+            row["form_abandons"] = int(row["form_abandons"]) + count_value
         elif event_type == "form_submit":
             row["form_submits"] = int(row["form_submits"]) + count_value
         elif event_type == "call_click":
@@ -487,6 +489,7 @@ def get_source_performance(db: Session, principal: Principal) -> list[SourcePerf
             campaign=str(row["campaign"]),
             page_views=int(row["page_views"]),
             form_starts=int(row["form_starts"]),
+            form_abandons=int(row["form_abandons"]),
             form_submits=int(row["form_submits"]),
             call_clicks=int(row["call_clicks"]),
             leads_created=int(row["leads_created"]),
@@ -522,6 +525,7 @@ def ensure_source_performance_row(
             "campaign": key[2],
             "page_views": 0,
             "form_starts": 0,
+            "form_abandons": 0,
             "form_submits": 0,
             "call_clicks": 0,
             "leads_created": 0,

@@ -102,6 +102,7 @@ def test_dashboard_summary_counts_leads(
             "campaign": "uncategorized",
             "page_views": 0,
             "form_starts": 0,
+            "form_abandons": 0,
             "form_submits": 0,
             "call_clicks": 0,
             "leads_created": 1,

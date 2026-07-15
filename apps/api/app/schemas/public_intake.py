@@ -47,12 +47,15 @@ class SellerIntakeCreate(BaseModel):
     desired_timeline: str | None = Field(default=None, max_length=120)
     asking_price: str | None = Field(default=None, max_length=120)
     comments: str | None = Field(default=None, max_length=1000)
+    company_website: str | None = Field(default=None, max_length=255)
     consent_to_contact: bool
     consent_wording_version: str = Field(default=CONSENT_WORDING_VERSION, max_length=80)
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
 
     @model_validator(mode="after")
     def require_contact_channel(self) -> "SellerIntakeCreate":
+        if self.company_website:
+            raise ValueError("Submission could not be accepted.")
         if not self.phone and not self.email:
             raise ValueError("Either phone or email is required.")
         if not self.consent_to_contact:

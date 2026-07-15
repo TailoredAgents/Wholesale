@@ -152,7 +152,7 @@ def create_public_seller_lead(
         matched_existing_lead=matched_existing_lead,
         consent_wording_version=payload.consent_wording_version,
         message=(
-            "Thanks. We matched your submission to an existing lead."
+            "Thanks. We received your updated information."
             if matched_existing_lead
             else "Thanks. Your information was received."
         ),

@@ -77,6 +77,40 @@
   gap: 16px;
 }
 
+.formIntro {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.formIntro h2,
+.confirmation h2 {
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+.formIntro p:last-child,
+.confirmation p {
+  color: #4f5658;
+  line-height: 1.5;
+}
+
+.fieldset {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e1dcd1;
+  border-radius: 8px;
+}
+
+.fieldset legend {
+  padding: 0 6px;
+  color: #2f6f4e;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .gridTwo {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -89,6 +123,13 @@
   color: #343a3d;
   font-size: 13px;
   font-weight: 700;
+}
+
+.form small {
+  color: #6a7072;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.35;
 }
 
 .form input,
@@ -107,6 +148,14 @@
 
 .form textarea {
   resize: vertical;
+}
+
+.hiddenField {
+  position: absolute;
+  left: -10000px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
 }
 
 .consent {
@@ -130,6 +179,31 @@
   color: #ffffff;
   font: inherit;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.secondaryButton,
+.textButton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 800;
+}
+
+.secondaryButton {
+  padding: 0 18px;
+  border: 1px solid #cfc8bc;
+  color: #2f6f4e;
+}
+
+.textButton {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #2f6f4e;
   cursor: pointer;
 }
 
@@ -157,9 +231,50 @@
   color: #5d6365;
 }
 
+.confirmation {
+  padding: 24px;
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 18px;
+}
+
+.nextSteps {
+  display: grid;
+  gap: 12px;
+}
+
+.nextSteps div {
+  padding: 16px;
+  border: 1px solid #e1dcd1;
+  border-radius: 8px;
+  background: #fbfaf7;
+}
+
+.nextSteps strong,
+.nextSteps span {
+  display: block;
+}
+
+.nextSteps span {
+  margin-top: 6px;
+  color: #4f5658;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.confirmationActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+
 @media (max-width: 860px) {
   .header,
-  .nav {
+  .nav,
+  .confirmationActions {
     align-items: flex-start;
     flex-direction: column;
   }
