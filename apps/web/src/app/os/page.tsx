@@ -1,74 +1,21 @@
 import Link from "next/link";
 
-import { AuthControls } from "./auth-controls";
 import { CompleteTaskButton } from "../complete-task-button";
 import styles from "./page.module.css";
 import { getDashboardData } from "../lib/api";
+import {
+  boardStages,
+  formatDateTime,
+  formatMoney,
+  formatTime,
+  getTaskCountsByLead,
+  getWorkspaceQueues,
+  labelize,
+  pipelineStages,
+  qualificationFieldCount,
+} from "./os-utils";
 
 export const dynamic = "force-dynamic";
-export const metadata = {
-  title: "Oakwell Operating System",
-  description: "Internal acquisitions workspace for Oakwell Home Buyers.",
-};
-
-const pipelineStages = [
-  { key: "new", label: "New" },
-  { key: "attempting_contact", label: "Attempting contact" },
-  { key: "contacted", label: "Contacted" },
-  { key: "qualification_in_progress", label: "Qualifying" },
-  { key: "qualified", label: "Qualified" },
-  { key: "appointment_scheduled", label: "Appointment" },
-  { key: "underwriting", label: "Underwriting" },
-  { key: "offer_ready", label: "Offer ready" },
-  { key: "under_contract", label: "Under contract" },
-];
-
-const boardStages = pipelineStages.slice(0, 6);
-
-function formatMoney(cents: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  }).format(cents / 100);
-}
-
-function labelize(value: string) {
-  return value
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
-
-function formatTime(value: string | null) {
-  if (!value) {
-    return "Unscheduled";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatDateTime(value: string | null) {
-  if (!value) {
-    return "Unscheduled";
-  }
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function missingQualificationFields(lead: {
-  motivation: string | null;
-  desired_timeline: string | null;
-  property_condition: string | null;
-}) {
-  return [lead.motivation, lead.desired_timeline, lead.property_condition].filter(Boolean).length;
-}
 
 export default async function Home() {
   const dashboard = await getDashboardData();
@@ -77,31 +24,15 @@ export default async function Home() {
   );
   const sourcePerformance = dashboard.summary.source_performance;
   const openTasks = dashboard.openTaskQueue;
-  const overdueTasks = openTasks.filter((task) => task.due_status === "overdue");
-  const dueTasks = openTasks.filter((task) => task.due_status === "due");
-  const needsQualification = dashboard.leads.filter(
-    (lead) =>
-      ["new", "contacted", "qualification_in_progress"].includes(lead.stage_key) &&
-      missingQualificationFields(lead) < 3,
-  );
-  const appointmentQueue = dashboard.leads.filter(
-    (lead) =>
-      ["qualified", "appointment_scheduled"].includes(lead.stage_key) ||
-      ["appointment_requested", "not_scheduled"].includes(lead.appointment_status ?? ""),
-  );
-  const offerQueue = dashboard.leads.filter((lead) =>
-    ["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key),
-  );
+  const { overdueTasks, dueTasks, needsQualification, appointmentQueue, offerQueue } =
+    getWorkspaceQueues(dashboard.leads, openTasks);
   const leadsByStage = new Map(
     boardStages.map((stage) => [
       stage.key,
       dashboard.leads.filter((lead) => lead.stage_key === stage.key).slice(0, 5),
     ]),
   );
-  const openTaskCountsByLead = openTasks.reduce((counts, task) => {
-    counts.set(task.lead_id, (counts.get(task.lead_id) ?? 0) + 1);
-    return counts;
-  }, new Map<string, number>());
+  const openTaskCountsByLead = getTaskCountsByLead(openTasks);
   const metrics = [
     {
       label: "New paid leads",
@@ -131,25 +62,7 @@ export default async function Home() {
   ];
 
   return (
-    <main className={styles.shell}>
-      <aside className={styles.sidebar} aria-label="Primary navigation">
-        <div>
-          <p className={styles.eyebrow}>Oakwell Home Buyers</p>
-          <h1>Operating System</h1>
-        </div>
-        <nav className={styles.nav}>
-          <a className={styles.activeNav} href="#dashboard">
-            Dashboard
-          </a>
-          <a href="#work">Work Queue</a>
-          <a href="#pipeline">Pipeline</a>
-          <a href="#leads">Leads</a>
-          <a href="#underwriting">Underwriting</a>
-        </nav>
-        <AuthControls />
-      </aside>
-
-      <section className={styles.workspace} id="dashboard">
+    <>
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>Local foundation</p>
@@ -208,7 +121,7 @@ export default async function Home() {
                   <strong>{lead.seller_name}</strong>
                   <span>{lead.property_address}</span>
                   <small>
-                    {missingQualificationFields(lead)}/3 fields captured · {labelize(lead.source)}
+                    {qualificationFieldCount(lead)}/3 fields captured · {labelize(lead.source)}
                   </small>
                 </Link>
               ))}
@@ -462,7 +375,6 @@ export default async function Home() {
             </div>
           </div>
         </section>
-      </section>
-    </main>
+    </>
   );
 }

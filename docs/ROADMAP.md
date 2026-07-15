@@ -437,6 +437,8 @@ Delivered so far:
 - Added a generic open task queue API for all acquisition task types.
 - Added OS daily work queues for overdue follow-up, qualification gaps, appointments, and offers.
 - Added a seller acquisition board grouped by pipeline stage with task and follow-up context.
+- Split the OS into real routed pages for dashboard, tasks, pipeline, leads, underwriting,
+  approvals, and buyers.
 
 Remaining:
 
@@ -444,6 +446,7 @@ Remaining:
 - Add appointment records instead of only appointment status.
 - Add missing-field prompts and AI intake summary support.
 - Add communication records once Twilio/Gmail integrations are introduced.
+- Move lead detail pages under `/os/leads/{leadId}` when route history/redirect handling is added.
 
 ## Later Product Phases
 
