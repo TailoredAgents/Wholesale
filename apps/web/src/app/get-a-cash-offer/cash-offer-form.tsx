@@ -171,7 +171,7 @@ export function CashOfferForm() {
     <form className={styles.form} onFocusCapture={handleFormStart} onSubmit={handleSubmit}>
       <div className={styles.formIntro}>
         <p className={styles.eyebrow}>Cash offer request</p>
-        <h2>Tell us about the property.</h2>
+        <h2>Get started in about a minute.</h2>
         <p>Required fields are marked. Phone or email is enough to start.</p>
       </div>
 
@@ -181,27 +181,40 @@ export function CashOfferForm() {
       </label>
 
       <fieldset className={styles.fieldset}>
-        <legend>Property</legend>
+        <legend>Property basics</legend>
         <div className={styles.gridTwo}>
           <label>
-            <span>Property address</span>
-            <input name="property_address" autoComplete="street-address" required />
+            <span>Property address *</span>
+            <input
+              name="property_address"
+              autoComplete="street-address"
+              placeholder="123 Main St"
+              required
+            />
           </label>
           <label>
-            <span>ZIP code</span>
-            <input name="property_postal_code" autoComplete="postal-code" required />
+            <span>ZIP code *</span>
+            <input
+              name="property_postal_code"
+              autoComplete="postal-code"
+              inputMode="numeric"
+              placeholder="30303"
+              required
+            />
           </label>
         </div>
 
         <div className={styles.gridTwo}>
           <label>
-            <span>City</span>
-            <input name="property_city" autoComplete="address-level2" required />
+            <span>City *</span>
+            <input
+              name="property_city"
+              autoComplete="address-level2"
+              placeholder="Atlanta"
+              required
+            />
           </label>
-          <label>
-            <span>State</span>
-            <input name="property_state" autoComplete="address-level1" defaultValue="GA" required />
-          </label>
+          <input name="property_state" type="hidden" defaultValue="GA" />
         </div>
       </fieldset>
 
@@ -209,20 +222,20 @@ export function CashOfferForm() {
         <legend>Contact</legend>
         <div className={styles.gridTwo}>
           <label>
-            <span>Name</span>
-            <input name="name" autoComplete="name" required />
+            <span>Name *</span>
+            <input name="name" autoComplete="name" placeholder="Jane Seller" required />
           </label>
           <label>
             <span>Phone</span>
-            <input name="phone" autoComplete="tel" />
-            <small>Best if you want the fastest follow-up.</small>
+            <input name="phone" autoComplete="tel" inputMode="tel" placeholder="404-555-0100" />
+            <small>Best for the fastest response.</small>
           </label>
         </div>
 
         <div className={styles.gridTwo}>
           <label>
             <span>Email</span>
-            <input name="email" type="email" autoComplete="email" />
+            <input name="email" type="email" autoComplete="email" placeholder="jane@example.com" />
           </label>
           <label>
             <span>Preferred contact</span>
@@ -235,40 +248,43 @@ export function CashOfferForm() {
         </div>
       </fieldset>
 
-      <fieldset className={styles.fieldset}>
-        <legend>Situation</legend>
-        <div className={styles.gridTwo}>
-          <label>
-            <span>Reason for selling</span>
-            <input name="reason_for_selling" placeholder="Inherited, repairs, moving, etc." />
-          </label>
-          <label>
-            <span>Timeline</span>
-            <select name="desired_timeline" defaultValue="">
-              <option value="">Select</option>
-              <option value="asap">As soon as possible</option>
-              <option value="30_days">Within 30 days</option>
-              <option value="60_90_days">60-90 days</option>
-              <option value="just_exploring">Just exploring</option>
-            </select>
-          </label>
-        </div>
+      <details className={styles.optionalDetails}>
+        <summary>Add timing, repairs, or price details</summary>
+        <fieldset className={styles.fieldset}>
+          <legend>Optional context</legend>
+          <div className={styles.gridTwo}>
+            <label>
+              <span>Reason for selling</span>
+              <input name="reason_for_selling" placeholder="Inherited, repairs, moving, etc." />
+            </label>
+            <label>
+              <span>Timeline</span>
+              <select name="desired_timeline" defaultValue="">
+                <option value="">Select</option>
+                <option value="asap">As soon as possible</option>
+                <option value="30_days">Within 30 days</option>
+                <option value="60_90_days">60-90 days</option>
+                <option value="just_exploring">Just exploring</option>
+              </select>
+            </label>
+          </div>
 
-        <label>
-          <span>Target price or mortgage balance</span>
-          <input name="asking_price" inputMode="numeric" placeholder="Optional" />
-          <small>Optional, but useful if you already have a number in mind.</small>
-        </label>
+          <label>
+            <span>Target price or mortgage balance</span>
+            <input name="asking_price" inputMode="numeric" placeholder="Optional" />
+            <small>Optional, but useful if you already have a number in mind.</small>
+          </label>
 
-        <label>
-          <span>Anything else we should know?</span>
-          <textarea
-            name="comments"
-            rows={4}
-            placeholder="Repairs needed, occupancy, access, deadline, or other context."
-          />
-        </label>
-      </fieldset>
+          <label>
+            <span>Anything else we should know?</span>
+            <textarea
+              name="comments"
+              rows={4}
+              placeholder="Repairs needed, occupancy, access, deadline, or other context."
+            />
+          </label>
+        </fieldset>
+      </details>
 
       <label className={styles.consent}>
         <input name="consent_to_contact" type="checkbox" required />
@@ -276,7 +292,7 @@ export function CashOfferForm() {
       </label>
 
       <button disabled={submitState.status === "submitting"} type="submit">
-        {submitState.status === "submitting" ? "Sending request..." : "Get my cash offer"}
+        {submitState.status === "submitting" ? "Sending request..." : "Request my cash offer"}
       </button>
 
       {submitState.message ? (

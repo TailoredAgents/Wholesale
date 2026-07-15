@@ -7,24 +7,30 @@ import { TrackedPhoneLink } from "./tracked-phone-link";
 
 const processSteps = [
   {
-    title: "Request an offer",
-    detail: "Send the address, contact details, and what you know about the property.",
+    title: "Send the basics",
+    detail: "Start with the address and the best way to reach you. Extra details are optional.",
   },
   {
-    title: "Review the property",
-    detail: "The acquisitions team checks condition, location, timing, and seller priorities.",
+    title: "Get a real review",
+    detail: "We check the property, timing, condition, and local buyer demand before follow-up.",
   },
   {
-    title: "Choose your next step",
-    detail: "Compare the cash offer against your other options before making a decision.",
+    title: "Compare your options",
+    detail: "Review the cash-offer path against listing, repairs, or waiting. No obligation.",
   },
 ];
 
 const trustPoints = [
-  "No repairs required before requesting an offer",
-  "No agent commissions or open-house schedule",
-  "Your consent and property details are captured with each request",
-  "Every form submission is routed for follow-up",
+  "As-is review before you spend money on repairs",
+  "No agent commissions, open houses, or listing prep",
+  "Clear consent, privacy, and follow-up tracking",
+  "Every request enters our local acquisition workflow",
+];
+
+const heroStats = [
+  { value: "24 hr", label: "typical first review window" },
+  { value: "0", label: "repairs required before requesting" },
+  { value: "GA", label: "local market focus" },
 ];
 
 export default function PublicHomePage() {
@@ -45,11 +51,11 @@ export default function PublicHomePage() {
 
       <section className={styles.hero}>
         <div className={styles.heroContent}>
-          <p className={styles.eyebrow}>Georgia home buyers</p>
-          <h1>Sell your house for cash without repairs, showings, or agent commissions.</h1>
+          <p className={styles.eyebrow}>Georgia cash home buyers</p>
+          <h1>Get a fair as-is cash offer without repairs, showings, or agent commissions.</h1>
           <p>
-            Oakwell Home Buyers helps Georgia homeowners compare a direct cash-offer option
-            when the property, repairs, or timeline make a traditional listing harder.
+            Oakwell Home Buyers helps Georgia homeowners compare a direct sale when repairs,
+            timing, inherited property issues, or uncertainty make listing harder.
           </p>
           <div className={styles.actions}>
             <Link className={styles.primaryAction} href="/get-a-cash-offer">
@@ -59,12 +65,31 @@ export default function PublicHomePage() {
               Call Oakwell
             </TrackedPhoneLink>
           </div>
+          <div className={styles.reassurance} aria-label="Offer request benefits">
+            <span>No obligation</span>
+            <span>No cleanup required</span>
+            <span>Phone or email is enough to start</span>
+          </div>
         </div>
-        <img
-          className={styles.heroImage}
-          src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1400&q=80"
-          alt="A bright home exterior with a front porch."
-        />
+        <div className={styles.heroVisual}>
+          <img
+            className={styles.heroImage}
+            src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=1200&q=72"
+            alt="A bright home exterior with a front porch."
+            width="1200"
+            height="900"
+            fetchPriority="high"
+            decoding="async"
+          />
+          <div className={styles.offerPanel} aria-label="Oakwell offer process highlights">
+            {heroStats.map((stat) => (
+              <p key={stat.label}>
+                <strong>{stat.value}</strong>
+                <span>{stat.label}</span>
+              </p>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className={styles.reasons} aria-label="Common seller situations">
@@ -82,7 +107,7 @@ export default function PublicHomePage() {
       <section className={styles.process} aria-label="How the cash offer process works">
         <div className={styles.sectionHeading}>
           <p className={styles.eyebrow}>How it works</p>
-          <h2>A simple path from property details to a clear option.</h2>
+          <h2>A low-friction path from property details to a clear option.</h2>
         </div>
         <div className={styles.processGrid}>
           {processSteps.map((step, index) => (

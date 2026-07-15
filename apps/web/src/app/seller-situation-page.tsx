@@ -38,8 +38,21 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
               Call Oakwell
             </TrackedPhoneLink>
           </div>
+          <div className={styles.reassurance}>
+            <span>No obligation</span>
+            <span>As-is review</span>
+            <span>Georgia-focused team</span>
+          </div>
         </div>
-        <img className={styles.heroImage} src={situation.image} alt={situation.imageAlt} />
+        <img
+          className={styles.heroImage}
+          src={situation.image}
+          alt={situation.imageAlt}
+          width="1200"
+          height="900"
+          fetchPriority="high"
+          decoding="async"
+        />
       </section>
 
       <section className={styles.sectionGrid} aria-label="Seller situation details">

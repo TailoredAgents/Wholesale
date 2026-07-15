@@ -36,7 +36,7 @@
 .hero {
   width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 48px 32px 40px;
+  padding: 42px 32px 36px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
   gap: 32px;
@@ -83,6 +83,25 @@
   gap: 12px;
 }
 
+.reassurance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reassurance span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #d9e2dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #31443b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .primaryAction,
 .secondaryAction {
   min-height: 46px;
@@ -98,11 +117,13 @@
 .primaryAction {
   background: #245f43;
   color: #ffffff;
+  box-shadow: 0 10px 24px rgba(36, 95, 67, 0.18);
 }
 
 .secondaryAction {
   border: 1px solid #cfc8ba;
   color: #245f43;
+  background: #ffffff;
 }
 
 .sectionGrid {

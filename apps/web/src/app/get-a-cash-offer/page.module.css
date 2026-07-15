@@ -1,6 +1,6 @@
 .page {
   min-height: 100vh;
-  background: #f4f2ee;
+  background: #f7f5ef;
   color: #161a1d;
 }
 
@@ -36,14 +36,16 @@
 .hero {
   width: min(1180px, 100%);
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 34px 24px;
   display: grid;
-  grid-template-columns: minmax(280px, 0.8fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(280px, 0.72fr) minmax(340px, 1fr);
   gap: 32px;
   align-items: start;
 }
 
 .copy {
+  position: sticky;
+  top: 24px;
   padding-top: 28px;
 }
 
@@ -56,8 +58,9 @@
 
 .copy h1 {
   margin-top: 10px;
-  font-size: 48px;
+  font-size: 50px;
   line-height: 1.05;
+  letter-spacing: 0;
 }
 
 .copy p:last-child {
@@ -68,13 +71,40 @@
   line-height: 1.6;
 }
 
+.trustStack {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.trustStack p {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #dce4dd;
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 4px;
+}
+
+.trustStack strong {
+  color: #245f43;
+}
+
+.trustStack span {
+  color: #4f5658;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .form {
-  padding: 22px;
+  padding: 20px;
   border: 1px solid #d8d3c8;
   border-radius: 8px;
   background: #ffffff;
   display: grid;
-  gap: 16px;
+  gap: 14px;
+  box-shadow: 0 18px 50px rgba(16, 24, 32, 0.08);
 }
 
 .formIntro {
@@ -97,9 +127,9 @@
 
 .fieldset {
   display: grid;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
-  padding: 16px;
+  padding: 14px;
   border: 1px solid #e1dcd1;
   border-radius: 8px;
 }
@@ -146,6 +176,13 @@
   font-weight: 400;
 }
 
+.form input:focus,
+.form select:focus,
+.form textarea:focus {
+  outline: 2px solid rgba(36, 95, 67, 0.18);
+  border-color: #245f43;
+}
+
 .form textarea {
   resize: vertical;
 }
@@ -166,20 +203,43 @@
   line-height: 1.45;
 }
 
+.optionalDetails {
+  border: 1px solid #e1dcd1;
+  border-radius: 8px;
+  background: #fbfaf7;
+}
+
+.optionalDetails summary {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  color: #245f43;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.optionalDetails .fieldset {
+  margin: 0 14px 14px;
+  background: #ffffff;
+}
+
 .consent input {
   min-height: 18px;
   margin-top: 2px;
 }
 
 .form button {
-  min-height: 46px;
+  min-height: 50px;
   border: 0;
   border-radius: 8px;
-  background: #2f6f4e;
+  background: #245f43;
   color: #ffffff;
   font: inherit;
-  font-weight: 700;
+  font-weight: 800;
   cursor: pointer;
+  box-shadow: 0 10px 24px rgba(36, 95, 67, 0.18);
 }
 
 .secondaryButton,
@@ -286,6 +346,11 @@
   .hero,
   .gridTwo {
     grid-template-columns: 1fr;
+  }
+
+  .copy {
+    position: static;
+    padding-top: 0;
   }
 
   .copy h1 {

@@ -1,18 +1,18 @@
 .page {
   min-height: 100vh;
-  background: #f6f3ee;
+  background: #f7f5ef;
   color: #161a1d;
 }
 
 .header {
-  min-height: 72px;
+  min-height: 68px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
   padding: 0 32px;
   border-bottom: 1px solid #ded8cc;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.96);
 }
 
 .brand {
@@ -38,8 +38,8 @@
   grid-template-columns: minmax(0, 1fr) minmax(320px, 0.82fr);
   gap: 32px;
   align-items: center;
-  min-height: calc(92vh - 72px);
-  padding: 48px 32px;
+  min-height: calc(88vh - 68px);
+  padding: 42px 32px 34px;
   max-width: 1180px;
   margin: 0 auto;
 }
@@ -50,7 +50,7 @@
 }
 
 .eyebrow {
-  color: #6c9a8b;
+  color: #245f43;
   font-size: 12px;
   font-weight: 800;
   text-transform: uppercase;
@@ -58,8 +58,9 @@
 
 .hero h1 {
   max-width: 780px;
-  font-size: 56px;
+  font-size: 58px;
   line-height: 1;
+  letter-spacing: 0;
 }
 
 .hero p {
@@ -77,7 +78,7 @@
 
 .primaryAction,
 .secondaryAction {
-  min-height: 46px;
+  min-height: 50px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -90,11 +91,37 @@
 .primaryAction {
   background: #245f43;
   color: #ffffff;
+  box-shadow: 0 10px 24px rgba(36, 95, 67, 0.18);
 }
 
 .secondaryAction {
   border: 1px solid #cfc8ba;
   color: #245f43;
+  background: #ffffff;
+}
+
+.reassurance {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reassurance span {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border: 1px solid #d9e2dc;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #31443b;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.heroVisual {
+  position: relative;
+  min-width: 0;
 }
 
 .heroImage {
@@ -104,6 +131,41 @@
   border-radius: 8px;
   object-fit: cover;
   background: #ffffff;
+}
+
+.offerPanel {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 18px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.offerPanel p {
+  min-height: 76px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.46);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.offerPanel strong {
+  color: #245f43;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.offerPanel span {
+  color: #343a3d;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
 }
 
 .reasons {
@@ -121,6 +183,7 @@
   border: 1px solid #ded8cc;
   border-radius: 8px;
   background: #ffffff;
+  box-shadow: 0 12px 28px rgba(16, 24, 32, 0.04);
 }
 
 .reasons h2 {
@@ -218,6 +281,16 @@
   line-height: 1.35;
 }
 
+.trustBand li::before {
+  content: "";
+  width: 28px;
+  height: 4px;
+  margin-bottom: 12px;
+  display: block;
+  border-radius: 2px;
+  background: #245f43;
+}
+
 .finalCta {
   display: flex;
   align-items: center;
@@ -250,7 +323,8 @@
   .reasons,
   .processGrid,
   .trustBand,
-  .trustBand ul {
+  .trustBand ul,
+  .offerPanel {
     grid-template-columns: 1fr;
   }
 
@@ -269,6 +343,15 @@
 
   .hero h1 {
     font-size: 40px;
+  }
+
+  .heroVisual {
+    width: 100%;
+  }
+
+  .offerPanel {
+    position: static;
+    margin-top: 10px;
   }
 
   .sectionHeading h2,

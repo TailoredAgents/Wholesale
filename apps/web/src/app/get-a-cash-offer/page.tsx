@@ -25,12 +25,26 @@ export default function GetCashOfferPage() {
       </header>
       <section className={styles.hero}>
         <div className={styles.copy}>
-          <p className={styles.eyebrow}>Georgia home buyers</p>
-          <h1>Get a cash offer for your property</h1>
+          <p className={styles.eyebrow}>Fast as-is review</p>
+          <h1>Start with the address. We will handle the rest from there.</h1>
           <p>
-            Share the basics and our acquisitions team will review the property, timing,
-            and condition before following up with your next step.
+            The fastest requests include the property address, city, ZIP code, your name, and
+            a phone or email. Extra details help, but they are optional.
           </p>
+          <div className={styles.trustStack}>
+            <p>
+              <strong>No obligation.</strong>
+              <span>You can compare the offer before making a decision.</span>
+            </p>
+            <p>
+              <strong>No repairs first.</strong>
+              <span>Condition, cleanup, and timing are part of the review.</span>
+            </p>
+            <p>
+              <strong>Clear consent.</strong>
+              <span>We only follow up using the contact details you submit.</span>
+            </p>
+          </div>
         </div>
         <CashOfferForm />
       </section>
