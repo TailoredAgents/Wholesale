@@ -71,8 +71,7 @@ export function CashOfferForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const formElement = event.currentTarget;
-    const formData = new FormData(formElement);
+    const formData = new FormData(event.currentTarget);
     const payload = {
       property_address: getValue(formData, "property_address"),
       property_city: getValue(formData, "property_city"),
@@ -116,7 +115,6 @@ export function CashOfferForm() {
       const result = (await response.json()) as { message?: string };
       hasSubmitted.current = true;
       isSubmitting.current = false;
-      formElement.reset();
       setSubmitState({
         status: "success",
         message:
