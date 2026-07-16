@@ -85,7 +85,6 @@ export function CashOfferForm() {
       desired_timeline: getValue(formData, "desired_timeline") || null,
       asking_price: getValue(formData, "asking_price") || null,
       comments: getValue(formData, "comments") || null,
-      company_website: getValue(formData, "company_website") || null,
       consent_to_contact: formData.get("consent_to_contact") === "on",
       consent_wording_version: "seller-web-v1",
       attribution: getConversionAttribution(),
@@ -184,11 +183,6 @@ export function CashOfferForm() {
         <h2>Get started in about a minute.</h2>
         <p>Required fields are marked. Phone or email is enough to start.</p>
       </div>
-
-      <label className={styles.hiddenField} aria-hidden="true">
-        <span>Company website</span>
-        <input name="company_website" autoComplete="off" tabIndex={-1} />
-      </label>
 
       <fieldset className={styles.fieldset}>
         <legend>Property basics</legend>

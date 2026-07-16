@@ -187,14 +187,6 @@
   resize: vertical;
 }
 
-.hiddenField {
-  position: absolute;
-  left: -10000px;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-}
-
 .consent {
   grid-template-columns: 18px 1fr;
   align-items: start;
