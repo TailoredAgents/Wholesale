@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import styles from "./page.module.css";
@@ -22,12 +23,24 @@ type MarketComparable = {
 };
 
 type MarketValueEstimate = {
+  id?: string;
+  underwriting_version_id?: string | null;
   provider: string;
   requested_address: string;
   estimated_value_cents: number | null;
   estimated_value_low_cents: number | null;
   estimated_value_high_cents: number | null;
+  arv_low_cents?: number | null;
+  arv_high_cents?: number | null;
+  repair_low_cents?: number | null;
+  repair_high_cents?: number | null;
+  mao_low_cents?: number | null;
+  mao_high_cents?: number | null;
+  recommended_offer_cents?: number | null;
+  confidence_score?: number;
   comparables: MarketComparable[];
+  selected_comps?: MarketComparable[];
+  rejected_comps?: MarketComparable[];
   source_note: string;
 };
 
@@ -56,6 +69,7 @@ function formatPercent(value: number | null) {
 }
 
 export function MarketValuePreview({ leadId }: { leadId: string }) {
+  const router = useRouter();
   const { getToken } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const [estimate, setEstimate] = useState<MarketValueEstimate | null>(null);
@@ -80,13 +94,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     return headers;
   }
 
-  async function fetchEstimate() {
+  async function createAnalysis() {
     setStatus("loading");
     setError(null);
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-value`,
-        { headers: await getHeaders() },
+        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis`,
+        { headers: await getHeaders(), method: "POST" },
       );
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -94,21 +108,24 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       }
       setEstimate((await response.json()) as MarketValueEstimate);
       setStatus("loaded");
+      router.refresh();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Unable to pull market value.");
+      setError(caught instanceof Error ? caught.message : "Unable to analyze comps.");
       setStatus("error");
     }
   }
+
+  const comps = estimate?.selected_comps ?? estimate?.comparables ?? [];
 
   return (
     <section className={styles.marketValuePanel}>
       <div className={styles.marketValueHeader}>
         <div>
-          <strong>RentCast market value</strong>
-          <span>Draft ARV support with sale comps</span>
+          <strong>RentCast comp analysis</strong>
+          <span>Creates a draft ARV and offer ceiling for review</span>
         </div>
-        <button disabled={status === "loading"} onClick={fetchEstimate} type="button">
-          {status === "loading" ? "Pulling..." : "Pull comps"}
+        <button disabled={status === "loading"} onClick={createAnalysis} type="button">
+          {status === "loading" ? "Analyzing..." : "Analyze comps"}
         </button>
       </div>
 
@@ -122,20 +139,40 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <dd>{formatMoney(estimate.estimated_value_cents)}</dd>
             </div>
             <div>
-              <dt>Range</dt>
+              <dt>ARV range</dt>
               <dd>
-                {formatMoney(estimate.estimated_value_low_cents)} to{" "}
-                {formatMoney(estimate.estimated_value_high_cents)}
+                {formatMoney(estimate.arv_low_cents ?? estimate.estimated_value_low_cents)} to{" "}
+                {formatMoney(estimate.arv_high_cents ?? estimate.estimated_value_high_cents)}
               </dd>
             </div>
             <div>
-              <dt>Comps</dt>
-              <dd>{estimate.comparables.length}</dd>
+              <dt>Offer ceiling</dt>
+              <dd>
+                {formatMoney(estimate.mao_low_cents ?? null)} to{" "}
+                {formatMoney(estimate.mao_high_cents ?? null)}
+              </dd>
+            </div>
+          </dl>
+          <dl>
+            <div>
+              <dt>Repairs</dt>
+              <dd>
+                {formatMoney(estimate.repair_low_cents ?? null)} to{" "}
+                {formatMoney(estimate.repair_high_cents ?? null)}
+              </dd>
+            </div>
+            <div>
+              <dt>Recommended</dt>
+              <dd>{formatMoney(estimate.recommended_offer_cents ?? null)}</dd>
+            </div>
+            <div>
+              <dt>Confidence</dt>
+              <dd>{estimate.confidence_score ?? "Unknown"}%</dd>
             </div>
           </dl>
           <p>{estimate.source_note}</p>
           <div className={styles.compList}>
-            {estimate.comparables.slice(0, 5).map((comp, index) => (
+            {comps.slice(0, 5).map((comp, index) => (
               <article key={comp.provider_id ?? `${comp.formatted_address}-${index}`}>
                 <div>
                   <strong>{comp.formatted_address ?? "Unknown address"}</strong>

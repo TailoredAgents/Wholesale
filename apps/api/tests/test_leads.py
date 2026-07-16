@@ -15,6 +15,7 @@ from app.models.foundation import (
     Task,
     Transaction,
     TransactionChecklistItem,
+    UnderwritingMarketAnalysis,
     UnderwritingVersion,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -707,6 +708,122 @@ def test_preview_lead_market_value_requires_rentcast_key(
 
     assert response.status_code == 422
     assert response.json()["detail"] == "RENTCAST_API_KEY is not configured."
+    get_settings.cache_clear()
+
+
+def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    monkeypatch.setenv("UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS", "1500000")
+    get_settings.cache_clear()
+
+    class FakeRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            return RentCastValueEstimate(
+                price=300000,
+                price_range_low=275000,
+                price_range_high=325000,
+                subject_property={
+                    "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "squareFootage": 1800,
+                },
+                comparables=[
+                    {
+                        "id": "comp-1",
+                        "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
+                        "status": "Inactive",
+                        "propertyType": "Single Family",
+                        "price": 280000,
+                        "squareFootage": 1800,
+                        "distance": 0.4,
+                        "daysOld": 42,
+                        "correlation": 0.98,
+                    },
+                    {
+                        "id": "comp-2",
+                        "formattedAddress": "127 Peachtree St, Atlanta, GA 30303",
+                        "status": "Inactive",
+                        "propertyType": "Single Family",
+                        "price": 300000,
+                        "squareFootage": 1800,
+                        "distance": 0.6,
+                        "daysOld": 65,
+                        "correlation": 0.95,
+                    },
+                    {
+                        "id": "comp-3",
+                        "formattedAddress": "129 Peachtree St, Atlanta, GA 30303",
+                        "status": "Inactive",
+                        "propertyType": "Single Family",
+                        "price": 320000,
+                        "squareFootage": 1800,
+                        "distance": 0.8,
+                        "daysOld": 82,
+                        "correlation": 0.91,
+                    },
+                    {
+                        "id": "active-1",
+                        "formattedAddress": "131 Peachtree St, Atlanta, GA 30303",
+                        "status": "Active",
+                        "propertyType": "Single Family",
+                        "price": 340000,
+                        "squareFootage": 1800,
+                        "distance": 0.7,
+                        "daysOld": 12,
+                        "correlation": 0.9,
+                    },
+                ],
+                raw_response={"source": "test"},
+            )
+
+    monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["provider"] == "rentcast"
+    assert payload["arv_low_cents"] == 29000000
+    assert payload["arv_high_cents"] == 31000000
+    assert payload["repair_low_cents"] == 5400000
+    assert payload["repair_high_cents"] == 9000000
+    assert payload["mao_low_cents"] == 8350000
+    assert payload["mao_high_cents"] == 14800000
+    assert payload["recommended_offer_cents"] == 8350000
+    assert payload["offer_low_percentage"] == 65
+    assert payload["offer_high_percentage"] == 70
+    assert len(payload["selected_comps"]) == 3
+    assert len(payload["rejected_comps"]) == 1
+    assert payload["underwriting_version_id"] is not None
+    assert int(
+        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
+    ) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 1
+    saved_version = db_session.scalar(select(UnderwritingVersion))
+    assert saved_version is not None
+    assert saved_version.source == "rentcast"
+    assert saved_version.status == "needs_review"
+    assert saved_version.max_offer_cents == 14800000
+    assert saved_version.recommended_offer_cents == 8350000
     get_settings.cache_clear()
 
 

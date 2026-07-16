@@ -24,3 +24,7 @@ Maximum Seller Offer = Expected Buyer Price - Target Assignment Fee - Direct Who
 ```
 
 Calculate 65%, 67.5%, and 70% scenarios.
+
+Detailed implementation method:
+
+- `docs/UNDERWRITING_COMP_METHOD.md`

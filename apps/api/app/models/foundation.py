@@ -289,6 +289,45 @@ class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class UnderwritingMarketAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_market_analyses"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    underwriting_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id"), nullable=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    requested_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    estimated_value_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    estimated_value_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    estimated_value_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    repair_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    repair_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    mao_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    mao_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    recommended_offer_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    assignment_fee_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    offer_low_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    offer_high_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_comp_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    rejected_comp_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_comps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    rejected_comps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    subject_property: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    raw_response: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    analysis_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "deals"
 

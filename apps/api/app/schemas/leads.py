@@ -188,6 +188,39 @@ class LeadMarketValueEstimateRead(BaseModel):
     source_note: str
 
 
+class MarketAnalysisCompRead(MarketComparableRead):
+    selection_status: str
+    selection_reason: str
+    score: int
+
+
+class LeadMarketAnalysisRead(BaseModel):
+    id: UUID
+    lead_id: UUID
+    property_id: UUID
+    underwriting_version_id: UUID | None
+    provider: str
+    requested_address: str
+    estimated_value_cents: int | None
+    estimated_value_low_cents: int | None
+    estimated_value_high_cents: int | None
+    arv_low_cents: int | None
+    arv_high_cents: int | None
+    repair_low_cents: int | None
+    repair_high_cents: int | None
+    mao_low_cents: int | None
+    mao_high_cents: int | None
+    recommended_offer_cents: int | None
+    assignment_fee_cents: int | None
+    offer_low_percentage: int
+    offer_high_percentage: int
+    confidence_score: int
+    selected_comps: list[MarketAnalysisCompRead]
+    rejected_comps: list[MarketAnalysisCompRead]
+    source_note: str
+    created_at: datetime
+
+
 class TransactionChecklistItemRead(BaseModel):
     id: UUID
     title: str

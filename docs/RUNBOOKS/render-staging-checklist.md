@@ -40,6 +40,9 @@
 - `ATTOM_API_KEY`: optional later upgrade for deeper property/deed/tax datasets.
 - `BRIDGE_API_BASE_URL`: optional MLS/RESO feed base URL.
 - `BRIDGE_API_KEY`: optional MLS/RESO feed API key.
+- `UNDERWRITING_OFFER_LOW_PERCENTAGE`: `0.65`.
+- `UNDERWRITING_OFFER_HIGH_PERCENTAGE`: `0.70`.
+- `UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS`: `1500000`.
 - `CLERK_ISSUER`: Clerk issuer URL.
 - `CLERK_JWKS_URL`: Clerk JWKS URL.
 - `CLERK_AUDIENCE`: optional Clerk audience, if configured.

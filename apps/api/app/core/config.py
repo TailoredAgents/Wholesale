@@ -59,6 +59,18 @@ class Settings(BaseSettings):
     )
     bridge_api_base_url: str | None = Field(default=None, validation_alias="BRIDGE_API_BASE_URL")
     bridge_api_key: str | None = Field(default=None, validation_alias="BRIDGE_API_KEY")
+    underwriting_offer_low_percentage: float = Field(
+        default=0.65,
+        validation_alias="UNDERWRITING_OFFER_LOW_PERCENTAGE",
+    )
+    underwriting_offer_high_percentage: float = Field(
+        default=0.70,
+        validation_alias="UNDERWRITING_OFFER_HIGH_PERCENTAGE",
+    )
+    underwriting_default_assignment_fee_cents: int = Field(
+        default=1_500_000,
+        validation_alias="UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS",
+    )
     clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")
     clerk_jwks_url: str | None = Field(default=None, validation_alias="CLERK_JWKS_URL")
     clerk_audience: str | None = Field(default=None, validation_alias="CLERK_AUDIENCE")

@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
-from app.integrations.rentcast_client import RentCastClient, RentCastClientError
+from app.integrations.rentcast_client import (
+    RentCastClient,
+    RentCastClientError,
+    RentCastValueEstimate,
+)
 from app.models.foundation import (
     ActivityEvent,
     Appointment,
@@ -27,6 +31,7 @@ from app.models.foundation import (
     Task,
     Transaction,
     TransactionChecklistItem,
+    UnderwritingMarketAnalysis,
     UnderwritingVersion,
     User,
 )
@@ -47,6 +52,7 @@ from app.schemas.leads import (
     LeadDetail,
     LeadFollowUpTaskCreate,
     LeadIntelligence,
+    LeadMarketAnalysisRead,
     LeadMarketValueEstimateRead,
     LeadMissingField,
     LeadNextBestAction,
@@ -57,6 +63,7 @@ from app.schemas.leads import (
     LeadTaskRead,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    MarketAnalysisCompRead,
     MarketComparableRead,
     PipelineStageCount,
     SourcePerformance,
@@ -1183,6 +1190,195 @@ def preview_lead_market_value(
     )
 
 
+def create_lead_market_analysis(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> LeadMarketAnalysisRead | None:
+    settings = get_settings()
+    if settings.property_data_provider.lower() != "rentcast":
+        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for market analysis.")
+    if not settings.rentcast_api_key:
+        raise ValueError("RENTCAST_API_KEY is not configured.")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise ValueError("Lead is missing a property record.")
+
+    address = format_property_address(property_record)
+    client = RentCastClient(
+        api_key=settings.rentcast_api_key,
+        base_url=settings.rentcast_base_url,
+        timeout_seconds=settings.openai_request_timeout_seconds,
+    )
+    try:
+        estimate = client.get_value_estimate(
+            address=address,
+            property_type=property_record.property_type,
+        )
+    except RentCastClientError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    subject_square_feet = first_int(
+        estimate.subject_property,
+        ("squareFootage", "livingArea", "grossLivingArea"),
+    )
+    selected_comps, rejected_comps = analyze_rentcast_comps(estimate.comparables)
+    arv_low_cents, arv_high_cents = calculate_arv_range(
+        estimate=estimate,
+        selected_comps=selected_comps,
+        subject_square_feet=subject_square_feet,
+    )
+    repair_low_cents, repair_high_cents = estimate_repair_range(
+        condition=lead.property_condition,
+        square_feet=subject_square_feet,
+    )
+    assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
+    mao_low_cents = calculate_mao(
+        arv_cents=arv_low_cents,
+        percentage=settings.underwriting_offer_low_percentage,
+        repair_cents=repair_high_cents,
+        assignment_fee_cents=assignment_fee_cents,
+    )
+    mao_high_cents = calculate_mao(
+        arv_cents=arv_high_cents,
+        percentage=settings.underwriting_offer_high_percentage,
+        repair_cents=repair_low_cents,
+        assignment_fee_cents=assignment_fee_cents,
+    )
+    confidence_score = calculate_confidence_score(
+        selected_comps=selected_comps,
+        arv_low_cents=arv_low_cents,
+        arv_high_cents=arv_high_cents,
+    )
+
+    latest_version = db.scalar(
+        select(func.max(UnderwritingVersion.version_number)).where(
+            UnderwritingVersion.organization_id == principal.organization_id,
+            UnderwritingVersion.lead_id == lead.id,
+        )
+    )
+    version_number = int(latest_version or 0) + 1
+    previous_stage = lead.stage_key
+    version = UnderwritingVersion(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        created_by_user_id=principal.user_id,
+        version_number=version_number,
+        status="needs_review",
+        arv_low_cents=arv_low_cents,
+        arv_high_cents=arv_high_cents,
+        repair_low_cents=repair_low_cents,
+        repair_high_cents=repair_high_cents,
+        max_offer_cents=mao_high_cents,
+        recommended_offer_cents=mao_low_cents,
+        offer_strategy="cash_offer",
+        notes=build_market_analysis_notes(
+            selected_count=len(selected_comps),
+            rejected_count=len(rejected_comps),
+            confidence_score=confidence_score,
+            offer_low_percentage=settings.underwriting_offer_low_percentage,
+            offer_high_percentage=settings.underwriting_offer_high_percentage,
+            assignment_fee_cents=assignment_fee_cents,
+        ),
+        source="rentcast",
+        underwriting_metadata={
+            "provider_imported": True,
+            "human_review_required": True,
+            "method": "sales_comparison_screening",
+            "offer_formula": "ARV x 65-70% minus repairs minus assignment fee",
+        },
+    )
+    db.add(version)
+    db.flush()
+
+    analysis = UnderwritingMarketAnalysis(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        underwriting_version_id=version.id,
+        created_by_user_id=principal.user_id,
+        provider="rentcast",
+        requested_address=address,
+        estimated_value_cents=dollars_to_cents(estimate.price),
+        estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
+        estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
+        arv_low_cents=arv_low_cents,
+        arv_high_cents=arv_high_cents,
+        repair_low_cents=repair_low_cents,
+        repair_high_cents=repair_high_cents,
+        mao_low_cents=mao_low_cents,
+        mao_high_cents=mao_high_cents,
+        recommended_offer_cents=mao_low_cents,
+        assignment_fee_cents=assignment_fee_cents,
+        offer_low_percentage=round(settings.underwriting_offer_low_percentage * 100),
+        offer_high_percentage=round(settings.underwriting_offer_high_percentage * 100),
+        confidence_score=confidence_score,
+        selected_comp_count=len(selected_comps),
+        rejected_comp_count=len(rejected_comps),
+        selected_comps=[comp.model_dump(mode="json") for comp in selected_comps],
+        rejected_comps=[comp.model_dump(mode="json") for comp in rejected_comps],
+        subject_property=estimate.subject_property,
+        raw_response=estimate.raw_response,
+        analysis_metadata={
+            "subject_square_feet": subject_square_feet,
+            "human_review_required": True,
+            "active_listings_are_context_only": True,
+        },
+    )
+    db.add(analysis)
+    db.flush()
+    version.underwriting_metadata = {
+        **(version.underwriting_metadata or {}),
+        "market_analysis_id": str(analysis.id),
+    }
+    if lead.stage_key not in {"offer_presented", "negotiating", "under_contract"}:
+        lead.stage_key = "underwriting"
+
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.market_analysis_created",
+            summary=(
+                f"RentCast market analysis created with {len(selected_comps)} selected comps "
+                f"and {confidence_score}% confidence."
+            ),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="underwriting.market_analysis.create",
+            entity_type="underwriting_market_analysis",
+            entity_id=analysis.id,
+            previous_value={"stage_key": previous_stage},
+            new_value={
+                "lead_id": str(lead.id),
+                "underwriting_version_id": str(version.id),
+                "arv_low_cents": arv_low_cents,
+                "arv_high_cents": arv_high_cents,
+                "mao_low_cents": mao_low_cents,
+                "mao_high_cents": mao_high_cents,
+                "recommended_offer_cents": mao_low_cents,
+                "stage_key": lead.stage_key,
+            },
+            reason="RentCast market analysis and MAO draft",
+        )
+    )
+    db.commit()
+    db.refresh(analysis)
+    return market_analysis_to_read(analysis)
+
+
 def create_lead_transaction(
     db: Session,
     principal: Principal,
@@ -1942,6 +2138,286 @@ def rentcast_comp_to_read(comp: dict[str, Any]) -> MarketComparableRead:
         removed_date=string_or_none(comp.get("removedDate")),
         last_seen_date=string_or_none(comp.get("lastSeenDate")),
     )
+
+
+def analyze_rentcast_comps(
+    comps: list[dict[str, Any]],
+) -> tuple[list[MarketAnalysisCompRead], list[MarketAnalysisCompRead]]:
+    scored_comps = [score_rentcast_comp(comp) for comp in comps]
+    eligible = [
+        comp
+        for comp in scored_comps
+        if comp.price_cents is not None
+        and comp.selection_reason != "Active listing; context only."
+    ]
+    selected = sorted(
+        [comp for comp in eligible if comp.score >= 55],
+        key=lambda comp: comp.score,
+        reverse=True,
+    )[:5]
+    if len(selected) < 3:
+        selected_ids = {comp.provider_id for comp in selected}
+        backfill = [
+            comp
+            for comp in sorted(eligible, key=lambda comp: comp.score, reverse=True)
+            if comp.provider_id not in selected_ids
+        ]
+        selected = [*selected, *backfill[: 3 - len(selected)]]
+
+    selected_ids = {comp.provider_id for comp in selected}
+    selected_addresses = {comp.formatted_address for comp in selected}
+    rejected = [
+        comp
+        for comp in scored_comps
+        if comp.provider_id not in selected_ids or comp.formatted_address not in selected_addresses
+    ]
+    selected = [
+        comp.model_copy(update={"selection_status": "selected"})
+        for comp in selected
+    ]
+    rejected = [
+        comp.model_copy(update={"selection_status": "rejected"})
+        for comp in rejected
+    ]
+    return selected, rejected
+
+
+def score_rentcast_comp(comp: dict[str, Any]) -> MarketAnalysisCompRead:
+    comparable = rentcast_comp_to_read(comp)
+    score = 50
+    reasons: list[str] = []
+    status = (comparable.status or "").strip().lower()
+    if comparable.price_cents is None:
+        return MarketAnalysisCompRead(
+            **comparable.model_dump(),
+            selection_status="rejected",
+            selection_reason="Missing sale/list price.",
+            score=0,
+        )
+    if status == "active":
+        return MarketAnalysisCompRead(
+            **comparable.model_dump(),
+            selection_status="rejected",
+            selection_reason="Active listing; context only.",
+            score=25,
+        )
+
+    if comparable.correlation is not None:
+        correlation = (
+            comparable.correlation
+            if comparable.correlation <= 1
+            else comparable.correlation / 100
+        )
+        score += round(max(0, min(correlation, 1)) * 25)
+        reasons.append("provider similarity score")
+    if comparable.distance_miles is not None:
+        if comparable.distance_miles <= 1:
+            score += 15
+            reasons.append("within 1 mile")
+        elif comparable.distance_miles <= 3:
+            score += 8
+            reasons.append("within 3 miles")
+        else:
+            score -= 10
+            reasons.append("farther than 3 miles")
+    if comparable.days_old is not None:
+        if comparable.days_old <= 90:
+            score += 12
+            reasons.append("sold/listed within 90 days")
+        elif comparable.days_old <= 180:
+            score += 6
+            reasons.append("sold/listed within 180 days")
+        elif comparable.days_old > 365:
+            score -= 12
+            reasons.append("older than 12 months")
+    if comparable.property_type:
+        score += 5
+
+    bounded_score = max(0, min(score, 100))
+    reason = ", ".join(reasons) if reasons else "usable comp with limited similarity metadata"
+    return MarketAnalysisCompRead(
+        **comparable.model_dump(),
+        selection_status="candidate",
+        selection_reason=reason,
+        score=bounded_score,
+    )
+
+
+def calculate_arv_range(
+    *,
+    estimate: RentCastValueEstimate,
+    selected_comps: list[MarketAnalysisCompRead],
+    subject_square_feet: int | None,
+) -> tuple[int | None, int | None]:
+    comp_prices = [comp.price_cents for comp in selected_comps if comp.price_cents is not None]
+    if len(comp_prices) >= 3:
+        ppsf_values = [
+            comp.price_cents / comp.square_footage
+            for comp in selected_comps
+            if comp.price_cents is not None
+            and comp.square_footage is not None
+            and comp.square_footage > 0
+        ]
+        if subject_square_feet and len(ppsf_values) >= 3:
+            low = round(percentile(ppsf_values, 0.25) * subject_square_feet)
+            high = round(percentile(ppsf_values, 0.75) * subject_square_feet)
+            return normalize_money_range(low, high)
+        return normalize_money_range(
+            round(percentile(comp_prices, 0.25)),
+            round(percentile(comp_prices, 0.75)),
+        )
+
+    low = dollars_to_cents(estimate.price_range_low)
+    high = dollars_to_cents(estimate.price_range_high)
+    if low is not None and high is not None:
+        return normalize_money_range(low, high)
+    estimate_cents = dollars_to_cents(estimate.price)
+    if estimate_cents is not None:
+        return normalize_money_range(round(estimate_cents * 0.92), round(estimate_cents * 1.08))
+    return None, None
+
+
+def estimate_repair_range(condition: str | None, square_feet: int | None) -> tuple[int, int]:
+    normalized = (condition or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"new", "turnkey", "excellent", "good", "cosmetic"}:
+        low_per_sqft, high_per_sqft = 15, 25
+        fallback = (15_000_00, 30_000_00)
+    elif normalized in {"major_repairs", "heavy_repairs", "full_gut", "fire_damage"}:
+        low_per_sqft, high_per_sqft = 60, 90
+        fallback = (70_000_00, 120_000_00)
+    elif normalized in {"tear_down", "structural", "foundation"}:
+        low_per_sqft, high_per_sqft = 100, 140
+        fallback = (120_000_00, 200_000_00)
+    else:
+        low_per_sqft, high_per_sqft = 30, 50
+        fallback = (35_000_00, 60_000_00)
+
+    if square_feet and square_feet > 0:
+        return round(square_feet * low_per_sqft * 100), round(square_feet * high_per_sqft * 100)
+    return fallback
+
+
+def calculate_mao(
+    *,
+    arv_cents: int | None,
+    percentage: float,
+    repair_cents: int,
+    assignment_fee_cents: int,
+) -> int | None:
+    if arv_cents is None:
+        return None
+    return max(0, round((arv_cents * percentage) - repair_cents - assignment_fee_cents))
+
+
+def calculate_confidence_score(
+    *,
+    selected_comps: list[MarketAnalysisCompRead],
+    arv_low_cents: int | None,
+    arv_high_cents: int | None,
+) -> int:
+    if arv_low_cents is None or arv_high_cents is None:
+        return 20
+    base = 35 + min(len(selected_comps), 5) * 8
+    average_comp_score = (
+        sum(comp.score for comp in selected_comps) / len(selected_comps)
+        if selected_comps
+        else 0
+    )
+    spread_penalty = 0
+    if arv_high_cents > 0:
+        spread = (arv_high_cents - arv_low_cents) / arv_high_cents
+        if spread > 0.25:
+            spread_penalty = 15
+        elif spread > 0.15:
+            spread_penalty = 7
+    return max(20, min(95, round(base + (average_comp_score * 0.25) - spread_penalty)))
+
+
+def build_market_analysis_notes(
+    *,
+    selected_count: int,
+    rejected_count: int,
+    confidence_score: int,
+    offer_low_percentage: float,
+    offer_high_percentage: float,
+    assignment_fee_cents: int,
+) -> str:
+    return (
+        "RentCast comp pull created a draft underwriting version. "
+        f"Selected {selected_count} comps and rejected {rejected_count}. "
+        f"Confidence: {confidence_score}%. "
+        f"Offer screen: {round(offer_low_percentage * 100)}-"
+        f"{round(offer_high_percentage * 100)}% of ARV minus repairs and "
+        f"{format_cents_for_note(assignment_fee_cents)} assignment fee. "
+        "Review comps, repairs, and seller context before approving."
+    )
+
+
+def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketAnalysisRead:
+    return LeadMarketAnalysisRead(
+        id=analysis.id,
+        lead_id=analysis.lead_id,
+        property_id=analysis.property_id,
+        underwriting_version_id=analysis.underwriting_version_id,
+        provider=analysis.provider,
+        requested_address=analysis.requested_address,
+        estimated_value_cents=analysis.estimated_value_cents,
+        estimated_value_low_cents=analysis.estimated_value_low_cents,
+        estimated_value_high_cents=analysis.estimated_value_high_cents,
+        arv_low_cents=analysis.arv_low_cents,
+        arv_high_cents=analysis.arv_high_cents,
+        repair_low_cents=analysis.repair_low_cents,
+        repair_high_cents=analysis.repair_high_cents,
+        mao_low_cents=analysis.mao_low_cents,
+        mao_high_cents=analysis.mao_high_cents,
+        recommended_offer_cents=analysis.recommended_offer_cents,
+        assignment_fee_cents=analysis.assignment_fee_cents,
+        offer_low_percentage=analysis.offer_low_percentage,
+        offer_high_percentage=analysis.offer_high_percentage,
+        confidence_score=analysis.confidence_score,
+        selected_comps=[
+            MarketAnalysisCompRead.model_validate(comp) for comp in analysis.selected_comps
+        ],
+        rejected_comps=[
+            MarketAnalysisCompRead.model_validate(comp) for comp in analysis.rejected_comps
+        ],
+        source_note=(
+            "Saved RentCast sales-comparison analysis. Draft numbers are screening guidance "
+            "only and require human ARV/offer approval."
+        ),
+        created_at=analysis.created_at,
+    )
+
+
+def percentile(values: list[float | int], target: float) -> float:
+    sorted_values = sorted(float(value) for value in values)
+    if not sorted_values:
+        return 0
+    index = (len(sorted_values) - 1) * target
+    lower = int(index)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    if lower == upper:
+        return sorted_values[lower]
+    weight = index - lower
+    return sorted_values[lower] * (1 - weight) + sorted_values[upper] * weight
+
+
+def normalize_money_range(low: int | None, high: int | None) -> tuple[int | None, int | None]:
+    if low is None or high is None:
+        return low, high
+    return (low, high) if low <= high else (high, low)
+
+
+def first_int(values: dict[str, Any], keys: tuple[str, ...]) -> int | None:
+    for key in keys:
+        value = optional_int(values.get(key))
+        if value is not None:
+            return value
+    return None
+
+
+def format_cents_for_note(value: int) -> str:
+    return f"${value / 100:,.0f}"
 
 
 def string_or_none(value: Any) -> str | None:

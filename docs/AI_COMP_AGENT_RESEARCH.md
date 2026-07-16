@@ -53,6 +53,9 @@ Web search:
 6. Store selected comps, rejected comps with reasons, ARV range, confidence, missing data, and recommended next task.
 7. Require human approval before using the result for an offer ceiling.
 
+The detailed comp, ARV, repair, and 65-70% offer method lives in
+`docs/UNDERWRITING_COMP_METHOD.md`.
+
 ## Structured Output Shape
 
 The comp agent should return a strict JSON object with:

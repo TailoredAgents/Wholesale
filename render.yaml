@@ -74,6 +74,12 @@ services:
         sync: false
       - key: BRIDGE_API_KEY
         sync: false
+      - key: UNDERWRITING_OFFER_LOW_PERCENTAGE
+        value: 0.65
+      - key: UNDERWRITING_OFFER_HIGH_PERCENTAGE
+        value: 0.70
+      - key: UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS
+        value: 1500000
       - key: CLERK_ISSUER
         sync: false
       - key: CLERK_JWKS_URL
