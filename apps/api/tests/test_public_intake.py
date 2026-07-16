@@ -201,7 +201,7 @@ def test_public_seller_intake_requires_consent(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
-def test_public_seller_intake_rejects_honeypot_submission(
+def test_public_seller_intake_allows_autofilled_honeypot_field(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -212,9 +212,8 @@ def test_public_seller_intake_rejects_honeypot_submission(
 
     response = client.post("/api/v1/public/seller-leads", json=payload)
 
-    assert response.status_code == 422
-    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
-    assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 0
+    assert response.status_code == 201
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
 
 
 def test_public_seller_intake_matches_duplicate_active_lead(

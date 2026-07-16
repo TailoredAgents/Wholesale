@@ -54,8 +54,6 @@ class SellerIntakeCreate(BaseModel):
 
     @model_validator(mode="after")
     def require_contact_channel(self) -> "SellerIntakeCreate":
-        if self.company_website:
-            raise ValueError("Submission could not be accepted.")
         if not self.phone and not self.email:
             raise ValueError("Either phone or email is required.")
         if not self.consent_to_contact:
