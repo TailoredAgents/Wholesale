@@ -15,6 +15,7 @@ from app.schemas.leads import (
     LeadDetail,
     LeadFollowUpTaskCreate,
     LeadListResponse,
+    LeadMarketValueEstimateRead,
     LeadNoteCreate,
     LeadRead,
     LeadStaffUpdate,
@@ -33,6 +34,7 @@ from app.services.leads import (
     create_lead_underwriting_version,
     get_lead_detail,
     list_leads,
+    preview_lead_market_value,
     update_lead_staff_details,
     update_lead_stage,
 )
@@ -152,6 +154,29 @@ def create_underwriting_version(
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead
+
+
+@router.get("/{lead_id}/underwriting/market-value")
+def preview_underwriting_market_value(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadMarketValueEstimateRead:
+    try:
+        estimate = preview_lead_market_value(db, principal, lead_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    if estimate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return estimate
 
 
 @router.post("/{lead_id}/transactions", status_code=201)

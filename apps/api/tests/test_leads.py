@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.integrations.rentcast_client import RentCastValueEstimate
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -602,6 +604,110 @@ def test_create_lead_underwriting_rejects_invalid_ranges(
     )
 
     assert response.status_code == 422
+
+
+def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    get_settings.cache_clear()
+
+    captured: dict[str, object] = {}
+
+    class FakeRentCastClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured["init"] = kwargs
+
+        def get_value_estimate(self, **kwargs: object) -> RentCastValueEstimate:
+            captured["request"] = kwargs
+            return RentCastValueEstimate(
+                price=285000,
+                price_range_low=260000,
+                price_range_high=305000,
+                subject_property={
+                    "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                },
+                comparables=[
+                    {
+                        "id": "comp-1",
+                        "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
+                        "status": "Inactive",
+                        "listingType": "Standard",
+                        "propertyType": "Single Family",
+                        "price": 280000,
+                        "bedrooms": 3,
+                        "bathrooms": 2,
+                        "squareFootage": 1800,
+                        "yearBuilt": 1985,
+                        "distance": 0.4,
+                        "daysOld": 42,
+                        "correlation": 0.98,
+                    }
+                ],
+                raw_response={},
+            )
+
+    monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/market-value",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"] == "rentcast"
+    assert payload["estimated_value_cents"] == 28500000
+    assert payload["estimated_value_low_cents"] == 26000000
+    assert payload["estimated_value_high_cents"] == 30500000
+    assert payload["human_review_required"] is True
+    assert payload["comparables"][0]["provider_id"] == "comp-1"
+    assert payload["comparables"][0]["price_cents"] == 28000000
+    assert captured["request"] == {
+        "address": "123 Peachtree St, Atlanta, GA 30303",
+        "property_type": "single_family",
+    }
+    assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 0
+    get_settings.cache_clear()
+
+
+def test_preview_lead_market_value_requires_rentcast_key(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.delenv("RENTCAST_API_KEY", raising=False)
+    get_settings.cache_clear()
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/market-value",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "RENTCAST_API_KEY is not configured."
+    get_settings.cache_clear()
 
 
 def test_open_lead_transaction_creates_deal_checklist_and_audit(

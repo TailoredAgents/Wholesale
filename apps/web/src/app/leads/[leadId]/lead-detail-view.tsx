@@ -7,6 +7,7 @@ import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
+import { MarketValuePreview } from "./market-value-preview";
 import { StageUpdateForm } from "./stage-update-form";
 import { TransactionForm } from "./transaction-form";
 import { UnderwritingForm } from "./underwriting-form";
@@ -253,6 +254,7 @@ export async function LeadDetailView({ params }: LeadPageProps) {
           <div className={styles.underwritingGrid}>
             <UnderwritingForm leadId={lead.id} />
             <div className={styles.underwritingList}>
+              <MarketValuePreview leadId={lead.id} />
               {lead.underwriting_versions.length === 0 ? (
                 <p>No underwriting versions saved yet.</p>
               ) : null}

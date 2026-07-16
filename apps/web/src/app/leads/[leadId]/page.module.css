@@ -470,6 +470,121 @@
   font-size: 14px;
 }
 
+.marketValuePanel {
+  padding: 14px;
+  border: 1px solid #d8d2c7;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 12px;
+}
+
+.marketValueHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.marketValueHeader div {
+  display: grid;
+  gap: 3px;
+}
+
+.marketValueHeader strong {
+  color: #202426;
+  font-size: 15px;
+}
+
+.marketValueHeader span,
+.marketValueResult p,
+.compList small {
+  color: #5d6365;
+  font-size: 13px;
+}
+
+.marketValueHeader button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: #263238;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.marketValueHeader button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.marketValueResult {
+  display: grid;
+  gap: 12px;
+}
+
+.marketValueResult dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.marketValueResult dl div {
+  padding: 10px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #e8e3d8;
+}
+
+.marketValueResult dt {
+  color: #6f7678;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.marketValueResult dd {
+  margin: 4px 0 0;
+  color: #202426;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.marketValueResult p {
+  margin: 0;
+}
+
+.compList {
+  display: grid;
+  gap: 8px;
+}
+
+.compList article {
+  padding: 10px;
+  border: 1px solid #e8e3d8;
+  border-radius: 8px;
+  background: #ffffff;
+  display: grid;
+  gap: 5px;
+}
+
+.compList article div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.compList article strong,
+.compList article span {
+  color: #202426;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .appointmentList article,
 .communicationList article,
 .transactionList article,
@@ -632,6 +747,16 @@
   .transactionGrid,
   .buyerOfferGrid,
   .underwritingGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .marketValueHeader,
+  .compList article div {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .marketValueResult dl {
     grid-template-columns: 1fr;
   }
 

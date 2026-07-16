@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -152,6 +153,39 @@ class UnderwritingVersionRead(BaseModel):
     notes: str | None
     source: str
     created_at: datetime
+
+
+class MarketComparableRead(BaseModel):
+    provider_id: str | None
+    formatted_address: str | None
+    status: str | None
+    listing_type: str | None
+    property_type: str | None
+    price_cents: int | None
+    bedrooms: float | None
+    bathrooms: float | None
+    square_footage: int | None
+    year_built: int | None
+    distance_miles: float | None
+    days_old: int | None
+    correlation: float | None
+    listed_date: str | None
+    removed_date: str | None
+    last_seen_date: str | None
+
+
+class LeadMarketValueEstimateRead(BaseModel):
+    lead_id: UUID
+    property_id: UUID
+    provider: str
+    requested_address: str
+    estimated_value_cents: int | None
+    estimated_value_low_cents: int | None
+    estimated_value_high_cents: int | None
+    subject_property: dict[str, Any]
+    comparables: list[MarketComparableRead]
+    human_review_required: bool = True
+    source_note: str
 
 
 class TransactionChecklistItemRead(BaseModel):

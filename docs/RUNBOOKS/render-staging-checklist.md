@@ -34,9 +34,10 @@
 - `OPENAI_REASONING_EFFORT`: `medium`.
 - `OPENAI_WEB_SEARCH_ENABLED`: `false`.
 - `OPENAI_REQUEST_TIMEOUT_SECONDS`: `30`.
-- `PROPERTY_DATA_PROVIDER`: `attom`.
-- `ATTOM_API_KEY`: ATTOM property data API key, when comp automation is enabled.
-- `RENTCAST_API_KEY`: optional valuation/rent/listing API fallback key.
+- `PROPERTY_DATA_PROVIDER`: `rentcast`.
+- `RENTCAST_API_KEY`: RentCast API key for value estimates and sale comps.
+- `RENTCAST_BASE_URL`: `https://api.rentcast.io/v1`.
+- `ATTOM_API_KEY`: optional later upgrade for deeper property/deed/tax datasets.
 - `BRIDGE_API_BASE_URL`: optional MLS/RESO feed base URL.
 - `BRIDGE_API_KEY`: optional MLS/RESO feed API key.
 - `CLERK_ISSUER`: Clerk issuer URL.

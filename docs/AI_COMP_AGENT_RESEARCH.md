@@ -19,15 +19,19 @@ Why:
 
 The comp agent needs current property data APIs before it can produce useful ARV support.
 
-Primary provider:
+Primary provider for the current build:
+
+- RentCast.
+- Use first because the account/API key is available now and it gives value estimates, sale comps, property records, listings, rent estimates, and market trends at a low starting cost.
+
+Later enterprise provider:
 
 - ATTOM Property Data API.
 - Use for property facts, parcel/tax data, owner data, sale history, AVM, equity signals, and nearby sales.
 
 Secondary/fallback provider:
 
-- RentCast.
-- Use for fast property records, AVM, rent estimates, active listings, sale history, and market trends.
+- ATTOM, if upgraded later, or MLS/RESO where licensed.
 
 MLS/listing provider:
 
@@ -84,9 +88,10 @@ OpenAI:
 
 Property data:
 
-- `PROPERTY_DATA_PROVIDER=attom`
-- `ATTOM_API_KEY`
+- `PROPERTY_DATA_PROVIDER=rentcast`
 - `RENTCAST_API_KEY`
+- `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
+- `ATTOM_API_KEY`
 - `BRIDGE_API_BASE_URL`
 - `BRIDGE_API_KEY`
 

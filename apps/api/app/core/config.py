@@ -47,9 +47,16 @@ class Settings(BaseSettings):
         default=30.0,
         validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
     )
-    property_data_provider: str = Field(default="attom", validation_alias="PROPERTY_DATA_PROVIDER")
+    property_data_provider: str = Field(
+        default="rentcast",
+        validation_alias="PROPERTY_DATA_PROVIDER",
+    )
     attom_api_key: str | None = Field(default=None, validation_alias="ATTOM_API_KEY")
     rentcast_api_key: str | None = Field(default=None, validation_alias="RENTCAST_API_KEY")
+    rentcast_base_url: str = Field(
+        default="https://api.rentcast.io/v1",
+        validation_alias="RENTCAST_BASE_URL",
+    )
     bridge_api_base_url: str | None = Field(default=None, validation_alias="BRIDGE_API_BASE_URL")
     bridge_api_key: str | None = Field(default=None, validation_alias="BRIDGE_API_KEY")
     clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")

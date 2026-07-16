@@ -283,7 +283,7 @@ Integrate instead of building from scratch:
 - Email provider for outbound email.
 - Google/Meta conversion APIs.
 - Address validation and geocoding.
-- Property data/comps provider, led by ATTOM with RentCast or MLS/RESO feeds as fallback/enrichment.
+- Property data/comps provider, led by RentCast now with ATTOM or MLS/RESO feeds as later enrichment.
 - Skip tracing provider.
 - E-signature provider.
 - Object storage.

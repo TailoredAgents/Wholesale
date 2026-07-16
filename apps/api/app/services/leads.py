@@ -6,6 +6,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.core.config import get_settings
+from app.integrations.rentcast_client import RentCastClient, RentCastClientError
 from app.models.foundation import (
     ActivityEvent,
     Appointment,
@@ -45,6 +47,7 @@ from app.schemas.leads import (
     LeadDetail,
     LeadFollowUpTaskCreate,
     LeadIntelligence,
+    LeadMarketValueEstimateRead,
     LeadMissingField,
     LeadNextBestAction,
     LeadNoteCreate,
@@ -54,6 +57,7 @@ from app.schemas.leads import (
     LeadTaskRead,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    MarketComparableRead,
     PipelineStageCount,
     SourcePerformance,
     TransactionChecklistItemRead,
@@ -1130,6 +1134,55 @@ def create_lead_underwriting_version(
     return get_lead_detail(db, principal, lead_id)
 
 
+def preview_lead_market_value(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> LeadMarketValueEstimateRead | None:
+    settings = get_settings()
+    if settings.property_data_provider.lower() != "rentcast":
+        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for this preview.")
+    if not settings.rentcast_api_key:
+        raise ValueError("RENTCAST_API_KEY is not configured.")
+
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise ValueError("Lead is missing a property record.")
+
+    address = format_property_address(property_record)
+    client = RentCastClient(
+        api_key=settings.rentcast_api_key,
+        base_url=settings.rentcast_base_url,
+        timeout_seconds=settings.openai_request_timeout_seconds,
+    )
+    try:
+        estimate = client.get_value_estimate(
+            address=address,
+            property_type=property_record.property_type,
+        )
+    except RentCastClientError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    return LeadMarketValueEstimateRead(
+        lead_id=lead.id,
+        property_id=property_record.id,
+        provider="rentcast",
+        requested_address=address,
+        estimated_value_cents=dollars_to_cents(estimate.price),
+        estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
+        estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
+        subject_property=estimate.subject_property,
+        comparables=[rentcast_comp_to_read(comp) for comp in estimate.comparables],
+        source_note=(
+            "RentCast /avm/value estimate and comparable listings. Use as draft "
+            "underwriting support only; human ARV approval is required."
+        ),
+    )
+
+
 def create_lead_transaction(
     db: Session,
     principal: Principal,
@@ -1859,6 +1912,60 @@ def normalize_address_key(
     return " ".join(normalized.split())
 
 
+def format_property_address(property_record: Property) -> str:
+    return (
+        f"{property_record.street_address}, {property_record.city}, "
+        f"{property_record.state} {property_record.postal_code}"
+    )
+
+
+def dollars_to_cents(value: int | None) -> int | None:
+    return value * 100 if value is not None else None
+
+
+def rentcast_comp_to_read(comp: dict[str, Any]) -> MarketComparableRead:
+    return MarketComparableRead(
+        provider_id=string_or_none(comp.get("id")),
+        formatted_address=string_or_none(comp.get("formattedAddress")),
+        status=string_or_none(comp.get("status")),
+        listing_type=string_or_none(comp.get("listingType")),
+        property_type=string_or_none(comp.get("propertyType")),
+        price_cents=dollars_to_cents(optional_int(comp.get("price"))),
+        bedrooms=optional_float(comp.get("bedrooms")),
+        bathrooms=optional_float(comp.get("bathrooms")),
+        square_footage=optional_int(comp.get("squareFootage")),
+        year_built=optional_int(comp.get("yearBuilt")),
+        distance_miles=optional_float(comp.get("distance")),
+        days_old=optional_int(comp.get("daysOld")),
+        correlation=optional_float(comp.get("correlation")),
+        listed_date=string_or_none(comp.get("listedDate")),
+        removed_date=string_or_none(comp.get("removedDate")),
+        last_seen_date=string_or_none(comp.get("lastSeenDate")),
+    )
+
+
+def string_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def optional_float(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def optional_int(value: Any) -> int | None:
+    float_value = optional_float(value)
+    return int(round(float_value)) if float_value is not None else None
+
+
 def property_fields_changed(values: dict[str, Any]) -> bool:
     property_keys = {"street_address", "city", "state", "postal_code"}
     return any(key in values for key in property_keys)
@@ -1880,10 +1987,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         lead_temperature=lead.lead_temperature,
         seller_name=contact.legal_name,
         preferred_name=contact.preferred_name,
-        property_address=(
-            f"{property_record.street_address}, {property_record.city}, "
-            f"{property_record.state} {property_record.postal_code}"
-        ),
+        property_address=format_property_address(property_record),
         property_street_address=property_record.street_address,
         property_city=property_record.city,
         property_state=property_record.state,

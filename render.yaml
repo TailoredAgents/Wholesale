@@ -63,11 +63,13 @@ services:
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: PROPERTY_DATA_PROVIDER
-        value: attom
+        value: rentcast
       - key: ATTOM_API_KEY
         sync: false
       - key: RENTCAST_API_KEY
         sync: false
+      - key: RENTCAST_BASE_URL
+        value: https://api.rentcast.io/v1
       - key: BRIDGE_API_BASE_URL
         sync: false
       - key: BRIDGE_API_KEY
