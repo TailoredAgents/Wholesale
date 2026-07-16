@@ -12,7 +12,8 @@ The system should:
 4. Estimate repairs from property condition and square footage.
 5. Calculate offer ceilings using 65-70% of ARV minus repairs and assignment fee.
 6. Save the analysis and a `needs_review` underwriting version.
-7. Require human approval before ARV or offers become official.
+7. Generate a PDF report so humans can audit the comp choice, math, and mistakes.
+8. Require human approval before ARV or offers become official.
 
 ## Comp Selection
 
@@ -74,6 +75,37 @@ Default assignment fee:
 - `$15,000`, controlled by `UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS`.
 
 The 65-70% rule is a screening tool. It should not override buyer demand, local market speed, repair certainty, title risk, seller motivation, or human approval.
+
+## PDF Audit Report
+
+Every saved market analysis can generate a PDF report.
+
+The report includes:
+
+- Seller/property summary.
+- Provider value and value range.
+- Draft ARV range.
+- Repair range.
+- 65-70% offer ceiling math.
+- Recommended starting offer.
+- Selected comps with score and selection reason.
+- Rejected/context comps with rejection reason.
+- Human review checklist.
+
+This report is required before trusting the automation because it shows where the system may be wrong.
+
+## Reliability Notes
+
+This is a strong screening setup, not a final autonomous acquisition decision.
+
+Before relying on it heavily:
+
+- Compare generated reports against 20-50 manually comped deals.
+- Track where RentCast data is stale, missing, or misleading.
+- Add MLS/RESO sold data where licensed.
+- Add county/deed/tax validation for ownership and parcel facts.
+- Tune repair assumptions and assignment fee by market and buyer feedback.
+- Keep human approval for ARV, repairs, and offer ceiling.
 
 ## Sources
 

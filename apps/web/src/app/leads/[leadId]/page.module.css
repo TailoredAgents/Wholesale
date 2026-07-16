@@ -517,7 +517,22 @@
   white-space: nowrap;
 }
 
-.marketValueHeader button:disabled {
+.secondaryButton {
+  min-height: 38px;
+  justify-self: start;
+  padding: 0 12px;
+  border: 1px solid #263238;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #263238;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.marketValueHeader button:disabled,
+.secondaryButton:disabled {
   opacity: 0.65;
   cursor: wait;
 }

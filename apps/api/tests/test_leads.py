@@ -824,6 +824,15 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version.status == "needs_review"
     assert saved_version.max_offer_cents == 14800000
     assert saved_version.recommended_offer_cents == 8350000
+
+    report_response = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis/{payload['id']}/report.pdf",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert report_response.status_code == 200
+    assert report_response.headers["content-type"] == "application/pdf"
+    assert report_response.content.startswith(b"%PDF")
     get_settings.cache_clear()
 
 

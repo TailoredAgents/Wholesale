@@ -45,6 +45,7 @@ type MarketValueEstimate = {
 };
 
 type Status = "idle" | "loading" | "loaded" | "error";
+type ReportStatus = "idle" | "loading" | "error";
 
 function formatMoney(cents: number | null) {
   if (cents === null) {
@@ -74,6 +75,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const [estimate, setEstimate] = useState<MarketValueEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reportStatus, setReportStatus] = useState<ReportStatus>("idle");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -112,6 +114,32 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to analyze comps.");
       setStatus("error");
+    }
+  }
+
+  async function openReport() {
+    if (!estimate?.id) {
+      return;
+    }
+    setReportStatus("loading");
+    setError(null);
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis/${estimate.id}/report.pdf`,
+        { headers: await getHeaders() },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Unable to build report.");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      setReportStatus("idle");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to build report.");
+      setReportStatus("error");
     }
   }
 
@@ -171,6 +199,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </div>
           </dl>
           <p>{estimate.source_note}</p>
+          {estimate.id ? (
+            <button
+              className={styles.secondaryButton}
+              disabled={reportStatus === "loading"}
+              onClick={openReport}
+              type="button"
+            >
+              {reportStatus === "loading" ? "Building report..." : "Open PDF report"}
+            </button>
+          ) : null}
           <div className={styles.compList}>
             {comps.slice(0, 5).map((comp, index) => (
               <article key={comp.provider_id ?? `${comp.formatted_address}-${index}`}>

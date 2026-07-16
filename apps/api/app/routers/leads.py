@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_permission
@@ -40,6 +40,7 @@ from app.services.leads import (
     update_lead_staff_details,
     update_lead_stage,
 )
+from app.services.underwriting_reports import build_market_analysis_pdf
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
 view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
@@ -202,6 +203,24 @@ def create_underwriting_market_analysis(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return analysis
+
+
+@router.get("/{lead_id}/underwriting/market-analysis/{analysis_id}/report.pdf")
+def download_underwriting_market_analysis_report(
+    lead_id: UUID,
+    analysis_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> Response:
+    report = build_market_analysis_pdf(db, principal, lead_id, analysis_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
+    content, filename = report
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{lead_id}/transactions", status_code=201)
