@@ -108,6 +108,18 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert conversion_event.event_metadata == {"matched_existing_lead": False}
 
 
+def test_public_seller_intake_bootstraps_default_organization_when_missing(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/v1/public/seller-leads", json=public_payload())
+
+    assert response.status_code == 201
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+
+
 def test_public_conversion_event_endpoint_records_attribution(
     db_session: Session,
     api_db_override: None,

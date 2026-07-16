@@ -22,6 +22,7 @@ from app.schemas.public_intake import (
     SellerIntakeCreate,
     SellerIntakeResponse,
 )
+from app.services.bootstrap import bootstrap_foundation
 from app.services.conversion_events import record_conversion_event
 from app.services.tasks import ensure_speed_to_lead_task
 
@@ -393,5 +394,11 @@ def get_default_organization(db: Session) -> Organization:
     if organization is None:
         organization = db.scalar(select(Organization).order_by(Organization.created_at.asc()))
     if organization is None:
-        raise RuntimeError("No organization exists. Run bootstrap before accepting public leads.")
+        result = bootstrap_foundation(
+            db,
+            organization_name=settings.default_organization_name,
+            admin_email=None,
+            admin_name=None,
+        )
+        organization = result.organization
     return organization

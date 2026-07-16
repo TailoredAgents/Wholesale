@@ -90,6 +90,13 @@ export function CashOfferForm() {
       consent_wording_version: "seller-web-v1",
       attribution: getConversionAttribution(),
     };
+    if (!payload.phone && !payload.email) {
+      setSubmitState({
+        status: "error",
+        message: "Please enter a phone number or email so Stonegate can follow up.",
+      });
+      return;
+    }
 
     setSubmitState({ status: "submitting", message: "Submitting..." });
     isSubmitting.current = true;
@@ -102,7 +109,8 @@ export function CashOfferForm() {
       });
 
       if (!response.ok) {
-        throw new Error("The form could not be submitted.");
+        const errorPayload = await response.json().catch(() => null);
+        throw new Error(extractApiError(errorPayload) ?? "The form could not be submitted.");
       }
 
       const result = (await response.json()) as { message?: string };
@@ -115,12 +123,14 @@ export function CashOfferForm() {
           result.message ??
           "Thanks. Your request was received. The acquisitions team will review it next.",
       });
-    } catch {
+    } catch (caught) {
       isSubmitting.current = false;
       setSubmitState({
         status: "error",
         message:
-          "Submission failed. Please check the required fields or call Stonegate directly.",
+          caught instanceof Error && caught.message
+            ? caught.message
+            : "Submission failed. Please check the required fields or call Stonegate directly.",
       });
     }
   }
@@ -302,4 +312,26 @@ export function CashOfferForm() {
       ) : null}
     </form>
   );
+}
+
+function extractApiError(payload: unknown) {
+  if (!payload || typeof payload !== "object" || !("detail" in payload)) {
+    return null;
+  }
+  const detail = payload.detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (!item || typeof item !== "object" || !("msg" in item)) {
+          return null;
+        }
+        return typeof item.msg === "string" ? item.msg : null;
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+  return null;
 }
