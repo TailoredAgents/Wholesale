@@ -1,6 +1,7 @@
-import { getAiControlOverview } from "../../lib/api";
+import { getAiControlOverview, getDashboardData } from "../../lib/api";
 import { labelize } from "../os-utils";
 import { AiForms } from "./ai-forms";
+import { LeadSummaryRunner } from "./lead-summary-runner";
 import styles from "../page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,10 @@ function formatLatency(value: number | null) {
 }
 
 export default async function AiControlPage() {
-  const { ai, apiConnected } = await getAiControlOverview();
+  const [{ ai, apiConnected }, dashboard] = await Promise.all([
+    getAiControlOverview(),
+    getDashboardData(),
+  ]);
 
   return (
     <>
@@ -72,6 +76,7 @@ export default async function AiControlPage() {
             <h3>Control Entry</h3>
             <span>Definitions and logs</span>
           </div>
+          <LeadSummaryRunner leads={dashboard.leads} />
           <AiForms ai={ai} />
         </article>
 

@@ -55,6 +55,10 @@ class AiRunCreate(BaseModel):
     tool_calls: list[AiRunToolCallCreate] = Field(default_factory=list)
 
 
+class LeadIntakeSummaryRunCreate(BaseModel):
+    lead_id: UUID
+
+
 class AiToolPermissionRead(BaseModel):
     id: UUID
     tool_key: str

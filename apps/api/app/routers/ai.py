@@ -15,12 +15,14 @@ from app.schemas.ai import (
     AiPromptVersionRead,
     AiRunCreate,
     AiRunRead,
+    LeadIntakeSummaryRunCreate,
 )
 from app.services.ai import (
     create_ai_agent,
     create_ai_prompt_version,
     create_ai_run,
     get_ai_overview,
+    run_lead_intake_summary,
 )
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
@@ -77,6 +79,21 @@ def create_run_log(
 ) -> AiRunRead:
     try:
         return create_ai_run(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/lead-intake-summary", status_code=201)
+def create_lead_intake_summary_run(
+    payload: LeadIntakeSummaryRunCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRunRead:
+    try:
+        return run_lead_intake_summary(db, principal, payload.lead_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

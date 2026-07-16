@@ -48,6 +48,16 @@ services:
         value: Stonegate Home Buyers
       - key: SPEED_TO_LEAD_DUE_MINUTES
         value: 5
+      - key: AI_ENABLED
+        value: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_DEFAULT_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: CLERK_ISSUER
         sync: false
       - key: CLERK_JWKS_URL

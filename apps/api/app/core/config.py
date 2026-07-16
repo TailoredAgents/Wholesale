@@ -25,6 +25,20 @@ class Settings(BaseSettings):
         default=5,
         validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
     )
+    ai_enabled: bool = Field(default=True, validation_alias="AI_ENABLED")
+    openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(
+        default="https://api.openai.com/v1",
+        validation_alias="OPENAI_BASE_URL",
+    )
+    openai_default_model: str = Field(
+        default="gpt-4.1-mini",
+        validation_alias="OPENAI_DEFAULT_MODEL",
+    )
+    openai_request_timeout_seconds: float = Field(
+        default=30.0,
+        validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
+    )
     clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")
     clerk_jwks_url: str | None = Field(default=None, validation_alias="CLERK_JWKS_URL")
     clerk_audience: str | None = Field(default=None, validation_alias="CLERK_AUDIENCE")

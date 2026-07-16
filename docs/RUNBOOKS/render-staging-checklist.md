@@ -27,6 +27,11 @@
 - `API_CORS_ORIGINS`: staging web URL.
 - `DEFAULT_ORGANIZATION_NAME`: `Stonegate Home Buyers`.
 - `SPEED_TO_LEAD_DUE_MINUTES`: `5`.
+- `AI_ENABLED`: `true`.
+- `OPENAI_API_KEY`: OpenAI project API key.
+- `OPENAI_BASE_URL`: `https://api.openai.com/v1`.
+- `OPENAI_DEFAULT_MODEL`: `gpt-4.1-mini`.
+- `OPENAI_REQUEST_TIMEOUT_SECONDS`: `30`.
 - `CLERK_ISSUER`: Clerk issuer URL.
 - `CLERK_JWKS_URL`: Clerk JWKS URL.
 - `CLERK_AUDIENCE`: optional Clerk audience, if configured.

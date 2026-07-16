@@ -17,5 +17,6 @@ Deployment requirements:
 - All `sync: false` environment variables set in Render.
 - API service can run `alembic upgrade head` on startup.
 - Owner user bootstrapped in the staging database.
+- `OPENAI_API_KEY` set before running production AI agents.
 
 Use `docs/RUNBOOKS/render-staging-checklist.md` before creating staging.
