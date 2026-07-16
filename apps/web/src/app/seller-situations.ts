@@ -16,7 +16,7 @@ export const sellerSituations: SellerSituation[] = [
     eyebrow: "Inherited property",
     title: "Sell an inherited house without repairs, cleanout, or listing pressure.",
     description:
-      "When a family property needs a practical next step, Oakwell can review the house as-is and help you understand a direct cash-offer option.",
+      "When a family property needs a practical next step, Stonegate can review the house as-is and help you understand a direct cash-offer option.",
     image:
       "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=1400&q=80",
     imageAlt: "A well-kept suburban home with a front lawn.",
@@ -41,7 +41,7 @@ export const sellerSituations: SellerSituation[] = [
     eyebrow: "Repairs needed",
     title: "Sell a house that needs repairs without managing contractors first.",
     description:
-      "If repairs are blocking a traditional sale, Oakwell can evaluate the property in its current condition and make a direct offer.",
+      "If repairs are blocking a traditional sale, Stonegate can evaluate the property in its current condition and make a direct offer.",
     image:
       "https://images.unsplash.com/photo-1570129477492-45c003edd2be?auto=format&fit=crop&w=1400&q=80",
     imageAlt: "A single-family home exterior seen from the street.",
@@ -66,7 +66,7 @@ export const sellerSituations: SellerSituation[] = [
     eyebrow: "Fast timeline",
     title: "Sell your house on a tighter timeline without waiting on a listing cycle.",
     description:
-      "When timing matters, Oakwell gives you a direct path to compare against a traditional listing and decide what works.",
+      "When timing matters, Stonegate gives you a direct path to compare against a traditional listing and decide what works.",
     image:
       "https://images.unsplash.com/photo-1605146769289-440113cc3d00?auto=format&fit=crop&w=1400&q=80",
     imageAlt: "A bright home exterior with a garage and front walkway.",

@@ -5,8 +5,8 @@ import { OsNav } from "./os-nav";
 import styles from "./page.module.css";
 
 export const metadata = {
-  title: "Oakwell Operating System",
-  description: "Internal acquisitions workspace for Oakwell Home Buyers.",
+  title: "Stonegate Operating System",
+  description: "Internal acquisitions workspace for Stonegate Home Buyers.",
 };
 
 export default function OsLayout({ children }: { children: ReactNode }) {
@@ -16,7 +16,7 @@ export default function OsLayout({ children }: { children: ReactNode }) {
         <div className={styles.brandBlock}>
           <span className={styles.brandMark} aria-hidden="true" />
           <div className={styles.brandCopy}>
-            <p className={styles.eyebrow}>Oakwell Home Buyers</p>
+            <p className={styles.eyebrow}>Stonegate Home Buyers</p>
             <h1>Operating System</h1>
             <span>Acquisitions, finance, buyers, marketing, and AI control.</span>
           </div>

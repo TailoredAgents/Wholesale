@@ -58,13 +58,13 @@ export default function PublicHomePage() {
       <PublicConversionTracker metadata={{ page: "home" }} />
       <header className={styles.header}>
         <Link className={styles.brand} href="/">
-          Oakwell Home Buyers
+          Stonegate Home Buyers
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
           <Link href="/sell-inherited-house">Inherited</Link>
           <Link href="/sell-house-needs-repairs">Repairs</Link>
           <Link href="/sell-house-fast">Fast sale</Link>
-          <TrackedPhoneLink href="tel:+14045550100">Call Oakwell</TrackedPhoneLink>
+          <TrackedPhoneLink href="tel:+14045550100">Call Stonegate</TrackedPhoneLink>
         </nav>
       </header>
 
@@ -73,7 +73,7 @@ export default function PublicHomePage() {
           <p className={styles.eyebrow}>Georgia cash home buyers</p>
           <h1>Sell your house as-is for cash without repairs, showings, or agent commissions.</h1>
           <p>
-            Oakwell Home Buyers gives Georgia homeowners a direct sale option when repairs,
+            Stonegate Home Buyers gives Georgia homeowners a direct sale option when repairs,
             inheritance, relocation, tenants, or timing make a traditional listing harder.
           </p>
           <div className={styles.heroActions}>
@@ -96,7 +96,7 @@ export default function PublicHomePage() {
         </aside>
       </section>
 
-      <section className={styles.trustBar} aria-label="Oakwell cash offer highlights">
+      <section className={styles.trustBar} aria-label="Stonegate cash offer highlights">
         {trustMetrics.map((metric) => (
           <p key={metric.label}>
             <strong>{metric.value}</strong>
@@ -105,7 +105,7 @@ export default function PublicHomePage() {
         ))}
       </section>
 
-      <section className={styles.fitSection} aria-label="Seller situations Oakwell can review">
+      <section className={styles.fitSection} aria-label="Seller situations Stonegate can review">
         <div className={styles.sectionHeading}>
           <p className={styles.eyebrow}>When this helps</p>
           <h2>A direct offer is most useful when certainty matters more than listing prep.</h2>

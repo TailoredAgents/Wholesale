@@ -2,7 +2,7 @@ import { SellerSituationPage } from "../seller-situation-page";
 import { getSellerSituation } from "../seller-situations";
 
 export const metadata = {
-  title: "Sell a House That Needs Repairs | Oakwell Home Buyers",
+  title: "Sell a House That Needs Repairs | Stonegate Home Buyers",
   description: "Request a cash offer for a Georgia property that needs repairs.",
 };
 

@@ -23,7 +23,7 @@ Then:
 2. Push `main` to GitHub.
 3. Set up Render staging early.
 
-Use `Oakwell Home Buyers` as the business-facing company name.
+Use `Stonegate Home Buyers` as the business-facing company name.
 
 ## Consequences
 
@@ -38,7 +38,7 @@ Tradeoffs:
 
 - Clerk introduces a third-party auth dependency.
 - User/role mapping must be designed carefully so Clerk identity does not replace internal RBAC.
-- Public-facing copy should use Oakwell Home Buyers; domains remain temporary until selected.
+- Public-facing copy should use Stonegate Home Buyers; domains remain temporary until selected.
 
 ## Follow-Up
 

@@ -12,7 +12,7 @@ type ConversionAttribution = {
   fbclid: string | null;
 };
 
-const sessionStorageKey = "oakwell_conversion_session_id";
+const sessionStorageKey = "stonegate_conversion_session_id";
 
 export function getConversionAttribution(): ConversionAttribution {
   const params = new URLSearchParams(window.location.search);

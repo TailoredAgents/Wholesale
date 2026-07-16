@@ -9,8 +9,8 @@ Current assumptions:
 - Authentication provider: Clerk.
 - GitHub push timing: after staff lead editing and speed-to-lead workflow.
 - Render staging timing: soon after GitHub push.
-- Business-facing company name: `Oakwell Home Buyers`.
-- Current local organization: `Oakwell Home Buyers`.
+- Business-facing company name: `Stonegate Home Buyers`.
+- Current local organization: `Stonegate Home Buyers`.
 
 ## Completed Local Milestones
 
@@ -283,7 +283,7 @@ Delivered:
 - Confirmed `.gitignore` covers env files, dependency installs, build output, caches, and local conflict artifacts.
 - Added GitHub branch protection and issue-label plan.
 - Added Render staging checklist.
-- Reviewed and updated Render Blueprint for current service commands, Oakwell service names, migrations, and Clerk env vars.
+- Reviewed and updated Render Blueprint for current service commands, Stonegate service names, migrations, and Clerk env vars.
 
 Acceptance met:
 
@@ -370,7 +370,7 @@ Status: In progress.
 
 Goal:
 
-Make the front-facing Oakwell site ready for real seller traffic and paid lead generation.
+Make the front-facing Stonegate site ready for real seller traffic and paid lead generation.
 
 Scope:
 

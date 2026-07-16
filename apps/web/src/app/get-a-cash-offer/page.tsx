@@ -5,7 +5,7 @@ import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
 export const metadata = {
-  title: "Get a Cash Offer | Oakwell Home Buyers",
+  title: "Get a Cash Offer | Stonegate Home Buyers",
   description: "Request a cash offer for a Georgia property.",
 };
 
@@ -15,7 +15,7 @@ export default function GetCashOfferPage() {
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
       <header className={styles.header}>
         <Link className={styles.brand} href="/">
-          Oakwell Home Buyers
+          Stonegate Home Buyers
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
           <Link href="/sell-inherited-house">Inherited</Link>

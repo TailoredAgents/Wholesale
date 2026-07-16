@@ -25,7 +25,7 @@
 - `DATABASE_URL`: Render PostgreSQL connection string.
 - `REDIS_URL`: Render Key Value connection string.
 - `API_CORS_ORIGINS`: staging web URL.
-- `DEFAULT_ORGANIZATION_NAME`: `Oakwell Home Buyers`.
+- `DEFAULT_ORGANIZATION_NAME`: `Stonegate Home Buyers`.
 - `SPEED_TO_LEAD_DUE_MINUTES`: `5`.
 - `CLERK_ISSUER`: Clerk issuer URL.
 - `CLERK_JWKS_URL`: Clerk JWKS URL.

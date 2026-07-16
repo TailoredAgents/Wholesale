@@ -15,7 +15,7 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
       <PublicConversionTracker metadata={{ page: situation.slug }} />
       <header className={styles.header}>
         <Link className={styles.brand} href="/">
-          Oakwell Home Buyers
+          Stonegate Home Buyers
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
           <Link href="/sell-inherited-house">Inherited</Link>
@@ -35,7 +35,7 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
               Get my cash offer
             </Link>
             <TrackedPhoneLink className={styles.secondaryAction} href="tel:+14045550100">
-              Call Oakwell
+              Call Stonegate
             </TrackedPhoneLink>
           </div>
           <div className={styles.reassurance}>

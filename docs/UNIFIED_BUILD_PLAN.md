@@ -2,7 +2,7 @@
 
 ## Objective
 
-Build Oakwell Home Buyers as one operating system with two clean surfaces:
+Build Stonegate Home Buyers as one operating system with two clean surfaces:
 
 - Public website: converts motivated sellers into consented leads.
 - Internal OS: runs acquisition, follow-up, underwriting, transactions, buyers, bookkeeping,
@@ -61,7 +61,7 @@ Benchmark features from existing systems:
 - Podio: flexible workspace, custom workflows, automation, collaboration, and visibility.
 - Lead Sherpa: specialist SMS, skip tracing, list stacking, and compliance-focused outreach.
 
-Oakwell recommendation:
+Stonegate recommendation:
 
 - Build our own source-of-truth OS for CRM, pipeline, underwriting, transaction, buyers, finance,
   audit, and reporting.
@@ -89,7 +89,7 @@ Scope:
 
 Next build target:
 
-- Replace placeholder public copy with conversion-focused Oakwell pages and a tighter form flow.
+- Replace placeholder public copy with conversion-focused Stonegate pages and a tighter form flow.
 - Add conversion event tracking to the database before paid traffic.
 
 ### 2. Acquisition CRM

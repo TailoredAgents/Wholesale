@@ -120,7 +120,7 @@ export function CashOfferForm() {
       setSubmitState({
         status: "error",
         message:
-          "Submission failed. Please check the required fields or call Oakwell directly.",
+          "Submission failed. Please check the required fields or call Stonegate directly.",
       });
     }
   }
@@ -147,7 +147,7 @@ export function CashOfferForm() {
         </div>
         <div className={styles.confirmationActions}>
           <TrackedPhoneLink className={styles.secondaryButton} href="tel:+14045550100">
-            Call Oakwell
+            Call Stonegate
           </TrackedPhoneLink>
           <button
             className={styles.textButton}

@@ -12,7 +12,7 @@ OWNER_EMAIL = "owner@example.com"
 def seed_owner(db_session: Session) -> None:
     bootstrap_foundation(
         db_session,
-        organization_name="Oakwell Home Buyers",
+        organization_name="Stonegate Home Buyers",
         admin_email=OWNER_EMAIL,
         admin_name="Owner",
     )

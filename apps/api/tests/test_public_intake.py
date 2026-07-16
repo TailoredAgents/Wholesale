@@ -49,7 +49,7 @@ def public_payload() -> dict[str, object]:
 def seed_org(db_session: Session) -> None:
     bootstrap_foundation(
         db_session,
-        organization_name="Oakwell Home Buyers",
+        organization_name="Stonegate Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )

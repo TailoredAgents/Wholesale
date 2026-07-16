@@ -25,7 +25,7 @@ def test_read_me_returns_seeded_principal_permissions(
 ) -> None:
     bootstrap_foundation(
         db_session,
-        organization_name="Oakwell Home Buyers",
+        organization_name="Stonegate Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )
@@ -66,7 +66,7 @@ def test_read_me_accepts_mapped_clerk_user(
     get_settings.cache_clear()
     bootstrap_foundation(
         db_session,
-        organization_name="Oakwell Home Buyers",
+        organization_name="Stonegate Home Buyers",
         admin_email="owner@example.com",
         admin_name="Owner",
     )

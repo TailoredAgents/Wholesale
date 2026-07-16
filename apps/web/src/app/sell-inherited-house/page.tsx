@@ -2,7 +2,7 @@ import { SellerSituationPage } from "../seller-situation-page";
 import { getSellerSituation } from "../seller-situations";
 
 export const metadata = {
-  title: "Sell an Inherited House | Oakwell Home Buyers",
+  title: "Sell an Inherited House | Stonegate Home Buyers",
   description: "Request a cash offer for an inherited Georgia property.",
 };
 

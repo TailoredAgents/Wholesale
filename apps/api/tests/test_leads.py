@@ -23,7 +23,7 @@ OWNER_EMAIL = "owner@example.com"
 def seed_owner(db_session: Session) -> None:
     bootstrap_foundation(
         db_session,
-        organization_name="Oakwell Home Buyers",
+        organization_name="Stonegate Home Buyers",
         admin_email=OWNER_EMAIL,
         admin_name="Owner",
     )
@@ -625,7 +625,7 @@ def test_open_lead_transaction_creates_deal_checklist_and_audit(
             "purchase_price_cents": 17000000,
             "assignment_fee_cents": 2500000,
             "earnest_money_cents": 100000,
-            "title_company": "Oakwell Title Partner",
+            "title_company": "Stonegate Title Partner",
             "closing_date": "2026-08-14T21:00:00Z",
             "inspection_period_days": 7,
             "notes": "Seller accepted the approved offer.",

@@ -4,11 +4,11 @@ The Render Blueprint is in `render.yaml`.
 
 Planned staging resources:
 
-- `oakwell-web`: Next.js web service.
-- `oakwell-api`: FastAPI web service.
-- `oakwell-worker`: background worker.
-- `oakwell-postgres`: PostgreSQL database.
-- `oakwell-key-value`: Render Key Value instance.
+- `stonegate-web`: Next.js web service.
+- `stonegate-api`: FastAPI web service.
+- `stonegate-worker`: background worker.
+- `stonegate-postgres`: PostgreSQL database.
+- `stonegate-key-value`: Render Key Value instance.
 
 Deployment requirements:
 
