@@ -1,6 +1,6 @@
 """underwriting market analyses
 
-Revision ID: 0016_underwriting_market_analyses
+Revision ID: 0016_market_analyses
 Revises: 0015_ai_control_center
 Create Date: 2026-07-16 00:00:00
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision: str = "0016_underwriting_market_analyses"
+revision: str = "0016_market_analyses"
 down_revision: str | None = "0015_ai_control_center"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
