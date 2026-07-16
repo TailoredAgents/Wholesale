@@ -5,14 +5,18 @@ from typing import Annotated, Any
 
 import httpx
 import jwt
+import structlog
 from fastapi import Depends, Header, HTTPException, status
 from jwt import PyJWKClient, PyJWTError
+from jwt.exceptions import PyJWKClientError
 from sqlalchemy import distinct, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.foundation import Permission, RoleAssignment, RolePermission, User
+
+logger = structlog.get_logger()
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,19 @@ def verify_clerk_authorization_header(authorization: str) -> ClerkClaims:
         else:
             decode_options["options"] = {"verify_aud": False}
         claims = jwt.decode(token, signing_key.key, **decode_options)
+    except PyJWKClientError as exc:
+        logger.warning(
+            "clerk_jwks_fetch_failed",
+            clerk_issuer=settings.clerk_issuer,
+            clerk_jwks_url=jwks_url,
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not fetch Clerk signing keys. Check CLERK_ISSUER and CLERK_JWKS_URL.",
+        ) from exc
     except PyJWTError as exc:
+        logger.warning("clerk_token_invalid", error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Clerk session token.",

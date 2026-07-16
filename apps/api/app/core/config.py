@@ -21,6 +21,11 @@ class Settings(BaseSettings):
         default="Stonegate Home Buyers",
         validation_alias="DEFAULT_ORGANIZATION_NAME",
     )
+    bootstrap_admin_email: str | None = Field(
+        default=None,
+        validation_alias="BOOTSTRAP_ADMIN_EMAIL",
+    )
+    bootstrap_admin_name: str | None = Field(default=None, validation_alias="BOOTSTRAP_ADMIN_NAME")
     speed_to_lead_due_minutes: int = Field(
         default=5,
         validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
