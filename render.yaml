@@ -55,9 +55,23 @@ services:
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: OPENAI_DEFAULT_MODEL
-        value: gpt-4.1-mini
+        value: gpt-5.6-terra
+      - key: OPENAI_REASONING_EFFORT
+        value: medium
+      - key: OPENAI_WEB_SEARCH_ENABLED
+        value: false
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
+      - key: PROPERTY_DATA_PROVIDER
+        value: attom
+      - key: ATTOM_API_KEY
+        sync: false
+      - key: RENTCAST_API_KEY
+        sync: false
+      - key: BRIDGE_API_BASE_URL
+        sync: false
+      - key: BRIDGE_API_KEY
+        sync: false
       - key: CLERK_ISSUER
         sync: false
       - key: CLERK_JWKS_URL

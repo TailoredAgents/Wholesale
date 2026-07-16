@@ -32,8 +32,38 @@ class OpenAIResponsesClient:
         model: str,
         system_prompt: str,
         user_prompt: str,
+        reasoning_effort: str = "medium",
+        enable_web_search: bool = False,
         max_output_tokens: int = 900,
     ) -> OpenAITextResponse:
+        request_payload: dict[str, Any] = {
+            "model": model,
+            "input": [
+                {
+                    "role": "system",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": system_prompt,
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_text",
+                            "text": user_prompt,
+                        }
+                    ],
+                },
+            ],
+            "reasoning": {"effort": reasoning_effort},
+            "max_output_tokens": max_output_tokens,
+        }
+        if enable_web_search:
+            request_payload["tools"] = [{"type": "web_search"}]
+
         try:
             response = httpx.post(
                 f"{self.base_url}/responses",
@@ -41,30 +71,7 @@ class OpenAIResponsesClient:
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": model,
-                    "input": [
-                        {
-                            "role": "system",
-                            "content": [
-                                {
-                                    "type": "input_text",
-                                    "text": system_prompt,
-                                }
-                            ],
-                        },
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "input_text",
-                                    "text": user_prompt,
-                                }
-                            ],
-                        },
-                    ],
-                    "max_output_tokens": max_output_tokens,
-                },
+                json=request_payload,
                 timeout=self.timeout_seconds,
             )
             response.raise_for_status()

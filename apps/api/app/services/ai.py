@@ -371,6 +371,8 @@ def run_lead_intake_summary(
             model=agent.model_name,
             system_prompt=prompt.prompt_text,
             user_prompt=json.dumps(lead_context, indent=2, sort_keys=True),
+            reasoning_effort=settings.openai_reasoning_effort,
+            enable_web_search=False,
         )
         output_summary = truncate_text(
             response.text or "OpenAI returned an empty response.",

@@ -11,6 +11,8 @@ Current assumptions:
 - Render staging timing: soon after GitHub push.
 - Business-facing company name: `Stonegate Home Buyers`.
 - Current local organization: `Stonegate Home Buyers`.
+- AI model default: `gpt-5.6-terra`.
+- Comp automation requires property data APIs before AI can draft ARV support.
 
 ## Completed Local Milestones
 

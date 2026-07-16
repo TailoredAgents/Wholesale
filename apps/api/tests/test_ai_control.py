@@ -72,7 +72,7 @@ def test_ai_control_center_logs_run_and_creates_approval(
             "name": "Follow-up drafter",
             "description": "Drafts seller follow-up messages for human approval.",
             "status": "active",
-            "model_name": "gpt-4.1-mini",
+            "model_name": "gpt-5.6-terra",
             "risk_level": "medium",
             "requires_human_approval": True,
             "tool_permissions": [
@@ -247,8 +247,10 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
             pass
 
         def create_text_response(self, **kwargs: object) -> OpenAITextResponse:
-            assert kwargs["model"] == "gpt-4.1-mini"
+            assert kwargs["model"] == "gpt-5.6-terra"
             assert "Inherited property" in str(kwargs["user_prompt"])
+            assert kwargs["reasoning_effort"] == "medium"
+            assert kwargs["enable_web_search"] is False
             return OpenAITextResponse(
                 text=(
                     "Seller inherited the property, wants a 30 day sale, "

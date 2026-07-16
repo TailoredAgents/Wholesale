@@ -283,12 +283,12 @@ Integrate instead of building from scratch:
 - Email provider for outbound email.
 - Google/Meta conversion APIs.
 - Address validation and geocoding.
-- Property data/comps provider.
+- Property data/comps provider, led by ATTOM with RentCast or MLS/RESO feeds as fallback/enrichment.
 - Skip tracing provider.
 - E-signature provider.
 - Object storage.
 - Accounting export provider.
-- OpenAI for AI agents.
+- OpenAI for AI agents, with `gpt-5.6-terra` as the default reasoning model.
 - Error monitoring.
 
 Defer:

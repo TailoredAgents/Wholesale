@@ -32,13 +32,26 @@ class Settings(BaseSettings):
         validation_alias="OPENAI_BASE_URL",
     )
     openai_default_model: str = Field(
-        default="gpt-4.1-mini",
+        default="gpt-5.6-terra",
         validation_alias="OPENAI_DEFAULT_MODEL",
+    )
+    openai_reasoning_effort: str = Field(
+        default="medium",
+        validation_alias="OPENAI_REASONING_EFFORT",
+    )
+    openai_web_search_enabled: bool = Field(
+        default=False,
+        validation_alias="OPENAI_WEB_SEARCH_ENABLED",
     )
     openai_request_timeout_seconds: float = Field(
         default=30.0,
         validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
     )
+    property_data_provider: str = Field(default="attom", validation_alias="PROPERTY_DATA_PROVIDER")
+    attom_api_key: str | None = Field(default=None, validation_alias="ATTOM_API_KEY")
+    rentcast_api_key: str | None = Field(default=None, validation_alias="RENTCAST_API_KEY")
+    bridge_api_base_url: str | None = Field(default=None, validation_alias="BRIDGE_API_BASE_URL")
+    bridge_api_key: str | None = Field(default=None, validation_alias="BRIDGE_API_KEY")
     clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")
     clerk_jwks_url: str | None = Field(default=None, validation_alias="CLERK_JWKS_URL")
     clerk_audience: str | None = Field(default=None, validation_alias="CLERK_AUDIENCE")

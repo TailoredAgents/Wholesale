@@ -17,7 +17,7 @@ class AiAgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=1000)
     status: str = Field(default="draft", max_length=80)
-    model_name: str = Field(default="gpt-4.1-mini", max_length=120)
+    model_name: str = Field(default="gpt-5.6-terra", max_length=120)
     risk_level: str = Field(default="medium", max_length=80)
     requires_human_approval: bool = True
     tool_permissions: list[AiToolPermissionCreate] = Field(default_factory=list)

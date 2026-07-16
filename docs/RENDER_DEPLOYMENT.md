@@ -21,5 +21,6 @@ Deployment requirements:
 - API service can run `alembic upgrade head` on startup.
 - Owner user bootstrapped in the staging database.
 - `OPENAI_API_KEY` set before running production AI agents.
+- `ATTOM_API_KEY` or another property-data provider key set before enabling comp automation.
 
 Use `docs/RUNBOOKS/render-staging-checklist.md` before creating staging.

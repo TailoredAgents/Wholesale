@@ -30,8 +30,15 @@
 - `AI_ENABLED`: `true`.
 - `OPENAI_API_KEY`: OpenAI project API key.
 - `OPENAI_BASE_URL`: `https://api.openai.com/v1`.
-- `OPENAI_DEFAULT_MODEL`: `gpt-4.1-mini`.
+- `OPENAI_DEFAULT_MODEL`: `gpt-5.6-terra`.
+- `OPENAI_REASONING_EFFORT`: `medium`.
+- `OPENAI_WEB_SEARCH_ENABLED`: `false`.
 - `OPENAI_REQUEST_TIMEOUT_SECONDS`: `30`.
+- `PROPERTY_DATA_PROVIDER`: `attom`.
+- `ATTOM_API_KEY`: ATTOM property data API key, when comp automation is enabled.
+- `RENTCAST_API_KEY`: optional valuation/rent/listing API fallback key.
+- `BRIDGE_API_BASE_URL`: optional MLS/RESO feed base URL.
+- `BRIDGE_API_KEY`: optional MLS/RESO feed API key.
 - `CLERK_ISSUER`: Clerk issuer URL.
 - `CLERK_JWKS_URL`: Clerk JWKS URL.
 - `CLERK_AUDIENCE`: optional Clerk audience, if configured.
