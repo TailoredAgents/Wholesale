@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: stonegate-web
+    name: oakwell-web
     runtime: node
     rootDir: apps/web
     buildCommand: npm ci --workspaces=false && npm run build
@@ -24,7 +24,7 @@ services:
         value: /os
 
   - type: web
-    name: stonegate-api
+    name: oakwell-api
     runtime: python
     rootDir: apps/api
     buildCommand: pip install uv && uv sync --frozen
@@ -35,12 +35,12 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: stonegate-postgres
+          name: oakwell-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: stonegate-key-value
+          name: oakwell-key-value
           property: connectionString
       - key: API_CORS_ORIGINS
         sync: false
@@ -70,7 +70,7 @@ services:
         sync: false
 
   - type: worker
-    name: stonegate-worker
+    name: oakwell-worker
     runtime: python
     rootDir: apps/worker
     buildCommand: pip install uv && uv sync --frozen
@@ -80,19 +80,19 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: stonegate-postgres
+          name: oakwell-postgres
           property: connectionString
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: stonegate-key-value
+          name: oakwell-key-value
           property: connectionString
 
   - type: keyvalue
-    name: stonegate-key-value
+    name: oakwell-key-value
     plan: starter
     ipAllowList: []
 
 databases:
-  - name: stonegate-postgres
+  - name: oakwell-postgres
     plan: basic-256mb
