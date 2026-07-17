@@ -20,13 +20,17 @@ def main() -> None:
             admin_email=settings.bootstrap_admin_email,
             admin_name=settings.bootstrap_admin_name,
         )
+        organization_slug = result.organization.slug
+        admin_email = result.admin_user.email if result.admin_user else None
+        permissions_count = result.permissions_count
+        roles_count = result.roles_count
 
     logger.info(
         "bootstrap_from_env_completed",
-        organization=result.organization.slug,
-        admin=result.admin_user.email if result.admin_user else None,
-        permissions=result.permissions_count,
-        roles=result.roles_count,
+        organization=organization_slug,
+        admin=admin_email,
+        permissions=permissions_count,
+        roles=roles_count,
     )
 
 

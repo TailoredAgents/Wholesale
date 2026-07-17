@@ -1,6 +1,9 @@
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
+from app.cli import bootstrap_from_env
+from app.core.config import get_settings
 from app.domain.rbac import ALL_PERMISSION_KEYS, ROLES
 from app.models.foundation import (
     AuditEvent,
@@ -59,3 +62,23 @@ def test_bootstrap_foundation_is_idempotent(db_session: Session) -> None:
     assert counts_after_second["permissions"] == len(ALL_PERMISSION_KEYS)
     assert counts_after_second["roles"] == len(ROLES)
     assert counts_after_second["audit_events"] == 1
+
+
+def test_bootstrap_from_env_logs_before_session_objects_detach(
+    db_session: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    testing_session = sessionmaker(bind=db_session.get_bind(), autocommit=False, autoflush=False)
+    monkeypatch.setattr(bootstrap_from_env, "SessionLocal", testing_session)
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_EMAIL", "owner@example.com")
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_NAME", "Owner")
+    get_settings.cache_clear()
+
+    try:
+        bootstrap_from_env.main()
+    finally:
+        get_settings.cache_clear()
+
+    with testing_session() as verification_session:
+        user = verification_session.scalar(select(User).where(User.email == "owner@example.com"))
+        assert user is not None
