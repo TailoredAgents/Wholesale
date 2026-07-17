@@ -8,7 +8,8 @@ the API service is configured and `TWILIO_SMS_ENABLED` is set to `true`.
 
 1. In the Twilio Console, open **Messaging > Services** and create or select Stonegate's Messaging
    Service.
-2. Add the company-owned Twilio phone number under **Sender Pool**.
+2. Add the company-owned Twilio phone number under **Sender Pool**. Stonegate explicitly sends
+   from this number, even if the approved Messaging Service contains other senders.
 3. Review and enable **Advanced Opt-Out** for the service. Keep the standard STOP, START, and HELP
    keywords unless legal counsel directs otherwise.
 4. Copy the Account SID and Messaging Service SID. The Account SID starts with `AC`; the Messaging
@@ -28,6 +29,7 @@ Add these environment variables only to the API service:
 | `TWILIO_ACCOUNT_SID` | Account SID from Twilio |
 | `TWILIO_AUTH_TOKEN` | Auth Token from Twilio |
 | `TWILIO_MESSAGING_SERVICE_SID` | Messaging Service SID from Twilio |
+| `TWILIO_SMS_FROM_NUMBER` | Stonegate sender in E.164 format: `+16785417725` |
 | `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://oakwell-api.onrender.com` |
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
 | `TWILIO_SMS_ENABLED` | Keep `false` until the remaining steps are complete |
@@ -43,7 +45,9 @@ signs webhooks with the account's Auth Token.
 
 ## 3. Configure The Twilio Webhook
 
-In the Messaging Service integration settings, configure incoming messages as an HTTP `POST` to:
+If the Messaging Service contains numbers used by multiple applications, keep its incoming-message
+handling set to **Defer to sender's webhook**. Open the Stonegate phone number and configure its
+incoming-message webhook as an HTTP `POST` to:
 
 ```text
 https://YOUR-API-HOST/api/v1/webhooks/twilio/messaging/incoming
@@ -58,6 +62,9 @@ https://YOUR-API-HOST/api/v1/webhooks/twilio/messaging/status
 `TWILIO_WEBHOOK_BASE_URL` must exactly match the public scheme and host Twilio uses. Signature
 validation uses the complete callback URL, so a different host or an extra trailing slash will
 cause a rejected webhook.
+
+Do not set a shared service-level incoming webhook when the service contains another application's
+number. That would route inbound messages for every sender in the service into Stonegate.
 
 ## 4. Activate And Test
 

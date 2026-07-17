@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import pytest
@@ -13,6 +14,7 @@ from app.integrations.communications import (
     OutboundMessageRequest,
     OutboundMessageResult,
 )
+from app.integrations.twilio_messaging import TwilioMessagingProvider
 from app.main import app
 from app.models.foundation import (
     CommunicationDispatch,
@@ -28,6 +30,7 @@ from app.services.bootstrap import bootstrap_foundation
 OWNER_EMAIL = "owner@example.com"
 AUTH_TOKEN = "test-auth-token"
 MESSAGING_SERVICE_SID = "MG00000000000000000000000000000000"
+STONEGATE_FROM_NUMBER = "+16785417725"
 WEBHOOK_BASE_URL = "https://api.stonegate.test"
 
 
@@ -57,6 +60,29 @@ class FakeTwilioProvider:
         )
 
 
+class FakeMessagesResource:
+    def __init__(self) -> None:
+        self.create_payload: dict[str, object] | None = None
+
+    def create(self, **payload: object) -> SimpleNamespace:
+        self.create_payload = payload
+        return SimpleNamespace(
+            sid="SM00000000000000000000000000000009",
+            status="accepted",
+            to=payload["to"],
+            from_=payload["from_"],
+            messaging_service_sid=payload["messaging_service_sid"],
+            error_code=None,
+            error_message=None,
+            num_segments="1",
+        )
+
+
+class FakeTwilioClient:
+    def __init__(self) -> None:
+        self.messages = FakeMessagesResource()
+
+
 @pytest.fixture
 def twilio_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
     values = {
@@ -64,6 +90,7 @@ def twilio_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
         "TWILIO_ACCOUNT_SID": "AC00000000000000000000000000000000",
         "TWILIO_AUTH_TOKEN": AUTH_TOKEN,
         "TWILIO_MESSAGING_SERVICE_SID": MESSAGING_SERVICE_SID,
+        "TWILIO_SMS_FROM_NUMBER": STONEGATE_FROM_NUMBER,
         "TWILIO_WEBHOOK_BASE_URL": WEBHOOK_BASE_URL,
         "TWILIO_VALIDATE_WEBHOOK_SIGNATURES": "true",
         "TWILIO_SMS_ALLOWED_START_HOUR": "0",
@@ -127,6 +154,33 @@ def post_signed_twilio(
         content=urlencode(payload),
         headers=signed_twilio_headers(path, payload),
     )
+
+
+def test_twilio_provider_uses_configured_stonegate_sender(
+    twilio_settings: None,
+) -> None:
+    client = FakeTwilioClient()
+    provider = TwilioMessagingProvider(
+        get_settings(),
+        client=client,  # type: ignore[arg-type]
+    )
+
+    result = provider.send(
+        OutboundMessageRequest(
+            lead_id="lead-1",
+            contact_id="contact-1",
+            channel="sms",
+            recipient="+14045551212",
+            body="Stonegate sender selection test.",
+            idempotency_key="sender-test-1",
+        ),
+        dry_run=False,
+    )
+
+    assert client.messages.create_payload is not None
+    assert client.messages.create_payload["from_"] == STONEGATE_FROM_NUMBER
+    assert client.messages.create_payload["messaging_service_sid"] == MESSAGING_SERVICE_SID
+    assert result.raw_payload["from"] == STONEGATE_FROM_NUMBER
 
 
 def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(

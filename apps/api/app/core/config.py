@@ -76,6 +76,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="TWILIO_MESSAGING_SERVICE_SID",
     )
+    twilio_sms_from_number: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_SMS_FROM_NUMBER",
+    )
     twilio_webhook_base_url: str | None = Field(
         default=None,
         validation_alias="TWILIO_WEBHOOK_BASE_URL",
@@ -155,6 +159,7 @@ class Settings(BaseSettings):
             self.twilio_sms_enabled
             and sending_credentials
             and self.twilio_messaging_service_sid
+            and self.twilio_sms_from_number
             and self.twilio_webhook_base_url
         )
 
