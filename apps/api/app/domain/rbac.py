@@ -15,6 +15,8 @@ class PermissionKeys:
     EXPORT_BUYERS = "buyers:export"
     SEND_BULK_COMMUNICATIONS = "communications:send_bulk"
     ACCESS_RECORDINGS = "communications:access_recordings"
+    SEND_SMS = "communications:send_sms"
+    SEND_ASSIGNED_SMS = "communications:send_assigned_sms"
     VIEW_CONVERSATIONS = "communications:view_conversations"
     VIEW_ASSIGNED_CONVERSATIONS = "communications:view_assigned_conversations"
     MANAGE_CONVERSATION_ASSIGNMENTS = "communications:manage_assignments"
@@ -90,6 +92,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Access call recordings and related transcripts.",
     ),
     PermissionDefinition(
+        PermissionKeys.SEND_SMS,
+        "Send SMS",
+        "Send compliant one-to-one seller text messages.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.SEND_ASSIGNED_SMS,
+        "Send assigned SMS",
+        "Send compliant text messages only for assigned seller conversations.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_CONVERSATIONS,
         "View conversations",
         "View the shared company conversation inbox.",
@@ -155,6 +167,7 @@ ACQUISITION_KEYS = (
     PermissionKeys.EDIT_UNDERWRITING,
     PermissionKeys.VIEW_DEALS,
     PermissionKeys.VIEW_CONVERSATIONS,
+    PermissionKeys.SEND_SMS,
 )
 
 DISPOSITION_KEYS = (
@@ -202,6 +215,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.VIEW_ASSIGNED_CONVERSATIONS,
             PermissionKeys.HANDOFF_ASSIGNED_CONVERSATIONS,
             PermissionKeys.LOG_ASSIGNED_COMMUNICATIONS,
+            PermissionKeys.SEND_ASSIGNED_SMS,
             PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
         ),
     ),

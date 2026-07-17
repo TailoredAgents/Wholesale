@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.twilio_messaging import TwilioMessagingError
 from app.schemas.inbox import (
     ConversationDetailRead,
     ConversationHandoffRequest,
@@ -14,6 +15,8 @@ from app.schemas.inbox import (
     ConversationRead,
     ConversationWatcherCreate,
     InboxAssigneeListResponse,
+    SmsSendRead,
+    SmsSendRequest,
 )
 from app.services.inbox import (
     add_conversation_watcher,
@@ -23,6 +26,12 @@ from app.services.inbox import (
     list_eligible_assignees,
     mark_conversation_read,
     remove_conversation_watcher,
+)
+from app.services.messaging import (
+    SmsComplianceError,
+    SmsConfigurationError,
+    SmsDispatchConflictError,
+    send_conversation_sms,
 )
 
 router = APIRouter(prefix="/api/v1/inbox", tags=["inbox"])
@@ -35,6 +44,10 @@ handoff_dependency = require_any_permission(
     PermissionKeys.HANDOFF_ASSIGNED_CONVERSATIONS,
 )
 manage_assignments_dependency = require_permission(PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS)
+send_sms_dependency = require_any_permission(
+    PermissionKeys.SEND_SMS,
+    PermissionKeys.SEND_ASSIGNED_SMS,
+)
 
 
 @router.get("/conversations")
@@ -81,6 +94,36 @@ def mark_inbox_conversation_read(
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return conversation
+
+
+@router.post("/conversations/{conversation_id}/messages/sms", status_code=201)
+def send_inbox_sms(
+    conversation_id: UUID,
+    payload: SmsSendRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_sms_dependency)],
+) -> SmsSendRead:
+    try:
+        result = send_conversation_sms(db, principal, conversation_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except SmsComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except SmsDispatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except SmsConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except TwilioMessagingError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return result
 
 
 @router.get("/assignees")

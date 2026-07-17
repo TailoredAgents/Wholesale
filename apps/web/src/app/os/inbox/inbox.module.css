@@ -620,6 +620,37 @@
   outline: 0;
 }
 
+.smsReady,
+.smsBlocked {
+  margin: 7px 10px 0;
+  padding: 7px 9px;
+  border-radius: 5px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.smsReady {
+  border: 1px solid #c8dccf;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.smsBlocked {
+  border: 1px solid #e1c9a5;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.smsReady svg,
+.smsBlocked svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
 .composerBody {
   min-height: 94px;
   padding: 7px 10px 10px;
@@ -774,6 +805,26 @@
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.contactSmsReady,
+.contactSmsBlocked {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.contactSmsReady {
+  color: var(--brand-strong);
+}
+
+.contactSmsBlocked {
+  color: var(--amber);
 }
 
 .propertyAddress {

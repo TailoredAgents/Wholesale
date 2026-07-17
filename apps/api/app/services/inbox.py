@@ -35,7 +35,9 @@ from app.schemas.inbox import (
     ConversationWatcherCreate,
     ConversationWatcherRead,
     InboxAssigneeRead,
+    SmsEligibilityRead,
 )
+from app.services.communication_compliance import evaluate_sms_eligibility
 
 CONVERSATION_QUEUE_KEYS = {
     "unassigned",
@@ -353,6 +355,7 @@ def get_conversation_detail(
         for item in appointments
     )
     timeline.sort(key=lambda item: (item.occurred_at, str(item.id)))
+    sms_eligibility = evaluate_sms_eligibility(db, contact)
 
     base = conversation_to_read(db, conversation)
     return ConversationDetailRead(
@@ -402,6 +405,15 @@ def get_conversation_detail(
             )
             for appointment in appointments
         ],
+        sms_eligibility=SmsEligibilityRead(
+            can_send=sms_eligibility.can_send,
+            recipient=sms_eligibility.recipient,
+            consent_status=sms_eligibility.consent_status,
+            is_suppressed=sms_eligibility.is_suppressed,
+            provider_configured=sms_eligibility.provider_configured,
+            within_allowed_hours=sms_eligibility.within_allowed_hours,
+            blockers=list(sms_eligibility.blockers),
+        ),
     )
 
 

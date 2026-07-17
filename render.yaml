@@ -78,6 +78,28 @@ services:
         sync: false
       - key: BRIDGE_API_KEY
         sync: false
+      - key: TWILIO_SMS_ENABLED
+        value: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_API_KEY_SID
+        sync: false
+      - key: TWILIO_API_KEY_SECRET
+        sync: false
+      - key: TWILIO_MESSAGING_SERVICE_SID
+        sync: false
+      - key: TWILIO_WEBHOOK_BASE_URL
+        sync: false
+      - key: TWILIO_VALIDATE_WEBHOOK_SIGNATURES
+        value: true
+      - key: TWILIO_SMS_TIMEZONE
+        value: America/New_York
+      - key: TWILIO_SMS_ALLOWED_START_HOUR
+        value: 9
+      - key: TWILIO_SMS_ALLOWED_END_HOUR
+        value: 20
       - key: UNDERWRITING_OFFER_LOW_PERCENTAGE
         value: 0.65
       - key: UNDERWRITING_OFFER_HIGH_PERCENTAGE

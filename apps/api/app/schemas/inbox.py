@@ -64,6 +64,16 @@ class ConversationAppointmentRead(BaseModel):
     notes: str | None
 
 
+class SmsEligibilityRead(BaseModel):
+    can_send: bool
+    recipient: str | None
+    consent_status: str
+    is_suppressed: bool
+    provider_configured: bool
+    within_allowed_hours: bool
+    blockers: list[str]
+
+
 class ConversationRead(BaseModel):
     id: UUID
     lead_id: UUID
@@ -104,6 +114,7 @@ class ConversationDetailRead(ConversationRead):
     timeline: list[ConversationTimelineItemRead]
     open_tasks: list[ConversationTaskRead]
     appointments: list[ConversationAppointmentRead]
+    sms_eligibility: SmsEligibilityRead
 
 
 class ConversationListResponse(BaseModel):
@@ -114,6 +125,18 @@ class ConversationHandoffRequest(BaseModel):
     assigned_user_id: UUID
     queue_key: str = Field(min_length=1, max_length=120)
     reason: str = Field(min_length=1, max_length=500)
+
+
+class SmsSendRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=1600)
+    idempotency_key: str = Field(min_length=8, max_length=120)
+
+
+class SmsSendRead(BaseModel):
+    communication_id: UUID
+    provider_message_id: str
+    status: str
+    recipient: str
 
 
 class ConversationWatcherCreate(BaseModel):

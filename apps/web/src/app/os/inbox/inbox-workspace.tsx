@@ -19,6 +19,8 @@ import {
   Reply,
   Search,
   Send,
+  ShieldAlert,
+  ShieldCheck,
   UserRound,
   Users,
 } from "lucide-react";
@@ -114,6 +116,15 @@ type ConversationDetail = Conversation & {
     location: string | null;
     notes: string | null;
   }>;
+  sms_eligibility: {
+    can_send: boolean;
+    recipient: string | null;
+    consent_status: string;
+    is_suppressed: boolean;
+    provider_configured: boolean;
+    within_allowed_hours: boolean;
+    blockers: string[];
+  };
 };
 
 type Assignee = {
@@ -218,6 +229,7 @@ function displayError(payload: unknown, fallback: string) {
 export function InboxWorkspace() {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
+  const smsIdempotencyKeyRef = useRef<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -410,6 +422,14 @@ export function InboxWorkspace() {
     ["scheduled", "rescheduled"].includes(appointment.status),
   );
   const nextTask = detail?.open_tasks[0];
+  const isLiveSms = channel === "sms" && direction === "outbound";
+  const canUseSms =
+    me?.permissions.includes("communications:send_sms") ||
+    me?.permissions.includes("communications:send_assigned_sms");
+  const canSubmitComposer =
+    Boolean(body.trim()) &&
+    composerStatus !== "saving" &&
+    (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send));
 
   function selectConversation(conversationId: string) {
     setSelectedId(conversationId);
@@ -433,17 +453,29 @@ export function InboxWorkspace() {
     setComposerStatus("saving");
     setError(null);
     try {
-      await request(`/api/v1/leads/${detail.lead_id}/communications`, {
-        method: "POST",
-        body: JSON.stringify({
-          direction: channel === "note" ? "internal" : direction,
-          channel,
-          status: direction === "inbound" && channel !== "note" ? "received" : "logged",
-          subject: subject.trim() || null,
-          body: body.trim(),
-          occurred_at: null,
-        }),
-      });
+      if (isLiveSms) {
+        smsIdempotencyKeyRef.current ??= window.crypto.randomUUID();
+        await request(`/api/v1/inbox/conversations/${detail.id}/messages/sms`, {
+          method: "POST",
+          body: JSON.stringify({
+            body: body.trim(),
+            idempotency_key: smsIdempotencyKeyRef.current,
+          }),
+        });
+        smsIdempotencyKeyRef.current = null;
+      } else {
+        await request(`/api/v1/leads/${detail.lead_id}/communications`, {
+          method: "POST",
+          body: JSON.stringify({
+            direction: channel === "note" ? "internal" : direction,
+            channel,
+            status: direction === "inbound" && channel !== "note" ? "received" : "logged",
+            subject: subject.trim() || null,
+            body: body.trim(),
+            occurred_at: null,
+          }),
+        });
+      }
       setSubject("");
       setBody("");
       setComposerStatus("saved");
@@ -702,7 +734,7 @@ export function InboxWorkspace() {
               </div>
 
               <form className={styles.composer} onSubmit={submitCommunication}>
-                <div className={styles.composerTabs} role="tablist" aria-label="Log channel">
+                <div className={styles.composerTabs} role="tablist" aria-label="Communication channel">
                   {composerChannels.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -751,11 +783,36 @@ export function InboxWorkspace() {
                     />
                   ) : null}
                 </div>
+                {isLiveSms ? (
+                  <div
+                    className={
+                      detail.sms_eligibility.can_send
+                        ? styles.smsReady
+                        : styles.smsBlocked
+                    }
+                  >
+                    {detail.sms_eligibility.can_send ? (
+                      <ShieldCheck size={15} aria-hidden="true" />
+                    ) : (
+                      <ShieldAlert size={15} aria-hidden="true" />
+                    )}
+                    <span>
+                      {detail.sms_eligibility.can_send
+                        ? canUseSms
+                          ? `Ready to send to ${detail.sms_eligibility.recipient}`
+                          : "Your role cannot send seller text messages."
+                        : detail.sms_eligibility.blockers.join(" ")}
+                    </span>
+                  </div>
+                ) : null}
                 <div className={styles.composerBody}>
                   <textarea
                     aria-label={`${labelize(channel)} details`}
-                    maxLength={4000}
-                    onChange={(event) => setBody(event.target.value)}
+                    maxLength={channel === "sms" ? 1600 : 4000}
+                    onChange={(event) => {
+                      if (event.target.value !== body) smsIdempotencyKeyRef.current = null;
+                      setBody(event.target.value);
+                    }}
                     placeholder={
                       channel === "note"
                         ? "Add a note for the Stonegate team..."
@@ -765,7 +822,7 @@ export function InboxWorkspace() {
                     rows={3}
                     value={body}
                   />
-                  <button disabled={composerStatus === "saving" || !body.trim()} type="submit">
+                  <button disabled={!canSubmitComposer} type="submit">
                     {composerStatus === "saved" ? (
                       <Check size={17} aria-hidden="true" />
                     ) : (
@@ -774,8 +831,12 @@ export function InboxWorkspace() {
                     {composerStatus === "saving"
                       ? "Saving"
                       : composerStatus === "saved"
-                        ? "Logged"
-                        : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
+                        ? isLiveSms
+                          ? "Sent"
+                          : "Logged"
+                        : isLiveSms
+                          ? "Send SMS"
+                          : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
                   </button>
                 </div>
               </form>
@@ -825,6 +886,26 @@ export function InboxWorkspace() {
                       </span>
                     </a>
                   ))}
+                </div>
+                <div
+                  className={
+                    detail.sms_eligibility.can_send
+                      ? styles.contactSmsReady
+                      : styles.contactSmsBlocked
+                  }
+                >
+                  {detail.sms_eligibility.can_send ? (
+                    <ShieldCheck size={14} aria-hidden="true" />
+                  ) : (
+                    <ShieldAlert size={14} aria-hidden="true" />
+                  )}
+                  <span>
+                    {detail.sms_eligibility.can_send
+                      ? "SMS eligible"
+                      : detail.sms_eligibility.is_suppressed
+                        ? "SMS suppressed"
+                        : `SMS consent ${labelize(detail.sms_eligibility.consent_status)}`}
+                  </span>
                 </div>
               </section>
 

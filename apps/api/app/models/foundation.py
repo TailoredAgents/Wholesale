@@ -161,6 +161,37 @@ class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class SuppressionRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "suppression_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "channel",
+            "normalized_address",
+            name="uq_suppression_records_org_channel_address",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("contacts.id", ondelete="SET NULL"), index=True
+    )
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    normalized_address: Mapped[str] = mapped_column(String(320), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    suppressed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lifted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suppression_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
 class LeadFormSubmission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lead_form_submissions"
 
@@ -326,6 +357,14 @@ class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "communication_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_message_id",
+            name="uq_communication_records_org_provider_message",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -346,6 +385,43 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     external_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     communication_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class CommunicationDispatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "communication_dispatches"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_communication_dispatches_org_idempotency",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    communication_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("communication_records.id", ondelete="SET NULL")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(80), nullable=False)
+    request_body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    dispatch_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
 

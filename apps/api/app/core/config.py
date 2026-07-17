@@ -64,6 +64,42 @@ class Settings(BaseSettings):
     )
     bridge_api_base_url: str | None = Field(default=None, validation_alias="BRIDGE_API_BASE_URL")
     bridge_api_key: str | None = Field(default=None, validation_alias="BRIDGE_API_KEY")
+    twilio_sms_enabled: bool = Field(default=False, validation_alias="TWILIO_SMS_ENABLED")
+    twilio_account_sid: str | None = Field(default=None, validation_alias="TWILIO_ACCOUNT_SID")
+    twilio_auth_token: str | None = Field(default=None, validation_alias="TWILIO_AUTH_TOKEN")
+    twilio_api_key_sid: str | None = Field(default=None, validation_alias="TWILIO_API_KEY_SID")
+    twilio_api_key_secret: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_API_KEY_SECRET",
+    )
+    twilio_messaging_service_sid: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_MESSAGING_SERVICE_SID",
+    )
+    twilio_webhook_base_url: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_WEBHOOK_BASE_URL",
+    )
+    twilio_validate_webhook_signatures: bool = Field(
+        default=True,
+        validation_alias="TWILIO_VALIDATE_WEBHOOK_SIGNATURES",
+    )
+    twilio_sms_timezone: str = Field(
+        default="America/New_York",
+        validation_alias="TWILIO_SMS_TIMEZONE",
+    )
+    twilio_sms_allowed_start_hour: int = Field(
+        default=9,
+        ge=0,
+        le=23,
+        validation_alias="TWILIO_SMS_ALLOWED_START_HOUR",
+    )
+    twilio_sms_allowed_end_hour: int = Field(
+        default=20,
+        ge=1,
+        le=24,
+        validation_alias="TWILIO_SMS_ALLOWED_END_HOUR",
+    )
     underwriting_offer_low_percentage: float = Field(
         default=0.65,
         validation_alias="UNDERWRITING_OFFER_LOW_PERCENTAGE",
@@ -105,6 +141,22 @@ class Settings(BaseSettings):
             for origin in self.clerk_authorized_parties_raw.split(",")
             if origin.strip()
         ]
+
+    @property
+    def twilio_sms_configured(self) -> bool:
+        sending_credentials = bool(
+            self.twilio_account_sid
+            and (
+                self.twilio_auth_token
+                or (self.twilio_api_key_sid and self.twilio_api_key_secret)
+            )
+        )
+        return bool(
+            self.twilio_sms_enabled
+            and sending_credentials
+            and self.twilio_messaging_service_sid
+            and self.twilio_webhook_base_url
+        )
 
 
 @lru_cache

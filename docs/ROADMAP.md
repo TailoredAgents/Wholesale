@@ -493,8 +493,7 @@ Remaining:
   approval request workflow.
 - Connect the AI-ready summary to model-backed agents after communications and underwriting data
   are available.
-- Add inbound provider webhooks, suppression checks, and send approval gates before live
-  seller-facing automation.
+- Add approval gates for future AI-authored seller messages before enabling autonomous sending.
 - Decide whether to keep or redirect the legacy `/leads/{leadId}` route after staff bookmarks
   have moved to `/os/leads/{leadId}`.
 
@@ -512,13 +511,24 @@ Remaining:
 
 ### Phase 3: Communications And Intake
 
-- Twilio adapter.
-- Webhook signature validation.
-- Inbound SMS/call records.
-- Outbound communication compliance gate.
-- Unified communication timeline.
-- Initial AI intake summary/extraction.
-- Call/lead follow-up tasks.
+Delivered in the SMS foundation:
+
+- Twilio Messaging Service adapter with idempotent outbound dispatch records.
+- Signed inbound-message and delivery-status webhooks with retained provider events.
+- Inbound and outbound SMS records in the unified communication timeline.
+- Role-aware sending from the shared inbox.
+- Consent, suppression, valid-number, contact-hour, and provider-configuration checks before send.
+- STOP and START processing with consent history and an organization-wide suppression record.
+- Delivery, failure, and undeliverable status updates on sent messages.
+- Render configuration that remains disabled until Twilio credentials are supplied.
+
+Remaining in the communications sequence:
+
+- Browser calling and inbound call routing.
+- Call recording callbacks and secure recording access.
+- OpenAI transcription, structured intake extraction, and human approval.
+- Communication-triggered follow-up tasks and notifications.
+- Email provider integration.
 
 ### Phase 4: Acquisition Workspace
 
