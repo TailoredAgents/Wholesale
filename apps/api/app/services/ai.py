@@ -219,6 +219,7 @@ def create_ai_run(
             select(Lead).where(
                 Lead.organization_id == principal.organization_id,
                 Lead.id == payload.lead_id,
+                Lead.archived_at.is_(None),
             )
         )
         if lead is None:
@@ -524,6 +525,7 @@ def build_lead_context(
         select(Lead).where(
             Lead.organization_id == principal.organization_id,
             Lead.id == lead_id,
+            Lead.archived_at.is_(None),
         )
     )
     if lead is None:

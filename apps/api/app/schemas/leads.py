@@ -61,6 +61,7 @@ class LeadRead(BaseModel):
     mortgage_balance: str | None
     appointment_status: str | None
     next_follow_up_at: datetime | None
+    archived_at: datetime | None
     created_at: datetime
 
 

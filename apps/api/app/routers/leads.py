@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_permission
@@ -27,6 +27,7 @@ from app.schemas.leads import (
 from app.services.leads import (
     add_lead_communication,
     add_lead_note,
+    archive_lead,
     create_lead,
     create_lead_appointment,
     create_lead_buyer_offer,
@@ -36,7 +37,9 @@ from app.services.leads import (
     create_lead_underwriting_version,
     get_lead_detail,
     list_leads,
+    permanently_delete_lead,
     preview_lead_market_value,
+    restore_lead,
     update_lead_staff_details,
     update_lead_stage,
 )
@@ -45,14 +48,16 @@ from app.services.underwriting_reports import build_market_analysis_pdf
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
 view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
 edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
+delete_leads_dependency = require_permission(PermissionKeys.DELETE_OR_ARCHIVE_RECORDS)
 
 
 @router.get("")
 def read_leads(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_leads_dependency)],
+    archived: bool = Query(default=False),
 ) -> LeadListResponse:
-    return LeadListResponse(items=list_leads(db, principal))
+    return LeadListResponse(items=list_leads(db, principal, archived=archived))
 
 
 @router.post("", status_code=201)
@@ -291,3 +296,51 @@ def update_seller_lead_stage(
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead
+
+
+@router.delete("/{lead_id}")
+def archive_seller_lead(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(delete_leads_dependency)],
+) -> LeadRead:
+    lead = archive_lead(db, principal, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.post("/{lead_id}/restore")
+def restore_seller_lead(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(delete_leads_dependency)],
+) -> LeadRead:
+    lead = restore_lead(db, principal, lead_id)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.delete("/{lead_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+def permanently_delete_seller_lead(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(delete_leads_dependency)],
+    confirmation: str = Query(default=""),
+) -> Response:
+    if confirmation != "DELETE":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail='Type "DELETE" to confirm permanent deletion.',
+        )
+    try:
+        deleted = permanently_delete_lead(db, principal, lead_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

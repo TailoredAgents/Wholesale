@@ -43,6 +43,7 @@ export type LeadListItem = {
   mortgage_balance: string | null;
   appointment_status: string | null;
   next_follow_up_at: string | null;
+  archived_at: string | null;
   created_at: string;
 };
 
@@ -558,6 +559,31 @@ export async function getDashboardData(): Promise<DashboardData> {
       openTaskQueue: [],
       apiConnected: false,
     };
+  }
+}
+
+export async function getArchivedLeads(): Promise<{
+  leads: LeadListItem[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/leads?archived=true`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      leads: ((await response.json()) as LeadListResponse).items,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate archived leads request failed.", error);
+    return { leads: [], apiConnected: false };
   }
 }
 

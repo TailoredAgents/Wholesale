@@ -139,6 +139,9 @@ class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     next_follow_up_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
 
 
 class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):

@@ -1,0 +1,120 @@
+.actions,
+.compact {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.actions {
+  justify-content: flex-end;
+}
+
+.actions button,
+.compact button,
+.dialog button {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid #c9c5bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #252a2c;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.actions button:disabled,
+.compact button:disabled,
+.dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.archiveButton {
+  border-color: #9a7226 !important;
+  color: #755416 !important;
+}
+
+.restoreButton {
+  border-color: #2f6f4e !important;
+  color: #245f43 !important;
+}
+
+.deleteButton {
+  border-color: #a13c2f !important;
+  color: #922f24 !important;
+}
+
+.backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  padding: 20px;
+  background: rgb(22 26 29 / 62%);
+  display: grid;
+  place-items: center;
+}
+
+.dialog {
+  width: min(460px, 100%);
+  padding: 22px;
+  border: 1px solid #d8d3c8;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 60px rgb(22 26 29 / 28%);
+  display: grid;
+  gap: 14px;
+}
+
+.dialog h2,
+.dialog p {
+  margin: 0;
+}
+
+.dialog h2 {
+  font-size: 20px;
+}
+
+.dialog p,
+.dialog label span {
+  color: #565d60;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.dialog label {
+  display: grid;
+  gap: 7px;
+}
+
+.dialog input {
+  min-height: 42px;
+  padding: 0 11px;
+  border: 1px solid #bdb8ae;
+  border-radius: 6px;
+  font: inherit;
+}
+
+.dialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.error {
+  margin: 0;
+  color: #a13c2f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+@media (max-width: 620px) {
+  .actions,
+  .compact,
+  .dialogActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

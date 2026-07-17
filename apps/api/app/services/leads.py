@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -14,7 +14,9 @@ from app.integrations.rentcast_client import (
 )
 from app.models.foundation import (
     ActivityEvent,
+    AiRunLog,
     Appointment,
+    ApprovalRequest,
     AttributionTouch,
     AuditEvent,
     Buyer,
@@ -25,7 +27,10 @@ from app.models.foundation import (
     ContactMethod,
     ConversionEvent,
     Deal,
+    DealDeduction,
     Lead,
+    LeadFormSubmission,
+    OfflineConversionExport,
     Property,
     RevenueRecord,
     Task,
@@ -221,10 +226,20 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     return lead_to_read(db, lead)
 
 
-def list_leads(db: Session, principal: Principal, limit: int = 25) -> list[LeadRead]:
+def list_leads(
+    db: Session,
+    principal: Principal,
+    *,
+    archived: bool = False,
+    limit: int = 100,
+) -> list[LeadRead]:
+    archive_filter = Lead.archived_at.is_not(None) if archived else Lead.archived_at.is_(None)
     leads = db.scalars(
         select(Lead)
-        .where(Lead.organization_id == principal.organization_id)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            archive_filter,
+        )
         .order_by(Lead.created_at.desc())
         .limit(limit)
     ).all()
@@ -232,7 +247,7 @@ def list_leads(db: Session, principal: Principal, limit: int = 25) -> list[LeadR
 
 
 def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDetail | None:
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
     if lead is None:
         return None
     base = lead_to_read(db, lead)
@@ -1794,10 +1809,12 @@ def update_lead_staff_details(
 
 def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary:
     total_leads = count_scalar(db, select(func.count(Lead.id)).where(
-        Lead.organization_id == principal.organization_id
+        Lead.organization_id == principal.organization_id,
+        Lead.archived_at.is_(None),
     ))
     new_paid_leads = count_scalar(db, select(func.count(Lead.id)).where(
         Lead.organization_id == principal.organization_id,
+        Lead.archived_at.is_(None),
         Lead.stage_key == "new",
         Lead.source.in_(PAID_LEAD_SOURCES),
     ))
@@ -1816,7 +1833,10 @@ def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary
     )
     pipeline_rows = db.execute(
         select(Lead.stage_key, func.count(Lead.id))
-        .where(Lead.organization_id == principal.organization_id)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+        )
         .group_by(Lead.stage_key)
         .order_by(Lead.stage_key)
     ).all()
@@ -1870,7 +1890,10 @@ def get_source_performance(db: Session, principal: Principal) -> list[SourcePerf
 
     lead_rows = db.execute(
         select(Lead.source, func.count(Lead.id))
-        .where(Lead.organization_id == principal.organization_id)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+        )
         .group_by(Lead.source)
     ).all()
     for source, count in lead_rows:
@@ -1932,13 +1955,191 @@ def count_scalar(db: Session, statement: Any) -> int:
     return int(db.scalar(statement) or 0)
 
 
-def get_scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
-    return db.scalar(
-        select(Lead).where(
-            Lead.organization_id == principal.organization_id,
-            Lead.id == lead_id,
+def get_scoped_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    *,
+    include_archived: bool = False,
+) -> Lead | None:
+    filters = [
+        Lead.organization_id == principal.organization_id,
+        Lead.id == lead_id,
+    ]
+    if not include_archived:
+        filters.append(Lead.archived_at.is_(None))
+    return db.scalar(select(Lead).where(*filters))
+
+
+def archive_lead(db: Session, principal: Principal, lead_id: UUID) -> LeadRead | None:
+    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
+    if lead is None:
+        return None
+    if lead.archived_at is not None:
+        return lead_to_read(db, lead)
+
+    archived_at = datetime.now(UTC)
+    lead.archived_at = archived_at
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.archived",
+            summary="Lead archived.",
         )
     )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.archive",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value={"archived_at": None},
+            new_value={"archived_at": archived_at.isoformat()},
+            reason="Archived from the operating system",
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    return lead_to_read(db, lead)
+
+
+def restore_lead(db: Session, principal: Principal, lead_id: UUID) -> LeadRead | None:
+    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
+    if lead is None:
+        return None
+    if lead.archived_at is None:
+        return lead_to_read(db, lead)
+
+    previous_archived_at = lead.archived_at
+    lead.archived_at = None
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.restored",
+            summary="Lead restored from archive.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.restore",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value={"archived_at": previous_archived_at.isoformat()},
+            new_value={"archived_at": None},
+            reason="Restored from the operating system archive",
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    return lead_to_read(db, lead)
+
+
+def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) -> bool:
+    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
+    if lead is None:
+        return False
+    if lead.archived_at is None:
+        raise ValueError("Archive the lead before permanently deleting it.")
+
+    contact_id = lead.contact_id
+    property_id = lead.property_id
+    deal_ids = list(db.scalars(select(Deal.id).where(Deal.lead_id == lead.id)))
+    transaction_ids = list(db.scalars(select(Transaction.id).where(Transaction.lead_id == lead.id)))
+
+    finance_filter = [RevenueRecord.lead_id == lead.id]
+    deduction_filter = [DealDeduction.lead_id == lead.id]
+    if deal_ids:
+        finance_filter.append(RevenueRecord.deal_id.in_(deal_ids))
+        deduction_filter.append(DealDeduction.deal_id.in_(deal_ids))
+    if transaction_ids:
+        finance_filter.append(RevenueRecord.transaction_id.in_(transaction_ids))
+        deduction_filter.append(DealDeduction.transaction_id.in_(transaction_ids))
+
+    db.execute(
+        update(RevenueRecord)
+        .where(or_(*finance_filter))
+        .values(lead_id=None, deal_id=None, transaction_id=None)
+    )
+    db.execute(
+        update(DealDeduction)
+        .where(or_(*deduction_filter))
+        .values(lead_id=None, deal_id=None, transaction_id=None)
+    )
+    for model in (Task, ConversionEvent, OfflineConversionExport, AiRunLog):
+        db.execute(update(model).where(model.lead_id == lead.id).values(lead_id=None))
+
+    if transaction_ids:
+        db.execute(
+            delete(TransactionChecklistItem).where(
+                TransactionChecklistItem.transaction_id.in_(transaction_ids)
+            )
+        )
+    for model in (
+        BuyerOffer,
+        UnderwritingMarketAnalysis,
+        Transaction,
+        Deal,
+        UnderwritingVersion,
+        Appointment,
+        CommunicationRecord,
+        AttributionTouch,
+        LeadFormSubmission,
+    ):
+        db.execute(delete(model).where(model.lead_id == lead.id))
+    db.execute(
+        delete(ApprovalRequest).where(
+            ApprovalRequest.organization_id == principal.organization_id,
+            ApprovalRequest.entity_type == "lead",
+            ApprovalRequest.entity_id == lead.id,
+        )
+    )
+    db.execute(
+        delete(ActivityEvent).where(
+            ActivityEvent.organization_id == principal.organization_id,
+            ActivityEvent.entity_type == "lead",
+            ActivityEvent.entity_id == lead.id,
+        )
+    )
+    db.delete(lead)
+    db.flush()
+
+    if db.scalar(select(func.count(Lead.id)).where(Lead.contact_id == contact_id)) == 0:
+        db.execute(delete(ConsentRecord).where(ConsentRecord.contact_id == contact_id))
+        db.execute(delete(ContactMethod).where(ContactMethod.contact_id == contact_id))
+        contact = db.get(Contact, contact_id)
+        if contact is not None:
+            db.delete(contact)
+    if db.scalar(select(func.count(Lead.id)).where(Lead.property_id == property_id)) == 0:
+        property_record = db.get(Property, property_id)
+        if property_record is not None:
+            db.delete(property_record)
+
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.delete_permanently",
+            entity_type="lead",
+            entity_id=lead_id,
+            previous_value={"archived_at": lead.archived_at.isoformat()},
+            new_value=None,
+            reason="Permanently deleted from the operating system archive",
+        )
+    )
+    db.commit()
+    return True
 
 
 def update_value(
@@ -2479,5 +2680,6 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         mortgage_balance=lead.mortgage_balance,
         appointment_status=lead.appointment_status,
         next_follow_up_at=lead.next_follow_up_at,
+        archived_at=lead.archived_at,
         created_at=lead.created_at,
     )

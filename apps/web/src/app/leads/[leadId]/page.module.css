@@ -47,6 +47,28 @@
   gap: 4px;
 }
 
+.headerActions {
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+}
+
+.archiveNotice {
+  margin-top: 24px;
+  padding: 18px;
+  border: 1px solid #d9b869;
+  border-radius: 8px;
+  background: #fff9e8;
+  display: grid;
+  gap: 5px;
+}
+
+.archiveNotice p {
+  margin: 0;
+  color: #5d563f;
+  font-size: 14px;
+}
+
 .statusBox span {
   color: #5d6365;
   font-size: 13px;
@@ -739,6 +761,11 @@
 
   .statusBox {
     width: 100%;
+  }
+
+  .headerActions {
+    width: 100%;
+    justify-items: stretch;
   }
 
   .editGrid {

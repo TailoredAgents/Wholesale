@@ -172,6 +172,7 @@ def find_duplicate_match(
         lead = db.scalar(
             select(Lead).where(
                 Lead.organization_id == organization.id,
+                Lead.archived_at.is_(None),
                 Lead.contact_id == contact.id,
                 Lead.property_id == property_record.id,
                 Lead.stage_key.in_(ACTIVE_LEAD_STAGES),

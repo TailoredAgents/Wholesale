@@ -11,7 +11,10 @@ from app.models.foundation import (
     AuditEvent,
     BuyerOffer,
     CommunicationRecord,
+    Contact,
     Deal,
+    Lead,
+    Property,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -98,6 +101,86 @@ def test_create_and_list_lead(
     assert int(
         db_session.scalar(
             select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "lead.create")
+        )
+        or 0
+    ) == 1
+
+
+def test_archive_restore_and_permanently_delete_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    ).json()
+    lead_id = created["id"]
+    client.post(
+        f"/api/v1/leads/{lead_id}/tasks",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"title": "Call test seller", "priority": "normal"},
+    )
+
+    archive_response = client.delete(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert archive_response.status_code == 200
+    assert archive_response.json()["archived_at"] is not None
+    assert client.get(
+        "/api/v1/leads", headers={"X-Dev-User-Email": OWNER_EMAIL}
+    ).json()["items"] == []
+    archived_items = client.get(
+        "/api/v1/leads?archived=true",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()["items"]
+    assert [item["id"] for item in archived_items] == [lead_id]
+    assert client.get(
+        "/api/v1/tasks/open", headers={"X-Dev-User-Email": OWNER_EMAIL}
+    ).json()["items"] == []
+
+    restore_response = client.post(
+        f"/api/v1/leads/{lead_id}/restore",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.json()["archived_at"] is None
+
+    unarchived_delete_response = client.delete(
+        f"/api/v1/leads/{lead_id}/permanent?confirmation=DELETE",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert unarchived_delete_response.status_code == 422
+
+    client.delete(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    missing_confirmation_response = client.delete(
+        f"/api/v1/leads/{lead_id}/permanent",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert missing_confirmation_response.status_code == 422
+
+    delete_response = client.delete(
+        f"/api/v1/leads/{lead_id}/permanent?confirmation=DELETE",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert delete_response.status_code == 204
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 0
+    task = db_session.scalar(select(Task))
+    assert task is not None
+    assert task.lead_id is None
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "lead.delete_permanently"
+            )
         )
         or 0
     ) == 1

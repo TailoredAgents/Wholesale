@@ -88,6 +88,7 @@ def get_open_task_rows(
     filters = [
         Task.organization_id == principal.organization_id,
         Task.status.in_(OPEN_TASK_STATUSES),
+        Lead.archived_at.is_(None),
     ]
     if task_type is not None:
         filters.append(Task.task_type == task_type)

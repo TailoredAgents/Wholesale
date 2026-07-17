@@ -47,8 +47,13 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
           <h2>Seller lead database</h2>
         </div>
         <div className={styles.statusGroup}>
-          <span>Total leads</span>
-          <strong className={styles.ready}>{dashboard.leads.length}</strong>
+          <Link className={styles.headerAction} href="/os/leads/archived">
+            Archived leads
+          </Link>
+          <div>
+            <span>Total leads</span>
+            <strong className={styles.ready}>{dashboard.leads.length}</strong>
+          </div>
         </div>
       </header>
 

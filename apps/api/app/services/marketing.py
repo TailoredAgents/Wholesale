@@ -225,7 +225,10 @@ def add_leads(
                 AttributionTouch.touch_type == "lead_creation",
             ),
         )
-        .where(Lead.organization_id == principal.organization_id)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+        )
         .group_by(
             func.coalesce(AttributionTouch.source, Lead.source),
             AttributionTouch.medium,

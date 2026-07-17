@@ -321,6 +321,34 @@
   font-size: 13px;
 }
 
+.headerAction {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.statusGroup > div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.panelMessage {
+  margin: 0;
+  padding: 18px;
+  color: var(--danger);
+  font-weight: 700;
+}
+
 .metric span {
   font-weight: 800;
 }
@@ -1115,5 +1143,60 @@
   .queueItem {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .archivePanelHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .archivePanelHeader > div {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .archiveTable {
+    overflow: visible;
+  }
+
+  .archiveTable table,
+  .archiveTable tbody,
+  .archiveTable tr,
+  .archiveTable td {
+    width: 100%;
+    min-width: 0;
+    display: block;
+  }
+
+  .archiveTable thead {
+    display: none;
+  }
+
+  .archiveTable tr {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .archiveTable tr:last-child {
+    border-bottom: 0;
+  }
+
+  .archiveTable td,
+  .archiveTable tr:last-child td {
+    min-height: 0;
+    height: auto;
+    padding: 8px 0;
+    border: 0;
+    white-space: normal;
+  }
+
+  .archiveTable td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 850;
+    text-transform: uppercase;
   }
 }

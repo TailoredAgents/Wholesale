@@ -7,6 +7,7 @@ import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
+import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { MarketValuePreview } from "./market-value-preview";
 import { StageUpdateForm } from "./stage-update-form";
 import { TransactionForm } from "./transaction-form";
@@ -80,13 +81,28 @@ export async function LeadDetailView({ params }: LeadPageProps) {
           <h1>{lead.seller_name}</h1>
           <p>{lead.property_address}</p>
         </div>
-        <div className={styles.statusBox}>
-          <span>Current stage</span>
-          <strong>{labelize(lead.stage_key)}</strong>
-          <small>Next follow-up: {formatOptionalDate(lead.next_follow_up_at)}</small>
+        <div className={styles.headerActions}>
+          <div className={styles.statusBox}>
+            <span>{lead.archived_at ? "Record status" : "Current stage"}</span>
+            <strong>{lead.archived_at ? "Archived" : labelize(lead.stage_key)}</strong>
+            <small>
+              {lead.archived_at
+                ? `Archived ${formatDate(lead.archived_at)}`
+                : `Next follow-up: ${formatOptionalDate(lead.next_follow_up_at)}`}
+            </small>
+          </div>
+          <LeadLifecycleActions archived={Boolean(lead.archived_at)} leadId={lead.id} />
         </div>
       </header>
 
+      {lead.archived_at ? (
+        <section className={styles.archiveNotice}>
+          <strong>This lead is archived.</strong>
+          <p>Restore it before editing, contacting the seller, or creating new deal activity.</p>
+        </section>
+      ) : null}
+
+      {!lead.archived_at ? (
       <section className={styles.grid}>
         <article className={styles.panelWide}>
           <div className={styles.panelHeader}>
@@ -491,6 +507,7 @@ export async function LeadDetailView({ params }: LeadPageProps) {
           </div>
         </article>
       </section>
+      ) : null}
     </main>
   );
 }
