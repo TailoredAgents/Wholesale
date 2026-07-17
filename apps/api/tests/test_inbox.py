@@ -13,6 +13,7 @@ from app.models.foundation import (
     CallRecording,
     CallTranscript,
     CommunicationProviderEvent,
+    ContactMethod,
     Conversation,
     ConversationAssignmentEvent,
     ConversationWatcher,
@@ -454,3 +455,103 @@ def test_inbox_provider_call_recording_and_transcript_records_persist(
     assert int(db_session.scalar(select(func.count()).select_from(CallRecord)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(CallRecording)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(CallTranscript)) or 0) == 1
+
+
+def test_inbox_detail_combines_context_timeline_and_read_state(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_workspace(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json={
+            **lead_payload("404 Timeline Street"),
+            "contact": {
+                "legal_name": "Jordan Seller",
+                "preferred_name": "Jordan",
+                "contact_type": "seller",
+            },
+            "motivation": "Inherited property",
+            "desired_timeline": "30_days",
+        },
+    )
+    assert lead_response.status_code == 201
+    lead_id = lead_response.json()["id"]
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.lead_id == UUID(lead_id))
+    )
+    assert conversation is not None
+    db_session.add_all(
+        [
+            ContactMethod(
+                organization_id=conversation.organization_id,
+                contact_id=conversation.contact_id,
+                method_type="phone",
+                value="+14045550199",
+                normalized_value="+14045550199",
+                is_primary=True,
+            ),
+            ContactMethod(
+                organization_id=conversation.organization_id,
+                contact_id=conversation.contact_id,
+                method_type="email",
+                value="jordan@example.com",
+                normalized_value="jordan@example.com",
+                is_primary=False,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    inbound_response = client.post(
+        f"/api/v1/leads/{lead_id}/communications",
+        headers=headers,
+        json={
+            "direction": "inbound",
+            "channel": "sms",
+            "status": "received",
+            "body": "I can talk tomorrow afternoon.",
+        },
+    )
+    assert inbound_response.status_code == 201
+    appointment_response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers=headers,
+        json={
+            "appointment_type": "seller_call",
+            "status": "scheduled",
+            "scheduled_start_at": "2026-07-20T18:00:00Z",
+            "location_type": "phone",
+        },
+    )
+    assert appointment_response.status_code == 201
+
+    detail_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["seller_name"] == "Jordan Seller"
+    assert detail["preferred_name"] == "Jordan"
+    assert detail["motivation"] == "Inherited property"
+    assert {method["method_type"] for method in detail["contact_methods"]} == {
+        "phone",
+        "email",
+    }
+    assert {item["item_type"] for item in detail["timeline"]} == {
+        "assignment",
+        "communication",
+        "appointment",
+    }
+    assert detail["unread_count"] == 1
+
+    read_response = client.patch(
+        f"/api/v1/inbox/conversations/{conversation.id}/read",
+        headers=headers,
+    )
+    assert read_response.status_code == 200
+    assert read_response.json()["unread_count"] == 0

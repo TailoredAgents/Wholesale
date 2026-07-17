@@ -455,6 +455,10 @@ Delivered so far:
 - Added a communication provider adapter contract for future Twilio/Gmail-style integrations.
 - Added the shared inbox foundation with one unified conversation per lead, conversation queues,
   assignments, watchers, assignment history, unread/activity tracking, and provider-event storage.
+- Added the routed three-panel shared inbox with Mine, Unassigned, Team, Needs Reply,
+  Appointments, and Unread views; a unified communication, appointment, and assignment timeline;
+  manual SMS, email, call, and internal-note logging; seller/property context; responsive pane
+  navigation; read-state controls; and manager/VA handoff controls.
 - Added a restricted prospecting-caller role that can only view assigned leads and conversations,
   log assigned communications, schedule assigned appointments, and hand qualified conversations
   to eligible acquisition users.

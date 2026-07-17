@@ -24,6 +24,46 @@ class ConversationAssignmentEventRead(BaseModel):
     created_at: datetime
 
 
+class ConversationContactMethodRead(BaseModel):
+    method_type: str
+    value: str
+    is_primary: bool
+
+
+class ConversationTimelineItemRead(BaseModel):
+    id: UUID
+    item_type: str
+    direction: str | None
+    channel: str
+    status: str
+    provider: str | None
+    subject: str | None
+    body: str
+    actor_user_id: UUID | None
+    actor_display_name: str | None
+    occurred_at: datetime
+
+
+class ConversationTaskRead(BaseModel):
+    id: UUID
+    title: str
+    task_type: str
+    status: str
+    priority: str
+    due_at: datetime | None
+
+
+class ConversationAppointmentRead(BaseModel):
+    id: UUID
+    appointment_type: str
+    status: str
+    scheduled_start_at: datetime
+    scheduled_end_at: datetime | None
+    location_type: str
+    location: str | None
+    notes: str | None
+
+
 class ConversationRead(BaseModel):
     id: UUID
     lead_id: UUID
@@ -32,6 +72,7 @@ class ConversationRead(BaseModel):
     property_address: str
     assigned_user_id: UUID | None
     assigned_user_email: str | None
+    assigned_user_display_name: str | None
     status: str
     queue_key: str
     priority: str
@@ -44,6 +85,25 @@ class ConversationRead(BaseModel):
     assignment_history: list[ConversationAssignmentEventRead]
     created_at: datetime
     updated_at: datetime
+
+
+class ConversationDetailRead(ConversationRead):
+    preferred_name: str | None
+    contact_methods: list[ConversationContactMethodRead]
+    source: str
+    stage_key: str
+    lead_temperature: str | None
+    motivation: str | None
+    desired_timeline: str | None
+    property_condition: str | None
+    occupancy_status: str | None
+    appointment_status: str | None
+    next_follow_up_at: datetime | None
+    property_type: str | None
+    property_county: str | None
+    timeline: list[ConversationTimelineItemRead]
+    open_tasks: list[ConversationTaskRead]
+    appointments: list[ConversationAppointmentRead]
 
 
 class ConversationListResponse(BaseModel):

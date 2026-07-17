@@ -10,7 +10,9 @@ from app.models.foundation import (
     ActivityEvent,
     Appointment,
     AuditEvent,
+    CommunicationRecord,
     Contact,
+    ContactMethod,
     Conversation,
     ConversationAssignmentEvent,
     ConversationWatcher,
@@ -22,9 +24,14 @@ from app.models.foundation import (
     User,
 )
 from app.schemas.inbox import (
+    ConversationAppointmentRead,
     ConversationAssignmentEventRead,
+    ConversationContactMethodRead,
+    ConversationDetailRead,
     ConversationHandoffRequest,
     ConversationRead,
+    ConversationTaskRead,
+    ConversationTimelineItemRead,
     ConversationWatcherCreate,
     ConversationWatcherRead,
     InboxAssigneeRead,
@@ -208,6 +215,209 @@ def get_conversation(
 ) -> ConversationRead | None:
     conversation = get_scoped_conversation(db, principal, conversation_id)
     return conversation_to_read(db, conversation) if conversation is not None else None
+
+
+def get_conversation_detail(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+) -> ConversationDetailRead | None:
+    conversation = get_scoped_conversation(db, principal, conversation_id)
+    if conversation is None:
+        return None
+    lead = db.get(Lead, conversation.lead_id)
+    contact = db.get(Contact, conversation.contact_id)
+    if lead is None or contact is None:
+        raise RuntimeError("Conversation is missing its lead or contact.")
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise RuntimeError("Conversation lead is missing its property.")
+
+    contact_methods = db.scalars(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == contact.id,
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    ).all()
+    communications = db.scalars(
+        select(CommunicationRecord)
+        .where(
+            CommunicationRecord.organization_id == principal.organization_id,
+            CommunicationRecord.conversation_id == conversation.id,
+        )
+        .order_by(CommunicationRecord.occurred_at.asc(), CommunicationRecord.created_at.asc())
+        .limit(200)
+    ).all()
+    assignment_events = db.scalars(
+        select(ConversationAssignmentEvent)
+        .where(
+            ConversationAssignmentEvent.organization_id == principal.organization_id,
+            ConversationAssignmentEvent.conversation_id == conversation.id,
+        )
+        .order_by(
+            ConversationAssignmentEvent.created_at.asc(),
+            ConversationAssignmentEvent.id.asc(),
+        )
+        .limit(100)
+    ).all()
+    tasks = db.scalars(
+        select(Task)
+        .where(
+            Task.organization_id == principal.organization_id,
+            Task.lead_id == lead.id,
+            Task.status.in_(("open", "in_progress")),
+        )
+        .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
+        .limit(20)
+    ).all()
+    appointments = db.scalars(
+        select(Appointment)
+        .where(
+            Appointment.organization_id == principal.organization_id,
+            Appointment.lead_id == lead.id,
+        )
+        .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.asc())
+        .limit(20)
+    ).all()
+
+    actor_ids = {
+        actor_id
+        for actor_id in [
+            *(item.actor_user_id for item in communications),
+            *(item.actor_user_id for item in assignment_events),
+            *(item.owner_user_id for item in appointments),
+        ]
+        if actor_id is not None
+    }
+    actor_names = {
+        user.id: user.display_name
+        for user in db.scalars(
+            select(User).where(
+                User.organization_id == principal.organization_id,
+                User.id.in_(actor_ids),
+            )
+        ).all()
+    }
+
+    def actor_display_name(actor_user_id: UUID | None) -> str | None:
+        return actor_names.get(actor_user_id) if actor_user_id is not None else None
+
+    timeline = [
+        ConversationTimelineItemRead(
+            id=item.id,
+            item_type="communication",
+            direction=item.direction,
+            channel=item.channel,
+            status=item.status,
+            provider=item.provider,
+            subject=item.subject,
+            body=item.body,
+            actor_user_id=item.actor_user_id,
+            actor_display_name=actor_display_name(item.actor_user_id),
+            occurred_at=item.occurred_at,
+        )
+        for item in communications
+    ]
+    timeline.extend(
+        ConversationTimelineItemRead(
+            id=item.id,
+            item_type="assignment",
+            direction=None,
+            channel="assignment",
+            status=item.queue_key,
+            provider=None,
+            subject="Ownership updated",
+            body=item.reason,
+            actor_user_id=item.actor_user_id,
+            actor_display_name=actor_display_name(item.actor_user_id),
+            occurred_at=item.created_at,
+        )
+        for item in assignment_events
+    )
+    timeline.extend(
+        ConversationTimelineItemRead(
+            id=item.id,
+            item_type="appointment",
+            direction=None,
+            channel="appointment",
+            status=item.status,
+            provider=None,
+            subject=f"{item.appointment_type.replace('_', ' ').title()} appointment",
+            body=item.notes or item.location or item.location_type.replace("_", " ").title(),
+            actor_user_id=item.owner_user_id,
+            actor_display_name=actor_display_name(item.owner_user_id),
+            occurred_at=item.scheduled_start_at,
+        )
+        for item in appointments
+    )
+    timeline.sort(key=lambda item: (item.occurred_at, str(item.id)))
+
+    base = conversation_to_read(db, conversation)
+    return ConversationDetailRead(
+        **base.model_dump(),
+        preferred_name=contact.preferred_name,
+        contact_methods=[
+            ConversationContactMethodRead(
+                method_type=method.method_type,
+                value=method.value,
+                is_primary=method.is_primary,
+            )
+            for method in contact_methods
+        ],
+        source=lead.source,
+        stage_key=lead.stage_key,
+        lead_temperature=lead.lead_temperature,
+        motivation=lead.motivation,
+        desired_timeline=lead.desired_timeline,
+        property_condition=lead.property_condition,
+        occupancy_status=lead.occupancy_status,
+        appointment_status=lead.appointment_status,
+        next_follow_up_at=lead.next_follow_up_at,
+        property_type=property_record.property_type,
+        property_county=property_record.county,
+        timeline=timeline,
+        open_tasks=[
+            ConversationTaskRead(
+                id=task.id,
+                title=task.title,
+                task_type=task.task_type,
+                status=task.status,
+                priority=task.priority,
+                due_at=task.due_at,
+            )
+            for task in tasks
+        ],
+        appointments=[
+            ConversationAppointmentRead(
+                id=appointment.id,
+                appointment_type=appointment.appointment_type,
+                status=appointment.status,
+                scheduled_start_at=appointment.scheduled_start_at,
+                scheduled_end_at=appointment.scheduled_end_at,
+                location_type=appointment.location_type,
+                location=appointment.location,
+                notes=appointment.notes,
+            )
+            for appointment in appointments
+        ],
+    )
+
+
+def mark_conversation_read(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+) -> ConversationRead | None:
+    conversation = get_scoped_conversation(db, principal, conversation_id)
+    if conversation is None:
+        return None
+    if conversation.unread_count:
+        conversation.unread_count = 0
+        db.commit()
+        db.refresh(conversation)
+    return conversation_to_read(db, conversation)
 
 
 def list_eligible_assignees(db: Session, principal: Principal) -> list[InboxAssigneeRead]:
@@ -628,6 +838,7 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         ),
         assigned_user_id=conversation.assigned_user_id,
         assigned_user_email=assigned_user.email if assigned_user else None,
+        assigned_user_display_name=assigned_user.display_name if assigned_user else None,
         status=conversation.status,
         queue_key=conversation.queue_key,
         priority=conversation.priority,

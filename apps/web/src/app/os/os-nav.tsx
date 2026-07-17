@@ -11,6 +11,7 @@ const navGroups = [
     label: "Command",
     items: [
       { href: "/os", label: "Dashboard" },
+      { href: "/os/inbox", label: "Inbox" },
       { href: "/os/tasks", label: "Work Queue" },
       { href: "/os/pipeline", label: "Pipeline" },
       { href: "/os/leads", label: "Leads" },
