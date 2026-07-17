@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
@@ -216,8 +216,15 @@ def download_underwriting_market_analysis_report(
     analysis_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
+    audience: Literal["investor", "client"] = Query(default="investor"),
 ) -> Response:
-    report = build_market_analysis_pdf(db, principal, lead_id, analysis_id)
+    report = build_market_analysis_pdf(
+        db,
+        principal,
+        lead_id,
+        analysis_id,
+        audience=audience,
+    )
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Report not found.")
     content, filename = report

@@ -908,14 +908,36 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version.max_offer_cents == 14800000
     assert saved_version.recommended_offer_cents == 8350000
 
-    report_response = client.get(
+    investor_report_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis/{payload['id']}/report.pdf",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
 
-    assert report_response.status_code == 200
-    assert report_response.headers["content-type"] == "application/pdf"
-    assert report_response.content.startswith(b"%PDF")
+    assert investor_report_response.status_code == 200
+    assert investor_report_response.headers["content-type"] == "application/pdf"
+    assert "stonegate-investor-property-report" in investor_report_response.headers[
+        "content-disposition"
+    ]
+    assert investor_report_response.content.startswith(b"%PDF")
+    assert b"Assignment fee assumption" in investor_report_response.content
+
+    client_report_response = client.get(
+        (
+            f"/api/v1/leads/{lead_id}/underwriting/market-analysis/"
+            f"{payload['id']}/report.pdf?audience=client"
+        ),
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert client_report_response.status_code == 200
+    assert client_report_response.headers["content-type"] == "application/pdf"
+    assert "stonegate-client-property-report" in client_report_response.headers[
+        "content-disposition"
+    ]
+    assert client_report_response.content.startswith(b"%PDF")
+    assert b"Assignment fee assumption" not in client_report_response.content
+    assert b"Offer ceiling" not in client_report_response.content
+    assert b"Recommended starting offer" not in client_report_response.content
     get_settings.cache_clear()
 
 

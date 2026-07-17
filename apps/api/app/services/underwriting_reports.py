@@ -1,17 +1,29 @@
+from collections.abc import Callable
+from dataclasses import dataclass
+from datetime import datetime
 from io import BytesIO
+from typing import Any, Literal
 from uuid import UUID
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
+    HRFlowable,
+    KeepTogether,
+    LongTable,
+    PageBreak,
     Paragraph,
     SimpleDocTemplate,
     Spacer,
     Table,
     TableStyle,
 )
+from reportlab.platypus.doctemplate import BaseDocTemplate
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -24,13 +36,106 @@ from app.models.foundation import (
     UnderwritingVersion,
 )
 
+ReportAudience = Literal["investor", "client"]
+
+BRAND = colors.HexColor("#245F43")
+BRAND_DARK = colors.HexColor("#183A2B")
+BRAND_SOFT = colors.HexColor("#EAF3ED")
+GOLD = colors.HexColor("#B18436")
+INK = colors.HexColor("#18201D")
+TEXT = colors.HexColor("#37413D")
+MUTED = colors.HexColor("#68716D")
+LINE = colors.HexColor("#D9D7CF")
+SURFACE = colors.HexColor("#F6F4EF")
+WHITE = colors.white
+WARNING = colors.HexColor("#8A5A16")
+WARNING_SOFT = colors.HexColor("#FFF6E4")
+
+
+@dataclass(frozen=True)
+class ReportContext:
+    analysis: UnderwritingMarketAnalysis
+    lead: Lead
+    property_record: Property
+    contact: Contact | None
+    underwriting_version: UnderwritingVersion | None
+
+    @property
+    def address(self) -> str:
+        return format_property_address(self.property_record)
+
+    @property
+    def seller_name(self) -> str:
+        return self.contact.legal_name if self.contact else "Property owner"
+
+    @property
+    def seller_first_name(self) -> str:
+        preferred = self.contact.preferred_name if self.contact else None
+        return preferred or self.seller_name.split()[0]
+
+    @property
+    def analysis_reference(self) -> str:
+        return str(self.analysis.id).split("-")[0].upper()
+
+    @property
+    def version_label(self) -> str:
+        if self.underwriting_version is None:
+            return "Unlinked"
+        return f"Version {self.underwriting_version.version_number}"
+
 
 def build_market_analysis_pdf(
     db: Session,
     principal: Principal,
     lead_id: UUID,
     analysis_id: UUID,
+    *,
+    audience: ReportAudience = "investor",
 ) -> tuple[bytes, str] | None:
+    context = load_report_context(db, principal, lead_id, analysis_id)
+    if context is None:
+        return None
+
+    title = (
+        "Stonegate Internal Investment Analysis"
+        if audience == "investor"
+        else "Stonegate Property Value Review"
+    )
+    buffer = BytesIO()
+    document = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.55 * inch,
+        leftMargin=0.55 * inch,
+        topMargin=0.72 * inch,
+        bottomMargin=0.62 * inch,
+        title=title,
+        author="Stonegate Home Buyers",
+        subject=f"{context.address} - saved comp analysis {context.analysis_reference}",
+        pageCompression=0,
+    )
+    styles = report_styles()
+    story = (
+        build_investor_story(context, styles)
+        if audience == "investor"
+        else build_client_story(context, styles)
+    )
+    decorator = page_decorator(context, audience)
+    document.build(story, onFirstPage=decorator, onLaterPages=decorator)
+
+    filename = (
+        f"stonegate-{audience}-property-report-"
+        f"{slugify(context.property_record.street_address)}-{context.analysis_reference.lower()}.pdf"
+    )
+    return buffer.getvalue(), filename
+
+
+def load_report_context(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    analysis_id: UUID,
+) -> ReportContext | None:
     analysis = db.scalar(
         select(UnderwritingMarketAnalysis).where(
             UnderwritingMarketAnalysis.organization_id == principal.organization_id,
@@ -43,137 +148,967 @@ def build_market_analysis_pdf(
 
     lead = db.get(Lead, analysis.lead_id)
     property_record = db.get(Property, analysis.property_id)
-    contact = db.get(Contact, lead.contact_id) if lead else None
+    if lead is None or property_record is None:
+        return None
+
+    contact = db.get(Contact, lead.contact_id)
     underwriting_version = (
         db.get(UnderwritingVersion, analysis.underwriting_version_id)
         if analysis.underwriting_version_id
         else None
     )
-    if lead is None or property_record is None:
-        return None
-
-    buffer = BytesIO()
-    document = SimpleDocTemplate(
-        buffer,
-        pagesize=letter,
-        rightMargin=0.45 * inch,
-        leftMargin=0.45 * inch,
-        topMargin=0.45 * inch,
-        bottomMargin=0.45 * inch,
-        title="Underwriting Comp Report",
-    )
-    styles = getSampleStyleSheet()
-    title_style = styles["Title"]
-    heading_style = styles["Heading2"]
-    body_style = styles["BodyText"]
-    small_style = ParagraphStyle(
-        "Small",
-        parent=body_style,
-        fontSize=8,
-        leading=10,
-        textColor=colors.HexColor("#4f5658"),
+    return ReportContext(
+        analysis=analysis,
+        lead=lead,
+        property_record=property_record,
+        contact=contact,
+        underwriting_version=underwriting_version,
     )
 
-    story: list[object] = [
-        Paragraph("Underwriting Comp Report", title_style),
-        Paragraph("Stonegate Home Buyers", small_style),
-        Spacer(1, 0.15 * inch),
-        Paragraph("Deal Summary", heading_style),
-        key_value_table(
-            [
-                ("Seller", contact.legal_name if contact else "Unknown"),
-                ("Property", format_property_address(property_record)),
-                ("Provider", analysis.provider),
-                ("Report created", analysis.created_at.strftime("%b %-d, %Y %I:%M %p")),
-                (
-                    "Draft underwriting version",
-                    str(underwriting_version.version_number) if underwriting_version else "None",
-                ),
-                ("Human review required", "Yes"),
-            ]
+
+def report_styles() -> dict[str, ParagraphStyle]:
+    samples = getSampleStyleSheet()
+    body = ParagraphStyle(
+        "ReportBody",
+        parent=samples["BodyText"],
+        fontName="Helvetica",
+        fontSize=9.2,
+        leading=13.5,
+        textColor=TEXT,
+        spaceAfter=6,
+    )
+    return {
+        "body": body,
+        "small": ParagraphStyle(
+            "ReportSmall",
+            parent=body,
+            fontSize=7.4,
+            leading=10.2,
+            textColor=MUTED,
+            spaceAfter=3,
         ),
-        Spacer(1, 0.12 * inch),
-        Paragraph("Valuation And Offer Screen", heading_style),
-        key_value_table(
+        "eyebrow": ParagraphStyle(
+            "ReportEyebrow",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=7.6,
+            leading=9,
+            textColor=BRAND,
+            spaceAfter=5,
+        ),
+        "hero": ParagraphStyle(
+            "ReportHero",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=23,
+            leading=26,
+            textColor=WHITE,
+            spaceAfter=7,
+        ),
+        "hero_subtitle": ParagraphStyle(
+            "ReportHeroSubtitle",
+            parent=body,
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#DDEBE3"),
+            spaceAfter=0,
+        ),
+        "section": ParagraphStyle(
+            "ReportSection",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=13,
+            leading=16,
+            textColor=INK,
+            spaceBefore=4,
+            spaceAfter=8,
+        ),
+        "subsection": ParagraphStyle(
+            "ReportSubsection",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=9.5,
+            leading=12,
+            textColor=INK,
+            spaceAfter=4,
+        ),
+        "metric_label": ParagraphStyle(
+            "MetricLabel",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=7,
+            leading=9,
+            textColor=MUTED,
+            spaceAfter=4,
+        ),
+        "metric_value": ParagraphStyle(
+            "MetricValue",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=14,
+            leading=17,
+            textColor=BRAND_DARK,
+            spaceAfter=0,
+        ),
+        "table_header": ParagraphStyle(
+            "TableHeader",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=6.6,
+            leading=8.2,
+            textColor=WHITE,
+            alignment=TA_LEFT,
+            spaceAfter=0,
+        ),
+        "table_cell": ParagraphStyle(
+            "TableCell",
+            parent=body,
+            fontSize=7.1,
+            leading=9.2,
+            textColor=TEXT,
+            spaceAfter=0,
+        ),
+        "table_cell_bold": ParagraphStyle(
+            "TableCellBold",
+            parent=body,
+            fontName="Helvetica-Bold",
+            fontSize=7.1,
+            leading=9.2,
+            textColor=INK,
+            spaceAfter=0,
+        ),
+        "center": ParagraphStyle(
+            "CenterSmall",
+            parent=body,
+            fontSize=7.2,
+            leading=9.2,
+            textColor=MUTED,
+            alignment=TA_CENTER,
+            spaceAfter=0,
+        ),
+        "right": ParagraphStyle(
+            "RightSmall",
+            parent=body,
+            fontSize=7.2,
+            leading=9.2,
+            textColor=MUTED,
+            alignment=TA_RIGHT,
+            spaceAfter=0,
+        ),
+        "disclaimer": ParagraphStyle(
+            "Disclaimer",
+            parent=body,
+            fontSize=7.5,
+            leading=10.8,
+            textColor=colors.HexColor("#5B513D"),
+            spaceAfter=0,
+        ),
+    }
+
+
+def build_investor_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[object]:
+    analysis = context.analysis
+    version_status = (
+        labelize(context.underwriting_version.status)
+        if context.underwriting_version
+        else "Unlinked"
+    )
+    return [
+        hero_block(
+            "INTERNAL INVESTMENT ANALYSIS",
+            context.address,
+            (
+                f"Confidential underwriting package | Analysis {context.analysis_reference} | "
+                f"{context.version_label}"
+            ),
+            styles,
+        ),
+        Spacer(1, 0.18 * inch),
+        section_heading("Executive decision screen", styles),
+        metric_table(
             [
-                ("Provider value", format_money(analysis.estimated_value_cents)),
-                (
-                    "Provider value range",
-                    f"{format_money(analysis.estimated_value_low_cents)} to "
-                    f"{format_money(analysis.estimated_value_high_cents)}",
-                ),
-                (
-                    "Draft ARV range",
-                    format_money_range(analysis.arv_low_cents, analysis.arv_high_cents),
-                ),
+                ("Draft ARV", format_money_range(analysis.arv_low_cents, analysis.arv_high_cents)),
                 (
                     "Repair range",
-                    f"{format_money(analysis.repair_low_cents)} to "
-                    f"{format_money(analysis.repair_high_cents)}",
+                    format_money_range(
+                        analysis.repair_low_cents,
+                        analysis.repair_high_cents,
+                    ),
                 ),
                 (
-                    "Offer ceiling range",
+                    "Offer ceiling",
                     format_money_range(analysis.mao_low_cents, analysis.mao_high_cents),
                 ),
-                ("Recommended starting offer", format_money(analysis.recommended_offer_cents)),
-                ("Assignment fee assumption", format_money(analysis.assignment_fee_cents)),
                 ("Confidence", f"{analysis.confidence_score}%"),
-            ]
+            ],
+            styles,
         ),
-        Spacer(1, 0.12 * inch),
-        Paragraph("Formula Used", heading_style),
-        Paragraph(
-            "Low offer ceiling = ARV low x "
-            f"{analysis.offer_low_percentage}% - repair high - assignment fee.",
-            body_style,
+        Spacer(1, 0.14 * inch),
+        two_column_facts(
+            [
+                ("Seller", context.seller_name),
+                ("Property type", labelize(context.property_record.property_type)),
+                ("Condition", labelize(context.lead.property_condition)),
+                ("Occupancy", labelize(context.lead.occupancy_status)),
+                ("Seller timeline", labelize(context.lead.desired_timeline)),
+                ("Current stage", labelize(context.lead.stage_key)),
+            ],
+            styles,
         ),
-        Paragraph(
-            "High offer ceiling = ARV high x "
-            f"{analysis.offer_high_percentage}% - repair low - assignment fee.",
-            body_style,
+        Spacer(1, 0.16 * inch),
+        section_heading("Acquisition calculation", styles),
+        key_value_table(
+            [
+                ("Provider estimate", format_money(analysis.estimated_value_cents)),
+                (
+                    "Provider range",
+                    format_money_range(
+                        analysis.estimated_value_low_cents,
+                        analysis.estimated_value_high_cents,
+                    ),
+                ),
+                (
+                    "Recommended starting offer",
+                    format_money(analysis.recommended_offer_cents),
+                ),
+                ("Assignment fee assumption", format_money(analysis.assignment_fee_cents)),
+                (
+                    "Selected / context comps",
+                    f"{analysis.selected_comp_count} / {analysis.rejected_comp_count}",
+                ),
+                ("Review status", version_status),
+            ],
+            styles,
         ),
-        Paragraph(
-            "This is a screening method only. Review condition, neighborhood, title, buyer demand, "
-            "and seller context before approving ARV or making an offer.",
-            small_style,
+        Spacer(1, 0.14 * inch),
+        formula_box(context, styles),
+        PageBreak(),
+        warning_box(
+            "DECISION CONTROL",
+            (
+                "This analysis is a screening model, not an approval to make an offer. Confirm "
+                "condition, square footage, title, neighborhood boundaries, buyer demand, and "
+                "exit assumptions before changing the underwriting status to approved."
+            ),
+            styles,
         ),
-        Spacer(1, 0.12 * inch),
-        Paragraph("Selected Comps", heading_style),
-        comp_table(analysis.selected_comps),
-        Spacer(1, 0.12 * inch),
-        Paragraph("Rejected / Context Comps", heading_style),
-        comp_table(analysis.rejected_comps),
-        Spacer(1, 0.12 * inch),
-        Paragraph("Review Checklist", heading_style),
-        Paragraph(
-            "Confirm property condition, square footage, bedroom/bath count, neighborhood "
-            "boundary, sale dates, seller timeline, repair budget, and buyer appetite "
-            "before approving.",
-            body_style,
+        Spacer(1, 0.16 * inch),
+        section_heading("Selected comparable evidence", styles),
+        body_paragraph(
+            (
+                "Selected properties are ranked using provider similarity, distance, recency, "
+                "property type, and available sale or listing data. Review the raw evidence and "
+                "selection rationale before relying on the draft ARV."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.06 * inch),
+        investor_comp_table(analysis.selected_comps, styles),
+        Spacer(1, 0.2 * inch),
+        section_heading("Rejected and market-context evidence", styles),
+        body_paragraph(
+            (
+                "These records were excluded from the primary value range or retained only as "
+                "market context. Active listings are not treated as closed-sale evidence."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.06 * inch),
+        investor_comp_table(analysis.rejected_comps, styles),
+        PageBreak(),
+        section_heading("Subject property and diligence", styles),
+        subject_property_table(context, styles),
+        Spacer(1, 0.18 * inch),
+        diligence_checklist(styles),
+        Spacer(1, 0.18 * inch),
+        section_heading("Methodology and audit record", styles),
+        key_value_table(
+            [
+                ("Data provider", analysis.provider.title()),
+                ("Requested address", analysis.requested_address),
+                ("Analysis reference", context.analysis_reference),
+                ("Full analysis ID", str(analysis.id)),
+                (
+                    "Underwriting version ID",
+                    str(analysis.underwriting_version_id or "Not linked"),
+                ),
+                ("Saved at", format_datetime(analysis.created_at)),
+                (
+                    "Method",
+                    "Sales comparison screening with percentile-based ARV range",
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.16 * inch),
+        disclaimer_box(
+            (
+                "Internal use only. Data may be incomplete, delayed, estimated, or sourced from "
+                "listing records rather than recorded sales. This document is not an appraisal, "
+                "broker price opinion, inspection, title report, or guarantee of resale value. "
+                "A qualified human reviewer remains responsible for the acquisition decision."
+            ),
+            styles,
         ),
     ]
 
-    document.build(story)
-    filename = f"underwriting-comp-report-{analysis.id}.pdf"
-    return buffer.getvalue(), filename
+
+def build_client_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[object]:
+    analysis = context.analysis
+    return [
+        hero_block(
+            "PROPERTY VALUE & SALE OPTIONS REVIEW",
+            context.address,
+            (
+                f"Prepared for {context.seller_first_name} | "
+                f"Market review {context.analysis_reference}"
+            ),
+            styles,
+        ),
+        Spacer(1, 0.2 * inch),
+        section_heading("A clear look at the property and local market", styles),
+        body_paragraph(
+            (
+                f"Stonegate Home Buyers prepared this review for {context.seller_first_name} "
+                "using recent nearby property evidence and the information currently available "
+                "about the home. It is designed to support a practical conversation about value "
+                "and the tradeoffs between a renovated retail sale and a direct as-is sale."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.12 * inch),
+        metric_table(
+            [
+                (
+                    "Estimated renovated value",
+                    format_money_range(analysis.arv_low_cents, analysis.arv_high_cents),
+                ),
+                ("Comparable properties", str(analysis.selected_comp_count)),
+                ("Market evidence", confidence_label(analysis.confidence_score)),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.18 * inch),
+        section_heading("Property snapshot", styles),
+        subject_property_table(context, styles, include_internal=False),
+        Spacer(1, 0.16 * inch),
+        disclaimer_box(
+            (
+                "This preliminary market review is informational and is not a formal appraisal, "
+                "broker price opinion, inspection, tax assessment, or guarantee of sale price. "
+                "Values can change as property facts, condition, and market information are "
+                "verified."
+            ),
+            styles,
+        ),
+        PageBreak(),
+        section_heading("What the value range represents", styles),
+        two_column_callouts(
+            [
+                (
+                    "Renovated market position",
+                    (
+                        "The value range reflects how comparable properties support the home's "
+                        "potential market position after appropriate repairs and preparation."
+                    ),
+                ),
+                (
+                    "Current condition",
+                    (
+                        f"The property is currently described as "
+                        f"{labelize(context.lead.property_condition).lower()}. A walkthrough is "
+                        "needed before finalizing the scope of work."
+                    ),
+                ),
+                (
+                    "Direct as-is sale",
+                    (
+                        "A direct purchase can reduce preparation, showings, financing delays, "
+                        "and uncertainty, but the economics differ from a renovated retail sale."
+                    ),
+                ),
+                (
+                    "Final decision",
+                    (
+                        "Any cash offer is finalized separately after property, title, timeline, "
+                        "and closing-cost details are confirmed."
+                    ),
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.2 * inch),
+        section_heading("Comparable property evidence", styles),
+        body_paragraph(
+            (
+                "The properties below were selected because their available location, recency, "
+                "property type, size, and pricing data provide useful context for the subject "
+                "property. Differences in condition, updates, lot, layout, and micro-location "
+                "can materially affect value."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.08 * inch),
+        client_comp_table(analysis.selected_comps, styles),
+        PageBreak(),
+        section_heading("How to use this review", styles),
+        numbered_steps(
+            [
+                (
+                    "Verify the property",
+                    "Confirm size, layout, major systems, repairs, occupancy, and title details.",
+                ),
+                (
+                    "Compare sale paths",
+                    (
+                        "Consider preparation cost, commissions, carrying time, financing risk, "
+                        "closing timeline, and certainty alongside the headline sale price."
+                    ),
+                ),
+                (
+                    "Confirm next steps",
+                    (
+                        "Stonegate can review the property in person and provide a separate "
+                        "written cash offer when the required facts are verified."
+                    ),
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.2 * inch),
+        section_heading("Source and preparation record", styles),
+        key_value_table(
+            [
+                ("Prepared by", "Stonegate Home Buyers"),
+                ("Property", context.address),
+                ("Market data source", analysis.provider.title()),
+                ("Analysis reference", context.analysis_reference),
+                ("Market data saved", format_datetime(analysis.created_at)),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.16 * inch),
+        closing_box(context, styles),
+    ]
 
 
-def key_value_table(rows: list[tuple[str, str]]) -> Table:
-    table = Table(rows, colWidths=[1.9 * inch, 4.6 * inch])
+def hero_block(
+    eyebrow: str,
+    title: str,
+    subtitle: str,
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    content = [
+        Paragraph(escape(eyebrow), styles["eyebrow"]),
+        Paragraph(escape(title), styles["hero"]),
+        Paragraph(escape(subtitle), styles["hero_subtitle"]),
+    ]
+    table = Table([[content]], colWidths=[7.4 * inch])
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f2f0ea")),
-                ("TEXTCOLOR", (0, 0), (0, -1), colors.HexColor("#202426")),
-                ("FONTNAME", (0, 0), (0, -1), "Helvetica-Bold"),
-                ("FONTNAME", (1, 0), (1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("BACKGROUND", (0, 0), (-1, -1), BRAND_DARK),
+                ("BOX", (0, 0), (-1, -1), 0.8, BRAND_DARK),
+                ("LEFTPADDING", (0, 0), (-1, -1), 20),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 20),
+                ("TOPPADDING", (0, 0), (-1, -1), 18),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 18),
+            ]
+        )
+    )
+    return table
+
+
+def section_heading(title: str, styles: dict[str, ParagraphStyle]) -> KeepTogether:
+    return KeepTogether(
+        [
+            Paragraph(escape(title), styles["section"]),
+            HRFlowable(width="100%", thickness=0.6, color=LINE, spaceAfter=8),
+        ]
+    )
+
+
+def body_paragraph(text: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
+    return Paragraph(escape(text), styles["body"])
+
+
+def metric_table(
+    metrics: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    width = 7.4 * inch / len(metrics)
+    cells = [
+        [
+            Paragraph(escape(label.upper()), styles["metric_label"]),
+            Paragraph(escape(value), styles["metric_value"]),
+        ]
+        for label, value in metrics
+    ]
+    table = Table([cells], colWidths=[width] * len(cells))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), BRAND_SOFT),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#C8DCCF")),
+                ("INNERGRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#C8DCCF")),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d8d2c7")),
-                ("ROWBACKGROUNDS", (1, 0), (1, -1), [colors.white, colors.HexColor("#fbfaf7")]),
-                ("LEFTPADDING", (0, 0), (-1, -1), 6),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+                ("LEFTPADDING", (0, 0), (-1, -1), 11),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 11),
+                ("TOPPADDING", (0, 0), (-1, -1), 11),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 11),
+            ]
+        )
+    )
+    return table
+
+
+def key_value_table(
+    rows: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    content = [
+        [
+            Paragraph(escape(label), styles["table_cell_bold"]),
+            Paragraph(escape(value), styles["table_cell"]),
+        ]
+        for label, value in rows
+    ]
+    table = Table(content, colWidths=[1.85 * inch, 5.55 * inch])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, -1), SURFACE),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    return table
+
+
+def two_column_facts(
+    facts: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    pairs: list[list[list[Paragraph]]] = []
+    for index in range(0, len(facts), 2):
+        row: list[list[Paragraph]] = []
+        for label, value in facts[index : index + 2]:
+            row.append(
+                [
+                    Paragraph(escape(label.upper()), styles["metric_label"]),
+                    Paragraph(escape(value), styles["table_cell_bold"]),
+                ]
+            )
+        while len(row) < 2:
+            row.append([])
+        pairs.append(row)
+    table = Table(pairs, colWidths=[3.7 * inch, 3.7 * inch])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return table
+
+
+def formula_box(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    analysis = context.analysis
+    low_formula = (
+        f"Low ceiling = {format_money(analysis.arv_low_cents)} x "
+        f"{analysis.offer_low_percentage}% - {format_money(analysis.repair_high_cents)} "
+        f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
+    )
+    high_formula = (
+        f"High ceiling = {format_money(analysis.arv_high_cents)} x "
+        f"{analysis.offer_high_percentage}% - {format_money(analysis.repair_low_cents)} "
+        f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
+    )
+    table = Table(
+        [
+            [
+                [
+                    Paragraph("FORMULA USED", styles["metric_label"]),
+                    Paragraph(escape(low_formula), styles["body"]),
+                    Paragraph(escape(high_formula), styles["body"]),
+                ]
+            ]
+        ],
+        colWidths=[7.4 * inch],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+                ("BOX", (0, 0), (-1, -1), 0.6, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return table
+
+
+def warning_box(
+    label: str,
+    text: str,
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    label_style = ParagraphStyle(
+        "WarningLabel",
+        parent=styles["metric_label"],
+        textColor=WARNING,
+    )
+    table = Table(
+        [
+            [
+                [
+                    Paragraph(escape(label), label_style),
+                    Paragraph(escape(text), styles["disclaimer"]),
+                ]
+            ]
+        ],
+        colWidths=[7.4 * inch],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), WARNING_SOFT),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E4C88C")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ]
+        )
+    )
+    return table
+
+
+def disclaimer_box(text: str, styles: dict[str, ParagraphStyle]) -> Table:
+    table = Table(
+        [[Paragraph(escape(text), styles["disclaimer"])]],
+        colWidths=[7.4 * inch],
+    )
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+                ("BOX", (0, 0), (-1, -1), 0.5, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ]
+        )
+    )
+    return table
+
+
+def investor_comp_table(
+    comps: list[dict[str, Any]],
+    styles: dict[str, ParagraphStyle],
+) -> LongTable:
+    headings = ["Address", "Price", "$/sf", "Sqft", "Dist.", "Age", "Score", "Rationale"]
+    rows: list[list[Paragraph]] = [
+        [Paragraph(heading, styles["table_header"]) for heading in headings]
+    ]
+    for comp in comps[:12]:
+        rows.append(
+            [
+                Paragraph(
+                    escape(safe_string(comp.get("formatted_address"))),
+                    styles["table_cell_bold"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(comp.get("price_cents")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(escape(format_ppsf(comp)), styles["table_cell"]),
+                Paragraph(
+                    escape(format_number(optional_int(comp.get("square_footage")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
+                    escape(format_distance(comp.get("distance_miles"))),
+                    styles["table_cell"],
+                ),
+                Paragraph(escape(format_days(comp.get("days_old"))), styles["table_cell"]),
+                Paragraph(escape(safe_string(comp.get("score"))), styles["table_cell"]),
+                Paragraph(
+                    escape(safe_string(comp.get("selection_reason"))),
+                    styles["table_cell"],
+                ),
+            ]
+        )
+    if len(rows) == 1:
+        rows.append(
+            [Paragraph("No comparable records saved.", styles["table_cell"])]
+            + [Paragraph("", styles["table_cell"]) for _ in range(len(headings) - 1)]
+        )
+    table = LongTable(
+        rows,
+        colWidths=[
+            1.58 * inch,
+            0.68 * inch,
+            0.48 * inch,
+            0.45 * inch,
+            0.43 * inch,
+            0.48 * inch,
+            0.4 * inch,
+            2.9 * inch,
+        ],
+        repeatRows=1,
+    )
+    apply_comp_table_style(table)
+    return table
+
+
+def client_comp_table(
+    comps: list[dict[str, Any]],
+    styles: dict[str, ParagraphStyle],
+) -> LongTable:
+    headings = [
+        "Comparable property",
+        "Price",
+        "$/sf",
+        "Beds / baths",
+        "Sqft",
+        "Distance",
+        "Recency",
+    ]
+    rows: list[list[Paragraph]] = [
+        [Paragraph(heading, styles["table_header"]) for heading in headings]
+    ]
+    for comp in comps[:8]:
+        bedrooms = format_decimal(optional_float(comp.get("bedrooms")))
+        bathrooms = format_decimal(optional_float(comp.get("bathrooms")))
+        rows.append(
+            [
+                Paragraph(
+                    escape(safe_string(comp.get("formatted_address"))),
+                    styles["table_cell_bold"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(comp.get("price_cents")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(escape(format_ppsf(comp)), styles["table_cell"]),
+                Paragraph(f"{escape(bedrooms)} / {escape(bathrooms)}", styles["table_cell"]),
+                Paragraph(
+                    escape(format_number(optional_int(comp.get("square_footage")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
+                    escape(format_distance(comp.get("distance_miles"))),
+                    styles["table_cell"],
+                ),
+                Paragraph(escape(format_days(comp.get("days_old"))), styles["table_cell"]),
+            ]
+        )
+    if len(rows) == 1:
+        rows.append(
+            [Paragraph("No comparable records were available.", styles["table_cell"])]
+            + [Paragraph("", styles["table_cell"]) for _ in range(len(headings) - 1)]
+        )
+    table = LongTable(
+        rows,
+        colWidths=[
+            2.35 * inch,
+            0.82 * inch,
+            0.58 * inch,
+            0.72 * inch,
+            0.55 * inch,
+            0.62 * inch,
+            0.72 * inch,
+        ],
+        repeatRows=1,
+    )
+    apply_comp_table_style(table)
+    return table
+
+
+def apply_comp_table_style(table: Table) -> None:
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), BRAND_DARK),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, SURFACE]),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+
+
+def subject_property_table(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+    *,
+    include_internal: bool = True,
+) -> Table:
+    subject = context.analysis.subject_property
+    rows = [
+        ("Address", context.address),
+        (
+            "Property type",
+            labelize(
+                first_string(subject, ("propertyType", "property_type"))
+                or context.property_record.property_type
+            ),
+        ),
+        ("Living area", format_subject_number(subject, ("squareFootage", "livingArea"))),
+        ("Bedrooms", format_subject_number(subject, ("bedrooms", "bedroomCount"))),
+        ("Bathrooms", format_subject_number(subject, ("bathrooms", "bathroomCount"))),
+        ("Year built", format_subject_number(subject, ("yearBuilt", "year_built"))),
+        ("County", context.property_record.county or "Not recorded"),
+        ("Occupancy", labelize(context.lead.occupancy_status)),
+    ]
+    if include_internal:
+        rows.extend(
+            [
+                ("Seller motivation", context.lead.motivation or "Not recorded"),
+                ("Asking price", context.lead.asking_price or "Not recorded"),
+            ]
+        )
+    return key_value_table(rows, styles)
+
+
+def diligence_checklist(styles: dict[str, ParagraphStyle]) -> Table:
+    items = [
+        "Verify gross living area, bed/bath count, lot, additions, and property type.",
+        "Walk the property and replace the condition-based repair allowance with a scoped budget.",
+        "Confirm comp sale status, sale date, concessions, renovation level, and neighborhood fit.",
+        "Review title, liens, taxes, probate, occupancy, access, and seller authority.",
+        "Validate buyer demand, assignment spread, holding exposure, and closing assumptions.",
+        "Document manual changes and obtain human approval before presenting an offer.",
+    ]
+    cells = [
+        [
+            Paragraph(
+                f"<b>{index}.</b>&nbsp;&nbsp;{escape(item)}",
+                styles["body"],
+            )
+        ]
+        for index, item in enumerate(items, start=1)
+    ]
+    table = Table(cells, colWidths=[7.4 * inch])
+    table.setStyle(
+        TableStyle(
+            [
+                ("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, SURFACE]),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.3, LINE),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    return table
+
+
+def two_column_callouts(
+    callouts: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    rows: list[list[list[Paragraph]]] = []
+    for index in range(0, len(callouts), 2):
+        row = [
+            [
+                Paragraph(escape(title), styles["subsection"]),
+                Paragraph(escape(text), styles["body"]),
+            ]
+            for title, text in callouts[index : index + 2]
+        ]
+        while len(row) < 2:
+            row.append([])
+        rows.append(row)
+    table = Table(rows, colWidths=[3.62 * inch, 3.62 * inch], hAlign="LEFT")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SURFACE),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 11),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 11),
+                ("TOPPADDING", (0, 0), (-1, -1), 10),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+    return table
+
+
+def numbered_steps(
+    steps: list[tuple[str, str]],
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    rows: list[list[object]] = []
+    for index, (title, text) in enumerate(steps, start=1):
+        number_style = ParagraphStyle(
+            f"StepNumber{index}",
+            parent=styles["metric_value"],
+            textColor=WHITE,
+            alignment=TA_CENTER,
+            fontSize=11,
+        )
+        rows.append(
+            [
+                Paragraph(str(index), number_style),
+                [
+                    Paragraph(escape(title), styles["subsection"]),
+                    Paragraph(escape(text), styles["body"]),
+                ],
+            ]
+        )
+    table = Table(rows, colWidths=[0.42 * inch, 6.98 * inch])
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (0, -1), BRAND),
+                ("ROWBACKGROUNDS", (1, 0), (1, -1), [WHITE, SURFACE]),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (0, -1), 6),
+                ("RIGHTPADDING", (0, 0), (0, -1), 6),
+                ("LEFTPADDING", (1, 0), (1, -1), 10),
+                ("RIGHTPADDING", (1, 0), (1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
             ]
         )
@@ -181,55 +1116,100 @@ def key_value_table(rows: list[tuple[str, str]]) -> Table:
     return table
 
 
-def comp_table(comps: list[dict[str, object]]) -> Table:
-    rows: list[list[str]] = [["Address", "Price", "Sqft", "Dist", "Age", "Score", "Reason"]]
-    for comp in comps[:10]:
-        rows.append(
-            [
-                safe_string(comp.get("formatted_address")),
-                format_money(optional_int(comp.get("price_cents"))),
-                safe_string(comp.get("square_footage")),
-                format_distance(comp.get("distance_miles")),
-                format_days(comp.get("days_old")),
-                safe_string(comp.get("score")),
-                safe_string(comp.get("selection_reason")),
-            ]
-        )
-    if len(rows) == 1:
-        rows.append(["No comps saved.", "", "", "", "", "", ""])
-
-    table = Table(
-        rows,
-        colWidths=[
-            1.55 * inch,
-            0.78 * inch,
-            0.55 * inch,
-            0.48 * inch,
-            0.5 * inch,
-            0.5 * inch,
-            2.15 * inch,
-        ],
-        repeatRows=1,
-    )
+def closing_box(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> Table:
+    content = [
+        Paragraph("STONEGATE HOME BUYERS", styles["metric_label"]),
+        Paragraph("A practical next step, without pressure.", styles["subsection"]),
+        Paragraph(
+            escape(
+                "We can review the property, answer questions about the comparable evidence, "
+                "and explain the timing and terms of a direct as-is purchase."
+            ),
+            styles["body"],
+        ),
+        Paragraph(
+            escape(f"Reference this review as {context.analysis_reference}."),
+            styles["small"],
+        ),
+    ]
+    table = Table([[content]], colWidths=[7.4 * inch])
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#263238")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
-                ("FONTSIZE", (0, 0), (-1, -1), 7),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#d8d2c7")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#fbfaf7")]),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("BACKGROUND", (0, 0), (-1, -1), BRAND_SOFT),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#C8DCCF")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 14),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 14),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
             ]
         )
     )
     return table
+
+
+def page_decorator(
+    context: ReportContext,
+    audience: ReportAudience,
+) -> Callable[[Canvas, BaseDocTemplate], None]:
+    report_label = "INTERNAL INVESTMENT ANALYSIS" if audience == "investor" else "PROPERTY REVIEW"
+    confidentiality = (
+        "CONFIDENTIAL - INTERNAL USE"
+        if audience == "investor"
+        else "PREPARED FOR PROPERTY OWNER"
+    )
+
+    def decorate(canvas: Canvas, document: BaseDocTemplate) -> None:
+        canvas.saveState()
+        width, height = letter
+        canvas.setFillColor(BRAND_DARK)
+        canvas.rect(0, height - 0.18 * inch, width, 0.18 * inch, fill=1, stroke=0)
+        canvas.setFillColor(BRAND)
+        canvas.roundRect(
+            0.55 * inch,
+            height - 0.55 * inch,
+            0.24 * inch,
+            0.24 * inch,
+            2,
+            fill=1,
+            stroke=0,
+        )
+        canvas.setFillColor(INK)
+        canvas.setFont("Helvetica-Bold", 8.5)
+        canvas.drawString(0.88 * inch, height - 0.45 * inch, "STONEGATE HOME BUYERS")
+        canvas.setFillColor(MUTED)
+        canvas.setFont("Helvetica", 6.8)
+        canvas.drawRightString(width - 0.55 * inch, height - 0.45 * inch, report_label)
+        canvas.setStrokeColor(LINE)
+        canvas.setLineWidth(0.4)
+        canvas.line(0.55 * inch, 0.47 * inch, width - 0.55 * inch, 0.47 * inch)
+        canvas.setFillColor(MUTED)
+        canvas.setFont("Helvetica", 6.5)
+        canvas.drawString(0.55 * inch, 0.28 * inch, confidentiality)
+        canvas.drawCentredString(
+            width / 2,
+            0.28 * inch,
+            f"Analysis {context.analysis_reference}",
+        )
+        canvas.drawRightString(
+            width - 0.55 * inch,
+            0.28 * inch,
+            f"Page {document.page}",
+        )
+        canvas.restoreState()
+
+    return decorate
+
+
+def confidence_label(score: int) -> str:
+    if score >= 80:
+        return "Strong"
+    if score >= 60:
+        return "Moderate"
+    return "Limited"
 
 
 def format_property_address(property_record: Property) -> str:
@@ -241,27 +1221,78 @@ def format_property_address(property_record: Property) -> str:
 
 def format_money(cents: int | None) -> str:
     if cents is None:
-        return "Unknown"
+        return "Not available"
     return f"${cents / 100:,.0f}"
 
 
 def format_money_range(low_cents: int | None, high_cents: int | None) -> str:
-    return f"{format_money(low_cents)} to {format_money(high_cents)}"
+    return f"{format_money(low_cents)} - {format_money(high_cents)}"
+
+
+def format_number(value: int | None) -> str:
+    return "Not available" if value is None else f"{value:,}"
+
+
+def format_decimal(value: float | None) -> str:
+    if value is None:
+        return "N/A"
+    return f"{value:g}"
 
 
 def format_distance(value: object) -> str:
     number = optional_float(value)
-    return "Unknown" if number is None else f"{number:.1f} mi"
+    return "N/A" if number is None else f"{number:.1f} mi"
 
 
 def format_days(value: object) -> str:
     number = optional_int(value)
-    return "Unknown" if number is None else f"{number} days"
+    return "N/A" if number is None else f"{number} days"
+
+
+def format_ppsf(comp: dict[str, Any]) -> str:
+    price = optional_int(comp.get("price_cents"))
+    square_feet = optional_int(comp.get("square_footage"))
+    if price is None or square_feet is None or square_feet <= 0:
+        return "N/A"
+    return f"${(price / 100) / square_feet:,.0f}"
+
+
+def format_datetime(value: datetime) -> str:
+    rendered = value.strftime("%b %d, %Y at %I:%M %p")
+    return rendered.replace(" 0", " ")
+
+
+def format_subject_number(subject: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = subject.get(key)
+        number = optional_float(value)
+        if number is not None:
+            return format_decimal(number)
+    return "Not available"
+
+
+def first_string(subject: dict[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
+        value = subject.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def labelize(value: str | None) -> str:
+    if not value:
+        return "Not recorded"
+    return " ".join(word.capitalize() for word in value.replace("-", "_").split("_"))
+
+
+def slugify(value: str) -> str:
+    slug = "".join(character.lower() if character.isalnum() else "-" for character in value)
+    return "-".join(part for part in slug.split("-") if part)[:60] or "property"
 
 
 def safe_string(value: object) -> str:
     if value is None:
-        return "Unknown"
+        return "Not available"
     return str(value)
 
 

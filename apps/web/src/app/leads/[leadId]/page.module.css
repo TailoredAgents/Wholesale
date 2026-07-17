@@ -1147,6 +1147,21 @@
   cursor: pointer;
 }
 
+.reportActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reportActions > span {
+  margin-right: 2px;
+  color: #687073;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .marketValueHeader button:disabled,
 .secondaryButton:disabled {
   opacity: 0.65;
@@ -1499,6 +1514,19 @@
 
   .quickActions > div {
     grid-column: 1 / -1;
+  }
+
+  .reportActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reportActions > span {
+    margin: 0;
+  }
+
+  .reportActions .secondaryButton {
+    width: 100%;
   }
 
   .tabs {

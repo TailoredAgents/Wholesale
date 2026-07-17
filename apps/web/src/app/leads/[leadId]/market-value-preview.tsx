@@ -45,7 +45,7 @@ type MarketValueEstimate = {
 };
 
 type Status = "idle" | "loading" | "loaded" | "error";
-type ReportStatus = "idle" | "loading" | "error";
+type ReportAudience = "investor" | "client";
 
 function formatMoney(cents: number | null) {
   if (cents === null) {
@@ -75,7 +75,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const [status, setStatus] = useState<Status>("idle");
   const [estimate, setEstimate] = useState<MarketValueEstimate | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [reportStatus, setReportStatus] = useState<ReportStatus>("idle");
+  const [reportLoading, setReportLoading] = useState<ReportAudience | null>(null);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -117,15 +117,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
   }
 
-  async function openReport() {
+  async function openReport(audience: ReportAudience) {
     if (!estimate?.id) {
       return;
     }
-    setReportStatus("loading");
+    setReportLoading(audience);
     setError(null);
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis/${estimate.id}/report.pdf`,
+        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis/` +
+          `${estimate.id}/report.pdf?audience=${audience}`,
         { headers: await getHeaders() },
       );
       if (!response.ok) {
@@ -136,10 +137,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank", "noopener,noreferrer");
       window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-      setReportStatus("idle");
+      setReportLoading(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to build report.");
-      setReportStatus("error");
+      setReportLoading(null);
     }
   }
 
@@ -200,14 +201,25 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           </dl>
           <p>{estimate.source_note}</p>
           {estimate.id ? (
-            <button
-              className={styles.secondaryButton}
-              disabled={reportStatus === "loading"}
-              onClick={openReport}
-              type="button"
-            >
-              {reportStatus === "loading" ? "Building report..." : "Open PDF report"}
-            </button>
+            <div className={styles.reportActions}>
+              <span>PDF reports</span>
+              <button
+                className={styles.secondaryButton}
+                disabled={reportLoading !== null}
+                onClick={() => openReport("investor")}
+                type="button"
+              >
+                {reportLoading === "investor" ? "Building..." : "Investor PDF"}
+              </button>
+              <button
+                className={styles.secondaryButton}
+                disabled={reportLoading !== null}
+                onClick={() => openReport("client")}
+                type="button"
+              >
+                {reportLoading === "client" ? "Building..." : "Client PDF"}
+              </button>
+            </div>
           ) : null}
           <div className={styles.compList}>
             {comps.slice(0, 5).map((comp, index) => (
