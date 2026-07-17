@@ -1054,15 +1054,20 @@
 
 @media (max-width: 920px) {
   .shell {
+    width: 100%;
+    min-width: 0;
     grid-template-columns: 1fr;
   }
 
   .sidebar {
     position: relative;
+    width: 100%;
+    min-width: 0;
     min-height: auto;
     height: auto;
     gap: 18px;
     padding: 20px;
+    overflow-x: hidden;
   }
 
   .brandBlock {
@@ -1075,6 +1080,9 @@
   }
 
   .nav {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
     grid-auto-flow: column;
     grid-auto-columns: minmax(132px, max-content);
     gap: 10px;
@@ -1101,6 +1109,8 @@
   }
 
   .workspace {
+    width: 100%;
+    min-width: 0;
     padding: 20px;
   }
 

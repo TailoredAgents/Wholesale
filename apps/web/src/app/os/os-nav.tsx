@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 import styles from "./page.module.css";
 
@@ -35,9 +36,19 @@ const navGroups = [
 
 export function OsNav() {
   const pathname = usePathname();
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const activeLink = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !activeLink || nav.scrollWidth <= nav.clientWidth) return;
+
+    const centeredLeft = activeLink.offsetLeft - (nav.clientWidth - activeLink.offsetWidth) / 2;
+    nav.scrollTo({ left: Math.max(0, centeredLeft), behavior: "auto" });
+  }, [pathname]);
 
   return (
-    <nav className={styles.nav}>
+    <nav className={styles.nav} ref={navRef}>
       {navGroups.map((group) => (
         <div className={styles.navGroup} key={group.label}>
           <p className={styles.navLabel}>{group.label}</p>
