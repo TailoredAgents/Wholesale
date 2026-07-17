@@ -101,7 +101,7 @@ class Settings(BaseSettings):
     @property
     def clerk_authorized_parties(self) -> list[str]:
         return [
-            origin.strip()
+            origin.strip().rstrip("/")
             for origin in self.clerk_authorized_parties_raw.split(",")
             if origin.strip()
         ]

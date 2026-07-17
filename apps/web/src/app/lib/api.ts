@@ -475,14 +475,33 @@ async function getServerApiHeaders(): Promise<Record<string, string>> {
 
 async function getClerkToken() {
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
+    console.error("Clerk token unavailable: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing.");
     return null;
   }
   try {
     const session = await auth();
-    return await session.getToken();
-  } catch {
+    const token = await session.getToken();
+    if (!token) {
+      console.error("Clerk token unavailable: there is no active signed-in session.");
+    }
+    return token;
+  } catch (error) {
+    console.error("Clerk token retrieval failed.", error);
     return null;
   }
+}
+
+async function apiError(response: Response): Promise<Error> {
+  let detail = "No response detail";
+  try {
+    const payload = (await response.json()) as { detail?: unknown };
+    if (typeof payload.detail === "string") {
+      detail = payload.detail;
+    }
+  } catch {
+    // The API may return an empty or non-JSON error response.
+  }
+  return new Error(`Stonegate API ${response.status}: ${detail}`);
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -516,7 +535,13 @@ export async function getDashboardData(): Promise<DashboardData> {
       !speedToLeadResponse.ok ||
       !openTaskResponse.ok
     ) {
-      throw new Error("API returned a non-OK response");
+      const failedResponse = [
+        summaryResponse,
+        leadsResponse,
+        speedToLeadResponse,
+        openTaskResponse,
+      ].find((response) => !response.ok);
+      throw await apiError(failedResponse!);
     }
 
     const summary = (await summaryResponse.json()) as DashboardSummary;
@@ -524,7 +549,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     const speedToLeadQueue = ((await speedToLeadResponse.json()) as SpeedToLeadQueueResponse).items;
     const openTaskQueue = ((await openTaskResponse.json()) as TaskQueueResponse).items;
     return { summary, leads, speedToLeadQueue, openTaskQueue, apiConnected: true };
-  } catch {
+  } catch (error) {
+    console.error("Stonegate dashboard data request failed.", error);
     return {
       summary: emptySummary,
       leads: [],

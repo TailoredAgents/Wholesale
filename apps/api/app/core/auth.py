@@ -45,6 +45,7 @@ def get_current_principal(
         return principal_for_user(db, user)
 
     if settings.app_env == "production":
+        logger.warning("clerk_bearer_token_missing")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing bearer token.",
@@ -124,7 +125,17 @@ def verify_clerk_authorization_header(authorization: str) -> ClerkClaims:
         ) from exc
 
     authorized_party = claims.get("azp")
-    if authorized_party and authorized_party not in settings.clerk_authorized_parties:
+    normalized_authorized_party = (
+        authorized_party.rstrip("/") if isinstance(authorized_party, str) else authorized_party
+    )
+    if normalized_authorized_party and (
+        normalized_authorized_party not in settings.clerk_authorized_parties
+    ):
+        logger.warning(
+            "clerk_authorized_party_invalid",
+            token_authorized_party=normalized_authorized_party,
+            configured_authorized_parties=settings.clerk_authorized_parties,
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Clerk authorized party.",
@@ -169,6 +180,12 @@ def resolve_clerk_user(db: Session, claims: ClerkClaims) -> User:
             db.refresh(user)
             return user
 
+    logger.warning(
+        "clerk_user_mapping_failed",
+        clerk_user_id=claims.subject,
+        resolved_email=email,
+        clerk_secret_key_configured=bool(get_settings().clerk_secret_key),
+    )
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Clerk user is not mapped to an active local user.",
@@ -186,7 +203,12 @@ def fetch_clerk_user_email(clerk_user_id: str) -> str | None:
             timeout=5,
         )
         response.raise_for_status()
-    except httpx.HTTPError:
+    except httpx.HTTPError as exc:
+        logger.warning(
+            "clerk_user_fetch_failed",
+            clerk_user_id=clerk_user_id,
+            error=str(exc),
+        )
         return None
 
     payload = response.json()
