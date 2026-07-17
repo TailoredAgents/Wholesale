@@ -1394,6 +1394,30 @@ def create_lead_market_analysis(
     return market_analysis_to_read(analysis)
 
 
+def get_latest_lead_market_analysis(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> LeadMarketAnalysisRead | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+
+    analysis = db.scalar(
+        select(UnderwritingMarketAnalysis)
+        .where(
+            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+            UnderwritingMarketAnalysis.lead_id == lead.id,
+        )
+        .order_by(
+            UnderwritingMarketAnalysis.created_at.desc(),
+            UnderwritingMarketAnalysis.id.desc(),
+        )
+        .limit(1)
+    )
+    return market_analysis_to_read(analysis) if analysis is not None else None
+
+
 def create_lead_transaction(
     db: Session,
     principal: Principal,

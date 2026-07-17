@@ -35,6 +35,7 @@ from app.services.leads import (
     create_lead_market_analysis,
     create_lead_transaction,
     create_lead_underwriting_version,
+    get_latest_lead_market_analysis,
     get_lead_detail,
     list_leads,
     permanently_delete_lead,
@@ -185,6 +186,21 @@ def preview_underwriting_market_value(
     if estimate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return estimate
+
+
+@router.get("/{lead_id}/underwriting/market-analysis")
+def read_latest_underwriting_market_analysis(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_leads_dependency)],
+) -> LeadMarketAnalysisRead:
+    analysis = get_latest_lead_market_analysis(db, principal, lead_id)
+    if analysis is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Market analysis not found.",
+        )
+    return analysis
 
 
 @router.post("/{lead_id}/underwriting/market-analysis", status_code=201)

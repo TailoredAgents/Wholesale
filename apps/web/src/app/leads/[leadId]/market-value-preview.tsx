@@ -2,7 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "./page.module.css";
 
@@ -85,7 +85,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     [],
   );
 
-  async function getHeaders() {
+  const getHeaders = useCallback(async () => {
     const token = await getToken().catch(() => null);
     const headers: Record<string, string> = {};
     if (token) {
@@ -94,7 +94,45 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       headers["X-Dev-User-Email"] = devUserEmail;
     }
     return headers;
-  }
+  }, [devUserEmail, getToken]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadLatestAnalysis() {
+      setStatus("loading");
+      setError(null);
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis`,
+          { headers: await getHeaders(), signal: controller.signal },
+        );
+        if (response.status === 404) {
+          setStatus("idle");
+          return;
+        }
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.detail ?? "Unable to load the latest comp analysis.");
+        }
+        setEstimate((await response.json()) as MarketValueEstimate);
+        setStatus("loaded");
+      } catch (caught) {
+        if (caught instanceof DOMException && caught.name === "AbortError") {
+          return;
+        }
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : "Unable to load the latest comp analysis.",
+        );
+        setStatus("error");
+      }
+    }
+
+    void loadLatestAnalysis();
+    return () => controller.abort();
+  }, [apiBaseUrl, getHeaders, leadId]);
 
   async function createAnalysis() {
     setStatus("loading");

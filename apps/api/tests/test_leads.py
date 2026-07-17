@@ -908,6 +908,14 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version.max_offer_cents == 14800000
     assert saved_version.recommended_offer_cents == 8350000
 
+    latest_analysis_response = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert latest_analysis_response.status_code == 200
+    assert latest_analysis_response.json()["id"] == payload["id"]
+
     investor_report_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis/{payload['id']}/report.pdf",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
