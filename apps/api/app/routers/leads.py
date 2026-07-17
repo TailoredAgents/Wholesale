@@ -4,7 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_permission
+from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
@@ -47,8 +47,20 @@ from app.services.leads import (
 from app.services.underwriting_reports import build_market_analysis_pdf
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
-view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
+view_leads_dependency = require_any_permission(
+    PermissionKeys.VIEW_LEADS,
+    PermissionKeys.VIEW_ASSIGNED_LEADS,
+)
+view_full_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
 edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
+log_communications_dependency = require_any_permission(
+    PermissionKeys.EDIT_LEADS,
+    PermissionKeys.LOG_ASSIGNED_COMMUNICATIONS,
+)
+schedule_appointments_dependency = require_any_permission(
+    PermissionKeys.EDIT_LEADS,
+    PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
+)
 delete_leads_dependency = require_permission(PermissionKeys.DELETE_OR_ARCHIVE_RECORDS)
 
 
@@ -113,7 +125,7 @@ def create_lead_communication(
     lead_id: UUID,
     payload: LeadCommunicationCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+    principal: Annotated[Principal, Depends(log_communications_dependency)],
 ) -> LeadDetail:
     try:
         lead = add_lead_communication(db, principal, lead_id, payload)
@@ -132,7 +144,7 @@ def schedule_lead_appointment(
     lead_id: UUID,
     payload: LeadAppointmentCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+    principal: Annotated[Principal, Depends(schedule_appointments_dependency)],
 ) -> LeadDetail:
     try:
         lead = create_lead_appointment(db, principal, lead_id, payload)
@@ -192,7 +204,7 @@ def preview_underwriting_market_value(
 def read_latest_underwriting_market_analysis(
     lead_id: UUID,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(view_leads_dependency)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
 ) -> LeadMarketAnalysisRead:
     analysis = get_latest_lead_market_analysis(db, principal, lead_id)
     if analysis is None:

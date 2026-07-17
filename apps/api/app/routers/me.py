@@ -2,16 +2,19 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from app.core.auth import Principal, require_permission
+from app.core.auth import Principal, require_any_permission
 from app.domain.rbac import PermissionKeys
 
 router = APIRouter(prefix="/api/v1/me", tags=["me"])
-view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
+workspace_access_dependency = require_any_permission(
+    PermissionKeys.VIEW_LEADS,
+    PermissionKeys.VIEW_ASSIGNED_LEADS,
+)
 
 
 @router.get("")
 def read_me(
-    principal: Annotated[Principal, Depends(view_leads_dependency)],
+    principal: Annotated[Principal, Depends(workspace_access_dependency)],
 ) -> dict[str, object]:
     return {
         "user_id": str(principal.user_id),

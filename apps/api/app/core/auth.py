@@ -237,3 +237,21 @@ def require_permission(permission_key: str) -> Callable[[Principal], Principal]:
         return principal
 
     return dependency
+
+
+def require_any_permission(*permission_keys: str) -> Callable[[Principal], Principal]:
+    required = frozenset(permission_keys)
+    if not required:
+        raise ValueError("At least one permission key is required.")
+
+    def dependency(
+        principal: Annotated[Principal, Depends(get_current_principal)],
+    ) -> Principal:
+        if principal.permission_keys.isdisjoint(required):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing one of permissions: {', '.join(sorted(required))}",
+            )
+        return principal
+
+    return dependency

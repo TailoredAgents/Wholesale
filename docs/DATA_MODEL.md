@@ -15,6 +15,14 @@
 - `contacts`
 - `properties`
 - `leads`
+- `conversations`
+- `conversation_watchers`
+- `conversation_assignment_events`
+- `communication_records`
+- `communication_provider_events`
+- `call_records`
+- `call_recordings`
+- `call_transcripts`
 - `deals`
 - `tasks`
 - `activity_events`
@@ -23,7 +31,6 @@
 ## Next Tables
 
 - `suppression_records`
-- `communications`
 - `documents`
 - `underwriting_versions`
 - `offer_versions`

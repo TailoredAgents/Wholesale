@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     func,
 )
@@ -218,11 +219,119 @@ class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class Conversation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "lead_id", name="uq_conversations_org_lead"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="CASCADE"), index=True
+    )
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    queue_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    priority: Mapped[str] = mapped_column(String(80), nullable=False)
+    unread_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_activity_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_inbound_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_outbound_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    conversation_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class ConversationWatcher(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversation_watchers"
+    __table_args__ = (
+        UniqueConstraint(
+            "conversation_id",
+            "user_id",
+            name="uq_conversation_watchers_conversation_user",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    source: Mapped[str] = mapped_column(String(80), nullable=False)
+    notification_level: Mapped[str] = mapped_column(String(80), nullable=False)
+    is_muted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+
+class ConversationAssignmentEvent(UuidPrimaryKeyMixin, Base):
+    __tablename__ = "conversation_assignment_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    previous_assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    previous_queue_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    queue_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "communication_provider_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "external_event_id",
+            name="uq_provider_events_org_provider_external",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="SET NULL"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    external_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    processing_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
 class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "communication_records"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="SET NULL"), index=True
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
@@ -237,6 +346,98 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     external_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     communication_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "call_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_call_id",
+            name="uq_call_records_org_provider_call",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    communication_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("communication_records.id", ondelete="SET NULL")
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    direction: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    from_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    to_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    disposition: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    call_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
+
+
+class CallRecording(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "call_recordings"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_recording_id",
+            name="uq_call_recordings_org_provider_recording",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    call_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("call_records.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_recording_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    media_reference: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    channel_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    consent_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    recording_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class CallTranscript(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "call_transcripts"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    recording_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("call_recordings.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False)
+    language: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    transcript_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    speaker_segments: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    confidence_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    transcript_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
 

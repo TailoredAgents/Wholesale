@@ -24,6 +24,7 @@ from app.schemas.public_intake import (
 )
 from app.services.bootstrap import bootstrap_foundation
 from app.services.conversion_events import record_conversion_event
+from app.services.inbox import ensure_primary_conversation
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -65,6 +66,7 @@ def create_public_seller_lead(
     ensure_contact_methods(db, organization, contact, payload)
     property_record = duplicate_match.property_record or create_property(db, organization, payload)
     lead = duplicate_match.lead or create_lead(db, organization, contact, property_record, payload)
+    ensure_primary_conversation(db, lead)
     matched_existing_lead = duplicate_match.lead is not None
     ensure_speed_to_lead_task(db, lead, contact)
 
@@ -340,6 +342,7 @@ def create_lead(
     )
     db.add(lead)
     db.flush()
+    ensure_primary_conversation(db, lead)
     return lead
 
 

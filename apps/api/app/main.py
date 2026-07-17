@@ -9,6 +9,7 @@ from app.routers import (
     dashboard,
     finance,
     health,
+    inbox,
     leads,
     marketing,
     me,
@@ -40,6 +41,7 @@ def create_app() -> FastAPI:
     app.include_router(buyers.router)
     app.include_router(dashboard.router)
     app.include_router(finance.router)
+    app.include_router(inbox.router)
     app.include_router(leads.router)
     app.include_router(marketing.router)
     app.include_router(me.router)

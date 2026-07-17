@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.rbac import PermissionKeys
 from app.integrations.rentcast_client import (
     RentCastClient,
     RentCastClientError,
@@ -25,6 +26,9 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    Conversation,
+    ConversationAssignmentEvent,
+    ConversationWatcher,
     ConversionEvent,
     Deal,
     DealDeduction,
@@ -75,6 +79,12 @@ from app.schemas.leads import (
     TransactionChecklistItemRead,
     TransactionRead,
     UnderwritingVersionRead,
+)
+from app.services.inbox import (
+    add_automatic_owner_watchers,
+    ensure_primary_conversation,
+    sync_conversation_to_lead_stage,
+    update_conversation_activity,
 )
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
@@ -197,6 +207,7 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     )
     db.add(lead)
     db.flush()
+    ensure_primary_conversation(db, lead)
 
     db.add(
         ActivityEvent(
@@ -234,14 +245,17 @@ def list_leads(
     limit: int = 100,
 ) -> list[LeadRead]:
     archive_filter = Lead.archived_at.is_not(None) if archived else Lead.archived_at.is_(None)
+    filters = [
+        Lead.organization_id == principal.organization_id,
+        archive_filter,
+    ]
+    if (
+        PermissionKeys.VIEW_LEADS not in principal.permission_keys
+        and PermissionKeys.EDIT_LEADS not in principal.permission_keys
+    ):
+        filters.append(Lead.assigned_user_id == principal.user_id)
     leads = db.scalars(
-        select(Lead)
-        .where(
-            Lead.organization_id == principal.organization_id,
-            archive_filter,
-        )
-        .order_by(Lead.created_at.desc())
-        .limit(limit)
+        select(Lead).where(*filters).order_by(Lead.created_at.desc()).limit(limit)
     ).all()
     return [lead_to_read(db, lead) for lead in leads]
 
@@ -313,27 +327,39 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.desc())
         .limit(20)
     ).all()
-    underwriting_versions = db.scalars(
-        select(UnderwritingVersion)
-        .where(
-            UnderwritingVersion.organization_id == principal.organization_id,
-            UnderwritingVersion.lead_id == lead.id,
-        )
-        .order_by(
-            UnderwritingVersion.version_number.desc(),
-            UnderwritingVersion.created_at.desc(),
-        )
-        .limit(20)
-    ).all()
-    transactions = db.scalars(
-        select(Transaction)
-        .where(
-            Transaction.organization_id == principal.organization_id,
-            Transaction.lead_id == lead.id,
-        )
-        .order_by(Transaction.created_at.desc())
-        .limit(10)
-    ).all()
+    restricted_assigned_access = (
+        PermissionKeys.VIEW_LEADS not in principal.permission_keys
+        and PermissionKeys.EDIT_LEADS not in principal.permission_keys
+    )
+    underwriting_versions = (
+        []
+        if restricted_assigned_access
+        else db.scalars(
+            select(UnderwritingVersion)
+            .where(
+                UnderwritingVersion.organization_id == principal.organization_id,
+                UnderwritingVersion.lead_id == lead.id,
+            )
+            .order_by(
+                UnderwritingVersion.version_number.desc(),
+                UnderwritingVersion.created_at.desc(),
+            )
+            .limit(20)
+        ).all()
+    )
+    transactions = (
+        []
+        if restricted_assigned_access
+        else db.scalars(
+            select(Transaction)
+            .where(
+                Transaction.organization_id == principal.organization_id,
+                Transaction.lead_id == lead.id,
+            )
+            .order_by(Transaction.created_at.desc())
+            .limit(10)
+        ).all()
+    )
     transaction_ids = [transaction.id for transaction in transactions]
     checklist_items_by_transaction: dict[UUID, list[TransactionChecklistItem]] = {
         transaction_id: [] for transaction_id in transaction_ids
@@ -352,15 +378,19 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         ).all()
         for item in checklist_items:
             checklist_items_by_transaction[item.transaction_id].append(item)
-    buyer_offers = db.scalars(
-        select(BuyerOffer)
-        .where(
-            BuyerOffer.organization_id == principal.organization_id,
-            BuyerOffer.lead_id == lead.id,
-        )
-        .order_by(BuyerOffer.received_at.desc(), BuyerOffer.created_at.desc())
-        .limit(20)
-    ).all()
+    buyer_offers = (
+        []
+        if restricted_assigned_access
+        else db.scalars(
+            select(BuyerOffer)
+            .where(
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.lead_id == lead.id,
+            )
+            .order_by(BuyerOffer.received_at.desc(), BuyerOffer.created_at.desc())
+            .limit(20)
+        ).all()
+    )
     buyer_ids = [offer.buyer_id for offer in buyer_offers]
     buyers_by_id = {
         buyer.id: buyer
@@ -754,6 +784,12 @@ def update_lead_stage(
         return get_lead_detail(db, principal, lead_id)
 
     lead.stage_key = payload.stage_key
+    sync_conversation_to_lead_stage(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason=payload.reason,
+    )
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
@@ -898,8 +934,11 @@ def add_lead_communication(
     if lead is None:
         return None
 
+    conversation = ensure_primary_conversation(db, lead)
+    occurred_at = payload.occurred_at or datetime.now(UTC)
     communication = CommunicationRecord(
         organization_id=principal.organization_id,
+        conversation_id=conversation.id,
         lead_id=lead.id,
         contact_id=lead.contact_id,
         actor_user_id=principal.user_id,
@@ -910,7 +949,7 @@ def add_lead_communication(
         provider_message_id=None,
         subject=payload.subject,
         body=payload.body,
-        occurred_at=payload.occurred_at or datetime.now(UTC),
+        occurred_at=occurred_at,
         external_payload=None,
         communication_metadata={
             "source": "manual_log",
@@ -918,6 +957,11 @@ def add_lead_communication(
         },
     )
     db.add(communication)
+    update_conversation_activity(
+        conversation,
+        direction=payload.direction,
+        occurred_at=occurred_at,
+    )
     db.flush()
 
     summary = (
@@ -980,6 +1024,7 @@ def create_lead_appointment(
     if lead is None:
         return None
 
+    conversation = ensure_primary_conversation(db, lead)
     previous_values = {
         "appointment_status": lead.appointment_status,
         "next_follow_up_at": lead.next_follow_up_at.isoformat()
@@ -1008,6 +1053,7 @@ def create_lead_appointment(
         },
     )
     db.add(appointment)
+    add_automatic_owner_watchers(db, conversation)
 
     lead.appointment_status = payload.status
     lead.next_follow_up_at = payload.scheduled_start_at
@@ -1992,6 +2038,11 @@ def get_scoped_lead(
     ]
     if not include_archived:
         filters.append(Lead.archived_at.is_(None))
+    if (
+        PermissionKeys.VIEW_LEADS not in principal.permission_keys
+        and PermissionKeys.EDIT_LEADS not in principal.permission_keys
+    ):
+        filters.append(Lead.assigned_user_id == principal.user_id)
     return db.scalar(select(Lead).where(*filters))
 
 
@@ -2121,6 +2172,21 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         LeadFormSubmission,
     ):
         db.execute(delete(model).where(model.lead_id == lead.id))
+    conversation_ids = list(
+        db.scalars(select(Conversation.id).where(Conversation.lead_id == lead.id))
+    )
+    if conversation_ids:
+        db.execute(
+            delete(ConversationAssignmentEvent).where(
+                ConversationAssignmentEvent.conversation_id.in_(conversation_ids)
+            )
+        )
+        db.execute(
+            delete(ConversationWatcher).where(
+                ConversationWatcher.conversation_id.in_(conversation_ids)
+            )
+        )
+        db.execute(delete(Conversation).where(Conversation.id.in_(conversation_ids)))
     db.execute(
         delete(ApprovalRequest).where(
             ApprovalRequest.organization_id == principal.organization_id,

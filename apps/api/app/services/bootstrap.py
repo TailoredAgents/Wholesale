@@ -156,6 +156,7 @@ def ensure_admin_user(
             organization_id=organization.id,
             email=normalized_email,
             display_name=admin_name or normalized_email,
+            is_active=True,
         )
         db.add(user)
         db.flush()

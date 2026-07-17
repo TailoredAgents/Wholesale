@@ -453,6 +453,17 @@ Delivered so far:
 - Added protected lead communication logging API with audit and activity events.
 - Added a communications panel to the lead workspace.
 - Added a communication provider adapter contract for future Twilio/Gmail-style integrations.
+- Added the shared inbox foundation with one unified conversation per lead, conversation queues,
+  assignments, watchers, assignment history, unread/activity tracking, and provider-event storage.
+- Added a restricted prospecting-caller role that can only view assigned leads and conversations,
+  log assigned communications, schedule assigned appointments, and hand qualified conversations
+  to eligible acquisition users.
+- Added an audited VA-to-acquisitions handoff that reassigns the lead, seller, open tasks, and
+  scheduled appointments while automatically adding owner and acquisition watchers.
+- Added call, recording, and transcript records with provider identifiers, recording-consent
+  status, speaker segments, approval fields, and secure provider media references.
+- Existing leads and communication records are backfilled into unified conversations during the
+  Phase 1 database migration.
 - Added appointment records with scheduled windows, type, status, location, notes, audit trail,
   and activity timeline entries.
 - Added protected appointment scheduling API and lead workspace appointment panel.
