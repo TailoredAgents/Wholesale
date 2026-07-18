@@ -1091,7 +1091,7 @@ def investor_comp_table(
         [Paragraph(heading, styles["table_header"]) for heading in headings]
     ]
     for comp in comps[:12]:
-        price_per_square_foot = format_ppsf(
+        price_per_square_foot = format_ppsf_cents(
             optional_int(comp.get("price_per_square_foot_cents"))
         )
         rows.append(
@@ -1516,7 +1516,7 @@ def format_money_range(low_cents: int | None, high_cents: int | None) -> str:
     return f"{format_money(low_cents)} - {format_money(high_cents)}"
 
 
-def format_ppsf(cents: int | None) -> str:
+def format_ppsf_cents(cents: int | None) -> str:
     if cents is None:
         return "N/A"
     return f"${cents / 100:,.0f}/sqft"
