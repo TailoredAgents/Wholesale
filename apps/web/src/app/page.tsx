@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { CashOfferForm } from "./get-a-cash-offer/cash-offer-form";
 import { PublicConversionTracker } from "./public-conversion-tracker";
+import { PublicSiteFooter } from "./public-site-footer";
 import styles from "./page.module.css";
 import { sellerSituations } from "./seller-situations";
 import { TrackedPhoneLink } from "./tracked-phone-link";
@@ -64,7 +65,7 @@ export default function PublicHomePage() {
           <Link href="/sell-inherited-house">Inherited</Link>
           <Link href="/sell-house-needs-repairs">Repairs</Link>
           <Link href="/sell-house-fast">Fast sale</Link>
-          <TrackedPhoneLink href="tel:+14045550100">Call Stonegate</TrackedPhoneLink>
+          <TrackedPhoneLink href="tel:+16785417725">Call Stonegate</TrackedPhoneLink>
         </nav>
       </header>
 
@@ -80,7 +81,7 @@ export default function PublicHomePage() {
             <a className={styles.primaryAction} href="#cash-offer">
               Start my offer request
             </a>
-            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+14045550100">
+            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+16785417725">
               Call instead
             </TrackedPhoneLink>
           </div>
@@ -163,6 +164,7 @@ export default function PublicHomePage() {
           Request my cash offer
         </a>
       </section>
+      <PublicSiteFooter />
     </main>
   );
 }

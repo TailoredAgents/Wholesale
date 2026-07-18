@@ -1,0 +1,124 @@
+.page {
+  min-height: 100vh;
+  background: #f7f5ef;
+  color: #161a1d;
+}
+
+.header {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 32px;
+  border-bottom: 1px solid #ded8cc;
+  background: #ffffff;
+}
+
+.brand {
+  color: #101820;
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.header nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  color: #245f43;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.content {
+  width: min(820px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 54px 0 64px;
+}
+
+.eyebrow {
+  color: #2f6f4e;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.content h1 {
+  margin-top: 10px;
+  font-size: 46px;
+  line-height: 1.08;
+}
+
+.effective {
+  margin-top: 14px;
+  color: #646b6d;
+  font-size: 14px;
+}
+
+.intro {
+  margin-top: 28px;
+  color: #3f4749;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.content section {
+  margin-top: 34px;
+}
+
+.content h2 {
+  font-size: 23px;
+  line-height: 1.2;
+}
+
+.content p,
+.content li {
+  color: #3f4749;
+  line-height: 1.7;
+}
+
+.content section > p,
+.content ul {
+  margin-top: 12px;
+}
+
+.content ul {
+  display: grid;
+  gap: 8px;
+  padding-left: 22px;
+}
+
+.content a {
+  color: #245f43;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.smsNotice {
+  padding-left: 18px;
+  border-left: 4px solid #245f43;
+}
+
+@media (max-width: 720px) {
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px;
+  }
+
+  .header nav {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .content {
+    width: calc(100% - 36px);
+    padding-top: 36px;
+  }
+
+  .content h1 {
+    font-size: 36px;
+  }
+}

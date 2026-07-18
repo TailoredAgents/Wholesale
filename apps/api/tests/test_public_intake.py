@@ -34,6 +34,7 @@ def public_payload() -> dict[str, object]:
         "asking_price": "180000",
         "comments": "Needs repairs",
         "consent_to_contact": True,
+        "sms_consent": True,
         "attribution": {
             "landing_page": "/get-a-cash-offer",
             "referrer": "https://www.google.com/",
@@ -76,15 +77,18 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 3
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 1
 
-    consent = db_session.scalar(select(ConsentRecord))
-    assert consent is not None
-    assert consent.status == "granted"
-    assert consent.captured_ip == "203.0.113.10"
+    consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
+    assert {consent.channel for consent in consents} == {"email", "phone", "sms"}
+    assert all(consent.status == "granted" for consent in consents)
+    assert all(consent.captured_ip == "203.0.113.10" for consent in consents)
+    sms_consent = next(consent for consent in consents if consent.channel == "sms")
+    assert sms_consent.wording_version == "seller-sms-web-v1"
+    assert "Reply STOP to opt out or HELP for help." in sms_consent.wording
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
     assert property_record.normalized_address_key == "55 auburn ave atlanta ga 30303"
@@ -201,6 +205,39 @@ def test_public_seller_intake_requires_consent(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
+def test_public_seller_intake_does_not_grant_sms_without_separate_opt_in(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["sms_consent"] = False
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201
+    consents = db_session.scalars(select(ConsentRecord)).all()
+    assert {consent.channel for consent in consents} == {"email", "phone"}
+
+
+def test_public_seller_intake_requires_sms_opt_in_when_text_is_preferred(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["preferred_contact_method"] = "sms"
+    payload["sms_consent"] = False
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "Text message consent is required" in str(response.json())
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
 def test_public_seller_intake_allows_autofilled_honeypot_field(
     db_session: Session,
     api_db_override: None,
@@ -242,7 +279,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
-    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 6
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2

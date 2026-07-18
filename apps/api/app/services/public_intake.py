@@ -19,6 +19,9 @@ from app.models.foundation import (
 )
 from app.schemas.public_intake import (
     CONSENT_WORDING,
+    CONSENT_WORDING_VERSION,
+    SMS_CONSENT_WORDING,
+    SMS_CONSENT_WORDING_VERSION,
     SellerIntakeCreate,
     SellerIntakeResponse,
 )
@@ -70,19 +73,39 @@ def create_public_seller_lead(
     matched_existing_lead = duplicate_match.lead is not None
     ensure_speed_to_lead_task(db, lead, contact)
 
-    db.add(
-        ConsentRecord(
-            organization_id=organization.id,
-            contact_id=contact.id,
-            channel=payload.preferred_contact_method,
-            status="granted",
-            source="seller_website",
-            wording_version=payload.consent_wording_version,
-            wording=CONSENT_WORDING,
-            captured_ip=ip_address,
-            user_agent=user_agent,
+    contact_channels = []
+    if payload.phone:
+        contact_channels.append("phone")
+    if payload.email:
+        contact_channels.append("email")
+    for channel in contact_channels:
+        db.add(
+            ConsentRecord(
+                organization_id=organization.id,
+                contact_id=contact.id,
+                channel=channel,
+                status="granted",
+                source="seller_website",
+                wording_version=CONSENT_WORDING_VERSION,
+                wording=CONSENT_WORDING,
+                captured_ip=ip_address,
+                user_agent=user_agent,
+            )
         )
-    )
+    if payload.sms_consent:
+        db.add(
+            ConsentRecord(
+                organization_id=organization.id,
+                contact_id=contact.id,
+                channel="sms",
+                status="granted",
+                source="seller_website",
+                wording_version=SMS_CONSENT_WORDING_VERSION,
+                wording=SMS_CONSENT_WORDING,
+                captured_ip=ip_address,
+                user_agent=user_agent,
+            )
+        )
     db.add(
         LeadFormSubmission(
             organization_id=organization.id,
@@ -140,7 +163,11 @@ def create_public_seller_lead(
             new_value={
                 "source": lead.source,
                 "stage_key": lead.stage_key,
-                "consent_wording_version": payload.consent_wording_version,
+                "consent_wording_version": CONSENT_WORDING_VERSION,
+                "sms_consent": payload.sms_consent,
+                "sms_consent_wording_version": (
+                    SMS_CONSENT_WORDING_VERSION if payload.sms_consent else None
+                ),
                 "matched_existing_lead": matched_existing_lead,
             },
             reason="Public seller website form submission",
@@ -153,7 +180,7 @@ def create_public_seller_lead(
         property_id=property_record.id,
         duplicate_status="matched_existing_lead" if matched_existing_lead else "created",
         matched_existing_lead=matched_existing_lead,
-        consent_wording_version=payload.consent_wording_version,
+        consent_wording_version=CONSENT_WORDING_VERSION,
         message=(
             "Thanks. We received your updated information."
             if matched_existing_lead

@@ -1,13 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 import { getConversionAttribution, recordConversionEvent } from "../lib/conversion-events";
 import { TrackedPhoneLink } from "../tracked-phone-link";
 import styles from "./page.module.css";
 
 const consentWording =
-  "By submitting this form, you agree that the company may contact you about your property using the phone number or email provided. Message and data rates may apply. Consent is not required as a condition of purchase.";
+  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property and cash offer request. This permission does not include text messages.";
 
 type SubmitState =
   | { status: "idle"; message: string }
@@ -86,7 +87,9 @@ export function CashOfferForm() {
       asking_price: getValue(formData, "asking_price") || null,
       comments: getValue(formData, "comments") || null,
       consent_to_contact: formData.get("consent_to_contact") === "on",
-      consent_wording_version: "seller-web-v1",
+      consent_wording_version: "seller-contact-web-v2",
+      sms_consent: formData.get("sms_consent") === "on",
+      sms_consent_wording_version: "seller-sms-web-v1",
       attribution: getConversionAttribution(),
     };
     if (!payload.phone && !payload.email) {
@@ -154,7 +157,7 @@ export function CashOfferForm() {
           </div>
         </div>
         <div className={styles.confirmationActions}>
-          <TrackedPhoneLink className={styles.secondaryButton} href="tel:+14045550100">
+          <TrackedPhoneLink className={styles.secondaryButton} href="tel:+16785417725">
             Call Stonegate
           </TrackedPhoneLink>
           <button
@@ -244,7 +247,7 @@ export function CashOfferForm() {
             <span>Preferred contact</span>
             <select name="preferred_contact_method" defaultValue="phone">
               <option value="phone">Phone</option>
-              <option value="sms">Text</option>
+              <option value="sms">Text (SMS opt-in required)</option>
               <option value="email">Email</option>
             </select>
           </label>
@@ -292,6 +295,18 @@ export function CashOfferForm() {
       <label className={styles.consent}>
         <input name="consent_to_contact" type="checkbox" required />
         <span>{consentWording}</span>
+      </label>
+
+      <label className={styles.consent}>
+        <input name="sms_consent" type="checkbox" />
+        <span>
+          Yes, I agree to receive recurring automated text messages from Stonegate Home Buyers
+          about my property inquiry, appointments, and cash offer updates at the number provided.
+          Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP
+          for help. Consent is not a condition of purchase. See our{" "}
+          <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
+          <Link href="/privacy-policy">Privacy Policy</Link>.
+        </span>
       </label>
 
       <button disabled={submitState.status === "submitting"} type="submit">

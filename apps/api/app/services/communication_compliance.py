@@ -59,7 +59,7 @@ def evaluate_sms_eligibility(
         .where(
             ConsentRecord.organization_id == contact.organization_id,
             ConsentRecord.contact_id == contact.id,
-            ConsentRecord.channel.in_(("sms", "phone")),
+            ConsentRecord.channel == "sms",
         )
         .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
     )
@@ -87,7 +87,8 @@ def evaluate_sms_eligibility(
     if not within_allowed_hours:
         blockers.append("Text messaging is outside Stonegate's allowed contact hours.")
     if not settings.twilio_sms_configured:
-        blockers.append("Twilio SMS is not configured.")
+        missing = "; ".join(settings.twilio_sms_configuration_blockers)
+        blockers.append(f"Twilio SMS is not configured. Missing: {missing}.")
     return SmsEligibility(
         can_send=not blockers,
         recipient=recipient,
@@ -135,7 +136,7 @@ def evaluate_voice_eligibility(
         .where(
             ConsentRecord.organization_id == contact.organization_id,
             ConsentRecord.contact_id == contact.id,
-            ConsentRecord.channel.in_(("phone", "sms")),
+            ConsentRecord.channel == "phone",
         )
         .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
     )

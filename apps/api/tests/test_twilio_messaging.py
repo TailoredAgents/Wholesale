@@ -118,6 +118,7 @@ def public_payload() -> dict[str, object]:
         "reason_for_selling": "Inherited property",
         "desired_timeline": "30 days",
         "consent_to_contact": True,
+        "sms_consent": True,
     }
 
 
@@ -442,3 +443,24 @@ def test_inbox_detail_reports_sms_eligibility(
     assert eligibility["can_send"] is True
     assert eligibility["recipient"] == "+14045551212"
     assert eligibility["consent_status"] == "granted"
+
+
+def test_sms_eligibility_identifies_missing_render_setting(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TWILIO_MESSAGING_SERVICE_SID")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+
+    response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200
+    blockers = response.json()["sms_eligibility"]["blockers"]
+    assert any("TWILIO_MESSAGING_SERVICE_SID" in blocker for blocker in blockers)

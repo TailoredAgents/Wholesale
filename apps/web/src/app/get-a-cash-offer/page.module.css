@@ -222,6 +222,13 @@
   margin-top: 2px;
 }
 
+.consent a {
+  color: #245f43;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .form button {
   min-height: 50px;
   border: 0;

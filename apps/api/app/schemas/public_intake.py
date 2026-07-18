@@ -2,11 +2,19 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
-CONSENT_WORDING_VERSION = "seller-web-v1"
+CONSENT_WORDING_VERSION = "seller-contact-web-v2"
 CONSENT_WORDING = (
-    "By submitting this form, you agree that the company may contact you about your "
-    "property using the phone number or email provided. Message and data rates may apply. "
-    "Consent is not required as a condition of purchase."
+    "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
+    "phone call or email about your property and cash offer request. This permission "
+    "does not include text messages."
+)
+SMS_CONSENT_WORDING_VERSION = "seller-sms-web-v1"
+SMS_CONSENT_WORDING = (
+    "Yes, I agree to receive recurring automated text messages from Stonegate Home "
+    "Buyers about my property inquiry, appointments, and cash offer updates at the "
+    "number provided. Message frequency varies. Message and data rates may apply. "
+    "Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. "
+    "See the Stonegate Home Buyers Terms and Conditions and Privacy Policy."
 )
 
 
@@ -50,6 +58,11 @@ class SellerIntakeCreate(BaseModel):
     company_website: str | None = Field(default=None, max_length=255)
     consent_to_contact: bool
     consent_wording_version: str = Field(default=CONSENT_WORDING_VERSION, max_length=80)
+    sms_consent: bool = False
+    sms_consent_wording_version: str = Field(
+        default=SMS_CONSENT_WORDING_VERSION,
+        max_length=80,
+    )
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
 
     @model_validator(mode="after")
@@ -58,6 +71,10 @@ class SellerIntakeCreate(BaseModel):
             raise ValueError("Either phone or email is required.")
         if not self.consent_to_contact:
             raise ValueError("Consent to contact is required.")
+        if self.sms_consent and not self.phone:
+            raise ValueError("A phone number is required to consent to text messages.")
+        if self.preferred_contact_method == "sms" and not self.sms_consent:
+            raise ValueError("Text message consent is required when text is selected.")
         return self
 
 

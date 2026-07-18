@@ -192,21 +192,29 @@ class Settings(BaseSettings):
         ]
 
     @property
-    def twilio_sms_configured(self) -> bool:
-        sending_credentials = bool(
-            self.twilio_account_sid
-            and (
-                self.twilio_auth_token
-                or (self.twilio_api_key_sid and self.twilio_api_key_secret)
+    def twilio_sms_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.twilio_sms_enabled:
+            blockers.append("TWILIO_SMS_ENABLED=true")
+        if not self.twilio_account_sid:
+            blockers.append("TWILIO_ACCOUNT_SID")
+        if not self.twilio_auth_token and not (
+            self.twilio_api_key_sid and self.twilio_api_key_secret
+        ):
+            blockers.append(
+                "TWILIO_AUTH_TOKEN or both TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET"
             )
-        )
-        return bool(
-            self.twilio_sms_enabled
-            and sending_credentials
-            and self.twilio_messaging_service_sid
-            and self.twilio_sms_from_number
-            and self.twilio_webhook_base_url
-        )
+        if not self.twilio_messaging_service_sid:
+            blockers.append("TWILIO_MESSAGING_SERVICE_SID")
+        if not self.twilio_sms_from_number:
+            blockers.append("TWILIO_SMS_FROM_NUMBER")
+        if not self.twilio_webhook_base_url:
+            blockers.append("TWILIO_WEBHOOK_BASE_URL")
+        return tuple(blockers)
+
+    @property
+    def twilio_sms_configured(self) -> bool:
+        return not self.twilio_sms_configuration_blockers
 
     @property
     def twilio_voice_configured(self) -> bool:

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PublicConversionTracker } from "./public-conversion-tracker";
+import { PublicSiteFooter } from "./public-site-footer";
 import type { SellerSituation } from "./seller-situations";
 import styles from "./seller-situation.module.css";
 import { TrackedPhoneLink } from "./tracked-phone-link";
@@ -34,7 +35,7 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
             <Link className={styles.primaryAction} href="/get-a-cash-offer">
               Get my cash offer
             </Link>
-            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+14045550100">
+            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+16785417725">
               Call Stonegate
             </TrackedPhoneLink>
           </div>
@@ -95,6 +96,7 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
           Get my cash offer
         </Link>
       </section>
+      <PublicSiteFooter />
     </main>
   );
 }

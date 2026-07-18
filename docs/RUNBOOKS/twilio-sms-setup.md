@@ -6,8 +6,8 @@ the API service is configured and `TWILIO_SMS_ENABLED` is set to `true`.
 
 ## 1. Prepare Twilio
 
-1. In the Twilio Console, open **Messaging > Services** and create or select Stonegate's Messaging
-   Service.
+1. In the Twilio Console, open **Messaging > Services** and create or select Stonegate's dedicated
+   Messaging Service. Do not share another company's Messaging Service or A2P Campaign.
 2. Add the company-owned Twilio phone number under **Sender Pool**. Stonegate explicitly sends
    from this number, even if the approved Messaging Service contains other senders.
 3. Review and enable **Advanced Opt-Out** for the service. Keep the standard STOP, START, and HELP
@@ -16,8 +16,10 @@ the API service is configured and `TWILIO_SMS_ENABLED` is set to `true`.
    Service SID starts with `MG`.
 5. Copy the Auth Token. Stonegate uses it to verify Twilio webhook signatures.
 
-Twilio trial accounts can send only to verified recipient numbers. Production messaging may also
-require A2P 10DLC registration for US application-to-person traffic.
+Twilio trial accounts can send only to verified recipient numbers. Complete Stonegate's A2P 10DLC
+registration before production messaging. Use
+[Stonegate A2P 10DLC Registration](./twilio-a2p-registration.md) for the website evidence and
+application answers.
 
 ## 2. Configure `oakwell-api` In Render
 

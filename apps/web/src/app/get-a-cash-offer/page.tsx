@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { PublicConversionTracker } from "../public-conversion-tracker";
+import { PublicSiteFooter } from "../public-site-footer";
 import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
@@ -48,6 +49,7 @@ export default function GetCashOfferPage() {
         </div>
         <CashOfferForm />
       </section>
+      <PublicSiteFooter />
     </main>
   );
 }
