@@ -1,7 +1,9 @@
 from collections.abc import Iterator
+from datetime import datetime
 from typing import cast
 from urllib.parse import urlencode
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,6 +27,10 @@ from app.models.foundation import (
     VoiceLine,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.communication_compliance import (
+    is_within_sms_allowed_hours,
+    is_within_voice_allowed_hours,
+)
 
 OWNER_EMAIL = "owner@example.com"
 AUTH_TOKEN = "test-voice-auth-token"
@@ -50,6 +56,8 @@ def voice_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
         "TWILIO_VALIDATE_WEBHOOK_SIGNATURES": "true",
         "TWILIO_SMS_ALLOWED_START_HOUR": "0",
         "TWILIO_SMS_ALLOWED_END_HOUR": "24",
+        "TWILIO_VOICE_ALLOWED_START_HOUR": "0",
+        "TWILIO_VOICE_ALLOWED_END_HOUR": "24",
     }
     for key, value in values.items():
         monkeypatch.setenv(key, value)
@@ -120,6 +128,20 @@ def create_intent(client: TestClient, conversation: Conversation) -> dict[str, o
     )
     assert response.status_code == 201
     return cast(dict[str, object], response.json())
+
+
+def test_sms_and_voice_contact_hours_are_independent(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.setenv("TWILIO_SMS_ALLOWED_START_HOUR", "0")
+    monkeypatch.setenv("TWILIO_SMS_ALLOWED_END_HOUR", "24")
+    monkeypatch.setenv("TWILIO_VOICE_ALLOWED_START_HOUR", "9")
+    monkeypatch.setenv("TWILIO_VOICE_ALLOWED_END_HOUR", "20")
+    get_settings.cache_clear()
+    settings = get_settings()
+    late_evening = datetime(2026, 7, 17, 21, 30, tzinfo=ZoneInfo("America/New_York"))
+
+    assert is_within_sms_allowed_hours(settings, now=late_evening) is True
+    assert is_within_voice_allowed_hours(settings, now=late_evening) is False
+    get_settings.cache_clear()
 
 
 def test_voice_session_and_outbound_call_are_scoped_and_idempotent(

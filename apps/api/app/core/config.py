@@ -93,13 +93,13 @@ class Settings(BaseSettings):
         validation_alias="TWILIO_SMS_TIMEZONE",
     )
     twilio_sms_allowed_start_hour: int = Field(
-        default=9,
+        default=0,
         ge=0,
         le=23,
         validation_alias="TWILIO_SMS_ALLOWED_START_HOUR",
     )
     twilio_sms_allowed_end_hour: int = Field(
-        default=20,
+        default=24,
         ge=1,
         le=24,
         validation_alias="TWILIO_SMS_ALLOWED_END_HOUR",
@@ -124,6 +124,22 @@ class Settings(BaseSettings):
         ge=10,
         le=60,
         validation_alias="TWILIO_VOICE_RING_TIMEOUT_SECONDS",
+    )
+    twilio_voice_timezone: str = Field(
+        default="America/New_York",
+        validation_alias="TWILIO_VOICE_TIMEZONE",
+    )
+    twilio_voice_allowed_start_hour: int = Field(
+        default=9,
+        ge=0,
+        le=23,
+        validation_alias="TWILIO_VOICE_ALLOWED_START_HOUR",
+    )
+    twilio_voice_allowed_end_hour: int = Field(
+        default=20,
+        ge=1,
+        le=24,
+        validation_alias="TWILIO_VOICE_ALLOWED_END_HOUR",
     )
     twilio_voice_recording_enabled: bool = Field(
         default=False,

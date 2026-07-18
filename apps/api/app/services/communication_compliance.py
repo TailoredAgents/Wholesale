@@ -76,7 +76,7 @@ def evaluate_sms_eligibility(
         if recipient
         else None
     )
-    within_allowed_hours = is_within_allowed_hours(settings, now=now)
+    within_allowed_hours = is_within_sms_allowed_hours(settings, now=now)
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller mobile number is required.")
@@ -152,7 +152,7 @@ def evaluate_voice_eligibility(
         if recipient
         else None
     )
-    within_allowed_hours = is_within_allowed_hours(settings, now=now)
+    within_allowed_hours = is_within_voice_allowed_hours(settings, now=now)
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller phone number is required.")
@@ -183,14 +183,42 @@ def phone_lookup_values(value: str) -> tuple[str, ...]:
     return tuple(value for value in values if value)
 
 
-def is_within_allowed_hours(settings: Settings, *, now: datetime | None = None) -> bool:
+def is_within_sms_allowed_hours(
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    return is_within_contact_hours(
+        timezone=settings.twilio_sms_timezone,
+        start_hour=settings.twilio_sms_allowed_start_hour,
+        end_hour=settings.twilio_sms_allowed_end_hour,
+        now=now,
+    )
+
+
+def is_within_voice_allowed_hours(
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    return is_within_contact_hours(
+        timezone=settings.twilio_voice_timezone,
+        start_hour=settings.twilio_voice_allowed_start_hour,
+        end_hour=settings.twilio_voice_allowed_end_hour,
+        now=now,
+    )
+
+
+def is_within_contact_hours(
+    *,
+    timezone: str,
+    start_hour: int,
+    end_hour: int,
+    now: datetime | None = None,
+) -> bool:
     current = now or datetime.now(UTC)
     try:
-        local_time = current.astimezone(ZoneInfo(settings.twilio_sms_timezone))
+        local_time = current.astimezone(ZoneInfo(timezone))
     except ZoneInfoNotFoundError:
         return False
-    return (
-        settings.twilio_sms_allowed_start_hour
-        <= local_time.hour
-        < settings.twilio_sms_allowed_end_hour
-    )
+    return start_hour <= local_time.hour < end_hour

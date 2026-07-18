@@ -99,9 +99,9 @@ services:
       - key: TWILIO_SMS_TIMEZONE
         value: America/New_York
       - key: TWILIO_SMS_ALLOWED_START_HOUR
-        value: 9
+        value: 0
       - key: TWILIO_SMS_ALLOWED_END_HOUR
-        value: 20
+        value: 24
       - key: TWILIO_VOICE_ENABLED
         value: false
       - key: TWILIO_VOICE_FROM_NUMBER
@@ -112,6 +112,12 @@ services:
         value: 3600
       - key: TWILIO_VOICE_RING_TIMEOUT_SECONDS
         value: 25
+      - key: TWILIO_VOICE_TIMEZONE
+        value: America/New_York
+      - key: TWILIO_VOICE_ALLOWED_START_HOUR
+        value: 9
+      - key: TWILIO_VOICE_ALLOWED_END_HOUR
+        value: 20
       - key: TWILIO_VOICE_RECORDING_ENABLED
         value: false
       - key: TWILIO_VOICE_RECORDING_DISCLOSURE

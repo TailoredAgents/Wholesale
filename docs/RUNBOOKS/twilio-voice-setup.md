@@ -53,12 +53,14 @@ Add these variables only to `oakwell-api`:
 | `TWILIO_VOICE_ENABLED` | Keep `false` until the activation steps are complete |
 | `TWILIO_VOICE_TOKEN_TTL_SECONDS` | `3600` |
 | `TWILIO_VOICE_RING_TIMEOUT_SECONDS` | `25` |
+| `TWILIO_VOICE_TIMEZONE` | `America/New_York` |
+| `TWILIO_VOICE_ALLOWED_START_HOUR` | `9` |
+| `TWILIO_VOICE_ALLOWED_END_HOUR` | `20` |
 | `TWILIO_VOICE_RECORDING_ENABLED` | Keep `false` initially |
 | `TWILIO_VOICE_RECORDING_DISCLOSURE` | Leave blank while recording is disabled |
 
-Voice currently uses the same timezone and allowed contact-hour settings as SMS:
-`TWILIO_SMS_TIMEZONE`, `TWILIO_SMS_ALLOWED_START_HOUR`, and
-`TWILIO_SMS_ALLOWED_END_HOUR`.
+Voice has its own contact window and remains limited to 9:00 AM–8:00 PM Eastern even though
+Stonegate permits staff SMS at any hour.
 
 Never add Twilio secrets to `oakwell-web`, GitHub, or a `NEXT_PUBLIC_` variable. The browser only
 receives a short-lived, user-specific Voice token from the authenticated Stonegate API.

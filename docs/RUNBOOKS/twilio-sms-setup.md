@@ -34,8 +34,8 @@ Add these environment variables only to the API service:
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
 | `TWILIO_SMS_ENABLED` | Keep `false` until the remaining steps are complete |
 | `TWILIO_SMS_TIMEZONE` | `America/New_York` |
-| `TWILIO_SMS_ALLOWED_START_HOUR` | `9` |
-| `TWILIO_SMS_ALLOWED_END_HOUR` | `20` |
+| `TWILIO_SMS_ALLOWED_START_HOUR` | `0` |
+| `TWILIO_SMS_ALLOWED_END_HOUR` | `24` |
 
 Do not add Twilio secrets to `oakwell-web`, GitHub, or any `NEXT_PUBLIC_` variable.
 
@@ -87,6 +87,8 @@ check the Twilio Messaging logs for the provider error code.
 - Every outbound attempt requires an idempotency key, preventing double sends from repeated clicks.
 - Messages are blocked without a valid phone number, consent, permitted contact hours, and a fully
   configured provider.
+- Stonegate's configured SMS window is `0–24`, so staff can send at any hour. Consent and
+  suppression checks still apply.
 - Active STOP suppression blocks every Stonegate user, not only the person who received the reply.
 - Inbound and status callbacks validate `X-Twilio-Signature` and retain provider event identifiers.
 - Disabling `TWILIO_SMS_ENABLED` stops new outbound messages without removing communication history.
