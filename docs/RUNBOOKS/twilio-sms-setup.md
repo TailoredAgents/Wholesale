@@ -32,7 +32,7 @@ Add these environment variables only to the API service:
 | `TWILIO_SMS_FROM_NUMBER` | Stonegate sender in E.164 format: `+16785417725` |
 | `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://oakwell-api.onrender.com` |
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
-| `TWILIO_SMS_ENABLED` | Keep `false` until the remaining steps are complete |
+| `TWILIO_SMS_ENABLED` | `true` after the remaining steps are complete |
 | `TWILIO_SMS_TIMEZONE` | `America/New_York` |
 | `TWILIO_SMS_ALLOWED_START_HOUR` | `0` |
 | `TWILIO_SMS_ALLOWED_END_HOUR` | `24` |
