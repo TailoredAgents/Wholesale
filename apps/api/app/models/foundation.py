@@ -426,6 +426,68 @@ class CommunicationDispatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "voice_lines"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "phone_number",
+            name="uq_voice_lines_org_phone_number",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_phone_number_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone_number: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    inbound_route: Mapped[str] = mapped_column(String(80), nullable=False)
+    line_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class VoiceCallIntent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "voice_call_intents"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_voice_call_intents_org_idempotency",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    voice_line_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("voice_lines.id"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    recording_consent_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    intent_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
 class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "call_records"
     __table_args__ = (
@@ -449,8 +511,15 @@ class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     communication_record_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("communication_records.id", ondelete="SET NULL")
     )
+    voice_line_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("voice_lines.id", ondelete="SET NULL"), index=True
+    )
+    call_intent_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("voice_call_intents.id", ondelete="SET NULL"), index=True
+    )
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    child_provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     direction: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     from_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -460,6 +529,9 @@ class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     disposition: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    recording_consent_status: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="not_requested"
+    )
     call_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 

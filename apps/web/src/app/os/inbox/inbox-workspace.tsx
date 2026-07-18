@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import type { Call, Device } from "@twilio/voice-sdk";
 import {
   ArrowRightLeft,
   CalendarClock,
@@ -13,8 +14,13 @@ import {
   Mail,
   MailOpen,
   MessageSquare,
+  Mic,
+  MicOff,
   NotebookPen,
   Phone,
+  PhoneCall,
+  PhoneOff,
+  Play,
   RefreshCw,
   Reply,
   Search,
@@ -77,6 +83,10 @@ type TimelineItem = {
   actor_user_id: string | null;
   actor_display_name: string | null;
   occurred_at: string;
+  call_id: string | null;
+  duration_seconds: number | null;
+  recording_id: string | null;
+  recording_status: string | null;
 };
 
 type ConversationDetail = Conversation & {
@@ -125,6 +135,15 @@ type ConversationDetail = Conversation & {
     within_allowed_hours: boolean;
     blockers: string[];
   };
+  voice_eligibility: {
+    can_call: boolean;
+    recipient: string | null;
+    consent_status: string;
+    is_suppressed: boolean;
+    provider_configured: boolean;
+    within_allowed_hours: boolean;
+    blockers: string[];
+  };
 };
 
 type Assignee = {
@@ -137,6 +156,40 @@ type Assignee = {
 type FilterKey = "mine" | "unassigned" | "team" | "needs_reply" | "appointments" | "unread";
 type MobilePane = "conversations" | "thread" | "details";
 type ComposerChannel = "sms" | "email" | "call" | "note";
+type VoiceStatus =
+  | "disabled"
+  | "loading"
+  | "ready"
+  | "connecting"
+  | "ringing"
+  | "incoming"
+  | "active"
+  | "ended"
+  | "error";
+
+type VoiceSession = {
+  can_initialize: boolean;
+  identity: string;
+  token: string | null;
+  expires_at: string | null;
+  line: {
+    id: string;
+    phone_number: string;
+    label: string;
+  } | null;
+  recording_enabled: boolean;
+  blockers: string[];
+};
+
+type VoiceCallIntent = {
+  id: string;
+  conversation_id: string;
+  recipient: string;
+  from_number: string;
+  status: string;
+  expires_at: string;
+  recording_enabled: boolean;
+};
 
 const filters: Array<{
   key: FilterKey;
@@ -208,6 +261,13 @@ function formatDateTime(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatDuration(totalSeconds: number | null) {
+  if (totalSeconds === null) return "No duration";
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 function hasNeedsReply(conversation: Conversation) {
   if (!conversation.last_inbound_at) return false;
   if (!conversation.last_outbound_at) return true;
@@ -230,6 +290,9 @@ export function InboxWorkspace() {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
+  const voiceDeviceRef = useRef<Device | null>(null);
+  const activeCallRef = useRef<Call | null>(null);
+  const recordingUrlsRef = useRef<Record<string, string>>({});
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -239,6 +302,7 @@ export function InboxWorkspace() {
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
+  const [callComposerMode, setCallComposerMode] = useState<"browser" | "log">("browser");
   const [direction, setDirection] = useState<"inbound" | "outbound">("outbound");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -250,6 +314,15 @@ export function InboxWorkspace() {
   const [assigneeId, setAssigneeId] = useState("");
   const [queueKey, setQueueKey] = useState("acquisitions_follow_up");
   const [handoffReason, setHandoffReason] = useState("Reassigned from the shared inbox.");
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("disabled");
+  const [voiceSession, setVoiceSession] = useState<VoiceSession | null>(null);
+  const [voiceMessage, setVoiceMessage] = useState("Calling is off");
+  const [voiceCaller, setVoiceCaller] = useState<string | null>(null);
+  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
+  const [callElapsed, setCallElapsed] = useState(0);
+  const [callMuted, setCallMuted] = useState(false);
+  const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
+  const [recordingLoadingId, setRecordingLoadingId] = useState<string | null>(null);
 
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -337,6 +410,189 @@ export function InboxWorkspace() {
     [request],
   );
 
+  const finishCall = useCallback(() => {
+    activeCallRef.current = null;
+    setCallStartedAt(null);
+    setCallElapsed(0);
+    setCallMuted(false);
+    setVoiceCaller(null);
+    setVoiceStatus("ended");
+    setVoiceMessage("Call ended");
+    const conversationId = selectedId;
+    window.setTimeout(() => {
+      setVoiceStatus((current) => (current === "ended" ? "ready" : current));
+      setVoiceMessage((current) => (current === "Call ended" ? "Ready for calls" : current));
+    }, 1600);
+    if (conversationId) {
+      void Promise.all([loadConversations(), loadDetail(conversationId)]);
+    }
+  }, [loadConversations, loadDetail, selectedId]);
+
+  const wireCall = useCallback(
+    (call: Call, incoming: boolean) => {
+      activeCallRef.current = call;
+      call.on("ringing", () => {
+        setVoiceStatus("ringing");
+        setVoiceMessage(incoming ? "Incoming call" : "Ringing seller");
+      });
+      call.on("accept", () => {
+        setVoiceStatus("active");
+        setVoiceMessage("Call connected");
+        setCallStartedAt(Date.now());
+      });
+      call.on("disconnect", finishCall);
+      call.on("cancel", finishCall);
+      call.on("reject", finishCall);
+      call.on("error", (callError: Error) => {
+        setVoiceStatus("error");
+        setVoiceMessage(callError.message || "Call failed");
+        setError(callError.message || "Twilio could not complete the call.");
+        activeCallRef.current = null;
+      });
+    },
+    [finishCall],
+  );
+
+  const enableCalling = useCallback(async (): Promise<Device | null> => {
+    if (voiceDeviceRef.current) return voiceDeviceRef.current;
+    setVoiceStatus("loading");
+    setVoiceMessage("Connecting secure phone");
+    try {
+      const session = await request<VoiceSession>("/api/v1/voice/session");
+      setVoiceSession(session);
+      if (!session.can_initialize || !session.token) {
+        const message = session.blockers.join(" ") || "Calling is not available.";
+        setVoiceStatus("disabled");
+        setVoiceMessage(message);
+        setError(message);
+        return null;
+      }
+      const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
+      if (!TwilioDevice.isSupported) {
+        throw new Error("This browser does not support secure browser calling.");
+      }
+      const device = new TwilioDevice(session.token, {
+        closeProtection: "A Stonegate call is still active.",
+        tokenRefreshMs: 60_000,
+      });
+      device.on("registered", () => {
+        setVoiceStatus("ready");
+        setVoiceMessage(`Ready on ${session.line?.phone_number ?? "Stonegate line"}`);
+      });
+      device.on("unregistered", () => {
+        setVoiceStatus("disabled");
+        setVoiceMessage("Calling is off");
+      });
+      device.on("error", (deviceError: Error) => {
+        setVoiceStatus("error");
+        setVoiceMessage(deviceError.message || "Phone connection failed");
+        setError(deviceError.message || "Twilio Voice could not connect.");
+      });
+      device.on("incoming", (call: Call) => {
+        const caller = call.parameters.From || call.customParameters.get("From") || "Unknown caller";
+        setVoiceCaller(caller);
+        setVoiceStatus("incoming");
+        setVoiceMessage("Incoming Stonegate call");
+        wireCall(call, true);
+      });
+      device.on("tokenWillExpire", async () => {
+        try {
+          const refreshed = await request<VoiceSession>("/api/v1/voice/session");
+          if (refreshed.token) {
+            device.updateToken(refreshed.token);
+            setVoiceSession(refreshed);
+          }
+        } catch {
+          setError("The phone session could not be refreshed. Finish the call and reconnect.");
+        }
+      });
+      voiceDeviceRef.current = device;
+      await device.register();
+      return device;
+    } catch (voiceError) {
+      const message =
+        voiceError instanceof Error ? voiceError.message : "Unable to initialize browser calling.";
+      setVoiceStatus("error");
+      setVoiceMessage(message);
+      setError(message);
+      return null;
+    }
+  }, [request, wireCall]);
+
+  const startCall = useCallback(async () => {
+    if (!detail || activeCallRef.current) return;
+    const canPlaceCalls =
+      me?.permissions.includes("communications:place_calls") ||
+      (me?.permissions.includes("communications:place_assigned_calls") &&
+        detail.assigned_user_id === me.user_id);
+    if (!canPlaceCalls) {
+      setError("This conversation must be assigned to you before you can call.");
+      return;
+    }
+    if (!detail.voice_eligibility.can_call) {
+      setError(detail.voice_eligibility.blockers.join(" "));
+      return;
+    }
+    setError(null);
+    const device = voiceDeviceRef.current ?? (await enableCalling());
+    if (!device) return;
+    try {
+      setVoiceCaller(detail.preferred_name || detail.seller_name);
+      setCallElapsed(0);
+      setVoiceStatus("connecting");
+      setVoiceMessage(`Calling ${detail.voice_eligibility.recipient}`);
+      const intent = await request<VoiceCallIntent>(
+        `/api/v1/voice/conversations/${detail.id}/call-intents`,
+        {
+          method: "POST",
+          body: JSON.stringify({ idempotency_key: window.crypto.randomUUID() }),
+        },
+      );
+      const call = await device.connect({
+        params: { CallIntentId: intent.id },
+      });
+      wireCall(call, false);
+    } catch (voiceError) {
+      const message = voiceError instanceof Error ? voiceError.message : "Call could not start.";
+      setVoiceStatus("error");
+      setVoiceMessage(message);
+      setVoiceCaller(null);
+      setError(message);
+    }
+  }, [detail, enableCalling, me, request, wireCall]);
+
+  const loadRecording = useCallback(
+    async (recordingId: string) => {
+      if (recordingUrlsRef.current[recordingId]) return;
+      setRecordingLoadingId(recordingId);
+      try {
+        const response = await fetch(
+          `${apiBaseUrl}/api/v1/voice/recordings/${recordingId}/media`,
+          {
+            headers: await getHeaders(),
+            cache: "no-store",
+          },
+        );
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(displayError(payload, "Recording could not be loaded."));
+        }
+        const url = URL.createObjectURL(await response.blob());
+        recordingUrlsRef.current[recordingId] = url;
+        setRecordingUrls((current) => ({ ...current, [recordingId]: url }));
+      } catch (recordingError) {
+        setError(
+          recordingError instanceof Error
+            ? recordingError.message
+            : "Recording could not be loaded.",
+        );
+      } finally {
+        setRecordingLoadingId(null);
+      }
+    },
+    [apiBaseUrl, getHeaders],
+  );
+
   useEffect(() => {
     let active = true;
     async function load() {
@@ -381,6 +637,28 @@ export function InboxWorkspace() {
     timelineEndRef.current?.scrollIntoView({ block: "end" });
   }, [detail?.id, detail?.timeline.length]);
 
+  useEffect(() => {
+    if (voiceStatus !== "active" || callStartedAt === null) {
+      return;
+    }
+    const updateElapsed = () => {
+      setCallElapsed(Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000)));
+    };
+    updateElapsed();
+    const interval = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(interval);
+  }, [callStartedAt, voiceStatus]);
+
+  useEffect(
+    () => () => {
+      voiceDeviceRef.current?.destroy();
+      for (const url of Object.values(recordingUrlsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [],
+  );
+
   const counts = useMemo(() => {
     const currentUserId = me?.user_id;
     return {
@@ -423,12 +701,17 @@ export function InboxWorkspace() {
   );
   const nextTask = detail?.open_tasks[0];
   const isLiveSms = channel === "sms" && direction === "outbound";
+  const isVoiceComposer = channel === "call" && callComposerMode === "browser";
+  const isCallInProgress = ["connecting", "ringing", "incoming", "active"].includes(
+    voiceStatus,
+  );
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
   const canSubmitComposer =
     Boolean(body.trim()) &&
     composerStatus !== "saving" &&
+    !isVoiceComposer &&
     (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send));
 
   function selectConversation(conversationId: string) {
@@ -445,6 +728,31 @@ export function InboxWorkspace() {
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh inbox.");
     }
+  }
+
+  function acceptIncomingCall() {
+    const call = activeCallRef.current;
+    if (!call) return;
+    call.accept();
+    setVoiceStatus("connecting");
+    setVoiceMessage("Connecting call");
+  }
+
+  function rejectIncomingCall() {
+    activeCallRef.current?.reject();
+    finishCall();
+  }
+
+  function endActiveCall() {
+    activeCallRef.current?.disconnect();
+  }
+
+  function toggleCallMute() {
+    const call = activeCallRef.current;
+    if (!call) return;
+    const nextMuted = !callMuted;
+    call.mute(nextMuted);
+    setCallMuted(nextMuted);
   }
 
   async function submitCommunication(event: FormEvent<HTMLFormElement>) {
@@ -522,11 +830,95 @@ export function InboxWorkspace() {
           <p className={styles.eyebrow}>Communications</p>
           <h2>Shared inbox</h2>
         </div>
-        <button className={styles.refreshButton} onClick={() => void refreshInbox()} type="button">
-          <RefreshCw size={16} aria-hidden="true" />
-          Refresh
-        </button>
+        <div className={styles.headerActions}>
+          <button
+            className={styles.phoneStatusButton}
+            data-status={voiceStatus}
+            disabled={voiceStatus === "loading"}
+            onClick={() => void enableCalling()}
+            title={voiceMessage}
+            type="button"
+          >
+            <PhoneCall size={16} aria-hidden="true" />
+            {voiceStatus === "disabled" || voiceStatus === "error"
+              ? "Enable calling"
+              : voiceMessage}
+          </button>
+          <button className={styles.refreshButton} onClick={() => void refreshInbox()} type="button">
+            <RefreshCw size={16} aria-hidden="true" />
+            Refresh
+          </button>
+        </div>
       </header>
+
+      {["connecting", "ringing", "incoming", "active"].includes(voiceStatus) ? (
+        <section className={styles.callDock} aria-live="polite">
+          <span className={styles.callDockIcon}>
+            <PhoneCall size={18} aria-hidden="true" />
+          </span>
+          <div>
+            <strong>{voiceCaller || "Stonegate call"}</strong>
+            <span>
+              {voiceMessage}
+              {voiceStatus === "active" ? ` · ${formatDuration(callElapsed)}` : ""}
+            </span>
+          </div>
+          <div className={styles.callDockActions}>
+            {voiceStatus === "incoming" ? (
+              <>
+                <button
+                  className={styles.acceptCallButton}
+                  onClick={acceptIncomingCall}
+                  title="Answer call"
+                  type="button"
+                >
+                  <Phone size={17} aria-hidden="true" />
+                  <span className={styles.visuallyHidden}>Answer call</span>
+                </button>
+                <button
+                  className={styles.endCallButton}
+                  onClick={rejectIncomingCall}
+                  title="Decline call"
+                  type="button"
+                >
+                  <PhoneOff size={17} aria-hidden="true" />
+                  <span className={styles.visuallyHidden}>Decline call</span>
+                </button>
+              </>
+            ) : (
+              <>
+                {voiceStatus === "active" ? (
+                  <button
+                    className={styles.muteCallButton}
+                    data-muted={callMuted}
+                    onClick={toggleCallMute}
+                    title={callMuted ? "Unmute microphone" : "Mute microphone"}
+                    type="button"
+                  >
+                    {callMuted ? (
+                      <MicOff size={17} aria-hidden="true" />
+                    ) : (
+                      <Mic size={17} aria-hidden="true" />
+                    )}
+                    <span className={styles.visuallyHidden}>
+                      {callMuted ? "Unmute microphone" : "Mute microphone"}
+                    </span>
+                  </button>
+                ) : null}
+                <button
+                  className={styles.endCallButton}
+                  onClick={endActiveCall}
+                  title="End call"
+                  type="button"
+                >
+                  <PhoneOff size={17} aria-hidden="true" />
+                  <span className={styles.visuallyHidden}>End call</span>
+                </button>
+              </>
+            )}
+          </div>
+        </section>
+      ) : null}
 
       {error ? (
         <div className={styles.errorBanner} role="alert">
@@ -662,10 +1054,15 @@ export function InboxWorkspace() {
                 </div>
                 <div className={styles.contactActions}>
                   {primaryPhone ? (
-                    <a href={`tel:${primaryPhone.value}`} title={`Call ${primaryPhone.value}`}>
+                    <button
+                      disabled={isCallInProgress}
+                      onClick={() => void startCall()}
+                      title={`Call ${primaryPhone.value} from Stonegate`}
+                      type="button"
+                    >
                       <Phone size={17} aria-hidden="true" />
                       <span className={styles.visuallyHidden}>Call seller</span>
-                    </a>
+                    </button>
                   ) : null}
                   {primaryEmail ? (
                     <a href={`mailto:${primaryEmail.value}`} title={`Email ${primaryEmail.value}`}>
@@ -700,7 +1097,7 @@ export function InboxWorkspace() {
                           : item.direction === "internal"
                             ? styles.internalMessage
                             : styles.inboundMessage
-                      }`}
+                      } ${item.channel === "call" ? styles.callMessage : ""}`}
                       key={item.id}
                     >
                       <div className={styles.messageMeta}>
@@ -709,6 +1106,34 @@ export function InboxWorkspace() {
                       </div>
                       {item.subject ? <strong>{item.subject}</strong> : null}
                       <p>{item.body}</p>
+                      {item.channel === "call" ? (
+                        <div className={styles.callMetadata}>
+                          <span>{formatDuration(item.duration_seconds)}</span>
+                          {item.recording_id &&
+                          item.recording_status === "completed" &&
+                          me?.permissions.includes("communications:access_recordings") ? (
+                            recordingUrls[item.recording_id] ? (
+                              <audio controls preload="none" src={recordingUrls[item.recording_id]}>
+                                Call recording
+                              </audio>
+                            ) : (
+                              <button
+                                disabled={recordingLoadingId === item.recording_id}
+                                onClick={() => void loadRecording(item.recording_id as string)}
+                                type="button"
+                              >
+                                <Play size={13} aria-hidden="true" />
+                                {recordingLoadingId === item.recording_id
+                                  ? "Loading"
+                                  : "Play recording"}
+                              </button>
+                            )
+                          ) : item.recording_status &&
+                            item.recording_status !== "completed" ? (
+                            <span>Recording {labelize(item.recording_status)}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
                       <small>
                         {item.actor_display_name || (item.direction === "inbound" ? "Seller" : "Team")}
                         {" · "}
@@ -753,7 +1178,57 @@ export function InboxWorkspace() {
                   })}
                 </div>
                 <div className={styles.composerControls}>
-                  {channel !== "note" ? (
+                  {channel === "call" ? (
+                    <>
+                      <div className={styles.callModeToggle}>
+                        <button
+                          className={
+                            callComposerMode === "browser" ? styles.activeDirection : undefined
+                          }
+                          onClick={() => setCallComposerMode("browser")}
+                          type="button"
+                        >
+                          <PhoneCall size={13} aria-hidden="true" />
+                          Browser
+                        </button>
+                        <button
+                          className={callComposerMode === "log" ? styles.activeDirection : undefined}
+                          onClick={() => setCallComposerMode("log")}
+                          type="button"
+                        >
+                          <NotebookPen size={13} aria-hidden="true" />
+                          Log external
+                        </button>
+                      </div>
+                      {callComposerMode === "log" ? (
+                        <div className={styles.directionToggle}>
+                          <button
+                            className={
+                              direction === "outbound" ? styles.activeDirection : undefined
+                            }
+                            onClick={() => setDirection("outbound")}
+                            type="button"
+                          >
+                            Outbound
+                          </button>
+                          <button
+                            className={
+                              direction === "inbound" ? styles.activeDirection : undefined
+                            }
+                            onClick={() => setDirection("inbound")}
+                            type="button"
+                          >
+                            Inbound
+                          </button>
+                        </div>
+                      ) : (
+                        <span className={styles.voiceLabel}>
+                          <PhoneCall size={14} aria-hidden="true" />
+                          Secure browser call
+                        </span>
+                      )}
+                    </>
+                  ) : channel === "sms" || channel === "email" ? (
                     <div className={styles.directionToggle}>
                       <button
                         className={direction === "outbound" ? styles.activeDirection : undefined}
@@ -805,40 +1280,76 @@ export function InboxWorkspace() {
                     </span>
                   </div>
                 ) : null}
-                <div className={styles.composerBody}>
-                  <textarea
-                    aria-label={`${labelize(channel)} details`}
-                    maxLength={channel === "sms" ? 1600 : 4000}
-                    onChange={(event) => {
-                      if (event.target.value !== body) smsIdempotencyKeyRef.current = null;
-                      setBody(event.target.value);
-                    }}
-                    placeholder={
-                      channel === "note"
-                        ? "Add a note for the Stonegate team..."
-                        : `Log the ${channel} conversation...`
-                    }
-                    required
-                    rows={3}
-                    value={body}
-                  />
-                  <button disabled={!canSubmitComposer} type="submit">
-                    {composerStatus === "saved" ? (
-                      <Check size={17} aria-hidden="true" />
-                    ) : (
-                      <Send size={17} aria-hidden="true" />
-                    )}
-                    {composerStatus === "saving"
-                      ? "Saving"
-                      : composerStatus === "saved"
-                        ? isLiveSms
-                          ? "Sent"
-                          : "Logged"
-                        : isLiveSms
-                          ? "Send SMS"
-                          : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
-                  </button>
-                </div>
+                {isVoiceComposer ? (
+                  <div className={styles.voiceComposer}>
+                    <div
+                      className={
+                        detail.voice_eligibility.can_call
+                          ? styles.voiceReady
+                          : styles.voiceBlocked
+                      }
+                    >
+                      {detail.voice_eligibility.can_call ? (
+                        <ShieldCheck size={15} aria-hidden="true" />
+                      ) : (
+                        <ShieldAlert size={15} aria-hidden="true" />
+                      )}
+                      <span>
+                        {detail.voice_eligibility.can_call
+                          ? `Call ${detail.voice_eligibility.recipient} from ${
+                              voiceSession?.line?.phone_number || "the Stonegate line"
+                            }`
+                          : detail.voice_eligibility.blockers.join(" ")}
+                      </span>
+                    </div>
+                    <button
+                      disabled={
+                        !detail.voice_eligibility.can_call ||
+                        ["connecting", "ringing", "incoming", "active"].includes(voiceStatus)
+                      }
+                      onClick={() => void startCall()}
+                      type="button"
+                    >
+                      <PhoneCall size={17} aria-hidden="true" />
+                      {voiceStatus === "loading" ? "Connecting phone" : "Call seller"}
+                    </button>
+                  </div>
+                ) : (
+                  <div className={styles.composerBody}>
+                    <textarea
+                      aria-label={`${labelize(channel)} details`}
+                      maxLength={channel === "sms" ? 1600 : 4000}
+                      onChange={(event) => {
+                        if (event.target.value !== body) smsIdempotencyKeyRef.current = null;
+                        setBody(event.target.value);
+                      }}
+                      placeholder={
+                        channel === "note"
+                          ? "Add a note for the Stonegate team..."
+                          : `Log the ${channel} conversation...`
+                      }
+                      required
+                      rows={3}
+                      value={body}
+                    />
+                    <button disabled={!canSubmitComposer} type="submit">
+                      {composerStatus === "saved" ? (
+                        <Check size={17} aria-hidden="true" />
+                      ) : (
+                        <Send size={17} aria-hidden="true" />
+                      )}
+                      {composerStatus === "saving"
+                        ? "Saving"
+                        : composerStatus === "saved"
+                          ? isLiveSms
+                            ? "Sent"
+                            : "Logged"
+                          : isLiveSms
+                            ? "Send SMS"
+                            : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
+                    </button>
+                  </div>
+                )}
               </form>
             </>
           ) : null}
@@ -905,6 +1416,26 @@ export function InboxWorkspace() {
                       : detail.sms_eligibility.is_suppressed
                         ? "SMS suppressed"
                         : `SMS consent ${labelize(detail.sms_eligibility.consent_status)}`}
+                  </span>
+                </div>
+                <div
+                  className={
+                    detail.voice_eligibility.can_call
+                      ? styles.contactVoiceReady
+                      : styles.contactVoiceBlocked
+                  }
+                >
+                  {detail.voice_eligibility.can_call ? (
+                    <PhoneCall size={14} aria-hidden="true" />
+                  ) : (
+                    <ShieldAlert size={14} aria-hidden="true" />
+                  )}
+                  <span>
+                    {detail.voice_eligibility.can_call
+                      ? "Voice eligible"
+                      : detail.voice_eligibility.is_suppressed
+                        ? "Calling suppressed"
+                        : `Phone permission ${labelize(detail.voice_eligibility.consent_status)}`}
                   </span>
                 </div>
               </section>

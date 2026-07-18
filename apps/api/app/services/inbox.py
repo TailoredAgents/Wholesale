@@ -10,6 +10,8 @@ from app.models.foundation import (
     ActivityEvent,
     Appointment,
     AuditEvent,
+    CallRecord,
+    CallRecording,
     CommunicationRecord,
     Contact,
     ContactMethod,
@@ -36,8 +38,12 @@ from app.schemas.inbox import (
     ConversationWatcherRead,
     InboxAssigneeRead,
     SmsEligibilityRead,
+    VoiceEligibilityRead,
 )
-from app.services.communication_compliance import evaluate_sms_eligibility
+from app.services.communication_compliance import (
+    evaluate_sms_eligibility,
+    evaluate_voice_eligibility,
+)
 
 CONVERSATION_QUEUE_KEYS = {
     "unassigned",
@@ -252,6 +258,39 @@ def get_conversation_detail(
         .order_by(CommunicationRecord.occurred_at.asc(), CommunicationRecord.created_at.asc())
         .limit(200)
     ).all()
+    communication_ids = [item.id for item in communications]
+    calls = (
+        db.scalars(
+            select(CallRecord).where(
+                CallRecord.organization_id == principal.organization_id,
+                CallRecord.communication_record_id.in_(communication_ids),
+            )
+        ).all()
+        if communication_ids
+        else []
+    )
+    call_by_communication_id = {
+        call.communication_record_id: call
+        for call in calls
+        if call.communication_record_id is not None
+    }
+    call_ids = [call.id for call in calls]
+    recordings = (
+        db.scalars(
+            select(CallRecording)
+            .where(
+                CallRecording.organization_id == principal.organization_id,
+                CallRecording.call_record_id.in_(call_ids),
+                CallRecording.deleted_at.is_(None),
+            )
+            .order_by(CallRecording.created_at.desc())
+        ).all()
+        if call_ids
+        else []
+    )
+    recording_by_call_id: dict[UUID, CallRecording] = {}
+    for recording in recordings:
+        recording_by_call_id.setdefault(recording.call_record_id, recording)
     assignment_events = db.scalars(
         select(ConversationAssignmentEvent)
         .where(
@@ -306,8 +345,12 @@ def get_conversation_detail(
     def actor_display_name(actor_user_id: UUID | None) -> str | None:
         return actor_names.get(actor_user_id) if actor_user_id is not None else None
 
-    timeline = [
-        ConversationTimelineItemRead(
+    timeline = []
+    for item in communications:
+        call = call_by_communication_id.get(item.id)
+        timeline_recording = recording_by_call_id.get(call.id) if call is not None else None
+        timeline.append(
+            ConversationTimelineItemRead(
             id=item.id,
             item_type="communication",
             direction=item.direction,
@@ -319,9 +362,12 @@ def get_conversation_detail(
             actor_user_id=item.actor_user_id,
             actor_display_name=actor_display_name(item.actor_user_id),
             occurred_at=item.occurred_at,
+            call_id=call.id if call else None,
+            duration_seconds=call.duration_seconds if call else None,
+            recording_id=timeline_recording.id if timeline_recording else None,
+            recording_status=timeline_recording.status if timeline_recording else None,
         )
-        for item in communications
-    ]
+        )
     timeline.extend(
         ConversationTimelineItemRead(
             id=item.id,
@@ -356,6 +402,7 @@ def get_conversation_detail(
     )
     timeline.sort(key=lambda item: (item.occurred_at, str(item.id)))
     sms_eligibility = evaluate_sms_eligibility(db, contact)
+    voice_eligibility = evaluate_voice_eligibility(db, contact)
 
     base = conversation_to_read(db, conversation)
     return ConversationDetailRead(
@@ -413,6 +460,15 @@ def get_conversation_detail(
             provider_configured=sms_eligibility.provider_configured,
             within_allowed_hours=sms_eligibility.within_allowed_hours,
             blockers=list(sms_eligibility.blockers),
+        ),
+        voice_eligibility=VoiceEligibilityRead(
+            can_call=voice_eligibility.can_call,
+            recipient=voice_eligibility.recipient,
+            consent_status=voice_eligibility.consent_status,
+            is_suppressed=voice_eligibility.is_suppressed,
+            provider_configured=voice_eligibility.provider_configured,
+            within_allowed_hours=voice_eligibility.within_allowed_hours,
+            blockers=list(voice_eligibility.blockers),
         ),
     )
 

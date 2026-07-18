@@ -15,6 +15,7 @@ from app.routers import (
     me,
     public,
     tasks,
+    voice,
     webhooks,
 )
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(me.router)
     app.include_router(public.router)
     app.include_router(tasks.router)
+    app.include_router(voice.router)
     app.include_router(webhooks.router)
     return app
 

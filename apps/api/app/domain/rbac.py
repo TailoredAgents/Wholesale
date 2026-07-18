@@ -17,6 +17,9 @@ class PermissionKeys:
     ACCESS_RECORDINGS = "communications:access_recordings"
     SEND_SMS = "communications:send_sms"
     SEND_ASSIGNED_SMS = "communications:send_assigned_sms"
+    PLACE_CALLS = "communications:place_calls"
+    PLACE_ASSIGNED_CALLS = "communications:place_assigned_calls"
+    MANAGE_VOICE_LINES = "communications:manage_voice_lines"
     VIEW_CONVERSATIONS = "communications:view_conversations"
     VIEW_ASSIGNED_CONVERSATIONS = "communications:view_assigned_conversations"
     MANAGE_CONVERSATION_ASSIGNMENTS = "communications:manage_assignments"
@@ -102,6 +105,21 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Send compliant text messages only for assigned seller conversations.",
     ),
     PermissionDefinition(
+        PermissionKeys.PLACE_CALLS,
+        "Place calls",
+        "Place one-to-one seller calls from the browser softphone.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.PLACE_ASSIGNED_CALLS,
+        "Place assigned calls",
+        "Place seller calls only for assigned conversations.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_VOICE_LINES,
+        "Manage voice lines",
+        "Create and assign company-owned voice lines.",
+    ),
+    PermissionDefinition(
         PermissionKeys.VIEW_CONVERSATIONS,
         "View conversations",
         "View the shared company conversation inbox.",
@@ -168,6 +186,8 @@ ACQUISITION_KEYS = (
     PermissionKeys.VIEW_DEALS,
     PermissionKeys.VIEW_CONVERSATIONS,
     PermissionKeys.SEND_SMS,
+    PermissionKeys.PLACE_CALLS,
+    PermissionKeys.ACCESS_RECORDINGS,
 )
 
 DISPOSITION_KEYS = (
@@ -216,6 +236,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.HANDOFF_ASSIGNED_CONVERSATIONS,
             PermissionKeys.LOG_ASSIGNED_COMMUNICATIONS,
             PermissionKeys.SEND_ASSIGNED_SMS,
+            PermissionKeys.PLACE_ASSIGNED_CALLS,
             PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
         ),
     ),

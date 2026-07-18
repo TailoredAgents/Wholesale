@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.domain.rbac import PERMISSIONS, ROLES
 from app.models.foundation import (
     AuditEvent,
@@ -13,6 +14,7 @@ from app.models.foundation import (
     RoleAssignment,
     RolePermission,
     User,
+    VoiceLine,
 )
 
 
@@ -46,6 +48,7 @@ def bootstrap_foundation(
     roles_by_key = ensure_roles(db, organization)
     ensure_role_permissions(db, organization, permissions_by_key, roles_by_key)
     admin_user = ensure_admin_user(db, organization, admin_email, admin_name)
+    ensure_default_voice_line(db, organization, admin_user)
     maybe_record_bootstrap_audit(db, organization, admin_user)
     db.commit()
     return BootstrapResult(
@@ -184,6 +187,52 @@ def ensure_admin_user(
         )
         db.flush()
     return user
+
+
+def ensure_default_voice_line(
+    db: Session,
+    organization: Organization,
+    admin_user: User | None,
+) -> VoiceLine | None:
+    settings = get_settings()
+    phone_number = settings.twilio_voice_from_number
+    if not phone_number:
+        return None
+    for other_line in db.scalars(
+        select(VoiceLine).where(
+            VoiceLine.organization_id == organization.id,
+            VoiceLine.phone_number != phone_number,
+            VoiceLine.is_default.is_(True),
+        )
+    ):
+        other_line.is_default = False
+    line = db.scalar(
+        select(VoiceLine).where(
+            VoiceLine.organization_id == organization.id,
+            VoiceLine.phone_number == phone_number,
+        )
+    )
+    if line is None:
+        line = VoiceLine(
+            organization_id=organization.id,
+            assigned_user_id=admin_user.id if admin_user else None,
+            provider="twilio",
+            provider_phone_number_id=None,
+            phone_number=phone_number,
+            label="Stonegate primary line",
+            status="active",
+            is_default=True,
+            inbound_route="conversation_owner",
+            line_metadata={"source": "environment_bootstrap"},
+        )
+        db.add(line)
+        db.flush()
+        return line
+    line.status = "active"
+    line.is_default = True
+    if line.assigned_user_id is None and admin_user is not None:
+        line.assigned_user_id = admin_user.id
+    return line
 
 
 def maybe_record_bootstrap_audit(

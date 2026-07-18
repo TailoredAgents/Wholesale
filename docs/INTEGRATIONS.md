@@ -42,3 +42,18 @@ and append-only consent history.
 The integration remains disabled in deployment configuration until credentials are entered and
 the activation checklist is complete. See
 [Twilio SMS Setup](./RUNBOOKS/twilio-sms-setup.md).
+
+## Twilio Voice
+
+Phase 4 uses Twilio's browser Voice SDK with short-lived user identities. The browser never
+receives the Account SID, Auth Token, API key secret, seller phone number routing authority, or
+recording credentials. It asks the API for a conversation-scoped call intent and sends only that
+intent identifier to the TwiML App.
+
+Inbound calls route to the conversation owner or the company line assignee. Unknown callers create
+a retained lead and conversation, while missed inbound calls create an urgent return-call task.
+Signed status and recording callbacks update the unified timeline idempotently. Recording audio is
+proxied through an authenticated permission check rather than exposing provider media URLs.
+
+Voice and recording remain independently disabled in deployment configuration. See
+[Twilio Voice Setup](./RUNBOOKS/twilio-voice-setup.md).

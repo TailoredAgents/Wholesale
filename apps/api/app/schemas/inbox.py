@@ -42,6 +42,10 @@ class ConversationTimelineItemRead(BaseModel):
     actor_user_id: UUID | None
     actor_display_name: str | None
     occurred_at: datetime
+    call_id: UUID | None = None
+    duration_seconds: int | None = None
+    recording_id: UUID | None = None
+    recording_status: str | None = None
 
 
 class ConversationTaskRead(BaseModel):
@@ -66,6 +70,16 @@ class ConversationAppointmentRead(BaseModel):
 
 class SmsEligibilityRead(BaseModel):
     can_send: bool
+    recipient: str | None
+    consent_status: str
+    is_suppressed: bool
+    provider_configured: bool
+    within_allowed_hours: bool
+    blockers: list[str]
+
+
+class VoiceEligibilityRead(BaseModel):
+    can_call: bool
     recipient: str | None
     consent_status: str
     is_suppressed: bool
@@ -115,6 +129,7 @@ class ConversationDetailRead(ConversationRead):
     open_tasks: list[ConversationTaskRead]
     appointments: list[ConversationAppointmentRead]
     sms_eligibility: SmsEligibilityRead
+    voice_eligibility: VoiceEligibilityRead
 
 
 class ConversationListResponse(BaseModel):

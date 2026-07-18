@@ -104,6 +104,35 @@ class Settings(BaseSettings):
         le=24,
         validation_alias="TWILIO_SMS_ALLOWED_END_HOUR",
     )
+    twilio_voice_enabled: bool = Field(default=False, validation_alias="TWILIO_VOICE_ENABLED")
+    twilio_voice_from_number: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_VOICE_FROM_NUMBER",
+    )
+    twilio_twiml_app_sid: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_TWIML_APP_SID",
+    )
+    twilio_voice_token_ttl_seconds: int = Field(
+        default=3600,
+        ge=300,
+        le=86400,
+        validation_alias="TWILIO_VOICE_TOKEN_TTL_SECONDS",
+    )
+    twilio_voice_ring_timeout_seconds: int = Field(
+        default=25,
+        ge=10,
+        le=60,
+        validation_alias="TWILIO_VOICE_RING_TIMEOUT_SECONDS",
+    )
+    twilio_voice_recording_enabled: bool = Field(
+        default=False,
+        validation_alias="TWILIO_VOICE_RECORDING_ENABLED",
+    )
+    twilio_voice_recording_disclosure: str | None = Field(
+        default=None,
+        validation_alias="TWILIO_VOICE_RECORDING_DISCLOSURE",
+    )
     underwriting_offer_low_percentage: float = Field(
         default=0.65,
         validation_alias="UNDERWRITING_OFFER_LOW_PERCENTAGE",
@@ -161,6 +190,27 @@ class Settings(BaseSettings):
             and self.twilio_messaging_service_sid
             and self.twilio_sms_from_number
             and self.twilio_webhook_base_url
+        )
+
+    @property
+    def twilio_voice_configured(self) -> bool:
+        return bool(
+            self.twilio_voice_enabled
+            and self.twilio_account_sid
+            and self.twilio_api_key_sid
+            and self.twilio_api_key_secret
+            and self.twilio_twiml_app_sid
+            and self.twilio_voice_from_number
+            and self.twilio_webhook_base_url
+            and self.twilio_auth_token
+        )
+
+    @property
+    def twilio_voice_recording_configured(self) -> bool:
+        return bool(
+            self.twilio_voice_configured
+            and self.twilio_voice_recording_enabled
+            and self.twilio_voice_recording_disclosure
         )
 
 

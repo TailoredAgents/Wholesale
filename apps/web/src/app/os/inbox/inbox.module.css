@@ -44,6 +44,120 @@
   color: var(--brand-strong);
 }
 
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phoneStatusButton {
+  min-height: 38px;
+  max-width: 260px;
+  padding: 0 12px;
+  border: 1px solid #c6d9cd;
+  border-radius: 7px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.phoneStatusButton[data-status="disabled"],
+.phoneStatusButton[data-status="error"] {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.phoneStatusButton:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.callDock {
+  width: min(640px, 100%);
+  min-height: 58px;
+  margin: 0 auto 12px;
+  padding: 9px 10px;
+  border: 1px solid #bcd4c5;
+  border-radius: 8px;
+  background: #f2f8f4;
+  box-shadow: var(--shadow-soft);
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.callDockIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  display: grid;
+  place-items: center;
+}
+
+.callDock > div:not(.callDockActions) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.callDock strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.callDock span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.callDockActions {
+  display: flex;
+  gap: 7px;
+}
+
+.callDockActions button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.acceptCallButton {
+  background: var(--brand);
+}
+
+.endCallButton {
+  background: var(--danger);
+}
+
+.muteCallButton {
+  background: #5d6862;
+}
+
+.muteCallButton[data-muted="true"] {
+  background: var(--amber);
+}
+
 .errorBanner {
   max-width: 1680px;
   min-height: 42px;
@@ -415,6 +529,11 @@
   color: var(--brand-strong);
 }
 
+.contactActions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .timeline {
   min-height: 0;
   padding: 20px 18px;
@@ -501,6 +620,46 @@
   font-size: 10px;
 }
 
+.callMessage {
+  border-left: 3px solid var(--brand);
+}
+
+.callMetadata {
+  padding-top: 7px;
+  border-top: 1px solid rgba(104, 112, 115, 0.16);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.callMetadata > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.callMetadata button {
+  min-height: 27px;
+  padding: 0 8px;
+  border: 1px solid #bdd2c4;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.callMetadata audio {
+  width: min(260px, 65%);
+  height: 30px;
+}
+
 .systemEvent {
   width: min(86%, 620px);
   align-self: center;
@@ -570,10 +729,12 @@
   padding: 7px 10px 0;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.directionToggle {
+.directionToggle,
+.callModeToggle {
   display: inline-flex;
   padding: 2px;
   border: 1px solid var(--line);
@@ -581,7 +742,8 @@
   background: var(--surface-muted);
 }
 
-.directionToggle button {
+.directionToggle button,
+.callModeToggle button {
   min-height: 27px;
   padding: 0 8px;
   border: 0;
@@ -594,14 +756,30 @@
   cursor: pointer;
 }
 
-.directionToggle .activeDirection {
+.directionToggle .activeDirection,
+.callModeToggle .activeDirection {
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 1px 2px rgba(22, 26, 29, 0.1);
 }
 
+.callModeToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .internalLabel {
   color: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.voiceLabel {
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 800;
 }
@@ -649,6 +827,69 @@
 .smsBlocked svg {
   flex: 0 0 auto;
   margin-top: 1px;
+}
+
+.voiceComposer {
+  min-height: 88px;
+  padding: 8px 10px 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.voiceReady,
+.voiceBlocked {
+  min-height: 48px;
+  padding: 9px 10px;
+  border-radius: 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.voiceReady {
+  border: 1px solid #c8dccf;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.voiceBlocked {
+  border: 1px solid #e1c9a5;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.voiceReady svg,
+.voiceBlocked svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.voiceComposer > button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.voiceComposer > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .composerBody {
@@ -808,7 +1049,9 @@
 }
 
 .contactSmsReady,
-.contactSmsBlocked {
+.contactSmsBlocked,
+.contactVoiceReady,
+.contactVoiceBlocked {
   margin-top: 10px;
   padding-top: 9px;
   border-top: 1px solid var(--line-soft);
@@ -824,6 +1067,20 @@
 }
 
 .contactSmsBlocked {
+  color: var(--amber);
+}
+
+.contactVoiceReady,
+.contactVoiceBlocked {
+  margin-top: 0;
+  padding-top: 7px;
+}
+
+.contactVoiceReady {
+  color: var(--brand-strong);
+}
+
+.contactVoiceBlocked {
   color: var(--amber);
 }
 
@@ -1137,6 +1394,22 @@
     font-size: 0;
   }
 
+  .headerActions {
+    gap: 5px;
+  }
+
+  .phoneStatusButton {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
+  .callDock {
+    width: 100%;
+    border-radius: 7px;
+  }
+
   .inboxFrame {
     height: 680px;
     min-height: 580px;
@@ -1174,7 +1447,21 @@
     grid-template-columns: 1fr;
   }
 
-  .composerBody button {
+  .composerBody button,
+  .voiceComposer > button {
+    width: 100%;
+  }
+
+  .voiceComposer {
+    grid-template-columns: 1fr;
+  }
+
+  .callMetadata {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .callMetadata audio {
     width: 100%;
   }
 }

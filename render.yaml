@@ -102,6 +102,20 @@ services:
         value: 9
       - key: TWILIO_SMS_ALLOWED_END_HOUR
         value: 20
+      - key: TWILIO_VOICE_ENABLED
+        value: false
+      - key: TWILIO_VOICE_FROM_NUMBER
+        sync: false
+      - key: TWILIO_TWIML_APP_SID
+        sync: false
+      - key: TWILIO_VOICE_TOKEN_TTL_SECONDS
+        value: 3600
+      - key: TWILIO_VOICE_RING_TIMEOUT_SECONDS
+        value: 25
+      - key: TWILIO_VOICE_RECORDING_ENABLED
+        value: false
+      - key: TWILIO_VOICE_RECORDING_DISCLOSURE
+        sync: false
       - key: UNDERWRITING_OFFER_LOW_PERCENTAGE
         value: 0.65
       - key: UNDERWRITING_OFFER_HIGH_PERCENTAGE

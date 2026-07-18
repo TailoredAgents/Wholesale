@@ -522,10 +522,23 @@ Delivered in the SMS foundation:
 - Delivery, failure, and undeliverable status updates on sent messages.
 - Render configuration that remains disabled until Twilio credentials are supplied.
 
+Delivered in the Phase 4 Voice foundation:
+
+- Twilio browser Voice SDK with short-lived, user-specific access tokens.
+- One-time, conversation-scoped outbound call intents that prevent arbitrary browser dialing.
+- Company voice-line records with explicit sender selection, assignment, and inbound routing.
+- Signed outbound, inbound, status, dial-result, disclosure, and recording webhooks.
+- Known-caller routing to the conversation owner and retained lead creation for unknown callers.
+- Idempotent call lifecycle records protected from duplicate and out-of-order callbacks.
+- Missed inbound call tasks due within five minutes.
+- Unified inbox call cards with duration, status, and permission-gated private recording playback.
+- Role-aware calling for owners, acquisitions staff, and assigned prospecting callers.
+- Contact permission, suppression, valid-number, contact-hour, and provider readiness checks.
+- Render configuration that keeps Voice and recording independently disabled until activation.
+- A migration-tested Voice schema and an operator setup runbook.
+
 Remaining in the communications sequence:
 
-- Browser calling and inbound call routing.
-- Call recording callbacks and secure recording access.
 - OpenAI transcription, structured intake extraction, and human approval.
 - Communication-triggered follow-up tasks and notifications.
 - Email provider integration.
