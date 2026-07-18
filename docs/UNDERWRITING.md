@@ -19,11 +19,12 @@ Expansion order:
 ## Offer Formula
 
 ```text
-Expected Buyer Price = ARV * Buyer Percentage - Repairs - Buyer-Specific Adjustments
-Maximum Seller Offer = Expected Buyer Price - Target Assignment Fee - Direct Wholesale Costs - Risk Buffer
+Flip Buyer Maximum = Conservative ARV - Rehab - Purchase Costs - Holding - Resale - Profit
+Seller Contract Ceiling = Best Supported Buyer Maximum - Assignment Fee - Transaction Reserve
+Opening Recommendation = Seller Contract Ceiling - Negotiation Reserve
 ```
 
-Calculate 65%, 67.5%, and 70% scenarios.
+The 65-70% rule is retained as a comparison, not the controlling calculation.
 
 Detailed implementation method:
 

@@ -15,6 +15,7 @@ from app.schemas.leads import (
     LeadDetail,
     LeadFollowUpTaskCreate,
     LeadListResponse,
+    LeadMarketAnalysisCreate,
     LeadMarketAnalysisRead,
     LeadMarketValueEstimateRead,
     LeadNoteCreate,
@@ -220,9 +221,10 @@ def create_underwriting_market_analysis(
     lead_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
+    payload: LeadMarketAnalysisCreate | None = None,
 ) -> LeadMarketAnalysisRead:
     try:
-        analysis = create_lead_market_analysis(db, principal, lead_id)
+        analysis = create_lead_market_analysis(db, principal, lead_id, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

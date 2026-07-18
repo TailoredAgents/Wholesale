@@ -159,7 +159,43 @@ class Settings(BaseSettings):
     )
     underwriting_default_assignment_fee_cents: int = Field(
         default=1_500_000,
+        ge=0,
         validation_alias="UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS",
+    )
+    underwriting_transaction_reserve_cents: int = Field(
+        default=250_000,
+        ge=0,
+        validation_alias="UNDERWRITING_TRANSACTION_RESERVE_CENTS",
+    )
+    underwriting_purchase_cost_percentage: float = Field(
+        default=0.02,
+        ge=0,
+        le=1,
+        validation_alias="UNDERWRITING_PURCHASE_COST_PERCENTAGE",
+    )
+    underwriting_financing_holding_percentage: float = Field(
+        default=0.06,
+        ge=0,
+        le=1,
+        validation_alias="UNDERWRITING_FINANCING_HOLDING_PERCENTAGE",
+    )
+    underwriting_resale_cost_percentage: float = Field(
+        default=0.08,
+        ge=0,
+        le=1,
+        validation_alias="UNDERWRITING_RESALE_COST_PERCENTAGE",
+    )
+    underwriting_negotiation_reserve_percentage: float = Field(
+        default=0.08,
+        ge=0,
+        le=1,
+        validation_alias="UNDERWRITING_NEGOTIATION_RESERVE_PERCENTAGE",
+    )
+    underwriting_rental_target_cap_rate: float = Field(
+        default=0.08,
+        gt=0,
+        le=1,
+        validation_alias="UNDERWRITING_RENTAL_TARGET_CAP_RATE",
     )
     clerk_issuer: str | None = Field(default=None, validation_alias="CLERK_ISSUER")
     clerk_jwks_url: str | None = Field(default=None, validation_alias="CLERK_JWKS_URL")

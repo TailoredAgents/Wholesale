@@ -1087,29 +1087,29 @@
 }
 
 .marketValuePanel {
-  padding: 14px;
+  padding: 16px;
   border: 1px solid #d8d2c7;
   border-radius: 8px;
-  background: #fbfaf7;
+  background: #ffffff;
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .marketValueHeader {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
-.marketValueHeader div {
+.marketValueHeader > div:first-child {
   display: grid;
   gap: 3px;
 }
 
 .marketValueHeader strong {
   color: #202426;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .marketValueHeader span,
@@ -1119,7 +1119,20 @@
   font-size: 13px;
 }
 
-.marketValueHeader button {
+.marketValueHeader .underwritingEyebrow {
+  color: #2f6f4e;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.marketValueActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.marketValueActions > button:not(.secondaryButton) {
   min-height: 38px;
   padding: 0 12px;
   border: 0;
@@ -1147,6 +1160,12 @@
   cursor: pointer;
 }
 
+.marketValueActions .secondaryButton {
+  border-color: #d5d0c6;
+  background: #ffffff;
+  color: #394144;
+}
+
 .reportActions {
   display: flex;
   align-items: center;
@@ -1162,7 +1181,7 @@
   text-transform: uppercase;
 }
 
-.marketValueHeader button:disabled,
+.marketValueActions button:disabled,
 .secondaryButton:disabled {
   opacity: 0.65;
   cursor: wait;
@@ -1170,38 +1189,158 @@
 
 .marketValueResult {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
-.marketValueResult dl {
+.reviewBanner,
+.evidenceBanner {
+  padding: 10px 12px;
+  border-left: 4px solid #b7791f;
+  background: #fff8e8;
+  color: #654515;
+  display: grid;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.evidenceBanner {
+  border-left-color: #2f6f4e;
+  background: #edf6f0;
+  color: #24563e;
+}
+
+.reviewBanner span,
+.evidenceBanner span {
+  color: inherit;
+}
+
+.marketValueResult .decisionMetrics {
   margin: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.marketValueResult dl div {
-  padding: 10px;
-  border-radius: 8px;
-  background: #ffffff;
+.marketValueResult .decisionMetrics > div {
+  min-height: 88px;
+  padding: 11px;
+  border-radius: 6px;
+  background: #faf9f6;
   border: 1px solid #e8e3d8;
 }
 
-.marketValueResult dt {
+.marketValueResult .decisionMetrics .primaryMetric {
+  border-color: #9fc0ac;
+  background: #edf6f0;
+}
+
+.marketValueResult .decisionMetrics dt {
   color: #6f7678;
   font-size: 12px;
   font-weight: 800;
 }
 
-.marketValueResult dd {
+.marketValueResult .decisionMetrics dd {
   margin: 4px 0 0;
   color: #202426;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 800;
+}
+
+.marketValueResult .decisionMetrics small {
+  display: block;
+  margin-top: 5px;
+  color: #697173;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .marketValueResult p {
   margin: 0;
+}
+
+.underwritingControls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.25fr) repeat(2, minmax(130px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-top: 1px solid #e8e3d8;
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.underwritingControls label,
+.underwritingControls > div {
+  display: grid;
+  gap: 5px;
+}
+
+.underwritingControls span,
+.compCondition span {
+  color: #687073;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.underwritingControls strong {
+  color: #202426;
+  font-size: 14px;
+}
+
+.underwritingControls select,
+.compCondition select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 30px 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 13px;
+}
+
+.reviewReasons {
+  padding: 12px;
+  border: 1px solid #ead6ae;
+  background: #fffaf0;
+  color: #59441e;
+}
+
+.reviewReasons > strong {
+  font-size: 13px;
+}
+
+.reviewReasons ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.compSectionHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.compSectionHeader > div {
+  display: grid;
+  gap: 2px;
+}
+
+.compSectionHeader strong {
+  color: #202426;
+  font-size: 14px;
+}
+
+.compSectionHeader span {
+  color: #687073;
+  font-size: 12px;
 }
 
 .compList {
@@ -1210,18 +1349,20 @@
 }
 
 .compList article {
-  padding: 10px;
+  padding: 11px;
   border: 1px solid #e8e3d8;
-  border-radius: 8px;
-  background: #ffffff;
+  border-radius: 6px;
+  background: #faf9f6;
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) 190px;
+  gap: 5px 14px;
 }
 
-.compList article div {
+.compList article > div:first-child {
   display: flex;
   justify-content: space-between;
   gap: 10px;
+  grid-column: 1 / -1;
 }
 
 .compList article strong,
@@ -1229,6 +1370,14 @@
   color: #202426;
   font-size: 13px;
   line-height: 1.35;
+}
+
+.compCondition {
+  grid-column: 2;
+  grid-row: 2 / span 2;
+  display: grid;
+  align-content: start;
+  gap: 5px;
 }
 
 .appointmentList article,
@@ -1468,13 +1617,28 @@
   }
 
   .marketValueHeader,
-  .compList article div {
+  .compList article > div:first-child {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .marketValueResult dl {
+  .marketValueActions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .marketValueResult .decisionMetrics,
+  .underwritingControls {
     grid-template-columns: 1fr;
+  }
+
+  .compList article {
+    grid-template-columns: 1fr;
+  }
+
+  .compCondition {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .appointmentForm,
@@ -1526,6 +1690,15 @@
   }
 
   .reportActions .secondaryButton {
+    width: 100%;
+  }
+
+  .marketValueActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .marketValueActions button {
     width: 100%;
   }
 

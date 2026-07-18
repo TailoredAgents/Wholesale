@@ -49,11 +49,14 @@ Web search:
 2. Pull property facts from the property data provider.
 3. Pull sold comps within configurable radius and lookback windows.
 4. Filter comps by distance, sale recency, property type, beds/baths, square footage, year built, lot size, condition notes, and outlier price per square foot.
-5. Ask OpenAI to reason over the normalized comp packet using structured output.
-6. Store selected comps, rejected comps with reasons, ARV range, confidence, missing data, and recommended next task.
-7. Require human approval before using the result for an offer ceiling.
+5. Run deterministic scoring, condition review, repair, and buyer-economics calculations.
+6. Optionally ask OpenAI to summarize the normalized evidence and propose review tasks using
+   structured output. AI must not change comp facts or calculation results.
+7. Store selected comps, rejected comps with reasons, value ranges, confidence, missing data,
+   buyer economics, and the recommended next task.
+8. Require human approval before using the result for an offer ceiling.
 
-The detailed comp, ARV, repair, and 65-70% offer method lives in
+The detailed recorded-sale, ARV, repair, and buyer-economics method lives in
 `docs/UNDERWRITING_COMP_METHOD.md`.
 
 ## Structured Output Shape

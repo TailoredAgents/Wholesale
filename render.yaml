@@ -128,6 +128,18 @@ services:
         value: 0.70
       - key: UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS
         value: 1500000
+      - key: UNDERWRITING_TRANSACTION_RESERVE_CENTS
+        value: 250000
+      - key: UNDERWRITING_PURCHASE_COST_PERCENTAGE
+        value: 0.02
+      - key: UNDERWRITING_FINANCING_HOLDING_PERCENTAGE
+        value: 0.06
+      - key: UNDERWRITING_RESALE_COST_PERCENTAGE
+        value: 0.08
+      - key: UNDERWRITING_NEGOTIATION_RESERVE_PERCENTAGE
+        value: 0.08
+      - key: UNDERWRITING_RENTAL_TARGET_CAP_RATE
+        value: 0.08
       - key: CLERK_ISSUER
         sync: false
       - key: CLERK_JWKS_URL

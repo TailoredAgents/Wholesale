@@ -1,117 +1,177 @@
-# Underwriting Comp Method
+# Underwriting V2 Method
 
 ## Purpose
 
-The underwriting assistant should create a draft, not a final offer.
+Underwriting V2 creates an auditable acquisition recommendation. It does not approve an
+offer. A qualified user must verify comparable condition, repair scope, title, buyer demand,
+and exit assumptions before changing an underwriting version from `needs_review`.
 
-The system should:
+## Evidence Hierarchy
 
-1. Pull market data from RentCast.
-2. Prefer recent, nearby, similar sale comps.
-3. Calculate an ARV range.
-4. Estimate repairs from property condition and square footage.
-5. Calculate offer ceilings using 65-70% of ARV minus repairs and assignment fee.
-6. Save the analysis and a `needs_review` underwriting version.
-7. Generate a PDF report so humans can audit the comp choice, math, and mistakes.
-8. Require human approval before ARV or offers become official.
+The engine keeps three conclusions separate:
 
-## Comp Selection
+1. **As-is value:** what the property may be worth in its current condition.
+2. **After-repair value (ARV):** the supported retail value after a defined renovation.
+3. **Contract recommendation:** the amount Stonegate can pay while preserving a viable exit.
 
-Use the sales comparison approach:
+RentCast's `/properties` endpoint supplies property records and recorded sale history.
+Recorded sale price and date are the core comp evidence. The `/avm/value` result is retained
+as a benchmark and disagreement check; its comparable `price` fields are listing prices and
+are not treated as closed-sale prices.
 
-- Prefer closed/recent comparable sales over active listings.
-- Match similar physical/legal characteristics where data is available.
-- Prioritize proximity, recency, size, property type, condition, and similarity score.
-- Treat active listings as context only because asking price is not the same as market-cleared value.
-- Reject comps that are missing price data.
-- Save selected and rejected comps with reasons.
+## Comparable Search
 
-Initial screening rules:
+The initial provider query uses:
 
-- Pull up to 20 RentCast comps.
-- Select up to 5 best comps.
-- Prefer comps within 1 mile and 90 days.
-- Keep 3 comps when available.
-- Flag low confidence when comp count is thin or ARV spread is wide.
+- Same property type.
+- One-mile radius.
+- Sale within 365 days.
+- Bedrooms and bathrooms within one.
+- Living area within 20% at retrieval and 25% at final screening.
+- Year built within 25 years.
+- Up to 50 candidate records.
 
-## ARV Range
+The final screen rejects the subject property, missing sale price/date, different property
+type, living-area difference over 25%, bed/bath difference over one, and age difference over
+25 years. Eligible sales are scored for distance, recency, living area, age, and lot fit. The
+five best records are saved; all excluded records retain a reason.
 
-When at least 3 selected comps have price and square footage:
+The search does not cross a neighborhood boundary intentionally. RentCast radius search is a
+geographic screen, so the reviewer must still reject sales from a different subdivision,
+school district, flood influence, traffic corridor, or other competing market.
 
-- Calculate price per square foot for each selected comp.
-- Apply the 25th percentile PPSF to the subject square footage for ARV low.
-- Apply the 75th percentile PPSF to the subject square footage for ARV high.
+## Condition Classification
 
-When square footage is not reliable:
+Every selected sale starts as `unknown`. A reviewer classifies it as:
 
-- Use the 25th and 75th percentile selected comp prices.
+- `renovated`: credible evidence shows condition comparable to the target finished product.
+- `as_is`: credible evidence shows dated, distressed, or unrenovated condition.
+- `unknown`: evidence is absent or inconclusive.
 
-When fewer than 3 selected comps are usable:
+Evidence may come from MLS photos/remarks, listing archives, permits, or direct verification.
+The system records that the classification was human-supplied. It does not infer renovation
+quality from sale price.
 
-- Fall back to RentCast's value range.
-- If only a single value exists, use an 8% band around the estimate.
+At least three renovated comps are required for a supported ARV conclusion. At least two
+as-is comps are required for a comp-supported as-is conclusion. Until those thresholds are
+met, the AVM is only a benchmark and manual review remains required.
 
-## Repair Range
+## Value Conclusions
 
-Initial repair screening uses property condition and subject square footage:
+The engine uses score-weighted sale-price quartiles:
 
-- Cosmetic/good: $15-$25 per square foot.
-- Needs repairs/unknown: $30-$50 per square foot.
-- Major/full gut/fire: $60-$90 per square foot.
-- Structural/tear-down: $100-$140 per square foot.
+- 25th percentile: supported low.
+- 50th percentile: point estimate.
+- 75th percentile: supported high.
 
-This is not a contractor bid. It is a screening estimate until a human updates repairs.
+ARV uses confirmed renovated comps when at least three exist. As-is value uses confirmed
+as-is comps when at least two exist. The conservative ARV applies a confidence haircut to the
+point estimate while remaining inside the supported range:
 
-## Offer Formula
+- 2% at confidence 80 or higher.
+- 5% at confidence 60-79.
+- 8% below confidence 60.
 
-The system creates a conservative screening range:
+No time, square-foot, bed/bath, or condition dollar adjustment is fabricated. Until a
+reviewed adjustment model is implemented, material differences reduce score or reject the
+comp.
 
-- Low offer ceiling: `ARV low x 65% - repair high - assignment fee`.
-- High offer ceiling: `ARV high x 70% - repair low - assignment fee`.
-- Recommended starting offer: low offer ceiling.
+## Repair Scope
 
-Default assignment fee:
+The user selects a scope before relying on the recommendation:
 
-- `$15,000`, controlled by `UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS`.
+| Scope | Base range | Contingency |
+| --- | ---: | ---: |
+| Light cosmetic | $15-$25/sqft | 10% |
+| Moderate renovation | $30-$50/sqft | 15% |
+| Heavy renovation | $60-$90/sqft | 20% |
+| Structural/full rebuild | $100-$140/sqft | 25% |
 
-The 65-70% rule is a screening tool. It should not override buyer demand, local market speed, repair certainty, title risk, seller motivation, or human approval.
+The base budget is the midpoint of the range. Total rehab is base budget plus contingency.
+This remains a screening budget until replaced by a walkthrough scope and contractor pricing.
 
-## PDF Audit Report
+## Buyer Economics
 
-Every saved market analysis can generate a PDF report.
+The flip-buyer maximum is:
 
-The report includes:
+```text
+Conservative ARV
+- total rehab
+- purchase costs
+- financing and holding costs
+- resale costs
+- required buyer profit
+= flip buyer maximum
+```
 
-- Seller/property summary.
-- Provider value and value range.
-- Draft ARV range.
-- Repair range.
-- 65-70% offer ceiling math.
-- Recommended starting offer.
-- Selected comps with score and selection reason.
-- Rejected/context comps with rejection reason.
-- Human review checklist.
+Defaults are 2% purchase costs, 6% financing/holding, 8% resale costs, and a buyer profit
+floor determined by repair scope. All percentages are explicit environment settings.
 
-This report is required before trusting the automation because it shows where the system may be wrong.
+When RentCast rent support exists for an eligible single-family exit, the engine also
+estimates stabilized value from net operating income and the configured target cap rate.
+The higher supported flip or rental maximum becomes the recommended disposition price.
 
-## Reliability Notes
+The seller negotiation limits are:
 
-This is a strong screening setup, not a final autonomous acquisition decision.
+```text
+Recommended disposition
+- assignment fee
+- transaction reserve
+= seller contract ceiling
 
-Before relying on it heavily:
+Seller contract ceiling
+- negotiation reserve
+= opening recommendation
+```
 
-- Compare generated reports against 20-50 manually comped deals.
-- Track where RentCast data is stale, missing, or misleading.
-- Add MLS/RESO sold data where licensed.
-- Add county/deed/tax validation for ownership and parcel facts.
-- Tune repair assumptions and assignment fee by market and buyer feedback.
-- Keep human approval for ARV, repairs, and offer ceiling.
+The old 65-70% rule is calculated only as an internal comparison. It is not the controlling
+offer formula.
 
-## Sources
+## Confidence And Review Gates
 
-- Fannie Mae comparable sales guidance: https://selling-guide.fanniemae.com/sel/b4-1.3-08/comparable-sales
+Confidence combines comp count and fit, condition evidence, value-range spread, AVM
+agreement, and subject-data agreement. Manual review is required when:
+
+- Confidence is below 75.
+- Fewer than three renovated comps are confirmed.
+- Fewer than two as-is comps are confirmed.
+- The ARV range is too wide.
+- The AVM materially disagrees with recorded sales.
+- Subject facts disagree across sources.
+
+Even when evidence thresholds are met, a human must approve the acquisition decision.
+
+## Reports And Audit
+
+Every run saves immutable raw provider responses, selected/rejected comps, classifications,
+assumptions, review reasons, data disagreements, calculation outputs, and a linked
+underwriting version.
+
+The investor PDF includes internal buyer economics, repair contingency, seller ceiling,
+opening recommendation, comp rationale, and decision controls. The client PDF excludes
+Stonegate's assignment, profit, and negotiation assumptions and presents only property facts,
+as-is/renovated value evidence, comparable sales, and limitations.
+
+Changing classifications or repair scope reuses the latest saved provider evidence and does
+not consume another market-data pull. `Refresh market data` deliberately retrieves new data.
+
+## Validation Before Autonomy
+
+Before broad operational reliance:
+
+1. Back-test at least 50 known deals against an acquisitions manager's comp set.
+2. Track predicted ARV against resale or verified retail outcome.
+3. Track repair estimate against scoped budget and final spend.
+4. Track predicted buyer maximum against actual buyer offers.
+5. Review errors by market, property type, price band, and confidence band.
+6. Add licensed MLS/RESO sold data when available.
+7. Keep offer sending and contract commitments behind human approval.
+
+## Primary Sources
+
+- RentCast property records: https://developers.rentcast.io/reference/property-records
+- RentCast property valuation: https://developers.rentcast.io/reference/property-valuation
+- RentCast long-term rent estimate: https://developers.rentcast.io/reference/rent-estimate-long-term
+- Fannie Mae comparable sales: https://selling-guide.fanniemae.com/sel/b4-1.3-08/comparable-sales
 - Fannie Mae sales comparison approach: https://selling-guide.fanniemae.com/sel/b4-1.3-07/sales-comparison-approach-section-appraisal-report
-- Fannie Mae comparable sale adjustments: https://selling-guide.fanniemae.com/sel/b4-1.3-09/adjustments-comparable-sales
-- Investopedia sales comparison approach overview: https://www.investopedia.com/terms/s/sales-comparison-approach.asp
-- BiggerPockets 70% rule explanation: https://www.biggerpockets.com/forums/67/topics/1214017-what-is-the-70-rule-in-house-flipping
-- Chase 70% rule overview: https://www.chase.com/personal/mortgage/education/buying-a-home/mao-real-estate
+- Fannie Mae comparable adjustments: https://selling-guide.fanniemae.com/sel/b4-1.3-09/adjustments-comparable-sales

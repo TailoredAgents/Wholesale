@@ -173,6 +173,14 @@ class MarketComparableRead(BaseModel):
     listed_date: str | None
     removed_date: str | None
     last_seen_date: str | None
+    sale_date: str | None = None
+    price_source: str | None = None
+    verification_status: str | None = None
+    condition_classification: str | None = None
+    condition_evidence: str | None = None
+    lot_size: int | None = None
+    adjusted_value_cents: int | None = None
+    weight: float | None = None
 
 
 class LeadMarketValueEstimateRead(BaseModel):
@@ -193,6 +201,13 @@ class MarketAnalysisCompRead(MarketComparableRead):
     selection_status: str
     selection_reason: str
     score: int
+
+
+class LeadMarketAnalysisCreate(BaseModel):
+    target_condition: str = Field(default="standard_flip", max_length=80)
+    repair_level: str | None = Field(default=None, max_length=80)
+    comp_condition_overrides: dict[str, str] = Field(default_factory=dict)
+    refresh_market_data: bool = False
 
 
 class LeadMarketAnalysisRead(BaseModel):
@@ -220,6 +235,25 @@ class LeadMarketAnalysisRead(BaseModel):
     rejected_comps: list[MarketAnalysisCompRead]
     source_note: str
     created_at: datetime
+    methodology_version: str = "v1"
+    as_is_value_low_cents: int | None = None
+    as_is_value_cents: int | None = None
+    as_is_value_high_cents: int | None = None
+    arv_point_cents: int | None = None
+    conservative_arv_cents: int | None = None
+    base_rehab_cents: int | None = None
+    rehab_contingency_percentage: int | None = None
+    total_rehab_cents: int | None = None
+    flip_buyer_max_cents: int | None = None
+    rental_buyer_max_cents: int | None = None
+    recommended_disposition_cents: int | None = None
+    seller_contract_ceiling_cents: int | None = None
+    transaction_reserve_cents: int | None = None
+    monthly_rent_cents: int | None = None
+    manual_review_required: bool = True
+    review_reasons: list[str] = Field(default_factory=list)
+    data_disagreements: list[str] = Field(default_factory=list)
+    assumptions: dict[str, Any] = Field(default_factory=dict)
 
 
 class TransactionChecklistItemRead(BaseModel):

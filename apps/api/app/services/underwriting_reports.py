@@ -311,6 +311,18 @@ def build_investor_story(
     styles: dict[str, ParagraphStyle],
 ) -> list[object]:
     analysis = context.analysis
+    metadata = analysis.analysis_metadata or {}
+    is_v2 = metadata.get("methodology_version") == "v2"
+    review_reasons = string_list(metadata.get("review_reasons"))
+    data_disagreements = string_list(metadata.get("data_disagreements"))
+    decision_control = (
+        "Manual review required: " + " ".join(review_reasons + data_disagreements)
+        if review_reasons or data_disagreements
+        else (
+            "Evidence thresholds are met, but this analysis is not approval to make an offer. "
+            "Confirm condition, title, buyer demand, and exit assumptions before approval."
+        )
+    )
     version_status = (
         labelize(context.underwriting_version.status)
         if context.underwriting_version
@@ -330,17 +342,24 @@ def build_investor_story(
         section_heading("Executive decision screen", styles),
         metric_table(
             [
-                ("Draft ARV", format_money_range(analysis.arv_low_cents, analysis.arv_high_cents)),
                 (
-                    "Repair range",
-                    format_money_range(
-                        analysis.repair_low_cents,
-                        analysis.repair_high_cents,
-                    ),
+                    "As-is benchmark",
+                    format_money(optional_int(metadata.get("as_is_value_cents"))),
                 ),
                 (
-                    "Offer ceiling",
-                    format_money_range(analysis.mao_low_cents, analysis.mao_high_cents),
+                    "Conservative ARV",
+                    format_money(optional_int(metadata.get("conservative_arv_cents"))),
+                ),
+                (
+                    "Total rehab",
+                    format_money(optional_int(metadata.get("total_rehab_cents"))),
+                ),
+                (
+                    "Seller ceiling",
+                    format_money(
+                        optional_int(metadata.get("seller_contract_ceiling_cents"))
+                        or analysis.mao_high_cents
+                    ),
                 ),
                 ("Confidence", f"{analysis.confidence_score}%"),
             ],
@@ -362,13 +381,24 @@ def build_investor_story(
         section_heading("Acquisition calculation", styles),
         key_value_table(
             [
-                ("Provider estimate", format_money(analysis.estimated_value_cents)),
                 (
-                    "Provider range",
+                    "Recorded-sale ARV range",
                     format_money_range(
-                        analysis.estimated_value_low_cents,
-                        analysis.estimated_value_high_cents,
+                        analysis.arv_low_cents,
+                        analysis.arv_high_cents,
                     ),
+                ),
+                (
+                    "Flip buyer maximum",
+                    format_money(optional_int(metadata.get("flip_buyer_max_cents"))),
+                ),
+                (
+                    "Rental buyer maximum",
+                    format_money(optional_int(metadata.get("rental_buyer_max_cents"))),
+                ),
+                (
+                    "Recommended disposition",
+                    format_money(optional_int(metadata.get("recommended_disposition_cents"))),
                 ),
                 (
                     "Recommended starting offer",
@@ -376,10 +406,21 @@ def build_investor_story(
                 ),
                 ("Assignment fee assumption", format_money(analysis.assignment_fee_cents)),
                 (
+                    "Transaction reserve",
+                    format_money(optional_int(metadata.get("transaction_reserve_cents"))),
+                ),
+                (
                     "Selected / context comps",
                     f"{analysis.selected_comp_count} / {analysis.rejected_comp_count}",
                 ),
-                ("Review status", version_status),
+                (
+                    "Review status",
+                    (
+                        "Manual review required"
+                        if metadata.get("human_review_required", True)
+                        else f"{version_status}; evidence threshold met"
+                    ),
+                ),
             ],
             styles,
         ),
@@ -388,20 +429,16 @@ def build_investor_story(
         PageBreak(),
         warning_box(
             "DECISION CONTROL",
-            (
-                "This analysis is a screening model, not an approval to make an offer. Confirm "
-                "condition, square footage, title, neighborhood boundaries, buyer demand, and "
-                "exit assumptions before changing the underwriting status to approved."
-            ),
+            decision_control,
             styles,
         ),
         Spacer(1, 0.16 * inch),
         section_heading("Selected comparable evidence", styles),
         body_paragraph(
             (
-                "Selected properties are ranked using provider similarity, distance, recency, "
-                "property type, and available sale or listing data. Review the raw evidence and "
-                "selection rationale before relying on the draft ARV."
+                "Selected properties are recorded sales ranked by distance, recency, size, age, "
+                "lot, and property-type fit. Renovated and as-is classifications require human "
+                "evidence before they support the corresponding value conclusion."
             ),
             styles,
         ),
@@ -438,7 +475,12 @@ def build_investor_story(
                 ("Saved at", format_datetime(analysis.created_at)),
                 (
                     "Method",
-                    "Sales comparison screening with percentile-based ARV range",
+                    (
+                        "Recorded-sale comparison, condition classification, repair scope, and "
+                        "buyer economics"
+                        if is_v2
+                        else "Sales comparison screening with percentile-based ARV range"
+                    ),
                 ),
             ],
             styles,
@@ -446,8 +488,8 @@ def build_investor_story(
         Spacer(1, 0.16 * inch),
         disclaimer_box(
             (
-                "Internal use only. Data may be incomplete, delayed, estimated, or sourced from "
-                "listing records rather than recorded sales. This document is not an appraisal, "
+                "Internal use only. Provider records and human classifications may be incomplete "
+                "or delayed. This document is not an appraisal, "
                 "broker price opinion, inspection, title report, or guarantee of resale value. "
                 "A qualified human reviewer remains responsible for the acquisition decision."
             ),
@@ -461,6 +503,7 @@ def build_client_story(
     styles: dict[str, ParagraphStyle],
 ) -> list[object]:
     analysis = context.analysis
+    metadata = analysis.analysis_metadata or {}
     return [
         hero_block(
             "PROPERTY VALUE & SALE OPTIONS REVIEW",
@@ -485,6 +528,13 @@ def build_client_story(
         Spacer(1, 0.12 * inch),
         metric_table(
             [
+                (
+                    "Current as-is benchmark",
+                    format_money_range(
+                        optional_int(metadata.get("as_is_value_low_cents")),
+                        optional_int(metadata.get("as_is_value_high_cents")),
+                    ),
+                ),
                 (
                     "Estimated renovated value",
                     format_money_range(analysis.arv_low_cents, analysis.arv_high_cents),
@@ -736,16 +786,33 @@ def formula_box(
     styles: dict[str, ParagraphStyle],
 ) -> Table:
     analysis = context.analysis
-    low_formula = (
-        f"Low ceiling = {format_money(analysis.arv_low_cents)} x "
-        f"{analysis.offer_low_percentage}% - {format_money(analysis.repair_high_cents)} "
-        f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
-    )
-    high_formula = (
-        f"High ceiling = {format_money(analysis.arv_high_cents)} x "
-        f"{analysis.offer_high_percentage}% - {format_money(analysis.repair_low_cents)} "
-        f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
-    )
+    metadata = analysis.analysis_metadata or {}
+    if metadata.get("methodology_version") == "v2":
+        assumptions = dict_value(metadata.get("assumptions"))
+        low_formula = (
+            "Buyer maximum = conservative ARV - total rehab - purchase costs - "
+            "financing/holding - resale costs - required buyer profit"
+        )
+        high_formula = (
+            "Seller ceiling = "
+            f"{format_money(optional_int(metadata.get('recommended_disposition_cents')))} "
+            f"disposition - {format_money(analysis.assignment_fee_cents)} assignment - "
+            f"{format_money(optional_int(metadata.get('transaction_reserve_cents')))} reserve. "
+            f"Opening recommendation includes a "
+            f"{format_percentage(assumptions.get('negotiation_reserve_percentage'))} "
+            "negotiation reserve."
+        )
+    else:
+        low_formula = (
+            f"Low ceiling = {format_money(analysis.arv_low_cents)} x "
+            f"{analysis.offer_low_percentage}% - {format_money(analysis.repair_high_cents)} "
+            f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
+        )
+        high_formula = (
+            f"High ceiling = {format_money(analysis.arv_high_cents)} x "
+            f"{analysis.offer_high_percentage}% - {format_money(analysis.repair_low_cents)} "
+            f"repairs - {format_money(analysis.assignment_fee_cents)} assignment fee"
+        )
     table = Table(
         [
             [
@@ -833,7 +900,7 @@ def investor_comp_table(
     comps: list[dict[str, Any]],
     styles: dict[str, ParagraphStyle],
 ) -> LongTable:
-    headings = ["Address", "Price", "$/sf", "Sqft", "Dist.", "Age", "Score", "Rationale"]
+    headings = ["Address", "Sale date", "Price", "Sqft", "Dist.", "Condition", "Score", "Rationale"]
     rows: list[list[Paragraph]] = [
         [Paragraph(heading, styles["table_header"]) for heading in headings]
     ]
@@ -845,10 +912,13 @@ def investor_comp_table(
                     styles["table_cell_bold"],
                 ),
                 Paragraph(
+                    escape(format_sale_date(comp.get("sale_date"))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
                     escape(format_money(optional_int(comp.get("price_cents")))),
                     styles["table_cell"],
                 ),
-                Paragraph(escape(format_ppsf(comp)), styles["table_cell"]),
                 Paragraph(
                     escape(format_number(optional_int(comp.get("square_footage")))),
                     styles["table_cell"],
@@ -857,7 +927,10 @@ def investor_comp_table(
                     escape(format_distance(comp.get("distance_miles"))),
                     styles["table_cell"],
                 ),
-                Paragraph(escape(format_days(comp.get("days_old"))), styles["table_cell"]),
+                Paragraph(
+                    escape(labelize(safe_string(comp.get("condition_classification")))),
+                    styles["table_cell"],
+                ),
                 Paragraph(escape(safe_string(comp.get("score"))), styles["table_cell"]),
                 Paragraph(
                     escape(safe_string(comp.get("selection_reason"))),
@@ -873,14 +946,14 @@ def investor_comp_table(
     table = LongTable(
         rows,
         colWidths=[
-            1.58 * inch,
+            1.4 * inch,
+            0.72 * inch,
             0.68 * inch,
-            0.48 * inch,
             0.45 * inch,
-            0.43 * inch,
-            0.48 * inch,
+            0.42 * inch,
+            0.68 * inch,
             0.4 * inch,
-            2.9 * inch,
+            2.65 * inch,
         ],
         repeatRows=1,
     )
@@ -894,12 +967,12 @@ def client_comp_table(
 ) -> LongTable:
     headings = [
         "Comparable property",
+        "Sale date",
         "Price",
-        "$/sf",
         "Beds / baths",
         "Sqft",
         "Distance",
-        "Recency",
+        "Condition",
     ]
     rows: list[list[Paragraph]] = [
         [Paragraph(heading, styles["table_header"]) for heading in headings]
@@ -914,10 +987,13 @@ def client_comp_table(
                     styles["table_cell_bold"],
                 ),
                 Paragraph(
+                    escape(format_sale_date(comp.get("sale_date"))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
                     escape(format_money(optional_int(comp.get("price_cents")))),
                     styles["table_cell"],
                 ),
-                Paragraph(escape(format_ppsf(comp)), styles["table_cell"]),
                 Paragraph(f"{escape(bedrooms)} / {escape(bathrooms)}", styles["table_cell"]),
                 Paragraph(
                     escape(format_number(optional_int(comp.get("square_footage")))),
@@ -927,7 +1003,10 @@ def client_comp_table(
                     escape(format_distance(comp.get("distance_miles"))),
                     styles["table_cell"],
                 ),
-                Paragraph(escape(format_days(comp.get("days_old"))), styles["table_cell"]),
+                Paragraph(
+                    escape(labelize(safe_string(comp.get("condition_classification")))),
+                    styles["table_cell"],
+                ),
             ]
         )
     if len(rows) == 1:
@@ -938,13 +1017,13 @@ def client_comp_table(
     table = LongTable(
         rows,
         colWidths=[
-            2.35 * inch,
+            2.1 * inch,
             0.82 * inch,
+            0.82 * inch,
+            0.78 * inch,
             0.58 * inch,
-            0.72 * inch,
-            0.55 * inch,
             0.62 * inch,
-            0.72 * inch,
+            1.02 * inch,
         ],
         repeatRows=1,
     )
@@ -1249,6 +1328,21 @@ def format_days(value: object) -> str:
     return "N/A" if number is None else f"{number} days"
 
 
+def format_sale_date(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return "N/A"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return value
+    return parsed.strftime("%b %d, %Y").replace(" 0", " ")
+
+
+def format_percentage(value: object) -> str:
+    number = optional_float(value)
+    return "N/A" if number is None else f"{number * 100:.0f}%"
+
+
 def format_ppsf(comp: dict[str, Any]) -> str:
     price = optional_int(comp.get("price_cents"))
     square_feet = optional_int(comp.get("square_footage"))
@@ -1294,6 +1388,16 @@ def safe_string(value: object) -> str:
     if value is None:
         return "Not available"
     return str(value)
+
+
+def string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
+def dict_value(value: object) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
 
 
 def optional_int(value: object) -> int | None:

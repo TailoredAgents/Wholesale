@@ -3,7 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.integrations.rentcast_client import RentCastValueEstimate
+from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -804,68 +804,157 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
     monkeypatch.setenv("UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS", "1500000")
     get_settings.cache_clear()
+    provider_calls: list[str] = []
 
     class FakeRentCastClient:
         def __init__(self, **_: object) -> None:
-            pass
+            provider_calls.append("init")
 
         def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            provider_calls.append("value")
             return RentCastValueEstimate(
                 price=300000,
                 price_range_low=275000,
                 price_range_high=325000,
                 subject_property={
+                    "id": "subject-1",
                     "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
                     "propertyType": "Single Family",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
                     "squareFootage": 1800,
+                    "yearBuilt": 1980,
+                    "lotSize": 8000,
                 },
-                comparables=[
-                    {
-                        "id": "comp-1",
-                        "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
-                        "status": "Inactive",
+                comparables=[],
+                raw_response={
+                    "price": 300000,
+                    "priceRangeLow": 275000,
+                    "priceRangeHigh": 325000,
+                    "subjectProperty": {
+                        "id": "subject-1",
+                        "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
                         "propertyType": "Single Family",
-                        "price": 280000,
+                        "bedrooms": 3,
+                        "bathrooms": 2,
                         "squareFootage": 1800,
-                        "distance": 0.4,
-                        "daysOld": 42,
-                        "correlation": 0.98,
+                        "yearBuilt": 1980,
+                        "lotSize": 8000,
                     },
-                    {
-                        "id": "comp-2",
-                        "formattedAddress": "127 Peachtree St, Atlanta, GA 30303",
-                        "status": "Inactive",
-                        "propertyType": "Single Family",
-                        "price": 300000,
-                        "squareFootage": 1800,
-                        "distance": 0.6,
-                        "daysOld": 65,
-                        "correlation": 0.95,
-                    },
-                    {
-                        "id": "comp-3",
-                        "formattedAddress": "129 Peachtree St, Atlanta, GA 30303",
-                        "status": "Inactive",
-                        "propertyType": "Single Family",
-                        "price": 320000,
-                        "squareFootage": 1800,
-                        "distance": 0.8,
-                        "daysOld": 82,
-                        "correlation": 0.91,
-                    },
-                    {
-                        "id": "active-1",
-                        "formattedAddress": "131 Peachtree St, Atlanta, GA 30303",
-                        "status": "Active",
-                        "propertyType": "Single Family",
-                        "price": 340000,
-                        "squareFootage": 1800,
-                        "distance": 0.7,
-                        "daysOld": 12,
-                        "correlation": 0.9,
-                    },
-                ],
-                raw_response={"source": "test"},
+                    "comparables": [],
+                },
+            )
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            provider_calls.append("subject")
+            return {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "lotSize": 8000,
+                "propertyTaxes": {"2025": 3600},
+            }
+
+        def get_recent_sales(self, **_: object) -> list[dict[str, object]]:
+            provider_calls.append("sales")
+            return [
+                {
+                    "id": "comp-1",
+                    "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 280000,
+                    "lastSaleDate": "2026-05-01T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1700,
+                    "yearBuilt": 1982,
+                    "lotSize": 7000,
+                    "distance": 0.2,
+                },
+                {
+                    "id": "comp-2",
+                    "formattedAddress": "127 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 300000,
+                    "lastSaleDate": "2026-04-15T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1800,
+                    "yearBuilt": 1980,
+                    "lotSize": 8000,
+                    "distance": 0.4,
+                },
+                {
+                    "id": "comp-3",
+                    "formattedAddress": "129 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 320000,
+                    "lastSaleDate": "2026-03-20T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1900,
+                    "yearBuilt": 1978,
+                    "lotSize": 8500,
+                    "distance": 0.6,
+                },
+                {
+                    "id": "comp-4",
+                    "formattedAddress": "131 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 230000,
+                    "lastSaleDate": "2026-05-12T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1750,
+                    "yearBuilt": 1981,
+                    "lotSize": 7800,
+                    "distance": 0.3,
+                },
+                {
+                    "id": "comp-5",
+                    "formattedAddress": "133 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 240000,
+                    "lastSaleDate": "2026-04-28T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1850,
+                    "yearBuilt": 1979,
+                    "lotSize": 8200,
+                    "distance": 0.5,
+                },
+                {
+                    "id": "reject-size",
+                    "formattedAddress": "200 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 400000,
+                    "lastSaleDate": "2026-05-03T00:00:00Z",
+                    "bedrooms": 4,
+                    "bathrooms": 3,
+                    "squareFootage": 2400,
+                    "yearBuilt": 1980,
+                    "lotSize": 9000,
+                    "distance": 0.8,
+                },
+            ]
+
+        def get_rent_estimate(self, **_: object) -> RentCastRentEstimate:
+            provider_calls.append("rent")
+            return RentCastRentEstimate(
+                rent=2400,
+                rent_range_low=2200,
+                rent_range_high=2600,
+                comparables=[],
+                raw_response={
+                    "rent": 2400,
+                    "rentRangeLow": 2200,
+                    "rentRangeHigh": 2600,
+                    "comparables": [],
+                },
             )
 
     monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
@@ -880,22 +969,41 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_level": "moderate",
+            "comp_condition_overrides": {
+                "comp-1": "renovated",
+                "comp-2": "renovated",
+                "comp-3": "renovated",
+                "comp-4": "as_is",
+                "comp-5": "as_is",
+            },
+        },
     )
 
     assert response.status_code == 201
     payload = response.json()
     assert payload["provider"] == "rentcast"
-    assert payload["arv_low_cents"] == 29000000
-    assert payload["arv_high_cents"] == 31000000
+    assert payload["methodology_version"] == "v2"
+    assert payload["as_is_value_cents"] == 23000000
+    assert payload["arv_low_cents"] == 28000000
+    assert payload["arv_point_cents"] == 30000000
+    assert payload["arv_high_cents"] == 32000000
+    assert payload["conservative_arv_cents"] == 29400000
     assert payload["repair_low_cents"] == 5400000
     assert payload["repair_high_cents"] == 9000000
-    assert payload["mao_low_cents"] == 8350000
-    assert payload["mao_high_cents"] == 14800000
-    assert payload["recommended_offer_cents"] == 8350000
+    assert payload["total_rehab_cents"] == 8280000
+    assert payload["flip_buyer_max_cents"] == 11916000
+    assert payload["rental_buyer_max_cents"] == 11579700
+    assert payload["seller_contract_ceiling_cents"] == 10166000
+    assert payload["recommended_offer_cents"] == 9352720
+    assert payload["manual_review_required"] is False
+    assert payload["review_reasons"] == []
     assert payload["offer_low_percentage"] == 65
     assert payload["offer_high_percentage"] == 70
-    assert len(payload["selected_comps"]) == 3
+    assert len(payload["selected_comps"]) == 5
     assert len(payload["rejected_comps"]) == 1
+    assert payload["selected_comps"][0]["price_source"] == "recorded_sale"
     assert payload["underwriting_version_id"] is not None
     assert int(
         db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
@@ -903,10 +1011,10 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 1
     saved_version = db_session.scalar(select(UnderwritingVersion))
     assert saved_version is not None
-    assert saved_version.source == "rentcast"
+    assert saved_version.source == "rentcast_property_records"
     assert saved_version.status == "needs_review"
-    assert saved_version.max_offer_cents == 14800000
-    assert saved_version.recommended_offer_cents == 8350000
+    assert saved_version.max_offer_cents == 10166000
+    assert saved_version.recommended_offer_cents == 9352720
 
     latest_analysis_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
@@ -946,6 +1054,32 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Assignment fee assumption" not in client_report_response.content
     assert b"Offer ceiling" not in client_report_response.content
     assert b"Recommended starting offer" not in client_report_response.content
+    unclassified_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "moderate"},
+    )
+    assert unclassified_response.status_code == 201
+    assert unclassified_response.json()["manual_review_required"] is True
+    assert unclassified_response.json()["confidence_score"] <= 59
+    assert unclassified_response.json()["arv_point_cents"] == 30000000
+    cached_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_level": "light",
+            "comp_condition_overrides": {
+                "comp-1": "renovated",
+                "comp-2": "renovated",
+                "comp-3": "renovated",
+                "comp-4": "as_is",
+                "comp-5": "as_is",
+            },
+        },
+    )
+    assert cached_response.status_code == 201
+    assert provider_calls == ["init", "value", "subject", "sales", "rent"]
+    assert cached_response.json()["total_rehab_cents"] < payload["total_rehab_cents"]
     get_settings.cache_clear()
 
 
