@@ -1306,7 +1306,9 @@ def create_lead_market_analysis(
         and cached_avm.get("price") is not None
     )
     rent_error: str | None = None
+    rent_estimate: RentCastRentEstimate | None = None
     if reuse_market_data:
+        assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
         cached_subject = cached_raw.get("subject_record") if cached_raw else None
         cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
@@ -1352,7 +1354,6 @@ def create_lead_market_analysis(
         except RentCastClientError as exc:
             raise RuntimeError(str(exc)) from exc
 
-        rent_estimate: RentCastRentEstimate | None = None
         try:
             rent_estimate = client.get_rent_estimate(
                 address=address,
@@ -2912,7 +2913,9 @@ def first_int(values: dict[str, Any], keys: tuple[str, ...]) -> int | None:
     return None
 
 
-def format_cents_for_note(value: int) -> str:
+def format_cents_for_note(value: int | None) -> str:
+    if value is None:
+        return "not supported"
     return f"${value / 100:,.0f}"
 
 

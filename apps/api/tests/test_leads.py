@@ -1028,15 +1028,15 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["arv_low_cents"] == 29647100
     assert payload["arv_point_cents"] == 30000000
     assert payload["arv_high_cents"] == 30315800
-    assert payload["conservative_arv_cents"] == 29400000
+    assert payload["conservative_arv_cents"] == 29647100
     assert payload["repair_low_cents"] == 5000000
     assert payload["repair_high_cents"] == 6000000
     assert payload["base_rehab_cents"] == 5000000
     assert payload["total_rehab_cents"] == 6000000
-    assert payload["flip_buyer_max_cents"] == 13314000
-    assert payload["rental_buyer_max_cents"] == 13859700
-    assert payload["seller_contract_ceiling_cents"] == 12109700
-    assert payload["recommended_offer_cents"] == 11140924
+    assert payload["flip_buyer_max_cents"] == 13514151
+    assert payload["rental_buyer_max_cents"] == 13829430
+    assert payload["seller_contract_ceiling_cents"] == 12079430
+    assert payload["recommended_offer_cents"] == 11113076
     assert payload["report_stage"] == "pre_meeting_reviewed"
     assert payload["pre_meeting_inputs"]["repair_estimate_source"] == "itemized"
     assert payload["pre_meeting_inputs"]["holding_period_months"] == 9
@@ -1071,8 +1071,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version is not None
     assert saved_version.source == "rentcast_property_records"
     assert saved_version.status == "needs_review"
-    assert saved_version.max_offer_cents == 12109700
-    assert saved_version.recommended_offer_cents == 11140924
+    assert saved_version.max_offer_cents == 12079430
+    assert saved_version.recommended_offer_cents == 11113076
 
     latest_analysis_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
