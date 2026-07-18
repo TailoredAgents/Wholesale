@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.voice import CallTranscriptRead
+
 
 class ConversationWatcherRead(BaseModel):
     user_id: UUID
@@ -46,6 +48,7 @@ class ConversationTimelineItemRead(BaseModel):
     duration_seconds: int | None = None
     recording_id: UUID | None = None
     recording_status: str | None = None
+    transcript: CallTranscriptRead | None = None
 
 
 class ConversationTaskRead(BaseModel):

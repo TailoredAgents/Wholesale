@@ -341,6 +341,7 @@ export type ApprovalRequestItem = {
   due_at: string | null;
   decided_at: string | null;
   created_at: string;
+  review_url: string | null;
 };
 
 export type AiControlOverview = {

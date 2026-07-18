@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -7,6 +8,14 @@ import httpx
 @dataclass(frozen=True)
 class OpenAITextResponse:
     text: str
+    total_tokens: int | None
+
+
+@dataclass(frozen=True)
+class OpenAIAudioTranscript:
+    text: str
+    language: str | None
+    segments: list[dict[str, Any]]
     total_tokens: int | None
 
 
@@ -86,6 +95,109 @@ class OpenAIResponsesClient:
             text=extract_response_text(payload),
             total_tokens=extract_total_tokens(payload),
         )
+
+    def create_structured_response(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema_name: str,
+        json_schema: dict[str, Any],
+        reasoning_effort: str = "medium",
+        max_output_tokens: int = 1800,
+    ) -> tuple[dict[str, Any], int | None]:
+        request_payload: dict[str, Any] = {
+            "model": model,
+            "input": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "reasoning": {"effort": reasoning_effort},
+            "max_output_tokens": max_output_tokens,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": json_schema,
+                }
+            },
+        }
+        payload = self._post_json("/responses", request_payload)
+        raw_text = extract_response_text(payload)
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise OpenAIClientError("OpenAI returned invalid structured call notes.") from exc
+        if not isinstance(parsed, dict):
+            raise OpenAIClientError("OpenAI returned an invalid call-notes object.")
+        return parsed, extract_total_tokens(payload)
+
+    def create_audio_transcription(
+        self,
+        *,
+        model: str,
+        audio: bytes,
+        filename: str = "stonegate-call.mp3",
+        media_type: str = "audio/mpeg",
+    ) -> OpenAIAudioTranscript:
+        try:
+            response = httpx.post(
+                f"{self.base_url}/audio/transcriptions",
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                data={
+                    "model": model,
+                    "response_format": "diarized_json",
+                    "chunking_strategy": "auto",
+                },
+                files={"file": (filename, audio, media_type)},
+                timeout=max(self.timeout_seconds, 120),
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = parse_openai_error(exc.response)
+            raise OpenAIClientError(detail) from exc
+        except httpx.HTTPError as exc:
+            raise OpenAIClientError("OpenAI transcription request failed.") from exc
+
+        payload = response.json()
+        text = payload.get("text")
+        raw_segments = payload.get("segments")
+        segments = [
+            segment
+            for segment in raw_segments
+            if isinstance(segment, dict)
+        ] if isinstance(raw_segments, list) else []
+        language = payload.get("language")
+        return OpenAIAudioTranscript(
+            text=text.strip() if isinstance(text, str) else "",
+            language=language if isinstance(language, str) else None,
+            segments=segments,
+            total_tokens=extract_total_tokens(payload),
+        )
+
+    def _post_json(self, path: str, request_payload: dict[str, Any]) -> dict[str, Any]:
+        try:
+            response = httpx.post(
+                f"{self.base_url}{path}",
+                headers={
+                    "Authorization": f"Bearer {self.api_key}",
+                    "Content-Type": "application/json",
+                },
+                json=request_payload,
+                timeout=self.timeout_seconds,
+            )
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            detail = parse_openai_error(exc.response)
+            raise OpenAIClientError(detail) from exc
+        except httpx.HTTPError as exc:
+            raise OpenAIClientError("OpenAI request failed.") from exc
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise OpenAIClientError("OpenAI returned an invalid response.")
+        return payload
 
 
 def parse_openai_error(response: httpx.Response) -> str:

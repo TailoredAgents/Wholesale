@@ -66,6 +66,14 @@ services:
         value: false
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
+      - key: OPENAI_TRANSCRIPTION_MODEL
+        value: gpt-4o-transcribe-diarize
+      - key: CALL_TRANSCRIPTION_ENABLED
+        value: true
+      - key: CALL_TRANSCRIPTION_POLL_SECONDS
+        value: 10
+      - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
+        value: 3
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: ATTOM_API_KEY
@@ -154,9 +162,9 @@ services:
   - type: worker
     name: oakwell-worker
     runtime: python
-    rootDir: apps/worker
+    rootDir: apps/api
     buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run python -m worker.main
+    startCommand: uv run python -m app.worker
     envVars:
       - key: APP_ENV
         value: production
@@ -169,6 +177,30 @@ services:
           type: keyvalue
           name: oakwell-key-value
           property: connectionString
+      - key: AI_ENABLED
+        value: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_DEFAULT_MODEL
+        value: gpt-5.6-terra
+      - key: OPENAI_REASONING_EFFORT
+        value: medium
+      - key: OPENAI_REQUEST_TIMEOUT_SECONDS
+        value: 30
+      - key: OPENAI_TRANSCRIPTION_MODEL
+        value: gpt-4o-transcribe-diarize
+      - key: CALL_TRANSCRIPTION_ENABLED
+        value: true
+      - key: CALL_TRANSCRIPTION_POLL_SECONDS
+        value: 10
+      - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
+        value: 3
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
 
   - type: keyvalue
     name: oakwell-key-value

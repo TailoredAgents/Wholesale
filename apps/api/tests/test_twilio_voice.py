@@ -18,6 +18,7 @@ from app.main import app
 from app.models.foundation import (
     CallRecord,
     CallRecording,
+    CallTranscript,
     CommunicationProviderEvent,
     Contact,
     Conversation,
@@ -324,6 +325,7 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     assert first.status_code == 204
     assert duplicate.status_code == 204
     assert int(db_session.scalar(select(func.count()).select_from(CallRecording)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(CallTranscript)) or 0) == 1
 
     detail = client.get(
         f"/api/v1/inbox/conversations/{conversation.id}",
@@ -332,6 +334,7 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     call_item = next(item for item in detail.json()["timeline"] if item["channel"] == "call")
     assert call_item["recording_id"]
     assert call_item["recording_status"] == "completed"
+    assert call_item["transcript"]["status"] == "queued"
 
 
 def test_voice_webhooks_reject_invalid_signatures(

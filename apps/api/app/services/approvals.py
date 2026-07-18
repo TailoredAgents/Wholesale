@@ -38,6 +38,8 @@ def decide_approval_request(
     )
     if request is None:
         return None
+    if request.request_type == "call_notes_review":
+        raise ValueError("Call notes must be reviewed with the recording in the shared inbox.")
     previous_status = request.status
     request.status = payload.status
     request.decision_notes = payload.decision_notes
@@ -83,4 +85,5 @@ def approval_to_read(request: ApprovalRequest) -> ApprovalRequestRead:
         due_at=request.due_at,
         decided_at=request.decided_at,
         created_at=request.created_at,
+        review_url="/os/inbox" if request.request_type == "call_notes_review" else None,
     )

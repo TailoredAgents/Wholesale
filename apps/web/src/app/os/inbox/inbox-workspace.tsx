@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import type { Call, Device } from "@twilio/voice-sdk";
 import {
   ArrowRightLeft,
+  Bot,
   CalendarClock,
   Check,
   ChevronRight,
@@ -87,6 +88,53 @@ type TimelineItem = {
   duration_seconds: number | null;
   recording_id: string | null;
   recording_status: string | null;
+  transcript: CallTranscript | null;
+};
+
+type CallNoteEvidence = {
+  field: string;
+  segment_index: number;
+  start_seconds: number;
+  supporting_text: string;
+};
+
+type StructuredCallNotes = {
+  summary: string;
+  motivation: string | null;
+  timeline: string | null;
+  property_condition: string | null;
+  occupancy_status: string | null;
+  asking_price: string | null;
+  mortgage_or_title: string | null;
+  repairs: string[];
+  objections: string[];
+  commitments: string[];
+  next_action: string | null;
+  follow_up_at: string | null;
+  appointment_details: string | null;
+  confidence: number;
+  evidence: CallNoteEvidence[];
+};
+
+type CallTranscript = {
+  id: string;
+  status: string;
+  model_name: string | null;
+  language: string | null;
+  transcript_text: string | null;
+  speaker_segments: Array<{
+    index?: number;
+    speaker?: string;
+    start?: number;
+    end?: number;
+    text?: string;
+  }>;
+  confidence_score: number | null;
+  structured_notes: StructuredCallNotes | null;
+  approval_request_id: string | null;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  error_message: string | null;
 };
 
 type ConversationDetail = Conversation & {
@@ -286,6 +334,253 @@ function displayError(payload: unknown, fallback: string) {
   return fallback;
 }
 
+const callNoteFieldOptions: Array<{ key: keyof StructuredCallNotes; label: string }> = [
+  { key: "motivation", label: "Motivation" },
+  { key: "timeline", label: "Timeline" },
+  { key: "property_condition", label: "Condition" },
+  { key: "occupancy_status", label: "Occupancy" },
+  { key: "asking_price", label: "Asking price" },
+];
+
+function listToText(values: string[]) {
+  return values.join("\n");
+}
+
+function textToList(value: string) {
+  return value
+    .split("\n")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function CallTranscriptPanel({
+  transcript,
+  canReview,
+  onReview,
+}: {
+  transcript: CallTranscript;
+  canReview: boolean;
+  onReview: (
+    transcriptId: string,
+    payload: {
+      status: "approved" | "rejected";
+      structured_notes: StructuredCallNotes;
+      decision_notes: string | null;
+      apply_field_updates: string[];
+      create_follow_up_task: boolean;
+    },
+  ) => Promise<void>;
+}) {
+  const [notes, setNotes] = useState<StructuredCallNotes | null>(transcript.structured_notes);
+  const [selectedFields, setSelectedFields] = useState<string[]>(
+    callNoteFieldOptions
+      .filter((item) => Boolean(transcript.structured_notes?.[item.key]))
+      .map((item) => item.key),
+  );
+  const [createTask, setCreateTask] = useState(Boolean(transcript.structured_notes?.next_action));
+  const [decisionNotes, setDecisionNotes] = useState("");
+  const [reviewStatus, setReviewStatus] = useState<"idle" | "saving">("idle");
+
+  const updateNote = <K extends keyof StructuredCallNotes>(
+    key: K,
+    value: StructuredCallNotes[K],
+  ) => {
+    setNotes((current) => (current ? { ...current, [key]: value } : current));
+  };
+
+  const submitReview = async (status: "approved" | "rejected") => {
+    if (!notes) return;
+    setReviewStatus("saving");
+    try {
+      await onReview(transcript.id, {
+        status,
+        structured_notes: notes,
+        decision_notes: decisionNotes.trim() || null,
+        apply_field_updates: status === "approved" ? selectedFields : [],
+        create_follow_up_task: status === "approved" && createTask,
+      });
+    } finally {
+      setReviewStatus("idle");
+    }
+  };
+
+  return (
+    <details className={styles.transcriptPanel}>
+      <summary>
+        <span>
+          <Bot size={14} aria-hidden="true" />
+          AI call intelligence
+        </span>
+        <span className={styles.transcriptStatus} data-status={transcript.status}>
+          {labelize(transcript.status)}
+        </span>
+      </summary>
+      <div className={styles.transcriptBody}>
+        {transcript.error_message ? (
+          <p className={styles.transcriptError}>{transcript.error_message}</p>
+        ) : null}
+        {notes ? (
+          <section className={styles.notesReview} aria-label="AI call-note review">
+            <div className={styles.notesReviewHeader}>
+              <strong>Review draft</strong>
+              <span>{notes.confidence}% AI confidence</span>
+            </div>
+            <label>
+              Summary
+              <textarea
+                disabled={!canReview || transcript.status !== "needs_review"}
+                onChange={(event) => updateNote("summary", event.target.value)}
+                value={notes.summary}
+              />
+            </label>
+            <div className={styles.notesGrid}>
+              {callNoteFieldOptions.map((item) => (
+                <label key={item.key}>
+                  {item.label}
+                  <input
+                    disabled={!canReview || transcript.status !== "needs_review"}
+                    onChange={(event) =>
+                      updateNote(item.key, event.target.value || null)
+                    }
+                    value={String(notes[item.key] ?? "")}
+                  />
+                </label>
+              ))}
+              <label>
+                Mortgage or title
+                <input
+                  disabled={!canReview || transcript.status !== "needs_review"}
+                  onChange={(event) =>
+                    updateNote("mortgage_or_title", event.target.value || null)
+                  }
+                  value={notes.mortgage_or_title ?? ""}
+                />
+              </label>
+              <label>
+                Next action
+                <input
+                  disabled={!canReview || transcript.status !== "needs_review"}
+                  onChange={(event) => updateNote("next_action", event.target.value || null)}
+                  value={notes.next_action ?? ""}
+                />
+              </label>
+              <label>
+                Follow-up time
+                <input
+                  disabled={!canReview || transcript.status !== "needs_review"}
+                  onChange={(event) => updateNote("follow_up_at", event.target.value || null)}
+                  placeholder="ISO date/time if stated"
+                  value={notes.follow_up_at ?? ""}
+                />
+              </label>
+            </div>
+            <div className={styles.notesGrid}>
+              {(["repairs", "objections", "commitments"] as const).map((key) => (
+                <label key={key}>
+                  {labelize(key)} (one per line)
+                  <textarea
+                    disabled={!canReview || transcript.status !== "needs_review"}
+                    onChange={(event) => updateNote(key, textToList(event.target.value))}
+                    value={listToText(notes[key])}
+                  />
+                </label>
+              ))}
+            </div>
+            {canReview && transcript.status === "needs_review" ? (
+              <div className={styles.reviewControls}>
+                <fieldset>
+                  <legend>Fill empty lead fields</legend>
+                  {callNoteFieldOptions
+                    .filter((item) => Boolean(notes[item.key]))
+                    .map((item) => (
+                      <label key={item.key}>
+                        <input
+                          checked={selectedFields.includes(item.key)}
+                          onChange={(event) =>
+                            setSelectedFields((current) =>
+                              event.target.checked
+                                ? [...current, item.key]
+                                : current.filter((key) => key !== item.key),
+                            )
+                          }
+                          type="checkbox"
+                        />
+                        {item.label}
+                      </label>
+                    ))}
+                  {notes.next_action ? (
+                    <label>
+                      <input
+                        checked={createTask}
+                        onChange={(event) => setCreateTask(event.target.checked)}
+                        type="checkbox"
+                      />
+                      Create follow-up task
+                    </label>
+                  ) : null}
+                </fieldset>
+                <label>
+                  Review note
+                  <input
+                    onChange={(event) => setDecisionNotes(event.target.value)}
+                    placeholder="Optional correction or decision reason"
+                    value={decisionNotes}
+                  />
+                </label>
+                <div className={styles.reviewActions}>
+                  <button
+                    disabled={reviewStatus === "saving"}
+                    onClick={() => void submitReview("rejected")}
+                    type="button"
+                  >
+                    Reject draft
+                  </button>
+                  <button
+                    className={styles.approveButton}
+                    disabled={reviewStatus === "saving"}
+                    onClick={() => void submitReview("approved")}
+                    type="button"
+                  >
+                    <Check size={14} aria-hidden="true" />
+                    {reviewStatus === "saving" ? "Saving" : "Approve notes"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : (
+          <p className={styles.transcriptPending}>
+            {transcript.status === "failed"
+              ? "Transcription will retry automatically."
+              : "Recording is queued for transcription."}
+          </p>
+        )}
+        {transcript.speaker_segments.length > 0 ? (
+          <details className={styles.transcriptText}>
+            <summary>Full transcript</summary>
+            <div>
+              {transcript.speaker_segments.map((segment, index) => (
+                <p key={`${segment.start ?? 0}-${index}`}>
+                  <strong>
+                    {segment.speaker || "Speaker"} ·{" "}
+                    {formatDuration(Math.round(segment.start ?? 0))}
+                  </strong>
+                  <span>{segment.text}</span>
+                </p>
+              ))}
+            </div>
+          </details>
+        ) : transcript.transcript_text ? (
+          <details className={styles.transcriptText}>
+            <summary>Full transcript</summary>
+            <p>{transcript.transcript_text}</p>
+          </details>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
 export function InboxWorkspace() {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
@@ -408,6 +703,28 @@ export function InboxWorkspace() {
       }
     },
     [request],
+  );
+
+  const reviewTranscript = useCallback(
+    async (
+      transcriptId: string,
+      payload: {
+        status: "approved" | "rejected";
+        structured_notes: StructuredCallNotes;
+        decision_notes: string | null;
+        apply_field_updates: string[];
+        create_follow_up_task: boolean;
+      },
+    ) => {
+      await request(`/api/v1/voice/transcripts/${transcriptId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+      if (selectedId) {
+        await Promise.all([loadConversations(), loadDetail(selectedId)]);
+      }
+    },
+    [loadConversations, loadDetail, request, selectedId],
   );
 
   const finishCall = useCallback(() => {
@@ -1107,32 +1424,52 @@ export function InboxWorkspace() {
                       {item.subject ? <strong>{item.subject}</strong> : null}
                       <p>{item.body}</p>
                       {item.channel === "call" ? (
-                        <div className={styles.callMetadata}>
-                          <span>{formatDuration(item.duration_seconds)}</span>
-                          {item.recording_id &&
-                          item.recording_status === "completed" &&
+                        <>
+                          <div className={styles.callMetadata}>
+                            <span>{formatDuration(item.duration_seconds)}</span>
+                            {item.recording_id &&
+                            item.recording_status === "completed" &&
+                            me?.permissions.includes("communications:access_recordings") ? (
+                              recordingUrls[item.recording_id] ? (
+                                <audio
+                                  controls
+                                  preload="none"
+                                  src={recordingUrls[item.recording_id]}
+                                >
+                                  Call recording
+                                </audio>
+                              ) : (
+                                <button
+                                  disabled={recordingLoadingId === item.recording_id}
+                                  onClick={() => void loadRecording(item.recording_id as string)}
+                                  type="button"
+                                >
+                                  <Play size={13} aria-hidden="true" />
+                                  {recordingLoadingId === item.recording_id
+                                    ? "Loading"
+                                    : "Play recording"}
+                                </button>
+                              )
+                            ) : item.recording_status &&
+                              item.recording_status !== "completed" ? (
+                              <span>Recording {labelize(item.recording_status)}</span>
+                            ) : null}
+                          </div>
+                          {item.transcript &&
                           me?.permissions.includes("communications:access_recordings") ? (
-                            recordingUrls[item.recording_id] ? (
-                              <audio controls preload="none" src={recordingUrls[item.recording_id]}>
-                                Call recording
-                              </audio>
-                            ) : (
-                              <button
-                                disabled={recordingLoadingId === item.recording_id}
-                                onClick={() => void loadRecording(item.recording_id as string)}
-                                type="button"
-                              >
-                                <Play size={13} aria-hidden="true" />
-                                {recordingLoadingId === item.recording_id
-                                  ? "Loading"
-                                  : "Play recording"}
-                              </button>
-                            )
-                          ) : item.recording_status &&
-                            item.recording_status !== "completed" ? (
-                            <span>Recording {labelize(item.recording_status)}</span>
+                            <CallTranscriptPanel
+                              canReview={Boolean(
+                                me.permissions.includes("leads:edit") &&
+                                  me.permissions.includes(
+                                    "communications:access_recordings",
+                                  ),
+                              )}
+                              key={item.transcript.id}
+                              onReview={reviewTranscript}
+                              transcript={item.transcript}
+                            />
                           ) : null}
-                        </div>
+                        </>
                       ) : null}
                       <small>
                         {item.actor_display_name || (item.direction === "inbound" ? "Seller" : "Team")}

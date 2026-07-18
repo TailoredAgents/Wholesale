@@ -40,6 +40,7 @@ from app.schemas.voice import (
     VoiceLineRead,
     VoiceSessionRead,
 )
+from app.services.call_intelligence import enqueue_call_transcript
 from app.services.communication_compliance import (
     evaluate_voice_eligibility,
     format_e164,
@@ -524,6 +525,13 @@ def process_voice_recording(
         recording.channel_count = parse_int(payload.get("RecordingChannels"))
         if recording_status == "completed":
             recording.recorded_at = datetime.now(UTC)
+    if recording_status == "completed":
+        db.flush()
+        enqueue_call_transcript(
+            db,
+            recording,
+            model_name=get_settings().openai_transcription_model,
+        )
     event = record_provider_event(
         db,
         organization_id=call.organization_id,

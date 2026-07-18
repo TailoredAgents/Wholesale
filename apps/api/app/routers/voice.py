@@ -1,7 +1,6 @@
 from typing import Annotated
 from uuid import UUID
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
@@ -9,7 +8,13 @@ from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.twilio_recordings import (
+    TwilioRecordingError,
+    download_twilio_recording,
+)
 from app.schemas.voice import (
+    CallTranscriptRead,
+    CallTranscriptReview,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
     VoiceLineAssignmentUpdate,
@@ -18,6 +23,7 @@ from app.schemas.voice import (
     VoiceLineRead,
     VoiceSessionRead,
 )
+from app.services.call_intelligence import review_call_transcript
 from app.services.voice import (
     VoiceComplianceError,
     VoiceConfigurationError,
@@ -134,32 +140,39 @@ def read_voice_recording_media(
             detail="Recording is not ready.",
         )
     settings = get_settings()
-    if not settings.twilio_account_sid or not settings.twilio_auth_token:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Twilio recording access is not configured.",
-        )
-    media_url = (
-        f"https://api.twilio.com/2010-04-01/Accounts/{settings.twilio_account_sid}"
-        f"/Recordings/{recording.provider_recording_id}.mp3"
-    )
     try:
-        provider_response = httpx.get(
-            media_url,
-            auth=(settings.twilio_account_sid, settings.twilio_auth_token),
-            timeout=30,
-        )
-        provider_response.raise_for_status()
-    except httpx.HTTPError as exc:
+        media = download_twilio_recording(settings, recording.provider_recording_id)
+    except TwilioRecordingError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Twilio recording media could not be retrieved.",
+            detail=str(exc),
         ) from exc
     return Response(
-        content=provider_response.content,
-        media_type=provider_response.headers.get("content-type", "audio/mpeg"),
+        content=media.content,
+        media_type=media.media_type,
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": f'inline; filename="stonegate-call-{recording.id}.mp3"',
         },
     )
+
+
+@router.patch("/transcripts/{transcript_id}/review")
+def review_voice_transcript(
+    transcript_id: UUID,
+    payload: CallTranscriptReview,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_dependency)],
+) -> CallTranscriptRead:
+    try:
+        transcript = review_call_transcript(db, principal, transcript_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if transcript is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found.")
+    return transcript

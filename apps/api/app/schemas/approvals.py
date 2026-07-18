@@ -21,6 +21,7 @@ class ApprovalRequestRead(BaseModel):
     due_at: datetime | None
     decided_at: datetime | None
     created_at: datetime
+    review_url: str | None
 
 
 class ApprovalListResponse(BaseModel):

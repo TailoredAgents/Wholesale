@@ -52,6 +52,32 @@ class Settings(BaseSettings):
         default=30.0,
         validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
     )
+    openai_transcription_model: str = Field(
+        default="gpt-4o-transcribe-diarize",
+        validation_alias="OPENAI_TRANSCRIPTION_MODEL",
+    )
+    call_transcription_enabled: bool = Field(
+        default=True,
+        validation_alias="CALL_TRANSCRIPTION_ENABLED",
+    )
+    call_transcription_poll_seconds: int = Field(
+        default=10,
+        ge=2,
+        le=300,
+        validation_alias="CALL_TRANSCRIPTION_POLL_SECONDS",
+    )
+    call_transcription_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        validation_alias="CALL_TRANSCRIPTION_MAX_ATTEMPTS",
+    )
+    call_transcription_max_audio_bytes: int = Field(
+        default=25_000_000,
+        ge=1_000_000,
+        le=25_000_000,
+        validation_alias="CALL_TRANSCRIPTION_MAX_AUDIO_BYTES",
+    )
     property_data_provider: str = Field(
         default="rentcast",
         validation_alias="PROPERTY_DATA_PROVIDER",

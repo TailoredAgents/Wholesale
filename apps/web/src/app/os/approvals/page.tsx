@@ -68,7 +68,13 @@ export default async function ApprovalsPage() {
                     <td>{labelize(approval.status)}</td>
                     <td>
                       {approval.status === "pending" ? (
-                        <ApprovalDecisionButtons approvalId={approval.id} />
+                        approval.review_url ? (
+                          <Link className={styles.tableLink} href={approval.review_url}>
+                            Review in inbox
+                          </Link>
+                        ) : (
+                          <ApprovalDecisionButtons approvalId={approval.id} />
+                        )
                       ) : (
                         approval.decision_notes ?? "Decided"
                       )}

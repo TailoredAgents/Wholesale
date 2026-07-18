@@ -12,6 +12,7 @@ from app.models.foundation import (
     AuditEvent,
     CallRecord,
     CallRecording,
+    CallTranscript,
     CommunicationRecord,
     Contact,
     ContactMethod,
@@ -40,6 +41,7 @@ from app.schemas.inbox import (
     SmsEligibilityRead,
     VoiceEligibilityRead,
 )
+from app.services.call_intelligence import transcript_to_read
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
@@ -291,6 +293,22 @@ def get_conversation_detail(
     recording_by_call_id: dict[UUID, CallRecording] = {}
     for recording in recordings:
         recording_by_call_id.setdefault(recording.call_record_id, recording)
+    recording_ids = [recording.id for recording in recordings]
+    transcripts = (
+        db.scalars(
+            select(CallTranscript)
+            .where(
+                CallTranscript.organization_id == principal.organization_id,
+                CallTranscript.recording_id.in_(recording_ids),
+            )
+            .order_by(CallTranscript.created_at.desc())
+        ).all()
+        if recording_ids and PermissionKeys.ACCESS_RECORDINGS in principal.permission_keys
+        else []
+    )
+    transcript_by_recording_id: dict[UUID, CallTranscript] = {}
+    for transcript in transcripts:
+        transcript_by_recording_id.setdefault(transcript.recording_id, transcript)
     assignment_events = db.scalars(
         select(ConversationAssignmentEvent)
         .where(
@@ -349,6 +367,11 @@ def get_conversation_detail(
     for item in communications:
         call = call_by_communication_id.get(item.id)
         timeline_recording = recording_by_call_id.get(call.id) if call is not None else None
+        timeline_transcript = (
+            transcript_by_recording_id.get(timeline_recording.id)
+            if timeline_recording is not None
+            else None
+        )
         timeline.append(
             ConversationTimelineItemRead(
             id=item.id,
@@ -366,6 +389,11 @@ def get_conversation_detail(
             duration_seconds=call.duration_seconds if call else None,
             recording_id=timeline_recording.id if timeline_recording else None,
             recording_status=timeline_recording.status if timeline_recording else None,
+            transcript=(
+                transcript_to_read(db, timeline_transcript)
+                if timeline_transcript is not None
+                else None
+            ),
         )
         )
     timeline.extend(

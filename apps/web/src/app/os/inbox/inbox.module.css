@@ -660,6 +660,216 @@
   height: 30px;
 }
 
+.transcriptPanel {
+  margin-top: 2px;
+  border-top: 1px solid rgba(104, 112, 115, 0.16);
+}
+
+.transcriptPanel > summary,
+.transcriptText > summary {
+  min-height: 32px;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.transcriptPanel > summary > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transcriptStatus {
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: #eef1ee;
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.transcriptStatus[data-status="needs_review"] {
+  background: #fff0ca;
+  color: #7a5813;
+}
+
+.transcriptStatus[data-status="approved"] {
+  background: #dceee2;
+  color: var(--brand-strong);
+}
+
+.transcriptError {
+  color: #a33c35;
+  font-size: 11px;
+}
+
+.transcriptPending {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.transcriptBody,
+.notesReview {
+  display: grid;
+  gap: 10px;
+}
+
+.notesReviewHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.notesReviewHeader strong {
+  font-size: 12px;
+}
+
+.notesReviewHeader span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.notesReview label,
+.reviewControls label {
+  color: var(--muted);
+  display: grid;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.notesReview input,
+.notesReview textarea,
+.reviewControls input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  text-transform: none;
+}
+
+.notesReview textarea {
+  min-height: 64px;
+  resize: vertical;
+}
+
+.notesReview input:disabled,
+.notesReview textarea:disabled {
+  background: #f5f4f0;
+  color: var(--text-soft);
+}
+
+.notesGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.reviewControls {
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 9px;
+}
+
+.reviewControls fieldset {
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+}
+
+.reviewControls legend {
+  width: 100%;
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.reviewControls fieldset label {
+  display: inline-flex;
+  align-items: center;
+  grid-template-columns: auto 1fr;
+  gap: 5px;
+  color: var(--text-soft);
+  text-transform: none;
+}
+
+.reviewControls fieldset input {
+  width: 14px;
+  min-height: 14px;
+}
+
+.reviewActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.reviewActions button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.reviewActions .approveButton {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.transcriptText {
+  border-top: 1px solid var(--line-soft);
+}
+
+.transcriptText > div {
+  max-height: 240px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.transcriptText p {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  gap: 3px;
+}
+
+.transcriptText p strong {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.transcriptText p span {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .systemEvent {
   width: min(86%, 620px);
   align-self: center;
@@ -1463,5 +1673,14 @@
 
   .callMetadata audio {
     width: 100%;
+  }
+
+  .notesGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .reviewActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }
