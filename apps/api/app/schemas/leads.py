@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -203,9 +203,64 @@ class MarketAnalysisCompRead(MarketComparableRead):
     score: int
 
 
+RepairCategory = Literal[
+    "roof",
+    "hvac",
+    "plumbing",
+    "electrical",
+    "foundation",
+    "kitchen",
+    "bathrooms",
+    "flooring",
+    "paint_drywall",
+    "windows_doors",
+    "exterior",
+    "landscaping",
+    "permits",
+    "cleanup",
+    "other",
+]
+
+
+class UnderwritingRepairItemInput(BaseModel):
+    category: RepairCategory
+    estimated_cost_cents: int = Field(ge=1, le=100_000_000)
+    details: str | None = Field(default=None, max_length=500)
+
+
+class UnderwritingPreMeetingInputsRead(BaseModel):
+    verification_status: str
+    report_stage: str
+    current_condition: str | None
+    target_condition: str
+    repair_level: str
+    repair_estimate_source: str
+    base_rehab_override_cents: int | None
+    repair_items: list[UnderwritingRepairItemInput]
+    contingency_override_percentage: int | None
+    holding_period_months: int
+    repair_notes: str | None
+    custom_inputs_applied: bool
+
+
 class LeadMarketAnalysisCreate(BaseModel):
     target_condition: str = Field(default="standard_flip", max_length=80)
+    current_condition: str | None = Field(default=None, max_length=80)
     repair_level: str | None = Field(default=None, max_length=80)
+    input_verification_status: Literal[
+        "preliminary",
+        "pre_meeting_reviewed",
+        "walkthrough_verified",
+    ] = "preliminary"
+    base_rehab_override_cents: int | None = Field(
+        default=None,
+        ge=0,
+        le=100_000_000,
+    )
+    repair_items: list[UnderwritingRepairItemInput] = Field(default_factory=list, max_length=25)
+    contingency_override_percentage: int | None = Field(default=None, ge=0, le=50)
+    holding_period_months: int = Field(default=6, ge=1, le=24)
+    repair_notes: str | None = Field(default=None, max_length=2000)
     comp_condition_overrides: dict[str, str] = Field(default_factory=dict)
     refresh_market_data: bool = False
 
@@ -254,6 +309,8 @@ class LeadMarketAnalysisRead(BaseModel):
     review_reasons: list[str] = Field(default_factory=list)
     data_disagreements: list[str] = Field(default_factory=list)
     assumptions: dict[str, Any] = Field(default_factory=dict)
+    report_stage: str = "preliminary"
+    pre_meeting_inputs: UnderwritingPreMeetingInputsRead | None = None
 
 
 class TransactionChecklistItemRead(BaseModel):

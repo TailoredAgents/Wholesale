@@ -312,6 +312,8 @@ def build_investor_story(
 ) -> list[object]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
+    pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
+    report_stage = safe_string(metadata.get("report_stage"))
     is_v2 = metadata.get("methodology_version") == "v2"
     review_reasons = string_list(metadata.get("review_reasons"))
     data_disagreements = string_list(metadata.get("data_disagreements"))
@@ -330,7 +332,7 @@ def build_investor_story(
     )
     return [
         hero_block(
-            "INTERNAL INVESTMENT ANALYSIS",
+            f"INTERNAL INVESTMENT ANALYSIS / {report_stage_label(report_stage).upper()}",
             context.address,
             (
                 f"Confidential underwriting package | Analysis {context.analysis_reference} | "
@@ -370,7 +372,13 @@ def build_investor_story(
             [
                 ("Seller", context.seller_name),
                 ("Property type", labelize(context.property_record.property_type)),
-                ("Condition", labelize(context.lead.property_condition)),
+                (
+                    "Condition",
+                    labelize(
+                        first_string(pre_meeting_inputs, ("current_condition",))
+                        or context.lead.property_condition
+                    ),
+                ),
                 ("Occupancy", labelize(context.lead.occupancy_status)),
                 ("Seller timeline", labelize(context.lead.desired_timeline)),
                 ("Current stage", labelize(context.lead.stage_key)),
@@ -425,6 +433,7 @@ def build_investor_story(
             styles,
         ),
         Spacer(1, 0.14 * inch),
+        *repair_input_story(context, styles),
         formula_box(context, styles),
         PageBreak(),
         warning_box(
@@ -504,9 +513,15 @@ def build_client_story(
 ) -> list[object]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
+    pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
+    report_stage = safe_string(metadata.get("report_stage"))
+    current_condition = labelize(
+        first_string(pre_meeting_inputs, ("current_condition",))
+        or context.lead.property_condition
+    ).lower()
     return [
         hero_block(
-            "PROPERTY VALUE & SALE OPTIONS REVIEW",
+            f"PROPERTY VALUE & SALE OPTIONS REVIEW / {report_stage_label(report_stage).upper()}",
             context.address,
             (
                 f"Prepared for {context.seller_first_name} | "
@@ -550,7 +565,8 @@ def build_client_story(
         Spacer(1, 0.16 * inch),
         disclaimer_box(
             (
-                "This preliminary market review is informational and is not a formal appraisal, "
+                f"This {report_stage_label(report_stage).lower()} market review is informational "
+                "and is not a formal appraisal, "
                 "broker price opinion, inspection, tax assessment, or guarantee of sale price. "
                 "Values can change as property facts, condition, and market information are "
                 "verified."
@@ -572,8 +588,8 @@ def build_client_story(
                     "Current condition",
                     (
                         f"The property is currently described as "
-                        f"{labelize(context.lead.property_condition).lower()}. A walkthrough is "
-                        "needed before finalizing the scope of work."
+                        f"{current_condition}. A walkthrough is needed before finalizing "
+                        "the scope of work."
                     ),
                 ),
                 (
@@ -638,6 +654,7 @@ def build_client_story(
                 ("Prepared by", "Stonegate Home Buyers"),
                 ("Property", context.address),
                 ("Market data source", analysis.provider.title()),
+                ("Review status", report_stage_label(report_stage)),
                 ("Analysis reference", context.analysis_reference),
                 ("Market data saved", format_datetime(analysis.created_at)),
             ],
@@ -778,6 +795,123 @@ def two_column_facts(
             ]
         )
     )
+    return table
+
+
+def repair_input_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[object]:
+    metadata = context.analysis.analysis_metadata or {}
+    assumptions = dict_value(metadata.get("assumptions"))
+    inputs = dict_value(metadata.get("pre_meeting_inputs"))
+    repair_items_value = inputs.get("repair_items")
+    repair_items = (
+        [item for item in repair_items_value if isinstance(item, dict)]
+        if isinstance(repair_items_value, list)
+        else []
+    )
+    holding_months = optional_int(inputs.get("holding_period_months")) or optional_int(
+        assumptions.get("holding_period_months")
+    )
+    story: list[object] = [
+        section_heading("Repair scope and input record", styles),
+        key_value_table(
+            [
+                (
+                    "Report stage",
+                    report_stage_label(safe_string(metadata.get("report_stage"))),
+                ),
+                (
+                    "Current condition",
+                    labelize(
+                        first_string(inputs, ("current_condition",))
+                        or context.lead.property_condition
+                    ),
+                ),
+                (
+                    "Target finish",
+                    labelize(
+                        first_string(inputs, ("target_condition",))
+                        or first_string(assumptions, ("target_condition",))
+                    ),
+                ),
+                (
+                    "Repair estimate source",
+                    labelize(
+                        first_string(inputs, ("repair_estimate_source",))
+                        or first_string(assumptions, ("repair_estimate_source",))
+                    ),
+                ),
+                (
+                    "Base remodel estimate",
+                    format_money(optional_int(metadata.get("base_rehab_cents"))),
+                ),
+                (
+                    "Contingency",
+                    f"{optional_int(metadata.get('rehab_contingency_percentage')) or 0}%",
+                ),
+                (
+                    "Total remodel estimate",
+                    format_money(optional_int(metadata.get("total_rehab_cents"))),
+                ),
+                (
+                    "Holding period",
+                    f"{holding_months or 6} months",
+                ),
+                (
+                    "Repair notes",
+                    first_string(inputs, ("repair_notes",)) or "No additional notes recorded.",
+                ),
+            ],
+            styles,
+        ),
+    ]
+    if repair_items:
+        story.extend(
+            [
+                Spacer(1, 0.12 * inch),
+                repair_item_table(repair_items, styles),
+            ]
+        )
+    story.append(Spacer(1, 0.14 * inch))
+    return story
+
+
+def repair_item_table(
+    items: list[dict[str, Any]],
+    styles: dict[str, ParagraphStyle],
+) -> LongTable:
+    rows: list[list[Paragraph]] = [
+        [
+            Paragraph("Repair category", styles["table_header"]),
+            Paragraph("Estimated cost", styles["table_header"]),
+            Paragraph("Details", styles["table_header"]),
+        ]
+    ]
+    for item in items:
+        rows.append(
+            [
+                Paragraph(
+                    escape(labelize(first_string(item, ("category",)))),
+                    styles["table_cell_bold"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(item.get("estimated_cost_cents")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
+                    escape(first_string(item, ("details",)) or "No item note."),
+                    styles["table_cell"],
+                ),
+            ]
+        )
+    table = LongTable(
+        rows,
+        colWidths=[1.7 * inch, 1.25 * inch, 4.45 * inch],
+        repeatRows=1,
+    )
+    apply_comp_table_style(table)
     return table
 
 
@@ -1289,6 +1423,15 @@ def confidence_label(score: int) -> str:
     if score >= 60:
         return "Moderate"
     return "Limited"
+
+
+def report_stage_label(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "walkthrough_verified":
+        return "Walkthrough verified"
+    if normalized == "pre_meeting_reviewed":
+        return "Pre-meeting reviewed"
+    return "Preliminary"
 
 
 def format_property_address(property_record: Property) -> str:

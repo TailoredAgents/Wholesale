@@ -78,7 +78,22 @@ comp.
 
 ## Repair Scope
 
-The user selects a scope before relying on the recommendation:
+The user can prepare an analysis with structured inputs before a seller meeting:
+
+- Current property condition and target finish.
+- A system screening budget, user-entered total, or itemized repair budget.
+- A contingency percentage and expected holding period.
+- Repair details, estimate source notes, and items to verify during the walkthrough.
+
+Itemized costs take precedence over a user-entered total, so repair costs cannot be counted
+twice. The selected base budget receives contingency once to produce total rehab.
+
+Every saved analysis is labeled `Preliminary`, `Pre-meeting reviewed`, or
+`Walkthrough verified`. Entering custom facts automatically promotes a preliminary analysis
+to pre-meeting reviewed. The label records how thoroughly the inputs have been checked; it
+does not approve an offer or remove the human review gate.
+
+When the system screening budget is used, the selected scope controls the estimate:
 
 | Scope | Base range | Contingency |
 | --- | ---: | ---: |
@@ -87,8 +102,9 @@ The user selects a scope before relying on the recommendation:
 | Heavy renovation | $60-$90/sqft | 20% |
 | Structural/full rebuild | $100-$140/sqft | 25% |
 
-The base budget is the midpoint of the range. Total rehab is base budget plus contingency.
-This remains a screening budget until replaced by a walkthrough scope and contractor pricing.
+The base budget is the midpoint of the range. A user-entered total or itemized budget replaces
+that midpoint while retaining the system range in the audit record. All repair budgets remain
+estimates until supported by a walkthrough scope and contractor pricing.
 
 ## Buyer Economics
 
@@ -104,8 +120,10 @@ Conservative ARV
 = flip buyer maximum
 ```
 
-Defaults are 2% purchase costs, 6% financing/holding, 8% resale costs, and a buyer profit
-floor determined by repair scope. All percentages are explicit environment settings.
+Defaults are 2% purchase costs, 6% financing/holding for six months, 8% resale costs, and a
+buyer profit floor determined by repair scope. Financing and holding cost scales with the
+entered holding period; for example, nine months applies 9% when the six-month default is 6%.
+All base percentages are explicit environment settings.
 
 When RentCast rent support exists for an eligible single-family exit, the engine also
 estimates stabilized value from net operating income and the configured target cap rate.
@@ -147,10 +165,11 @@ Every run saves immutable raw provider responses, selected/rejected comps, class
 assumptions, review reasons, data disagreements, calculation outputs, and a linked
 underwriting version.
 
-The investor PDF includes internal buyer economics, repair contingency, seller ceiling,
-opening recommendation, comp rationale, and decision controls. The client PDF excludes
-Stonegate's assignment, profit, and negotiation assumptions and presents only property facts,
-as-is/renovated value evidence, comparable sales, and limitations.
+The investor PDF includes the report stage, structured repair inputs, itemized costs and
+notes, buyer economics, repair contingency, seller ceiling, opening recommendation, comp
+rationale, and decision controls. The client PDF shows the report stage but excludes
+Stonegate's repair budget, assignment, profit, and negotiation assumptions; it presents only
+property facts, as-is/renovated value evidence, comparable sales, and limitations.
 
 Changing classifications or repair scope reuses the latest saved provider evidence and does
 not consume another market-data pull. `Refresh market data` deliberately retrieves new data.

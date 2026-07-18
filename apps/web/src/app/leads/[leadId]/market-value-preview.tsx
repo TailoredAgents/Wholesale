@@ -7,6 +7,48 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./page.module.css";
 
 type CompCondition = "unknown" | "as_is" | "renovated";
+type RepairEntryMode = "system" | "total" | "itemized";
+type VerificationStatus =
+  | "preliminary"
+  | "pre_meeting_reviewed"
+  | "walkthrough_verified";
+type RepairCategory =
+  | "roof"
+  | "hvac"
+  | "plumbing"
+  | "electrical"
+  | "foundation"
+  | "kitchen"
+  | "bathrooms"
+  | "flooring"
+  | "paint_drywall"
+  | "windows_doors"
+  | "exterior"
+  | "landscaping"
+  | "permits"
+  | "cleanup"
+  | "other";
+
+type RepairItem = {
+  category: RepairCategory;
+  estimated_cost_cents: number;
+  details?: string | null;
+};
+
+type PreMeetingInputs = {
+  verification_status: VerificationStatus;
+  report_stage: VerificationStatus;
+  current_condition: string | null;
+  target_condition: string;
+  repair_level: string;
+  repair_estimate_source: "system_estimate" | "user_total" | "itemized";
+  base_rehab_override_cents: number | null;
+  repair_items: RepairItem[];
+  contingency_override_percentage: number | null;
+  holding_period_months: number;
+  repair_notes: string | null;
+  custom_inputs_applied: boolean;
+};
 
 type MarketComparable = {
   provider_id: string | null;
@@ -60,6 +102,8 @@ type MarketValueEstimate = {
   review_reasons?: string[];
   data_disagreements?: string[];
   assumptions?: Record<string, unknown>;
+  report_stage?: VerificationStatus;
+  pre_meeting_inputs?: PreMeetingInputs | null;
   comparables?: MarketComparable[];
   selected_comps?: MarketComparable[];
   source_note: string;
@@ -67,6 +111,30 @@ type MarketValueEstimate = {
 
 type Status = "idle" | "loading" | "loaded" | "error";
 type ReportAudience = "investor" | "client";
+
+const REPAIR_CATEGORIES: { key: RepairCategory; label: string }[] = [
+  { key: "roof", label: "Roof" },
+  { key: "hvac", label: "HVAC" },
+  { key: "plumbing", label: "Plumbing" },
+  { key: "electrical", label: "Electrical" },
+  { key: "foundation", label: "Foundation" },
+  { key: "kitchen", label: "Kitchen" },
+  { key: "bathrooms", label: "Bathrooms" },
+  { key: "flooring", label: "Flooring" },
+  { key: "paint_drywall", label: "Paint / drywall" },
+  { key: "windows_doors", label: "Windows / doors" },
+  { key: "exterior", label: "Exterior" },
+  { key: "landscaping", label: "Landscaping" },
+  { key: "permits", label: "Permits" },
+  { key: "cleanup", label: "Cleanup" },
+  { key: "other", label: "Other" },
+];
+
+function emptyRepairAmounts() {
+  return Object.fromEntries(
+    REPAIR_CATEGORIES.map(({ key }) => [key, ""]),
+  ) as Record<RepairCategory, string>;
+}
 
 function formatMoney(cents: number | null | undefined) {
   if (cents === null || cents === undefined) {
@@ -107,6 +175,34 @@ function conditionLabel(value: CompCondition) {
   return "Not verified";
 }
 
+function reportStageLabel(value: VerificationStatus | undefined) {
+  if (value === "walkthrough_verified") {
+    return "Walkthrough verified";
+  }
+  if (value === "pre_meeting_reviewed") {
+    return "Pre-meeting reviewed";
+  }
+  return "Preliminary";
+}
+
+function repairSourceLabel(value: PreMeetingInputs["repair_estimate_source"] | undefined) {
+  if (value === "itemized") {
+    return "Itemized estimate";
+  }
+  if (value === "user_total") {
+    return "User total";
+  }
+  return "System estimate";
+}
+
+function dollarsToCents(value: string) {
+  if (!value.trim()) {
+    return null;
+  }
+  const amount = Number(value.replace(/,/g, ""));
+  return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
+}
+
 export function MarketValuePreview({ leadId }: { leadId: string }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -115,6 +211,17 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState<ReportAudience | null>(null);
   const [repairLevel, setRepairLevel] = useState("moderate");
+  const [currentCondition, setCurrentCondition] = useState("");
+  const [targetCondition, setTargetCondition] = useState("standard_flip");
+  const [verificationStatus, setVerificationStatus] =
+    useState<VerificationStatus>("preliminary");
+  const [repairEntryMode, setRepairEntryMode] = useState<RepairEntryMode>("system");
+  const [baseRehabInput, setBaseRehabInput] = useState("");
+  const [repairAmounts, setRepairAmounts] =
+    useState<Record<RepairCategory, string>>(emptyRepairAmounts);
+  const [contingencyInput, setContingencyInput] = useState("");
+  const [holdingPeriodMonths, setHoldingPeriodMonths] = useState("6");
+  const [repairNotes, setRepairNotes] = useState("");
   const [conditionOverrides, setConditionOverrides] = useState<Record<string, CompCondition>>(
     {},
   );
@@ -152,7 +259,46 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     if (typeof savedRepairLevel === "string") {
       setRepairLevel(savedRepairLevel);
     }
+    const inputs = nextEstimate.pre_meeting_inputs;
+    if (inputs) {
+      setCurrentCondition(inputs.current_condition ?? "");
+      setTargetCondition(inputs.target_condition);
+      setVerificationStatus(inputs.report_stage);
+      setRepairLevel(inputs.repair_level);
+      setHoldingPeriodMonths(String(inputs.holding_period_months));
+      setContingencyInput(
+        inputs.contingency_override_percentage === null
+          ? ""
+          : String(inputs.contingency_override_percentage),
+      );
+      setRepairNotes(inputs.repair_notes ?? "");
+      if (inputs.repair_estimate_source === "itemized") {
+        setRepairEntryMode("itemized");
+        const nextAmounts = emptyRepairAmounts();
+        for (const item of inputs.repair_items) {
+          nextAmounts[item.category] = String(item.estimated_cost_cents / 100);
+        }
+        setRepairAmounts(nextAmounts);
+        setBaseRehabInput("");
+      } else if (inputs.repair_estimate_source === "user_total") {
+        setRepairEntryMode("total");
+        setBaseRehabInput(
+          inputs.base_rehab_override_cents === null
+            ? ""
+            : String(inputs.base_rehab_override_cents / 100),
+        );
+        setRepairAmounts(emptyRepairAmounts());
+      } else {
+        setRepairEntryMode("system");
+        setBaseRehabInput("");
+        setRepairAmounts(emptyRepairAmounts());
+      }
+    }
   }, []);
+
+  function markInputsReviewed() {
+    setVerificationStatus("pre_meeting_reviewed");
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -196,14 +342,55 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     setStatus("loading");
     setError(null);
     try {
+      const repairItems =
+        repairEntryMode === "itemized"
+          ? REPAIR_CATEGORIES.flatMap(({ key }) => {
+              const estimatedCostCents = dollarsToCents(repairAmounts[key]);
+              return estimatedCostCents && estimatedCostCents > 0
+                ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
+                : [];
+            })
+          : [];
+      const baseRehabOverride =
+        repairEntryMode === "total" ? dollarsToCents(baseRehabInput) : null;
+      const contingency = contingencyInput.trim()
+        ? Number(contingencyInput)
+        : null;
+      const holdingPeriod = Number(holdingPeriodMonths);
+      if (repairEntryMode === "total" && baseRehabOverride === null) {
+        throw new Error("Enter the expected base remodel cost.");
+      }
+      if (repairEntryMode === "itemized" && repairItems.length === 0) {
+        throw new Error("Enter at least one itemized repair cost.");
+      }
+      if (
+        contingency !== null &&
+        (!Number.isFinite(contingency) || contingency < 0 || contingency > 50)
+      ) {
+        throw new Error("Contingency must be between 0% and 50%.");
+      }
+      if (
+        !Number.isInteger(holdingPeriod) ||
+        holdingPeriod < 1 ||
+        holdingPeriod > 24
+      ) {
+        throw new Error("Holding period must be between 1 and 24 months.");
+      }
       const headers = await getHeaders();
       headers["Content-Type"] = "application/json";
       const response = await fetch(
         `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis`,
         {
           body: JSON.stringify({
-            target_condition: "standard_flip",
+            target_condition: targetCondition,
+            current_condition: currentCondition || null,
             repair_level: repairLevel,
+            input_verification_status: verificationStatus,
+            base_rehab_override_cents: baseRehabOverride,
+            repair_items: repairItems,
+            contingency_override_percentage: contingency,
+            holding_period_months: holdingPeriod,
+            repair_notes: repairNotes.trim() || null,
             comp_condition_overrides: conditionOverrides,
             refresh_market_data: refreshMarketData,
           }),
@@ -256,8 +443,19 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     ...(estimate?.review_reasons ?? []),
     ...(estimate?.data_disagreements ?? []),
   ];
+  const itemizedBaseCents = REPAIR_CATEGORIES.reduce(
+    (total, { key }) => total + (dollarsToCents(repairAmounts[key]) ?? 0),
+    0,
+  );
   const isLoading = status === "loading";
   const isV2 = estimate?.methodology_version === "v2";
+  const activeReportStage = estimate?.report_stage ?? verificationStatus;
+  const activeRepairSource =
+    repairEntryMode === "itemized"
+      ? "itemized"
+      : repairEntryMode === "total"
+        ? "user_total"
+        : "system_estimate";
 
   return (
     <section className={styles.marketValuePanel}>
@@ -285,6 +483,217 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       </div>
 
       {error ? <p className={styles.error}>{error}</p> : null}
+
+      <details className={styles.preMeetingInputs} open={!estimate}>
+        <summary>
+          <div>
+            <strong>Pre-meeting inputs</strong>
+            <span>Condition, repair scope, contingency, and holding assumptions</span>
+          </div>
+          <span className={styles.reportStageBadge}>
+            {reportStageLabel(activeReportStage)}
+          </span>
+        </summary>
+        <div className={styles.preMeetingBody}>
+          <div className={styles.preMeetingGrid}>
+            <label>
+              <span>Input status</span>
+              <select
+                onChange={(event) =>
+                  setVerificationStatus(event.target.value as VerificationStatus)
+                }
+                value={verificationStatus}
+              >
+                <option value="preliminary">Preliminary</option>
+                <option value="pre_meeting_reviewed">Pre-meeting reviewed</option>
+                <option value="walkthrough_verified">Walkthrough verified</option>
+              </select>
+            </label>
+            <label>
+              <span>Current condition</span>
+              <select
+                onChange={(event) => {
+                  setCurrentCondition(event.target.value);
+                  markInputsReviewed();
+                }}
+                value={currentCondition}
+              >
+                <option value="">Use lead information</option>
+                <option value="distressed">Distressed</option>
+                <option value="heavy_rehab">Heavy rehab</option>
+                <option value="moderate_rehab">Moderate rehab</option>
+                <option value="dated_livable">Dated but livable</option>
+                <option value="lightly_updated">Lightly updated</option>
+                <option value="renovated">Renovated</option>
+              </select>
+            </label>
+            <label>
+              <span>Target finish</span>
+              <select
+                onChange={(event) => {
+                  setTargetCondition(event.target.value);
+                  markInputsReviewed();
+                }}
+                value={targetCondition}
+              >
+                <option value="rental_grade">Rental grade</option>
+                <option value="entry_level_retail">Entry-level retail</option>
+                <option value="standard_flip">Standard flip</option>
+                <option value="premium_renovation">Premium renovation</option>
+              </select>
+            </label>
+            <label>
+              <span>Repair scope</span>
+              <select
+                onChange={(event) => {
+                  setRepairLevel(event.target.value);
+                  markInputsReviewed();
+                }}
+                value={repairLevel}
+              >
+                <option value="light">Light cosmetic</option>
+                <option value="moderate">Moderate renovation</option>
+                <option value="heavy">Heavy renovation</option>
+                <option value="structural">Structural / full rebuild</option>
+              </select>
+            </label>
+            <label>
+              <span>Contingency</span>
+              <div className={styles.inputSuffix}>
+                <input
+                  inputMode="numeric"
+                  max="50"
+                  min="0"
+                  onChange={(event) => {
+                    setContingencyInput(event.target.value);
+                    markInputsReviewed();
+                  }}
+                  placeholder="Scope default"
+                  type="number"
+                  value={contingencyInput}
+                />
+                <span>%</span>
+              </div>
+            </label>
+            <label>
+              <span>Holding period</span>
+              <div className={styles.inputSuffix}>
+                <input
+                  inputMode="numeric"
+                  max="24"
+                  min="1"
+                  onChange={(event) => {
+                    setHoldingPeriodMonths(event.target.value);
+                    markInputsReviewed();
+                  }}
+                  type="number"
+                  value={holdingPeriodMonths}
+                />
+                <span>months</span>
+              </div>
+            </label>
+          </div>
+
+          <div className={styles.repairEntryHeader}>
+            <div>
+              <strong>Remodel estimate</strong>
+              <span>{repairSourceLabel(activeRepairSource)}</span>
+            </div>
+            <div className={styles.segmentedControl} aria-label="Remodel estimate method">
+              {(
+                [
+                  ["system", "System"],
+                  ["total", "Total"],
+                  ["itemized", "Itemized"],
+                ] as [RepairEntryMode, string][]
+              ).map(([value, label]) => (
+                <button
+                  aria-pressed={repairEntryMode === value}
+                  className={repairEntryMode === value ? styles.segmentActive : undefined}
+                  key={value}
+                  onClick={() => {
+                    setRepairEntryMode(value);
+                    if (value !== "system") {
+                      markInputsReviewed();
+                    }
+                  }}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {repairEntryMode === "total" ? (
+            <label className={styles.totalRepairInput}>
+              <span>Expected base remodel cost</span>
+              <div className={styles.moneyInput}>
+                <span>$</span>
+                <input
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => {
+                    setBaseRehabInput(event.target.value);
+                    markInputsReviewed();
+                  }}
+                  placeholder="0"
+                  step="500"
+                  type="number"
+                  value={baseRehabInput}
+                />
+              </div>
+            </label>
+          ) : null}
+
+          {repairEntryMode === "itemized" ? (
+            <div className={styles.itemizedRepairs}>
+              {REPAIR_CATEGORIES.map(({ key, label }) => (
+                <label key={key}>
+                  <span>{label}</span>
+                  <div className={styles.moneyInput}>
+                    <span>$</span>
+                    <input
+                      aria-label={`${label} estimated cost`}
+                      inputMode="decimal"
+                      min="0"
+                      onChange={(event) => {
+                        setRepairAmounts((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }));
+                        markInputsReviewed();
+                      }}
+                      placeholder="0"
+                      step="500"
+                      type="number"
+                      value={repairAmounts[key]}
+                    />
+                  </div>
+                </label>
+              ))}
+              <div className={styles.itemizedTotal}>
+                <span>Itemized base</span>
+                <strong>{formatMoney(itemizedBaseCents)}</strong>
+              </div>
+            </div>
+          ) : null}
+
+          <label className={styles.repairNotes}>
+            <span>Repair details and source notes</span>
+            <textarea
+              maxLength={2000}
+              onChange={(event) => {
+                setRepairNotes(event.target.value);
+                markInputsReviewed();
+              }}
+              placeholder="Known repairs, estimate source, property risks, or items to verify"
+              rows={3}
+              value={repairNotes}
+            />
+          </label>
+        </div>
+      </details>
 
       {estimate ? (
         <div className={styles.marketValueResult}>
@@ -357,15 +766,22 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           </dl>
 
           <div className={styles.underwritingControls}>
-            <label>
-              <span>Repair scope</span>
-              <select value={repairLevel} onChange={(event) => setRepairLevel(event.target.value)}>
-                <option value="light">Light cosmetic</option>
-                <option value="moderate">Moderate renovation</option>
-                <option value="heavy">Heavy renovation</option>
-                <option value="structural">Structural / full rebuild</option>
-              </select>
-            </label>
+            <div>
+              <span>Report stage</span>
+              <strong>{reportStageLabel(estimate.report_stage)}</strong>
+            </div>
+            <div>
+              <span>Repair source</span>
+              <strong>
+                {repairSourceLabel(estimate.pre_meeting_inputs?.repair_estimate_source)}
+              </strong>
+            </div>
+            <div>
+              <span>Holding period</span>
+              <strong>
+                {estimate.pre_meeting_inputs?.holding_period_months ?? 6} months
+              </strong>
+            </div>
             <div>
               <span>Monthly rent support</span>
               <strong>{formatMoney(estimate.monthly_rent_cents)}</strong>
@@ -436,12 +852,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                     <span>Condition at sale</span>
                     <select
                       aria-label={`Condition at sale for ${comp.formatted_address ?? "comparable"}`}
-                      onChange={(event) =>
+                      onChange={(event) => {
                         setConditionOverrides((current) => ({
                           ...current,
                           [compKey]: event.target.value as CompCondition,
-                        }))
-                      }
+                        }));
+                        markInputsReviewed();
+                      }}
                       value={condition}
                     >
                       {(["unknown", "as_is", "renovated"] as CompCondition[]).map((value) => (

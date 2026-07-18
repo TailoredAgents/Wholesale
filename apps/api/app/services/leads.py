@@ -82,6 +82,7 @@ from app.schemas.leads import (
     SourcePerformance,
     TransactionChecklistItemRead,
     TransactionRead,
+    UnderwritingPreMeetingInputsRead,
     UnderwritingVersionRead,
 )
 from app.services.inbox import (
@@ -1362,14 +1363,53 @@ def create_lead_market_analysis(
         rent_estimate=rent_estimate,
         local_property_type=property_record.property_type,
         lead_condition=lead.property_condition,
+        current_condition_override=payload.current_condition,
         target_condition=payload.target_condition,
         repair_level_override=payload.repair_level,
+        base_rehab_override_cents=payload.base_rehab_override_cents,
+        repair_items=[item.model_dump(mode="json") for item in payload.repair_items],
+        contingency_override_percentage=payload.contingency_override_percentage,
+        holding_period_months=payload.holding_period_months,
         condition_overrides=payload.comp_condition_overrides,
         settings=settings,
+    )
+    custom_inputs_applied = any(
+        (
+            payload.current_condition,
+            payload.target_condition != "standard_flip",
+            payload.base_rehab_override_cents is not None,
+            payload.repair_items,
+            payload.contingency_override_percentage is not None,
+            payload.holding_period_months != 6,
+            payload.repair_notes,
+            payload.comp_condition_overrides,
+        )
+    )
+    report_stage = payload.input_verification_status
+    if report_stage == "preliminary" and custom_inputs_applied:
+        report_stage = "pre_meeting_reviewed"
+    pre_meeting_inputs = UnderwritingPreMeetingInputsRead(
+        verification_status=report_stage,
+        report_stage=report_stage,
+        current_condition=payload.current_condition,
+        target_condition=payload.target_condition,
+        repair_level=string_or_none(result.assumptions.get("repair_level")) or "moderate",
+        repair_estimate_source=(
+            string_or_none(result.assumptions.get("repair_estimate_source"))
+            or "system_estimate"
+        ),
+        base_rehab_override_cents=payload.base_rehab_override_cents,
+        repair_items=payload.repair_items,
+        contingency_override_percentage=payload.contingency_override_percentage,
+        holding_period_months=payload.holding_period_months,
+        repair_notes=payload.repair_notes,
+        custom_inputs_applied=custom_inputs_applied,
     )
     assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
     analysis_metadata = {
         "methodology_version": "v2",
+        "report_stage": report_stage,
+        "pre_meeting_inputs": pre_meeting_inputs.model_dump(mode="json"),
         "subject_square_feet": first_int(
             {**estimate.subject_property, **subject_record},
             ("squareFootage", "livingArea", "grossLivingArea"),
@@ -1425,7 +1465,7 @@ def create_lead_market_analysis(
         max_offer_cents=result.seller_contract_ceiling_cents,
         recommended_offer_cents=result.recommended_opening_offer_cents,
         offer_strategy="flip_or_rental_buyer_economics",
-        notes=build_v2_market_analysis_notes(result),
+        notes=build_v2_market_analysis_notes(result, report_stage=report_stage),
         source="rentcast_property_records",
         underwriting_metadata={
             "provider_imported": True,
@@ -2727,7 +2767,11 @@ def build_market_analysis_notes(
     )
 
 
-def build_v2_market_analysis_notes(result: UnderwritingV2Result) -> str:
+def build_v2_market_analysis_notes(
+    result: UnderwritingV2Result,
+    *,
+    report_stage: str,
+) -> str:
     review_status = (
         "Manual review required."
         if result.manual_review_required
@@ -2740,6 +2784,7 @@ def build_v2_market_analysis_notes(result: UnderwritingV2Result) -> str:
         f"Seller ceiling: {format_cents_for_note(result.seller_contract_ceiling_cents)}. "
         f"Opening recommendation: "
         f"{format_cents_for_note(result.recommended_opening_offer_cents)}. "
+        f"Report stage: {report_stage.replace('_', ' ')}. "
         f"{review_status}"
     )
 
@@ -2810,6 +2855,14 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         review_reasons=string_list(metadata.get("review_reasons")),
         data_disagreements=string_list(metadata.get("data_disagreements")),
         assumptions=dict_value(metadata.get("assumptions")),
+        report_stage=string_or_none(metadata.get("report_stage")) or "preliminary",
+        pre_meeting_inputs=(
+            UnderwritingPreMeetingInputsRead.model_validate(
+                metadata.get("pre_meeting_inputs")
+            )
+            if isinstance(metadata.get("pre_meeting_inputs"), dict)
+            else None
+        ),
     )
 
 

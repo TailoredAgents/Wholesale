@@ -970,7 +970,30 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
         json={
+            "input_verification_status": "pre_meeting_reviewed",
+            "current_condition": "dated_livable",
+            "target_condition": "standard_flip",
             "repair_level": "moderate",
+            "repair_items": [
+                {
+                    "category": "roof",
+                    "estimated_cost_cents": 1500000,
+                    "details": "Replace architectural shingles.",
+                },
+                {
+                    "category": "kitchen",
+                    "estimated_cost_cents": 2500000,
+                    "details": "Entry-level retail kitchen.",
+                },
+                {
+                    "category": "hvac",
+                    "estimated_cost_cents": 1000000,
+                    "details": "Replace system.",
+                },
+            ],
+            "contingency_override_percentage": 20,
+            "holding_period_months": 9,
+            "repair_notes": "Pre-meeting contractor estimate.",
             "comp_condition_overrides": {
                 "comp-1": "renovated",
                 "comp-2": "renovated",
@@ -990,13 +1013,19 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["arv_point_cents"] == 30000000
     assert payload["arv_high_cents"] == 32000000
     assert payload["conservative_arv_cents"] == 29400000
-    assert payload["repair_low_cents"] == 5400000
-    assert payload["repair_high_cents"] == 9000000
-    assert payload["total_rehab_cents"] == 8280000
-    assert payload["flip_buyer_max_cents"] == 11916000
-    assert payload["rental_buyer_max_cents"] == 11579700
-    assert payload["seller_contract_ceiling_cents"] == 10166000
-    assert payload["recommended_offer_cents"] == 9352720
+    assert payload["repair_low_cents"] == 5000000
+    assert payload["repair_high_cents"] == 6000000
+    assert payload["base_rehab_cents"] == 5000000
+    assert payload["total_rehab_cents"] == 6000000
+    assert payload["flip_buyer_max_cents"] == 13314000
+    assert payload["rental_buyer_max_cents"] == 13859700
+    assert payload["seller_contract_ceiling_cents"] == 12109700
+    assert payload["recommended_offer_cents"] == 11140924
+    assert payload["report_stage"] == "pre_meeting_reviewed"
+    assert payload["pre_meeting_inputs"]["repair_estimate_source"] == "itemized"
+    assert payload["pre_meeting_inputs"]["holding_period_months"] == 9
+    assert len(payload["pre_meeting_inputs"]["repair_items"]) == 3
+    assert payload["assumptions"]["financing_holding_percentage"] == 0.09
     assert payload["manual_review_required"] is False
     assert payload["review_reasons"] == []
     assert payload["offer_low_percentage"] == 65
@@ -1013,8 +1042,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version is not None
     assert saved_version.source == "rentcast_property_records"
     assert saved_version.status == "needs_review"
-    assert saved_version.max_offer_cents == 10166000
-    assert saved_version.recommended_offer_cents == 9352720
+    assert saved_version.max_offer_cents == 12109700
+    assert saved_version.recommended_offer_cents == 11140924
 
     latest_analysis_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
@@ -1036,6 +1065,10 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     ]
     assert investor_report_response.content.startswith(b"%PDF")
     assert b"Assignment fee assumption" in investor_report_response.content
+    assert b"Repair scope and input record" in investor_report_response.content
+    assert b"Pre-meeting reviewed" in investor_report_response.content
+    assert b"Pre-meeting contractor estimate" in investor_report_response.content
+    assert b"Roof" in investor_report_response.content
 
     client_report_response = client.get(
         (
@@ -1054,6 +1087,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Assignment fee assumption" not in client_report_response.content
     assert b"Offer ceiling" not in client_report_response.content
     assert b"Recommended starting offer" not in client_report_response.content
+    assert b"Repair scope and input record" not in client_report_response.content
+    assert b"Pre-meeting contractor estimate" not in client_report_response.content
+    assert b"Pre-meeting reviewed" in client_report_response.content
     unclassified_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -1068,6 +1104,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         headers={"X-Dev-User-Email": OWNER_EMAIL},
         json={
             "repair_level": "light",
+            "base_rehab_override_cents": 4000000,
+            "contingency_override_percentage": 10,
             "comp_condition_overrides": {
                 "comp-1": "renovated",
                 "comp-2": "renovated",
@@ -1079,7 +1117,44 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     )
     assert cached_response.status_code == 201
     assert provider_calls == ["init", "value", "subject", "sales", "rent"]
-    assert cached_response.json()["total_rehab_cents"] < payload["total_rehab_cents"]
+    assert cached_response.json()["base_rehab_cents"] == 4000000
+    assert cached_response.json()["total_rehab_cents"] == 4400000
+    assert (
+        cached_response.json()["pre_meeting_inputs"]["repair_estimate_source"]
+        == "user_total"
+    )
+    itemized_precedence_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_level": "light",
+            "base_rehab_override_cents": 10000000,
+            "repair_items": [
+                {
+                    "category": "roof",
+                    "estimated_cost_cents": 2000000,
+                },
+            ],
+            "contingency_override_percentage": 10,
+            "comp_condition_overrides": {
+                "comp-1": "renovated",
+                "comp-2": "renovated",
+                "comp-3": "renovated",
+                "comp-4": "as_is",
+                "comp-5": "as_is",
+            },
+        },
+    )
+    assert itemized_precedence_response.status_code == 201
+    assert provider_calls == ["init", "value", "subject", "sales", "rent"]
+    assert itemized_precedence_response.json()["base_rehab_cents"] == 2000000
+    assert itemized_precedence_response.json()["total_rehab_cents"] == 2200000
+    assert (
+        itemized_precedence_response.json()["pre_meeting_inputs"][
+            "repair_estimate_source"
+        ]
+        == "itemized"
+    )
     get_settings.cache_clear()
 
 

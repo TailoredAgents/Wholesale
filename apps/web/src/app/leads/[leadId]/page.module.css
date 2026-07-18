@@ -1187,6 +1187,220 @@
   cursor: wait;
 }
 
+.preMeetingInputs {
+  border-top: 1px solid #e8e3d8;
+  border-bottom: 1px solid #e8e3d8;
+}
+
+.preMeetingInputs summary {
+  min-height: 50px;
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.preMeetingInputs summary::-webkit-details-marker {
+  display: none;
+}
+
+.preMeetingInputs summary > div {
+  display: grid;
+  gap: 2px;
+}
+
+.preMeetingInputs summary strong {
+  color: #202426;
+  font-size: 14px;
+}
+
+.preMeetingInputs summary span {
+  color: #687073;
+  font-size: 12px;
+}
+
+.reportStageBadge {
+  padding: 5px 8px;
+  border: 1px solid #b9d1c1;
+  border-radius: 6px;
+  background: #edf6f0;
+  color: #285b42 !important;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.preMeetingBody {
+  padding: 4px 0 14px;
+  display: grid;
+  gap: 14px;
+}
+
+.preMeetingGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preMeetingGrid label,
+.totalRepairInput,
+.itemizedRepairs label,
+.repairNotes {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.preMeetingGrid label > span,
+.totalRepairInput > span,
+.itemizedRepairs label > span,
+.repairNotes > span,
+.repairEntryHeader > div:first-child > span,
+.itemizedTotal > span {
+  color: #687073;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.preMeetingGrid select,
+.preMeetingGrid input,
+.totalRepairInput input,
+.itemizedRepairs input,
+.repairNotes textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 13px;
+}
+
+.preMeetingGrid select {
+  padding: 0 30px 0 9px;
+}
+
+.preMeetingGrid input,
+.totalRepairInput input,
+.itemizedRepairs input {
+  padding: 0 9px;
+}
+
+.inputSuffix,
+.moneyInput {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.moneyInput {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.inputSuffix input,
+.moneyInput input {
+  border: 0;
+  border-radius: 0;
+}
+
+.inputSuffix > span,
+.moneyInput > span {
+  padding: 0 9px;
+  color: #687073;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.repairEntryHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repairEntryHeader > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.repairEntryHeader strong {
+  color: #202426;
+  font-size: 13px;
+}
+
+.segmentedControl {
+  display: inline-grid;
+  grid-template-columns: repeat(3, minmax(70px, 1fr));
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.segmentedControl button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 0;
+  border-left: 1px solid #ded9cf;
+  background: #ffffff;
+  color: #4c5557;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.segmentedControl button:first-child {
+  border-left: 0;
+}
+
+.segmentedControl .segmentActive {
+  background: #263238;
+  color: #ffffff;
+}
+
+.totalRepairInput {
+  max-width: 320px;
+}
+
+.itemizedRepairs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.itemizedTotal {
+  min-height: 62px;
+  padding: 9px;
+  border-top: 1px solid #d9d3c8;
+  border-bottom: 1px solid #d9d3c8;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.itemizedTotal strong {
+  color: #245f43;
+  font-size: 15px;
+}
+
+.repairNotes textarea {
+  min-height: 76px;
+  padding: 9px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
 .marketValueResult {
   display: grid;
   gap: 14px;
@@ -1261,7 +1475,7 @@
 
 .underwritingControls {
   display: grid;
-  grid-template-columns: minmax(180px, 1.25fr) repeat(2, minmax(130px, 1fr));
+  grid-template-columns: repeat(5, minmax(105px, 1fr));
   gap: 10px;
   padding: 12px;
   border-top: 1px solid #e8e3d8;
@@ -1628,8 +1842,13 @@
   }
 
   .marketValueResult .decisionMetrics,
-  .underwritingControls {
+  .underwritingControls,
+  .preMeetingGrid {
     grid-template-columns: 1fr;
+  }
+
+  .itemizedRepairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .compList article {
@@ -1700,6 +1919,24 @@
 
   .marketValueActions button {
     width: 100%;
+  }
+
+  .preMeetingInputs summary,
+  .repairEntryHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .reportStageBadge {
+    align-self: flex-start;
+  }
+
+  .segmentedControl {
+    width: 100%;
+  }
+
+  .itemizedRepairs {
+    grid-template-columns: 1fr;
   }
 
   .tabs {

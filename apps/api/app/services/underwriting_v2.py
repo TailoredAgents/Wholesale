@@ -48,8 +48,13 @@ def analyze_underwriting_v2(
     rent_estimate: RentCastRentEstimate | None,
     local_property_type: str | None,
     lead_condition: str | None,
+    current_condition_override: str | None,
     target_condition: str,
     repair_level_override: str | None,
+    base_rehab_override_cents: int | None,
+    repair_items: list[dict[str, Any]],
+    contingency_override_percentage: int | None,
+    holding_period_months: int,
     condition_overrides: dict[str, str],
     settings: Settings,
 ) -> UnderwritingV2Result:
@@ -82,9 +87,17 @@ def analyze_underwriting_v2(
         as_is_point = dollars_to_cents(estimate.price)
         as_is_high = dollars_to_cents(estimate.price_range_high)
 
-    repair_level = normalize_repair_level(repair_level_override or lead_condition)
+    repair_level = normalize_repair_level(
+        repair_level_override or current_condition_override or lead_condition
+    )
     subject_square_feet = integer(subject.get("squareFootage"))
-    repair = repair_assumptions(repair_level, subject_square_feet)
+    repair = repair_assumptions(
+        repair_level,
+        subject_square_feet,
+        base_rehab_override_cents=base_rehab_override_cents,
+        repair_items=repair_items,
+        contingency_override_percentage=contingency_override_percentage,
+    )
     confidence_score, review_reasons = confidence_and_review_reasons(
         selected_comps=selected_comps,
         renovated_comps=renovated,
@@ -108,6 +121,7 @@ def analyze_underwriting_v2(
         subject_record=subject,
         rent_estimate=rent_estimate,
         property_type=string(subject.get("propertyType")) or local_property_type,
+        holding_period_months=holding_period_months,
         settings=settings,
     )
     disposition_values = [
@@ -154,9 +168,12 @@ def analyze_underwriting_v2(
 
     assumptions = {
         "target_condition": normalize_key(target_condition) or "standard_flip",
+        "current_condition": normalize_key(current_condition_override or lead_condition),
         "repair_level": repair_level,
         "purchase_cost_percentage": settings.underwriting_purchase_cost_percentage,
-        "financing_holding_percentage": settings.underwriting_financing_holding_percentage,
+        "financing_holding_percentage": buyer_economics["assumptions"].get(
+            "financing_holding_percentage"
+        ),
         "resale_cost_percentage": settings.underwriting_resale_cost_percentage,
         "assignment_fee_cents": assignment_fee,
         "transaction_reserve_cents": transaction_reserve,
@@ -411,27 +428,62 @@ def weighted_quantile(values: list[tuple[int, float]], target: float) -> int:
     return ordered[-1][0]
 
 
-def repair_assumptions(level: str, square_feet: int | None) -> dict[str, int]:
+def repair_assumptions(
+    level: str,
+    square_feet: int | None,
+    *,
+    base_rehab_override_cents: int | None,
+    repair_items: list[dict[str, Any]],
+    contingency_override_percentage: int | None,
+) -> dict[str, Any]:
     rules = {
         "light": (15, 25, 10, 15_000_00, 30_000_00),
         "moderate": (30, 50, 15, 35_000_00, 60_000_00),
         "heavy": (60, 90, 20, 70_000_00, 120_000_00),
         "structural": (100, 140, 25, 120_000_00, 200_000_00),
     }
-    low_rate, high_rate, contingency, fallback_low, fallback_high = rules[level]
+    low_rate, high_rate, default_contingency, fallback_low, fallback_high = rules[level]
     if square_feet and square_feet > 0:
-        repair_low = round(square_feet * low_rate * MONEY)
-        repair_high = round(square_feet * high_rate * MONEY)
+        system_low = round(square_feet * low_rate * MONEY)
+        system_high = round(square_feet * high_rate * MONEY)
     else:
-        repair_low, repair_high = fallback_low, fallback_high
-    base_rehab = round((repair_low + repair_high) / 2)
+        system_low, system_high = fallback_low, fallback_high
+
+    itemized_total = sum(
+        cost
+        for item in repair_items
+        if (cost := optional_int(item.get("estimated_cost_cents"))) is not None
+    )
+    if repair_items and itemized_total > 0:
+        base_rehab = itemized_total
+        repair_source = "itemized"
+    elif base_rehab_override_cents is not None:
+        base_rehab = base_rehab_override_cents
+        repair_source = "user_total"
+    else:
+        base_rehab = round((system_low + system_high) / 2)
+        repair_source = "system_estimate"
+
+    contingency = (
+        contingency_override_percentage
+        if contingency_override_percentage is not None
+        else default_contingency
+    )
     total_rehab = round(base_rehab * (1 + contingency / 100))
+    if repair_source == "system_estimate":
+        repair_low, repair_high = system_low, system_high
+    else:
+        repair_low, repair_high = base_rehab, total_rehab
     return {
         "repair_low_cents": repair_low,
         "repair_high_cents": repair_high,
         "base_rehab_cents": base_rehab,
         "contingency_percentage": contingency,
         "total_rehab_cents": total_rehab,
+        "repair_estimate_source": repair_source,
+        "system_repair_low_cents": system_low,
+        "system_repair_high_cents": system_high,
+        "repair_items": repair_items,
     }
 
 
@@ -444,6 +496,7 @@ def calculate_buyer_economics(
     subject_record: dict[str, Any],
     rent_estimate: RentCastRentEstimate | None,
     property_type: str | None,
+    holding_period_months: int,
     settings: Settings,
 ) -> dict[str, Any]:
     if conservative_arv_cents is None:
@@ -466,9 +519,13 @@ def calculate_buyer_economics(
     purchase_costs = round(
         conservative_arv_cents * settings.underwriting_purchase_cost_percentage
     )
-    financing_holding = round(
-        conservative_arv_cents * settings.underwriting_financing_holding_percentage
+    financing_holding_percentage = round(
+        settings.underwriting_financing_holding_percentage
+        * holding_period_months
+        / 6,
+        4,
     )
+    financing_holding = round(conservative_arv_cents * financing_holding_percentage)
     resale_costs = round(
         conservative_arv_cents * settings.underwriting_resale_cost_percentage
     )
@@ -521,6 +578,8 @@ def calculate_buyer_economics(
             "buyer_profit_percentage": profit_percentage,
             "purchase_costs_cents": purchase_costs,
             "financing_holding_costs_cents": financing_holding,
+            "financing_holding_percentage": financing_holding_percentage,
+            "holding_period_months": holding_period_months,
             "resale_costs_cents": resale_costs,
             "rental_noi_cents": rental_noi,
             "stabilized_rental_value_cents": stabilized_rental_value,
