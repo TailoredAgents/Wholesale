@@ -314,7 +314,13 @@ def build_investor_story(
     metadata = analysis.analysis_metadata or {}
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
-    is_v2 = metadata.get("methodology_version") == "v2"
+    is_v2 = is_v2_method(metadata.get("methodology_version"))
+    is_v2_1 = metadata.get("methodology_version") == "v2.1"
+    assumptions = dict_value(metadata.get("assumptions"))
+    arv_supported = (
+        first_string(assumptions, ("arv_value_basis",))
+        == "verified_renovated_recorded_sales"
+    )
     review_reasons = string_list(metadata.get("review_reasons"))
     data_disagreements = string_list(metadata.get("data_disagreements"))
     decision_control = (
@@ -390,10 +396,21 @@ def build_investor_story(
         key_value_table(
             [
                 (
-                    "Recorded-sale ARV range",
+                    (
+                        "Comp-supported ARV range"
+                        if is_v2_1
+                        else "Legacy value range (recalculate)"
+                    ),
                     format_money_range(
                         analysis.arv_low_cents,
                         analysis.arv_high_cents,
+                    ),
+                ),
+                (
+                    "Provider AVM screening range",
+                    format_money_range(
+                        analysis.estimated_value_low_cents,
+                        analysis.estimated_value_high_cents,
                     ),
                 ),
                 (
@@ -485,8 +502,12 @@ def build_investor_story(
                 (
                     "Method",
                     (
-                        "Recorded-sale comparison, condition classification, repair scope, and "
+                        "Recorded-sale comparison, robust price-per-square-foot screening, "
+                        "subject-size indicators, condition classification, repair scope, and "
                         "buyer economics"
+                        if arv_supported
+                        else "Recorded-sale screening and repair scope; comp-supported ARV "
+                        "withheld pending three verified renovated sales"
                         if is_v2
                         else "Sales comparison screening with percentile-based ARV range"
                     ),
@@ -513,6 +534,7 @@ def build_client_story(
 ) -> list[object]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
+    is_v2_1 = metadata.get("methodology_version") == "v2.1"
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
     current_condition = labelize(
@@ -551,8 +573,19 @@ def build_client_story(
                     ),
                 ),
                 (
-                    "Estimated renovated value",
+                    (
+                        "Comp-supported renovated value"
+                        if is_v2_1
+                        else "Legacy renovated value"
+                    ),
                     format_money_range(analysis.arv_low_cents, analysis.arv_high_cents),
+                ),
+                (
+                    "Provider market screen",
+                    format_money_range(
+                        analysis.estimated_value_low_cents,
+                        analysis.estimated_value_high_cents,
+                    ),
                 ),
                 ("Comparable properties", str(analysis.selected_comp_count)),
                 ("Market evidence", confidence_label(analysis.confidence_score)),
@@ -921,21 +954,31 @@ def formula_box(
 ) -> Table:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
-    if metadata.get("methodology_version") == "v2":
+    if is_v2_method(metadata.get("methodology_version")):
         assumptions = dict_value(metadata.get("assumptions"))
-        low_formula = (
-            "Buyer maximum = conservative ARV - total rehab - purchase costs - "
-            "financing/holding - resale costs - required buyer profit"
-        )
-        high_formula = (
-            "Seller ceiling = "
-            f"{format_money(optional_int(metadata.get('recommended_disposition_cents')))} "
-            f"disposition - {format_money(analysis.assignment_fee_cents)} assignment - "
-            f"{format_money(optional_int(metadata.get('transaction_reserve_cents')))} reserve. "
-            f"Opening recommendation includes a "
-            f"{format_percentage(assumptions.get('negotiation_reserve_percentage'))} "
-            "negotiation reserve."
-        )
+        if analysis.arv_low_cents is None or analysis.arv_high_cents is None:
+            low_formula = (
+                "Offer recommendation withheld: classify at least three credible renovated "
+                "recorded sales before calculating a comp-supported ARV."
+            )
+            high_formula = (
+                "The provider AVM remains market-screening context and does not control the "
+                "seller ceiling."
+            )
+        else:
+            low_formula = (
+                "Buyer maximum = conservative ARV - total rehab - purchase costs - "
+                "financing/holding - resale costs - required buyer profit"
+            )
+            high_formula = (
+                "Seller ceiling = "
+                f"{format_money(optional_int(metadata.get('recommended_disposition_cents')))} "
+                f"disposition - {format_money(analysis.assignment_fee_cents)} assignment - "
+                f"{format_money(optional_int(metadata.get('transaction_reserve_cents')))} "
+                f"reserve. Opening recommendation includes a "
+                f"{format_percentage(assumptions.get('negotiation_reserve_percentage'))} "
+                "negotiation reserve."
+            )
     else:
         low_formula = (
             f"Low ceiling = {format_money(analysis.arv_low_cents)} x "
@@ -1034,11 +1077,23 @@ def investor_comp_table(
     comps: list[dict[str, Any]],
     styles: dict[str, ParagraphStyle],
 ) -> LongTable:
-    headings = ["Address", "Sale date", "Price", "Sqft", "Dist.", "Condition", "Score", "Rationale"]
+    headings = [
+        "Address",
+        "Sale date",
+        "Price / sqft",
+        "Sqft",
+        "Subject-size indicator",
+        "Dist.",
+        "Condition",
+        "Rationale",
+    ]
     rows: list[list[Paragraph]] = [
         [Paragraph(heading, styles["table_header"]) for heading in headings]
     ]
     for comp in comps[:12]:
+        price_per_square_foot = format_ppsf(
+            optional_int(comp.get("price_per_square_foot_cents"))
+        )
         rows.append(
             [
                 Paragraph(
@@ -1050,11 +1105,20 @@ def investor_comp_table(
                     styles["table_cell"],
                 ),
                 Paragraph(
-                    escape(format_money(optional_int(comp.get("price_cents")))),
+                    (
+                        f"{escape(format_money(optional_int(comp.get('price_cents'))))}"
+                        f"<br/><font color='#657269'>"
+                        f"{escape(price_per_square_foot)}"
+                        "</font>"
+                    ),
                     styles["table_cell"],
                 ),
                 Paragraph(
                     escape(format_number(optional_int(comp.get("square_footage")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(comp.get("adjusted_value_cents")))),
                     styles["table_cell"],
                 ),
                 Paragraph(
@@ -1065,7 +1129,6 @@ def investor_comp_table(
                     escape(labelize(safe_string(comp.get("condition_classification")))),
                     styles["table_cell"],
                 ),
-                Paragraph(escape(safe_string(comp.get("score"))), styles["table_cell"]),
                 Paragraph(
                     escape(safe_string(comp.get("selection_reason"))),
                     styles["table_cell"],
@@ -1082,12 +1145,12 @@ def investor_comp_table(
         colWidths=[
             1.4 * inch,
             0.72 * inch,
-            0.68 * inch,
+            0.82 * inch,
             0.45 * inch,
+            0.82 * inch,
             0.42 * inch,
             0.68 * inch,
-            0.4 * inch,
-            2.65 * inch,
+            2.09 * inch,
         ],
         repeatRows=1,
     )
@@ -1448,7 +1511,15 @@ def format_money(cents: int | None) -> str:
 
 
 def format_money_range(low_cents: int | None, high_cents: int | None) -> str:
+    if low_cents is None and high_cents is None:
+        return "Not supported"
     return f"{format_money(low_cents)} - {format_money(high_cents)}"
+
+
+def format_ppsf(cents: int | None) -> str:
+    if cents is None:
+        return "N/A"
+    return f"${cents / 100:,.0f}/sqft"
 
 
 def format_number(value: int | None) -> str:
@@ -1541,6 +1612,10 @@ def string_list(value: object) -> list[str]:
 
 def dict_value(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def is_v2_method(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("v2")
 
 
 def optional_int(value: object) -> int | None:

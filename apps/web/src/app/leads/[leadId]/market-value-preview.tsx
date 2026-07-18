@@ -66,6 +66,8 @@ type MarketComparable = {
   price_source?: string | null;
   verification_status?: string | null;
   condition_classification?: CompCondition | null;
+  adjusted_value_cents?: number | null;
+  price_per_square_foot_cents?: number | null;
   selection_reason?: string;
   score?: number;
 };
@@ -211,16 +213,12 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState<ReportAudience | null>(null);
   const [repairLevel, setRepairLevel] = useState("moderate");
-  const [currentCondition, setCurrentCondition] = useState("");
-  const [targetCondition, setTargetCondition] = useState("standard_flip");
   const [verificationStatus, setVerificationStatus] =
     useState<VerificationStatus>("preliminary");
   const [repairEntryMode, setRepairEntryMode] = useState<RepairEntryMode>("system");
   const [baseRehabInput, setBaseRehabInput] = useState("");
   const [repairAmounts, setRepairAmounts] =
     useState<Record<RepairCategory, string>>(emptyRepairAmounts);
-  const [contingencyInput, setContingencyInput] = useState("");
-  const [holdingPeriodMonths, setHoldingPeriodMonths] = useState("6");
   const [repairNotes, setRepairNotes] = useState("");
   const [conditionOverrides, setConditionOverrides] = useState<Record<string, CompCondition>>(
     {},
@@ -261,16 +259,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
     const inputs = nextEstimate.pre_meeting_inputs;
     if (inputs) {
-      setCurrentCondition(inputs.current_condition ?? "");
-      setTargetCondition(inputs.target_condition);
       setVerificationStatus(inputs.report_stage);
       setRepairLevel(inputs.repair_level);
-      setHoldingPeriodMonths(String(inputs.holding_period_months));
-      setContingencyInput(
-        inputs.contingency_override_percentage === null
-          ? ""
-          : String(inputs.contingency_override_percentage),
-      );
       setRepairNotes(inputs.repair_notes ?? "");
       if (inputs.repair_estimate_source === "itemized") {
         setRepairEntryMode("itemized");
@@ -353,28 +343,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           : [];
       const baseRehabOverride =
         repairEntryMode === "total" ? dollarsToCents(baseRehabInput) : null;
-      const contingency = contingencyInput.trim()
-        ? Number(contingencyInput)
-        : null;
-      const holdingPeriod = Number(holdingPeriodMonths);
       if (repairEntryMode === "total" && baseRehabOverride === null) {
         throw new Error("Enter the expected base remodel cost.");
       }
       if (repairEntryMode === "itemized" && repairItems.length === 0) {
         throw new Error("Enter at least one itemized repair cost.");
-      }
-      if (
-        contingency !== null &&
-        (!Number.isFinite(contingency) || contingency < 0 || contingency > 50)
-      ) {
-        throw new Error("Contingency must be between 0% and 50%.");
-      }
-      if (
-        !Number.isInteger(holdingPeriod) ||
-        holdingPeriod < 1 ||
-        holdingPeriod > 24
-      ) {
-        throw new Error("Holding period must be between 1 and 24 months.");
       }
       const headers = await getHeaders();
       headers["Content-Type"] = "application/json";
@@ -382,14 +355,14 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis`,
         {
           body: JSON.stringify({
-            target_condition: targetCondition,
-            current_condition: currentCondition || null,
+            target_condition: "standard_flip",
+            current_condition: null,
             repair_level: repairLevel,
             input_verification_status: verificationStatus,
             base_rehab_override_cents: baseRehabOverride,
             repair_items: repairItems,
-            contingency_override_percentage: contingency,
-            holding_period_months: holdingPeriod,
+            contingency_override_percentage: null,
+            holding_period_months: 6,
             repair_notes: repairNotes.trim() || null,
             comp_condition_overrides: conditionOverrides,
             refresh_market_data: refreshMarketData,
@@ -448,7 +421,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     0,
   );
   const isLoading = status === "loading";
-  const isV2 = estimate?.methodology_version === "v2";
+  const isV2 = estimate?.methodology_version === "v2.1";
+  const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
   const activeReportStage = estimate?.report_stage ?? verificationStatus;
   const activeRepairSource =
     repairEntryMode === "itemized"
@@ -461,7 +435,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     <section className={styles.marketValuePanel}>
       <div className={styles.marketValueHeader}>
         <div>
-          <span className={styles.underwritingEyebrow}>Underwriting V2</span>
+          <span className={styles.underwritingEyebrow}>Underwriting V2.1</span>
           <strong>Recorded sales and buyer economics</strong>
           <span>Human-reviewed evidence for ARV, repairs, and seller negotiation limits</span>
         </div>
@@ -487,8 +461,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       <details className={styles.preMeetingInputs} open={!estimate}>
         <summary>
           <div>
-            <strong>Pre-meeting inputs</strong>
-            <span>Condition, repair scope, contingency, and holding assumptions</span>
+            <strong>Comp setup</strong>
+            <span>Repair scope and an optional budget</span>
           </div>
           <span className={styles.reportStageBadge}>
             {reportStageLabel(activeReportStage)}
@@ -496,52 +470,6 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         </summary>
         <div className={styles.preMeetingBody}>
           <div className={styles.preMeetingGrid}>
-            <label>
-              <span>Input status</span>
-              <select
-                onChange={(event) =>
-                  setVerificationStatus(event.target.value as VerificationStatus)
-                }
-                value={verificationStatus}
-              >
-                <option value="preliminary">Preliminary</option>
-                <option value="pre_meeting_reviewed">Pre-meeting reviewed</option>
-                <option value="walkthrough_verified">Walkthrough verified</option>
-              </select>
-            </label>
-            <label>
-              <span>Current condition</span>
-              <select
-                onChange={(event) => {
-                  setCurrentCondition(event.target.value);
-                  markInputsReviewed();
-                }}
-                value={currentCondition}
-              >
-                <option value="">Use lead information</option>
-                <option value="distressed">Distressed</option>
-                <option value="heavy_rehab">Heavy rehab</option>
-                <option value="moderate_rehab">Moderate rehab</option>
-                <option value="dated_livable">Dated but livable</option>
-                <option value="lightly_updated">Lightly updated</option>
-                <option value="renovated">Renovated</option>
-              </select>
-            </label>
-            <label>
-              <span>Target finish</span>
-              <select
-                onChange={(event) => {
-                  setTargetCondition(event.target.value);
-                  markInputsReviewed();
-                }}
-                value={targetCondition}
-              >
-                <option value="rental_grade">Rental grade</option>
-                <option value="entry_level_retail">Entry-level retail</option>
-                <option value="standard_flip">Standard flip</option>
-                <option value="premium_renovation">Premium renovation</option>
-              </select>
-            </label>
             <label>
               <span>Repair scope</span>
               <select
@@ -556,41 +484,6 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 <option value="heavy">Heavy renovation</option>
                 <option value="structural">Structural / full rebuild</option>
               </select>
-            </label>
-            <label>
-              <span>Contingency</span>
-              <div className={styles.inputSuffix}>
-                <input
-                  inputMode="numeric"
-                  max="50"
-                  min="0"
-                  onChange={(event) => {
-                    setContingencyInput(event.target.value);
-                    markInputsReviewed();
-                  }}
-                  placeholder="Scope default"
-                  type="number"
-                  value={contingencyInput}
-                />
-                <span>%</span>
-              </div>
-            </label>
-            <label>
-              <span>Holding period</span>
-              <div className={styles.inputSuffix}>
-                <input
-                  inputMode="numeric"
-                  max="24"
-                  min="1"
-                  onChange={(event) => {
-                    setHoldingPeriodMonths(event.target.value);
-                    markInputsReviewed();
-                  }}
-                  type="number"
-                  value={holdingPeriodMonths}
-                />
-                <span>months</span>
-              </div>
             </label>
           </div>
 
@@ -699,7 +592,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         <div className={styles.marketValueResult}>
           {!isV2 ? (
             <div className={styles.reviewBanner}>
-              This saved analysis uses the prior method. Recalculate to create a V2 analysis.
+              This saved analysis uses the prior method. Recalculate to create a V2.1 analysis.
             </div>
           ) : null}
           <div
@@ -733,8 +626,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <dt>Conservative ARV</dt>
               <dd>{formatMoney(estimate.conservative_arv_cents)}</dd>
               <small>
-                Supported range {formatMoney(estimate.arv_low_cents)} to{" "}
-                {formatMoney(estimate.arv_high_cents)}
+                {!hasSupportedArv
+                  ? "Requires 3 verified renovated sales"
+                  : `Supported range ${formatMoney(estimate.arv_low_cents)} to ${formatMoney(
+                      estimate.arv_high_cents,
+                    )}`}
               </small>
             </div>
             <div>
@@ -764,6 +660,22 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <small>Negotiation starting point, not an approved offer</small>
             </div>
           </dl>
+
+          {!hasSupportedArv ? (
+            <div className={styles.underwritingControls}>
+              <div>
+                <span>Provider AVM screen</span>
+                <strong>
+                  {formatMoney(estimate.estimated_value_low_cents)} to{" "}
+                  {formatMoney(estimate.estimated_value_high_cents)}
+                </strong>
+              </div>
+              <div>
+                <span>Use in offer math</span>
+                <strong>No</strong>
+              </div>
+            </div>
+          ) : null}
 
           <div className={styles.underwritingControls}>
             <div>
@@ -844,6 +756,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                     Recorded {formatDate(comp.sale_date)} / {comp.distance_miles ?? "?"} mi /{" "}
                     {formatNumber(comp.square_footage)} sqft / {comp.bedrooms ?? "?"} bd{" "}
                     {comp.bathrooms ?? "?"} ba
+                  </small>
+                  <small>
+                    {formatMoney(comp.price_per_square_foot_cents)} per sqft / Subject-size
+                    indicator {formatMoney(comp.adjusted_value_cents)}
                   </small>
                   <small>
                     Match score {comp.score ?? "?"}/100. {comp.selection_reason}

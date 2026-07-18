@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from math import asin, cos, radians, sin, sqrt
+from statistics import median
 from typing import Any
 
 from app.core.config import Settings
@@ -8,6 +9,7 @@ from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValue
 from app.schemas.leads import MarketAnalysisCompRead
 
 MONEY = 100
+METHODOLOGY_VERSION = "v2.1"
 
 
 @dataclass(frozen=True)
@@ -76,16 +78,19 @@ def analyze_underwriting_v2(
     as_is = [comp for comp in selected_comps if comp.condition_classification == "as_is"]
     arv_evidence = renovated if len(renovated) >= 3 else []
     arv_low, arv_point, arv_high = weighted_value_range(arv_evidence)
-    if arv_point is None:
-        arv_low = dollars_to_cents(estimate.price_range_low)
-        arv_point = dollars_to_cents(estimate.price)
-        arv_high = dollars_to_cents(estimate.price_range_high)
+    arv_value_basis = (
+        "verified_renovated_recorded_sales"
+        if arv_point is not None
+        else "unsupported"
+    )
 
     as_is_low, as_is_point, as_is_high = weighted_value_range(as_is)
+    as_is_value_basis = "verified_as_is_recorded_sales"
     if as_is_point is None:
         as_is_low = dollars_to_cents(estimate.price_range_low)
         as_is_point = dollars_to_cents(estimate.price)
         as_is_high = dollars_to_cents(estimate.price_range_high)
+        as_is_value_basis = "provider_avm_benchmark"
 
     repair_level = normalize_repair_level(
         repair_level_override or current_condition_override or lead_condition
@@ -170,6 +175,23 @@ def analyze_underwriting_v2(
         "target_condition": normalize_key(target_condition) or "standard_flip",
         "current_condition": normalize_key(current_condition_override or lead_condition),
         "repair_level": repair_level,
+        "arv_value_basis": arv_value_basis,
+        "as_is_value_basis": as_is_value_basis,
+        "arv_comp_count": len(arv_evidence),
+        "subject_square_feet": subject_square_feet,
+        "selected_median_price_per_square_foot_cents": median_optional_int(
+            [
+                comp.price_per_square_foot_cents
+                for comp in selected_comps
+                if comp.price_per_square_foot_cents is not None
+            ]
+        ),
+        "ppsf_outlier_count": sum(
+            "Price-per-square-foot outlier" in comp.selection_reason
+            for comp in rejected_comps
+        ),
+        "comp_value_method": "subject_size_ppsf_indicator",
+        "ppsf_outlier_method": "verified_renovated_median_mad_and_35_percent_guardrail",
         "purchase_cost_percentage": settings.underwriting_purchase_cost_percentage,
         "financing_holding_percentage": buyer_economics["assumptions"].get(
             "financing_holding_percentage"
@@ -231,6 +253,7 @@ def analyze_recorded_sales(
         )
         for record in sale_records
     ]
+    scored = reject_renovated_price_per_square_foot_outliers(scored)
     eligible = [comp for comp in scored if comp.selection_status != "rejected"]
     selected = sorted(eligible, key=lambda comp: comp.score, reverse=True)[:5]
     selected_keys = {comp_key(comp) for comp in selected}
@@ -267,6 +290,22 @@ def score_recorded_sale(
     address = string(record.get("formattedAddress"))
     sale_price = integer(record.get("lastSalePrice"))
     sale_date = string(record.get("lastSaleDate"))
+    subject_square_feet = integer(subject.get("squareFootage"))
+    comp_square_feet = integer(record.get("squareFootage"))
+    price_per_square_foot_cents = (
+        round(sale_price * MONEY / comp_square_feet)
+        if sale_price is not None and comp_square_feet and comp_square_feet > 0
+        else None
+    )
+    subject_size_value_cents = (
+        round(sale_price * subject_square_feet / comp_square_feet) * MONEY
+        if sale_price is not None
+        and subject_square_feet
+        and subject_square_feet > 0
+        and comp_square_feet
+        and comp_square_feet > 0
+        else dollars_to_cents(sale_price)
+    )
     condition = normalize_condition_override(
         condition_overrides.get(provider_id or "")
         or condition_overrides.get(address or "")
@@ -296,7 +335,8 @@ def score_recorded_sale(
             "human_classification" if condition != "unknown" else "not_provided"
         ),
         "lot_size": integer(record.get("lotSize")),
-        "adjusted_value_cents": dollars_to_cents(sale_price),
+        "adjusted_value_cents": subject_size_value_cents,
+        "price_per_square_foot_cents": price_per_square_foot_cents,
         "weight": None,
     }
     rejection = recorded_sale_rejection_reason(subject, record, sale_price, sale_date)
@@ -330,7 +370,7 @@ def score_recorded_sale(
         integer(record.get("squareFootage")),
     )
     if size_difference is not None:
-        score -= round(size_difference * 35)
+        score -= round(size_difference * 75)
         reasons.append(f"{round(size_difference * 100)}% size difference")
     year_difference = absolute_difference(
         integer(subject.get("yearBuilt")),
@@ -375,8 +415,8 @@ def recorded_sale_rejection_reason(
         integer(subject.get("squareFootage")),
         integer(record.get("squareFootage")),
     )
-    if size_difference is not None and size_difference > 0.25:
-        return "Living area differs by more than 25%."
+    if size_difference is not None and size_difference > 0.20:
+        return "Living area differs by more than 20%."
     bed_difference = absolute_difference(
         number(subject.get("bedrooms")),
         number(record.get("bedrooms")),
@@ -396,6 +436,56 @@ def recorded_sale_rejection_reason(
     if year_difference is not None and year_difference > 25:
         return "Year built differs by more than 25 years."
     return None
+
+
+def reject_renovated_price_per_square_foot_outliers(
+    comps: list[MarketAnalysisCompRead],
+) -> list[MarketAnalysisCompRead]:
+    eligible = [
+        comp
+        for comp in comps
+        if comp.selection_status != "rejected"
+        and comp.condition_classification == "renovated"
+        and comp.price_per_square_foot_cents is not None
+    ]
+    if len(eligible) < 3:
+        return comps
+
+    values = [
+        comp.price_per_square_foot_cents
+        for comp in eligible
+        if comp.price_per_square_foot_cents is not None
+    ]
+    center = float(median(values))
+    deviations = [abs(value - center) for value in values]
+    mad = float(median(deviations))
+    updated: list[MarketAnalysisCompRead] = []
+    for comp in comps:
+        value = comp.price_per_square_foot_cents
+        if comp.selection_status == "rejected" or value is None or center <= 0:
+            updated.append(comp)
+            continue
+        ratio = value / center
+        modified_z = 0.6745 * abs(value - center) / mad if mad > 0 else 0
+        statistically_extreme = modified_z > 3.5 and (ratio < 0.75 or ratio > 1.25)
+        if ratio < 0.65 or ratio > 1.35 or statistically_extreme:
+            updated.append(
+                comp.model_copy(
+                    update={
+                        "selection_status": "rejected",
+                        "selection_reason": (
+                            "Price-per-square-foot outlier: "
+                            f"{format_ppsf(value)} versus {format_ppsf(round(center))} "
+                            "verified-renovated median."
+                        ),
+                        "score": 0,
+                        "weight": None,
+                    }
+                )
+            )
+        else:
+            updated.append(comp)
+    return updated
 
 
 def weighted_value_range(
@@ -619,7 +709,10 @@ def confidence_and_review_reasons(
         reasons.append("Fewer than three verified recorded sales were available.")
         confidence -= 15
     if len(renovated_comps) < 3:
-        reasons.append("Fewer than three comps have confirmed renovated condition.")
+        reasons.append(
+            "Comp-supported ARV requires at least three sales with confirmed renovated "
+            "condition; the provider AVM is screening context only."
+        )
         confidence = min(confidence, 59)
     else:
         confidence += 10
@@ -809,6 +902,14 @@ def absolute_difference(
 
 def dollars_to_cents(value: int | None) -> int | None:
     return value * MONEY if value is not None else None
+
+
+def format_ppsf(value_cents: int) -> str:
+    return f"${value_cents / MONEY:,.0f}/sqft"
+
+
+def median_optional_int(values: list[int]) -> int | None:
+    return round(median(values)) if values else None
 
 
 def latest_mapping_amount(value: Any) -> int:

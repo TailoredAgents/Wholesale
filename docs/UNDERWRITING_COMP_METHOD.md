@@ -1,8 +1,8 @@
-# Underwriting V2 Method
+# Underwriting V2.1 Method
 
 ## Purpose
 
-Underwriting V2 creates an auditable acquisition recommendation. It does not approve an
+Underwriting V2.1 creates an auditable acquisition recommendation. It does not approve an
 offer. A qualified user must verify comparable condition, repair scope, title, buyer demand,
 and exit assumptions before changing an underwriting version from `needs_review`.
 
@@ -27,14 +27,21 @@ The initial provider query uses:
 - One-mile radius.
 - Sale within 365 days.
 - Bedrooms and bathrooms within one.
-- Living area within 20% at retrieval and 25% at final screening.
+- Living area within 20% at retrieval and final screening.
 - Year built within 25 years.
 - Up to 50 candidate records.
 
 The final screen rejects the subject property, missing sale price/date, different property
-type, living-area difference over 25%, bed/bath difference over one, and age difference over
+type, living-area difference over 20%, bed/bath difference over one, and age difference over
 25 years. Eligible sales are scored for distance, recency, living area, age, and lot fit. The
-five best records are saved; all excluded records retain a reason.
+living-area score penalty increases as the size difference grows.
+
+When at least three physically eligible records have been human-verified as renovated, the
+engine calculates that group's median price per square foot. It rejects only extreme
+renovated records using a median absolute deviation test plus wide percentage guardrails.
+Unknown and as-is records are not rejected for a low price because condition may explain the
+difference. The five best remaining records are saved; all excluded records retain a reason,
+including the renovated-group median used for a price-per-square-foot rejection.
 
 The search does not cross a neighborhood boundary intentionally. RentCast radius search is a
 geographic screen, so the reviewer must still reject sales from a different subdivision,
@@ -54,11 +61,22 @@ quality from sale price.
 
 At least three renovated comps are required for a supported ARV conclusion. At least two
 as-is comps are required for a comp-supported as-is conclusion. Until those thresholds are
-met, the AVM is only a benchmark and manual review remains required.
+met, comp-supported ARV and all offer outputs remain blank. The AVM is displayed separately
+as a screening benchmark and cannot drive the seller ceiling.
 
 ## Value Conclusions
 
-The engine uses score-weighted sale-price quartiles:
+For each physically similar sale, the engine stores:
+
+- The unmodified recorded sale price.
+- Recorded sale price per square foot.
+- A subject-size indicator: sale price / comp living area x subject living area.
+
+The subject-size indicator is an investor screening calculation, not an appraisal adjustment
+or claim that every square foot has equal contributory value. It is used only after property
+type and physical similarity screens, and the raw sale remains visible for review.
+
+The engine uses score-weighted subject-size indicator quartiles:
 
 - 25th percentile: supported low.
 - 50th percentile: point estimate.
@@ -72,18 +90,22 @@ point estimate while remaining inside the supported range:
 - 5% at confidence 60-79.
 - 8% below confidence 60.
 
-No time, square-foot, bed/bath, or condition dollar adjustment is fabricated. Until a
-reviewed adjustment model is implemented, material differences reduce score or reject the
-comp.
+No time, bed/bath, condition, quality, or feature dollar adjustment is fabricated. Material
+differences reduce score or reject the comp. A licensed appraisal-grade adjustment model
+would require market-supported paired-sales evidence rather than a rule-of-thumb rate.
 
 ## Repair Scope
 
-The user can prepare an analysis with structured inputs before a seller meeting:
+The basic comp setup asks only for:
 
-- Current property condition and target finish.
 - A system screening budget, user-entered total, or itemized repair budget.
-- A contingency percentage and expected holding period.
-- Repair details, estimate source notes, and items to verify during the walkthrough.
+- Repair scope.
+- Optional repair details, estimate source notes, and items to verify during the walkthrough.
+
+Standard-flip finish, scope-based contingency, and a six-month holding period remain explicit,
+documented defaults. They are not basic comp questions because target finish was not changing
+the comparable math, contingency can be derived from repair scope, and holding period belongs
+to buyer economics. These defaults can be changed later in advanced underwriting when needed.
 
 Itemized costs take precedence over a user-entered total, so repair costs cannot be counted
 twice. The selected base budget receives contingency once to produce total rehab.
@@ -121,9 +143,9 @@ Conservative ARV
 ```
 
 Defaults are 2% purchase costs, 6% financing/holding for six months, 8% resale costs, and a
-buyer profit floor determined by repair scope. Financing and holding cost scales with the
-entered holding period; for example, nine months applies 9% when the six-month default is 6%.
-All base percentages are explicit environment settings.
+buyer profit floor determined by repair scope. Advanced underwriting can change the holding
+period; for example, nine months applies 9% when the six-month default is 6%. All base
+percentages are explicit environment settings.
 
 When RentCast rent support exists for an eligible single-family exit, the engine also
 estimates stabilized value from net operating income and the configured target cap rate.
@@ -153,7 +175,7 @@ agreement, and subject-data agreement. Manual review is required when:
 - Confidence is below 75.
 - Fewer than three renovated comps are confirmed.
 - Fewer than two as-is comps are confirmed.
-- The ARV range is too wide.
+- The comp-supported ARV range is too wide.
 - The AVM materially disagrees with recorded sales.
 - Subject facts disagree across sources.
 
@@ -166,8 +188,9 @@ assumptions, review reasons, data disagreements, calculation outputs, and a link
 underwriting version.
 
 The investor PDF includes the report stage, structured repair inputs, itemized costs and
-notes, buyer economics, repair contingency, seller ceiling, opening recommendation, comp
-rationale, and decision controls. The client PDF shows the report stage but excludes
+notes, buyer economics, repair contingency, seller ceiling, opening recommendation, raw comp
+prices, price per square foot, subject-size indicators, comp rationale, and decision controls.
+The client PDF shows the report stage but excludes
 Stonegate's repair budget, assignment, profit, and negotiation assumptions; it presents only
 property facts, as-is/renovated value evidence, comparable sales, and limitations.
 

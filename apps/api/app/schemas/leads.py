@@ -180,6 +180,7 @@ class MarketComparableRead(BaseModel):
     condition_evidence: str | None = None
     lot_size: int | None = None
     adjusted_value_cents: int | None = None
+    price_per_square_foot_cents: int | None = None
     weight: float | None = None
 
 

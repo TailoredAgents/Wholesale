@@ -91,7 +91,11 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
-from app.services.underwriting_v2 import UnderwritingV2Result, analyze_underwriting_v2
+from app.services.underwriting_v2 import (
+    METHODOLOGY_VERSION,
+    UnderwritingV2Result,
+    analyze_underwriting_v2,
+)
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
 COMMUNICATION_DIRECTIONS = {"inbound", "outbound", "internal"}
@@ -1290,7 +1294,8 @@ def create_lead_market_analysis(
         cached_analysis.raw_response
         if cached_analysis is not None
         and cached_analysis.analysis_metadata
-        and cached_analysis.analysis_metadata.get("methodology_version") == "v2"
+        and cached_analysis.analysis_metadata.get("methodology_version")
+        in {"v2", METHODOLOGY_VERSION}
         and isinstance(cached_analysis.raw_response, dict)
         else None
     )
@@ -1407,7 +1412,7 @@ def create_lead_market_analysis(
     )
     assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
     analysis_metadata = {
-        "methodology_version": "v2",
+        "methodology_version": METHODOLOGY_VERSION,
         "report_stage": report_stage,
         "pre_meeting_inputs": pre_meeting_inputs.model_dump(mode="json"),
         "subject_square_feet": first_int(
@@ -1418,6 +1423,8 @@ def create_lead_market_analysis(
         "recorded_sales_are_core_evidence": True,
         "avm_is_benchmark_only": True,
         "condition_evidence_required": True,
+        "arv_value_basis": result.assumptions.get("arv_value_basis"),
+        "as_is_value_basis": result.assumptions.get("as_is_value_basis"),
         "market_data_reused": reuse_market_data,
         "source_analysis_id": (
             str(cached_analysis.id) if reuse_market_data and cached_analysis else None
@@ -1531,7 +1538,7 @@ def create_lead_market_analysis(
             entity_id=lead.id,
             event_type="lead.market_analysis_created",
             summary=(
-                f"Underwriting V2 created with {len(result.selected_comps)} recorded-sale comps "
+                f"Underwriting V2.1 created with {len(result.selected_comps)} recorded-sale comps "
                 f"and {result.confidence_score}% confidence."
             ),
         )
@@ -1548,7 +1555,7 @@ def create_lead_market_analysis(
             new_value={
                 "lead_id": str(lead.id),
                 "underwriting_version_id": str(version.id),
-                "methodology_version": "v2",
+                "methodology_version": METHODOLOGY_VERSION,
                 "arv_low_cents": result.arv_low_cents,
                 "arv_high_cents": result.arv_high_cents,
                 "seller_contract_ceiling_cents": result.seller_contract_ceiling_cents,
@@ -2778,7 +2785,8 @@ def build_v2_market_analysis_notes(
         else "Evidence threshold met; human approval still required."
     )
     return (
-        "Underwriting V2 used recorded sales and explicit buyer economics. "
+        "Underwriting V2.1 used recorded sales, price-per-square-foot screening, "
+        "subject-size value indicators, and explicit buyer economics. "
         f"Selected {len(result.selected_comps)} recorded comps. "
         f"Confidence: {result.confidence_score}%. "
         f"Seller ceiling: {format_cents_for_note(result.seller_contract_ceiling_cents)}. "
@@ -2820,10 +2828,11 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         ],
         source_note=(
             (
-                "Underwriting V2 uses recorded-sale evidence and buyer economics. "
-                "Condition classifications and all offer terms still require human approval."
+                "Underwriting V2.1 uses screened recorded sales and subject-size value "
+                "indicators. A comp-supported ARV requires three verified renovated sales; "
+                "condition classifications and all offer terms still require human approval."
             )
-            if metadata.get("methodology_version") == "v2"
+            if metadata.get("methodology_version") == METHODOLOGY_VERSION
             else (
                 "Saved RentCast sales-comparison analysis. Draft numbers are screening guidance "
                 "only and require human ARV/offer approval."

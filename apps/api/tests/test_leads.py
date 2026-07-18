@@ -940,6 +940,19 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
                     "lotSize": 9000,
                     "distance": 0.8,
                 },
+                {
+                    "id": "reject-price-outlier",
+                    "formattedAddress": "202 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 650000,
+                    "lastSaleDate": "2026-05-04T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1800,
+                    "yearBuilt": 1980,
+                    "lotSize": 8000,
+                    "distance": 0.4,
+                },
             ]
 
         def get_rent_estimate(self, **_: object) -> RentCastRentEstimate:
@@ -1000,6 +1013,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
                 "comp-3": "renovated",
                 "comp-4": "as_is",
                 "comp-5": "as_is",
+                "reject-price-outlier": "renovated",
             },
         },
     )
@@ -1007,11 +1021,13 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert response.status_code == 201
     payload = response.json()
     assert payload["provider"] == "rentcast"
-    assert payload["methodology_version"] == "v2"
-    assert payload["as_is_value_cents"] == 23000000
-    assert payload["arv_low_cents"] == 28000000
+    assert payload["methodology_version"] == "v2.1"
+    assert payload["as_is_value_low_cents"] == 23351400
+    assert payload["as_is_value_cents"] == 23351400
+    assert payload["as_is_value_high_cents"] == 23657100
+    assert payload["arv_low_cents"] == 29647100
     assert payload["arv_point_cents"] == 30000000
-    assert payload["arv_high_cents"] == 32000000
+    assert payload["arv_high_cents"] == 30315800
     assert payload["conservative_arv_cents"] == 29400000
     assert payload["repair_low_cents"] == 5000000
     assert payload["repair_high_cents"] == 6000000
@@ -1026,13 +1042,26 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["pre_meeting_inputs"]["holding_period_months"] == 9
     assert len(payload["pre_meeting_inputs"]["repair_items"]) == 3
     assert payload["assumptions"]["financing_holding_percentage"] == 0.09
+    assert payload["assumptions"]["arv_value_basis"] == (
+        "verified_renovated_recorded_sales"
+    )
+    assert payload["assumptions"]["comp_value_method"] == "subject_size_ppsf_indicator"
+    assert payload["assumptions"]["ppsf_outlier_count"] == 1
     assert payload["manual_review_required"] is False
     assert payload["review_reasons"] == []
     assert payload["offer_low_percentage"] == 65
     assert payload["offer_high_percentage"] == 70
     assert len(payload["selected_comps"]) == 5
-    assert len(payload["rejected_comps"]) == 1
+    assert len(payload["rejected_comps"]) == 2
     assert payload["selected_comps"][0]["price_source"] == "recorded_sale"
+    assert payload["selected_comps"][0]["price_per_square_foot_cents"] is not None
+    assert payload["selected_comps"][0]["adjusted_value_cents"] is not None
+    price_outlier = next(
+        comp
+        for comp in payload["rejected_comps"]
+        if comp["provider_id"] == "reject-price-outlier"
+    )
+    assert "Price-per-square-foot outlier" in price_outlier["selection_reason"]
     assert payload["underwriting_version_id"] is not None
     assert int(
         db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
@@ -1098,7 +1127,11 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert unclassified_response.status_code == 201
     assert unclassified_response.json()["manual_review_required"] is True
     assert unclassified_response.json()["confidence_score"] <= 59
-    assert unclassified_response.json()["arv_point_cents"] == 30000000
+    assert unclassified_response.json()["arv_point_cents"] is None
+    assert unclassified_response.json()["conservative_arv_cents"] is None
+    assert unclassified_response.json()["seller_contract_ceiling_cents"] is None
+    assert unclassified_response.json()["recommended_offer_cents"] is None
+    assert unclassified_response.json()["assumptions"]["arv_value_basis"] == "unsupported"
     cached_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -1112,6 +1145,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
                 "comp-3": "renovated",
                 "comp-4": "as_is",
                 "comp-5": "as_is",
+                "reject-price-outlier": "renovated",
             },
         },
     )
@@ -1142,6 +1176,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
                 "comp-3": "renovated",
                 "comp-4": "as_is",
                 "comp-5": "as_is",
+                "reject-price-outlier": "renovated",
             },
         },
     )
