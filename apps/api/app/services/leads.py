@@ -2830,8 +2830,9 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         source_note=(
             (
                 "Underwriting V2.1 uses screened recorded sales and subject-size value "
-                "indicators. A comp-supported ARV requires three verified renovated sales; "
-                "condition classifications and all offer terms still require human approval."
+                "indicators. Unverified comp conditions produce preliminary results; three "
+                "verified renovated sales produce a comp-supported result. All offer terms "
+                "still require human approval."
             )
             if metadata.get("methodology_version") == METHODOLOGY_VERSION
             else (

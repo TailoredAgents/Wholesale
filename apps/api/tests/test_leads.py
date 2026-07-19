@@ -1125,13 +1125,26 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         json={"repair_level": "moderate"},
     )
     assert unclassified_response.status_code == 201
-    assert unclassified_response.json()["manual_review_required"] is True
-    assert unclassified_response.json()["confidence_score"] <= 59
-    assert unclassified_response.json()["arv_point_cents"] is None
-    assert unclassified_response.json()["conservative_arv_cents"] is None
-    assert unclassified_response.json()["seller_contract_ceiling_cents"] is None
-    assert unclassified_response.json()["recommended_offer_cents"] is None
-    assert unclassified_response.json()["assumptions"]["arv_value_basis"] == "unsupported"
+    unclassified_payload = unclassified_response.json()
+    assert unclassified_payload["manual_review_required"] is True
+    assert unclassified_payload["confidence_score"] <= 59
+    assert unclassified_payload["arv_point_cents"] is not None
+    assert unclassified_payload["conservative_arv_cents"] is not None
+    assert unclassified_payload["seller_contract_ceiling_cents"] is not None
+    assert unclassified_payload["recommended_offer_cents"] is not None
+    assert (
+        unclassified_payload["assumptions"]["arv_value_basis"]
+        == "provisional_unverified_recorded_sales"
+    )
+    preliminary_report_response = client.get(
+        (
+            f"/api/v1/leads/{lead_id}/underwriting/market-analysis/"
+            f"{unclassified_payload['id']}/report.pdf"
+        ),
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert preliminary_report_response.status_code == 200
+    assert preliminary_report_response.content.startswith(b"%PDF")
     cached_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},

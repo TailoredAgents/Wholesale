@@ -317,9 +317,12 @@ def build_investor_story(
     is_v2 = is_v2_method(metadata.get("methodology_version"))
     is_v2_1 = metadata.get("methodology_version") == "v2.1"
     assumptions = dict_value(metadata.get("assumptions"))
-    arv_supported = (
-        first_string(assumptions, ("arv_value_basis",))
-        == "verified_renovated_recorded_sales"
+    arv_value_basis = first_string(assumptions, ("arv_value_basis",))
+    arv_verified = arv_value_basis == "verified_renovated_recorded_sales"
+    arv_range_label = (
+        "Comp-supported ARV range"
+        if arv_verified
+        else "Preliminary recorded-sale ARV range"
     )
     review_reasons = string_list(metadata.get("review_reasons"))
     data_disagreements = string_list(metadata.get("data_disagreements"))
@@ -355,7 +358,7 @@ def build_investor_story(
                     format_money(optional_int(metadata.get("as_is_value_cents"))),
                 ),
                 (
-                    "Conservative ARV",
+                    "Conservative ARV" if arv_verified else "Preliminary ARV",
                     format_money(optional_int(metadata.get("conservative_arv_cents"))),
                 ),
                 (
@@ -397,7 +400,7 @@ def build_investor_story(
             [
                 (
                     (
-                        "Comp-supported ARV range"
+                        arv_range_label
                         if is_v2_1
                         else "Legacy value range (recalculate)"
                     ),
@@ -505,9 +508,9 @@ def build_investor_story(
                         "Recorded-sale comparison, robust price-per-square-foot screening, "
                         "subject-size indicators, condition classification, repair scope, and "
                         "buyer economics"
-                        if arv_supported
-                        else "Recorded-sale screening and repair scope; comp-supported ARV "
-                        "withheld pending three verified renovated sales"
+                        if arv_verified
+                        else "Preliminary recorded-sale comparison using subject-size "
+                        "indicators; condition verification remains outstanding"
                         if is_v2
                         else "Sales comparison screening with percentile-based ARV range"
                     ),
@@ -535,6 +538,11 @@ def build_client_story(
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
     is_v2_1 = metadata.get("methodology_version") == "v2.1"
+    assumptions = dict_value(metadata.get("assumptions"))
+    arv_verified = (
+        first_string(assumptions, ("arv_value_basis",))
+        == "verified_renovated_recorded_sales"
+    )
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
     current_condition = labelize(
@@ -574,7 +582,11 @@ def build_client_story(
                 ),
                 (
                     (
-                        "Comp-supported renovated value"
+                        (
+                            "Comp-supported renovated value"
+                            if arv_verified
+                            else "Preliminary renovated value"
+                        )
                         if is_v2_1
                         else "Legacy renovated value"
                     ),
@@ -958,8 +970,8 @@ def formula_box(
         assumptions = dict_value(metadata.get("assumptions"))
         if analysis.arv_low_cents is None or analysis.arv_high_cents is None:
             low_formula = (
-                "Offer recommendation withheld: classify at least three credible renovated "
-                "recorded sales before calculating a comp-supported ARV."
+                "Offer recommendation unavailable: no usable recorded-sale value evidence "
+                "was available for a preliminary ARV."
             )
             high_formula = (
                 "The provider AVM remains market-screening context and does not control the "

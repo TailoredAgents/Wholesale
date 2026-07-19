@@ -423,6 +423,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const isLoading = status === "loading";
   const isV2 = estimate?.methodology_version === "v2.1";
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
+  const hasVerifiedArv =
+    estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales";
   const activeReportStage = estimate?.report_stage ?? verificationStatus;
   const activeRepairSource =
     repairEntryMode === "itemized"
@@ -623,14 +625,14 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               </small>
             </div>
             <div>
-              <dt>Conservative ARV</dt>
+              <dt>{hasVerifiedArv ? "Conservative ARV" : "Preliminary ARV"}</dt>
               <dd>{formatMoney(estimate.conservative_arv_cents)}</dd>
               <small>
                 {!hasSupportedArv
-                  ? "Requires 3 verified renovated sales"
-                  : `Supported range ${formatMoney(estimate.arv_low_cents)} to ${formatMoney(
-                      estimate.arv_high_cents,
-                    )}`}
+                  ? "No usable recorded-sale evidence"
+                  : `${hasVerifiedArv ? "Comp-supported" : "Preliminary"} range ${formatMoney(
+                      estimate.arv_low_cents,
+                    )} to ${formatMoney(estimate.arv_high_cents)}`}
               </small>
             </div>
             <div>
@@ -652,7 +654,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             <div>
               <dt>Seller contract ceiling</dt>
               <dd>{formatMoney(estimate.seller_contract_ceiling_cents)}</dd>
-              <small>Do not exceed without re-underwriting</small>
+              <small>
+                {hasVerifiedArv
+                  ? "Do not exceed without re-underwriting"
+                  : "Preliminary until comp condition is reviewed"}
+              </small>
             </div>
             <div className={styles.primaryMetric}>
               <dt>Opening recommendation</dt>
@@ -661,8 +667,12 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </div>
           </dl>
 
-          {!hasSupportedArv ? (
+          {!hasVerifiedArv ? (
             <div className={styles.underwritingControls}>
+              <div>
+                <span>ARV status</span>
+                <strong>{hasSupportedArv ? "Preliminary" : "Unavailable"}</strong>
+              </div>
               <div>
                 <span>Provider AVM screen</span>
                 <strong>
@@ -671,7 +681,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 </strong>
               </div>
               <div>
-                <span>Use in offer math</span>
+                <span>AVM use in offer math</span>
                 <strong>No</strong>
               </div>
             </div>

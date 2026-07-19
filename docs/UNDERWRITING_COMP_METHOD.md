@@ -60,9 +60,11 @@ The system records that the classification was human-supplied. It does not infer
 quality from sale price.
 
 At least three renovated comps are required for a supported ARV conclusion. At least two
-as-is comps are required for a comp-supported as-is conclusion. Until those thresholds are
-met, comp-supported ARV and all offer outputs remain blank. The AVM is displayed separately
-as a screening benchmark and cannot drive the seller ceiling.
+as-is comps are required for a comp-supported as-is conclusion. Before three renovated comps
+are confirmed, selected recorded sales that are not classified as as-is still produce a
+preliminary ARV, offer calculation, and report. Confirmation upgrades the conclusion from
+preliminary to comp-supported; it does not unlock the calculation. The AVM is displayed
+separately as a screening benchmark and cannot drive the seller ceiling.
 
 ## Value Conclusions
 
@@ -82,9 +84,11 @@ The engine uses score-weighted subject-size indicator quartiles:
 - 50th percentile: point estimate.
 - 75th percentile: supported high.
 
-ARV uses confirmed renovated comps when at least three exist. As-is value uses confirmed
-as-is comps when at least two exist. The conservative ARV applies a confidence haircut to the
-point estimate while remaining inside the supported range:
+ARV uses confirmed renovated comps when at least three exist. Before that threshold, it uses
+selected recorded sales that have not been confirmed as as-is and clearly labels the result
+preliminary. As-is value uses confirmed as-is comps when at least two exist. The conservative
+ARV applies a confidence haircut to the point estimate while remaining inside the calculated
+range:
 
 - 2% at confidence 80 or higher.
 - 5% at confidence 60-79.

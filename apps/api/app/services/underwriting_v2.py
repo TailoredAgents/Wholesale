@@ -76,13 +76,23 @@ def analyze_underwriting_v2(
         comp for comp in selected_comps if comp.condition_classification == "renovated"
     ]
     as_is = [comp for comp in selected_comps if comp.condition_classification == "as_is"]
-    arv_evidence = renovated if len(renovated) >= 3 else []
+    if len(renovated) >= 3:
+        arv_evidence = renovated
+        arv_value_basis = "verified_renovated_recorded_sales"
+    else:
+        arv_evidence = [
+            comp
+            for comp in selected_comps
+            if comp.condition_classification != "as_is"
+        ]
+        arv_value_basis = (
+            "provisional_unverified_recorded_sales"
+            if arv_evidence
+            else "unsupported"
+        )
     arv_low, arv_point, arv_high = weighted_value_range(arv_evidence)
-    arv_value_basis = (
-        "verified_renovated_recorded_sales"
-        if arv_point is not None
-        else "unsupported"
-    )
+    if arv_point is None:
+        arv_value_basis = "unsupported"
 
     as_is_low, as_is_point, as_is_high = weighted_value_range(as_is)
     as_is_value_basis = "verified_as_is_recorded_sales"
@@ -710,8 +720,8 @@ def confidence_and_review_reasons(
         confidence -= 15
     if len(renovated_comps) < 3:
         reasons.append(
-            "Comp-supported ARV requires at least three sales with confirmed renovated "
-            "condition; the provider AVM is screening context only."
+            "ARV and offer calculations are preliminary until at least three recorded sales "
+            "have confirmed renovated condition."
         )
         confidence = min(confidence, 59)
     else:
