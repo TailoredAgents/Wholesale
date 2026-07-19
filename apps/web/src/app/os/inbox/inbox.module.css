@@ -70,6 +70,29 @@
   cursor: pointer;
 }
 
+.emailStatusButton {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.emailStatusButton[data-connected="true"] {
+  border-color: #c6d9cd;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
 .phoneStatusButton[data-status="disabled"],
 .phoneStatusButton[data-status="error"] {
   border-color: var(--line);
@@ -620,6 +643,40 @@
   font-size: 10px;
 }
 
+.messageAttachments {
+  display: grid;
+  gap: 5px;
+}
+
+.messageAttachments button {
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid rgba(104, 112, 115, 0.2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-soft);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.messageAttachments span {
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageAttachments button small {
+  white-space: nowrap;
+}
+
 .callMessage {
   border-left: 3px solid var(--brand);
 }
@@ -1097,6 +1154,242 @@
   font: inherit;
   font-size: 12px;
   outline: 0;
+}
+
+.emailComposerControls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.emailComposerControls select {
+  height: 32px;
+  max-width: 180px;
+  min-width: 0;
+  padding: 0 26px 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.emailSettingsToggle {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.emailSettingsToggle[aria-pressed="true"] {
+  border-color: #b8cfc0;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.emailSettingsPanel {
+  margin: 7px 10px 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8f9f7;
+  display: grid;
+  gap: 10px;
+}
+
+.emailSettingsHeader,
+.emailSettingsActions,
+.emailTemplateBuilder {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.emailSettingsHeader {
+  justify-content: space-between;
+}
+
+.emailSettingsHeader > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.emailSettingsHeader strong {
+  font-size: 11px;
+}
+
+.emailSettingsHeader span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emailSettingsHeader button,
+.emailSettingsActions button,
+.emailTemplateBuilder button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.emailSettingsHeader button:disabled,
+.emailSettingsActions button:disabled,
+.emailTemplateBuilder button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.emailConfigurationNote {
+  color: var(--amber);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.emailSettingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.emailSettingsGrid label {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.emailSettingsGrid textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  resize: vertical;
+  text-transform: none;
+}
+
+.emailSettingsActions {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.emailTemplateBuilder input {
+  height: 32px;
+  min-width: 0;
+  flex: 1;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.emailReady,
+.emailBlocked {
+  margin: 7px 10px 0;
+  padding: 7px 9px;
+  border-radius: 5px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.emailReady {
+  border: 1px solid #c8dccf;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.emailBlocked {
+  border: 1px solid #e1c9a5;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.emailReady svg,
+.emailBlocked svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.emailAttachmentRow {
+  min-height: 35px;
+  padding: 6px 10px 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+}
+
+.emailAttachmentRow label {
+  min-height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.emailAttachmentRow input {
+  display: none;
+}
+
+.emailAttachmentRow > span {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 5px 7px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .smsReady,
@@ -1706,6 +1999,13 @@
     font-size: 0;
   }
 
+  .emailStatusButton {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
   .callDock {
     width: 100%;
     border-radius: 7px;
@@ -1746,6 +2046,33 @@
 
   .composerBody {
     grid-template-columns: 1fr;
+  }
+
+  .composerControls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .emailComposerControls {
+    width: 100%;
+  }
+
+  .emailComposerControls select {
+    max-width: none;
+    flex: 1;
+  }
+
+  .emailSettingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .emailSettingsActions {
+    flex-direction: row;
+  }
+
+  .emailTemplateBuilder {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .composerBody button,

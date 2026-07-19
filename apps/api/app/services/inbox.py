@@ -19,6 +19,7 @@ from app.models.foundation import (
     Conversation,
     ConversationAssignmentEvent,
     ConversationWatcher,
+    EmailAttachment,
     Lead,
     Property,
     Role,
@@ -261,6 +262,23 @@ def get_conversation_detail(
         .limit(200)
     ).all()
     communication_ids = [item.id for item in communications]
+    email_attachments = (
+        db.scalars(
+            select(EmailAttachment)
+            .where(
+                EmailAttachment.organization_id == principal.organization_id,
+                EmailAttachment.communication_record_id.in_(communication_ids),
+            )
+            .order_by(EmailAttachment.created_at.asc())
+        ).all()
+        if communication_ids
+        else []
+    )
+    attachments_by_communication_id: dict[UUID, list[EmailAttachment]] = {}
+    for attachment in email_attachments:
+        attachments_by_communication_id.setdefault(
+            attachment.communication_record_id, []
+        ).append(attachment)
     calls = (
         db.scalars(
             select(CallRecord).where(
@@ -399,6 +417,15 @@ def get_conversation_detail(
                 if timeline_transcript is not None
                 else None
             ),
+            attachments=[
+                {
+                    "id": attachment.id,
+                    "filename": attachment.filename,
+                    "content_type": attachment.content_type,
+                    "size_bytes": attachment.size_bytes,
+                }
+                for attachment in attachments_by_communication_id.get(item.id, [])
+            ],
         )
         )
     timeline.extend(

@@ -78,6 +78,26 @@ services:
         value: 3
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
+      - key: EMAIL_ENABLED
+        value: false
+      - key: EMAIL_SYNC_ENABLED
+        value: false
+      - key: EMAIL_SYNC_POLL_SECONDS
+        value: 30
+      - key: EMAIL_MAX_ATTACHMENT_BYTES
+        value: 10000000
+      - key: EMAIL_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: EMAIL_OAUTH_STATE_SECRET
+        sync: false
+      - key: EMAIL_WEB_APP_BASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: ATTOM_API_KEY
@@ -205,6 +225,26 @@ services:
         value: 3
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
+      - key: EMAIL_ENABLED
+        value: false
+      - key: EMAIL_SYNC_ENABLED
+        value: false
+      - key: EMAIL_SYNC_POLL_SECONDS
+        value: 30
+      - key: EMAIL_MAX_ATTACHMENT_BYTES
+        value: 10000000
+      - key: EMAIL_TOKEN_ENCRYPTION_KEY
+        sync: false
+      - key: EMAIL_OAUTH_STATE_SECRET
+        sync: false
+      - key: EMAIL_WEB_APP_BASE_URL
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

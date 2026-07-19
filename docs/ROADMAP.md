@@ -560,10 +560,21 @@ Delivered in Communications Phase 7, AI Call Intelligence:
 - AI control-center quality reporting with conservative low-risk pilot thresholds.
 - Autonomy remains disabled; passing quality thresholds only identifies pilot eligibility.
 
+Delivered in Communications Phase 8, Google Workspace Email:
+
+- Individual Google Workspace mailbox connections using server-side OAuth and encrypted tokens.
+- Live one-to-one email sending from the shared inbox with signatures and shared templates.
+- Gmail thread preservation through provider thread IDs, Message-ID, In-Reply-To, and References.
+- Incremental inbound and outbound synchronization into the unified seller timeline.
+- Authenticated attachment upload, provider retention, metadata indexing, and download proxying.
+- Role-scoped mailbox access with no email permissions for prospecting callers by default.
+- Stale history-cursor recovery and idempotent provider-message ingestion.
+- Deployment defaults that keep email disabled until Google credentials are configured.
+- A provider boundary reserved for a later Smartlead cold-outreach integration.
+
 Remaining in the communications sequence:
 
 - Communication-triggered follow-up tasks and notifications.
-- Email provider integration.
 
 ### Phase 4: Acquisition Workspace
 

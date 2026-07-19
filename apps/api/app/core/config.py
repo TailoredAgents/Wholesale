@@ -88,6 +88,44 @@ class Settings(BaseSettings):
         le=3650,
         validation_alias="CALL_RECORDING_RETENTION_DAYS",
     )
+    email_enabled: bool = Field(default=False, validation_alias="EMAIL_ENABLED")
+    email_sync_enabled: bool = Field(default=False, validation_alias="EMAIL_SYNC_ENABLED")
+    email_sync_poll_seconds: int = Field(
+        default=30,
+        ge=10,
+        le=900,
+        validation_alias="EMAIL_SYNC_POLL_SECONDS",
+    )
+    email_max_attachment_bytes: int = Field(
+        default=10_000_000,
+        ge=1_000_000,
+        le=25_000_000,
+        validation_alias="EMAIL_MAX_ATTACHMENT_BYTES",
+    )
+    email_token_encryption_key: str | None = Field(
+        default=None,
+        validation_alias="EMAIL_TOKEN_ENCRYPTION_KEY",
+    )
+    email_oauth_state_secret: str | None = Field(
+        default=None,
+        validation_alias="EMAIL_OAUTH_STATE_SECRET",
+    )
+    email_web_app_base_url: str = Field(
+        default="http://localhost:3000",
+        validation_alias="EMAIL_WEB_APP_BASE_URL",
+    )
+    google_oauth_client_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_OAUTH_CLIENT_ID",
+    )
+    google_oauth_client_secret: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_OAUTH_CLIENT_SECRET",
+    )
+    google_oauth_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/email/oauth/google/callback",
+        validation_alias="GOOGLE_OAUTH_REDIRECT_URI",
+    )
     property_data_provider: str = Field(
         default="rentcast",
         validation_alias="PROPERTY_DATA_PROVIDER",
@@ -262,6 +300,21 @@ class Settings(BaseSettings):
             for origin in self.clerk_authorized_parties_raw.split(",")
             if origin.strip()
         ]
+
+    @property
+    def email_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.email_enabled:
+            blockers.append("EMAIL_ENABLED=true")
+        if not self.google_oauth_client_id:
+            blockers.append("GOOGLE_OAUTH_CLIENT_ID")
+        if not self.google_oauth_client_secret:
+            blockers.append("GOOGLE_OAUTH_CLIENT_SECRET")
+        if not self.email_token_encryption_key:
+            blockers.append("EMAIL_TOKEN_ENCRYPTION_KEY")
+        if not self.email_oauth_state_secret:
+            blockers.append("EMAIL_OAUTH_STATE_SECRET")
+        return tuple(blockers)
 
     @property
     def twilio_sms_configuration_blockers(self) -> tuple[str, ...]:

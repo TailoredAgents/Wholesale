@@ -71,3 +71,20 @@ Transcripts remain attached to the call after audio deletion.
 
 Voice and recording remain independently disabled in deployment configuration. See
 [Twilio Voice Setup](./RUNBOOKS/twilio-voice-setup.md).
+
+## Google Workspace Email
+
+Communications Phase 8 connects individual Google Workspace mailboxes through server-side OAuth.
+Refresh tokens are encrypted at rest, and the browser never receives Google credentials. Outbound
+MIME messages preserve Gmail thread identifiers and reply headers. Incremental Gmail history sync
+matches messages only to existing seller email addresses and appends them to the same unified
+timeline used for SMS, calls, transcripts, and notes.
+
+Attachments remain stored by Google. Stonegate retains provider attachment references and proxies
+downloads through authenticated conversation access checks. Shared templates are organization
+records; signatures belong to connected mailboxes. Email remains disabled until the Google project
+and Render variables are configured. See
+[Google Workspace Email Setup](./RUNBOOKS/google-workspace-email.md).
+
+Cold outreach is intentionally outside this adapter. A future Smartlead integration will use
+separate, clearly identified outreach infrastructure and feed replies into the operational inbox.

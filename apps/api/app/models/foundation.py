@@ -381,7 +381,7 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    body: Mapped[str] = mapped_column(String(4000), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     external_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     communication_metadata: Mapped[dict[str, Any] | None] = mapped_column(
@@ -413,7 +413,7 @@ class CommunicationDispatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     channel: Mapped[str] = mapped_column(String(40), nullable=False)
-    recipient: Mapped[str] = mapped_column(String(80), nullable=False)
+    recipient: Mapped[str] = mapped_column(String(320), nullable=False)
     request_body_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -422,6 +422,95 @@ class CommunicationDispatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     dispatch_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class EmailAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "email_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "email_address",
+            name="uq_email_accounts_org_provider_address",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    connected_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_account_id: Mapped[str] = mapped_column(String(320), nullable=False)
+    email_address: Mapped[str] = mapped_column(String(320), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    sync_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    encrypted_access_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    encrypted_refresh_token: Mapped[str] = mapped_column(Text, nullable=False)
+    access_token_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    history_cursor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    signature_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    account_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class EmailTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "email_templates"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "name",
+            name="uq_email_templates_org_name",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    subject_template: Mapped[str] = mapped_column(String(255), nullable=False)
+    body_template: Mapped[str] = mapped_column(String(4000), nullable=False)
+    is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class EmailAttachment(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "email_attachments"
+    __table_args__ = (
+        UniqueConstraint(
+            "communication_record_id",
+            "provider_attachment_id",
+            name="uq_email_attachments_communication_provider_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    communication_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("communication_records.id", ondelete="CASCADE"), index=True
+    )
+    email_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("email_accounts.id", ondelete="CASCADE"), index=True
+    )
+    provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_attachment_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    filename: Mapped[str] = mapped_column(String(500), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    disposition: Mapped[str] = mapped_column(String(40), nullable=False)
+    attachment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
 

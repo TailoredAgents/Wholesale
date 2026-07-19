@@ -18,6 +18,9 @@ class PermissionKeys:
     MANAGE_RECORDINGS = "communications:manage_recordings"
     SEND_SMS = "communications:send_sms"
     SEND_ASSIGNED_SMS = "communications:send_assigned_sms"
+    SEND_EMAIL = "communications:send_email"
+    SEND_ASSIGNED_EMAIL = "communications:send_assigned_email"
+    MANAGE_EMAIL_ACCOUNTS = "communications:manage_email_accounts"
     PLACE_CALLS = "communications:place_calls"
     PLACE_ASSIGNED_CALLS = "communications:place_assigned_calls"
     MANAGE_VOICE_LINES = "communications:manage_voice_lines"
@@ -111,6 +114,21 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Send compliant text messages only for assigned seller conversations.",
     ),
     PermissionDefinition(
+        PermissionKeys.SEND_EMAIL,
+        "Send email",
+        "Send one-to-one seller email from a connected company mailbox.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.SEND_ASSIGNED_EMAIL,
+        "Send assigned email",
+        "Send seller email only for assigned conversations.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_EMAIL_ACCOUNTS,
+        "Manage email accounts",
+        "Manage connected company mailboxes, signatures, and shared email templates.",
+    ),
+    PermissionDefinition(
         PermissionKeys.PLACE_CALLS,
         "Place calls",
         "Place one-to-one seller calls from the browser softphone.",
@@ -192,6 +210,7 @@ ACQUISITION_KEYS = (
     PermissionKeys.VIEW_DEALS,
     PermissionKeys.VIEW_CONVERSATIONS,
     PermissionKeys.SEND_SMS,
+    PermissionKeys.SEND_EMAIL,
     PermissionKeys.PLACE_CALLS,
     PermissionKeys.ACCESS_RECORDINGS,
 )
@@ -230,6 +249,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.APPROVE_ARV,
             PermissionKeys.APPROVE_OFFERS,
             PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS,
+            PermissionKeys.MANAGE_EMAIL_ACCOUNTS,
         ),
     ),
     RoleDefinition("acquisition_rep", "Acquisition representative", ACQUISITION_KEYS),

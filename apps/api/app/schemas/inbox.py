@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.email import EmailAttachmentRead
 from app.schemas.voice import CallTranscriptRead
 
 
@@ -51,6 +52,7 @@ class ConversationTimelineItemRead(BaseModel):
     recording_retention_expires_at: datetime | None = None
     recording_deleted_at: datetime | None = None
     transcript: CallTranscriptRead | None = None
+    attachments: list[EmailAttachmentRead] = Field(default_factory=list)
 
 
 class ConversationTaskRead(BaseModel):

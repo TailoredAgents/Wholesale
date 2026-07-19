@@ -22,10 +22,13 @@ import {
   PhoneCall,
   PhoneOff,
   Play,
+  Plus,
+  Paperclip,
   RefreshCw,
   Reply,
   Search,
   Send,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
   Trash2,
@@ -92,6 +95,12 @@ type TimelineItem = {
   recording_retention_expires_at: string | null;
   recording_deleted_at: string | null;
   transcript: CallTranscript | null;
+  attachments: Array<{
+    id: string;
+    filename: string;
+    content_type: string;
+    size_bytes: number;
+  }>;
 };
 
 type CallNoteEvidence = {
@@ -202,6 +211,31 @@ type Assignee = {
   email: string;
   display_name: string;
   role_keys: string[];
+};
+
+type EmailAccount = {
+  id: string;
+  user_id: string;
+  provider: string;
+  email_address: string;
+  display_name: string;
+  status: string;
+  is_shared: boolean;
+  sync_enabled: boolean;
+  last_synced_at: string | null;
+  last_error: string | null;
+  signature_text: string | null;
+  is_owned_by_current_user: boolean;
+};
+
+type EmailTemplate = {
+  id: string;
+  created_by_user_id: string;
+  name: string;
+  subject_template: string;
+  body_template: string;
+  is_shared: boolean;
+  is_active: boolean;
 };
 
 type FilterKey = "mine" | "unassigned" | "team" | "needs_reply" | "appointments" | "unread";
@@ -319,6 +353,23 @@ function formatDuration(totalSeconds: number | null) {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
+function formatFileSize(sizeBytes: number) {
+  if (sizeBytes < 1024) return `${sizeBytes} B`;
+  if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`;
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+async function fileToBase64(file: File) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return window.btoa(binary);
+}
+
 function hasNeedsReply(conversation: Conversation) {
   if (!conversation.last_inbound_at) return false;
   if (!conversation.last_outbound_at) return true;
@@ -337,7 +388,10 @@ function displayError(payload: unknown, fallback: string) {
   return fallback;
 }
 
-const callNoteFieldOptions: Array<{ key: keyof StructuredCallNotes; label: string }> = [
+const callNoteFieldOptions: Array<{
+  key: keyof StructuredCallNotes;
+  label: string;
+}> = [
   { key: "motivation", label: "Motivation" },
   { key: "timeline", label: "Timeline" },
   { key: "property_condition", label: "Condition" },
@@ -442,9 +496,7 @@ function CallTranscriptPanel({
                   {item.label}
                   <input
                     disabled={!canReview || transcript.status !== "needs_review"}
-                    onChange={(event) =>
-                      updateNote(item.key, event.target.value || null)
-                    }
+                    onChange={(event) => updateNote(item.key, event.target.value || null)}
                     value={String(notes[item.key] ?? "")}
                   />
                 </label>
@@ -453,9 +505,7 @@ function CallTranscriptPanel({
                 Mortgage or title
                 <input
                   disabled={!canReview || transcript.status !== "needs_review"}
-                  onChange={(event) =>
-                    updateNote("mortgage_or_title", event.target.value || null)
-                  }
+                  onChange={(event) => updateNote("mortgage_or_title", event.target.value || null)}
                   value={notes.mortgage_or_title ?? ""}
                 />
               </label>
@@ -588,6 +638,7 @@ export function InboxWorkspace() {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
+  const emailIdempotencyKeyRef = useRef<string | null>(null);
   const voiceDeviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const recordingUrlsRef = useRef<Record<string, string>>({});
@@ -595,6 +646,18 @@ export function InboxWorkspace() {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
+  const [emailAccountId, setEmailAccountId] = useState("");
+  const [emailProviderConfigured, setEmailProviderConfigured] = useState(false);
+  const [emailConfigurationBlockers, setEmailConfigurationBlockers] = useState<string[]>([]);
+  const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
+  const [emailSignatureDrafts, setEmailSignatureDrafts] = useState<Record<string, string>>({});
+  const [emailTemplateName, setEmailTemplateName] = useState("");
+  const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
+  const [emailSettingsStatus, setEmailSettingsStatus] = useState<
+    "idle" | "saving" | "saved" | "syncing"
+  >("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("team");
   const [search, setSearch] = useState("");
@@ -635,7 +698,9 @@ export function InboxWorkspace() {
   );
 
   const getHeaders = useCallback(async () => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
     if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
       headers["X-Dev-User-Email"] = devUserEmail;
       return headers;
@@ -667,6 +732,36 @@ export function InboxWorkspace() {
     },
     [apiBaseUrl, getHeaders],
   );
+
+  const loadEmailConfiguration = useCallback(async () => {
+    const [accountsPayload, templatesPayload] = await Promise.all([
+      request<{
+        items: EmailAccount[];
+        provider_configured: boolean;
+        configuration_blockers: string[];
+      }>("/api/v1/email/accounts"),
+      request<{ items: EmailTemplate[] }>("/api/v1/email/templates"),
+    ]);
+    setEmailAccounts(accountsPayload.items);
+    setEmailTemplates(templatesPayload.items);
+    setEmailProviderConfigured(accountsPayload.provider_configured);
+    setEmailConfigurationBlockers(accountsPayload.configuration_blockers);
+    setEmailSignatureDrafts((current) =>
+      Object.fromEntries(
+        accountsPayload.items.map((account) => [
+          account.id,
+          current[account.id] ?? account.signature_text ?? "",
+        ]),
+      ),
+    );
+    setEmailAccountId((current) => {
+      if (current && accountsPayload.items.some((account) => account.id === current)) {
+        return current;
+      }
+      return accountsPayload.items.find((account) => account.status === "active")?.id ?? "";
+    });
+    return accountsPayload.items;
+  }, [request]);
 
   const loadConversations = useCallback(async () => {
     const payload = await request<{ items: Conversation[] }>("/api/v1/inbox/conversations");
@@ -812,7 +907,8 @@ export function InboxWorkspace() {
         setError(deviceError.message || "Twilio Voice could not connect.");
       });
       device.on("incoming", (call: Call) => {
-        const caller = call.parameters.From || call.customParameters.get("From") || "Unknown caller";
+        const caller =
+          call.parameters.From || call.customParameters.get("From") || "Unknown caller";
         setVoiceCaller(caller);
         setVoiceStatus("incoming");
         setVoiceMessage("Incoming Stonegate call");
@@ -889,13 +985,10 @@ export function InboxWorkspace() {
       if (recordingUrlsRef.current[recordingId]) return;
       setRecordingLoadingId(recordingId);
       try {
-        const response = await fetch(
-          `${apiBaseUrl}/api/v1/voice/recordings/${recordingId}/media`,
-          {
-            headers: await getHeaders(),
-            cache: "no-store",
-          },
-        );
+        const response = await fetch(`${apiBaseUrl}/api/v1/voice/recordings/${recordingId}/media`, {
+          headers: await getHeaders(),
+          cache: "no-store",
+        });
         if (!response.ok) {
           const payload = await response.json().catch(() => null);
           throw new Error(displayError(payload, "Recording could not be loaded."));
@@ -966,6 +1059,12 @@ export function InboxWorkspace() {
           setAssignees(payload.items);
           setAssigneeId(payload.items[0]?.user_id ?? "");
         }
+        if (
+          currentUser.permissions.includes("communications:send_email") ||
+          currentUser.permissions.includes("communications:send_assigned_email")
+        ) {
+          await loadEmailConfiguration();
+        }
       } catch (loadError) {
         if (active) {
           setError(loadError instanceof Error ? loadError.message : "Unable to load inbox.");
@@ -978,7 +1077,24 @@ export function InboxWorkspace() {
     return () => {
       active = false;
     };
-  }, [loadConversations, request]);
+  }, [loadConversations, loadEmailConfiguration, request]);
+
+  useEffect(() => {
+    const result = new URLSearchParams(window.location.search).get("email");
+    if (!result) return;
+    const handle = window.setTimeout(() => {
+      if (result === "connected") {
+        setChannel("email");
+        setEmailSettingsOpen(true);
+      } else if (result === "connection_failed") {
+        setError("Google could not connect that mailbox. Check the OAuth settings and try again.");
+      } else if (result === "connection_cancelled") {
+        setError("Google mailbox connection was cancelled.");
+      }
+    }, 0);
+    window.history.replaceState({}, "", window.location.pathname);
+    return () => window.clearTimeout(handle);
+  }, []);
 
   useEffect(() => {
     const handle = window.setTimeout(() => {
@@ -1051,23 +1167,34 @@ export function InboxWorkspace() {
   const queueOptions = canManageAssignments ? managerQueueOptions : acquisitionQueueOptions;
   const primaryPhone = detail?.contact_methods.find((method) => method.method_type === "phone");
   const primaryEmail = detail?.contact_methods.find((method) => method.method_type === "email");
+  const selectedEmailAccount =
+    emailAccounts.find((account) => account.id === emailAccountId) ?? null;
+  const emailSignature = selectedEmailAccount
+    ? (emailSignatureDrafts[selectedEmailAccount.id] ?? selectedEmailAccount.signature_text ?? "")
+    : "";
   const nextAppointment = detail?.appointments.find((appointment) =>
     ["scheduled", "rescheduled"].includes(appointment.status),
   );
   const nextTask = detail?.open_tasks[0];
   const isLiveSms = channel === "sms" && direction === "outbound";
+  const isLiveEmail = channel === "email";
   const isVoiceComposer = channel === "call" && callComposerMode === "browser";
-  const isCallInProgress = ["connecting", "ringing", "incoming", "active"].includes(
-    voiceStatus,
-  );
+  const isCallInProgress = ["connecting", "ringing", "incoming", "active"].includes(voiceStatus);
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
+  const canUseEmail =
+    me?.permissions.includes("communications:send_email") ||
+    me?.permissions.includes("communications:send_assigned_email");
   const canSubmitComposer =
     Boolean(body.trim()) &&
     composerStatus !== "saving" &&
     !isVoiceComposer &&
-    (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send));
+    (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send)) &&
+    (!isLiveEmail ||
+      Boolean(
+        canUseEmail && primaryEmail && selectedEmailAccount?.status === "active" && subject.trim(),
+      ));
 
   function selectConversation(conversationId: string) {
     setSelectedId(conversationId);
@@ -1082,6 +1209,128 @@ export function InboxWorkspace() {
       if (selectedId) await loadDetail(selectedId);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh inbox.");
+    }
+  }
+
+  async function connectGoogleEmail() {
+    setError(null);
+    try {
+      const payload = await request<{ authorization_url: string }>(
+        "/api/v1/email/oauth/google/authorize",
+        { method: "POST" },
+      );
+      window.location.assign(payload.authorization_url);
+    } catch (connectError) {
+      setError(
+        connectError instanceof Error
+          ? connectError.message
+          : "Google Workspace could not be connected.",
+      );
+    }
+  }
+
+  async function saveEmailSignature() {
+    if (!selectedEmailAccount) return;
+    setEmailSettingsStatus("saving");
+    setError(null);
+    try {
+      await request(`/api/v1/email/accounts/${selectedEmailAccount.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ signature_text: emailSignature.trim() || null }),
+      });
+      await loadEmailConfiguration();
+      setEmailSettingsStatus("saved");
+      window.setTimeout(() => setEmailSettingsStatus("idle"), 1500);
+    } catch (signatureError) {
+      setEmailSettingsStatus("idle");
+      setError(
+        signatureError instanceof Error
+          ? signatureError.message
+          : "The email signature could not be saved.",
+      );
+    }
+  }
+
+  async function synchronizeEmailAccount() {
+    if (!selectedEmailAccount) return;
+    setEmailSettingsStatus("syncing");
+    setError(null);
+    try {
+      await request(`/api/v1/email/accounts/${selectedEmailAccount.id}/sync`, {
+        method: "POST",
+      });
+      await Promise.all([
+        loadEmailConfiguration(),
+        loadConversations(),
+        selectedId ? loadDetail(selectedId) : Promise.resolve(),
+      ]);
+      setEmailSettingsStatus("saved");
+      window.setTimeout(() => setEmailSettingsStatus("idle"), 1500);
+    } catch (syncError) {
+      setEmailSettingsStatus("idle");
+      setError(
+        syncError instanceof Error ? syncError.message : "The mailbox could not be synchronized.",
+      );
+    }
+  }
+
+  async function saveCurrentEmailAsTemplate() {
+    if (!emailTemplateName.trim() || !subject.trim() || !body.trim()) return;
+    setEmailSettingsStatus("saving");
+    setError(null);
+    try {
+      await request("/api/v1/email/templates", {
+        method: "POST",
+        body: JSON.stringify({
+          name: emailTemplateName.trim(),
+          subject_template: subject.trim(),
+          body_template: body.trim(),
+          is_shared: true,
+        }),
+      });
+      setEmailTemplateName("");
+      await loadEmailConfiguration();
+      setEmailSettingsStatus("saved");
+      window.setTimeout(() => setEmailSettingsStatus("idle"), 1500);
+    } catch (templateError) {
+      setEmailSettingsStatus("idle");
+      setError(
+        templateError instanceof Error ? templateError.message : "The template could not be saved.",
+      );
+    }
+  }
+
+  function applyEmailTemplate(templateId: string) {
+    const template = emailTemplates.find((item) => item.id === templateId);
+    if (!template) return;
+    setSubject(template.subject_template);
+    setBody(template.body_template);
+    emailIdempotencyKeyRef.current = null;
+  }
+
+  async function downloadEmailAttachment(attachmentId: string, filename: string) {
+    setError(null);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/email/attachments/${attachmentId}`, {
+        headers: await getHeaders(),
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(displayError(payload, "The attachment could not be downloaded."));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = filename;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (attachmentError) {
+      setError(
+        attachmentError instanceof Error
+          ? attachmentError.message
+          : "The attachment could not be downloaded.",
+      );
     }
   }
 
@@ -1126,6 +1375,26 @@ export function InboxWorkspace() {
           }),
         });
         smsIdempotencyKeyRef.current = null;
+      } else if (isLiveEmail && selectedEmailAccount) {
+        emailIdempotencyKeyRef.current ??= window.crypto.randomUUID();
+        const attachments = await Promise.all(
+          emailAttachments.map(async (file) => ({
+            filename: file.name,
+            content_type: file.type || "application/octet-stream",
+            content_base64: await fileToBase64(file),
+          })),
+        );
+        await request(`/api/v1/email/conversations/${detail.id}/messages`, {
+          method: "POST",
+          body: JSON.stringify({
+            email_account_id: selectedEmailAccount.id,
+            subject: subject.trim(),
+            body: body.trim(),
+            idempotency_key: emailIdempotencyKeyRef.current,
+            attachments,
+          }),
+        });
+        emailIdempotencyKeyRef.current = null;
       } else {
         await request(`/api/v1/leads/${detail.lead_id}/communications`, {
           method: "POST",
@@ -1141,13 +1410,18 @@ export function InboxWorkspace() {
       }
       setSubject("");
       setBody("");
+      setEmailAttachments([]);
       setComposerStatus("saved");
       await Promise.all([loadConversations(), loadDetail(detail.id)]);
       window.setTimeout(() => setComposerStatus("idle"), 1800);
     } catch (submitError) {
       setComposerStatus("idle");
       setError(
-        submitError instanceof Error ? submitError.message : "Unable to log communication.",
+        submitError instanceof Error
+          ? submitError.message
+          : isLiveEmail
+            ? "Unable to send email."
+            : "Unable to log communication.",
       );
     }
   }
@@ -1186,6 +1460,31 @@ export function InboxWorkspace() {
           <h2>Shared inbox</h2>
         </div>
         <div className={styles.headerActions}>
+          {canUseEmail ? (
+            <button
+              className={styles.emailStatusButton}
+              data-connected={emailAccounts.some((account) => account.status === "active")}
+              onClick={() => {
+                if (emailAccounts.some((account) => account.status === "active")) {
+                  setChannel("email");
+                  setEmailSettingsOpen(true);
+                } else {
+                  void connectGoogleEmail();
+                }
+              }}
+              title={
+                emailAccounts.some((account) => account.status === "active")
+                  ? "Open email settings"
+                  : "Connect Google Workspace"
+              }
+              type="button"
+            >
+              <Mail size={16} aria-hidden="true" />
+              {emailAccounts.some((account) => account.status === "active")
+                ? "Email connected"
+                : "Connect email"}
+            </button>
+          ) : null}
           <button
             className={styles.phoneStatusButton}
             data-status={voiceStatus}
@@ -1199,7 +1498,11 @@ export function InboxWorkspace() {
               ? "Enable calling"
               : voiceMessage}
           </button>
-          <button className={styles.refreshButton} onClick={() => void refreshInbox()} type="button">
+          <button
+            className={styles.refreshButton}
+            onClick={() => void refreshInbox()}
+            type="button"
+          >
             <RefreshCw size={16} aria-hidden="true" />
             Refresh
           </button>
@@ -1420,10 +1723,17 @@ export function InboxWorkspace() {
                     </button>
                   ) : null}
                   {primaryEmail ? (
-                    <a href={`mailto:${primaryEmail.value}`} title={`Email ${primaryEmail.value}`}>
+                    <button
+                      onClick={() => {
+                        setChannel("email");
+                        setDirection("outbound");
+                      }}
+                      title={`Email ${primaryEmail.value}`}
+                      type="button"
+                    >
                       <Mail size={17} aria-hidden="true" />
                       <span className={styles.visuallyHidden}>Email seller</span>
-                    </a>
+                    </button>
                   ) : null}
                   <button
                     onClick={() => setMobilePane("details")}
@@ -1461,6 +1771,24 @@ export function InboxWorkspace() {
                       </div>
                       {item.subject ? <strong>{item.subject}</strong> : null}
                       <p>{item.body}</p>
+                      {item.attachments.length > 0 ? (
+                        <div className={styles.messageAttachments}>
+                          {item.attachments.map((attachment) => (
+                            <button
+                              key={attachment.id}
+                              onClick={() =>
+                                void downloadEmailAttachment(attachment.id, attachment.filename)
+                              }
+                              title={`Download ${attachment.filename}`}
+                              type="button"
+                            >
+                              <Paperclip size={13} aria-hidden="true" />
+                              <span>{attachment.filename}</span>
+                              <small>{formatFileSize(attachment.size_bytes)}</small>
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {item.channel === "call" ? (
                         <>
                           <div className={styles.callMetadata}>
@@ -1534,9 +1862,7 @@ export function InboxWorkspace() {
                                 <input
                                   autoFocus
                                   minLength={10}
-                                  onChange={(event) =>
-                                    setRecordingDeleteReason(event.target.value)
-                                  }
+                                  onChange={(event) => setRecordingDeleteReason(event.target.value)}
                                   placeholder="Why must this audio be deleted early?"
                                   required
                                   value={recordingDeleteReason}
@@ -1574,10 +1900,8 @@ export function InboxWorkspace() {
                             <CallTranscriptPanel
                               canReview={Boolean(
                                 me.permissions.includes("leads:edit") &&
-                                  item.recording_status === "completed" &&
-                                  me.permissions.includes(
-                                    "communications:access_recordings",
-                                  ),
+                                item.recording_status === "completed" &&
+                                me.permissions.includes("communications:access_recordings"),
                               )}
                               key={item.transcript.id}
                               onReview={reviewTranscript}
@@ -1587,7 +1911,8 @@ export function InboxWorkspace() {
                         </>
                       ) : null}
                       <small>
-                        {item.actor_display_name || (item.direction === "inbound" ? "Seller" : "Team")}
+                        {item.actor_display_name ||
+                          (item.direction === "inbound" ? "Seller" : "Team")}
                         {" · "}
                         {labelize(item.status)}
                       </small>
@@ -1611,7 +1936,11 @@ export function InboxWorkspace() {
               </div>
 
               <form className={styles.composer} onSubmit={submitCommunication}>
-                <div className={styles.composerTabs} role="tablist" aria-label="Communication channel">
+                <div
+                  className={styles.composerTabs}
+                  role="tablist"
+                  aria-label="Communication channel"
+                >
                   {composerChannels.map((item) => {
                     const Icon = item.icon;
                     return (
@@ -1644,7 +1973,9 @@ export function InboxWorkspace() {
                           Browser
                         </button>
                         <button
-                          className={callComposerMode === "log" ? styles.activeDirection : undefined}
+                          className={
+                            callComposerMode === "log" ? styles.activeDirection : undefined
+                          }
                           onClick={() => setCallComposerMode("log")}
                           type="button"
                         >
@@ -1664,9 +1995,7 @@ export function InboxWorkspace() {
                             Outbound
                           </button>
                           <button
-                            className={
-                              direction === "inbound" ? styles.activeDirection : undefined
-                            }
+                            className={direction === "inbound" ? styles.activeDirection : undefined}
                             onClick={() => setDirection("inbound")}
                             type="button"
                           >
@@ -1680,7 +2009,7 @@ export function InboxWorkspace() {
                         </span>
                       )}
                     </>
-                  ) : channel === "sms" || channel === "email" ? (
+                  ) : channel === "sms" ? (
                     <div className={styles.directionToggle}>
                       <button
                         className={direction === "outbound" ? styles.activeDirection : undefined}
@@ -1697,6 +2026,51 @@ export function InboxWorkspace() {
                         Inbound
                       </button>
                     </div>
+                  ) : channel === "email" ? (
+                    <div className={styles.emailComposerControls}>
+                      <select
+                        aria-label="Email sender"
+                        onChange={(event) => {
+                          setEmailAccountId(event.target.value);
+                          emailIdempotencyKeyRef.current = null;
+                        }}
+                        value={emailAccountId}
+                      >
+                        <option value="">Select sender</option>
+                        {emailAccounts
+                          .filter((account) => account.status === "active")
+                          .map((account) => (
+                            <option key={account.id} value={account.id}>
+                              {account.email_address}
+                            </option>
+                          ))}
+                      </select>
+                      <select
+                        aria-label="Email template"
+                        defaultValue=""
+                        onChange={(event) => {
+                          applyEmailTemplate(event.target.value);
+                          event.target.value = "";
+                        }}
+                      >
+                        <option value="">Use template</option>
+                        {emailTemplates.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        aria-pressed={emailSettingsOpen}
+                        className={styles.emailSettingsToggle}
+                        onClick={() => setEmailSettingsOpen((current) => !current)}
+                        title="Email settings"
+                        type="button"
+                      >
+                        <Settings2 size={15} aria-hidden="true" />
+                        <span className={styles.visuallyHidden}>Email settings</span>
+                      </button>
+                    </div>
                   ) : (
                     <span className={styles.internalLabel}>Internal note</span>
                   )}
@@ -1704,18 +2078,104 @@ export function InboxWorkspace() {
                     <input
                       aria-label="Email subject"
                       maxLength={255}
-                      onChange={(event) => setSubject(event.target.value)}
+                      onChange={(event) => {
+                        setSubject(event.target.value);
+                        emailIdempotencyKeyRef.current = null;
+                      }}
                       placeholder="Subject"
                       value={subject}
                     />
                   ) : null}
                 </div>
+                {isLiveEmail && emailSettingsOpen ? (
+                  <div className={styles.emailSettingsPanel}>
+                    <div className={styles.emailSettingsHeader}>
+                      <div>
+                        <strong>Google Workspace</strong>
+                        <span>
+                          {selectedEmailAccount
+                            ? selectedEmailAccount.email_address
+                            : "No mailbox connected"}
+                        </span>
+                      </div>
+                      <button
+                        disabled={!emailProviderConfigured}
+                        onClick={() => void connectGoogleEmail()}
+                        type="button"
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        Connect mailbox
+                      </button>
+                    </div>
+                    {!emailProviderConfigured ? (
+                      <p className={styles.emailConfigurationNote}>
+                        Email remains disabled until the Google OAuth environment variables are
+                        configured.
+                      </p>
+                    ) : null}
+                    {selectedEmailAccount ? (
+                      <div className={styles.emailSettingsGrid}>
+                        <label>
+                          Signature
+                          <textarea
+                            disabled={
+                              !selectedEmailAccount.is_owned_by_current_user &&
+                              !me?.permissions.includes("communications:manage_email_accounts")
+                            }
+                            maxLength={4000}
+                            onChange={(event) =>
+                              setEmailSignatureDrafts((current) => ({
+                                ...current,
+                                [selectedEmailAccount.id]: event.target.value,
+                              }))
+                            }
+                            placeholder="Name, role, company, and contact details"
+                            rows={3}
+                            value={emailSignature}
+                          />
+                        </label>
+                        <div className={styles.emailSettingsActions}>
+                          <button
+                            disabled={emailSettingsStatus === "saving"}
+                            onClick={() => void saveEmailSignature()}
+                            type="button"
+                          >
+                            <Check size={14} aria-hidden="true" />
+                            {emailSettingsStatus === "saving" ? "Saving" : "Save signature"}
+                          </button>
+                          <button
+                            disabled={emailSettingsStatus === "syncing"}
+                            onClick={() => void synchronizeEmailAccount()}
+                            type="button"
+                          >
+                            <RefreshCw size={14} aria-hidden="true" />
+                            {emailSettingsStatus === "syncing" ? "Syncing" : "Sync now"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className={styles.emailTemplateBuilder}>
+                      <input
+                        maxLength={160}
+                        onChange={(event) => setEmailTemplateName(event.target.value)}
+                        placeholder="Template name"
+                        value={emailTemplateName}
+                      />
+                      <button
+                        disabled={!emailTemplateName.trim() || !subject.trim() || !body.trim()}
+                        onClick={() => void saveCurrentEmailAsTemplate()}
+                        type="button"
+                      >
+                        <Plus size={14} aria-hidden="true" />
+                        Save current draft
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 {isLiveSms ? (
                   <div
                     className={
-                      detail.sms_eligibility.can_send
-                        ? styles.smsReady
-                        : styles.smsBlocked
+                      detail.sms_eligibility.can_send ? styles.smsReady : styles.smsBlocked
                     }
                   >
                     {detail.sms_eligibility.can_send ? (
@@ -1732,13 +2192,58 @@ export function InboxWorkspace() {
                     </span>
                   </div>
                 ) : null}
+                {isLiveEmail ? (
+                  <>
+                    <div
+                      className={
+                        canUseEmail && primaryEmail && selectedEmailAccount
+                          ? styles.emailReady
+                          : styles.emailBlocked
+                      }
+                    >
+                      {canUseEmail && primaryEmail && selectedEmailAccount ? (
+                        <ShieldCheck size={15} aria-hidden="true" />
+                      ) : (
+                        <ShieldAlert size={15} aria-hidden="true" />
+                      )}
+                      <span>
+                        {!canUseEmail
+                          ? "Your role cannot send seller email."
+                          : !primaryEmail
+                            ? "This seller does not have an email address."
+                            : selectedEmailAccount
+                              ? `Ready to email ${primaryEmail.value} from ${selectedEmailAccount.email_address}`
+                              : emailProviderConfigured
+                                ? "Connect or select a Google Workspace mailbox."
+                                : emailConfigurationBlockers.join(" ")}
+                      </span>
+                    </div>
+                    <div className={styles.emailAttachmentRow}>
+                      <label>
+                        <Paperclip size={14} aria-hidden="true" />
+                        Attach files
+                        <input
+                          multiple
+                          onChange={(event) => {
+                            setEmailAttachments(Array.from(event.target.files ?? []).slice(0, 5));
+                            emailIdempotencyKeyRef.current = null;
+                          }}
+                          type="file"
+                        />
+                      </label>
+                      {emailAttachments.map((file) => (
+                        <span key={`${file.name}-${file.size}`}>
+                          {file.name} · {formatFileSize(file.size)}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
                 {isVoiceComposer ? (
                   <div className={styles.voiceComposer}>
                     <div
                       className={
-                        detail.voice_eligibility.can_call
-                          ? styles.voiceReady
-                          : styles.voiceBlocked
+                        detail.voice_eligibility.can_call ? styles.voiceReady : styles.voiceBlocked
                       }
                     >
                       {detail.voice_eligibility.can_call ? (
@@ -1773,12 +2278,15 @@ export function InboxWorkspace() {
                       maxLength={channel === "sms" ? 1600 : 4000}
                       onChange={(event) => {
                         if (event.target.value !== body) smsIdempotencyKeyRef.current = null;
+                        if (event.target.value !== body) emailIdempotencyKeyRef.current = null;
                         setBody(event.target.value);
                       }}
                       placeholder={
                         channel === "note"
                           ? "Add a note for the Stonegate team..."
-                          : `Log the ${channel} conversation...`
+                          : channel === "email"
+                            ? "Write the seller email..."
+                            : `Log the ${channel} conversation...`
                       }
                       required
                       rows={3}
@@ -1795,10 +2303,14 @@ export function InboxWorkspace() {
                         : composerStatus === "saved"
                           ? isLiveSms
                             ? "Sent"
-                            : "Logged"
+                            : isLiveEmail
+                              ? "Sent"
+                              : "Logged"
                           : isLiveSms
                             ? "Send SMS"
-                            : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
+                            : isLiveEmail
+                              ? "Send email"
+                              : `Log ${channel === "note" ? "note" : channel.toUpperCase()}`}
                     </button>
                   </div>
                 )}
@@ -2004,7 +2516,10 @@ export function InboxWorkspace() {
                     </label>
                     <label>
                       <span>Queue</span>
-                      <select onChange={(event) => setQueueKey(event.target.value)} value={queueKey}>
+                      <select
+                        onChange={(event) => setQueueKey(event.target.value)}
+                        value={queueKey}
+                      >
                         {queueOptions.map((option) => (
                           <option key={option.value} value={option.value}>
                             {option.label}
