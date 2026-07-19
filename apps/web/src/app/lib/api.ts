@@ -352,7 +352,24 @@ export type AiControlOverview = {
     run_count: number;
     pending_approval_count: number;
     total_cost_cents: number;
+    total_cost_microusd: number;
+    unpriced_run_count: number;
     average_latency_ms: number | null;
+  };
+  call_intelligence_quality: {
+    total_calls: number;
+    reviewed_calls: number;
+    approved_calls: number;
+    rejected_calls: number;
+    pending_review_calls: number;
+    failed_calls: number;
+    average_confidence: number | null;
+    average_field_agreement: number | null;
+    average_evidence_coverage: number | null;
+    high_correction_calls: number;
+    minimum_review_sample: number;
+    autonomy_status: string;
+    autonomy_blockers: string[];
   };
   agents: Array<{
     id: string;
@@ -392,12 +409,16 @@ export type AiControlOverview = {
     model_name: string;
     input_summary: string;
     output_summary: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
     total_tokens: number | null;
     cost_cents: number | null;
+    cost_microusd: number | null;
     latency_ms: number | null;
     started_at: string;
     completed_at: string | null;
     error_message: string | null;
+    run_metadata: Record<string, unknown> | null;
     tool_calls: Array<{
       id: string;
       ai_run_log_id: string;
@@ -720,7 +741,24 @@ const emptyAiControlOverview: AiControlOverview = {
     run_count: 0,
     pending_approval_count: 0,
     total_cost_cents: 0,
+    total_cost_microusd: 0,
+    unpriced_run_count: 0,
     average_latency_ms: null,
+  },
+  call_intelligence_quality: {
+    total_calls: 0,
+    reviewed_calls: 0,
+    approved_calls: 0,
+    rejected_calls: 0,
+    pending_review_calls: 0,
+    failed_calls: 0,
+    average_confidence: null,
+    average_field_agreement: null,
+    average_evidence_coverage: null,
+    high_correction_calls: 0,
+    minimum_review_sample: 50,
+    autonomy_status: "human_review_required",
+    autonomy_blockers: ["No reviewed call sample is available."],
   },
   agents: [],
   prompt_versions: [],

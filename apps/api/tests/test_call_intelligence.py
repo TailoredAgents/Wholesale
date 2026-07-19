@@ -184,7 +184,9 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
                     "text": "I want to move in 30 days and I am asking 180 thousand.",
                 }
             ],
-            total_tokens=100,
+            total_tokens=1100,
+            input_tokens=1000,
+            output_tokens=100,
         ),
     )
     notes_payload = {
@@ -213,7 +215,14 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     }
     monkeypatch.setattr(
         "app.services.call_intelligence.OpenAIResponsesClient.create_structured_response",
-        lambda *_args, **_kwargs: (notes_payload, 200),
+        lambda *_args, **_kwargs: (
+            notes_payload,
+            {
+                "input_tokens": 2000,
+                "output_tokens": 500,
+                "total_tokens": 2500,
+            },
+        ),
     )
     settings = Settings(
         DATABASE_URL="sqlite+pysqlite:///:memory:",
@@ -229,6 +238,15 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
         select(func.count()).select_from(ApprovalRequest)
     ) == 1
     assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 1
+    ai_run = db_session.scalar(select(AiRunLog))
+    assert ai_run is not None
+    assert ai_run.input_tokens == 3000
+    assert ai_run.output_tokens == 600
+    assert ai_run.total_tokens == 3600
+    assert ai_run.cost_microusd == 16_000
+    assert ai_run.cost_cents == 2
+    assert ai_run.run_metadata is not None
+    assert ai_run.run_metadata["pricing_status"] == "priced"
 
     client = TestClient(app)
     approval = db_session.scalar(select(ApprovalRequest))
@@ -246,9 +264,13 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     )
     assert blind_decision.status_code == 422
 
+    reviewed_notes = {
+        **notes_payload,
+        "property_condition": "Roof replacement needed",
+    }
     payload = CallTranscriptReview(
         status="approved",
-        structured_notes=StructuredCallNotes.model_validate(notes_payload),
+        structured_notes=StructuredCallNotes.model_validate(reviewed_notes),
         decision_notes="Checked against the recording.",
         apply_field_updates=[
             "motivation",
@@ -268,13 +290,28 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     db_session.refresh(lead)
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"
-    assert lead.property_condition == "Roof needs replacement"
+    assert lead.property_condition == "Roof replacement needed"
     assert lead.asking_price == "$180,000"
     assert db_session.scalar(
         select(func.count())
         .select_from(CommunicationRecord)
         .where(CommunicationRecord.provider == "openai_reviewed")
     ) == 1
+    db_session.refresh(transcript)
+    review_metrics = (transcript.transcript_metadata or {}).get("review_metrics")
+    assert isinstance(review_metrics, dict)
+    assert review_metrics["changed_fields"] == ["property_condition"]
+    assert review_metrics["field_agreement_percent"] == 92
+    quality_response = client.get(
+        "/api/v1/ai",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert quality_response.status_code == 200
+    quality = quality_response.json()["call_intelligence_quality"]
+    assert quality["reviewed_calls"] == 1
+    assert quality["approved_calls"] == 1
+    assert quality["average_field_agreement"] == 92
+    assert quality["autonomy_status"] == "human_review_required"
     assert db_session.scalar(
         select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
     ) == 1

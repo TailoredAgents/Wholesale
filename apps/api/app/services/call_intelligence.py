@@ -36,6 +36,7 @@ from app.schemas.voice import (
     CallTranscriptReview,
     StructuredCallNotes,
 )
+from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
 
 CALL_INTELLIGENCE_AGENT_KEY = "call_intelligence"
 CALL_INTELLIGENCE_PROMPT = """You prepare factual real-estate acquisition call notes.
@@ -51,6 +52,22 @@ LEAD_UPDATE_FIELDS = {
     "occupancy_status": "occupancy_status",
     "asking_price": "asking_price",
 }
+QUALITY_NOTE_FIELDS = (
+    "summary",
+    "motivation",
+    "timeline",
+    "property_condition",
+    "occupancy_status",
+    "asking_price",
+    "mortgage_or_title",
+    "repairs",
+    "objections",
+    "commitments",
+    "next_action",
+    "follow_up_at",
+    "appointment_details",
+)
+EVIDENCE_NOTE_FIELDS = QUALITY_NOTE_FIELDS[1:]
 
 
 class CallIntelligenceError(RuntimeError):
@@ -231,7 +248,7 @@ def process_call_transcript(
         transcript.speaker_segments = normalize_segments(audio_result.segments)
         transcript.language = audio_result.language
 
-        notes_payload, note_tokens = client.create_structured_response(
+        notes_payload, note_usage = client.create_structured_response(
             model=settings.openai_default_model,
             system_prompt=prompt.prompt_text,
             user_prompt=build_call_notes_prompt(db, call, transcript),
@@ -241,6 +258,38 @@ def process_call_transcript(
         )
         notes = StructuredCallNotes.model_validate(notes_payload)
         confidence = notes.confidence
+        if isinstance(note_usage, int):
+            note_usage = {
+                "input_tokens": None,
+                "output_tokens": None,
+                "total_tokens": note_usage,
+            }
+        audio_cost = estimate_openai_cost(
+            settings,
+            model=settings.openai_transcription_model,
+            input_tokens=audio_result.input_tokens,
+            output_tokens=audio_result.output_tokens,
+        )
+        notes_cost = estimate_openai_cost(
+            settings,
+            model=settings.openai_default_model,
+            input_tokens=note_usage["input_tokens"],
+            output_tokens=note_usage["output_tokens"],
+        )
+        component_costs = [audio_cost.cost_microusd, notes_cost.cost_microusd]
+        total_cost_microusd = (
+            sum(cost for cost in component_costs if cost is not None)
+            if all(cost is not None for cost in component_costs)
+            else None
+        )
+        input_tokens = sum_optional_counts(
+            audio_result.input_tokens,
+            note_usage["input_tokens"],
+        )
+        output_tokens = sum_optional_counts(
+            audio_result.output_tokens,
+            note_usage["output_tokens"],
+        )
         transcript.confidence_score = confidence
         transcript.status = "needs_review"
         transcript.error_message = None
@@ -251,14 +300,30 @@ def process_call_transcript(
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
             "human_review_required": True,
+            "evidence_coverage_percent": evidence_coverage_percent(notes),
         }
         approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
         transcript.transcript_metadata["approval_request_id"] = str(approval.id)
         run.status = "needs_review"
         run.output_summary = notes.summary[:4000]
+        run.input_tokens = input_tokens
+        run.output_tokens = output_tokens
         run.total_tokens = sum(
-            value for value in (audio_result.total_tokens, note_tokens) if value is not None
+            value
+            for value in (audio_result.total_tokens, note_usage["total_tokens"])
+            if value is not None
         ) or None
+        run.cost_microusd = total_cost_microusd
+        run.cost_cents = cents_from_microusd(total_cost_microusd)
+        run.run_metadata = {
+            "pricing_components": [
+                audio_cost.to_metadata(),
+                notes_cost.to_metadata(),
+            ],
+            "pricing_status": (
+                "priced" if total_cost_microusd is not None else "incomplete"
+            ),
+        }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
         transcript.transcript_metadata["ai_run_id"] = str(run.id)
@@ -335,11 +400,16 @@ def review_call_transcript(
         "structured_notes": (transcript.transcript_metadata or {}).get("structured_notes"),
     }
     notes = payload.structured_notes
+    review_metrics = calculate_review_metrics(
+        previous.get("structured_notes"),
+        notes,
+    )
     transcript.transcript_metadata = {
         **(transcript.transcript_metadata or {}),
         "structured_notes": notes.model_dump(mode="json"),
         "reviewed_at": datetime.now(UTC).isoformat(),
         "review_decision_notes": payload.decision_notes,
+        "review_metrics": review_metrics,
     }
     transcript.status = payload.status
     if payload.status == "approved":
@@ -681,3 +751,66 @@ def mark_ai_run_reviewed(db: Session, transcript: CallTranscript, status: str) -
         return
     if run is not None:
         run.status = status
+        run.run_metadata = {
+            **(run.run_metadata or {}),
+            "human_review_status": status,
+            "review_metrics": (transcript.transcript_metadata or {}).get("review_metrics"),
+        }
+
+
+def calculate_review_metrics(
+    raw_draft: object,
+    reviewed_notes: StructuredCallNotes,
+) -> dict[str, object]:
+    draft = raw_draft if isinstance(raw_draft, dict) else {}
+    reviewed = reviewed_notes.model_dump(mode="json")
+    changed_fields = [
+        field
+        for field in QUALITY_NOTE_FIELDS
+        if normalize_quality_value(draft.get(field)) != normalize_quality_value(reviewed.get(field))
+    ]
+    evaluated_count = len(QUALITY_NOTE_FIELDS)
+    agreement = round(100 * (evaluated_count - len(changed_fields)) / evaluated_count)
+    return {
+        "evaluated_field_count": evaluated_count,
+        "changed_field_count": len(changed_fields),
+        "changed_fields": changed_fields,
+        "field_agreement_percent": agreement,
+        "evidence_coverage_percent": evidence_coverage_percent(reviewed_notes),
+    }
+
+
+def evidence_coverage_percent(notes: StructuredCallNotes) -> int | None:
+    payload = notes.model_dump(mode="json")
+    populated_fields = {
+        field
+        for field in EVIDENCE_NOTE_FIELDS
+        if normalize_quality_value(payload.get(field)) not in (None, (), "")
+    }
+    if not populated_fields:
+        return None
+    evidenced_fields = {
+        evidence.field
+        for evidence in notes.evidence
+        if evidence.supporting_text.strip()
+    }
+    return round(100 * len(populated_fields & evidenced_fields) / len(populated_fields))
+
+
+def normalize_quality_value(value: object) -> object:
+    if isinstance(value, str):
+        return " ".join(value.lower().split())
+    if isinstance(value, list):
+        return tuple(
+            sorted(
+                str(normalize_quality_value(item))
+                for item in value
+                if normalize_quality_value(item) not in (None, "")
+            )
+        )
+    return value
+
+
+def sum_optional_counts(*values: int | None) -> int | None:
+    present = [value for value in values if value is not None]
+    return sum(present) if present else None

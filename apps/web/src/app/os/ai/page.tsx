@@ -6,15 +6,20 @@ import styles from "../page.module.css";
 
 export const dynamic = "force-dynamic";
 
-function formatMoney(cents: number | null) {
-  if (cents === null) {
+function formatMicroUsd(value: number | null) {
+  if (value === null) {
     return "N/A";
   }
   return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(cents / 100);
+    minimumFractionDigits: 2,
+    maximumFractionDigits: value < 10_000 ? 4 : 2,
+  }).format(value / 1_000_000);
+}
+
+function formatPercent(value: number | null) {
+  return value === null ? "N/A" : `${value}%`;
 }
 
 function formatLatency(value: number | null) {
@@ -65,9 +70,71 @@ export default async function AiControlPage() {
         </article>
         <article className={styles.metric}>
           <span>AI cost</span>
-          <strong>{formatMoney(ai.summary.total_cost_cents)}</strong>
-          <small>Logged run cost</small>
+          <strong>{formatMicroUsd(ai.summary.total_cost_microusd)}</strong>
+          <small>
+            {ai.summary.unpriced_run_count
+              ? `${ai.summary.unpriced_run_count} unpriced runs`
+              : "All completed usage priced"}
+          </small>
         </article>
+      </section>
+
+      <section className={styles.qualityBand}>
+        <div className={styles.panelHeader}>
+          <div>
+            <h3>Call intelligence quality</h3>
+            <small>{labelize(ai.call_intelligence_quality.autonomy_status)}</small>
+          </div>
+          <span>
+            {ai.call_intelligence_quality.reviewed_calls}/
+            {ai.call_intelligence_quality.minimum_review_sample} reviewed
+          </span>
+        </div>
+        <dl className={styles.qualityGrid}>
+          <div>
+            <dt>Field agreement</dt>
+            <dd>{formatPercent(ai.call_intelligence_quality.average_field_agreement)}</dd>
+          </div>
+          <div>
+            <dt>Evidence coverage</dt>
+            <dd>{formatPercent(ai.call_intelligence_quality.average_evidence_coverage)}</dd>
+          </div>
+          <div>
+            <dt>AI confidence</dt>
+            <dd>{formatPercent(ai.call_intelligence_quality.average_confidence)}</dd>
+          </div>
+          <div>
+            <dt>Approved</dt>
+            <dd>{ai.call_intelligence_quality.approved_calls}</dd>
+          </div>
+          <div>
+            <dt>Rejected</dt>
+            <dd>{ai.call_intelligence_quality.rejected_calls}</dd>
+          </div>
+          <div>
+            <dt>Needs review</dt>
+            <dd>{ai.call_intelligence_quality.pending_review_calls}</dd>
+          </div>
+          <div>
+            <dt>Failures</dt>
+            <dd>{ai.call_intelligence_quality.failed_calls}</dd>
+          </div>
+          <div>
+            <dt>High correction</dt>
+            <dd>{ai.call_intelligence_quality.high_correction_calls}</dd>
+          </div>
+        </dl>
+        {ai.call_intelligence_quality.autonomy_blockers.length ? (
+          <div className={styles.qualityBlockers}>
+            {ai.call_intelligence_quality.autonomy_blockers.map((blocker) => (
+              <span key={blocker}>{blocker}</span>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.qualityReady}>
+            Quality thresholds support a controlled low-risk pilot. Human approval remains active.
+          </p>
+        )}
       </section>
 
       <section className={styles.contentGrid}>
@@ -132,12 +199,14 @@ export default async function AiControlPage() {
                 </div>
                 <dl>
                   <div>
-                    <dt>Tokens</dt>
-                    <dd>{run.total_tokens ?? "N/A"}</dd>
+                    <dt>Input / output</dt>
+                    <dd>
+                      {run.input_tokens ?? "N/A"} / {run.output_tokens ?? "N/A"}
+                    </dd>
                   </div>
                   <div>
                     <dt>Cost</dt>
-                    <dd>{formatMoney(run.cost_cents)}</dd>
+                    <dd>{formatMicroUsd(run.cost_microusd)}</dd>
                   </div>
                   <div>
                     <dt>Latency</dt>

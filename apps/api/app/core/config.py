@@ -52,6 +52,10 @@ class Settings(BaseSettings):
         default=30.0,
         validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
     )
+    openai_pricing_overrides_raw: str = Field(
+        default="",
+        validation_alias="OPENAI_PRICING_OVERRIDES_JSON",
+    )
     openai_transcription_model: str = Field(
         default="gpt-4o-transcribe-diarize",
         validation_alias="OPENAI_TRANSCRIPTION_MODEL",

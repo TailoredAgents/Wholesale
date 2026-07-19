@@ -27,6 +27,17 @@ Wrap all third-party services behind adapters.
 - Track sync state.
 - Provide test mode.
 
+## OpenAI
+
+OpenAI transcription and Responses API calls are server-side only. The API key is never exposed to
+the browser. Each AI run records model, prompt version, latency, input/output tokens, pricing
+version, sub-cent estimated cost, status, failure reason, and human-review outcome.
+
+Built-in pricing covers Stonegate's configured `gpt-5.6-terra` reasoning model and
+`gpt-4o-transcribe-diarize` transcription model. Pricing can be updated with
+`OPENAI_PRICING_OVERRIDES_JSON` when provider rates change. The stored estimate is operational cost
+telemetry; the OpenAI billing dashboard remains the billing source of truth.
+
 ## Twilio Messaging
 
 Phase 3 implements SMS through a Twilio Messaging Service. The adapter sends from the API only;

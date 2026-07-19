@@ -602,6 +602,69 @@
   gap: 16px;
 }
 
+.qualityBand {
+  margin-bottom: 16px;
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--info);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.qualityGrid {
+  margin: 0;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.qualityGrid div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.qualityGrid dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.qualityGrid dd {
+  margin: 0;
+  color: var(--text);
+  font-size: 19px;
+  font-weight: 850;
+}
+
+.qualityBlockers {
+  padding: 12px 18px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--amber-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 16px;
+}
+
+.qualityBlockers span {
+  color: #76501d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qualityReady {
+  margin: 0;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1145,6 +1208,7 @@
   .approvals,
   .formGrid,
   .buyerList dl,
+  .qualityGrid,
   .savedViews,
   .workQueues {
     grid-template-columns: 1fr;

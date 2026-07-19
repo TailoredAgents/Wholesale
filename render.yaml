@@ -66,6 +66,8 @@ services:
         value: false
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
+      - key: OPENAI_PRICING_OVERRIDES_JSON
+        value: ""
       - key: OPENAI_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe-diarize
       - key: CALL_TRANSCRIPTION_ENABLED
@@ -191,6 +193,8 @@ services:
         value: medium
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
+      - key: OPENAI_PRICING_OVERRIDES_JSON
+        value: ""
       - key: OPENAI_TRANSCRIPTION_MODEL
         value: gpt-4o-transcribe-diarize
       - key: CALL_TRANSCRIPTION_ENABLED

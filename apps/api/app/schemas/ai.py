@@ -46,12 +46,16 @@ class AiRunCreate(BaseModel):
     model_name: str | None = Field(default=None, max_length=120)
     input_summary: str = Field(min_length=1, max_length=4000)
     output_summary: str | None = Field(default=None, max_length=4000)
+    input_tokens: int | None = Field(default=None, ge=0)
+    output_tokens: int | None = Field(default=None, ge=0)
     total_tokens: int | None = Field(default=None, ge=0)
     cost_cents: int | None = Field(default=None, ge=0)
+    cost_microusd: int | None = Field(default=None, ge=0)
     latency_ms: int | None = Field(default=None, ge=0)
     started_at: datetime | None = None
     completed_at: datetime | None = None
     error_message: str | None = Field(default=None, max_length=2000)
+    run_metadata: dict[str, object] | None = None
     tool_calls: list[AiRunToolCallCreate] = Field(default_factory=list)
 
 
@@ -114,12 +118,16 @@ class AiRunRead(BaseModel):
     model_name: str
     input_summary: str
     output_summary: str | None
+    input_tokens: int | None
+    output_tokens: int | None
     total_tokens: int | None
     cost_cents: int | None
+    cost_microusd: int | None
     latency_ms: int | None
     started_at: datetime
     completed_at: datetime | None
     error_message: str | None
+    run_metadata: dict[str, object] | None
     tool_calls: list[AiToolCallRead]
     created_at: datetime
 
@@ -131,11 +139,30 @@ class AiControlSummary(BaseModel):
     run_count: int
     pending_approval_count: int
     total_cost_cents: int
+    total_cost_microusd: int
+    unpriced_run_count: int
     average_latency_ms: int | None
+
+
+class CallIntelligenceQuality(BaseModel):
+    total_calls: int
+    reviewed_calls: int
+    approved_calls: int
+    rejected_calls: int
+    pending_review_calls: int
+    failed_calls: int
+    average_confidence: int | None
+    average_field_agreement: int | None
+    average_evidence_coverage: int | None
+    high_correction_calls: int
+    minimum_review_sample: int
+    autonomy_status: str
+    autonomy_blockers: list[str]
 
 
 class AiControlOverview(BaseModel):
     summary: AiControlSummary
+    call_intelligence_quality: CallIntelligenceQuality
     agents: list[AiAgentRead]
     prompt_versions: list[AiPromptVersionRead]
     runs: list[AiRunRead]

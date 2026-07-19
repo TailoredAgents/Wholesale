@@ -150,6 +150,7 @@ def test_ai_control_center_logs_run_and_creates_approval(
     assert overview_response.status_code == 200
     assert overview_response.json()["summary"]["pending_approval_count"] == 1
     assert overview_response.json()["summary"]["total_cost_cents"] == 12
+    assert overview_response.json()["summary"]["total_cost_microusd"] == 120_000
     assert approval_response.status_code == 200
     assert approval_response.json()["items"][0]["request_type"] == "ai_tool_call"
     assert decision_response.status_code == 200
@@ -257,6 +258,8 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
                     "and needs repair context."
                 ),
                 total_tokens=321,
+                input_tokens=200,
+                output_tokens=121,
             )
 
     monkeypatch.setattr("app.services.ai.OpenAIResponsesClient", FakeOpenAIResponsesClient)
@@ -273,6 +276,10 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
     payload = response.json()
     assert payload["status"] == "needs_review"
     assert payload["total_tokens"] == 321
+    assert payload["input_tokens"] == 200
+    assert payload["output_tokens"] == 121
+    assert payload["cost_microusd"] == 2315
+    assert payload["run_metadata"]["pricing_status"] == "priced"
     assert "inherited" in payload["output_summary"].lower()
     assert payload["lead_id"] == lead_id
     assert db_session.scalar(select(Lead).where(Lead.id == UUID(lead_id))) is not None

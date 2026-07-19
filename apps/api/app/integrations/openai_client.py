@@ -9,6 +9,8 @@ import httpx
 class OpenAITextResponse:
     text: str
     total_tokens: int | None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 @dataclass(frozen=True)
@@ -17,6 +19,8 @@ class OpenAIAudioTranscript:
     language: str | None
     segments: list[dict[str, Any]]
     total_tokens: int | None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class OpenAIClientError(RuntimeError):
@@ -91,9 +95,12 @@ class OpenAIResponsesClient:
             raise OpenAIClientError("OpenAI request failed.") from exc
 
         payload = response.json()
+        usage = extract_usage(payload)
         return OpenAITextResponse(
             text=extract_response_text(payload),
-            total_tokens=extract_total_tokens(payload),
+            total_tokens=usage["total_tokens"],
+            input_tokens=usage["input_tokens"],
+            output_tokens=usage["output_tokens"],
         )
 
     def create_structured_response(
@@ -106,7 +113,7 @@ class OpenAIResponsesClient:
         json_schema: dict[str, Any],
         reasoning_effort: str = "medium",
         max_output_tokens: int = 1800,
-    ) -> tuple[dict[str, Any], int | None]:
+    ) -> tuple[dict[str, Any], dict[str, int | None]]:
         request_payload: dict[str, Any] = {
             "model": model,
             "input": [
@@ -132,7 +139,7 @@ class OpenAIResponsesClient:
             raise OpenAIClientError("OpenAI returned invalid structured call notes.") from exc
         if not isinstance(parsed, dict):
             raise OpenAIClientError("OpenAI returned an invalid call-notes object.")
-        return parsed, extract_total_tokens(payload)
+        return parsed, extract_usage(payload)
 
     def create_audio_transcription(
         self,
@@ -170,11 +177,14 @@ class OpenAIResponsesClient:
             if isinstance(segment, dict)
         ] if isinstance(raw_segments, list) else []
         language = payload.get("language")
+        usage = extract_usage(payload)
         return OpenAIAudioTranscript(
             text=text.strip() if isinstance(text, str) else "",
             language=language if isinstance(language, str) else None,
             segments=segments,
-            total_tokens=extract_total_tokens(payload),
+            total_tokens=usage["total_tokens"],
+            input_tokens=usage["input_tokens"],
+            output_tokens=usage["output_tokens"],
         )
 
     def _post_json(self, path: str, request_payload: dict[str, Any]) -> dict[str, Any]:
@@ -214,11 +224,29 @@ def parse_openai_error(response: httpx.Response) -> str:
 
 
 def extract_total_tokens(payload: dict[str, Any]) -> int | None:
+    return extract_usage(payload)["total_tokens"]
+
+
+def extract_usage(payload: dict[str, Any]) -> dict[str, int | None]:
     usage = payload.get("usage")
     if not isinstance(usage, dict):
-        return None
-    total = usage.get("total_tokens")
-    return int(total) if isinstance(total, int | float) else None
+        return {"input_tokens": None, "output_tokens": None, "total_tokens": None}
+    input_tokens = numeric_token_count(usage.get("input_tokens") or usage.get("prompt_tokens"))
+    output_tokens = numeric_token_count(
+        usage.get("output_tokens") or usage.get("completion_tokens")
+    )
+    total_tokens = numeric_token_count(usage.get("total_tokens"))
+    if total_tokens is None and (input_tokens is not None or output_tokens is not None):
+        total_tokens = (input_tokens or 0) + (output_tokens or 0)
+    return {
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+    }
+
+
+def numeric_token_count(value: object) -> int | None:
+    return int(value) if isinstance(value, int | float) else None
 
 
 def extract_response_text(payload: dict[str, Any]) -> str:

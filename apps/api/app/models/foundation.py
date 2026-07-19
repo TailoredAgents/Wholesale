@@ -1022,12 +1022,16 @@ class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
     input_summary: Mapped[str] = mapped_column(String(4000), nullable=False)
     output_summary: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    cost_microusd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     latency_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    run_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):

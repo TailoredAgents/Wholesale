@@ -19,6 +19,7 @@ from app.models.foundation import (
     AiToolPermission,
     ApprovalRequest,
     AuditEvent,
+    CallTranscript,
     Contact,
     ContactMethod,
     Lead,
@@ -36,7 +37,9 @@ from app.schemas.ai import (
     AiRunRead,
     AiToolCallRead,
     AiToolPermissionRead,
+    CallIntelligenceQuality,
 )
+from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
 
 AGENT_STATUSES = {"draft", "active", "paused", "retired"}
 RISK_LEVELS = {"low", "medium", "high"}
@@ -62,6 +65,7 @@ Rules:
 - Flag uncertainty clearly.
 - Do not send messages or make external tool calls.
 - Keep the total response under 220 words."""
+CALL_QUALITY_MINIMUM_REVIEW_SAMPLE = 50
 
 
 def get_ai_overview(db: Session, principal: Principal) -> AiControlOverview:
@@ -88,6 +92,7 @@ def get_ai_overview(db: Session, principal: Principal) -> AiControlOverview:
     tool_calls_by_run = get_tool_calls_by_run(db, principal, [run.id for run in runs])
     return AiControlOverview(
         summary=get_ai_summary(db, principal),
+        call_intelligence_quality=get_call_intelligence_quality(db, principal),
         agents=[
             agent_to_read(agent, tool_permissions_by_agent.get(agent.id, []))
             for agent in agents
@@ -243,14 +248,24 @@ def create_ai_run(
         model_name=payload.model_name or agent.model_name,
         input_summary=payload.input_summary,
         output_summary=payload.output_summary,
+        input_tokens=payload.input_tokens,
+        output_tokens=payload.output_tokens,
         total_tokens=payload.total_tokens,
         cost_cents=payload.cost_cents,
+        cost_microusd=(
+            payload.cost_microusd
+            if payload.cost_microusd is not None
+            else payload.cost_cents * 10_000
+            if payload.cost_cents is not None
+            else None
+        ),
         latency_ms=payload.latency_ms,
         started_at=started_at,
         completed_at=payload.completed_at or (
             datetime.now(UTC) if payload.status in {"completed", "failed", "needs_review"} else None
         ),
         error_message=payload.error_message,
+        run_metadata=payload.run_metadata,
     )
     db.add(run)
     db.flush()
@@ -388,6 +403,16 @@ def run_lead_intake_summary(
         error_message = str(exc)
 
     latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
+    cost_estimate = (
+        estimate_openai_cost(
+            settings,
+            model=agent.model_name,
+            input_tokens=response.input_tokens,
+            output_tokens=response.output_tokens,
+        )
+        if response is not None
+        else None
+    )
     return create_ai_run(
         db,
         principal,
@@ -399,11 +424,27 @@ def run_lead_intake_summary(
             model_name=agent.model_name,
             input_summary=input_summary,
             output_summary=output_summary,
+            input_tokens=response.input_tokens if response is not None else None,
+            output_tokens=response.output_tokens if response is not None else None,
             total_tokens=response.total_tokens if response is not None else None,
+            cost_cents=(
+                cents_from_microusd(cost_estimate.cost_microusd)
+                if cost_estimate is not None
+                else None
+            ),
+            cost_microusd=cost_estimate.cost_microusd if cost_estimate is not None else None,
             latency_ms=latency_ms,
             started_at=started_at,
             completed_at=datetime.now(UTC),
             error_message=error_message,
+            run_metadata=(
+                {
+                    "pricing_status": cost_estimate.pricing_status,
+                    "pricing_components": [cost_estimate.to_metadata()],
+                }
+                if cost_estimate is not None
+                else None
+            ),
         ),
     )
 
@@ -687,6 +728,20 @@ def get_ai_summary(db: Session, principal: Principal) -> AiControlSummary:
             AiRunLog.organization_id == principal.organization_id
         ),
     )
+    total_cost_microusd = count_scalar(
+        db,
+        select(func.coalesce(func.sum(AiRunLog.cost_microusd), 0)).where(
+            AiRunLog.organization_id == principal.organization_id
+        ),
+    )
+    unpriced_run_count = count_scalar(
+        db,
+        select(func.count(AiRunLog.id)).where(
+            AiRunLog.organization_id == principal.organization_id,
+            AiRunLog.completed_at.is_not(None),
+            AiRunLog.cost_microusd.is_(None),
+        ),
+    )
     average_latency = db.scalar(
         select(func.avg(AiRunLog.latency_ms)).where(
             AiRunLog.organization_id == principal.organization_id,
@@ -700,8 +755,87 @@ def get_ai_summary(db: Session, principal: Principal) -> AiControlSummary:
         run_count=run_count,
         pending_approval_count=pending_approval_count,
         total_cost_cents=total_cost_cents,
+        total_cost_microusd=total_cost_microusd,
+        unpriced_run_count=unpriced_run_count,
         average_latency_ms=round(float(average_latency)) if average_latency is not None else None,
     )
+
+
+def get_call_intelligence_quality(
+    db: Session,
+    principal: Principal,
+) -> CallIntelligenceQuality:
+    transcripts = db.scalars(
+        select(CallTranscript)
+        .where(CallTranscript.organization_id == principal.organization_id)
+        .order_by(CallTranscript.created_at.desc())
+        .limit(1000)
+    ).all()
+    total = len(transcripts)
+    approved = sum(item.status == "approved" for item in transcripts)
+    rejected = sum(item.status == "rejected" for item in transcripts)
+    pending = sum(item.status == "needs_review" for item in transcripts)
+    failed = sum(item.status == "failed" for item in transcripts)
+    reviewed = approved + rejected
+    confidences = [
+        item.confidence_score for item in transcripts if item.confidence_score is not None
+    ]
+    review_metrics = [
+        (item.transcript_metadata or {}).get("review_metrics")
+        for item in transcripts
+    ]
+    agreements = [
+        int(metric["field_agreement_percent"])
+        for metric in review_metrics
+        if isinstance(metric, dict) and isinstance(metric.get("field_agreement_percent"), int)
+    ]
+    evidence_values = [
+        int(value)
+        for item in transcripts
+        if isinstance(
+            value := (item.transcript_metadata or {}).get("evidence_coverage_percent"),
+            int,
+        )
+    ]
+    high_correction_calls = sum(value < 75 for value in agreements)
+    average_agreement = rounded_average(agreements)
+    average_evidence = rounded_average(evidence_values)
+    rejection_rate = rejected / reviewed if reviewed else 0
+    failure_rate = failed / total if total else 0
+    blockers: list[str] = []
+    if reviewed < CALL_QUALITY_MINIMUM_REVIEW_SAMPLE:
+        blockers.append(
+            f"Review {CALL_QUALITY_MINIMUM_REVIEW_SAMPLE - reviewed} more calls before any pilot."
+        )
+    if average_agreement is None or average_agreement < 90:
+        blockers.append("Average field agreement must reach 90%.")
+    if reviewed and rejection_rate > 0.05:
+        blockers.append("Reviewer rejection rate must be 5% or lower.")
+    if total and failure_rate > 0.02:
+        blockers.append("Processing failure rate must be 2% or lower.")
+    if average_evidence is None or average_evidence < 90:
+        blockers.append("Evidence coverage must reach 90%.")
+    return CallIntelligenceQuality(
+        total_calls=total,
+        reviewed_calls=reviewed,
+        approved_calls=approved,
+        rejected_calls=rejected,
+        pending_review_calls=pending,
+        failed_calls=failed,
+        average_confidence=rounded_average(confidences),
+        average_field_agreement=average_agreement,
+        average_evidence_coverage=average_evidence,
+        high_correction_calls=high_correction_calls,
+        minimum_review_sample=CALL_QUALITY_MINIMUM_REVIEW_SAMPLE,
+        autonomy_status=(
+            "eligible_for_low_risk_pilot" if not blockers else "human_review_required"
+        ),
+        autonomy_blockers=blockers,
+    )
+
+
+def rounded_average(values: list[int]) -> int | None:
+    return round(sum(values) / len(values)) if values else None
 
 
 def get_tool_permissions_by_agent(
@@ -863,12 +997,16 @@ def run_to_read(run: AiRunLog, tool_calls: list[AiToolCallLog]) -> AiRunRead:
         model_name=run.model_name,
         input_summary=run.input_summary,
         output_summary=run.output_summary,
+        input_tokens=run.input_tokens,
+        output_tokens=run.output_tokens,
         total_tokens=run.total_tokens,
         cost_cents=run.cost_cents,
+        cost_microusd=run.cost_microusd,
         latency_ms=run.latency_ms,
         started_at=run.started_at,
         completed_at=run.completed_at,
         error_message=run.error_message,
+        run_metadata=run.run_metadata,
         tool_calls=[tool_call_to_read(tool_call) for tool_call in tool_calls],
         created_at=run.created_at,
     )

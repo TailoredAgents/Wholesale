@@ -549,6 +549,17 @@ Delivered in Communications Phase 6, Recording and Transcription:
 - Deployment defaults that keep recording disabled until disclosure and Voice configuration are
   explicitly approved and enabled.
 
+Delivered in Communications Phase 7, AI Call Intelligence:
+
+- Evidence-backed structured call notes for motivation, condition, timeline, occupancy, asking
+  price, objections, commitments, and next actions.
+- Human approval before lead-field updates or follow-up task creation.
+- Reviewer correction tracking with per-field agreement measurements.
+- Confidence, evidence coverage, approval, rejection, failure, and high-correction reporting.
+- Per-model input/output usage and sub-cent OpenAI cost estimates with pricing provenance.
+- AI control-center quality reporting with conservative low-risk pilot thresholds.
+- Autonomy remains disabled; passing quality thresholds only identifies pilot eligibility.
+
 Remaining in the communications sequence:
 
 - Communication-triggered follow-up tasks and notifications.
