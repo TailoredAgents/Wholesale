@@ -1,12 +1,13 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
+from app.integrations.twilio_recordings import delete_twilio_recording
 from app.integrations.twilio_voice import (
     create_voice_access_token,
     inbound_call_twiml,
@@ -18,6 +19,7 @@ from app.models.foundation import (
     AuditEvent,
     CallRecord,
     CallRecording,
+    CallTranscript,
     CommunicationProviderEvent,
     CommunicationRecord,
     Contact,
@@ -38,6 +40,7 @@ from app.schemas.voice import (
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
     VoiceLineRead,
+    VoiceRecordingRead,
     VoiceSessionRead,
 )
 from app.services.call_intelligence import enqueue_call_transcript
@@ -489,6 +492,8 @@ def process_voice_recording(
     call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
     if call is None:
         return "unmatched"
+    if recording_status == "completed" and call.recording_consent_status == "disclosure_configured":
+        call.recording_consent_status = "disclosed"
     event_id = f"voice:recording:{recording_sid}:{recording_status}"
     existing_event = get_voice_provider_event(db, call.organization_id, event_id)
     if existing_event is not None:
@@ -499,6 +504,13 @@ def process_voice_recording(
             CallRecording.provider == "twilio",
             CallRecording.provider_recording_id == recording_sid,
         )
+    )
+    settings = get_settings()
+    completed_at = datetime.now(UTC) if recording_status == "completed" else None
+    retention_expires_at = (
+        completed_at + timedelta(days=settings.call_recording_retention_days)
+        if completed_at is not None
+        else None
     )
     if recording is None:
         recording = CallRecording(
@@ -511,11 +523,15 @@ def process_voice_recording(
             duration_seconds=parse_int(payload.get("RecordingDuration")),
             channel_count=parse_int(payload.get("RecordingChannels")),
             consent_status=call.recording_consent_status,
-            recorded_at=datetime.now(UTC) if recording_status == "completed" else None,
+            recorded_at=completed_at,
+            retention_expires_at=retention_expires_at,
             deleted_at=None,
+            deleted_by_user_id=None,
+            deletion_reason=None,
             recording_metadata={
                 "source": payload.get("RecordingSource"),
                 "storage": "provider_private",
+                "retention_days": settings.call_recording_retention_days,
             },
         )
         db.add(recording)
@@ -524,19 +540,51 @@ def process_voice_recording(
         recording.duration_seconds = parse_int(payload.get("RecordingDuration"))
         recording.channel_count = parse_int(payload.get("RecordingChannels"))
         if recording_status == "completed":
-            recording.recorded_at = datetime.now(UTC)
+            recording.recorded_at = completed_at
+            recording.retention_expires_at = (
+                recording.retention_expires_at or retention_expires_at
+            )
     if recording_status == "completed":
         db.flush()
         enqueue_call_transcript(
             db,
             recording,
-            model_name=get_settings().openai_transcription_model,
+            model_name=settings.openai_transcription_model,
         )
     event = record_provider_event(
         db,
         organization_id=call.organization_id,
         conversation_id=call.conversation_id,
         event_type="voice.recording",
+        external_event_id=event_id,
+        payload=payload,
+    )
+    event.processing_status = "processed"
+    event.processed_at = datetime.now(UTC)
+    db.commit()
+    return event.processing_status
+
+
+def process_voice_recording_disclosure(
+    db: Session,
+    payload: dict[str, str],
+    *,
+    intent_id: UUID | None = None,
+    call_id: UUID | None = None,
+) -> str:
+    call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
+    if call is None:
+        return "unmatched"
+    event_id = f"voice:recording-disclosure:{call.id}"
+    existing_event = get_voice_provider_event(db, call.organization_id, event_id)
+    if existing_event is not None:
+        return existing_event.processing_status
+    call.recording_consent_status = "disclosed"
+    event = record_provider_event(
+        db,
+        organization_id=call.organization_id,
+        conversation_id=call.conversation_id,
+        event_type="voice.recording_disclosure",
         external_event_id=event_id,
         payload=payload,
     )
@@ -564,6 +612,163 @@ def get_scoped_recording(
         .where(*filters)
     )
     return recording
+
+
+def delete_recording(
+    db: Session,
+    principal: Principal,
+    recording_id: UUID,
+    *,
+    reason: str,
+    settings: Settings | None = None,
+) -> VoiceRecordingRead | None:
+    recording = get_scoped_recording(db, principal, recording_id)
+    if recording is None:
+        return None
+    if recording.deleted_at is not None or recording.status == "deleted":
+        return recording_to_read(recording)
+    pending_transcript = db.scalar(
+        select(CallTranscript.id).where(
+            CallTranscript.recording_id == recording.id,
+            CallTranscript.status.in_(("queued", "processing")),
+        )
+    )
+    if pending_transcript is not None:
+        raise VoiceIntentConflictError(
+            "Recording cannot be deleted while transcription is still processing."
+        )
+    delete_recording_from_provider(
+        db,
+        recording,
+        settings=settings or get_settings(),
+        reason=reason,
+        actor_user_id=principal.user_id,
+        actor_type="user",
+    )
+    db.commit()
+    db.refresh(recording)
+    return recording_to_read(recording)
+
+
+def purge_next_expired_recording(
+    db: Session,
+    settings: Settings,
+    *,
+    now: datetime | None = None,
+) -> UUID | None:
+    cutoff = now or datetime.now(UTC)
+    legacy_recording = db.scalar(
+        select(CallRecording)
+        .where(
+            CallRecording.status == "completed",
+            CallRecording.deleted_at.is_(None),
+            CallRecording.recorded_at.is_not(None),
+            CallRecording.retention_expires_at.is_(None),
+        )
+        .order_by(CallRecording.recorded_at.asc(), CallRecording.id.asc())
+        .limit(1)
+    )
+    if legacy_recording is not None and legacy_recording.recorded_at is not None:
+        legacy_recording.retention_expires_at = as_utc(legacy_recording.recorded_at) + timedelta(
+            days=settings.call_recording_retention_days
+        )
+        db.commit()
+    pending_transcript = exists(
+        select(CallTranscript.id).where(
+            CallTranscript.recording_id == CallRecording.id,
+            CallTranscript.status.in_(("queued", "processing")),
+        )
+    )
+    recording = db.scalar(
+        select(CallRecording)
+        .where(
+            CallRecording.status == "completed",
+            CallRecording.deleted_at.is_(None),
+            CallRecording.retention_expires_at.is_not(None),
+            CallRecording.retention_expires_at <= cutoff,
+            ~pending_transcript,
+        )
+        .order_by(CallRecording.retention_expires_at.asc(), CallRecording.id.asc())
+        .limit(1)
+    )
+    if recording is None:
+        return None
+    recording_id = recording.id
+    delete_recording_from_provider(
+        db,
+        recording,
+        settings=settings,
+        reason="Stonegate recording retention period expired.",
+        actor_user_id=None,
+        actor_type="system",
+    )
+    db.commit()
+    return recording_id
+
+
+def delete_recording_from_provider(
+    db: Session,
+    recording: CallRecording,
+    *,
+    settings: Settings,
+    reason: str,
+    actor_user_id: UUID | None,
+    actor_type: str,
+) -> None:
+    previous_value = {
+        "status": recording.status,
+        "retention_expires_at": (
+            recording.retention_expires_at.isoformat()
+            if recording.retention_expires_at is not None
+            else None
+        ),
+        "provider_recording_id": recording.provider_recording_id,
+    }
+    if recording.provider == "twilio" and recording.provider_recording_id:
+        delete_twilio_recording(settings, recording.provider_recording_id)
+    deleted_at = datetime.now(UTC)
+    recording.status = "deleted"
+    recording.media_reference = None
+    recording.deleted_at = deleted_at
+    recording.deleted_by_user_id = actor_user_id
+    recording.deletion_reason = reason.strip()
+    recording.recording_metadata = {
+        **(recording.recording_metadata or {}),
+        "provider_media_deleted": True,
+        "provider_media_deleted_at": deleted_at.isoformat(),
+    }
+    db.add(
+        AuditEvent(
+            organization_id=recording.organization_id,
+            actor_user_id=actor_user_id,
+            actor_type=actor_type,
+            action="communication.recording_delete",
+            entity_type="call_recording",
+            entity_id=recording.id,
+            previous_value=previous_value,
+            new_value={
+                "status": "deleted",
+                "deleted_at": deleted_at.isoformat(),
+                "audio_retained": False,
+            },
+            reason=recording.deletion_reason,
+        )
+    )
+
+
+def recording_to_read(recording: CallRecording) -> VoiceRecordingRead:
+    return VoiceRecordingRead(
+        id=recording.id,
+        call_record_id=recording.call_record_id,
+        status=recording.status,
+        duration_seconds=recording.duration_seconds,
+        channel_count=recording.channel_count,
+        consent_status=recording.consent_status,
+        recorded_at=recording.recorded_at,
+        retention_expires_at=recording.retention_expires_at,
+        deleted_at=recording.deleted_at,
+        deletion_reason=recording.deletion_reason,
+    )
 
 
 def resolve_callback_call(

@@ -74,6 +74,8 @@ services:
         value: 10
       - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
         value: 3
+      - key: CALL_RECORDING_RETENTION_DAYS
+        value: 180
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: ATTOM_API_KEY
@@ -197,6 +199,8 @@ services:
         value: 10
       - key: CALL_TRANSCRIPTION_MAX_ATTEMPTS
         value: 3
+      - key: CALL_RECORDING_RETENTION_DAYS
+        value: 180
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

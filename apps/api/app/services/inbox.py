@@ -283,7 +283,6 @@ def get_conversation_detail(
             .where(
                 CallRecording.organization_id == principal.organization_id,
                 CallRecording.call_record_id.in_(call_ids),
-                CallRecording.deleted_at.is_(None),
             )
             .order_by(CallRecording.created_at.desc())
         ).all()
@@ -389,6 +388,12 @@ def get_conversation_detail(
             duration_seconds=call.duration_seconds if call else None,
             recording_id=timeline_recording.id if timeline_recording else None,
             recording_status=timeline_recording.status if timeline_recording else None,
+            recording_retention_expires_at=(
+                timeline_recording.retention_expires_at if timeline_recording else None
+            ),
+            recording_deleted_at=(
+                timeline_recording.deleted_at if timeline_recording else None
+            ),
             transcript=(
                 transcript_to_read(db, timeline_transcript)
                 if timeline_transcript is not None

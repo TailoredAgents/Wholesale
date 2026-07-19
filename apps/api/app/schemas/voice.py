@@ -68,6 +68,13 @@ class VoiceRecordingRead(BaseModel):
     channel_count: int | None
     consent_status: str
     recorded_at: datetime | None
+    retention_expires_at: datetime | None
+    deleted_at: datetime | None
+    deletion_reason: str | None
+
+
+class VoiceRecordingDelete(BaseModel):
+    reason: str = Field(min_length=10, max_length=1000)
 
 
 class CallNoteEvidence(BaseModel):

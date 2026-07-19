@@ -56,4 +56,6 @@
 - Store timestamps in UTC.
 - Store money as integer cents.
 - Preserve historical formula, compensation, consent, and prompt versions.
+- Give call audio an explicit retention deadline; preserve deletion actor, reason, timestamp, and
+  audit history after provider media is removed.
 - Keep audit events append-only.

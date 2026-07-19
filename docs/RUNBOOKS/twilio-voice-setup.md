@@ -1,6 +1,7 @@
 # Twilio Voice Setup
 
-Phase 4 adds browser calling, inbound call routing, call lifecycle history, missed-call tasks, and
+Communications Phase 5 adds browser calling, inbound call routing, call lifecycle history,
+missed-call tasks, and
 private recording access to the Stonegate shared inbox. Voice is disabled by default. Do not
 change either phone number's Voice webhook until the new API deployment and environment values are
 ready.
@@ -58,6 +59,7 @@ Add these variables only to `oakwell-api`:
 | `TWILIO_VOICE_ALLOWED_END_HOUR` | `20` |
 | `TWILIO_VOICE_RECORDING_ENABLED` | Keep `false` initially |
 | `TWILIO_VOICE_RECORDING_DISCLOSURE` | Leave blank while recording is disabled |
+| `CALL_RECORDING_RETENTION_DAYS` | `180` until Stonegate approves a different policy |
 
 Voice has its own contact window and remains limited to 9:00 AM–8:00 PM Eastern even though
 Stonegate permits staff SMS at any hour.
@@ -96,7 +98,8 @@ high-priority return-call task due in five minutes.
 ## 5. Recording Activation
 
 Recording remains off until Stonegate has approved recording disclosure and retention rules for
-its operating states.
+its operating states. The application will not treat recording as configured unless Voice,
+recording, and a non-empty disclosure are all enabled.
 
 When approved:
 
@@ -105,10 +108,19 @@ When approved:
 3. Redeploy `oakwell-api`.
 4. Test inbound and outbound disclosure with a phone you control.
 5. Confirm the completed recording appears once in the inbox call timeline.
+6. Confirm the call shows a disclosure status, a transcript is queued, and the audio displays its
+   retention deadline.
 
 Stonegate stores only the Twilio recording identifier and private provider reference. Audio is
 retrieved through an authenticated API endpoint and is never exposed as a public Twilio URL.
-Phase 5 will add transcription, structured AI notes, and human approval.
+The worker transcribes completed calls with speaker identification and places AI notes into human
+review. Audio is deleted from Twilio after `CALL_RECORDING_RETENTION_DAYS`; the transcript and
+reviewed CRM notes remain as historical records.
+
+Owners and CEOs can delete audio before the retention deadline from the inbox. Early deletion
+requires a written reason, removes the provider audio, preserves the transcript, and creates an
+audit event. Acquisition representatives can play recordings but cannot delete them. Prospecting
+callers cannot access recordings or transcripts.
 
 ## Safety Behavior
 

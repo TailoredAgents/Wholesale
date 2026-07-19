@@ -15,6 +15,7 @@ class PermissionKeys:
     EXPORT_BUYERS = "buyers:export"
     SEND_BULK_COMMUNICATIONS = "communications:send_bulk"
     ACCESS_RECORDINGS = "communications:access_recordings"
+    MANAGE_RECORDINGS = "communications:manage_recordings"
     SEND_SMS = "communications:send_sms"
     SEND_ASSIGNED_SMS = "communications:send_assigned_sms"
     PLACE_CALLS = "communications:place_calls"
@@ -93,6 +94,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         PermissionKeys.ACCESS_RECORDINGS,
         "Access recordings",
         "Access call recordings and related transcripts.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_RECORDINGS,
+        "Manage recordings",
+        "Delete call audio before its retention deadline and audit the reason.",
     ),
     PermissionDefinition(
         PermissionKeys.SEND_SMS,

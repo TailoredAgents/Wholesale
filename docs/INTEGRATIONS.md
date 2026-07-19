@@ -54,6 +54,9 @@ Inbound calls route to the conversation owner or the company line assignee. Unkn
 a retained lead and conversation, while missed inbound calls create an urgent return-call task.
 Signed status and recording callbacks update the unified timeline idempotently. Recording audio is
 proxied through an authenticated permission check rather than exposing provider media URLs.
+Completed recordings receive a configurable retention deadline. The worker removes expired audio
+from Twilio, while owner-authorized early deletion requires a reason and writes an audit event.
+Transcripts remain attached to the call after audio deletion.
 
 Voice and recording remain independently disabled in deployment configuration. See
 [Twilio Voice Setup](./RUNBOOKS/twilio-voice-setup.md).

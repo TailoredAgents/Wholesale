@@ -660,6 +660,97 @@
   height: 30px;
 }
 
+.recordingControls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.recordingControls > span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.callMetadata .deleteRecordingButton {
+  width: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-color: #dfc5c2;
+  color: #9a3d36;
+  justify-content: center;
+}
+
+.retentionLabel {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.recordingDeleteForm {
+  padding: 9px;
+  border: 1px solid #dfc5c2;
+  border-radius: 5px;
+  background: #fff8f7;
+  display: grid;
+  gap: 8px;
+}
+
+.recordingDeleteForm label {
+  color: #7d3b35;
+  display: grid;
+  gap: 4px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.recordingDeleteForm input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 7px;
+  border: 1px solid #d7b6b2;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  text-transform: none;
+}
+
+.recordingDeleteForm > div {
+  display: flex;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.recordingDeleteForm button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.recordingDeleteForm .confirmRecordingDeleteButton {
+  border-color: #9a3d36;
+  background: #9a3d36;
+  color: #fff;
+}
+
+.recordingDeleteForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .transcriptPanel {
   margin-top: 2px;
   border-top: 1px solid rgba(104, 112, 115, 0.16);

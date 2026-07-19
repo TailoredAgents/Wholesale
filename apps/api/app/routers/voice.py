@@ -21,6 +21,8 @@ from app.schemas.voice import (
     VoiceLineCreate,
     VoiceLineListResponse,
     VoiceLineRead,
+    VoiceRecordingDelete,
+    VoiceRecordingRead,
     VoiceSessionRead,
 )
 from app.services.call_intelligence import review_call_transcript
@@ -31,6 +33,7 @@ from app.services.voice import (
     create_call_intent,
     create_voice_line,
     create_voice_session,
+    delete_recording,
     get_scoped_recording,
     list_voice_lines,
     update_voice_line,
@@ -43,6 +46,7 @@ call_dependency = require_any_permission(
 )
 manage_lines_dependency = require_permission(PermissionKeys.MANAGE_VOICE_LINES)
 recording_dependency = require_permission(PermissionKeys.ACCESS_RECORDINGS)
+recording_management_dependency = require_permission(PermissionKeys.MANAGE_RECORDINGS)
 
 
 @router.get("/session")
@@ -155,6 +159,32 @@ def read_voice_recording_media(
             "Content-Disposition": f'inline; filename="stonegate-call-{recording.id}.mp3"',
         },
     )
+
+
+@router.delete("/recordings/{recording_id}")
+def delete_voice_recording(
+    recording_id: UUID,
+    payload: VoiceRecordingDelete,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_management_dependency)],
+) -> VoiceRecordingRead:
+    try:
+        recording = delete_recording(
+            db,
+            principal,
+            recording_id,
+            reason=payload.reason,
+        )
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except TwilioRecordingError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    if recording is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found.")
+    return recording
 
 
 @router.patch("/transcripts/{transcript_id}/review")

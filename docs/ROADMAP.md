@@ -522,7 +522,7 @@ Delivered in the SMS foundation:
 - Delivery, failure, and undeliverable status updates on sent messages.
 - Render configuration that remains disabled until Twilio credentials are supplied.
 
-Delivered in the Phase 4 Voice foundation:
+Delivered in Communications Phase 5, Twilio Browser Calling:
 
 - Twilio browser Voice SDK with short-lived, user-specific access tokens.
 - One-time, conversation-scoped outbound call intents that prevent arbitrary browser dialing.
@@ -537,9 +537,20 @@ Delivered in the Phase 4 Voice foundation:
 - Render configuration that keeps Voice and recording independently disabled until activation.
 - A migration-tested Voice schema and an operator setup runbook.
 
+Delivered in Communications Phase 6, Recording and Transcription:
+
+- Per-call recording disclosure tracking for inbound and outbound calls.
+- Signed, idempotent Twilio recording callbacks and private role-gated audio playback.
+- OpenAI transcription with speaker-separated segments in the unified inbox timeline.
+- Structured call-note extraction with evidence timestamps and required human review.
+- Configurable audio retention deadlines and automatic provider deletion by the worker.
+- Owner-only early audio deletion with a required reason and complete audit history.
+- Persistent transcripts and reviewed CRM notes after provider audio expires or is deleted.
+- Deployment defaults that keep recording disabled until disclosure and Voice configuration are
+  explicitly approved and enabled.
+
 Remaining in the communications sequence:
 
-- OpenAI transcription, structured intake extraction, and human approval.
 - Communication-triggered follow-up tasks and notifications.
 - Email provider integration.
 

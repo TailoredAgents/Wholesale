@@ -48,6 +48,8 @@ class ConversationTimelineItemRead(BaseModel):
     duration_seconds: int | None = None
     recording_id: UUID | None = None
     recording_status: str | None = None
+    recording_retention_expires_at: datetime | None = None
+    recording_deleted_at: datetime | None = None
     transcript: CallTranscriptRead | None = None
 
 

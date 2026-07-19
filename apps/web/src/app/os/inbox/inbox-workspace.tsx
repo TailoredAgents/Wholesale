@@ -28,6 +28,7 @@ import {
   Send,
   ShieldAlert,
   ShieldCheck,
+  Trash2,
   UserRound,
   Users,
 } from "lucide-react";
@@ -88,6 +89,8 @@ type TimelineItem = {
   duration_seconds: number | null;
   recording_id: string | null;
   recording_status: string | null;
+  recording_retention_expires_at: string | null;
+  recording_deleted_at: string | null;
   transcript: CallTranscript | null;
 };
 
@@ -618,6 +621,9 @@ export function InboxWorkspace() {
   const [callMuted, setCallMuted] = useState(false);
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
   const [recordingLoadingId, setRecordingLoadingId] = useState<string | null>(null);
+  const [recordingDeleteTarget, setRecordingDeleteTarget] = useState<string | null>(null);
+  const [recordingDeleteReason, setRecordingDeleteReason] = useState("");
+  const [recordingDeleteStatus, setRecordingDeleteStatus] = useState<"idle" | "deleting">("idle");
 
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -909,6 +915,38 @@ export function InboxWorkspace() {
     },
     [apiBaseUrl, getHeaders],
   );
+
+  async function submitRecordingDeletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!detail || !recordingDeleteTarget || recordingDeleteReason.trim().length < 10) return;
+    setRecordingDeleteStatus("deleting");
+    setError(null);
+    try {
+      await request(`/api/v1/voice/recordings/${recordingDeleteTarget}`, {
+        method: "DELETE",
+        body: JSON.stringify({ reason: recordingDeleteReason.trim() }),
+      });
+      const objectUrl = recordingUrlsRef.current[recordingDeleteTarget];
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        delete recordingUrlsRef.current[recordingDeleteTarget];
+        setRecordingUrls((current) => {
+          const next = { ...current };
+          delete next[recordingDeleteTarget];
+          return next;
+        });
+      }
+      setRecordingDeleteTarget(null);
+      setRecordingDeleteReason("");
+      await loadDetail(detail.id);
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error ? deleteError.message : "Recording could not be deleted.",
+      );
+    } finally {
+      setRecordingDeleteStatus("idle");
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -1427,39 +1465,116 @@ export function InboxWorkspace() {
                         <>
                           <div className={styles.callMetadata}>
                             <span>{formatDuration(item.duration_seconds)}</span>
-                            {item.recording_id &&
-                            item.recording_status === "completed" &&
-                            me?.permissions.includes("communications:access_recordings") ? (
-                              recordingUrls[item.recording_id] ? (
-                                <audio
-                                  controls
-                                  preload="none"
-                                  src={recordingUrls[item.recording_id]}
-                                >
-                                  Call recording
-                                </audio>
-                              ) : (
+                            <div className={styles.recordingControls}>
+                              {item.recording_id &&
+                              item.recording_status === "completed" &&
+                              me?.permissions.includes("communications:access_recordings") ? (
+                                recordingUrls[item.recording_id] ? (
+                                  <audio
+                                    controls
+                                    preload="none"
+                                    src={recordingUrls[item.recording_id]}
+                                  >
+                                    Call recording
+                                  </audio>
+                                ) : (
+                                  <button
+                                    disabled={recordingLoadingId === item.recording_id}
+                                    onClick={() => void loadRecording(item.recording_id as string)}
+                                    type="button"
+                                  >
+                                    <Play size={13} aria-hidden="true" />
+                                    {recordingLoadingId === item.recording_id
+                                      ? "Loading"
+                                      : "Play recording"}
+                                  </button>
+                                )
+                              ) : item.recording_status === "deleted" ? (
+                                <span>
+                                  Audio deleted
+                                  {item.recording_deleted_at
+                                    ? ` ${formatDateTime(item.recording_deleted_at)}`
+                                    : ""}
+                                </span>
+                              ) : item.recording_status ? (
+                                <span>Recording {labelize(item.recording_status)}</span>
+                              ) : null}
+                              {item.recording_id &&
+                              item.recording_status === "completed" &&
+                              me?.permissions.includes("communications:manage_recordings") ? (
                                 <button
-                                  disabled={recordingLoadingId === item.recording_id}
-                                  onClick={() => void loadRecording(item.recording_id as string)}
+                                  className={styles.deleteRecordingButton}
+                                  onClick={() => {
+                                    setRecordingDeleteTarget(item.recording_id);
+                                    setRecordingDeleteReason("");
+                                  }}
+                                  title="Delete call audio"
                                   type="button"
                                 >
-                                  <Play size={13} aria-hidden="true" />
-                                  {recordingLoadingId === item.recording_id
-                                    ? "Loading"
-                                    : "Play recording"}
+                                  <Trash2 size={13} aria-hidden="true" />
+                                  <span className={styles.visuallyHidden}>Delete call audio</span>
                                 </button>
-                              )
-                            ) : item.recording_status &&
-                              item.recording_status !== "completed" ? (
-                              <span>Recording {labelize(item.recording_status)}</span>
-                            ) : null}
+                              ) : null}
+                            </div>
                           </div>
+                          {item.recording_status === "completed" &&
+                          item.recording_retention_expires_at ? (
+                            <span className={styles.retentionLabel}>
+                              Audio retained until{" "}
+                              {formatDateTime(item.recording_retention_expires_at)}
+                            </span>
+                          ) : null}
+                          {recordingDeleteTarget === item.recording_id ? (
+                            <form
+                              className={styles.recordingDeleteForm}
+                              onSubmit={submitRecordingDeletion}
+                            >
+                              <label>
+                                Deletion reason
+                                <input
+                                  autoFocus
+                                  minLength={10}
+                                  onChange={(event) =>
+                                    setRecordingDeleteReason(event.target.value)
+                                  }
+                                  placeholder="Why must this audio be deleted early?"
+                                  required
+                                  value={recordingDeleteReason}
+                                />
+                              </label>
+                              <div>
+                                <button
+                                  disabled={recordingDeleteStatus === "deleting"}
+                                  onClick={() => {
+                                    setRecordingDeleteTarget(null);
+                                    setRecordingDeleteReason("");
+                                  }}
+                                  type="button"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  className={styles.confirmRecordingDeleteButton}
+                                  disabled={
+                                    recordingDeleteStatus === "deleting" ||
+                                    recordingDeleteReason.trim().length < 10
+                                  }
+                                  type="submit"
+                                >
+                                  <Trash2 size={13} aria-hidden="true" />
+                                  {recordingDeleteStatus === "deleting"
+                                    ? "Deleting"
+                                    : "Delete audio"}
+                                </button>
+                              </div>
+                            </form>
+                          ) : null}
                           {item.transcript &&
                           me?.permissions.includes("communications:access_recordings") ? (
                             <CallTranscriptPanel
                               canReview={Boolean(
                                 me.permissions.includes("leads:edit") &&
+                                  item.recording_status === "completed" &&
                                   me.permissions.includes(
                                     "communications:access_recordings",
                                   ),

@@ -321,6 +321,8 @@ def review_call_transcript(
         return transcript_to_read(db, transcript)
 
     recording = db.get(CallRecording, transcript.recording_id)
+    if recording is None or recording.deleted_at is not None or recording.status != "completed":
+        raise ValueError("Call audio is unavailable for the required human review.")
     call = db.get(CallRecord, recording.call_record_id) if recording else None
     if call is None:
         raise ValueError("Call record is unavailable.")

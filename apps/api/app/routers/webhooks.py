@@ -15,6 +15,7 @@ from app.services.voice import (
     process_inbound_voice_request,
     process_outbound_voice_request,
     process_voice_recording,
+    process_voice_recording_disclosure,
     process_voice_status,
 )
 
@@ -164,10 +165,19 @@ async def twilio_voice_recording(
 @router.post("/voice/disclosure")
 async def twilio_voice_recording_disclosure(
     request: Request,
+    db: Annotated[Session, Depends(get_db)],
     signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
+    intent_id: UUID | None = None,
+    call_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
     validate_request(request, payload, signature)
+    process_voice_recording_disclosure(
+        db,
+        payload,
+        intent_id=intent_id,
+        call_id=call_id,
+    )
     return Response(content=disclosure_twiml(get_settings()), media_type="application/xml")
 
 

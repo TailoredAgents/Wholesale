@@ -6,6 +6,7 @@ import structlog
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.services.call_intelligence import process_next_call_transcript
+from app.services.voice import purge_next_expired_recording
 
 logger = structlog.get_logger()
 
@@ -29,13 +30,19 @@ def run_worker(stop_event: threading.Event) -> None:
     )
     while not stop_event.is_set():
         processed_id = None
+        purged_recording_id = None
         try:
             with SessionLocal() as db:
                 processed_id = process_next_call_transcript(db, settings)
+                if processed_id is None:
+                    purged_recording_id = purge_next_expired_recording(db, settings)
         except Exception:
-            logger.exception("call_transcript_worker_iteration_failed")
+            logger.exception("communications_worker_iteration_failed")
         if processed_id is not None:
             logger.info("call_transcript_processed", transcript_id=str(processed_id))
+            continue
+        if purged_recording_id is not None:
+            logger.info("expired_call_recording_deleted", recording_id=str(purged_recording_id))
             continue
         stop_event.wait(settings.call_transcription_poll_seconds)
     logger.info("worker_stopped", service="stonegate-call-intelligence-worker")

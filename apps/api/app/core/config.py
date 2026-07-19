@@ -78,6 +78,12 @@ class Settings(BaseSettings):
         le=25_000_000,
         validation_alias="CALL_TRANSCRIPTION_MAX_AUDIO_BYTES",
     )
+    call_recording_retention_days: int = Field(
+        default=180,
+        ge=1,
+        le=3650,
+        validation_alias="CALL_RECORDING_RETENTION_DAYS",
+    )
     property_data_provider: str = Field(
         default="rentcast",
         validation_alias="PROPERTY_DATA_PROVIDER",
@@ -297,6 +303,7 @@ class Settings(BaseSettings):
             self.twilio_voice_configured
             and self.twilio_voice_recording_enabled
             and self.twilio_voice_recording_disclosure
+            and self.call_recording_retention_days
         )
 
 
