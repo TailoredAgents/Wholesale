@@ -135,7 +135,7 @@ services:
       - key: TWILIO_SMS_ALLOWED_END_HOUR
         value: 24
       - key: TWILIO_VOICE_ENABLED
-        value: false
+        sync: false
       - key: TWILIO_VOICE_FROM_NUMBER
         sync: false
       - key: TWILIO_TWIML_APP_SID
@@ -151,7 +151,7 @@ services:
       - key: TWILIO_VOICE_ALLOWED_END_HOUR
         value: 20
       - key: TWILIO_VOICE_RECORDING_ENABLED
-        value: false
+        sync: false
       - key: TWILIO_VOICE_RECORDING_DISCLOSURE
         sync: false
       - key: UNDERWRITING_OFFER_LOW_PERCENTAGE
