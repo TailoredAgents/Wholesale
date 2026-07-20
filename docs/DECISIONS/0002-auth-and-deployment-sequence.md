@@ -42,8 +42,8 @@ Tradeoffs:
 
 ## Follow-Up
 
-- Create Clerk project and collect local/staging environment variables.
-- Add Clerk environment variables locally and on Render.
-- Map the first Clerk user to the local owner user.
-- Require MFA for privileged users in Clerk.
-- Keep development header auth disabled in production.
+- Completed: Clerk project and Render variables.
+- Completed: first Clerk user mapped to the local owner.
+- Completed: development header auth rejected in production.
+- Remaining: verify and enforce MFA for every privileged user.
+- Remaining: update Clerk origins and redirects during the custom-domain cutover.

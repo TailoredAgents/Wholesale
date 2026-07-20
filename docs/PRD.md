@@ -1,33 +1,131 @@
-# PRD
+# Product Requirements
 
-Build a local-first operating system for a Georgia real-estate wholesaling company. The product connects seller lead capture, CRM, communications, underwriting, offer approval, contracts, transaction coordination, buyer disposition, compensation, attribution, reporting, and controlled AI automation.
+Last updated: July 20, 2026
 
-## Current State
+## Product
 
-- The repository now contains a local monorepo foundation.
-- No legacy application code existed before this scaffold.
-- PostgreSQL is the source of truth.
-- AI, transcripts, provider payloads, and vector search are supporting records only.
+Stonegate Home Buyers is a unified website and operating system for a Georgia real-estate
+wholesaling company. It connects seller acquisition, team communication, underwriting, offers,
+contracts, transactions, buyers, dispositions, finance, marketing attribution, and controlled AI
+automation.
 
-## MVP
+## Users
 
-1. Capture seller leads with consent and attribution.
-2. Create contact, property, and lead records.
-3. Work seller leads through a pipeline.
-4. Record communications and follow-up tasks.
-5. Underwrite property with comps, ARV, repairs, and offer scenarios.
-6. Require human approval for material decisions.
-7. Track buyers, transactions, closing revenue, and compensation.
-8. Report advertising spend as a percentage of collected revenue.
+- Motivated property seller.
+- Owner/CEO.
+- Acquisitions specialist.
+- Restricted VA prospecting caller.
+- Disposition specialist.
+- Transaction coordinator.
+- Approved AI and provider service identities.
 
-## Blocking Decisions
+## Core Outcomes
 
-- Initial company/organization name.
+1. Convert a public visitor into a consented, attributed seller lead.
+2. Contact and qualify that lead quickly without losing history.
+3. Hand a qualified lead from a VA to acquisitions without copying or moving records between
+   accounts.
+4. Prepare an explainable comp analysis, ARV range, repair range, and offer scenarios.
+5. Require human approval for price, contract, buyer, financial, and sensitive communication
+   decisions.
+6. Coordinate contract, title, buyer, closing, revenue, compensation, and marketing attribution.
+7. Use AI to reduce repetitive work while preserving evidence, permissions, and review.
+
+## Functional Requirements
+
+### Public
+
+- Public pages must remain separate from the internal OS.
+- Seller forms must capture property context, attribution, contact permission, and optional SMS
+  consent.
+- Consent evidence must retain wording, version, source, timestamp, IP, and user agent.
+- Duplicate submissions must preserve new evidence while avoiding duplicate active leads.
+
+### CRM
+
+- Every lead links seller, property, tasks, appointments, communications, underwriting,
+  transaction, buyer, source, activity, and audit history.
+- Assignment changes ownership without losing history.
+- Restricted roles can access only assigned records and permitted actions.
+
+### Communications
+
+- SMS, email, calls, recordings, transcripts, and notes share one chronological conversation.
+- Provider events are signed, idempotent, and retained.
+- Outbound communication requires permission, valid destination, consent, suppression, contact
+  rules, and configured provider.
+- STOP revokes SMS eligibility across the organization.
+
+### Underwriting
+
+- Comparable selection and exclusion must be explainable.
+- ARV and offer outputs must be ranges with versioned assumptions.
+- Reports must support internal review and seller-facing discussion.
+- Unconfirmed renovation status may reduce confidence but must not hide results or reports.
+
+### AI
+
+- Every model run records model, prompt, tools, evidence, status, cost, and review outcome.
+- AI cannot independently make offers, send contracts, select buyers, change payments, administer
+  users, override compliance, or provide legal or financial advice.
+
+## Non-Functional Requirements
+
+- Organization-scoped authorization.
+- UTC timestamps and integer-cent money.
+- Append-only audit history for material actions.
+- Secure secret storage and private provider media.
+- Responsive public and OS interfaces.
+- Idempotent webhooks and outbound dispatch.
+- Observable workers and recoverable provider failures.
+- Backups and tested restoration before broad production use.
+
+## Current Release State
+
+The broad product foundation is implemented and deployed. Final SMS, Voice, custom-domain, and
+Google Workspace activation is pending external/provider setup. See `CURRENT_STATE.md`.
+
+## Launch Gates
+
+- Dedicated A2P Campaign and Stonegate SMS sender approved.
+- SMS, Voice, email, domain, Clerk, and CORS acceptance tests pass.
+- Recording remains disabled until disclosure policy is approved.
+- Backups, alerts, access revocation, and smoke tests are verified.
+- Underwriting is compared against real deals before it is treated as dependable offer support.
+- AI external autonomy remains disabled until an evaluation-backed pilot is approved.
+
+## Success Measures
+
+- Seller form completion.
+- Median speed-to-lead.
+- Contact, appointment, offer, and contract conversion.
+- Follow-up SLA.
+- Underwriting review accuracy and correction rate.
+- Days from contract to disposition and close.
+- Net revenue and source profitability.
+- AI acceptance, correction, failure, cost, and time saved.
+
+## Resolved Decisions
+
+- Business-facing brand: Stonegate Home Buyers.
+- Repository: `TailoredAgents/Wholesale`.
+- Hosting: Render.
+- Authentication: Clerk with local RBAC.
+- Database: PostgreSQL.
+- AI provider: OpenAI.
+- Current property data: RentCast.
+- SMS and Voice: Twilio, with a dedicated Stonegate Messaging Service and SMS number.
+- Operational email: Google Workspace.
+- Cold email, if approved later: separate outreach infrastructure rather than operational Gmail.
+
+## Open Decisions
+
+- Branded custom domain.
+- Google Workspace mailbox names.
+- Recording disclosure and state coverage.
 - Object storage provider.
-- Render staging resource configuration.
-
-Resolved:
-
-- Authentication provider: Clerk.
-- GitHub timing: after staff lead editing and speed-to-lead workflow.
-- Render staging timing: soon after GitHub push.
+- E-signature provider.
+- Calendar rollout details.
+- Accounting integration.
+- Error monitoring provider.
+- Secondary property-data provider.

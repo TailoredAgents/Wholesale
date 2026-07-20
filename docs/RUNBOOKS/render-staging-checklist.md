@@ -1,5 +1,10 @@
 # Render Staging Checklist
 
+Status: the initial Render environment exists.
+
+Use this file as an environment inventory when reviewing the existing `oakwell-*` resources. Do
+not create a second set of resources. Current deployment status is in `../RENDER_DEPLOYMENT.md`.
+
 ## Required Inputs
 
 - Render account/project access.
@@ -57,7 +62,7 @@
 
 ## Deploy Steps
 
-1. Create Render resources from `render.yaml`.
+1. Review the existing Render resources against `render.yaml`; do not create duplicates.
 2. Set all synced secret/env values in Render.
 3. Deploy API; startup runs `alembic upgrade head`.
 4. Bootstrap the owner user against staging:
@@ -72,6 +77,9 @@ DATABASE_URL="<render database url>" uv run python -m app.cli.bootstrap \
 5. Sign in through Clerk.
 6. Map the Clerk user to the local owner if email auto-linking did not set `external_auth_id`.
 7. Confirm `/health`, `/ready`, public website, public intake, `/os`, and speed-to-lead queue.
+
+Twilio, Voice, recording, and Google Workspace variables are maintained in their dedicated
+runbooks because they are activated independently.
 
 ## Clerk Requirements
 

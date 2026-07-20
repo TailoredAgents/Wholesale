@@ -1,5 +1,10 @@
 # Twilio SMS Setup
 
+Last updated: July 20, 2026
+
+Current status: implementation complete; Stonegate's new dedicated A2P Campaign is under review.
+Do not perform the production sender cutover until the Campaign and new number are approved.
+
 Phase 3 uses a Twilio Messaging Service so Stonegate owns the phone numbers, routing, opt-out
 controls, and delivery callbacks in one place. SMS is disabled by default and will not send until
 the API service is configured and `TWILIO_SMS_ENABLED` is set to `true`.
@@ -31,7 +36,7 @@ Add these environment variables only to the API service:
 | `TWILIO_ACCOUNT_SID` | Account SID from Twilio |
 | `TWILIO_AUTH_TOKEN` | Auth Token from Twilio |
 | `TWILIO_MESSAGING_SERVICE_SID` | Messaging Service SID from Twilio |
-| `TWILIO_SMS_FROM_NUMBER` | Stonegate sender in E.164 format: `+16785417725` |
+| `TWILIO_SMS_FROM_NUMBER` | Newly purchased, campaign-approved Stonegate SMS number in E.164 format |
 | `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://oakwell-api.onrender.com` |
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
 | `TWILIO_SMS_ENABLED` | `true` after the remaining steps are complete |
@@ -40,6 +45,9 @@ Add these environment variables only to the API service:
 | `TWILIO_SMS_ALLOWED_END_HOUR` | `24` |
 
 Do not add Twilio secrets to `oakwell-web`, GitHub, or any `NEXT_PUBLIC_` variable.
+
+`TWILIO_SMS_FROM_NUMBER` and `TWILIO_VOICE_FROM_NUMBER` are intentionally independent. Do not use
+the existing Voice/support number here unless it is the number registered to the new Campaign.
 
 The optional `TWILIO_API_KEY_SID` and `TWILIO_API_KEY_SECRET` values can be used together for
 outbound API authentication. Keep both the Account SID and Auth Token configured because Twilio
@@ -80,6 +88,8 @@ number. That would route inbound messages for every sender in the service into S
 8. Send `STOP`; confirm the inbox shows the number as suppressed and prevents another outbound
    message.
 9. Send `START`; confirm the suppression is lifted before sending again.
+10. Submit a new website lead with the optional SMS box checked and confirm the immediate
+    enrollment message identifies Stonegate, discloses frequency and rates, and explains STOP.
 
 If the test fails, inspect the `oakwell-api` logs for the outbound request or webhook response and
 check the Twilio Messaging logs for the provider error code.

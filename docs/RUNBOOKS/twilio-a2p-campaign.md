@@ -1,5 +1,10 @@
 # Twilio A2P Campaign Registration
 
+Last updated: July 20, 2026
+
+Current status: the campaign described below was submitted and is under provider review. Preserve
+the submitted public URLs and wording unless Twilio requests a correction.
+
 Use this runbook for Stonegate Home Buyers' separate seller-communications campaign. This campaign
 is limited to people who explicitly consent through Stonegate's public cash-offer form. It does not
 cover purchased lists, third-party lead consent, or unsolicited cold SMS.

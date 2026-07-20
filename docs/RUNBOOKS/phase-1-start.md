@@ -1,5 +1,10 @@
 # Phase 1 Start
 
+Status: Historical and completed.
+
+This file preserves the original foundation build order. Use `../CURRENT_STATE.md` for the current
+baseline and `../ROADMAP.md` for active development.
+
 ## Build Order
 
 1. Initialize monorepo.
@@ -17,3 +22,6 @@
 - Communication compliance gates are tested.
 - Auth and RBAC tests pass.
 - Secrets are outside the repository.
+
+The foundation requirements above were implemented. Provider-specific production launch gates
+remain documented in the current roadmap and integration runbooks.

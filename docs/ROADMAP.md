@@ -1,695 +1,242 @@
 # Roadmap
 
-## Current Strategy
+Last updated: July 20, 2026
 
-Build locally first, keep the system testable at each milestone, then push to GitHub after the local staff lead workflow and speed-to-lead queue are in place. After GitHub is set up, create a Render staging deployment early so deployment issues are discovered before the product surface becomes large.
+`CURRENT_STATE.md` is the source of truth for what exists today. This roadmap defines the build
+order after the pending Twilio, domain, and email setup is complete.
 
-Current assumptions:
+## Current Gate: Integration Closeout
 
-- Authentication provider: Clerk.
-- GitHub push timing: after staff lead editing and speed-to-lead workflow.
-- Render staging timing: soon after GitHub push.
-- Business-facing company name: `Stonegate Home Buyers`.
-- Current local organization: `Stonegate Home Buyers`.
-- AI model default: `gpt-5.6-terra`.
-- Comp automation requires property data APIs before AI can draft ARV support.
+Status: Waiting on external A2P review.
 
-## Completed Local Milestones
+The application code for SMS, Voice, recording/transcription, AI call review, and Google Workspace
+email is implemented. Production setup is intentionally paused while Stonegate's dedicated A2P
+Campaign is reviewed.
 
-### M0: Local Monorepo Foundation
+Resume checklist:
 
-Status: Done.
+- A2P Campaign shows approved or verified.
+- New Stonegate SMS number is attached only to the new Stonegate Messaging Service.
+- Final SMS sender and Messaging Service SID are entered in Render.
+- Voice credentials and TwiML App are configured.
+- Custom domain is selected and connected.
+- Google Workspace domain and operational mailboxes exist.
 
-Delivered:
+## Phase 1: Production Integration Closeout
 
-- Root git repository.
-- Next.js web app.
-- FastAPI API app.
-- Python worker scaffold.
-- PostgreSQL local development database.
-- Alembic migrations.
-- Render Blueprint draft.
-- Local README and runbook.
+Goal: Make communications and identity infrastructure reliable end to end.
 
-Acceptance met:
+Deliver:
 
-- Web app builds.
-- API health/readiness works.
-- Worker starts.
-- Local database migrates.
-- Baseline committed.
+- Activate the approved Stonegate Messaging Service and dedicated SMS number.
+- Send immediate enrollment confirmation after website SMS opt-in.
+- Verify outbound, inbound, delivery, failure, STOP, START, HELP, and duplicate webhook behavior.
+- Finish browser Voice setup and move only the selected Stonegate Voice number's inbound webhook.
+- Keep recording disabled until disclosure and operating-state policy are approved.
+- Connect the custom domain to Render and preserve the existing Render URLs.
+- Update Clerk authorized parties, API CORS origins, Google OAuth redirects, public links, and
+  provider callback URLs.
+- Configure Google Workspace OAuth and connect the owner mailbox.
+- Verify email sending, replies, threading, signatures, templates, attachments, and worker sync.
 
-### M1: RBAC And Bootstrap Foundation
+Exit criteria:
 
-Status: Done.
+- A consented test seller can move through web form, SMS, call, and email in one conversation.
+- STOP blocks every Stonegate user immediately.
+- Incoming calls and messages attach once to the correct lead.
+- Domain, authentication, and OAuth redirects work without `401`, CORS, or signature errors.
+- Another company's numbers, Messaging Service, and webhooks are unchanged.
 
-Delivered:
+## Phase 2: Reliability, Security, And Operations
 
-- Organization seed.
-- Owner bootstrap command.
-- 14 default roles.
-- 22 default permissions.
-- Role-permission mappings.
-- Development-only protected route pattern.
-- `/api/v1/me`.
+Goal: Establish a production baseline before adding more business complexity.
 
-Acceptance met:
+Deliver:
 
-- Bootstrap is idempotent.
-- Protected route returns 401 without dev identity.
-- Seeded owner resolves with permissions.
-- Tests cover bootstrap and principal resolution.
+- Error monitoring, structured alerts, uptime checks, and provider failure dashboards.
+- Database backup and restore drill.
+- Worker health, retry, dead-letter, and idempotency review.
+- Secret inventory and rotation process.
+- Owner/admin MFA enforcement and user deactivation test.
+- CI review, dependency update policy, and resolution of the local filesystem/tooling stalls.
+- Production smoke-test checklist for every deployment.
+- Audit-log review tools for communications, recordings, approvals, and financial changes.
 
-### M2: Lead API And Live Dashboard
+Exit criteria:
 
-Status: Done.
+- Critical failures alert the owner.
+- Restore, rollback, and access-revocation procedures are tested.
+- No production feature depends on an unmonitored background job.
 
-Delivered:
+## Phase 3: Acquisition Workflow Completion
 
-- Protected lead create/list API.
-- Dashboard summary API.
-- Dashboard connected to live Postgres counts.
-- Lead create writes activity and audit events.
+Goal: Make the OS complete for the owner, acquisitions specialist, and VA calling team.
 
-Acceptance met:
+Deliver:
 
-- Leads can be created through API.
-- Dashboard reads live lead and pipeline counts.
-- Tests cover lead creation, listing, dashboard counts, and auth requirement.
+- User and team administration for owner, acquisitions, disposition, and VA roles.
+- Calling-list assignment and list-level progress.
+- Appointment reschedule, cancel, no-show, completed, and outcome workflows.
+- Google Calendar synchronization and reminders.
+- Persistent user/team saved views.
+- Duplicate review, merge, and merge audit.
+- Notifications for new leads, handoffs, appointments, overdue tasks, and seller replies.
+- Follow-up plans and approval-based sequences.
+- Mobile inbox and lead-workspace refinement.
 
-### M3: Public Seller Intake
+Exit criteria:
 
-Status: Done.
+- A VA can prospect and hand off without seeing restricted business data.
+- Acquisitions can work every qualified lead through appointment and offer preparation.
+- The owner can monitor workload, SLA, and handoff quality without manual spreadsheets.
 
-Delivered:
+## Phase 4: Underwriting Validation And Offer Workflow
 
-- Public cash-offer form at `/get-a-cash-offer`.
-- Public seller lead intake API.
-- Consent records.
-- Raw form submissions.
-- Attribution touches.
-- UTM, GCLID, FBCLID, landing page, referrer, IP, and user-agent capture.
+Goal: Turn comping into repeatable, explainable offer preparation.
 
-Acceptance met:
+Deliver:
 
-- Public form/API creates contact, property, lead, consent, form submission, attribution, activity, and audit records.
-- Consent is required.
-- Tests cover consent and record creation.
+- Comp candidate review UI with include, exclude, reason, and manual weighting.
+- Address validation and stronger subject-property normalization.
+- Optional ATTOM or MLS/RESO enrichment behind the property-data adapter.
+- Market-specific calibration datasets and backtesting against known sales.
+- Repair scope presets, contractor estimates, and version comparison.
+- Offer ceiling approval requests and negotiation scenarios.
+- Seller-meeting brief, objection preparation, and approved price discussion notes.
+- Final investor and client report polish with Stonegate's custom domain and contact information.
 
-### M4: Duplicate Detection
+Exit criteria:
 
-Status: Started and functional locally.
+- Every ARV and offer range can be explained from retained data and adjustments.
+- Material assumptions have an owner and timestamp.
+- No AI-generated value bypasses human comp review or offer approval.
 
-Delivered:
+## Phase 5: Contracts And Transaction Coordination
 
-- Contact methods for normalized email/phone.
-- Normalized property address key.
-- Public intake duplicate matching.
-- Duplicate submissions reuse existing active lead when contact and property match.
-- Duplicate submissions still preserve consent, form, attribution, activity, and audit evidence.
+Goal: Run an accepted offer through closing without outside checklists.
 
-Acceptance met:
+Deliver:
 
-- Repeat email/phone/address returns `matched_existing_lead`.
-- Repeat submission does not create another active lead.
-- Tests cover duplicate matching.
+- Contract and addendum template records.
+- Offer and contract approval workflow.
+- E-signature provider adapter.
+- Secure object storage and document permissions.
+- Checklist completion, ownership, due dates, dependencies, and escalation.
+- Earnest money, inspection, title, payoff, closing, and assignment deadline tracking.
+- Closing attorney/title communication timeline.
 
-Remaining hardening:
+Exit criteria:
 
-- More robust address normalization.
-- Fuzzy duplicate review queue.
-- Manual merge workflow.
-- Duplicate confidence/explanation fields.
+- An approved offer can become a signed contract and completed transaction with a complete audit
+  trail.
 
-### M5: Lead Detail And Stage Workflow
+## Phase 6: Buyers And Dispositions
 
-Status: Done.
+Goal: Match contracted deals to qualified buyers and manage assignment outcomes.
 
-Delivered:
+Deliver:
 
-- Protected lead detail API.
-- Protected stage update API.
-- Internal lead detail page.
-- Dashboard lead links.
-- Stage update control.
-- Lead detail shows contact methods, consent, attribution, and recent activity.
-- Stage updates write activity and audit events.
+- Buyer proof-of-funds documents and expiration.
+- Market, property, price, strategy, and volume criteria.
+- Ranked buyer matching with human review.
+- Deal room and approved marketing package.
+- Controlled email/SMS deal distribution.
+- Buyer response, showing, offer, deposit, selection, and backup-buyer workflows.
+- Disposition performance and buyer reliability reporting.
 
-Acceptance met:
+Exit criteria:
 
-- Lead detail API returns complete context.
-- Stage update changes the pipeline stage.
-- Stage update is audited.
-- Web detail route renders.
-- Tests cover detail, stage update, invalid stage rejection.
+- Stonegate can move a contract from deal approval to selected buyer without a separate buyer CRM.
 
-### M6: Staff Lead Editing
+## Phase 7: Finance, Compensation, And Accounting
 
-Status: Done.
+Goal: Close the loop from lead source to collected cash.
 
-Delivered:
+Deliver:
 
-- Protected staff lead edit API.
-- Seller legal/preferred name editing.
-- Email and phone contact method add/update.
-- Property address, county, and property type editing.
-- Lead source and temperature editing.
-- Structured property fields returned by lead APIs for edit prefill.
-- Lead detail edit form.
-- Audit events with previous and new values for material edits.
-- Activity timeline entry for material edits.
-- Tests added for successful edit/audit behavior and auth requirement.
+- Payment and collection status.
+- Monthly close and reconciliation.
+- Compensation approvals and payout status.
+- QuickBooks Online integration or controlled export.
+- Marketing spend imports.
+- Deal-level profitability and cash forecasting.
+- Owner P&L, revenue-by-source, and advertising-percentage reporting.
 
-Verification completed:
+Exit criteria:
 
-- API lint.
-- API typecheck.
-- Python compile check.
-- Full API test suite.
+- Every collected dollar ties to a transaction, source, deductions, compensation, and accounting
+  record.
 
-Verification blocked:
+## Phase 8: AI Agent Production Foundation
 
-- Broad web lint, Next build, TypeScript compiler, and Next dev server hung before producing diagnostics in this local shell.
+Goal: Move from AI-capable records to evaluated, permissioned agents.
 
-### M7: Speed-To-Lead Queue
+Deliver:
 
-Status: Done.
+- Versioned evaluation datasets for intake, follow-up, calls, underwriting, and compliance.
+- Agent runner with dry-run mode, retries, budgets, and trace review.
+- Intake summarizer and qualification-gap agent.
+- Follow-up draft agent with human approval.
+- Speed-to-lead and missed-reply monitor.
+- Underwriting research assistant that cannot set approved values.
+- Compliance preflight agent that cannot override deterministic rules.
 
-Delivered:
+Exit criteria:
 
-- Lead-linked task metadata and Alembic migration.
-- Configurable speed-to-lead due threshold through `SPEED_TO_LEAD_DUE_MINUTES`.
-- Idempotent speed-to-lead task creation for public seller submissions.
-- Protected speed-to-lead queue API.
-- Protected task completion API.
-- Dashboard queue panel backed by real open tasks.
-- Due/overdue/unscheduled queue state labels.
-- Dashboard task completion action.
-- Activity event when a speed-to-lead task is created.
-- Audit and activity events when a task is completed.
-- Tests for task creation, duplicate suppression, queue retrieval, completion, audit, and activity.
+- Every agent action is attributable to a prompt, model, tool permission, evidence, cost, and human
+  decision.
+- No external action is enabled without an explicit pilot decision.
 
-Acceptance met:
+## Phase 9: Controlled Automation And Team Intelligence
 
-- Public lead submission creates an acquisition follow-up task.
-- Duplicate public submissions do not create duplicate open speed-to-lead tasks.
-- Dashboard fetches and displays the live speed-to-lead queue.
-- Queue distinguishes due and overdue tasks.
-- Staff can mark a speed-to-lead task complete.
-- Completion is audited and recorded as activity.
-- Tests cover task creation and queue behavior.
+Goal: Automate repetitive low-risk work after measured accuracy.
 
-Verification completed:
+Deliver:
 
-- Alembic migration applied locally.
-- API lint.
-- API typecheck.
-- Python compile check.
-- Targeted M7 API tests.
-- Full API test suite.
+- Approval-based follow-up sequences.
+- Call coaching and missed-opportunity detection.
+- AI-proposed CRM field updates with evidence.
+- Appointment reminders and unanswered-message escalation.
+- VA and acquisitions quality dashboards.
+- Low-risk automation pilots only after documented evaluation thresholds are met.
+- Separate Smartlead-style cold email integration if Stonegate approves that channel and its
+  compliance process.
 
-Verification blocked:
+Exit criteria:
 
-- Broad web lint, Next build, and TypeScript compiler hung before producing diagnostics in this local shell.
+- Automation saves measurable staff time without increasing complaints, corrections, missed
+  follow-up, or compliance failures.
 
-### M8: Clerk Authentication
+## Phase 10: Growth, Optimization, And Premium Product Quality
 
-Status: Implemented locally; Clerk project credentials still required for live sign-in.
+Goal: Improve conversion, operating efficiency, and polish after core workflows are dependable.
 
-Delivered:
+Deliver:
 
-- Clerk dependency installed in the Next.js app.
-- `ClerkProvider` added at the app root.
-- Clerk middleware added for internal dashboard and lead routes.
-- Clerk sign-in and sign-up routes.
-- Server-rendered API requests send Clerk bearer tokens when available.
-- Client-side staff actions send Clerk bearer tokens when available.
-- FastAPI verifies Clerk JWTs through JWKS.
-- Clerk subject maps to local `users.external_auth_id`.
-- Existing local user can be linked by email after token verification.
-- Production rejects development header auth.
-- Local development can still use `X-Dev-User-Email` when no Clerk token is present.
-- Clerk environment variables documented in `.env.example`.
+- Additional seller-situation and campaign landing pages.
+- Branded photography, local proof, testimonials, and trust assets as they become available.
+- Google Ads offline conversion delivery and Meta Conversions API.
+- A/B testing with one controlled variable at a time.
+- Page-speed, accessibility, mobile, and Core Web Vitals passes.
+- OS information-density, keyboard flow, empty-state, and responsive refinement.
+- Executive reporting for funnel, team, deal, finance, marketing, and AI performance.
 
-Acceptance met:
+Exit criteria:
 
-- Signed-in Clerk users can be mapped to local RBAC users.
-- API validates Clerk identity before resolving local permissions.
-- Local user permissions remain the authorization source.
-- Production cannot use `X-Dev-User-Email`.
-- Tests cover production rejection of dev auth and mapped Clerk principal access.
+- Public conversion and internal workflow changes are driven by measured outcomes.
+- The platform meets Stonegate's premium quality bar on desktop and mobile.
 
-Verification completed:
+## Ordering Rules
 
-- API lint.
-- API typecheck.
-- Full API test suite.
-- Web production build using `next build --webpack`.
+- Complete Phase 1 before enabling live communications.
+- Complete the reliability controls in Phase 2 before broad team onboarding.
+- Complete acquisition and underwriting controls before contract automation.
+- Complete transactional records before accounting synchronization.
+- Complete evaluation and approval infrastructure before AI autonomy.
 
-Verification blocked:
+## Explicitly Deferred
 
-- Broad web lint still hangs before producing diagnostics in this local shell.
-
-Remaining setup:
-
-- Create Clerk project.
-- Add local and Render Clerk environment variables.
-- Map the first Clerk user to the existing owner user.
-- Require MFA for owner/admin users in Clerk.
-
-## Current Phase
-
-Phase 2A: Staging Stabilization And Public Conversion Foundation.
-
-Objective:
-
-Use the live staging deployment to harden the public seller conversion flow and the internal OS
-workspace. The unified product direction is documented in `docs/UNIFIED_BUILD_PLAN.md`.
-
-## Next Milestones
-
-### M9: Local Pre-Render Hardening
-
-Status: Done.
-
-Goal:
-
-Prepare the repository for CI and Render staging.
-
-Delivered:
-
-- Removed generated create-next-app README copy that conflicted with project docs.
-- Removed unused create-next-app SVG assets.
-- Added GitHub Actions CI for API lint/typecheck/tests and web production build.
-- Added secret scanning guidance.
-- Confirmed `.gitignore` covers env files, dependency installs, build output, caches, and local conflict artifacts.
-- Added GitHub branch protection and issue-label plan.
-- Added Render staging checklist.
-- Reviewed and updated Render Blueprint for current service commands, Stonegate service names, migrations, and Clerk env vars.
-
-Acceptance met:
-
-- Local verification passes for API and web build.
-- No tracked local secrets found by pattern scan.
-- README can bootstrap from a clean checkout.
-- GitHub CI is ready to run.
-
-Verification completed:
-
-- API lint.
-- API typecheck.
-- Full API test suite.
-- Web production compile with Next build-time TypeScript validation temporarily skipped.
-- `git diff --check`.
-
-Remaining caveat:
-
-- Web lint still hangs before diagnostics and is excluded from CI for now.
-- Clerk dependency type checking currently stalls local Next/TypeScript validation; re-enable
-  build-time validation after the toolchain issue is resolved.
-
-### M10: Push To GitHub
-
-Status: Done.
-
-Goal:
-
-Create the remote repository and push `main`.
-
-Delivered:
-
-- GitHub remote added: `https://github.com/TailoredAgents/Wholesale.git`.
-- `main` pushed and tracking `origin/main`.
-- CI workflow added.
-- Branch protection plan documented.
-
-Acceptance met:
-
-- GitHub remote exists.
-- `main` is pushed.
-- CI is ready to run.
-- README instructions are visible in GitHub.
-
-### M11: Render Staging
-
-Status: Done.
-
-Goal:
-
-Deploy an early staging environment.
-
-Scope:
-
-- Render PostgreSQL staging database.
-- Render API service.
-- Render web service.
-- Render worker service.
-- Render Key Value staging resource.
-- Staging environment variables.
-- Run migrations in staging.
-- Bootstrap staging owner.
-
-Acceptance criteria:
-
-- Staging web URL loads.
-- Staging API `/health` and `/ready` pass.
-- Staging database migrations apply.
-- Staging login path works after Clerk is configured.
-- No secrets are committed.
-
-Delivered:
-
-- Render Blueprint deployment.
-- Public website at `/`.
-- Public cash-offer form at `/get-a-cash-offer`.
-- Protected internal OS route at `/os`.
-- API health and readiness endpoints live.
-- Clerk redirects configured to return staff users to `/os`.
-
-### M12: Public Conversion Foundation
-
-Status: In progress.
-
-Goal:
-
-Make the front-facing Stonegate site ready for real seller traffic and paid lead generation.
-
-Scope:
-
-- Conversion-focused homepage copy.
-- Seller situation pages.
-- Trust and process sections.
-- Cash-offer form UX tightening.
-- Conversion event model.
-- Form start, abandonment, submit, duplicate, and call-click tracking.
-- Source/campaign reporting in the OS.
-
-Acceptance criteria:
-
-- Public pages have one seller CTA and no internal OS links.
-- Conversion events are stored in PostgreSQL.
-- OS shows source/campaign performance and speed-to-lead by source.
-- Paid traffic can be launched without losing attribution or consent evidence.
-
-Delivered so far:
-
-- Added PostgreSQL conversion event model and migration.
-- Added public conversion event API for page views, form starts, and call clicks.
-- Added definitive cash-offer form submit events tied to leads.
-- Preserved UTM, click ID, landing page, referrer, session, IP, and user-agent context.
-- Added OS source performance reporting for views, starts, submits, calls, and created leads.
-- Instrumented the public homepage and cash-offer form without adding internal OS links.
-- Added seller situation pages for inherited houses, repairs-needed houses, and fast-sale timelines.
-- Expanded the homepage with public trust cues, process content, visual property media, and stronger seller CTAs.
-- Removed internal operating-system wording from the public cash-offer page.
-- Improved the cash-offer form with clearer sections, helper text, and a stronger confirmation state.
-- Added honeypot spam protection for public seller intake.
-- Added form abandonment tracking and OS reporting.
-
-Remaining:
-
-- Add deeper trust/proof/process sections.
-- Add stronger spam protection after traffic volume justifies it.
-
-### M13: Acquisition Lead Workspace
-
-Status: In progress.
-
-Goal:
-
-Turn each seller lead into a usable acquisition workspace for qualification, follow-up,
-appointments, and next actions.
-
-Research basis:
-
-- Modern investor CRMs emphasize qualification fields for motivation, timeline, condition,
-  appointment setting, follow-up, and pipeline accountability.
-- Strong real estate CRMs centralize source context, contact details, notes, tasks, and timeline
-  history so the rep can work from one screen.
-
-Delivered so far:
-
-- Added acquisition fields to leads: motivation, timeline, condition, occupancy, asking price,
-  mortgage balance, appointment status, and next follow-up.
-- Public cash-offer submissions now populate motivation, timeline, and asking price.
-- Added lead notes that appear in the lead activity timeline.
-- Added manual follow-up task creation from the lead page.
-- Added open task visibility and completion from the lead page.
-- Expanded the lead detail page into an acquisition workspace with a qualification snapshot.
-- Added a generic open task queue API for all acquisition task types.
-- Added OS daily work queues for overdue follow-up, qualification gaps, appointments, and offers.
-- Added a seller acquisition board grouped by pipeline stage with task and follow-up context.
-- Split the OS into real routed pages for dashboard, tasks, pipeline, leads, underwriting,
-  approvals, and buyers.
-- Added deterministic lead intelligence with quality score, urgency score, priority label,
-  missing-field prompts, next best action, and AI-ready summary support.
-- Added an AI-ready intelligence panel to the lead workspace.
-- Added saved OS lead views for urgent leads, qualification gaps, missing follow-up,
-  appointments, offer prep, paid sources, and nurture.
-- Added operating status labels and seven-field qualification progress to the OS lead database.
-- Added `/os/leads/{leadId}` lead detail routing and updated OS links to stay inside the
-  operating-system surface.
-- Added communication records for manual call, SMS, email, voicemail, and internal-note logging.
-- Added protected lead communication logging API with audit and activity events.
-- Added a communications panel to the lead workspace.
-- Added a communication provider adapter contract for future Twilio/Gmail-style integrations.
-- Added the shared inbox foundation with one unified conversation per lead, conversation queues,
-  assignments, watchers, assignment history, unread/activity tracking, and provider-event storage.
-- Added the routed three-panel shared inbox with Mine, Unassigned, Team, Needs Reply,
-  Appointments, and Unread views; a unified communication, appointment, and assignment timeline;
-  manual SMS, email, call, and internal-note logging; seller/property context; responsive pane
-  navigation; read-state controls; and manager/VA handoff controls.
-- Added a restricted prospecting-caller role that can only view assigned leads and conversations,
-  log assigned communications, schedule assigned appointments, and hand qualified conversations
-  to eligible acquisition users.
-- Added an audited VA-to-acquisitions handoff that reassigns the lead, seller, open tasks, and
-  scheduled appointments while automatically adding owner and acquisition watchers.
-- Added call, recording, and transcript records with provider identifiers, recording-consent
-  status, speaker segments, approval fields, and secure provider media references.
-- Existing leads and communication records are backfilled into unified conversations during the
-  Phase 1 database migration.
-- Added appointment records with scheduled windows, type, status, location, notes, audit trail,
-  and activity timeline entries.
-- Added protected appointment scheduling API and lead workspace appointment panel.
-- Scheduling an appointment now updates lead appointment status, next follow-up, and appointment
-  pipeline stage when appropriate.
-- Added underwriting version records for manual ARV range, repair range, max offer, recommended
-  offer, strategy, notes, and review status.
-- Added protected underwriting API and lead workspace underwriting panel.
-- Creating underwriting versions now writes audit/activity events and moves leads into underwriting
-  or offer-ready stages when appropriate.
-- Added transaction records connected to deals, leads, properties, sellers, title/closing details,
-  contract terms, and deadline metadata.
-- Added default transaction checklist items for contract approval, signature, earnest money, title,
-  disclosure/payoff collection, due diligence, closing, and assignment planning.
-- Added protected transaction opening API and lead workspace contract/transaction panel.
-
-Remaining:
-
-- Persist user-specific saved view definitions after team/user preferences exist.
-- Add appointment status update/reschedule outcomes and calendar sync after provider selection.
-- Add comp candidate records, provider import adapters, and approval request records.
-- Add contract template records, e-signature adapter, checklist completion actions, and explicit
-  approval request workflow.
-- Connect the AI-ready summary to model-backed agents after communications and underwriting data
-  are available.
-- Add approval gates for future AI-authored seller messages before enabling autonomous sending.
-- Decide whether to keep or redirect the legacy `/leads/{leadId}` route after staff bookmarks
-  have moved to `/os/leads/{leadId}`.
-
-## Later Product Phases
-
-### Phase 2B: Lead Generation Hardening
-
-- Address validation/autocomplete provider.
-- Spam protection.
-- Content pages for seller situations.
-- PPC landing page templates.
-- Form abandonment events.
-- Consent wording management.
-- Suppression records and opt-out enforcement.
-
-### Phase 3: Communications And Intake
-
-Delivered in the SMS foundation:
-
-- Twilio Messaging Service adapter with idempotent outbound dispatch records.
-- Signed inbound-message and delivery-status webhooks with retained provider events.
-- Inbound and outbound SMS records in the unified communication timeline.
-- Role-aware sending from the shared inbox.
-- Consent, suppression, valid-number, contact-hour, and provider-configuration checks before send.
-- STOP and START processing with consent history and an organization-wide suppression record.
-- Delivery, failure, and undeliverable status updates on sent messages.
-- Render configuration that remains disabled until Twilio credentials are supplied.
-
-Delivered in Communications Phase 5, Twilio Browser Calling:
-
-- Twilio browser Voice SDK with short-lived, user-specific access tokens.
-- One-time, conversation-scoped outbound call intents that prevent arbitrary browser dialing.
-- Company voice-line records with explicit sender selection, assignment, and inbound routing.
-- Signed outbound, inbound, status, dial-result, disclosure, and recording webhooks.
-- Known-caller routing to the conversation owner and retained lead creation for unknown callers.
-- Idempotent call lifecycle records protected from duplicate and out-of-order callbacks.
-- Missed inbound call tasks due within five minutes.
-- Unified inbox call cards with duration, status, and permission-gated private recording playback.
-- Role-aware calling for owners, acquisitions staff, and assigned prospecting callers.
-- Contact permission, suppression, valid-number, contact-hour, and provider readiness checks.
-- Render configuration that keeps Voice and recording independently disabled until activation.
-- A migration-tested Voice schema and an operator setup runbook.
-
-Delivered in Communications Phase 6, Recording and Transcription:
-
-- Per-call recording disclosure tracking for inbound and outbound calls.
-- Signed, idempotent Twilio recording callbacks and private role-gated audio playback.
-- OpenAI transcription with speaker-separated segments in the unified inbox timeline.
-- Structured call-note extraction with evidence timestamps and required human review.
-- Configurable audio retention deadlines and automatic provider deletion by the worker.
-- Owner-only early audio deletion with a required reason and complete audit history.
-- Persistent transcripts and reviewed CRM notes after provider audio expires or is deleted.
-- Deployment defaults that keep recording disabled until disclosure and Voice configuration are
-  explicitly approved and enabled.
-
-Delivered in Communications Phase 7, AI Call Intelligence:
-
-- Evidence-backed structured call notes for motivation, condition, timeline, occupancy, asking
-  price, objections, commitments, and next actions.
-- Human approval before lead-field updates or follow-up task creation.
-- Reviewer correction tracking with per-field agreement measurements.
-- Confidence, evidence coverage, approval, rejection, failure, and high-correction reporting.
-- Per-model input/output usage and sub-cent OpenAI cost estimates with pricing provenance.
-- AI control-center quality reporting with conservative low-risk pilot thresholds.
-- Autonomy remains disabled; passing quality thresholds only identifies pilot eligibility.
-
-Delivered in Communications Phase 8, Google Workspace Email:
-
-- Individual Google Workspace mailbox connections using server-side OAuth and encrypted tokens.
-- Live one-to-one email sending from the shared inbox with signatures and shared templates.
-- Gmail thread preservation through provider thread IDs, Message-ID, In-Reply-To, and References.
-- Incremental inbound and outbound synchronization into the unified seller timeline.
-- Authenticated attachment upload, provider retention, metadata indexing, and download proxying.
-- Role-scoped mailbox access with no email permissions for prospecting callers by default.
-- Stale history-cursor recovery and idempotent provider-message ingestion.
-- Deployment defaults that keep email disabled until Google credentials are configured.
-- A provider boundary reserved for a later Smartlead cold-outreach integration.
-
-Remaining in the communications sequence:
-
-- Communication-triggered follow-up tasks and notifications.
-
-### Phase 4: Acquisition Workspace
-
-- Acquisition daily workspace.
-- Saved filters.
-- Lead assignment.
-- Appointments.
-- Follow-up plans.
-- Call notes and activity timeline.
-- Missing-field prompts.
-
-### Phase 5: Underwriting Foundation
-
-- Property data provider abstraction.
-- Underwriting versions.
-- Comparable sale candidate records.
-- Human comp review.
-- ARV range.
-- Repair estimate.
-- Offer scenarios.
-- ARV/offer approval queue.
-
-### Phase 6: Contracts And Transactions
-
-- Template records.
-- Contract approval request.
-- E-signature adapter.
-- Transaction checklist.
-- Closing attorney/status fields.
-- Deadline tracking.
-
-### Phase 7: Buyers And Dispositions
-
-Delivered foundation:
-
-- Buyer CRM records.
-- Buyer criteria.
-- Proof-of-funds status.
-- Deal room queue for contracted leads.
-- Buyer offer collection tied to lead workspaces.
-
-Remaining expansion:
-
-- Buyer proof-of-funds document records.
-- Buyer selection approval workflow.
-- Deal blast campaigns and response automation.
-
-### Phase 8: Finance And Compensation
-
-Delivered foundation:
-
-- Revenue records.
-- Direct deal deductions.
-- Effective-dated compensation rules.
-- Automatic compensation calculations.
-- Manual marketing spend records.
-- OS finance page for ledger entry and reporting.
-
-Remaining expansion:
-
-- Payment status workflow.
-- Monthly close process.
-- Advertising percentage reporting.
-- QuickBooks/Xero export or sync.
-
-### Phase 9: Marketing Intelligence
-
-Delivered foundation:
-
-- Campaign/click performance reporting.
-- Spend, lead, contract, and revenue attribution by source/campaign.
-- Cost-per-lead and cost-per-contract reporting.
-- ROAS reporting.
-- Offline conversion export queue for Google/Meta click IDs.
-
-Remaining expansion:
-
-- Google Ads upload adapter.
-- Meta conversions API adapter.
-- Export retry and failure workflow.
-
-### Phase 10: AI Control Center
-
-Delivered foundation:
-
-- Agent definitions.
-- Prompt versions.
-- Tool permission policy.
-- Run and tool-call logs.
-- Approval queue integration for proposed AI tool actions.
-- Cost and latency tracking.
-- OS AI Control page.
-
-Remaining expansion:
-
-- Evaluation datasets.
-- Model-backed agent execution.
-- OpenAI agent/tool integration.
-- Automated approval workflow routing.
-
-## Open Decisions
-
-- Business-facing company name.
-- Object storage provider.
-- Address validation/geocoding provider.
-- Initial property data provider.
-- E-signature provider.
-- Queue library.
-- Error monitoring provider.
-
-## Non-Negotiables
-
-- PostgreSQL remains the source of truth.
-- Material actions are audited.
-- AI does not make binding offers, send contracts, or bypass approvals.
-- Consent/suppression checks are deterministic.
-- No real seller communications from automated tests.
-- No secrets in git.
+- Fully autonomous seller negotiation.
+- AI authority to approve offers, contracts, buyers, payments, or compensation.
+- A custom carrier, email-delivery network, e-signature system, or accounting ledger.
+- Cold SMS to purchased, scraped, transferred, or non-consented leads.

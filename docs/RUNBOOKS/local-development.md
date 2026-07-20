@@ -25,11 +25,22 @@ npm run bootstrap:api -- --admin-email richardaustindugger@users.noreply.github.
 
 ## Services
 
+Run the web and API in separate terminals:
+
 ```bash
 npm run dev:api
 npm run dev:web
-npm run worker
 ```
+
+Run the same communications worker used by Render in a third terminal:
+
+```bash
+cd apps/api
+uv run python -m app.worker
+```
+
+The root `npm run worker` command starts the original heartbeat scaffold and does not process
+transcription, recording retention, or Gmail synchronization.
 
 ## Checks
 
@@ -70,7 +81,7 @@ http://localhost:3000/os
 Open a lead detail page from the OS dashboard or directly at:
 
 ```text
-http://localhost:3000/leads/{lead_id}
+http://localhost:3000/os/leads/{lead_id}
 ```
 
 The staff controls send a Clerk bearer token when available, otherwise they use the local

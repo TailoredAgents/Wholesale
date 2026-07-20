@@ -1,5 +1,10 @@
 # Google Workspace Email Setup
 
+Last updated: July 20, 2026
+
+Current status: the application implementation is complete and deployed disabled. Google Workspace
+domain, OAuth credentials, Render variables, and mailbox connections are still pending.
+
 Stonegate uses Google Workspace for active seller and deal communication. Cold outreach is a
 separate future Smartlead integration and must not use these operational mailboxes.
 

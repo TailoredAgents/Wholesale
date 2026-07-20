@@ -1,16 +1,27 @@
-# Real Estate Wholesaling Operating System
+# Stonegate Home Buyers Operating System
 
-Local-first monorepo for a Georgia real-estate wholesaling operating system.
+Local-first monorepo and Render deployment for Stonegate Home Buyers.
 
 ## Current State
 
-- `apps/web`: Next.js 16 / React 19 / TypeScript public site and internal OS shell.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic foundation API.
-- `apps/worker`: Python worker scaffold.
-- `docs`: Phase 0 product, architecture, data, workflow, AI, security, deployment, and roadmap docs.
-- `docs/UNIFIED_BUILD_PLAN.md`: current unified build plan for public site, OS, software stack,
-  bookkeeping, and AI agents.
-- `render.yaml`: Render Blueprint with no secrets.
+- `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 23 migrations.
+- `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
+  recording-retention worker.
+- `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
+  the Render worker service.
+- `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
+- Clerk authentication and organization-scoped RBAC are live.
+- CRM, shared inbox, underwriting V2.1, reports, transactions, buyers, finance, marketing, and AI
+  control foundations are implemented.
+- Final dedicated Twilio SMS, Voice, custom-domain, and Google Workspace setup is pending.
+
+Start with:
+
+- `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
+- `docs/ROADMAP.md`: ordered development phases after provider setup.
+- `docs/UNIFIED_BUILD_PLAN.md`: long-term product scope and quality standard.
+- `docs/INTEGRATIONS.md`: provider status and system boundaries.
 
 ## Prerequisites
 
@@ -64,7 +75,7 @@ Open:
 - Public website: http://localhost:3000
 - Public cash-offer form: http://localhost:3000/get-a-cash-offer
 - Internal operating system: http://localhost:3000/os
-- Lead detail pages: `http://localhost:3000/leads/{lead_id}`
+- Lead detail pages: `http://localhost:3000/os/leads/{lead_id}`
 - API health: http://localhost:8000/health
 - API readiness: http://localhost:8000/ready
 - Protected local API example: http://localhost:8000/api/v1/me
@@ -131,8 +142,13 @@ https://github.com/TailoredAgents/Wholesale.git
 CI is defined in `.github/workflows/ci.yml`. Branch protection and labels are documented in
 `docs/GITHUB_SETUP.md`.
 
-## Deployment Direction
+## Deployment
 
-Build and test locally first. Render deployment comes after staging environment variables, database,
-key-value service, and Clerk credentials are configured outside the repository. Use
-`docs/RUNBOOKS/render-staging-checklist.md`.
+`main` deploys through the Render Blueprint. Public staging is currently available at:
+
+- Website: https://oakwell-web.onrender.com
+- API health: https://oakwell-api.onrender.com/health
+
+The `oakwell-*` names are existing infrastructure identifiers, not a second product. Keep customer
+copy branded as Stonegate Home Buyers. Use `docs/RENDER_DEPLOYMENT.md` and the provider runbooks
+before changing environment variables or callback URLs.

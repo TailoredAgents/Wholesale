@@ -2,16 +2,26 @@
 
 Use specialized agents with narrow tools and human approval boundaries.
 
-## Initial Agents
+## Current Foundation
 
-- Seller intake agent.
-- Follow-up agent.
-- Acquisition copilot.
-- Underwriting and comps agent.
-- Contract assistant.
-- Disposition agent.
-- Finance and compensation agent.
-- Compliance agent.
+- Agent definitions, prompt versions, tool policies, runs, tool-call logs, approvals, and cost
+  telemetry are implemented.
+- Lead intake summary execution is available.
+- Call transcription and evidence-backed note extraction are implemented.
+- Call-derived CRM updates and tasks require human review.
+- External autonomy remains disabled.
+
+## Planned Agent Order
+
+1. Seller intake and qualification-gap agent.
+2. Speed-to-lead and missed-reply monitor.
+3. Follow-up drafting agent.
+4. Acquisition copilot.
+5. Underwriting research assistant.
+6. Compliance preflight agent.
+7. Disposition package assistant.
+8. Finance reconciliation checker.
+9. Contract assistant after document and approval infrastructure exists.
 
 ## Rules
 
@@ -20,6 +30,7 @@ Use specialized agents with narrow tools and human approval boundaries.
 - AI cannot give legal, tax, foreclosure, probate, bankruptcy, title, or closing advice.
 - AI cannot receive arbitrary SQL, shell access, payment access, user administration, or raw provider credentials.
 - Conflicts with human-confirmed facts create review items.
+- AI cannot bypass deterministic consent, suppression, offer, contract, buyer, or finance approval.
 
 ## Call Intelligence
 

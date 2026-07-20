@@ -1,6 +1,11 @@
 # Data Model
 
-## Foundation Tables
+Last updated: July 20, 2026
+
+The schema is managed through Alembic migrations. Migration `0023_google_workspace_email` is the
+current head.
+
+## Identity And Access
 
 - `organizations`
 - `users`
@@ -8,34 +13,53 @@
 - `permissions`
 - `role_permissions`
 - `role_assignments`
-- `contact_methods`
-- `consent_records`
-- `lead_form_submissions`
-- `attribution_touches`
+
+## CRM And Evidence
+
 - `contacts`
+- `contact_methods`
 - `properties`
 - `leads`
+- `consent_records`
+- `suppression_records`
+- `lead_form_submissions`
+- `attribution_touches`
+- `conversion_events`
+- `tasks`
+- `appointments`
+- `activity_events`
+- `audit_events`
+
+## Communications
+
 - `conversations`
 - `conversation_watchers`
 - `conversation_assignment_events`
 - `communication_records`
+- `communication_dispatches`
 - `communication_provider_events`
+- `email_accounts`
+- `email_templates`
+- `email_attachments`
+- `voice_lines`
+- `voice_call_intents`
 - `call_records`
 - `call_recordings`
 - `call_transcripts`
-- `deals`
-- `tasks`
-- `activity_events`
-- `audit_events`
 
-## Next Tables
+## Underwriting And Transactions
 
-- `suppression_records`
-- `documents`
 - `underwriting_versions`
-- `offer_versions`
+- `underwriting_market_analyses`
+- `deals`
+- `transactions`
+- `transaction_checklist_items`
 - `approval_requests`
+
+## Buyers, Finance, And Marketing
+
 - `buyers`
+- `buyer_criteria`
 - `buyer_offers`
 - `revenue_records`
 - `deal_deductions`
@@ -43,19 +67,38 @@
 - `compensation_calculations`
 - `marketing_spend`
 - `offline_conversion_exports`
-- `approval_requests`
+
+## AI Control
+
 - `ai_agent_definitions`
 - `ai_prompt_versions`
 - `ai_tool_permissions`
 - `ai_run_logs`
 - `ai_tool_call_logs`
 
+## Planned Additions
+
+- Team and persistent saved-view records.
+- Duplicate candidate and merge-history records.
+- Follow-up plan and sequence records.
+- Calendar account and provider-event records.
+- Comparable candidate records if comp-level review outgrows the retained analysis payload.
+- Offer versions and negotiation-event records.
+- Document, template, signature-envelope, and file-access records.
+- Buyer proof-of-funds document records.
+- Accounting sync and reconciliation records.
+- Notification delivery and preference records.
+- AI evaluation dataset and result records.
+
 ## Rules
 
 - Use UUID primary keys.
 - Store timestamps in UTC.
 - Store money as integer cents.
-- Preserve historical formula, compensation, consent, and prompt versions.
-- Give call audio an explicit retention deadline; preserve deletion actor, reason, timestamp, and
-  audit history after provider media is removed.
-- Keep audit events append-only.
+- Scope business records by `organization_id`.
+- Preserve historical formula, compensation, consent, underwriting, and prompt versions.
+- Keep provider IDs separate from internal IDs.
+- Give call audio an explicit retention deadline and preserve deletion evidence after media removal.
+- Keep material audit events append-only.
+- Use structured columns for operational queries and retained provider metadata for evidence, not
+  as the only source of business state.

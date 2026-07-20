@@ -1,5 +1,10 @@
 # Twilio Voice Setup
 
+Last updated: July 20, 2026
+
+Current status: code and public webhook endpoints are deployed; provider activation is paused until
+Stonegate resumes the Twilio/domain/email integration closeout.
+
 Communications Phase 5 adds browser calling, inbound call routing, call lifecycle history,
 missed-call tasks, and
 private recording access to the Stonegate shared inbox. Voice is disabled by default. Do not
@@ -69,7 +74,7 @@ receives a short-lived, user-specific Voice token from the authenticated Stonega
 
 ## 3. Deploy Before Moving Incoming Voice
 
-1. Push the Phase 4 code and let both Render web services deploy.
+1. Confirm the latest `main` deployment is healthy.
 2. Confirm the API migration reaches `0020_twilio_voice`.
 3. Confirm `https://YOUR-API-HOST/health` returns `200`.
 4. Set `TWILIO_VOICE_ENABLED=true` on `oakwell-api` and redeploy.

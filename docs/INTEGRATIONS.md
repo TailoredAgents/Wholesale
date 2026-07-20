@@ -1,90 +1,99 @@
 # Integrations
 
-Wrap all third-party services behind adapters.
+Last updated: July 20, 2026
 
-## Initial Interfaces
+All providers are adapters. PostgreSQL remains the business source of truth.
 
-- OpenAI.
-- Twilio.
-- Property data provider.
-- Address validation/geocoding.
-- Mapping.
-- E-signature provider.
-- Google advertising.
-- Meta conversions.
-- Email provider.
-- Calendar provider.
-- Object storage.
-- Error monitoring.
+## Status
 
-## Controls
+| Provider | Purpose | Code | External setup |
+| --- | --- | --- | --- |
+| Clerk | Staff authentication | Live | Verify MFA and final custom-domain origins |
+| Render | Web, API, worker, PostgreSQL, Key Value | Live | Custom domain and final production checks pending |
+| RentCast | Property facts and recorded-sale comps | Live | Continue usage and accuracy monitoring |
+| OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
+| Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
+| Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
+| Google Workspace | Operational seller email | Implemented | Domain, OAuth project, secrets, and mailbox connections pending |
+| Google Calendar | Appointments | Not implemented | Planned after operational email |
+| Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
+| Object storage | Contracts and persistent files | Not selected | Planned before transaction document automation |
+| E-signature | Contracts | Not selected | Planned in transaction phase |
+| QuickBooks Online | Accounting | Not implemented | Planned after finance workflow completion |
+| Google Ads / Meta | Offline conversion delivery | Foundation records only | Provider adapters and retries remain |
+| Error monitoring | Production alerts | Not selected | Roadmap Phase 2 |
 
-- Validate webhooks.
-- Store raw events.
-- Store external IDs.
-- Use idempotency keys.
-- Handle rate limits and retries.
-- Track sync state.
-- Provide test mode.
+## Shared Controls
+
+- Keep secrets in Render or provider dashboards, never browser variables or git.
+- Validate signed webhooks.
+- Retain external IDs and provider-event IDs.
+- Use idempotency keys for outbound work.
+- Store normalized business records separately from raw provider metadata.
+- Enforce organization and role scope.
+- Handle retries, stale cursors, rate limits, and provider outages.
+- Provide a disabled or test state before production activation.
+- Write audit events for material provider-backed actions.
 
 ## OpenAI
 
-OpenAI transcription and Responses API calls are server-side only. The API key is never exposed to
-the browser. Each AI run records model, prompt version, latency, input/output tokens, pricing
-version, sub-cent estimated cost, status, failure reason, and human-review outcome.
+OpenAI transcription and model calls are server-side. Runs record the model, prompt version,
+latency, token usage, pricing version, estimated cost, status, evidence, and human-review outcome.
 
-Built-in pricing covers Stonegate's configured `gpt-5.6-terra` reasoning model and
-`gpt-4o-transcribe-diarize` transcription model. Pricing can be updated with
-`OPENAI_PRICING_OVERRIDES_JSON` when provider rates change. The stored estimate is operational cost
-telemetry; the OpenAI billing dashboard remains the billing source of truth.
+Call intelligence is implemented but cannot update CRM facts or create tasks without review. Future
+agents must use the permission, approval, trace, and evaluation controls described in
+`AI_AGENTS.md`.
 
 ## Twilio Messaging
 
-Phase 3 implements SMS through a Twilio Messaging Service. The adapter sends from the API only;
-browser code never receives Twilio credentials. Incoming-message and delivery-status endpoints
-validate Twilio signatures, preserve provider event identifiers for idempotency, and update the
-shared conversation timeline.
+The API supports:
 
-Outbound sends must pass the communication compliance service. It checks the recipient number,
-consent history, active suppression records, configured contact hours, sender permissions, and
-provider readiness before calling Twilio. STOP and START events update both the suppression record
-and append-only consent history.
+- Messaging Service dispatch.
+- Signed inbound and delivery webhooks.
+- Idempotent provider events.
+- Shared-inbox timeline updates.
+- Consent, suppression, valid-number, role, provider, and contact-hour gates.
+- STOP and START consent history.
 
-The integration remains disabled in deployment configuration until credentials are entered and
-the activation checklist is complete. See
-[Twilio SMS Setup](./RUNBOOKS/twilio-sms-setup.md).
+Current status: Stonegate submitted a separate Low Volume Mixed A2P Campaign using the live public
+opt-in and legal pages. The campaign, new Messaging Service, and newly purchased SMS number must
+remain separate from every other business.
+
+After approval, configure:
+
+- `TWILIO_MESSAGING_SERVICE_SID`: new Stonegate Messaging Service.
+- `TWILIO_SMS_FROM_NUMBER`: newly purchased and campaign-approved SMS number.
+
+Do not substitute the Voice/support number unless Stonegate explicitly decides to register that
+number as an SMS sender. See `RUNBOOKS/twilio-a2p-campaign.md` and
+`RUNBOOKS/twilio-sms-setup.md`.
 
 ## Twilio Voice
 
-Phase 4 uses Twilio's browser Voice SDK with short-lived user identities. The browser never
-receives the Account SID, Auth Token, API key secret, seller phone number routing authority, or
-recording credentials. It asks the API for a conversation-scoped call intent and sends only that
-intent identifier to the TwiML App.
+The Voice implementation uses short-lived browser tokens and one-time conversation-scoped call
+intents. Inbound calls route to the conversation owner or line assignee. Unknown callers create a
+retained lead, and missed calls create urgent return-call tasks.
 
-Inbound calls route to the conversation owner or the company line assignee. Unknown callers create
-a retained lead and conversation, while missed inbound calls create an urgent return-call task.
-Signed status and recording callbacks update the unified timeline idempotently. Recording audio is
-proxied through an authenticated permission check rather than exposing provider media URLs.
-Completed recordings receive a configurable retention deadline. The worker removes expired audio
-from Twilio, while owner-authorized early deletion requires a reason and writes an audit event.
-Transcripts remain attached to the call after audio deletion.
+Recording, speaker-separated transcription, AI note extraction, retention, and audited deletion
+are implemented but recording remains disabled until the spoken disclosure and retention policy
+are approved.
 
-Voice and recording remain independently disabled in deployment configuration. See
-[Twilio Voice Setup](./RUNBOOKS/twilio-voice-setup.md).
+Voice setup is paused until Stonegate resumes provider configuration. See
+`RUNBOOKS/twilio-voice-setup.md`.
 
-## Google Workspace Email
+## Google Workspace
 
-Communications Phase 8 connects individual Google Workspace mailboxes through server-side OAuth.
-Refresh tokens are encrypted at rest, and the browser never receives Google credentials. Outbound
-MIME messages preserve Gmail thread identifiers and reply headers. Incremental Gmail history sync
-matches messages only to existing seller email addresses and appends them to the same unified
-timeline used for SMS, calls, transcripts, and notes.
+Operational mailboxes connect individually through server-side OAuth. Tokens are encrypted.
+Messages preserve Gmail threads and share the seller conversation timeline with SMS, calls,
+transcripts, and notes.
 
-Attachments remain stored by Google. Stonegate retains provider attachment references and proxies
-downloads through authenticated conversation access checks. Shared templates are organization
-records; signatures belong to connected mailboxes. Email remains disabled until the Google project
-and Render variables are configured. See
-[Google Workspace Email Setup](./RUNBOOKS/google-workspace-email.md).
+Cold outreach is excluded. Future cold email must use separate domains/mailboxes and a dedicated
+outreach adapter. See `RUNBOOKS/google-workspace-email.md`.
 
-Cold outreach is intentionally outside this adapter. A future Smartlead integration will use
-separate, clearly identified outreach infrastructure and feed replies into the operational inbox.
+## Property Data
+
+RentCast is the current low-cost provider for property facts and recorded sales. The underwriting
+service retains normalized comparable evidence and exclusion reasons.
+
+ATTOM or licensed MLS/RESO data may be added later behind the same adapter boundary. Provider data
+must not silently overwrite human-confirmed facts.

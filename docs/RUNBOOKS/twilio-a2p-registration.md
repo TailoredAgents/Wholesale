@@ -1,192 +1,91 @@
 # Stonegate A2P 10DLC Registration
 
-This runbook prepares a separate Stonegate Home Buyers Brand, Campaign, Messaging Service, and
-sender without changing another company's campaign. Submit the registration only after the public
-website changes in this runbook are deployed.
+Last updated: July 20, 2026
 
-Twilio's current guidance says campaign review can take 10-15 days or two to three weeks during
-high-volume periods. Do not plan around a two-day approval.
+## Current Status
 
-## Recommended Structure
+Stonegate's separate Low Volume Mixed Campaign has been submitted and is under provider review.
+Approval timing is controlled by Twilio and carrier review; resume this runbook when the Campaign
+shows approved or verified.
 
-- The Twilio account may remain the same. Account SID and Auth Token are account-level credentials.
-- Create a separate Customer Profile and Brand for Stonegate if it is a separate legal entity.
-- Create a new Campaign named `Stonegate Seller Property Inquiries`.
-- Create a new Messaging Service named `Stonegate Home Buyers`.
-- Associate only Stonegate's `+1 678-541-7725` number with that Messaging Service.
-- Do not move or modify the `+1 404-777-2631` number or the other company's Messaging Service.
-
-A Messaging Service can be linked to only one A2P Campaign. Keeping Stonegate separate prevents
-configuration and registration changes from interrupting the other software.
-
-## Before Starting
-
-Gather:
-
-- Exact legal business name from the IRS CP 575 or 147C letter if Stonegate has an EIN.
-- EIN, entity type, formation state, legal address, and business contact information.
-- Authorized representative's name, title, email, and mobile number.
-- Stonegate's live website URL.
-
-Use a **Low-Volume Standard Brand** when the US business has an EIN and expects fewer than roughly
-6,000 message segments per day. Use **Sole Proprietor** only when the US or Canadian sole
-proprietorship does not have an EIN or Canadian Business Number. The legal profile must match
-government records exactly; `Stonegate Home Buyers` can be the public brand while the profile uses
-the registered legal entity name.
-
-## Public Evidence
-
-After deployment, verify these pages without signing in:
+Submitted public evidence:
 
 - Opt-in form: `https://oakwell-web.onrender.com/get-a-cash-offer`
 - Privacy Policy: `https://oakwell-web.onrender.com/privacy-policy`
-- Terms & Conditions: `https://oakwell-web.onrender.com/terms`
+- Terms: `https://oakwell-web.onrender.com/terms`
 
-The form's SMS checkbox must be visible, optional, unchecked by default, and separate from general
-phone/email contact permission. The API stores the SMS wording version, exact wording, source,
-timestamp, IP address, and browser user agent. Selecting `Text` as the preferred contact method
-requires the seller to check the SMS box.
+The public pages were verified live before submission. The form uses a separate, optional,
+unchecked SMS checkbox and the API stores versioned consent evidence.
 
-Replace the Render URLs with Stonegate's custom domain before submitting if that domain is already
-live. Do not submit URLs that redirect to a login, return an error, or show a different business.
+The canonical submitted campaign description, samples, consent flow, and message-content answers
+are in `twilio-a2p-campaign.md`.
 
-## Console Registration
+## Separation Rules
 
-1. Open **Messaging > Regulatory Compliance > Onboarding** in Twilio.
-2. Create or select Stonegate's Customer Profile.
-3. Register Stonegate as the correct Brand type.
-4. Complete the Brand contact email verification.
-5. Create a new Messaging Service named `Stonegate Home Buyers`.
-6. Add `+1 678-541-7725` to its Sender Pool.
-7. Register a new A2P Campaign against that Messaging Service.
-8. Enable Advanced Opt-Out with the standard STOP, START, and HELP behavior.
-9. Submit the Campaign and wait for both Campaign and phone-number registration to show approved.
-10. Put the new Messaging Service SID in `TWILIO_MESSAGING_SERVICE_SID` on `oakwell-api`, then
-    redeploy and test STOP, START, HELP, inbound SMS, and outbound delivery.
+- The Twilio account may be shared because Account SID and Auth Token are account-level.
+- Stonegate must use its own Brand/Campaign relationship, Messaging Service, and newly purchased
+  SMS number.
+- Do not attach another company's phone number or Messaging Service.
+- Do not point another company's webhook at Stonegate.
+- Do not assume the Voice/support number is the new SMS sender.
 
-## Campaign Answers
-
-### Use case
-
-Choose **Low Volume Mixed** when available. The messages combine customer-care follow-up,
-appointment information, and related marketing follow-up for property owners who explicitly ask
-Stonegate to contact them. If Twilio offers only a single-purpose choice for the selected Brand,
-choose the option Twilio identifies for mixed customer care and marketing rather than mislabeling
-the traffic.
-
-### Campaign description
+Configuration values after approval:
 
 ```text
-Stonegate Home Buyers sends one-to-one and automated SMS to property owners who explicitly opt in
-on our public cash-offer request form. Messages concern the property inquiry they submitted,
-qualification questions, requested follow-up, appointment scheduling and reminders, cash-offer
-updates, and related seller follow-up. Message frequency varies by the seller's inquiry and
-responses. Stonegate does not use purchased consent or send messages on behalf of third parties.
-Recipients can reply STOP to opt out and HELP for help.
+TWILIO_MESSAGING_SERVICE_SID=<NEW_STONEGATE_MESSAGING_SERVICE_SID>
+TWILIO_SMS_FROM_NUMBER=<NEW_CAMPAIGN_APPROVED_SMS_NUMBER_IN_E164>
 ```
 
-### Message flow / how users opt in
+The Voice line remains independently configured through `TWILIO_VOICE_FROM_NUMBER`.
 
-```text
-Property owners opt in at https://oakwell-web.onrender.com/get-a-cash-offer. The user enters a
-mobile number and separately checks an optional, unchecked SMS consent box. The disclosure names
-Stonegate Home Buyers, identifies the message topics, states that messages may be recurring and
-automated, states that message frequency varies and message/data rates may apply, explains STOP and
-HELP, states that consent is not a condition of purchase, and links to the public Terms &
-Conditions and Privacy Policy. The user then submits the form. The system records the disclosure
-version, exact wording, timestamp, source, IP address, and user agent. Users who do not check the
-SMS box may still submit a property inquiry but are not eligible for outbound SMS.
-```
+## While Review Is Pending
 
-Select **Website form** as the opt-in method. Do not select QR code, paper form, verbal consent, or
-keyword opt-in unless Stonegate actually launches and documents those workflows.
+- Do not change the application answers unless Twilio requests a correction.
+- Keep the submitted opt-in, privacy, and terms URLs publicly available.
+- Do not remove or materially weaken the submitted consent wording.
+- Do not send production application-to-person traffic from the new number.
+- Record any reviewer request and the exact response in this file before resubmitting.
 
-### Opt-in keywords
+## Post-Approval Checklist
 
-Leave this field blank when the registration uses only the website form. Twilio's standard START
-handling may still restore messaging after a prior STOP.
+1. Confirm Campaign status is approved or verified.
+2. Open the new Stonegate Messaging Service.
+3. Add only the newly purchased Stonegate SMS number to its Sender Pool.
+4. Confirm the number shows registered with the approved Campaign.
+5. Enable Twilio's standard or Advanced Opt-Out behavior for STOP, START, and HELP.
+6. Configure incoming messages as HTTP `POST` to:
 
-### Opt-in confirmation
+   `https://oakwell-api.onrender.com/api/v1/webhooks/twilio/messaging/incoming`
 
-```text
-Stonegate Home Buyers: You are subscribed to texts about your property inquiry, appointments, and
-cash-offer updates. Message frequency varies. Msg & data rates may apply. Reply HELP for help or
-STOP to opt out.
-```
-
-Use this as the immediate confirmation or as the opening disclosure in the first message before
-sending ongoing campaign messages.
-
-### Sample message 1
-
-```text
-Stonegate Home Buyers: Hi [First Name], thanks for requesting a cash-offer review for [Property
-Address]. May I ask a few questions about the property? Reply STOP to opt out.
-```
-
-### Sample message 2
-
-```text
-Stonegate Home Buyers: Your property call is scheduled for [Date] at [Time]. Reply HELP for help or
-STOP to opt out.
-```
-
-### Sample message 3
-
-```text
-Stonegate Home Buyers: Hi [First Name], we have an update about the cash-offer review for [Property
-Address]. Is this a good time to discuss it? Reply STOP to opt out.
-```
-
-### HELP response
-
-```text
-Stonegate Home Buyers: Help with your property inquiry is available at (678) 541-7725 or
-https://oakwell-web.onrender.com. Msg & data rates may apply. Reply STOP to opt out.
-```
-
-### STOP response
-
-Use Twilio's standard Advanced Opt-Out confirmation:
-
-```text
-Stonegate Home Buyers: You have opted out and will receive no further messages. Reply START to
-subscribe again.
-```
-
-### Other campaign questions
-
-- Subscriber opt-in: **Yes**
-- Subscriber opt-out: **Yes**
-- Subscriber help: **Yes**
-- Number pooling: **No**
-- Direct lending or loan arrangement: **No**
-- Embedded links: **No**, unless the actual campaign will send the website links shown in samples
-- Embedded phone numbers: **No**, unless the actual samples include the Stonegate support number
-- Age-gated content: **No**
-- Affiliate marketing: **No**
-
-Keep the answers consistent with the submitted samples. If the Console asks whether messages
-contain a phone number because the HELP sample includes one, answer **Yes** and use the same
-Stonegate number in the sample.
+7. Enter the new Messaging Service SID and new SMS number on `oakwell-api`.
+8. Confirm `TWILIO_AUTH_TOKEN` is the actual Auth Token, not the Account SID.
+9. Set `TWILIO_SMS_ENABLED=true` and redeploy the API.
+10. Activate immediate enrollment confirmation for new website SMS opt-ins.
+11. Test with a company-controlled phone:
+    - outbound,
+    - delivered status,
+    - inbound reply,
+    - STOP suppression,
+    - blocked send after STOP,
+    - START restoration,
+    - HELP response,
+    - duplicate callback behavior.
+12. Verify all events appear once in the correct Stonegate conversation.
 
 ## Production Rules
 
-- Send only to contacts with an active `sms` consent record.
-- Identify Stonegate Home Buyers in the initial message and include STOP instructions.
-- Honor STOP immediately across the whole Stonegate workspace.
-- Do not treat permission to call as permission to text.
-- Do not upload purchased lists as consented contacts.
-- Keep consent evidence at least until consent is withdrawn and as long as legally required.
-- Do not send from the Stonegate Campaign for another company or use another company's Campaign for
-  Stonegate.
+- Send only to contacts with active SMS consent or a valid inbound conversational context.
+- Do not treat call permission as text permission.
+- Identify Stonegate Home Buyers in the initial message.
+- Include STOP instructions in the initial message.
+- Honor suppression across the whole Stonegate workspace.
+- Do not use purchased, rented, scraped, or transferred consent.
+- Do not use this Campaign for cold SMS.
+- Retain consent evidence until withdrawal and as long as required by policy or law.
 
-## Twilio References
+## References
 
 - A2P overview: https://www.twilio.com/docs/messaging/compliance/a2p-10dlc
-- Registration quickstart: https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/quickstart
-- Required business information:
-  https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/collect-business-info
-- Standard and low-volume onboarding:
-  https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/direct-standard-onboarding
+- Registration quickstart:
+  https://www.twilio.com/docs/messaging/compliance/a2p-10dlc/quickstart
 - Messaging Policy: https://www.twilio.com/en-us/legal/messaging-policy
