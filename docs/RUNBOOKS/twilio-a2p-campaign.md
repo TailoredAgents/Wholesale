@@ -26,7 +26,7 @@ campaign for purchased lists or unsolicited cold messaging.
 
 ```text
 Stonegate Home Buyers: Thanks for opting in to texts about your property inquiry. Message frequency
-varies. Msg & data rates may apply. Reply HELP for help or STOP to unsubscribe.
+varies. Msg & data rates may apply. Help: 678-541-7725. Reply STOP to unsubscribe.
 ```
 
 ```text
@@ -52,12 +52,12 @@ Reply YES to continue or STOP to unsubscribe.
 ## Message Contents
 
 - Embedded links: `No`
-- Phone numbers: `No`
+- Phone numbers: `Yes`
 - Direct lending or loan arrangements: `No`
 - Age-gated content: `No`
 
-Do not send links or phone numbers under this campaign unless the campaign registration and samples
-are updated to disclose them.
+The support phone number is disclosed in the first sample. Do not send embedded links under this
+campaign unless the campaign registration and samples are updated to disclose them.
 
 ## Consent Flow
 
