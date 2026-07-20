@@ -67,11 +67,12 @@ export default function TermsPage() {
         <section>
           <h2>Opting out and getting help</h2>
           <p>
-            Reply STOP to any Stonegate Home Buyers text message to unsubscribe. You may receive one
-            final confirmation that your opt-out was processed. After opting out, no additional
-            program messages will be sent unless you provide new consent. Reply HELP for help or
-            call <a href="tel:+16785417725">(678) 541-7725</a>. Carriers are not liable for delayed
-            or undelivered messages.
+            Reply <strong>STOP</strong> to any Stonegate Home Buyers text message to unsubscribe.
+            You may receive one final confirmation that your opt-out was processed. After opting
+            out, no additional program messages will be sent unless you provide new consent. Reply{" "}
+            <strong>HELP</strong> for help or call{" "}
+            <a href="tel:+16785417725">(678) 541-7725</a>. Carriers are not liable for delayed or
+            undelivered messages.
           </p>
         </section>
 

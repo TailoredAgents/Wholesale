@@ -89,7 +89,7 @@ export function CashOfferForm() {
       consent_to_contact: formData.get("consent_to_contact") === "on",
       consent_wording_version: "seller-contact-web-v2",
       sms_consent: formData.get("sms_consent") === "on",
-      sms_consent_wording_version: "seller-sms-web-v1",
+      sms_consent_wording_version: "seller-sms-web-v2",
       attribution: getConversionAttribution(),
     };
     if (!payload.phone && !payload.email) {
@@ -300,10 +300,10 @@ export function CashOfferForm() {
       <label className={styles.consent}>
         <input name="sms_consent" type="checkbox" />
         <span>
-          Yes, I agree to receive recurring automated text messages from Stonegate Home Buyers
-          about my property inquiry, appointments, and cash offer updates at the number provided.
-          Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP
-          for help. Consent is not a condition of purchase. See our{" "}
+          By checking this optional box, I agree to receive recurring automated text messages from
+          Stonegate Home Buyers about my property inquiry, appointments, and cash offer updates at
+          the number provided. Message frequency varies. Message and data rates may apply. Reply
+          STOP to opt out or HELP for help. Consent is not a condition of purchase. See our{" "}
           <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
           <Link href="/privacy-policy">Privacy Policy</Link>.
         </span>

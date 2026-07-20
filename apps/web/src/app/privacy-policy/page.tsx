@@ -68,11 +68,13 @@ export default function PrivacyPolicyPage() {
         <section className={styles.smsNotice}>
           <h2>Mobile information and text-message consent</h2>
           <p>
-            We do not sell or share mobile phone information, text-message opt-in data, or consent
-            with third parties or affiliates for their own marketing or promotional purposes.
-            Mobile information may be disclosed only to service providers that help us deliver and
-            support our messaging program, or when required by law. Those service providers may use
-            the information only to provide services to Stonegate Home Buyers.
+            The categories of disclosure described in this policy exclude text-message originator
+            opt-in data and consent. We do not sell, rent, or share mobile phone information,
+            text-message opt-in data, or consent with third parties or affiliates for their
+            marketing or promotional purposes. We may provide mobile information only to service
+            providers that help us deliver and support our messaging program, or when required by
+            law. Those providers may use the information only to provide services to Stonegate Home
+            Buyers.
           </p>
         </section>
 

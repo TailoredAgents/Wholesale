@@ -8,13 +8,14 @@ CONSENT_WORDING = (
     "phone call or email about your property and cash offer request. This permission "
     "does not include text messages."
 )
-SMS_CONSENT_WORDING_VERSION = "seller-sms-web-v1"
+SMS_CONSENT_WORDING_VERSION = "seller-sms-web-v2"
 SMS_CONSENT_WORDING = (
-    "Yes, I agree to receive recurring automated text messages from Stonegate Home "
-    "Buyers about my property inquiry, appointments, and cash offer updates at the "
-    "number provided. Message frequency varies. Message and data rates may apply. "
-    "Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. "
-    "See the Stonegate Home Buyers Terms and Conditions and Privacy Policy."
+    "By checking this optional box, I agree to receive recurring automated text "
+    "messages from Stonegate Home Buyers about my property inquiry, appointments, "
+    "and cash offer updates at the number provided. Message frequency varies. "
+    "Message and data rates may apply. Reply STOP to opt out or HELP for help. "
+    "Consent is not a condition of purchase. See the Stonegate Home Buyers Terms "
+    "and Conditions and Privacy Policy."
 )
 
 

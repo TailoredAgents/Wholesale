@@ -87,7 +87,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert all(consent.status == "granted" for consent in consents)
     assert all(consent.captured_ip == "203.0.113.10" for consent in consents)
     sms_consent = next(consent for consent in consents if consent.channel == "sms")
-    assert sms_consent.wording_version == "seller-sms-web-v1"
+    assert sms_consent.wording_version == "seller-sms-web-v2"
     assert "Reply STOP to opt out or HELP for help." in sms_consent.wording
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
