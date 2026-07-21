@@ -40,6 +40,9 @@ class PermissionKeys:
     EDIT_BUYERS = "buyers:edit"
     VIEW_DEALS = "deals:view"
     EDIT_DEALS = "deals:edit"
+    VIEW_ACQUISITION_OPERATIONS = "operations:view"
+    MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
+    WORK_ASSIGNED_CALLING_LISTS = "calling_lists:work_assigned"
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,21 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
     PermissionDefinition(PermissionKeys.EDIT_BUYERS, "Edit buyers", "Create and update buyers."),
     PermissionDefinition(PermissionKeys.VIEW_DEALS, "View deals", "View deal records."),
     PermissionDefinition(PermissionKeys.EDIT_DEALS, "Edit deals", "Create and update deals."),
+    PermissionDefinition(
+        PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+        "View acquisition operations",
+        "View team capacity, calling lists, notifications, and acquisition workflow controls.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+        "Manage acquisition operations",
+        "Manage teams, calling lists, duplicate review, saved views, and follow-up plans.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.WORK_ASSIGNED_CALLING_LISTS,
+        "Work assigned calling lists",
+        "View and update calling-list records assigned to the current user.",
+    ),
 )
 
 ALL_PERMISSION_KEYS = tuple(permission.key for permission in PERMISSIONS)
@@ -239,6 +257,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.MANAGE_USERS,
             PermissionKeys.VIEW_AUDIT_LOGS,
             PermissionKeys.DELETE_OR_ARCHIVE_RECORDS,
+            PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+            PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
         ),
     ),
     RoleDefinition(
@@ -250,9 +270,15 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.APPROVE_OFFERS,
             PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS,
             PermissionKeys.MANAGE_EMAIL_ACCOUNTS,
+            PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+            PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
         ),
     ),
-    RoleDefinition("acquisition_rep", "Acquisition representative", ACQUISITION_KEYS),
+    RoleDefinition(
+        "acquisition_rep",
+        "Acquisition representative",
+        (*ACQUISITION_KEYS, PermissionKeys.VIEW_ACQUISITION_OPERATIONS),
+    ),
     RoleDefinition(
         "prospecting_caller",
         "Prospecting caller",
@@ -264,6 +290,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.SEND_ASSIGNED_SMS,
             PermissionKeys.PLACE_ASSIGNED_CALLS,
             PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
+            PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
+            PermissionKeys.WORK_ASSIGNED_CALLING_LISTS,
         ),
     ),
     RoleDefinition(

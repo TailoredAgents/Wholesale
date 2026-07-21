@@ -69,6 +69,18 @@ complete and should continue to resolve afterward.
 - Seller, property, source, qualification, appointment, task, and follow-up records.
 - Lead editing, pipeline movement, archive/restore, and controlled permanent deletion.
 - Speed-to-lead queue and overdue state.
+- Acquisition Ops workspace with daily appointments, notifications, calling lists, team workload,
+  duplicate review, saved views, and follow-up plans.
+- Owner-managed individual users and operational teams for acquisitions, prospecting,
+  dispositions, and coordination.
+- VA-scoped calling-list execution with attempt history, dispositions, progress, and audited
+  handoff to acquisitions.
+- Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
+- Internal Stonegate calendar plus appointment and overdue-task reminders, with no external
+  calendar dependency.
+- Conservative duplicate review and merge that archives the secondary lead while preserving
+  evidence and a merge snapshot.
+- Human-approved SMS and email follow-up drafts; calls and tasks are created directly from plans.
 - Lead quality, urgency, qualification gaps, and deterministic next-best-action guidance.
 - Notes, appointments, underwriting versions, transactions, and buyer offers on the lead
   workspace.
@@ -137,8 +149,6 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- Calendar synchronization is not implemented.
-- Duplicate review and manual merge are not implemented.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
 - Buyer matching and deal-distribution automation are not complete.
@@ -157,5 +167,5 @@ While A2P approval is pending:
 
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
-3. Continue with Phase 2 acquisition workflow completion in `docs/ROADMAP.md`.
+3. Begin Phase 3 underwriting validation and offer workflow in `docs/ROADMAP.md`.
 4. Resume the external integration gate after A2P approval without blocking internal development.

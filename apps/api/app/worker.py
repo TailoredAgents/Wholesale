@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import Settings, get_settings
 from app.core.database import SessionLocal
 from app.integrations.operations_alerts import send_operational_failure_alert
+from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.call_intelligence import process_next_call_transcript
 from app.services.email import sync_next_email_account
 from app.services.operations import (
@@ -48,6 +49,7 @@ def run_worker(stop_event: threading.Event) -> None:
         ("call_transcription", process_next_call_transcript),
         ("recording_retention", purge_next_expired_recording),
         ("email_sync", sync_next_email_account),
+        ("acquisition_reminders", process_next_acquisition_reminder),
     )
     while not stop_event.is_set():
         processed_operation: str | None = None

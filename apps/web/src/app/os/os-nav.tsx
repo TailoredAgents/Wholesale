@@ -13,6 +13,7 @@ const navGroups = [
       { href: "/os", label: "Dashboard" },
       { href: "/os/inbox", label: "Inbox" },
       { href: "/os/tasks", label: "Work Queue" },
+      { href: "/os/operations", label: "Acquisition Ops" },
       { href: "/os/pipeline", label: "Pipeline" },
       { href: "/os/leads", label: "Leads" },
     ],

@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.leads import (
     LeadAppointmentCreate,
+    LeadAppointmentUpdate,
     LeadBuyerOfferCreate,
     LeadCommunicationCreate,
     LeadCreate,
@@ -25,6 +26,7 @@ from app.schemas.leads import (
     LeadTransactionCreate,
     LeadUnderwritingCreate,
 )
+from app.services.acquisition_operations import update_appointment
 from app.services.leads import (
     add_lead_communication,
     add_lead_note,
@@ -156,6 +158,25 @@ def schedule_lead_appointment(
         ) from exc
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.patch("/{lead_id}/appointments/{appointment_id}")
+def update_lead_appointment(
+    lead_id: UUID,
+    appointment_id: UUID,
+    payload: LeadAppointmentUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(schedule_appointments_dependency)],
+) -> LeadDetail:
+    try:
+        lead = update_appointment(db, principal, lead_id, appointment_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if lead is None:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
     return lead
 
 

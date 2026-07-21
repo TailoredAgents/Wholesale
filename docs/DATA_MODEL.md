@@ -2,7 +2,7 @@
 
 Last updated: July 21, 2026
 
-The schema is managed through Alembic migrations. Migration `0024_operational_reliability` is the
+The schema is managed through Alembic migrations. Migration `0025_acquisition_operations` is the
 current head.
 
 ## Identity And Access
@@ -81,14 +81,24 @@ current head.
 - `worker_heartbeats`
 - `operational_failures`
 
+## Acquisition Operations
+
+- `teams`
+- `team_memberships`
+- `calling_lists`
+- `calling_list_entries`
+- `calendar_events`
+- `saved_views`
+- `notifications`
+- `duplicate_candidates`
+- `lead_merge_events`
+- `follow_up_plans`
+- `follow_up_enrollments`
+
 ## Planned Additions
 
-- Market, territory, launch-checklist, campaign, calling-list, prospect, prospect-assignment, and
+- Market, territory, launch-checklist, campaign, prospect, prospect-assignment, and
   prospect-disposition records.
-- Team and persistent saved-view records.
-- Duplicate candidate and merge-history records.
-- Follow-up plan and sequence records.
-- Calendar account and provider-event records.
 - Comparable candidate records if comp-level review outgrows the retained analysis payload.
 - Offer versions and negotiation-event records.
 - Document, template, signature-envelope, and file-access records.

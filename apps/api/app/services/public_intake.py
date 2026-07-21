@@ -16,6 +16,9 @@ from app.models.foundation import (
     LeadFormSubmission,
     Organization,
     Property,
+    Role,
+    RoleAssignment,
+    User,
 )
 from app.schemas.public_intake import (
     CONSENT_WORDING,
@@ -173,6 +176,35 @@ def create_public_seller_lead(
             reason="Public seller website form submission",
         )
     )
+    from app.services.acquisition_operations import create_notification
+
+    recipients = db.scalars(
+        select(User)
+        .join(RoleAssignment, RoleAssignment.user_id == User.id)
+        .join(Role, Role.id == RoleAssignment.role_id)
+        .where(
+            User.organization_id == organization.id,
+            User.is_active.is_(True),
+            Role.key.in_(("owner", "founder_operator", "acquisition_manager")),
+        )
+    ).unique()
+    for recipient in recipients:
+        create_notification(
+            db,
+            organization_id=organization.id,
+            recipient_user_id=recipient.id,
+            notification_type="new_lead" if not matched_existing_lead else "duplicate_submission",
+            title="New seller lead" if not matched_existing_lead else "Seller submitted again",
+            body=f"{contact.legal_name} submitted property information from the public website.",
+            entity_type="lead",
+            entity_id=lead.id,
+            action_url=f"/os/leads/{lead.id}",
+            dedupe_key=(
+                f"new-public-lead:{lead.id}"
+                if not matched_existing_lead
+                else f"duplicate-public-lead:{lead.id}:{uuid.uuid4()}"
+            ),
+        )
     db.commit()
     return SellerIntakeResponse(
         lead_id=lead.id,

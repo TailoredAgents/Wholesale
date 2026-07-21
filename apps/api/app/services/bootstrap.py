@@ -45,8 +45,9 @@ def bootstrap_foundation(
 ) -> BootstrapResult:
     organization = ensure_organization(db, organization_name)
     permissions_by_key = ensure_permissions(db)
-    roles_by_key = ensure_roles(db, organization)
-    ensure_role_permissions(db, organization, permissions_by_key, roles_by_key)
+    for workspace in db.scalars(select(Organization).order_by(Organization.created_at)).all():
+        workspace_roles = ensure_roles(db, workspace)
+        ensure_role_permissions(db, workspace, permissions_by_key, workspace_roles)
     admin_user = ensure_admin_user(db, organization, admin_email, admin_name)
     ensure_default_voice_line(db, organization, admin_user)
     maybe_record_bootstrap_audit(db, organization, admin_user)

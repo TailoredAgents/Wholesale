@@ -78,6 +78,31 @@ class RoleAssignment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     role_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("roles.id"))
 
 
+class Team(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "teams"
+    __table_args__ = (UniqueConstraint("organization_id", "name", name="uq_teams_org_name"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    team_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    manager_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class TeamMembership(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "team_memberships"
+    __table_args__ = (UniqueConstraint("team_id", "user_id", name="uq_team_memberships_team_user"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    team_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("teams.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    membership_role: Mapped[str] = mapped_column(String(80), nullable=False)
+
+
 class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "contacts"
 
@@ -245,9 +270,7 @@ class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     session_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    event_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    event_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class Conversation(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -458,9 +481,7 @@ class EmailAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
     last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     signature_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
-    account_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    account_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class EmailTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -538,9 +559,7 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     inbound_route: Mapped[str] = mapped_column(String(80), nullable=False)
-    line_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    line_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class VoiceCallIntent(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -562,9 +581,7 @@ class VoiceCallIntent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
-    voice_line_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("voice_lines.id"), index=True
-    )
+    voice_line_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("voice_lines.id"), index=True)
     idempotency_key: Mapped[str] = mapped_column(String(120), nullable=False)
     recipient: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -572,9 +589,7 @@ class VoiceCallIntent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    intent_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    intent_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class CallRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -710,6 +725,32 @@ class Appointment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     appointment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
+
+
+class CalendarEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "calendar_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "appointment_id",
+            "provider",
+            name="uq_calendar_events_org_appointment_provider",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE"), index=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    external_event_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    event_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -1129,9 +1170,7 @@ class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
-    ai_run_log_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("ai_run_logs.id"), index=True
-    )
+    ai_run_log_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ai_run_logs.id"), index=True)
     approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("approval_requests.id"), index=True
     )
@@ -1157,6 +1196,172 @@ class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     priority: Mapped[str] = mapped_column(String(80), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CallingList(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "calling_lists"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_calling_lists_org_name"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    default_assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class CallingListEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "calling_list_entries"
+    __table_args__ = (
+        UniqueConstraint("calling_list_id", "lead_id", name="uq_calling_list_entries_list_lead"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    calling_list_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("calling_lists.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    disposition: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class SavedView(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "saved_views"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "owner_user_id",
+            "resource_type",
+            "name",
+            name="uq_saved_views_owner_resource_name",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    team_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("teams.id"), index=True)
+    resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    filters: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+
+class Notification(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "recipient_user_id",
+            "dedupe_key",
+            name="uq_notifications_recipient_dedupe",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    recipient_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    notification_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    body: Mapped[str] = mapped_column(String(1000), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
+    action_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    dedupe_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class DuplicateCandidate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "duplicate_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "primary_lead_id",
+            "duplicate_lead_id",
+            name="uq_duplicate_candidates_lead_pair",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    primary_lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    duplicate_lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    match_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    match_reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    resolution_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class LeadMergeEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_merge_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    primary_lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    duplicate_lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    merged_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    merge_strategy: Mapped[str] = mapped_column(String(80), nullable=False)
+    merge_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class FollowUpPlan(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "follow_up_plans"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_follow_up_plans_org_name"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    steps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+
+
+class FollowUpEnrollment(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "follow_up_enrollments"
+    __table_args__ = (
+        UniqueConstraint(
+            "follow_up_plan_id",
+            "lead_id",
+            "status",
+            name="uq_follow_up_enrollments_plan_lead_status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    follow_up_plan_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("follow_up_plans.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    enrolled_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    current_step: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
 class ActivityEvent(UuidPrimaryKeyMixin, Base):

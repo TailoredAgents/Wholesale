@@ -47,6 +47,118 @@ export type LeadListItem = {
   created_at: string;
 };
 
+export type OperationsUser = {
+  id: string;
+  email: string;
+  display_name: string;
+  is_active: boolean;
+  role_keys: string[];
+  open_leads: number;
+  open_tasks: number;
+};
+
+export type AcquisitionOperations = {
+  can_manage: boolean;
+  users: OperationsUser[];
+  teams: Array<{
+    id: string;
+    name: string;
+    team_type: string;
+    manager_user_id: string | null;
+    manager_name: string | null;
+    is_active: boolean;
+    members: Array<{
+      user_id: string;
+      display_name: string;
+      email: string;
+      membership_role: string;
+    }>;
+  }>;
+  calling_lists: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    default_assignee_user_id: string | null;
+    total_records: number;
+    completed_records: number;
+    interested_records: number;
+    entries: Array<{
+      id: string;
+      lead_id: string;
+      seller_name: string;
+      property_address: string;
+      assigned_user_id: string | null;
+      assigned_user_name: string | null;
+      status: string;
+      attempt_count: number;
+      disposition: string | null;
+      notes: string | null;
+      last_attempt_at: string | null;
+      completed_at: string | null;
+    }>;
+  }>;
+  appointments: Array<{
+    id: string;
+    lead_id: string;
+    seller_name: string;
+    property_address: string;
+    owner_user_id: string | null;
+    owner_name: string | null;
+    appointment_type: string;
+    status: string;
+    scheduled_start_at: string;
+    scheduled_end_at: string | null;
+    outcome: string | null;
+    calendar_status: string;
+  }>;
+  saved_views: Array<{
+    id: string;
+    name: string;
+    resource_type: string;
+    filters: Record<string, unknown>;
+    is_shared: boolean;
+    team_id: string | null;
+  }>;
+  notifications: Array<{
+    id: string;
+    notification_type: string;
+    title: string;
+    body: string;
+    entity_type: string | null;
+    entity_id: string | null;
+    action_url: string | null;
+    read_at: string | null;
+    created_at: string;
+  }>;
+  unread_notification_count: number;
+  duplicate_candidates: Array<{
+    id: string;
+    primary_lead_id: string;
+    duplicate_lead_id: string;
+    primary_label: string;
+    duplicate_label: string;
+    status: string;
+    match_score: number;
+    match_reasons: string[];
+    resolution_notes: string | null;
+    created_at: string;
+  }>;
+  follow_up_plans: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    status: string;
+    steps: Array<{
+      delay_days: number;
+      action_type: "task" | "call" | "sms" | "email";
+      title: string;
+      body: string | null;
+    }>;
+    active_enrollments: number;
+  }>;
+};
+
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
     method_type: string;
@@ -629,6 +741,31 @@ export async function getLeadDetail(leadId: string): Promise<{
     return { lead: (await response.json()) as LeadDetail, apiConnected: true };
   } catch {
     return { lead: null, apiConnected: false };
+  }
+}
+
+export async function getAcquisitionOperations(): Promise<{
+  operations: AcquisitionOperations | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/operations`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      operations: (await response.json()) as AcquisitionOperations,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate acquisition operations request failed.", error);
+    return { operations: null, apiConnected: false };
   }
 }
 

@@ -4,6 +4,7 @@ import { CompleteTaskButton } from "../../complete-task-button";
 import { getBuyers, getLeadDetail, type LeadDetail } from "../../lib/api";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { AppointmentForm } from "./appointment-form";
+import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
@@ -293,6 +294,9 @@ function CommunicationsTab({ lead }: { lead: LeadDetail }) {
           </ActionDisclosure>
           <ActionDisclosure label="Schedule appointment">
             <AppointmentForm leadId={lead.id} />
+          </ActionDisclosure>
+          <ActionDisclosure label="Record appointment outcome">
+            <AppointmentOutcomeForm appointments={lead.appointments} leadId={lead.id} />
           </ActionDisclosure>
           <ActionDisclosure label="Add note or task">
             <LeadActionForm leadId={lead.id} />

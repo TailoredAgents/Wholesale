@@ -46,7 +46,7 @@ Exit criteria:
 - The owner configures an alert destination and external uptime monitor.
 - The first isolated restore drill and production access-revocation check are recorded.
 
-## Phase 2: Acquisition Workflow Completion
+## Phase 2: Acquisition Workflow Completion (Implemented July 21, 2026)
 
 Goal: Make the OS complete for the owner, Lead Manager, Acquisitions Closer, and VA calling team.
 
@@ -56,7 +56,7 @@ Deliver:
   roles.
 - Calling-list assignment and list-level progress.
 - Appointment reschedule, cancel, no-show, completed, and outcome workflows.
-- Google Calendar synchronization and reminders.
+- Internal appointment calendar and reminders.
 - Persistent user/team saved views.
 - Duplicate review, merge, and merge audit.
 - Notifications for new leads, handoffs, appointments, overdue tasks, and seller replies.
@@ -69,6 +69,9 @@ Exit criteria:
 - The Lead Manager can qualify and book; the Acquisitions Closer can work every accepted
   appointment through offer preparation and outcome.
 - The owner can monitor workload, SLA, and handoff quality without manual spreadsheets.
+
+Implementation note: Stonegate is the calendar system of record. It does not require Google
+Calendar or another external calendar provider.
 
 ## Phase 3: Underwriting Validation And Offer Workflow
 

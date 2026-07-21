@@ -15,7 +15,7 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 | Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
 | Google Workspace | Operational seller email | Implemented | Domain, OAuth project, secrets, and mailbox connections pending |
-| Google Calendar | Appointments | Not implemented | Planned after operational email |
+| Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
 | Object storage | Contracts and persistent files | Not selected | Planned before transaction document automation |
 | E-signature | Contracts | Not selected | Planned in transaction phase |

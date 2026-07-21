@@ -1,0 +1,600 @@
+.workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-tight);
+}
+
+.metrics > div {
+  min-width: 0;
+  padding: 18px 20px;
+  display: grid;
+  gap: 7px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.metrics > div:last-child {
+  border-right: 0;
+}
+
+.metrics span,
+.sectionHeader span,
+.stackForm label span,
+.inlineForm label span,
+.formBand label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metrics strong {
+  font-size: 25px;
+  line-height: 1;
+}
+
+.tabBar {
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  overflow-x: auto;
+}
+
+.tabBar button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabBar button:hover {
+  color: var(--text);
+}
+
+.tabBar .activeTab {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow-tight);
+}
+
+.feedback {
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.saving {
+  background: var(--info-soft);
+  color: var(--info);
+}
+
+.saved {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.error {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.65fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.sectionHeader {
+  min-height: 72px;
+  padding: 15px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.sectionHeader > div {
+  min-width: 0;
+}
+
+.sectionHeader h3 {
+  margin-top: 4px;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.sectionHeader > strong {
+  min-width: 34px;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.sectionHeader select,
+.sectionHeader button,
+.inlineActions button,
+.inlineActions a,
+.callingRow button,
+.stackForm button,
+.inlineForm button,
+.formBand button,
+.planRow button {
+  min-height: 38px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sectionHeader select {
+  min-width: 220px;
+  padding: 0 12px;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.sectionHeader button,
+.inlineActions button,
+.inlineActions a {
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rows,
+.callingRows {
+  display: grid;
+}
+
+.appointmentRow,
+.notificationRow,
+.userRow,
+.teamRow,
+.duplicateRow,
+.planRow,
+.callingRow {
+  min-width: 0;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.rows > :last-child,
+.callingRows > :last-child {
+  border-bottom: 0;
+}
+
+.appointmentRow {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(130px, auto);
+  gap: 16px;
+  align-items: center;
+  color: inherit;
+}
+
+.appointmentRow:hover {
+  background: var(--brand-soft);
+}
+
+.appointmentRow time,
+.notificationRow time,
+.leadIdentity small,
+.userRow small,
+.teamRow small,
+.duplicateRow small,
+.planRow small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.appointmentRow > div,
+.notificationRow > div,
+.userRow > div,
+.teamRow > div,
+.duplicateRow > div,
+.planRow > div,
+.leadIdentity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.appointmentRow strong,
+.notificationRow strong,
+.userRow strong,
+.teamRow strong,
+.duplicateRow strong,
+.planRow strong,
+.leadIdentity a {
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.appointmentRow span,
+.userRow span,
+.teamRow span,
+.duplicateRow span,
+.planRow span,
+.leadIdentity span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rowMeta {
+  justify-items: end;
+}
+
+.badge {
+  width: fit-content;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: var(--brand-soft);
+  color: var(--brand-strong) !important;
+  font-size: 10px !important;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.notificationRow,
+.duplicateRow,
+.planRow,
+.userRow,
+.teamRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.notificationRow p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.inlineActions {
+  display: flex !important;
+  grid-auto-flow: column;
+  gap: 7px !important;
+  flex: none;
+}
+
+.inlineActions button:first-child,
+.inlineActions a:first-child {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.inlineActions .dangerButton {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
+.secondaryButton,
+.savedViews button,
+.teamRow form button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.savedViews {
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.savedViews > span {
+  margin-right: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.empty {
+  margin: 0;
+  padding: 28px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.inlineForm,
+.stackForm,
+.formBand {
+  padding: 16px 18px;
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.inlineForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.inlineForm label,
+.stackForm label,
+.formBand label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.inlineForm input,
+.inlineForm select,
+.stackForm input,
+.stackForm select,
+.stackForm textarea,
+.formBand input,
+.formBand select,
+.callingRow input,
+.callingRow select,
+.planRow select {
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.stackForm {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stackForm h4,
+.formBand h4 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.stackForm label:has(textarea),
+.stackForm .cadence {
+  grid-column: 1 / -1;
+}
+
+.stackForm button {
+  padding: 0 14px;
+  justify-self: start;
+}
+
+.formBand {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.formBand form {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.formBand button,
+.inlineForm button,
+.callingRow button,
+.planRow button {
+  padding: 0 14px;
+}
+
+.progress {
+  height: 4px;
+  background: var(--surface-muted);
+}
+
+.progress span {
+  height: 100%;
+  display: block;
+  background: var(--brand);
+}
+
+.callingRow {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.65fr) minmax(0, 1.35fr);
+  gap: 18px;
+  align-items: center;
+}
+
+.callingRow form {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(150px, 0.9fr) minmax(180px, 1.3fr) auto;
+  gap: 8px;
+}
+
+.userRow > div:nth-child(2) {
+  text-align: right;
+}
+
+.teamRow form {
+  min-width: 310px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 100px auto;
+  gap: 7px;
+}
+
+.teamRow form select {
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.planRow form {
+  display: flex;
+  gap: 8px;
+}
+
+.cadence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.cadence span {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+@media (max-width: 1120px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .metrics > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .twoColumn,
+  .callingRow {
+    grid-template-columns: 1fr;
+  }
+
+  .callingRow form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .metrics > div:nth-child(3) {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .metrics > div:last-child {
+    border-bottom: 0;
+  }
+
+  .sectionHeader,
+  .notificationRow,
+  .duplicateRow,
+  .planRow,
+  .userRow,
+  .teamRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sectionHeader select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .appointmentRow {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .rowMeta {
+    justify-items: start;
+  }
+
+  .inlineForm,
+  .stackForm,
+  .formBand,
+  .formBand form,
+  .callingRow form {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineActions,
+  .planRow form,
+  .teamRow form {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: 1fr;
+  }
+
+  .userRow > div:nth-child(2) {
+    text-align: left;
+  }
+}

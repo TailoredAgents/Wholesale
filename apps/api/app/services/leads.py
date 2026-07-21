@@ -1079,6 +1079,24 @@ def create_lead_appointment(
         lead.stage_key = "appointment_scheduled"
 
     db.flush()
+    from app.services.acquisition_operations import (
+        create_notification,
+        upsert_internal_calendar_event,
+    )
+
+    upsert_internal_calendar_event(db, appointment)
+    create_notification(
+        db,
+        organization_id=principal.organization_id,
+        recipient_user_id=appointment.owner_user_id,
+        notification_type="appointment_scheduled",
+        title="Seller appointment scheduled",
+        body=f"{payload.appointment_type.replace('_', ' ').title()} scheduled for the lead.",
+        entity_type="appointment",
+        entity_id=appointment.id,
+        action_url=f"/os/leads/{lead.id}?tab=communications",
+        dedupe_key=f"appointment-scheduled:{appointment.id}",
+    )
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,

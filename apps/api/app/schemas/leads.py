@@ -458,6 +458,16 @@ class LeadAppointmentCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
 
 
+class LeadAppointmentUpdate(BaseModel):
+    status: Literal["scheduled", "rescheduled", "completed", "cancelled", "no_show"]
+    scheduled_start_at: datetime | None = None
+    scheduled_end_at: datetime | None = None
+    outcome: str | None = Field(default=None, max_length=1000)
+    notes: str | None = Field(default=None, max_length=1000)
+    next_follow_up_at: datetime | None = None
+    reason: str = Field(min_length=3, max_length=500)
+
+
 class LeadUnderwritingCreate(BaseModel):
     status: str = Field(default="draft", max_length=80)
     arv_low_cents: int | None = Field(default=None, ge=0)
