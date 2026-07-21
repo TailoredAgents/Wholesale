@@ -52,6 +52,12 @@ services:
         value: Owner
       - key: SPEED_TO_LEAD_DUE_MINUTES
         value: 5
+      - key: COMMUNICATION_PROVIDER_MODE
+        value: live
+      - key: WORKER_READINESS_REQUIRED
+        value: true
+      - key: WORKER_STALE_AFTER_SECONDS
+        value: 120
       - key: AI_ENABLED
         value: true
       - key: OPENAI_API_KEY
@@ -201,6 +207,20 @@ services:
           type: keyvalue
           name: oakwell-key-value
           property: connectionString
+      - key: COMMUNICATION_PROVIDER_MODE
+        value: live
+      - key: WORKER_HEARTBEAT_INTERVAL_SECONDS
+        value: 30
+      - key: WORKER_STALE_AFTER_SECONDS
+        value: 120
+      - key: WORKER_RETRY_BASE_SECONDS
+        value: 15
+      - key: WORKER_RETRY_MAX_SECONDS
+        value: 900
+      - key: OPERATIONS_ALERT_WEBHOOK_URL
+        sync: false
+      - key: OPERATIONS_ALERT_AFTER_FAILURES
+        value: 3
       - key: AI_ENABLED
         value: true
       - key: OPENAI_API_KEY

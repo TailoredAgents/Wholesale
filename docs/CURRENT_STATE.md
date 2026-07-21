@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 ## Product
 
@@ -57,6 +57,12 @@ complete and should continue to resolve afterward.
 - Live dashboard, task queues, pipeline, lead database, archive, approvals, buyers, finance,
   marketing, underwriting, inbox, and AI control pages.
 - Append-only activity and audit records for material operations.
+- Worker heartbeat and readiness monitoring with durable, grouped failure records.
+- Threshold-based failure webhook alerts that omit raw exception details.
+- Guarded database backup/restore tooling and read-only deployment smoke tests.
+- Deterministic synthetic demo users, leads, appointments, underwriting, transactions, buyers,
+  communications, and a simulated shared mailbox.
+- SMS and email provider simulation for local end-to-end testing without external delivery.
 
 ### Acquisition CRM
 
@@ -142,14 +148,14 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   financial or legal decisions.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
+- A production backup has not yet been restored into an isolated verification database; the
+  guarded drill is implemented and remains an operator checkpoint.
 
 ## Next Checkpoint
 
-After A2P approval:
+While A2P approval is pending:
 
-1. Finish the dedicated Twilio SMS cutover and end-to-end messaging tests.
-2. Finish Voice setup without changing another application's number.
-3. Connect the custom domain and update every authorized origin and callback.
-4. Configure Google Workspace and connect the first operational mailbox.
-5. Run the complete production integration acceptance checklist.
-6. Continue with Phase 2 in `docs/ROADMAP.md`.
+1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
+2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
+3. Continue with Phase 2 acquisition workflow completion in `docs/ROADMAP.md`.
+4. Resume the external integration gate after A2P approval without blocking internal development.

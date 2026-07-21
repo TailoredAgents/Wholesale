@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -33,7 +34,7 @@ OWNER_EMAIL = "owner@example.com"
 def test_call_transcription_requires_review_and_applies_only_selected_empty_fields(
     db_session: Session,
     api_db_override: None,
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     result = bootstrap_foundation(
         db_session,
@@ -224,10 +225,12 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
             },
         ),
     )
-    settings = Settings(
-        DATABASE_URL="sqlite+pysqlite:///:memory:",
-        OPENAI_API_KEY="test-key",
-        CALL_TRANSCRIPTION_ENABLED=True,
+    settings = Settings.model_validate(
+        {
+            "DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "OPENAI_API_KEY": "test-key",
+            "CALL_TRANSCRIPTION_ENABLED": True,
+        }
     )
     processed = process_call_transcript(db_session, transcript.id, settings)
 

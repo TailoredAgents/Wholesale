@@ -1,7 +1,7 @@
 import json
 import time
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -632,10 +632,13 @@ def build_lead_context(
 
 
 def summarize_lead_context_for_log(lead_context: dict[str, object]) -> str:
-    lead = lead_context.get("lead") if isinstance(lead_context.get("lead"), dict) else {}
-    seller = lead_context.get("seller") if isinstance(lead_context.get("seller"), dict) else {}
+    lead_value = lead_context.get("lead")
+    seller_value = lead_context.get("seller")
+    property_value = lead_context.get("property")
+    lead = cast(dict[str, object], lead_value) if isinstance(lead_value, dict) else {}
+    seller = cast(dict[str, object], seller_value) if isinstance(seller_value, dict) else {}
     property_record = (
-        lead_context.get("property") if isinstance(lead_context.get("property"), dict) else {}
+        cast(dict[str, object], property_value) if isinstance(property_value, dict) else {}
     )
     address = ", ".join(
         str(value)

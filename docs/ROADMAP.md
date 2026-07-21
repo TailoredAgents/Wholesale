@@ -1,9 +1,11 @@
 # Roadmap
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
-`CURRENT_STATE.md` is the source of truth for what exists today. This roadmap defines the build
-order after the pending Twilio, domain, and email setup is complete.
+`CURRENT_STATE.md` is the source of truth for what exists today. This roadmap keeps internal
+development moving while Twilio, domain, and email setup are pending.
+`OPERATING_MODEL.md` defines the business roles, handoffs, compensation policy, AI portfolio, and
+operating standards that these phases implement.
 
 ## Current Gate: Integration Closeout
 
@@ -22,59 +24,36 @@ Resume checklist:
 - Custom domain is selected and connected.
 - Google Workspace domain and operational mailboxes exist.
 
-## Phase 1: Production Integration Closeout
+## Phase 1: Reliability, Security, And Operations
 
-Goal: Make communications and identity infrastructure reliable end to end.
-
-Deliver:
-
-- Activate the approved Stonegate Messaging Service and dedicated SMS number.
-- Send immediate enrollment confirmation after website SMS opt-in.
-- Verify outbound, inbound, delivery, failure, STOP, START, HELP, and duplicate webhook behavior.
-- Finish browser Voice setup and move only the selected Stonegate Voice number's inbound webhook.
-- Keep recording disabled until disclosure and operating-state policy are approved.
-- Connect the custom domain to Render and preserve the existing Render URLs.
-- Update Clerk authorized parties, API CORS origins, Google OAuth redirects, public links, and
-  provider callback URLs.
-- Configure Google Workspace OAuth and connect the owner mailbox.
-- Verify email sending, replies, threading, signatures, templates, attachments, and worker sync.
-
-Exit criteria:
-
-- A consented test seller can move through web form, SMS, call, and email in one conversation.
-- STOP blocks every Stonegate user immediately.
-- Incoming calls and messages attach once to the correct lead.
-- Domain, authentication, and OAuth redirects work without `401`, CORS, or signature errors.
-- Another company's numbers, Messaging Service, and webhooks are unchanged.
-
-## Phase 2: Reliability, Security, And Operations
+Status: Implementation complete; production operator checks remain.
 
 Goal: Establish a production baseline before adding more business complexity.
 
 Deliver:
 
-- Error monitoring, structured alerts, uptime checks, and provider failure dashboards.
-- Database backup and restore drill.
-- Worker health, retry, dead-letter, and idempotency review.
-- Secret inventory and rotation process.
-- Owner/admin MFA enforcement and user deactivation test.
-- CI review, dependency update policy, and resolution of the local filesystem/tooling stalls.
-- Production smoke-test checklist for every deployment.
-- Audit-log review tools for communications, recordings, approvals, and financial changes.
+- Durable worker heartbeat, grouped failure tracking, isolated operation retries, and readiness.
+- Threshold-based alert webhooks and an external `/ready` monitoring target.
+- Guarded database backup and isolated restore-verification scripts.
+- Deterministic synthetic demo workspace and provider-safe SMS/email simulators.
+- Production smoke-test script and CI shell validation.
+- User deactivation coverage and production simulation safeguards.
+- Detailed operator procedures in `PHASE_1_RELIABILITY.md`.
 
 Exit criteria:
 
-- Critical failures alert the owner.
-- Restore, rollback, and access-revocation procedures are tested.
-- No production feature depends on an unmonitored background job.
+- Code and automated safeguards are complete.
+- The owner configures an alert destination and external uptime monitor.
+- The first isolated restore drill and production access-revocation check are recorded.
 
-## Phase 3: Acquisition Workflow Completion
+## Phase 2: Acquisition Workflow Completion
 
-Goal: Make the OS complete for the owner, acquisitions specialist, and VA calling team.
+Goal: Make the OS complete for the owner, Lead Manager, Acquisitions Closer, and VA calling team.
 
 Deliver:
 
-- User and team administration for owner, acquisitions, disposition, and VA roles.
+- User and team administration for owner, Lead Manager, Acquisitions Closer, disposition, and VA
+  roles.
 - Calling-list assignment and list-level progress.
 - Appointment reschedule, cancel, no-show, completed, and outcome workflows.
 - Google Calendar synchronization and reminders.
@@ -87,10 +66,11 @@ Deliver:
 Exit criteria:
 
 - A VA can prospect and hand off without seeing restricted business data.
-- Acquisitions can work every qualified lead through appointment and offer preparation.
+- The Lead Manager can qualify and book; the Acquisitions Closer can work every accepted
+  appointment through offer preparation and outcome.
 - The owner can monitor workload, SLA, and handoff quality without manual spreadsheets.
 
-## Phase 4: Underwriting Validation And Offer Workflow
+## Phase 3: Underwriting Validation And Offer Workflow
 
 Goal: Turn comping into repeatable, explainable offer preparation.
 
@@ -111,7 +91,7 @@ Exit criteria:
 - Material assumptions have an owner and timestamp.
 - No AI-generated value bypasses human comp review or offer approval.
 
-## Phase 5: Contracts And Transaction Coordination
+## Phase 4: Contracts And Transaction Coordination
 
 Goal: Run an accepted offer through closing without outside checklists.
 
@@ -130,7 +110,7 @@ Exit criteria:
 - An approved offer can become a signed contract and completed transaction with a complete audit
   trail.
 
-## Phase 6: Buyers And Dispositions
+## Phase 5: Buyers And Dispositions
 
 Goal: Match contracted deals to qualified buyers and manage assignment outcomes.
 
@@ -143,12 +123,14 @@ Deliver:
 - Controlled email/SMS deal distribution.
 - Buyer response, showing, offer, deposit, selection, and backup-buyer workflows.
 - Disposition performance and buyer reliability reporting.
+- Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes without
+  retroactive compensation changes.
 
 Exit criteria:
 
 - Stonegate can move a contract from deal approval to selected buyer without a separate buyer CRM.
 
-## Phase 7: Finance, Compensation, And Accounting
+## Phase 6: Finance, Compensation, And Accounting
 
 Goal: Close the loop from lead source to collected cash.
 
@@ -157,6 +139,8 @@ Deliver:
 - Payment and collection status.
 - Monthly close and reconciliation.
 - Compensation approvals and payout status.
+- Adjusted Deal Margin, CEO Management, role credit, plan version, and 30% company-margin controls
+  defined by the operating model.
 - QuickBooks Online integration or controlled export.
 - Marketing spend imports.
 - Deal-level profitability and cash forecasting.
@@ -167,7 +151,7 @@ Exit criteria:
 - Every collected dollar ties to a transaction, source, deductions, compensation, and accounting
   record.
 
-## Phase 8: AI Agent Production Foundation
+## Phase 7: AI Agent Production Foundation
 
 Goal: Move from AI-capable records to evaluated, permissioned agents.
 
@@ -187,7 +171,7 @@ Exit criteria:
   decision.
 - No external action is enabled without an explicit pilot decision.
 
-## Phase 9: Controlled Automation And Team Intelligence
+## Phase 8: Controlled Automation And Team Intelligence
 
 Goal: Automate repetitive low-risk work after measured accuracy.
 
@@ -207,7 +191,7 @@ Exit criteria:
 - Automation saves measurable staff time without increasing complaints, corrections, missed
   follow-up, or compliance failures.
 
-## Phase 10: Growth, Optimization, And Premium Product Quality
+## Phase 9: Growth, Optimization, And Premium Product Quality
 
 Goal: Improve conversion, operating efficiency, and polish after core workflows are dependable.
 
@@ -226,10 +210,28 @@ Exit criteria:
 - Public conversion and internal workflow changes are driven by measured outcomes.
 - The platform meets Stonegate's premium quality bar on desktop and mobile.
 
+## Phase 10: Multi-Market Expansion And Operating Maturity
+
+Goal: Expand beyond the first Georgia market without losing financial or operating control.
+
+Deliver:
+
+- Versioned market profiles for pricing rules, disclosures, attorneys, vendors, and service areas.
+- Territory launch checklist, staffing capacity, and campaign budget controls.
+- Market-level conversion, margin, cycle-time, and compliance reporting.
+- Permissioned regional management and workload routing.
+- Disaster recovery review, quarterly restore drills, access reviews, and automation revalidation.
+
+Exit criteria:
+
+- A new market can be launched from an approved checklist without changing global code or silently
+  inheriting Georgia-specific assumptions.
+- Company and market-level profitability remain separately explainable.
+
 ## Ordering Rules
 
-- Complete Phase 1 before enabling live communications.
-- Complete the reliability controls in Phase 2 before broad team onboarding.
+- Complete Phase 1 operator checks before broad team onboarding.
+- Resume the external integration gate when providers are ready; it does not block Phase 2.
 - Complete acquisition and underwriting controls before contract automation.
 - Complete transactional records before accounting synchronization.
 - Complete evaluation and approval infrastructure before AI autonomy.

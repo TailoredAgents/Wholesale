@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,48 @@ class Settings(BaseSettings):
     speed_to_lead_due_minutes: int = Field(
         default=5,
         validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
+    )
+    communication_provider_mode: Literal["disabled", "simulate", "live"] = Field(
+        default="live",
+        validation_alias="COMMUNICATION_PROVIDER_MODE",
+    )
+    worker_readiness_required: bool = Field(
+        default=False,
+        validation_alias="WORKER_READINESS_REQUIRED",
+    )
+    worker_heartbeat_interval_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=300,
+        validation_alias="WORKER_HEARTBEAT_INTERVAL_SECONDS",
+    )
+    worker_stale_after_seconds: int = Field(
+        default=120,
+        ge=15,
+        le=1800,
+        validation_alias="WORKER_STALE_AFTER_SECONDS",
+    )
+    worker_retry_base_seconds: int = Field(
+        default=15,
+        ge=1,
+        le=300,
+        validation_alias="WORKER_RETRY_BASE_SECONDS",
+    )
+    worker_retry_max_seconds: int = Field(
+        default=900,
+        ge=15,
+        le=3600,
+        validation_alias="WORKER_RETRY_MAX_SECONDS",
+    )
+    operations_alert_webhook_url: str | None = Field(
+        default=None,
+        validation_alias="OPERATIONS_ALERT_WEBHOOK_URL",
+    )
+    operations_alert_after_failures: int = Field(
+        default=3,
+        ge=1,
+        le=100,
+        validation_alias="OPERATIONS_ALERT_AFTER_FAILURES",
     )
     ai_enabled: bool = Field(default=True, validation_alias="AI_ENABLED")
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
@@ -288,6 +331,16 @@ class Settings(BaseSettings):
         if value.startswith("postgresql://"):
             return value.replace("postgresql://", "postgresql+psycopg://", 1)
         return value
+
+    @model_validator(mode="after")
+    def reject_production_simulation(self) -> "Settings":
+        if self.app_env.lower() == "production" and self.communication_provider_mode == "simulate":
+            raise ValueError("COMMUNICATION_PROVIDER_MODE=simulate is forbidden in production.")
+        return self
+
+    @property
+    def communication_simulation_enabled(self) -> bool:
+        return self.communication_provider_mode == "simulate"
 
     @property
     def api_cors_origins(self) -> list[str]:

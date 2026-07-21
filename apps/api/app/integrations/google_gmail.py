@@ -177,7 +177,7 @@ class GoogleGmailClient:
         start_history_id: str,
         page_token: str | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, object] = {
+        params: dict[str, str | int | float | bool | None] = {
             "startHistoryId": start_history_id,
             "historyTypes": "messageAdded",
             "maxResults": 100,
@@ -203,7 +203,7 @@ class GoogleGmailClient:
         *,
         page_token: str | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, object] = {
+        params: dict[str, str | int | float | bool | None] = {
             "maxResults": 100,
             "q": "newer_than:30d",
         }
@@ -240,7 +240,7 @@ class GoogleGmailClient:
         url: str,
         access_token: str,
         *,
-        params: dict[str, object] | None = None,
+        params: dict[str, str | int | float | bool | None] | None = None,
     ) -> dict[str, Any]:
         try:
             response = self.client.get(

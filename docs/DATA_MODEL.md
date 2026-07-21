@@ -1,8 +1,8 @@
 # Data Model
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
-The schema is managed through Alembic migrations. Migration `0023_google_workspace_email` is the
+The schema is managed through Alembic migrations. Migration `0024_operational_reliability` is the
 current head.
 
 ## Identity And Access
@@ -76,8 +76,15 @@ current head.
 - `ai_run_logs`
 - `ai_tool_call_logs`
 
+## Platform Operations
+
+- `worker_heartbeats`
+- `operational_failures`
+
 ## Planned Additions
 
+- Market, territory, launch-checklist, campaign, calling-list, prospect, prospect-assignment, and
+  prospect-disposition records.
 - Team and persistent saved-view records.
 - Duplicate candidate and merge-history records.
 - Follow-up plan and sequence records.
@@ -86,9 +93,14 @@ current head.
 - Offer versions and negotiation-event records.
 - Document, template, signature-envelope, and file-access records.
 - Buyer proof-of-funds document records.
-- Accounting sync and reconciliation records.
+- Disposition package, campaign, buyer-response, showing, selection, deposit, and operating-mode
+  records.
+- Compensation-plan versions, role credits, commission states, payout batches, disputes, and
+  reversals.
+- Accounting sync, monthly close, reconciliation, cash forecast, and owner-distribution records.
 - Notification delivery and preference records.
-- AI evaluation dataset and result records.
+- AI orchestration event, evaluation dataset, evaluation result, pilot, rollback, and operating-mode
+  records.
 
 ## Rules
 

@@ -11,7 +11,11 @@
     "lint:api": "cd apps/api && uv run ruff check .",
     "typecheck:api": "cd apps/api && uv run mypy app tests",
     "bootstrap:api": "cd apps/api && uv run python -m app.cli.bootstrap",
+    "seed:demo": "cd apps/api && uv run python -m app.cli.seed_demo",
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
+    "db:backup": "bash scripts/db-backup.sh",
+    "db:restore-verify": "bash scripts/db-restore-verify.sh",
+    "ops:smoke": "bash scripts/smoke-test.sh",
     "worker": "cd apps/worker && uv run python -m worker.main"
   },
   "workspaces": [

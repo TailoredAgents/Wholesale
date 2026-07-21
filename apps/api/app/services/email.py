@@ -16,6 +16,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
+from app.integrations.communications import (
+    OutboundMessageRequest,
+    SimulatedCommunicationProvider,
+)
 from app.integrations.google_gmail import (
     GoogleGmailClient,
     GoogleGmailError,
@@ -404,6 +408,7 @@ def send_conversation_email(
     client: GoogleGmailClient | None = None,
 ) -> EmailSendRead | None:
     settings = settings or get_settings()
+    simulation_enabled = settings.communication_simulation_enabled
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
         return None
@@ -412,7 +417,7 @@ def send_conversation_email(
         or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("Email can only be sent from an assigned conversation.")
-    if settings.email_configuration_blockers:
+    if settings.email_configuration_blockers and not simulation_enabled:
         raise EmailConfigurationError(
             "Email is not configured: " + ", ".join(settings.email_configuration_blockers)
         )
@@ -489,7 +494,7 @@ def send_conversation_email(
         recipient=recipient,
         request_body_hash=request_hash,
         status="pending",
-        provider="google",
+        provider="simulated" if simulation_enabled else "google",
         provider_message_id=None,
         error_code=None,
         error_message=None,
@@ -506,49 +511,75 @@ def send_conversation_email(
             CommunicationRecord.organization_id == principal.organization_id,
             CommunicationRecord.conversation_id == conversation.id,
             CommunicationRecord.channel == "email",
-            CommunicationRecord.provider == "google",
         )
         .order_by(CommunicationRecord.occurred_at.desc())
     )
-    prior_metadata = prior_email.communication_metadata if prior_email else {}
+    prior_metadata = (prior_email.communication_metadata if prior_email else None) or {}
     message_body = append_signature(body, account.signature_text)
-    gmail = client or get_google_gmail_client(settings)
-    try:
-        access_token = get_account_access_token(db, account, settings, gmail)
-        result = gmail.send_message(
-            access_token,
-            sender_name=account.display_name,
-            sender_email=account.email_address,
-            recipient=recipient,
-            subject=subject,
-            body=message_body,
-            attachments=decoded_attachments,
-            thread_id=(
-                str(prior_metadata["provider_thread_id"])
-                if prior_metadata and prior_metadata.get("provider_thread_id")
-                else None
-            ),
-            in_reply_to=(
-                str(prior_metadata["rfc_message_id"])
-                if prior_metadata and prior_metadata.get("rfc_message_id")
-                else None
-            ),
-            references=(
-                str(prior_metadata["references"])
-                if prior_metadata and prior_metadata.get("references")
-                else (
+    gmail: GoogleGmailClient | None = None
+    access_token: str | None = None
+    if simulation_enabled:
+        simulated_result = SimulatedCommunicationProvider().send(
+            OutboundMessageRequest(
+                lead_id=str(lead.id),
+                contact_id=str(contact.id),
+                channel="email",
+                recipient=recipient,
+                subject=subject,
+                body=message_body,
+                idempotency_key=payload.idempotency_key,
+                metadata={"attachment_count": str(len(decoded_attachments))},
+            )
+        )
+        provider_message_id = simulated_result.provider_message_id or f"sim-email-{dispatch_id}"
+        provider_thread_id = str(
+            prior_metadata.get("provider_thread_id") or f"sim-thread-{conversation.id}"
+        )
+        provider_payload = simulated_result.raw_payload
+        rfc_message_id = f"<{provider_message_id}@example.test>"
+        provider_name = simulated_result.provider
+    else:
+        gmail = client or get_google_gmail_client(settings)
+        try:
+            access_token = get_account_access_token(db, account, settings, gmail)
+            result = gmail.send_message(
+                access_token,
+                sender_name=account.display_name,
+                sender_email=account.email_address,
+                recipient=recipient,
+                subject=subject,
+                body=message_body,
+                attachments=decoded_attachments,
+                thread_id=(
+                    str(prior_metadata["provider_thread_id"])
+                    if prior_metadata and prior_metadata.get("provider_thread_id")
+                    else None
+                ),
+                in_reply_to=(
                     str(prior_metadata["rfc_message_id"])
                     if prior_metadata and prior_metadata.get("rfc_message_id")
                     else None
-                )
-            ),
-        )
-    except (EmailConfigurationError, GoogleGmailError) as exc:
-        mark_email_dispatch_failed(db, dispatch_id, str(exc))
-        raise
+                ),
+                references=(
+                    str(prior_metadata["references"])
+                    if prior_metadata and prior_metadata.get("references")
+                    else (
+                        str(prior_metadata["rfc_message_id"])
+                        if prior_metadata and prior_metadata.get("rfc_message_id")
+                        else None
+                    )
+                ),
+            )
+        except (EmailConfigurationError, GoogleGmailError) as exc:
+            mark_email_dispatch_failed(db, dispatch_id, str(exc))
+            raise
+        provider_message_id = result.message_id
+        provider_thread_id = result.thread_id
+        provider_payload = result.raw_payload
+        rfc_message_id = str(result.raw_payload.get("rfc_message_id", ""))
+        provider_name = "google"
 
     occurred_at = datetime.now(UTC)
-    rfc_message_id = str(result.raw_payload.get("rfc_message_id", ""))
     communication = CommunicationRecord(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
@@ -558,16 +589,16 @@ def send_conversation_email(
         direction="outbound",
         channel="email",
         status="sent",
-        provider="google",
-        provider_message_id=result.message_id,
+        provider=provider_name,
+        provider_message_id=provider_message_id,
         subject=subject,
         body=message_body,
         occurred_at=occurred_at,
-        external_payload=result.raw_payload,
+        external_payload=provider_payload,
         communication_metadata={
             "source": "shared_inbox",
             "email_account_id": str(account.id),
-            "provider_thread_id": result.thread_id,
+            "provider_thread_id": provider_thread_id,
             "rfc_message_id": rfc_message_id,
             "references": " ".join(
                 part
@@ -589,7 +620,7 @@ def send_conversation_email(
         raise RuntimeError("Email dispatch disappeared before completion.")
     completed_dispatch.communication_record_id = communication.id
     completed_dispatch.status = "sent"
-    completed_dispatch.provider_message_id = result.message_id
+    completed_dispatch.provider_message_id = provider_message_id
     completed_dispatch.completed_at = occurred_at
     update_conversation_activity(conversation, direction="outbound", occurred_at=occurred_at)
     db.add(
@@ -612,8 +643,8 @@ def send_conversation_email(
             entity_id=communication.id,
             previous_value=None,
             new_value={
-                "provider_message_id": result.message_id,
-                "provider_thread_id": result.thread_id,
+                "provider_message_id": provider_message_id,
+                "provider_thread_id": provider_thread_id,
                 "recipient": recipient,
                 "attachment_count": len(decoded_attachments),
             },
@@ -621,17 +652,18 @@ def send_conversation_email(
         )
     )
     db.commit()
-    try:
-        provider_message = gmail.get_message(access_token, result.message_id)
-        index_message_attachments(db, account, communication, provider_message)
-        db.commit()
-    except GoogleGmailError:
-        account.last_error = "Email sent, but attachment metadata will be indexed during sync."
-        db.commit()
+    if gmail is not None and access_token is not None:
+        try:
+            provider_message = gmail.get_message(access_token, provider_message_id)
+            index_message_attachments(db, account, communication, provider_message)
+            db.commit()
+        except GoogleGmailError:
+            account.last_error = "Email sent, but attachment metadata will be indexed during sync."
+            db.commit()
     return EmailSendRead(
         communication_id=communication.id,
-        provider_message_id=result.message_id,
-        provider_thread_id=result.thread_id,
+        provider_message_id=provider_message_id,
+        provider_thread_id=provider_thread_id,
         status="sent",
         recipient=recipient,
     )
@@ -699,16 +731,16 @@ def sync_email_account(
         db.commit()
     except GoogleGmailError as exc:
         db.rollback()
-        account = db.get(EmailAccount, account.id)
-        if account is not None and exc.status_code == 404:
+        refreshed_account = db.get(EmailAccount, account.id)
+        if refreshed_account is not None and exc.status_code == 404:
             return recover_expired_history_cursor(
                 db,
-                account,
+                refreshed_account,
                 access_token=access_token,
                 gmail=gmail,
             )
-        if account is not None:
-            account.last_error = str(exc)
+        if refreshed_account is not None:
+            refreshed_account.last_error = str(exc)
             db.commit()
         raise
     assert account.last_synced_at is not None

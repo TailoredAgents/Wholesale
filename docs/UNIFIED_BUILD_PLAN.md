@@ -1,6 +1,6 @@
 # Unified Build Plan
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 ## Objective
 
@@ -16,6 +16,7 @@ business:
 - Controlled AI agents that automate work without bypassing human authority.
 
 The detailed delivered state is in `CURRENT_STATE.md`. Ordered execution is in `ROADMAP.md`.
+The authoritative human, AI, workflow, and compensation policy is in `OPERATING_MODEL.md`.
 
 ## Product Surfaces
 
@@ -88,13 +89,18 @@ Required modules:
 
 ### Owner/CEO
 
-Full operational visibility, approvals, finance, settings, and the ability to cover acquisitions or
-dispositions.
+Full operational visibility, management, approvals, finance, settings, and the ability to cover an
+operational role with separately attributed role credit.
 
-### Acquisitions
+### Lead Manager
 
-Qualified leads, appointments, seller communication, negotiation, underwriting preparation, and
-follow-up.
+Warm response, qualification, nurture, appointment setting, and seller follow-up. The Lead Manager
+does not own field closing.
+
+### Acquisitions Closer
+
+Seller appointments, property inspection, negotiation, underwriting review, approved offers, and
+purchase contracts. The CEO initially fills this role.
 
 ### VA Prospecting
 
@@ -104,6 +110,11 @@ underwriting, buyers, contracts, accounting, exports, unrelated leads, recording
 ### Dispositions
 
 Approved contracts, buyers, marketing packages, showings, offers, and buyer selection preparation.
+
+### Transaction Coordinator
+
+Executed contracts, closing-attorney intake, title, earnest money, due diligence, documents,
+assignment, deadlines, and funded closing.
 
 ### AI Service
 

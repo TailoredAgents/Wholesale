@@ -1192,3 +1192,34 @@ class AuditEvent(UuidPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class WorkerHeartbeat(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "worker_heartbeats"
+
+    service_name: Mapped[str] = mapped_column(String(160), nullable=False, unique=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consecutive_failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    total_failures: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    worker_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
+
+
+class OperationalFailure(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "operational_failures"
+
+    service_name: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    operation_name: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    error_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    error_message: Mapped[str] = mapped_column(String(2000), nullable=False)
+    first_occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    next_retry_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    failure_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)

@@ -5,7 +5,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 23 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 24 migrations.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker.
 - `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
@@ -18,6 +18,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 
 Start with:
 
+- `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
 - `docs/ROADMAP.md`: ordered development phases after provider setup.
 - `docs/UNIFIED_BUILD_PLAN.md`: long-term product scope and quality standard.
@@ -57,6 +58,16 @@ Bootstrap the first local organization and owner:
 ```bash
 npm run bootstrap:api -- --admin-email richardaustindugger@users.noreply.github.com --admin-name "Richard Austin Dugger"
 ```
+
+Seed a repeatable, entirely synthetic workspace for local workflow testing:
+
+```bash
+npm run seed:demo -- --owner-email owner@example.test --owner-name "Demo Owner"
+```
+
+Local `.env` defaults communications to `simulate`. Simulated SMS and email are retained in the
+normal conversation timeline but never leave the computer. Simulation is rejected when
+`APP_ENV=production`.
 
 Run the API:
 
@@ -125,6 +136,18 @@ npm run lint:api
 npm run typecheck:api
 npm run test:api
 ```
+
+Production operations:
+
+```bash
+DATABASE_URL='...' npm run db:backup
+RESTORE_DATABASE_URL='...stonegate_restore_test' ALLOW_RESTORE_TEST=true \
+  npm run db:restore-verify -- .backups/stonegate-YYYYMMDDTHHMMSSZ.dump
+API_BASE_URL='https://oakwell-api.onrender.com' \
+WEB_BASE_URL='https://oakwell-web.onrender.com' npm run ops:smoke
+```
+
+See `docs/PHASE_1_RELIABILITY.md` before running a restore drill or configuring failure alerts.
 
 `npm run lint:web` is not currently part of CI because ESLint hangs locally before diagnostics.
 Next.js web builds currently skip build-time TypeScript validation because Clerk dependency type

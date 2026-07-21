@@ -1,11 +1,12 @@
 from typing import Any
 
 import httpx
+from pytest import MonkeyPatch
 
 from app.integrations.rentcast_client import RentCastClient
 
 
-def test_recent_sales_uses_recorded_sale_filters(monkeypatch) -> None:
+def test_recent_sales_uses_recorded_sale_filters(monkeypatch: MonkeyPatch) -> None:
     captured: dict[str, Any] = {}
 
     class FakeResponse:

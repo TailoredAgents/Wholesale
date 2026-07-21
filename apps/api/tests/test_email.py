@@ -13,6 +13,7 @@ from app.core.auth import principal_for_user
 from app.core.config import get_settings
 from app.integrations.google_gmail import (
     GmailSendResult,
+    GoogleGmailClient,
     GoogleProfile,
     GoogleTokenResult,
 )
@@ -33,7 +34,7 @@ from app.services.email import (
 OWNER_EMAIL = "owner@example.com"
 
 
-class FakeGoogleGmailClient:
+class FakeGoogleGmailClient(GoogleGmailClient):
     def __init__(self) -> None:
         self.sent: list[dict[str, object]] = []
         self.inbound_enabled = False

@@ -8,7 +8,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import get_settings
 from app.domain.rbac import PermissionKeys
-from app.integrations.communications import OutboundMessageRequest
+from app.integrations.communications import (
+    OutboundMessageRequest,
+    SimulatedCommunicationProvider,
+)
 from app.integrations.twilio_messaging import (
     TwilioMessagingError,
     get_twilio_messaging_provider,
@@ -111,6 +114,8 @@ def send_conversation_sms(
     if not eligibility.can_send or eligibility.recipient is None:
         raise SmsComplianceError(eligibility.blockers)
 
+    settings = get_settings()
+    provider_name = "simulated" if settings.communication_simulation_enabled else "twilio"
     dispatch = CommunicationDispatch(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
@@ -123,7 +128,7 @@ def send_conversation_sms(
         recipient=eligibility.recipient,
         request_body_hash=body_hash,
         status="pending",
-        provider="twilio",
+        provider=provider_name,
         provider_message_id=None,
         error_code=None,
         error_message=None,
@@ -134,8 +139,13 @@ def send_conversation_sms(
     db.commit()
     dispatch_id = dispatch.id
 
-    settings = get_settings()
-    if not settings.twilio_sms_configured:
+    if (
+        settings.communication_provider_mode == "disabled"
+        or (
+            not settings.communication_simulation_enabled
+            and not settings.twilio_sms_configured
+        )
+    ):
         mark_dispatch_failed(
             db,
             dispatch_id,
@@ -143,8 +153,13 @@ def send_conversation_sms(
             error_message="Live Twilio SMS is not fully configured.",
         )
         raise SmsConfigurationError("Live Twilio SMS is not fully configured.")
+    provider = (
+        SimulatedCommunicationProvider()
+        if settings.communication_simulation_enabled
+        else get_twilio_messaging_provider()
+    )
     try:
-        result = get_twilio_messaging_provider().send(
+        result = provider.send(
             OutboundMessageRequest(
                 lead_id=str(lead.id),
                 contact_id=str(contact.id),
@@ -154,7 +169,7 @@ def send_conversation_sms(
                 idempotency_key=payload.idempotency_key,
                 metadata={"conversation_id": str(conversation.id)},
             ),
-            dry_run=False,
+            dry_run=settings.communication_simulation_enabled,
         )
     except TwilioMessagingError as exc:
         mark_dispatch_failed(
@@ -217,7 +232,7 @@ def send_conversation_sms(
             entity_type="lead",
             entity_id=lead.id,
             event_type="lead.sms_sent",
-            summary="Outbound seller SMS accepted by Twilio.",
+            summary="Outbound seller SMS accepted for delivery.",
         )
     )
     db.add(

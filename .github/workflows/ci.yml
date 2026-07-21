@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Check operational scripts
+        run: bash -n ../../scripts/db-backup.sh ../../scripts/db-restore-verify.sh ../../scripts/smoke-test.sh
+
       - name: Typecheck
         run: uv run mypy app tests
 

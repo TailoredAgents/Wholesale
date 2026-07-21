@@ -40,6 +40,30 @@ def test_read_me_returns_seeded_principal_permissions(
     assert "integrations:manage_credentials" in payload["permissions"]
 
 
+def test_read_me_rejects_deactivated_user(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email="owner@example.com",
+        admin_name="Owner",
+    )
+    user = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert user is not None
+    user.is_active = False
+    db_session.commit()
+
+    response = TestClient(app).get(
+        "/api/v1/me",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Unknown user."
+
+
 def test_read_me_rejects_development_header_in_production(
     monkeypatch: MonkeyPatch,
     api_db_override: None,

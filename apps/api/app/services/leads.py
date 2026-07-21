@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
@@ -2291,7 +2292,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                 TransactionChecklistItem.transaction_id.in_(transaction_ids)
             )
         )
-    for model in (
+    for deletion_model in (
         BuyerOffer,
         UnderwritingMarketAnalysis,
         Transaction,
@@ -2302,7 +2303,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         AttributionTouch,
         LeadFormSubmission,
     ):
-        db.execute(delete(model).where(model.lead_id == lead.id))
+        db.execute(delete(deletion_model).where(deletion_model.lead_id == lead.id))
     conversation_ids = list(
         db.scalars(select(Conversation.id).where(Conversation.lead_id == lead.id))
     )
@@ -2689,10 +2690,10 @@ def calculate_arv_range(
             round(percentile(comp_prices, 0.75)),
         )
 
-    low = dollars_to_cents(estimate.price_range_low)
-    high = dollars_to_cents(estimate.price_range_high)
-    if low is not None and high is not None:
-        return normalize_money_range(low, high)
+    estimate_low = dollars_to_cents(estimate.price_range_low)
+    estimate_high = dollars_to_cents(estimate.price_range_high)
+    if estimate_low is not None and estimate_high is not None:
+        return normalize_money_range(estimate_low, estimate_high)
     estimate_cents = dollars_to_cents(estimate.price)
     if estimate_cents is not None:
         return normalize_money_range(round(estimate_cents * 0.92), round(estimate_cents * 1.08))
@@ -2887,7 +2888,7 @@ def dict_value(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
-def percentile(values: list[float | int], target: float) -> float:
+def percentile(values: Sequence[float | int], target: float) -> float:
     sorted_values = sorted(float(value) for value in values)
     if not sorted_values:
         return 0

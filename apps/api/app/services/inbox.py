@@ -27,6 +27,7 @@ from app.models.foundation import (
     Task,
     User,
 )
+from app.schemas.email import EmailAttachmentRead
 from app.schemas.inbox import (
     ConversationAppointmentRead,
     ConversationAssignmentEventRead,
@@ -418,12 +419,12 @@ def get_conversation_detail(
                 else None
             ),
             attachments=[
-                {
-                    "id": attachment.id,
-                    "filename": attachment.filename,
-                    "content_type": attachment.content_type,
-                    "size_bytes": attachment.size_bytes,
-                }
+                EmailAttachmentRead(
+                    id=attachment.id,
+                    filename=attachment.filename,
+                    content_type=attachment.content_type,
+                    size_bytes=attachment.size_bytes,
+                )
                 for attachment in attachments_by_communication_id.get(item.id, [])
             ],
         )

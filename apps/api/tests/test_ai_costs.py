@@ -3,7 +3,7 @@ from app.services.ai_costs import estimate_openai_cost
 
 
 def test_openai_cost_estimate_supports_versioned_defaults_and_overrides() -> None:
-    settings = Settings(DATABASE_URL="sqlite+pysqlite:///:memory:")
+    settings = Settings.model_validate({"DATABASE_URL": "sqlite+pysqlite:///:memory:"})
     terra = estimate_openai_cost(
         settings,
         model="gpt-5.6-terra",
@@ -14,12 +14,14 @@ def test_openai_cost_estimate_supports_versioned_defaults_and_overrides() -> Non
     assert terra.cost_microusd == 12_500
     assert terra.pricing_status == "priced"
 
-    overridden = Settings(
-        DATABASE_URL="sqlite+pysqlite:///:memory:",
-        OPENAI_PRICING_OVERRIDES_JSON=(
-            '{"custom-model":{"input_usd_per_million":1.5,'
-            '"output_usd_per_million":7}}'
-        ),
+    overridden = Settings.model_validate(
+        {
+            "DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "OPENAI_PRICING_OVERRIDES_JSON": (
+                '{"custom-model":{"input_usd_per_million":1.5,'
+                '"output_usd_per_million":7}}'
+            ),
+        }
     )
     custom = estimate_openai_cost(
         overridden,
@@ -33,7 +35,7 @@ def test_openai_cost_estimate_supports_versioned_defaults_and_overrides() -> Non
 
 
 def test_openai_cost_estimate_marks_missing_usage_and_unknown_models() -> None:
-    settings = Settings(DATABASE_URL="sqlite+pysqlite:///:memory:")
+    settings = Settings.model_validate({"DATABASE_URL": "sqlite+pysqlite:///:memory:"})
 
     missing_usage = estimate_openai_cost(
         settings,

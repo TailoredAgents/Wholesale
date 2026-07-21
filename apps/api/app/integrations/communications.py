@@ -1,3 +1,4 @@
+import hashlib
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -32,3 +33,39 @@ class CommunicationProvider(Protocol):
         dry_run: bool = True,
     ) -> OutboundMessageResult:
         """Send or simulate one outbound message after deterministic compliance checks."""
+
+
+class SimulatedCommunicationProvider:
+    """Deterministic local provider used to test communication workflows without delivery."""
+
+    provider_name = "simulated"
+
+    def send(
+        self,
+        request: OutboundMessageRequest,
+        *,
+        dry_run: bool = True,
+    ) -> OutboundMessageResult:
+        fingerprint = hashlib.sha256(
+            "|".join(
+                [
+                    request.channel,
+                    request.idempotency_key or "",
+                    request.recipient,
+                    request.subject or "",
+                    request.body,
+                ]
+            ).encode("utf-8")
+        ).hexdigest()[:24]
+        return OutboundMessageResult(
+            provider=self.provider_name,
+            provider_message_id=f"sim-{request.channel}-{fingerprint}",
+            status="sent",
+            raw_payload={
+                "simulated": True,
+                "dry_run": dry_run,
+                "channel": request.channel,
+                "recipient": request.recipient,
+                "metadata": request.metadata,
+            },
+        )

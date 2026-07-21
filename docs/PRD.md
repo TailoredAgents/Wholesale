@@ -1,6 +1,6 @@
 # Product Requirements
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 ## Product
 
@@ -13,7 +13,8 @@ automation.
 
 - Motivated property seller.
 - Owner/CEO.
-- Acquisitions specialist.
+- Lead Manager.
+- Acquisitions Closer.
 - Restricted VA prospecting caller.
 - Disposition specialist.
 - Transaction coordinator.
@@ -24,7 +25,8 @@ automation.
 1. Convert a public visitor into a consented, attributed seller lead.
 2. Contact and qualify that lead quickly without losing history.
 3. Hand a qualified lead from a VA to acquisitions without copying or moving records between
-   accounts.
+   accounts, with the Lead Manager owning qualification and the Acquisitions Closer owning the
+   seller contract.
 4. Prepare an explainable comp analysis, ARV range, repair range, and offer scenarios.
 5. Require human approval for price, contract, buyer, financial, and sensitive communication
    decisions.

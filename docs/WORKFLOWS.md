@@ -1,6 +1,6 @@
 # Workflows
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 ## Seller Intake
 
@@ -21,8 +21,9 @@ Last updated: July 20, 2026
 2. VA sees only assigned seller context and permitted call/disposition actions.
 3. VA records qualification answers, call outcome, notes, and appointment.
 4. Interested lead changes to Qualified or Appointment Set.
-5. Handoff reassigns the lead, conversation, open tasks, and appointment to acquisitions.
-6. Owner and acquisitions become watchers.
+5. Handoff reassigns the lead, conversation, and open qualification tasks to the Lead Manager.
+6. Owner and assigned Lead Manager become watchers; the Acquisitions Closer becomes the appointment
+   owner when a qualified appointment is accepted.
 7. VA loses broad editing access after handoff.
 8. Assignment and activity history remain attached to the same record.
 
@@ -83,7 +84,8 @@ Last updated: July 20, 2026
 2. Apply deal-specific deductions.
 3. Calculate net commissionable revenue.
 4. Apply effective-dated compensation rules.
-5. Review and approve acquisition, disposition, founder, and company amounts.
+5. Review and approve Lead Manager, Acquisitions Closer, CEO Management, disposition, transaction
+   coordination, and company amounts under the effective-dated operating mode.
 6. Reconcile against accounting and payment status.
 7. Report revenue, spend, source profitability, and advertising percentage.
 

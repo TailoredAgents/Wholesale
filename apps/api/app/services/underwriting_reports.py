@@ -13,6 +13,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
+    Flowable,
     HRFlowable,
     KeepTogether,
     LongTable,
@@ -309,7 +310,7 @@ def report_styles() -> dict[str, ParagraphStyle]:
 def build_investor_story(
     context: ReportContext,
     styles: dict[str, ParagraphStyle],
-) -> list[object]:
+) -> list[Flowable]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
@@ -534,7 +535,7 @@ def build_investor_story(
 def build_client_story(
     context: ReportContext,
     styles: dict[str, ParagraphStyle],
-) -> list[object]:
+) -> list[Flowable]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
     is_v2_1 = metadata.get("methodology_version") == "v2.1"
@@ -846,7 +847,7 @@ def two_column_facts(
 def repair_input_story(
     context: ReportContext,
     styles: dict[str, ParagraphStyle],
-) -> list[object]:
+) -> list[Flowable]:
     metadata = context.analysis.analysis_metadata or {}
     assumptions = dict_value(metadata.get("assumptions"))
     inputs = dict_value(metadata.get("pre_meeting_inputs"))
@@ -859,7 +860,7 @@ def repair_input_story(
     holding_months = optional_int(inputs.get("holding_period_months")) or optional_int(
         assumptions.get("holding_period_months")
     )
-    story: list[object] = [
+    story: list[Flowable] = [
         section_heading("Repair scope and input record", styles),
         key_value_table(
             [

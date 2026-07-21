@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -693,7 +694,7 @@ def test_create_lead_underwriting_rejects_invalid_ranges(
 def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
     db_session: Session,
     api_db_override: None,
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
@@ -770,7 +771,7 @@ def test_preview_lead_market_value_uses_rentcast_without_saving_underwriting(
 def test_preview_lead_market_value_requires_rentcast_key(
     db_session: Session,
     api_db_override: None,
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
@@ -797,7 +798,7 @@ def test_preview_lead_market_value_requires_rentcast_key(
 def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     db_session: Session,
     api_db_override: None,
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     seed_owner(db_session)
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")

@@ -2,6 +2,10 @@
 
 Use specialized agents with narrow tools and human approval boundaries.
 
+`OPERATING_MODEL.md` defines the complete business agent portfolio, its relationship to human
+roles, and the disposition operating modes. This document defines technical AI controls and the
+current implementation state.
+
 ## Current Foundation
 
 - Agent definitions, prompt versions, tool policies, runs, tool-call logs, approvals, and cost

@@ -1,9 +1,11 @@
 from collections.abc import Iterator
 from types import SimpleNamespace
+from typing import cast
 from urllib.parse import urlencode
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx import Response
 from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -149,11 +151,14 @@ def post_signed_twilio(
     client: TestClient,
     path: str,
     payload: dict[str, str],
-):
-    return client.post(
-        path,
-        content=urlencode(payload),
-        headers=signed_twilio_headers(path, payload),
+) -> Response:
+    return cast(
+        Response,
+        client.post(
+            path,
+            content=urlencode(payload),
+            headers=signed_twilio_headers(path, payload),
+        ),
     )
 
 
@@ -163,7 +168,7 @@ def test_twilio_provider_uses_configured_stonegate_sender(
     client = FakeTwilioClient()
     provider = TwilioMessagingProvider(
         get_settings(),
-        client=client,  # type: ignore[arg-type]
+        client=client,
     )
 
     result = provider.send(
