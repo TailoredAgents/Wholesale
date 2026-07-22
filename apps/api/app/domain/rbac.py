@@ -42,6 +42,7 @@ class PermissionKeys:
     EDIT_DEALS = "deals:edit"
     VIEW_ACQUISITION_OPERATIONS = "operations:view"
     MANAGE_ACQUISITION_OPERATIONS = "operations:manage"
+    MANAGE_OPERATING_MODEL = "operating_model:manage"
     WORK_ASSIGNED_CALLING_LISTS = "calling_lists:work_assigned"
 
 
@@ -211,6 +212,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
         "Manage acquisition operations",
         "Manage teams, calling lists, duplicate review, saved views, and follow-up plans.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_OPERATING_MODEL,
+        "Manage operating model",
+        "Manage compensation policy, role credits, disposition modes, and market launch approval.",
     ),
     PermissionDefinition(
         PermissionKeys.WORK_ASSIGNED_CALLING_LISTS,

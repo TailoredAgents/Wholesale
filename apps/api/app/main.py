@@ -14,6 +14,7 @@ from app.routers import (
     leads,
     marketing,
     me,
+    operating_model,
     operations,
     public,
     tasks,
@@ -51,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(leads.router)
     app.include_router(marketing.router)
     app.include_router(me.router)
+    app.include_router(operating_model.router)
     app.include_router(operations.router)
     app.include_router(public.router)
     app.include_router(tasks.router)

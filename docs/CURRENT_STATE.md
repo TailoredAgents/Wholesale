@@ -178,6 +178,16 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 - Transaction records and default closing checklist.
 - Buyer CRM, buyer criteria, proof-of-funds status, deal queue, and buyer offers.
 - Revenue, deductions, compensation rules and calculations, and marketing spend.
+- Versioned compensation plans with owner activation, acquisition reserves, company-margin targets,
+  role percentages, transaction-coordinator caps, and effective dates.
+- Lead-level role-credit proposals and approvals preserve contribution history separately from CRM
+  assignment and prevent over-allocation.
+- Human-led and two AI-assisted disposition operating modes are versioned with each compensation
+  plan; AI modes remain locked behind later evaluation and owner approval.
+- Evidence-backed, versioned market launch checklists require all 11 operational controls before
+  owner approval.
+- Business Setup provides one workspace for operating economics, contribution review, and market
+  launch governance.
 - Source/campaign performance, CPL, contract cost, ROAS, and offline conversion export records.
 - AI agent definitions, prompt versions, tool permissions, run logs, tool-call logs, approvals,
   cost telemetry, and call-intelligence quality reporting.
@@ -204,8 +214,6 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- Compensation-plan versions, explicit role credits, disposition operating modes, and market
-  launch checklists are not yet first-class operating records.
 - CSV list import, field mapping, import-time DNC screening, campaign budgets, list costs, and
   list-quality reporting are not complete.
 - The VA workflow has assigned-list execution and handoff, but not the final one-prospect guided
@@ -234,6 +242,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Continue Phase 2 with compensation-plan versions, role credits, disposition modes, and market
-   launch checklists.
+4. Begin Phase 3 with CSV prospect import, reusable field mapping, row-level validation, and
+   import-time suppression evidence.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

@@ -29,6 +29,7 @@ const navGroups = [
   {
     label: "Systems",
     items: [
+      { href: "/os/operating-model", label: "Business Setup" },
       { href: "/os/finance", label: "Finance" },
       { href: "/os/marketing", label: "Marketing" },
       { href: "/os/ai", label: "AI Control" },

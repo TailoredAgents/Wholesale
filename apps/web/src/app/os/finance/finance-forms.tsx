@@ -70,7 +70,7 @@ export function FinanceForms({ leads }: { leads: LeadListItem[] }) {
   async function submitForm(
     event: FormEvent<HTMLFormElement>,
     endpoint: string,
-    body: Record<string, object | null>,
+    body: Record<string, unknown>,
     setStatus: (status: Status) => void,
   ) {
     event.preventDefault();

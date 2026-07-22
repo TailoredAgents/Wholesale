@@ -1,0 +1,409 @@
+.workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-tight);
+}
+
+.metrics > div {
+  min-width: 0;
+  padding: 17px 19px;
+  display: grid;
+  gap: 7px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.metrics > div:last-child {
+  border-right: 0;
+}
+
+.metrics span,
+.sectionHeader span,
+.planForm label > span,
+.stackForm label > span,
+.modeTable span,
+.checklistItem > div span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.metrics strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.tabBar {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  overflow-x: auto;
+}
+
+.tabBar button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tabBar .activeTab {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow-tight);
+}
+
+.feedback {
+  margin: 0;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.saving { background: var(--info-soft); color: var(--info); }
+.saved { background: var(--brand-soft); color: var(--brand-strong); }
+.error { background: var(--danger-soft); color: var(--danger); }
+
+.twoColumn,
+.launchLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.launchLayout {
+  grid-template-columns: minmax(300px, 0.42fr) minmax(0, 1.58fr);
+}
+
+.section {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.sectionHeader {
+  min-height: 70px;
+  padding: 14px 17px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.sectionHeader > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.sectionHeader h3 {
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.sectionHeader > strong {
+  min-width: 36px;
+  padding: 7px;
+  border-radius: 5px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  text-align: center;
+}
+
+.sectionHeader button,
+.rowActions button,
+.planForm button,
+.stackForm button,
+.checklistItem button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.rows {
+  display: grid;
+}
+
+.plan {
+  padding: 17px;
+  display: grid;
+  gap: 15px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.plan:last-child { border-bottom: 0; }
+
+.rowHeading,
+.creditRow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.rowHeading > div:first-child,
+.creditRow > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.rowHeading strong,
+.creditRow a {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.rowHeading span,
+.creditRow span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: none;
+}
+
+.rowActions .secondary {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.badge {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--brand-soft);
+  color: var(--brand-strong) !important;
+  font-size: 9px !important;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.roleGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.roleGrid > div {
+  min-width: 0;
+  padding: 10px;
+  display: grid;
+  gap: 4px;
+  border-right: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.roleGrid > div:last-child { border-right: 0; }
+.roleGrid span, .roleGrid small { color: var(--muted); font-size: 10px; }
+.roleGrid strong { font-size: 17px; }
+
+.modeTable {
+  display: grid;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.modeTable > div {
+  min-width: 0;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 100px 110px 68px;
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.modeTable > div:last-child { border-bottom: 0; }
+.modeTable > div > div { min-width: 0; display: grid; gap: 3px; }
+.modeTable strong { font-size: 12px; }
+.available, .locked { justify-self: end; font-size: 9px !important; }
+.available { color: var(--brand-strong) !important; }
+.locked { color: var(--amber) !important; }
+
+.planForm,
+.stackForm {
+  padding: 17px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.planForm label,
+.stackForm label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.full,
+.formContext {
+  grid-column: 1 / -1;
+}
+
+.planForm input,
+.planForm textarea,
+.stackForm input,
+.stackForm select,
+.stackForm textarea,
+.checklistItem input,
+.checklistItem select {
+  min-width: 0;
+  min-height: 39px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.planForm textarea,
+.stackForm textarea { resize: vertical; }
+.planForm button, .stackForm button { justify-self: start; }
+
+.formContext {
+  margin: 0;
+  padding: 10px;
+  border-left: 3px solid var(--info);
+  background: var(--info-soft);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.creditRow {
+  padding: 13px 17px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.creditRow:last-child { border-bottom: 0; }
+
+.checklistPicker {
+  display: grid;
+}
+
+.checklistPicker button {
+  min-width: 0;
+  padding: 13px 16px;
+  display: grid;
+  gap: 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.checklistPicker button strong { font-size: 12px; }
+.checklistPicker button span { color: var(--muted); font-size: 11px; }
+.checklistPicker .selectedChecklist { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+
+.checklistItems {
+  display: grid;
+}
+
+.checklistItem {
+  min-width: 0;
+  padding: 11px 14px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1.1fr) 120px 150px minmax(180px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.checklistItem:last-child { border-bottom: 0; }
+.checklistItem > div { min-width: 0; display: grid; gap: 4px; }
+.checklistItem > div strong { font-size: 11px; line-height: 1.35; }
+.checklistItem input, .checklistItem select { min-height: 36px; font-size: 11px; }
+.approvedBy { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+
+.empty {
+  margin: 0;
+  padding: 26px 17px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .twoColumn,
+  .launchLayout { grid-template-columns: 1fr; }
+  .roleGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .roleGrid > div { border-bottom: 1px solid var(--line-soft); }
+  .checklistItem { grid-template-columns: minmax(180px, 1fr) 120px 150px; }
+  .checklistItem input { grid-column: 1 / 3; }
+}
+
+@media (max-width: 760px) {
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics > div:nth-child(2) { border-right: 0; }
+  .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); }
+  .roleGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .modeTable > div { grid-template-columns: minmax(0, 1fr) auto; }
+  .modeTable > div > div:nth-child(2), .modeTable > div > div:nth-child(3) { margin-top: 5px; }
+  .planForm, .stackForm { grid-template-columns: 1fr; }
+  .full, .formContext { grid-column: auto; }
+  .creditRow, .rowHeading { align-items: flex-start; flex-direction: column; }
+  .checklistItem { grid-template-columns: 1fr 1fr; }
+  .checklistItem > div, .checklistItem input { grid-column: 1 / -1; }
+}
+
+@media (max-width: 480px) {
+  .metrics { grid-template-columns: 1fr; }
+  .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .metrics > div:last-child { border-bottom: 0; }
+  .roleGrid { grid-template-columns: 1fr; }
+  .roleGrid > div { border-right: 0; }
+  .checklistItem { grid-template-columns: 1fr; }
+  .checklistItem > div, .checklistItem input { grid-column: auto; }
+  .rowActions { flex-wrap: wrap; }
+}

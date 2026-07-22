@@ -232,6 +232,104 @@ export type AcquisitionOperations = {
   }>;
 };
 
+export type OperatingModelOverview = {
+  users: Array<{
+    id: string;
+    display_name: string;
+    email: string;
+    is_active: boolean;
+  }>;
+  markets: Array<{
+    id: string;
+    name: string;
+    state_code: string;
+    status: string;
+  }>;
+  compensation_plans: Array<{
+    id: string;
+    name: string;
+    version_number: number;
+    status: string;
+    acquisition_reserve_cents: number;
+    target_company_margin_basis_points: number;
+    effective_start_at: string | null;
+    effective_end_at: string | null;
+    created_by_user_id: string;
+    created_by_name: string;
+    approved_by_user_id: string | null;
+    approved_by_name: string | null;
+    approved_at: string | null;
+    notes: string | null;
+    roles: Array<{
+      id: string;
+      role_key: string;
+      basis_points: number;
+      cap_cents: number | null;
+      notes: string | null;
+    }>;
+    disposition_modes: Array<{
+      id: string;
+      key: string;
+      name: string;
+      status: string;
+      human_share_min_basis_points: number;
+      human_share_max_basis_points: number;
+      expected_company_share_min_basis_points: number;
+      expected_company_share_max_basis_points: number;
+      ai_authority_level: string;
+      activation_requirements: Record<string, unknown>;
+    }>;
+  }>;
+  role_credits: Array<{
+    id: string;
+    compensation_plan_version_id: string;
+    plan_label: string;
+    lead_id: string;
+    seller_name: string;
+    user_id: string;
+    user_name: string;
+    role_key: string;
+    credit_basis_points: number;
+    status: string;
+    assigned_by_user_id: string;
+    assigned_by_name: string;
+    approved_by_user_id: string | null;
+    approved_by_name: string | null;
+    approved_at: string | null;
+    notes: string | null;
+    created_at: string;
+  }>;
+  launch_checklists: Array<{
+    id: string;
+    market_id: string;
+    market_name: string;
+    version_number: number;
+    status: string;
+    owner_user_id: string;
+    owner_name: string;
+    approved_by_user_id: string | null;
+    approved_by_name: string | null;
+    approved_at: string | null;
+    notes: string | null;
+    completed_items: number;
+    total_items: number;
+    items: Array<{
+      id: string;
+      item_key: string;
+      category: string;
+      label: string;
+      status: string;
+      responsible_user_id: string | null;
+      responsible_user_name: string | null;
+      evidence_notes: string | null;
+      completed_by_user_id: string | null;
+      completed_by_name: string | null;
+      completed_at: string | null;
+      sort_order: number;
+    }>;
+  }>;
+};
+
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
     method_type: string;
@@ -927,6 +1025,31 @@ export async function getAcquisitionOperations(): Promise<{
   } catch (error) {
     console.error("Stonegate acquisition operations request failed.", error);
     return { operations: null, apiConnected: false };
+  }
+}
+
+export async function getOperatingModelOverview(): Promise<{
+  operatingModel: OperatingModelOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/operating-model`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      operatingModel: (await response.json()) as OperatingModelOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate operating model request failed.", error);
+    return { operatingModel: null, apiConnected: false };
   }
 }
 

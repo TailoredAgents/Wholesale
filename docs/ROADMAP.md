@@ -38,7 +38,7 @@ email is implemented. Production acceptance remains pending for:
 | Phase | Status | Current position |
 | --- | --- | --- |
 | 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
-| 2. Operating Model Data Foundation | Partial | Market, territory, campaign, and prospect foundations exist; compensation and launch controls remain |
+| 2. Operating Model Data Foundation | Complete | Markets, campaigns, versioned economics, role credits, operating modes, and launch controls are auditable |
 | 3. Campaign and List Management | Partial | Calling-list execution exists; prospect import, suppression, cost, and quality workflows remain |
 | 4. VA Prospecting Workbench | Partial | Restricted execution and handoff exist; the dedicated guided workbench remains |
 | 5. Lead Manager Operating System | Partial, advanced | Most CRM workflow exists; guided acceptance, qualification, and scorecards remain |
@@ -80,7 +80,7 @@ providers.
 
 ## Phase 2: Operating Model Data Foundation
 
-Status: Partial.
+Status: Complete.
 
 Goal: Make the database and permissions accurately represent Stonegate's approved operating model.
 
@@ -95,13 +95,16 @@ Delivered:
 - Cold records remain prospects with suppression review pending until a later qualified handoff
   creates a CRM lead.
 - Foundational compensation rules, revenue, deduction, and calculation records.
-
-Remaining:
-
-- Versioned compensation plans and explicit role-credit records.
-- Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes.
-- Market launch checklists and approved market-specific controls.
-- Complete permission and audit coverage for the new entities.
+- Owner-activated compensation plan versions with acquisition reserve, company-margin target,
+  role percentages, caps, effective dates, and immutable historical versions.
+- Explicit lead-level role credits with contribution evidence, approval decisions, and a 100%
+  allocation ceiling per role.
+- Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes. AI modes
+  remain locked until their later evaluation and approval requirements are satisfied.
+- Versioned market launch checklists covering service area, economics, legal review, communications,
+  closing partners, buyers, staffing, attribution, and final owner approval.
+- Dedicated owner-level permission gates and append-only audit events for every new write.
+- A dedicated Business Setup workspace for plan history, contribution review, and launch evidence.
 
 Result: The database accurately represents how Stonegate operates before specialized workspaces are
 built on it.
@@ -327,9 +330,9 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Resume Phase 2 with markets, territories, campaigns, prospects, compensation-plan versions,
-   role credits, disposition modes, and market launch checklists.
-3. Continue through Phases 3-6 in dependency order.
+2. Begin Phase 3 with CSV prospect import, reusable field mapping, and row-level validation.
+3. Continue Phase 3 suppression evidence, cost attribution, and list-quality reporting, then move
+   through Phases 4-6 in dependency order.
 4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred

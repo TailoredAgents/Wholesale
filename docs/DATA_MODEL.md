@@ -2,7 +2,7 @@
 
 Last updated: July 21, 2026
 
-The schema is managed through Alembic migrations. Migration `0029_offer_negotiation_plans` is the
+The schema is managed through Alembic migrations. Migration `0031_operating_controls` is the
 current head.
 
 ## Identity And Access
@@ -92,6 +92,24 @@ notes, timestamp, and audit events. A later request preserves but cancels the fo
 - `marketing_spend`
 - `offline_conversion_exports`
 
+## Operating Model
+
+- `markets`
+- `territories`
+- `outreach_campaigns`
+- `prospects`
+- `compensation_plan_versions`
+- `compensation_plan_roles`
+- `disposition_operating_modes`
+- `role_credits`
+- `market_launch_checklists`
+- `market_launch_checklist_items`
+
+Compensation plans preserve the exact approved economics in effect for a deal. Role credits record
+who performed each compensated function and require an auditable approval before later payment.
+Disposition operating modes define human and expected company shares without retroactively changing
+historical plans. Market checklists retain evidence and final approval for every launch version.
+
 ## AI Control
 
 - `ai_agent_definitions`
@@ -121,21 +139,19 @@ notes, timestamp, and audit events. A later request preserves but cancels the fo
 
 ## Planned Additions
 
-- Market, territory, launch-checklist, campaign, prospect, prospect-assignment, and
-  prospect-disposition records.
+- Prospect import batches, reusable field mappings, assignments, dispositions, and retained
+  suppression-screening evidence.
 - Comparable candidate records if calibration volume or cross-analysis querying outgrows the
   current immutable analysis payload and audit-event review history.
 - Offer versions and negotiation-event records.
 - Document, template, signature-envelope, and file-access records.
 - Buyer proof-of-funds document records.
-- Disposition package, campaign, buyer-response, showing, selection, deposit, and operating-mode
-  records.
-- Compensation-plan versions, role credits, commission states, payout batches, disputes, and
-  reversals.
+- Disposition package, campaign, buyer-response, showing, selection, deposit, and deal-level
+  operating-mode assignment records.
+- Commission states, payout batches, disputes, and reversals.
 - Accounting sync, monthly close, reconciliation, cash forecast, and owner-distribution records.
 - Notification delivery and preference records.
-- AI orchestration event, evaluation dataset, evaluation result, pilot, rollback, and operating-mode
-  records.
+- AI orchestration event, evaluation dataset, evaluation result, pilot, and rollback records.
 
 ## Rules
 

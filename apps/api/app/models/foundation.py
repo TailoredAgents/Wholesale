@@ -1051,6 +1051,12 @@ class Transaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    compensation_plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id"), index=True
+    )
+    disposition_operating_mode_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_operating_modes.id"), index=True
+    )
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     contract_type: Mapped[str] = mapped_column(String(120), nullable=False)
     purchase_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -1175,11 +1181,170 @@ class DealDeduction(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
+class CompensationPlanVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compensation_plan_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "name",
+            "version_number",
+            name="uq_compensation_plan_versions_org_name_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    acquisition_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_company_margin_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_start_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    effective_end_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class CompensationPlanRole(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compensation_plan_roles"
+    __table_args__ = (
+        UniqueConstraint(
+            "compensation_plan_version_id",
+            "role_key",
+            name="uq_compensation_plan_roles_plan_role",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id", ondelete="CASCADE"), index=True
+    )
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    cap_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class DispositionOperatingMode(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_operating_modes"
+    __table_args__ = (
+        UniqueConstraint(
+            "compensation_plan_version_id",
+            "key",
+            name="uq_disposition_operating_modes_plan_key",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id", ondelete="CASCADE"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    human_share_min_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    human_share_max_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_company_share_min_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    expected_company_share_max_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    ai_authority_level: Mapped[str] = mapped_column(String(80), nullable=False)
+    activation_requirements: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class RoleCredit(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "role_credits"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    credit_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    assigned_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class MarketLaunchChecklist(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "market_launch_checklists"
+    __table_args__ = (
+        UniqueConstraint(
+            "market_id",
+            "version_number",
+            name="uq_market_launch_checklists_market_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    market_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("markets.id"), index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class MarketLaunchChecklistItem(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "market_launch_checklist_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "market_launch_checklist_id",
+            "item_key",
+            name="uq_market_launch_checklist_items_checklist_key",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    market_launch_checklist_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("market_launch_checklists.id", ondelete="CASCADE"), index=True
+    )
+    item_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    evidence_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    completed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
 class CompensationRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "compensation_rules"
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
+    )
+    compensation_plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id"), index=True
+    )
+    compensation_plan_role_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_roles.id"), index=True
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     role_key: Mapped[str] = mapped_column(String(120), nullable=False)
