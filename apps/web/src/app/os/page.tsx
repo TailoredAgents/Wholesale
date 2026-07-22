@@ -67,7 +67,7 @@ export default async function Home() {
         <header className={styles.header}>
           <div>
             <p className={styles.eyebrow}>Local foundation</p>
-            <h2>Acquisition command center</h2>
+            <h2>Dashboard</h2>
           </div>
           <div className={styles.statusGroup} aria-label="System status">
             <span>API localhost:8000</span>

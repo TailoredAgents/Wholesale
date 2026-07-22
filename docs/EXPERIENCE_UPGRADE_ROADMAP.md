@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 and UX2 are complete.
+Status: Implementation in progress. Phases UX1 through UX3 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -130,7 +130,7 @@ Exit criteria:
 
 ## Phase UX3: Global OS Shell, Navigation, And Wayfinding
 
-Status: Not started.
+Status: Complete. The role-aware shell and approved navigation were implemented on July 22, 2026.
 
 Goal: Make movement through Stonegate predictable and role-specific.
 
@@ -148,6 +148,21 @@ Exit criteria:
 - Each role can reach its five most common tasks without scanning unrelated modules.
 - Every route clearly communicates its location and purpose.
 - Navigation works with keyboard, screen reader, desktop, and mobile input.
+
+Implementation notes:
+
+- The five approved navigation groups now use one centralized route definition with role and
+  permission visibility checks.
+- The global header provides workspace search, recent destinations, notification state, and compact
+  account controls.
+- Owner, acquisitions, prospecting, dispositions, transaction coordination, finance, marketing,
+  partner, and vendor roles receive focused navigation and appropriate default landing routes.
+- Mobile navigation uses an off-canvas drawer; desktop and mobile browser checks confirm no
+  horizontal overflow.
+- Existing route URLs remain unchanged, while visible route and page labels now use the approved
+  information architecture.
+- `/api/v1/me` supplies roles, permissions, display identity, and unread notification count to the
+  shell for every authenticated workspace role.
 
 ## Phase UX4: Command Center And Daily Workspaces
 

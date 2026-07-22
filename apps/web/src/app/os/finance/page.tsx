@@ -35,7 +35,7 @@ export default async function FinancePage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Finance</p>
-          <h2>Revenue and compensation</h2>
+          <h2>Finance</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Finance data</span>

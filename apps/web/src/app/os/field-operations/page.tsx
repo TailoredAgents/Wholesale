@@ -22,7 +22,7 @@ export default async function FieldOperationsPage({
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Seller appointment operations</p>
-          <h2>Field dispatch</h2>
+          <h2>Field Operations</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Internal calendar</span>

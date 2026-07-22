@@ -77,6 +77,8 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Organization-scoped RBAC, including owner, acquisitions, disposition, and restricted VA roles.
 - Live dashboard, task queues, pipeline, lead database, archive, approvals, buyers, finance,
   marketing, underwriting, inbox, and AI control pages.
+- Role-aware OS shell with five stable navigation groups, focused role landing routes, global
+  workspace search, recent destinations, notification state, and a responsive navigation drawer.
 - Append-only activity and audit records for material operations.
 - Worker heartbeat and readiness monitoring with durable, grouped failure records.
 - Threshold-based failure webhook alerts that omit raw exception details.

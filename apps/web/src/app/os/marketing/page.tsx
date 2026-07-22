@@ -38,7 +38,7 @@ export default async function MarketingPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Marketing</p>
-          <h2>Campaign intelligence</h2>
+          <h2>Marketing</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Tracking data</span>

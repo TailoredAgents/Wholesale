@@ -2,63 +2,23 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef } from "react";
 
+import type { WorkspaceProfile } from "../lib/api";
+import { visibleNavGroups } from "./os-navigation";
 import styles from "./page.module.css";
 
-const navGroups = [
-  {
-    label: "Command",
-    items: [
-      { href: "/os", label: "Dashboard" },
-      { href: "/os/inbox", label: "Inbox" },
-      { href: "/os/tasks", label: "Work Queue" },
-      { href: "/os/calendar", label: "Calendar" },
-      { href: "/os/operations", label: "Acquisition Ops" },
-      { href: "/os/campaigns", label: "Campaigns" },
-      { href: "/os/prospecting", label: "Prospecting" },
-      { href: "/os/lead-manager", label: "Acquisitions Desk" },
-      { href: "/os/field-operations", label: "Field Ops" },
-      { href: "/os/pipeline", label: "Pipeline" },
-      { href: "/os/leads", label: "Leads" },
-    ],
-  },
-  {
-    label: "Deal Flow",
-    items: [
-      { href: "/os/underwriting", label: "Underwriting" },
-      { href: "/os/approvals", label: "Approvals" },
-      { href: "/os/transactions", label: "Transactions" },
-      { href: "/os/dispositions", label: "Dispositions" },
-      { href: "/os/buyers", label: "Buyer CRM" },
-    ],
-  },
-  {
-    label: "Systems",
-    items: [
-      { href: "/os/operating-model", label: "Business Setup" },
-      { href: "/os/finance", label: "Finance" },
-      { href: "/os/marketing", label: "Marketing" },
-      { href: "/os/ai", label: "AI Control" },
-    ],
-  },
-];
-
-export function OsNav() {
+export function OsNav({
+  onNavigate,
+  profile,
+}: {
+  onNavigate?: () => void;
+  profile: WorkspaceProfile;
+}) {
   const pathname = usePathname();
-  const navRef = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const nav = navRef.current;
-    const activeLink = nav?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!nav || !activeLink || nav.scrollWidth <= nav.clientWidth) return;
-
-    const centeredLeft = activeLink.offsetLeft - (nav.clientWidth - activeLink.offsetWidth) / 2;
-    nav.scrollTo({ left: Math.max(0, centeredLeft), behavior: "auto" });
-  }, [pathname]);
+  const navGroups = visibleNavGroups(profile);
 
   return (
-    <nav className={styles.nav} ref={navRef}>
+    <nav aria-label="Stonegate workspaces" className={styles.nav}>
       {navGroups.map((group) => (
         <div className={styles.navGroup} key={group.label}>
           <p className={styles.navLabel}>{group.label}</p>
@@ -71,8 +31,10 @@ export function OsNav() {
                 className={isActive ? styles.activeNav : undefined}
                 href={item.href}
                 key={item.href}
+                onClick={onNavigate}
               >
-                {item.label}
+                <item.icon aria-hidden="true" size={17} strokeWidth={1.8} />
+                <span>{item.label}</span>
               </Link>
             );
           })}

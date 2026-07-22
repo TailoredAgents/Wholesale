@@ -23,7 +23,7 @@ export default async function ApprovalsPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Approvals</p>
-          <h2>Human approval queue</h2>
+          <h2>Approvals</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Approval items</span>

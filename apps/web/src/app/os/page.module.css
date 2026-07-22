@@ -29,6 +29,16 @@
   overflow-y: auto;
 }
 
+.sidebarTop {
+  position: relative;
+}
+
+.mobileClose,
+.mobileMenu,
+.mobileBackdrop {
+  display: none;
+}
+
 .brandBlock {
   padding: 12px;
   border: 1px solid rgba(156, 199, 178, 0.18);
@@ -114,6 +124,7 @@
   font-size: 14px;
   font-weight: 700;
   position: relative;
+  gap: 10px;
   transition:
     background 140ms ease,
     border-color 140ms ease,
@@ -156,6 +167,20 @@
   font-size: 13px;
 }
 
+.sidebarStatus small {
+  color: #9fb2aa;
+  font-size: 12px;
+}
+
+.navUnavailable {
+  padding: 14px 12px;
+  border: 1px solid rgba(156, 199, 178, 0.18);
+  border-radius: 8px;
+  color: #b6c3bd;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .authControls {
   display: grid;
   grid-template-columns: 1fr;
@@ -195,9 +220,235 @@
   transform: translateY(-1px);
 }
 
+.authControlsCompact {
+  width: auto;
+  display: flex;
+  align-items: center;
+}
+
+.authControlsCompact .authButton,
+.authControlsCompact .authButtonSecondary {
+  min-height: 38px;
+  width: auto;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.workspaceArea {
+  min-width: 0;
+}
+
+.globalHeader {
+  position: sticky;
+  z-index: 30;
+  top: 0;
+  min-height: 64px;
+  padding: 0 24px;
+  border-bottom: 1px solid rgba(104, 112, 115, 0.18);
+  background: rgba(250, 248, 243, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  backdrop-filter: blur(12px);
+}
+
+.globalContext {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.globalContext > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.globalContext span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.globalContext strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.globalActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.globalSearch,
+.headerMenuWrap {
+  position: relative;
+}
+
+.globalSearch {
+  width: min(300px, 28vw);
+  min-height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    width 140ms ease;
+}
+
+.globalSearch:focus-within {
+  border-color: var(--focus);
+  box-shadow: var(--sg-focus-ring);
+}
+
+.globalSearchField {
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: text;
+}
+
+.globalSearch input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.globalSearch input::placeholder {
+  color: #7d8586;
+}
+
+.commandMenu,
+.recentMenu {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 7px);
+  right: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+}
+
+.commandMenu {
+  right: -1px;
+  left: -1px;
+  min-width: 260px;
+}
+
+.recentMenu {
+  width: 250px;
+}
+
+.commandMenu > span,
+.recentMenu > span {
+  padding: 7px 9px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.commandMenu a,
+.recentMenu a {
+  min-height: 42px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-soft);
+  font-size: 13px;
+}
+
+.commandMenu a:hover,
+.recentMenu a:hover {
+  background: var(--surface-muted);
+}
+
+.commandMenu p {
+  padding: 12px 9px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.recentMenu a {
+  display: grid;
+  gap: 2px;
+}
+
+.recentMenu small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.headerIconButton {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.headerIconButton:hover,
+.headerIconButton:focus-visible,
+.mobileMenu:hover,
+.mobileMenu:focus-visible {
+  border-color: #bdb5a8;
+  background: var(--surface-soft);
+  outline: 0;
+}
+
+.headerIconButton > span {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border: 2px solid var(--surface-soft);
+  border-radius: 999px;
+  background: var(--danger);
+  color: #ffffff;
+  display: grid;
+  place-items: center;
+  font-size: 9px;
+  font-weight: 850;
+}
+
 .workspace {
   min-width: 0;
-  padding: 30px 32px 36px;
+  padding: 24px 28px 36px;
 }
 
 .workspace > header,
@@ -1173,14 +1424,67 @@
   }
 
   .sidebar {
-    position: relative;
+    position: fixed;
+    z-index: 60;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(320px, calc(100vw - 40px));
+    min-height: 100vh;
+    height: 100vh;
+    padding: 18px;
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
+    box-shadow: 18px 0 48px rgba(10, 20, 20, 0.2);
+  }
+
+  .sidebarOpen {
+    transform: translateX(0);
+  }
+
+  .sidebarTop {
+    padding-right: 36px;
+  }
+
+  .mobileClose {
+    position: absolute;
+    top: 8px;
+    right: -2px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border: 1px solid #3c5554;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+
+  .mobileBackdrop {
+    position: fixed;
+    z-index: 55;
+    inset: 0;
     width: 100%;
-    min-width: 0;
-    min-height: auto;
-    height: auto;
-    gap: 18px;
-    padding: 20px;
-    overflow-x: hidden;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    background: rgba(10, 20, 20, 0.5);
+    display: block;
+  }
+
+  .mobileMenu {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--text-soft);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
   }
 
   .brandBlock {
@@ -1194,31 +1498,6 @@
 
   .nav {
     width: 100%;
-    min-width: 0;
-    max-width: 100%;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(132px, max-content);
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .navGroup {
-    display: contents;
-  }
-
-  .navLabel,
-  .sidebarStatus {
-    display: none;
-  }
-
-  .nav a {
-    justify-content: center;
-    white-space: nowrap;
-  }
-
-  .activeNav {
-    box-shadow: inset 0 -3px 0 #9cc7b2;
   }
 
   .workspace {
@@ -1246,6 +1525,66 @@
 }
 
 @media (max-width: 620px) {
+  .globalHeader {
+    min-height: 58px;
+    padding: 0 12px;
+    gap: 8px;
+  }
+
+  .globalContext {
+    flex: 1 1 auto;
+  }
+
+  .globalContext span {
+    display: none;
+  }
+
+  .globalContext strong {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .globalActions {
+    gap: 6px;
+  }
+
+  .globalSearch {
+    width: 40px;
+    padding: 0 10px;
+    cursor: text;
+  }
+
+  .globalSearch input {
+    width: 0;
+    padding: 0;
+    opacity: 0;
+  }
+
+  .globalSearch:focus-within {
+    position: fixed;
+    z-index: 80;
+    top: 8px;
+    right: 12px;
+    left: 12px;
+    width: auto;
+    background: var(--surface);
+  }
+
+  .globalSearch:focus-within input {
+    width: 100%;
+    opacity: 1;
+  }
+
+  .commandMenu {
+    min-width: 0;
+  }
+
+  .authControlsCompact .authButton {
+    min-height: 40px;
+    padding: 0 10px;
+  }
+
   .workspace {
     padding: 16px;
   }

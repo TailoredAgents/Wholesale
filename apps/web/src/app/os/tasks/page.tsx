@@ -19,7 +19,7 @@ export default async function TasksPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Work queue</p>
-          <h2>Open acquisition tasks</h2>
+          <h2>Work Queue</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Open tasks</span>

@@ -20,6 +20,16 @@ export type DashboardSummary = {
   }>;
 };
 
+export type WorkspaceProfile = {
+  user_id: string;
+  organization_id: string;
+  email: string;
+  display_name: string;
+  role_keys: string[];
+  permissions: string[];
+  unread_notification_count: number;
+};
+
 export type LeadListItem = {
   id: string;
   source: string;
@@ -1661,7 +1671,7 @@ async function getServerApiHeaders(): Promise<Record<string, string>> {
 
 async function getClerkToken() {
   if (!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY) {
-    console.error("Clerk token unavailable: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing.");
+    console.warn("Clerk token unavailable: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is missing.");
     return null;
   }
   try {
@@ -1688,6 +1698,32 @@ async function apiError(response: Response): Promise<Error> {
     // The API may return an empty or non-JSON error response.
   }
   return new Error(`Stonegate API ${response.status}: ${detail}`);
+}
+
+export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/me`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    const profile = (await response.json()) as Partial<WorkspaceProfile>;
+    if (
+      typeof profile.user_id !== "string" ||
+      typeof profile.organization_id !== "string" ||
+      typeof profile.email !== "string" ||
+      typeof profile.display_name !== "string" ||
+      !Array.isArray(profile.role_keys) ||
+      !Array.isArray(profile.permissions) ||
+      typeof profile.unread_notification_count !== "number"
+    ) {
+      return null;
+    }
+    return profile as WorkspaceProfile;
+  } catch {
+    return null;
+  }
 }
 
 export async function getDashboardData(): Promise<DashboardData> {

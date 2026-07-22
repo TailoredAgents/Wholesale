@@ -12,7 +12,7 @@ export default async function CampaignsPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Campaign and list management</p>
-          <h2>Outreach control center</h2>
+          <h2>Campaigns</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Prospect data</span>

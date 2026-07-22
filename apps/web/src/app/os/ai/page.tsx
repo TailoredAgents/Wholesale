@@ -39,7 +39,7 @@ export default async function AiControlPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>AI Control</p>
-          <h2>Agent governance</h2>
+          <h2>AI Control</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Control plane</span>

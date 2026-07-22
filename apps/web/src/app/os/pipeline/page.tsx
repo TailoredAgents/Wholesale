@@ -23,7 +23,7 @@ export default async function PipelinePage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Pipeline</p>
-          <h2>Seller acquisition board</h2>
+          <h2>Seller Pipeline</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Active leads</span>

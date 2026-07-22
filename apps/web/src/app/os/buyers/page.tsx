@@ -41,7 +41,7 @@ export default async function BuyersPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Buyers</p>
-          <h2>Disposition workspace</h2>
+          <h2>Buyers</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Deals needing buyers</span>

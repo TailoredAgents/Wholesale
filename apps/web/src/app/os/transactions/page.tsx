@@ -18,7 +18,7 @@ export default async function TransactionsPage({
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Contract to funding</p>
-          <h2>Transaction Coordination</h2>
+          <h2>Transactions</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Closing control</span>

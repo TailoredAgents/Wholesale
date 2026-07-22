@@ -15,7 +15,7 @@ export default async function OperatingModelPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Business setup</p>
-          <h2>Operating model controls</h2>
+          <h2>Operating Model</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Policy records</span>

@@ -12,7 +12,7 @@ export default async function ProspectingPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>VA prospecting</p>
-          <h2>Seller outreach workbench</h2>
+          <h2>Prospecting</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Queue control</span>

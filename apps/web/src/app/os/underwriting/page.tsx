@@ -53,7 +53,7 @@ export default async function UnderwritingPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Underwriting</p>
-          <h2>Offer preparation and accuracy</h2>
+          <h2>Underwriting</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Verified outcomes</span>

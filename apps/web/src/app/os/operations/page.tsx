@@ -15,7 +15,7 @@ export default async function AcquisitionOperationsPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Acquisition operations</p>
-          <h2>Team execution</h2>
+          <h2>Operations</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Workspace</span>

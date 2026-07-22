@@ -12,7 +12,7 @@ export default async function LeadManagerPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Warm lead operations</p>
-          <h2>Acquisitions Desk</h2>
+          <h2>Lead Desk</h2>
         </div>
         <div className={styles.statusGroup}>
           <span>Daily control</span>
