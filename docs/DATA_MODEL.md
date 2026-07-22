@@ -142,11 +142,23 @@ authorized its presented or agreed price.
 - `role_credits`
 - `market_launch_checklists`
 - `market_launch_checklist_items`
+- `buyer_proof_documents`
+- `disposition_cases`
+- `disposition_matches`
+- `disposition_campaigns`
+- `buyer_engagements`
+- `deal_reconciliations`
+- `deal_payouts`
 
 Compensation plans preserve the exact approved economics in effect for a deal. Role credits record
 who performed each compensated function and require an auditable approval before later payment.
 Disposition operating modes define human and expected company shares without retroactively changing
 historical plans. Market checklists retain evidence and final approval for every launch version.
+
+Disposition cases freeze the governing plan and operating mode, retain the approved package and
+buyer-selection evidence, and connect one contracted transaction to its ranked buyer pool.
+Reconciliations use collected revenue and deal-specific deductions to produce auditable payout and
+company-profit records. Approval cannot silently allocate an unassigned commission.
 
 Prospect import batches preserve the source file checksum, reusable mapping, every source row,
 normalization result, duplicate match, and call-eligibility decision. Suppression checks retain

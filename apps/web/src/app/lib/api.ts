@@ -1033,6 +1033,10 @@ export type BuyerListItem = {
   status: string;
   proof_of_funds_status: string;
   max_purchase_price_cents: number | null;
+  reliability_score_basis_points: number;
+  completed_deals: number;
+  failed_deals: number;
+  proof_of_funds_expires_at: string | null;
   notes: string | null;
   criteria: {
     markets: string | null;
@@ -1043,6 +1047,76 @@ export type BuyerListItem = {
     notes: string | null;
   } | null;
   created_at: string;
+};
+
+export type DispositionMatch = {
+  id: string;
+  buyer_id: string;
+  buyer_name: string;
+  score_basis_points: number;
+  score_components: Record<string, number>;
+  qualification_status: string;
+  recipient_status: string;
+  rank: number;
+  proof_status: string;
+  proof_expires_at: string | null;
+  latest_proof_document_id: string | null;
+};
+
+export type DispositionOffer = {
+  id: string;
+  buyer_id: string;
+  buyer_name: string;
+  amount_cents: number;
+  earnest_money_cents: number | null;
+  financing_type: string;
+  status: string;
+  proof_document_id: string | null;
+  deposit_due_at: string | null;
+  deposit_received_at: string | null;
+  selected_at: string | null;
+  notes: string | null;
+  received_at: string;
+};
+
+export type DispositionCase = {
+  id: string;
+  transaction_id: string;
+  lead_id: string;
+  seller_name: string;
+  property_address: string;
+  property_type: string | null;
+  status: string;
+  strategy: string;
+  asking_price_cents: number;
+  minimum_acceptable_cents: number;
+  package_status: string;
+  package_snapshot: Record<string, unknown>;
+  compensation_plan_label: string;
+  operating_mode_label: string;
+  selected_buyer_id: string | null;
+  backup_buyer_id: string | null;
+  matches: DispositionMatch[];
+  offers: DispositionOffer[];
+  engagements: Array<{
+    id: string; buyer_id: string; buyer_name: string; engagement_type: string;
+    status: string; scheduled_at: string | null; occurred_at: string; notes: string | null;
+  }>;
+  reconciliation: null | {
+    id: string; status: string; gross_revenue_cents: number; acquisition_reserve_cents: number;
+    deal_deductions_cents: number; adjusted_deal_margin_cents: number;
+    total_compensation_cents: number; company_profit_cents: number;
+    company_margin_basis_points: number; target_margin_basis_points: number; notes: string | null;
+    payouts: Array<{ id: string; role_key: string; user_id: string | null; user_name: string | null; credit_basis_points: number; amount_cents: number; status: string }>;
+    created_at: string;
+  };
+  created_at: string;
+};
+
+export type DispositionOverview = {
+  metrics: { active_cases: number; packages_pending: number; buyer_selected: number; reconciliation_pending: number; below_margin_target: number };
+  eligible_transactions: Array<{ id: string; seller_name: string; property_address: string; purchase_price_cents: number; assignment_fee_cents: number | null }>;
+  cases: DispositionCase[];
 };
 
 export type FinanceOverview = {
@@ -2018,5 +2092,25 @@ export async function getTransactionOverview(): Promise<{
     };
   } catch {
     return { transactions: null, apiConnected: false };
+  }
+}
+
+export async function getDispositionOverview(): Promise<{
+  dispositions: DispositionOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/dispositions`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      dispositions: (await response.json()) as DispositionOverview,
+      apiConnected: true,
+    };
+  } catch {
+    return { dispositions: null, apiConnected: false };
   }
 }

@@ -1931,7 +1931,31 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     proof_of_funds_status: Mapped[str] = mapped_column(String(80), nullable=False)
     max_purchase_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reliability_score_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="5000"
+    )
+    completed_deals: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed_deals: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    proof_of_funds_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_proof_documents"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    institution_name: Mapped[str | None] = mapped_column(String(255))
+    verified_amount_cents: Mapped[int | None] = mapped_column(BigInteger)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000))
 
 
 class BuyerCriteria(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -1958,6 +1982,12 @@ class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
     buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"), index=True)
+    disposition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id")
+    )
+    proof_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyer_proof_documents.id")
+    )
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     earnest_money_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     financing_type: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -1967,6 +1997,147 @@ class BuyerOffer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deposit_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deposit_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    selected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class DispositionCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_cases"
+    __table_args__ = (UniqueConstraint("transaction_id", name="uq_disposition_cases_transaction"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    deal_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("deals.id"))
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"))
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id")
+    )
+    disposition_operating_mode_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_operating_modes.id")
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    strategy: Mapped[str] = mapped_column(String(40), nullable=False)
+    asking_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    minimum_acceptable_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    package_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    package_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    package_approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    package_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    selected_buyer_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    backup_buyer_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    selection_approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    selection_approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class DispositionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "disposition_case_id", "buyer_id", name="uq_disposition_matches_case_buyer"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), index=True
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    score_components: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    qualification_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    recipient_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class DispositionCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "disposition_campaigns"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE")
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    recipient_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BuyerEngagement(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_engagements"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE")
+    )
+    buyer_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    engagement_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class DealReconciliation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "deal_reconciliations"
+    __table_args__ = (
+        UniqueConstraint("transaction_id", name="uq_deal_reconciliations_transaction"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    transaction_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("transactions.id"))
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("disposition_cases.id"))
+    compensation_plan_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("compensation_plan_versions.id")
+    )
+    disposition_operating_mode_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_operating_modes.id")
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    gross_revenue_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    acquisition_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    deal_deductions_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    adjusted_deal_margin_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_compensation_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    company_profit_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    company_margin_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_margin_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class DealPayout(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "deal_payouts"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    deal_reconciliation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("deal_reconciliations.id", ondelete="CASCADE")
+    )
+    role_credit_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("role_credits.id"))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    credit_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RevenueRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):

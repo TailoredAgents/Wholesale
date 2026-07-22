@@ -306,26 +306,33 @@ Result: Stonegate can take an executed contract through closing without outside 
 
 ## Phase 9: Buyers, Dispositions, And Finance
 
-Status: Foundational.
+Status: Complete for the provider-neutral manual workflow.
 
 Goal: Move a contracted deal to a qualified buyer, reconcile proceeds, and calculate compensation
 correctly.
 
 Delivered:
 
-- Buyer CRM, criteria, proof-of-funds status, deal queue, and buyer offers.
-- Revenue, deductions, compensation rules and calculations, and marketing-spend records.
+- Dedicated disposition queue opened only from executed, closing, or funded transactions.
+- Deal-level snapshots that freeze the compensation-plan version and disposition operating mode
+  before buyer-placement work starts.
+- Buyer CRM, criteria, proof-of-funds documents and expiration, reliability history, and
+  deterministic ranked matching. Current verified proof is required for buyer selection.
+- Human-approved investor packages, authenticated PDF export, approved recipient pools, and a
+  simulated campaign release that intentionally sends no external communication.
+- Buyer inquiries, showings, follow-ups, offers, earnest-money terms, primary selection, and backup
+  buyer records on the same disposition case.
+- Revenue, deductions, Adjusted Deal Margin, role-credit payouts, transaction-coordinator caps,
+  company-margin target checks, owner reconciliation approval, and accounting CSV export.
 - Source/campaign performance, CPL, contract cost, ROAS, and offline-conversion records.
 
 Remaining:
 
-- Proof-of-funds documents, expiration, buyer reliability scoring, and ranked matching.
-- Deal-package generation, simulated campaigns, and approved package export.
-- Buyer inquiries, showings, offers, deposits, selection, and backup-buyer workflows.
-- Adjusted Deal Margin and versioned CEO Management, Closer, Lead Manager, Disposition, and
-  Transaction Coordinator compensation plans and role credits.
-- Thirty-percent company-margin dashboard, closing reconciliation, payout approval, and accounting
-  export or QuickBooks Online integration.
+- Connect approved disposition campaigns to email/SMS only after provider activation and final
+  recipient/compliance acceptance testing.
+- Add payment-state progression and QuickBooks Online behind the accounting adapter if funded-deal
+  volume justifies it; the approved CSV is the current controlled handoff.
+- Move proof and package files to object storage when volume warrants it.
 - Human-led and AI-assisted disposition performance comparison without retroactive compensation
   changes.
 
@@ -375,8 +382,9 @@ evidence requirements, compliance controls, or financial approvals.
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
 2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
    template and redacted documents.
-3. Start Phase 9 buyer matching, disposition campaigns, buyer selection, and closing reconciliation.
-4. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
+3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
+4. Start Phase 10 with the deterministic agent runner and evaluation harness before adding agents.
+5. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred
 

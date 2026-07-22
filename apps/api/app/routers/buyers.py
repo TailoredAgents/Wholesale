@@ -10,14 +10,14 @@ from app.schemas.buyers import BuyerCreate, BuyerListResponse, BuyerRead
 from app.services.buyers import create_buyer, list_buyers
 
 router = APIRouter(prefix="/api/v1/buyers", tags=["buyers"])
-view_leads_dependency = require_permission(PermissionKeys.VIEW_LEADS)
-edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
+view_buyers_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
+edit_buyers_dependency = require_permission(PermissionKeys.EDIT_BUYERS)
 
 
 @router.get("")
 def read_buyers(
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(view_leads_dependency)],
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
 ) -> BuyerListResponse:
     return BuyerListResponse(items=list_buyers(db, principal))
 
@@ -26,7 +26,7 @@ def read_buyers(
 def create_buyer_record(
     payload: BuyerCreate,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
 ) -> BuyerRead:
     try:
         return create_buyer(db, principal, payload)

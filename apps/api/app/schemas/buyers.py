@@ -45,6 +45,10 @@ class BuyerRead(BaseModel):
     status: str
     proof_of_funds_status: str
     max_purchase_price_cents: int | None
+    reliability_score_basis_points: int
+    completed_deals: int
+    failed_deals: int
+    proof_of_funds_expires_at: datetime | None
     notes: str | None
     criteria: BuyerCriteriaRead | None
     created_at: datetime

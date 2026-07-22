@@ -67,8 +67,8 @@ Required modules:
 | Shared inbox | Built | Final SMS, Voice, and email provider activation pending |
 | Underwriting V2.1 | Built | Real-deal validation, comp review controls, and offer approvals remain |
 | Transactions | Manual workflow built | Live closing validation and e-signature adapter remain |
-| Buyers/dispositions | Foundation built | Matching, proof documents, campaigns, and selection approval remain |
-| Finance | Foundation built | Close, payouts, accounting sync, and forecasting remain |
+| Buyers/dispositions | Manual workflow built | Live simulation and provider campaign delivery remain |
+| Finance | Deal reconciliation built | Payment lifecycle, accounting sync, and forecasting remain |
 | Marketing | Foundation built | Provider delivery, retry, and paid-channel optimization remain |
 | AI control | Foundation built | Evaluations, production runner, pilots, and measured automation remain |
 

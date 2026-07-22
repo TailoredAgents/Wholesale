@@ -94,8 +94,9 @@ Last updated: July 22, 2026
 
 1. Contracted deal enters the disposition queue.
 2. Staff confirms approved deal facts and marketing package.
-3. System ranks matching qualified buyers after matching is implemented.
-4. Staff approves recipients and sends the campaign.
+3. System ranks active buyers using verified funds, price capacity, market, reliability, and
+   property-type fit.
+4. Staff approves recipients and records a simulated release until a provider adapter is enabled.
 5. Buyer responses, showings, offers, proof of funds, and deposit status attach to the deal.
 6. Human approves the selected buyer and backup.
 
@@ -103,11 +104,13 @@ Last updated: July 22, 2026
 
 1. Record collected revenue.
 2. Apply deal-specific deductions.
-3. Calculate net commissionable revenue.
-4. Apply effective-dated compensation rules.
+3. Subtract the frozen acquisition reserve and deal-specific deductions to calculate Adjusted Deal
+   Margin.
+4. Apply the compensation plan and disposition mode frozen when the disposition case opened.
 5. Review and approve Lead Manager, Acquisitions Closer, CEO Management, disposition, transaction
    coordination, and company amounts under the effective-dated operating mode.
-6. Reconcile against accounting and payment status.
+6. Block approval when role credit is unassigned or the company margin is below target without an
+   explicit owner override, then export the approved statement to accounting.
 7. Report revenue, spend, source profitability, and advertising percentage.
 
 ## AI Tool Action

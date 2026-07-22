@@ -230,7 +230,12 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
   parties, dependency-aware checklist evidence, and an immutable transaction timeline.
 - Funded closing is blocked until an executed package, funding confirmation, and all required
   checklist items are present.
-- Buyer CRM, buyer criteria, proof-of-funds status, deal queue, and buyer offers.
+- Dedicated disposition queue with frozen compensation plan/mode, approved deal packages, and
+  authenticated investor PDF export.
+- Buyer CRM, criteria, expiring proof-of-funds evidence, reliability history, ranked qualification,
+  approved campaign simulation, engagement, offers, primary selection, and backup selection.
+- Funded-deal reconciliation calculates Adjusted Deal Margin, role-credit commission payouts,
+  transaction-coordinator caps, company margin, owner approval, and accounting CSV output.
 - Revenue, deductions, compensation rules and calculations, and marketing spend.
 - Versioned compensation plans with owner activation, acquisition reserves, company-margin targets,
   role percentages, transaction-coordinator caps, and effective dates.
@@ -271,7 +276,8 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   deferred until operating data demonstrates that route precision is necessary.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
-- Buyer matching and deal-distribution automation are not complete.
+- External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
+  is complete; buyer matching and human approval are operational.
 - QuickBooks/Xero synchronization is not implemented.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI agents do not autonomously send seller messages, change offers, send contracts, or make
@@ -289,5 +295,7 @@ While A2P approval is pending:
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
-5. Begin Phase 9 buyers, dispositions, and finance workflow completion.
-6. Resume the parallel integration track after A2P approval without blocking internal development.
+5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
+   feedback.
+6. Begin Phase 10 with the deterministic agent runner and evaluation harness.
+7. Resume the parallel integration track after A2P approval without blocking internal development.

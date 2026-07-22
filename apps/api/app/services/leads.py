@@ -25,6 +25,7 @@ from app.models.foundation import (
     AttributionTouch,
     AuditEvent,
     Buyer,
+    BuyerEngagement,
     BuyerOffer,
     CommunicationRecord,
     ConsentRecord,
@@ -37,6 +38,11 @@ from app.models.foundation import (
     ConversionEvent,
     Deal,
     DealDeduction,
+    DealPayout,
+    DealReconciliation,
+    DispositionCampaign,
+    DispositionCase,
+    DispositionMatch,
     Lead,
     LeadFormSubmission,
     OfferNegotiationPlan,
@@ -44,6 +50,7 @@ from app.models.foundation import (
     Property,
     RepairEstimate,
     RevenueRecord,
+    RoleCredit,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -2549,6 +2556,47 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         db.execute(update(model).where(model.lead_id == lead.id).values(lead_id=None))
 
     if transaction_ids:
+        disposition_case_ids = list(
+            db.scalars(
+                select(DispositionCase.id).where(
+                    DispositionCase.transaction_id.in_(transaction_ids)
+                )
+            )
+        )
+        if disposition_case_ids:
+            reconciliation_ids = list(
+                db.scalars(
+                    select(DealReconciliation.id).where(
+                        DealReconciliation.disposition_case_id.in_(disposition_case_ids)
+                    )
+                )
+            )
+            if reconciliation_ids:
+                db.execute(
+                    delete(DealPayout).where(
+                        DealPayout.deal_reconciliation_id.in_(reconciliation_ids)
+                    )
+                )
+                db.execute(
+                    delete(DealReconciliation).where(
+                        DealReconciliation.id.in_(reconciliation_ids)
+                    )
+                )
+            for disposition_model in (
+                BuyerEngagement,
+                DispositionCampaign,
+                DispositionMatch,
+            ):
+                db.execute(
+                    delete(disposition_model).where(
+                        disposition_model.disposition_case_id.in_(disposition_case_ids)
+                    )
+                )
+            db.execute(
+                delete(DispositionCase).where(
+                    DispositionCase.id.in_(disposition_case_ids)
+                )
+            )
         package_ids = list(
             db.scalars(
                 select(ContractPackage.id).where(
@@ -2606,8 +2654,9 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                 ApprovalRequest.entity_id.in_(offer_plan_ids),
             )
         )
+    db.execute(delete(BuyerOffer).where(BuyerOffer.lead_id == lead.id))
+    db.execute(delete(RoleCredit).where(RoleCredit.lead_id == lead.id))
     for deletion_model in (
-        BuyerOffer,
         UnderwritingCalibrationCase,
         UnderwritingMarketAnalysis,
         RepairEstimate,

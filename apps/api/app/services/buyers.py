@@ -133,6 +133,10 @@ def buyer_to_read(buyer: Buyer, criteria: BuyerCriteria | None) -> BuyerRead:
         status=buyer.status,
         proof_of_funds_status=buyer.proof_of_funds_status,
         max_purchase_price_cents=buyer.max_purchase_price_cents,
+        reliability_score_basis_points=buyer.reliability_score_basis_points,
+        completed_deals=buyer.completed_deals,
+        failed_deals=buyer.failed_deals,
+        proof_of_funds_expires_at=buyer.proof_of_funds_expires_at,
         notes=buyer.notes,
         criteria=BuyerCriteriaRead(
             markets=criteria.markets,

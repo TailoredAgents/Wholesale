@@ -29,7 +29,8 @@ const navGroups = [
       { href: "/os/underwriting", label: "Underwriting" },
       { href: "/os/approvals", label: "Approvals" },
       { href: "/os/transactions", label: "Transactions" },
-      { href: "/os/buyers", label: "Buyers" },
+      { href: "/os/dispositions", label: "Dispositions" },
+      { href: "/os/buyers", label: "Buyer CRM" },
     ],
   },
   {

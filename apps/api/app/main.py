@@ -8,6 +8,7 @@ from app.routers import (
     buyers,
     campaign_management,
     dashboard,
+    dispositions,
     email,
     field_operations,
     finance,
@@ -52,6 +53,7 @@ def create_app() -> FastAPI:
     app.include_router(buyers.router)
     app.include_router(campaign_management.router)
     app.include_router(dashboard.router)
+    app.include_router(dispositions.router)
     app.include_router(email.router)
     app.include_router(field_operations.router)
     app.include_router(finance.router)
