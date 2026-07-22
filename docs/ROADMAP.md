@@ -44,7 +44,7 @@ email is implemented. Production acceptance remains pending for:
 | 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
 | 6. Appointments and Field Acquisitions | Complete | Dispatch, month/week/day calendar, meeting brief, mobile inspection, negotiation, evidence transfer, and scorecards are operational |
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
-| 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
+| 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
 | 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
 | 10. Integrated AI Agent System | Foundational | Agent controls and Call Intelligence exist; the complete agent portfolio remains |
 
@@ -273,23 +273,34 @@ Result: Every price recommendation is explainable, versioned, and approved befor
 
 ## Phase 8: Contracts And Transaction Coordination
 
-Status: Foundational.
+Status: Complete for the provider-neutral manual workflow.
 
 Goal: Take an executed seller contract through funded closing without outside checklists.
 
 Delivered:
 
-- Transaction records and a default closing checklist.
-- Foundational transaction activity visible from the lead workspace.
+- Dedicated transaction coordination queue with risk, deadline, progress, and closing metrics.
+- Versioned contract packages with immutable terms snapshots and human approval before sending.
+- State-specific, versioned legal-template library with explicit internal approval. Stonegate must
+  upload attorney-reviewed documents; the application does not invent legal language.
+- Private transaction documents with authenticated downloads and signed-agreement, earnest-money,
+  title, payoff, assignment, closing, and funding evidence types.
+- Manual sent and executed controls. A lead becomes `under_contract` only after a signed purchase
+  agreement is attached to the approved package and execution is recorded.
+- Closing-attorney, title-company, seller, buyer, lender, and other closing-party records.
+- Earnest-money, due-diligence, assignment, title, and closing milestones.
+- Owned, dependency-aware closing checklist with evidence links and immutable transaction events.
+- Funded-closing gate requiring an executed package, funding evidence, and every required checklist
+  item to be complete or marked not applicable.
+- Lead Deal-tab handoff into the central transaction workspace.
 
 Remaining:
 
-- Contract and addendum templates with offer and contract approval.
-- Secure document storage and manual signed-document upload before e-signature is selected.
-- Closing-attorney intake and seller, buyer, and attorney communication timeline.
-- Earnest money, due diligence, title, payoff, assignment, and closing deadlines.
-- Checklist ownership, dependencies, completion, escalation, and evidence.
-- E-signature provider adapter after the manual workflow is dependable.
+- Select and connect an e-signature provider adapter after the manual workflow is proven in live
+  closings.
+- Move binary files to dedicated object storage when volume warrants it; authorization remains in
+  Stonegate.
+- Add automated deadline escalation and provider communication after email and Voice activation.
 
 Result: Stonegate can take an executed contract through closing without outside checklists.
 
@@ -362,8 +373,9 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Start Phase 8 with the seller-contract data model, templates, and controlled document workflow.
-3. Build transaction coordination from execution through funded closing.
+2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
+   template and redacted documents.
+3. Start Phase 9 buyer matching, disposition campaigns, buyer selection, and closing reconciliation.
 4. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

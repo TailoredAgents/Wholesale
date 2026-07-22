@@ -1366,6 +1366,128 @@ export type DashboardData = {
   apiConnected: boolean;
 };
 
+export type TransactionQueueItem = {
+  id: string;
+  lead_id: string;
+  seller_name: string;
+  property_address: string;
+  status: string;
+  purchase_price_cents: number;
+  closing_date: string | null;
+  next_deadline: string | null;
+  coordinator_name: string | null;
+  checklist_complete: number;
+  checklist_total: number;
+  risk_flags: string[];
+};
+
+export type TransactionOverview = {
+  metrics: {
+    active: number;
+    pending_approval: number;
+    due_next_seven_days: number;
+    overdue: number;
+    ready_to_close: number;
+  };
+  items: TransactionQueueItem[];
+};
+
+export type TransactionDetail = {
+  id: string;
+  lead_id: string;
+  deal_id: string;
+  seller_name: string;
+  property_address: string;
+  status: string;
+  contract_type: string;
+  purchase_price_cents: number;
+  assignment_fee_cents: number | null;
+  earnest_money_cents: number | null;
+  title_company: string | null;
+  closing_date: string | null;
+  inspection_period_days: number | null;
+  coordinator_user_id: string | null;
+  coordinator_name: string | null;
+  earnest_money_due_at: string | null;
+  earnest_money_paid_at: string | null;
+  due_diligence_deadline: string | null;
+  title_opened_at: string | null;
+  title_cleared_at: string | null;
+  assignment_deadline: string | null;
+  funded_at: string | null;
+  closed_at: string | null;
+  cancelled_at: string | null;
+  notes: string | null;
+  contract_packages: Array<{
+    id: string;
+    version_number: number;
+    template_id: string | null;
+    status: string;
+    seller_name: string;
+    buyer_entity_name: string;
+    purchase_price_cents: number;
+    earnest_money_cents: number | null;
+    closing_date: string | null;
+    inspection_period_days: number | null;
+    approval_request_id: string | null;
+    notes: string | null;
+    approved_at: string | null;
+    sent_at: string | null;
+    executed_at: string | null;
+    created_at: string;
+  }>;
+  documents: Array<{
+    id: string;
+    contract_package_id: string | null;
+    document_type: string;
+    title: string;
+    status: string;
+    file_name: string;
+    content_type: string;
+    file_size: number;
+    occurred_at: string;
+    notes: string | null;
+    download_url: string;
+  }>;
+  parties: Array<{
+    id: string;
+    party_type: string;
+    name: string;
+    company_name: string | null;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+    is_primary: boolean;
+    notes: string | null;
+    created_at: string;
+  }>;
+  checklist: Array<{
+    id: string;
+    item_key: string | null;
+    category: string;
+    title: string;
+    description: string | null;
+    status: string;
+    is_required: boolean;
+    responsible_user_id: string | null;
+    responsible_name: string | null;
+    due_at: string | null;
+    completed_at: string | null;
+    dependency_item_id: string | null;
+    evidence_document_id: string | null;
+    evidence_notes: string | null;
+    escalated_at: string | null;
+    sort_order: number;
+  }>;
+  events: Array<{
+    id: string;
+    event_type: string;
+    summary: string;
+    actor_name: string | null;
+    occurred_at: string;
+  }>;
+};
+
 const emptySummary: DashboardSummary = {
   total_leads: 0,
   new_paid_leads: 0,
@@ -1876,5 +1998,25 @@ export async function getApprovalRequests(): Promise<{
     };
   } catch {
     return { approvals: [], apiConnected: false };
+  }
+}
+
+export async function getTransactionOverview(): Promise<{
+  transactions: TransactionOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/transactions`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      transactions: (await response.json()) as TransactionOverview,
+      apiConnected: true,
+    };
+  } catch {
+    return { transactions: null, apiConnected: false };
   }
 }

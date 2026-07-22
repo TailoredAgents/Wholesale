@@ -66,7 +66,7 @@ Required modules:
 | Acquisition CRM | Broad foundation built | Team administration, calendar, merge, notifications, and sequences remain |
 | Shared inbox | Built | Final SMS, Voice, and email provider activation pending |
 | Underwriting V2.1 | Built | Real-deal validation, comp review controls, and offer approvals remain |
-| Transactions | Foundation built | Templates, documents, checklist actions, and e-signature remain |
+| Transactions | Manual workflow built | Live closing validation and e-signature adapter remain |
 | Buyers/dispositions | Foundation built | Matching, proof documents, campaigns, and selection approval remain |
 | Finance | Foundation built | Close, payouts, accounting sync, and forecasting remain |
 | Marketing | Foundation built | Provider delivery, retry, and paid-channel optimization remain |

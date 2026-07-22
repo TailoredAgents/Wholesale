@@ -583,6 +583,16 @@
   background: #ffffff;
 }
 
+.transactionWorkspaceLink {
+  width: fit-content;
+  margin-top: 10px;
+  color: var(--brand, #2f6f4e);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .actionDisclosure summary {
   min-height: 46px;
   padding: 0 16px;

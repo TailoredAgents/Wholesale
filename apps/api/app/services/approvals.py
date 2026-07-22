@@ -57,10 +57,17 @@ def decide_approval_request(
         raise ValueError("Call notes must be reviewed with the recording in the shared inbox.")
     offer_context = None
     concession_context = None
+    contract_context = None
     if request.request_type == "offer_ceiling":
         offer_context = validate_offer_decision(db, principal, request, payload)
     elif request.request_type == "offer_concession":
         concession_context = validate_concession_decision(db, principal, request, payload)
+    elif request.request_type == "contract_send":
+        if PermissionKeys.SEND_CONTRACTS not in principal.permission_keys:
+            raise ValueError("Your role cannot approve contract packages for sending.")
+        from app.services.transactions import apply_contract_decision
+
+        contract_context = apply_contract_decision(db, principal, request, payload)
     previous_status = request.status
     request.status = payload.status
     request.decision_notes = payload.decision_notes
@@ -142,6 +149,21 @@ def decide_approval_request(
                 reason="Human seller-concession decision",
             )
         )
+    if contract_context is not None:
+        package, transaction = contract_context
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="contract.approval.decide",
+                entity_type="contract_package",
+                entity_id=package.id,
+                previous_value={"status": "pending_approval"},
+                new_value={"status": package.status, "transaction_id": str(transaction.id)},
+                reason="Human contract package decision",
+            )
+        )
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
@@ -178,6 +200,8 @@ def approval_to_read(request: ApprovalRequest) -> ApprovalRequestRead:
         review_url = f"/os/leads/{metadata['lead_id']}?tab=underwriting#offer-approval"
     elif request.request_type == "offer_concession" and metadata.get("lead_id"):
         review_url = f"/os/leads/{metadata['lead_id']}?tab=underwriting#negotiation-governance"
+    elif request.request_type == "contract_send" and metadata.get("transaction_id"):
+        review_url = f"/os/transactions?transaction={metadata['transaction_id']}"
     else:
         review_url = None
     return ApprovalRequestRead(

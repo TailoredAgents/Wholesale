@@ -53,7 +53,7 @@ sequence is:
 | 5. Lead Manager Operating System | Complete |
 | 6. Appointments and Field Acquisitions | Complete |
 | 7. Underwriting and Offer Governance | Complete |
-| 8. Contracts and Transaction Coordination | Foundational |
+| 8. Contracts and Transaction Coordination | Complete for the manual workflow |
 | 9. Buyers, Dispositions, and Finance | Foundational |
 | 10. Integrated AI Agent System | Foundational |
 
@@ -222,7 +222,14 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 
 ### Downstream Operations
 
-- Transaction records and default closing checklist.
+- Central transaction coordination queue with contract-to-funding status, risk flags, closing
+  metrics, milestone dates, and checklist progress.
+- Versioned contract packages require human approval before sending. A signed agreement must be
+  attached before execution can move the lead to `under_contract`.
+- Versioned, state-specific legal-template records, private authenticated document storage, closing
+  parties, dependency-aware checklist evidence, and an immutable transaction timeline.
+- Funded closing is blocked until an executed package, funding confirmation, and all required
+  checklist items are present.
 - Buyer CRM, buyer criteria, proof-of-funds status, deal queue, and buyer offers.
 - Revenue, deductions, compensation rules and calculations, and marketing spend.
 - Versioned compensation plans with owner activation, acquisition reserves, company-margin targets,
@@ -281,5 +288,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Begin Phase 8 contract and transaction coordination.
-5. Resume the parallel integration track after A2P approval without blocking internal development.
+4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
+5. Begin Phase 9 buyers, dispositions, and finance workflow completion.
+6. Resume the parallel integration track after A2P approval without blocking internal development.

@@ -30,6 +30,7 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    ContractPackage,
     Conversation,
     ConversationAssignmentEvent,
     ConversationWatcher,
@@ -46,6 +47,9 @@ from app.models.foundation import (
     Task,
     Transaction,
     TransactionChecklistItem,
+    TransactionDocument,
+    TransactionEvent,
+    TransactionParty,
     UnderwritingCalibrationCase,
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
@@ -1885,7 +1889,6 @@ def create_lead_transaction(
         deal.assignment_fee_cents = payload.assignment_fee_cents
 
     previous_stage = lead.stage_key
-    lead.stage_key = "under_contract"
     transaction = Transaction(
         organization_id=principal.organization_id,
         deal_id=deal.id,
@@ -1911,19 +1914,31 @@ def create_lead_transaction(
     )
     db.add(transaction)
     db.flush()
-    for index, title in enumerate(default_transaction_checklist_titles(), start=1):
-        db.add(
-            TransactionChecklistItem(
-                organization_id=principal.organization_id,
-                transaction_id=transaction.id,
-                responsible_user_id=transaction.owner_user_id,
-                title=title,
-                status="open",
-                due_at=payload.closing_date if "closing" in title.lower() else None,
-                completed_at=None,
-                sort_order=index,
-            )
+    prior_item: TransactionChecklistItem | None = None
+    for index, (item_key, category, title, description) in enumerate(
+        default_transaction_checklist_specs(), start=1
+    ):
+        item = TransactionChecklistItem(
+            organization_id=principal.organization_id,
+            transaction_id=transaction.id,
+            responsible_user_id=transaction.owner_user_id,
+            item_key=item_key,
+            category=category,
+            title=title,
+            description=description,
+            is_required=True,
+            dependency_item_id=prior_item.id if prior_item else None,
+            evidence_document_id=None,
+            evidence_notes=None,
+            escalated_at=None,
+            status="open",
+            due_at=payload.closing_date if "closing" in title.lower() else None,
+            completed_at=None,
+            sort_order=index,
         )
+        db.add(item)
+        db.flush()
+        prior_item = item
 
     db.add(
         ActivityEvent(
@@ -2534,11 +2549,52 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         db.execute(update(model).where(model.lead_id == lead.id).values(lead_id=None))
 
     if transaction_ids:
+        package_ids = list(
+            db.scalars(
+                select(ContractPackage.id).where(
+                    ContractPackage.transaction_id.in_(transaction_ids)
+                )
+            )
+        )
+        db.execute(
+            update(TransactionChecklistItem)
+            .where(TransactionChecklistItem.transaction_id.in_(transaction_ids))
+            .values(evidence_document_id=None, dependency_item_id=None)
+        )
         db.execute(
             delete(TransactionChecklistItem).where(
                 TransactionChecklistItem.transaction_id.in_(transaction_ids)
             )
         )
+        db.execute(
+            delete(TransactionDocument).where(
+                TransactionDocument.transaction_id.in_(transaction_ids)
+            )
+        )
+        db.execute(
+            delete(TransactionParty).where(
+                TransactionParty.transaction_id.in_(transaction_ids)
+            )
+        )
+        db.execute(
+            delete(TransactionEvent).where(
+                TransactionEvent.transaction_id.in_(transaction_ids)
+            )
+        )
+        if package_ids:
+            db.execute(
+                update(ContractPackage)
+                .where(ContractPackage.id.in_(package_ids))
+                .values(approval_request_id=None)
+            )
+            db.execute(
+                delete(ApprovalRequest).where(
+                    ApprovalRequest.organization_id == principal.organization_id,
+                    ApprovalRequest.entity_type == "contract_package",
+                    ApprovalRequest.entity_id.in_(package_ids),
+                )
+            )
+            db.execute(delete(ContractPackage).where(ContractPackage.id.in_(package_ids)))
     if offer_plan_ids:
         db.execute(
             delete(OfferNegotiationPlan).where(OfferNegotiationPlan.id.in_(offer_plan_ids))
@@ -2694,16 +2750,56 @@ def validate_money_range(label: str, low_cents: int | None, high_cents: int | No
         raise ValueError(f"{label} low value cannot be greater than high value.")
 
 
-def default_transaction_checklist_titles() -> tuple[str, ...]:
+def default_transaction_checklist_specs() -> tuple[tuple[str, str, str, str], ...]:
     return (
-        "Manager approves contract package",
-        "Prepare seller purchase agreement",
-        "Send contract for signature",
-        "Confirm earnest money details",
-        "Open file with title company",
-        "Collect seller disclosures and payoff details",
-        "Track inspection and due diligence period",
-        "Confirm closing date and assignment plan",
+        (
+            "contract_approved",
+            "contract",
+            "Manager approves contract package",
+            "Verify seller, entity, price, deadlines, and special terms.",
+        ),
+        (
+            "contract_executed",
+            "contract",
+            "Record executed purchase agreement",
+            "Upload the signed agreement and record execution.",
+        ),
+        (
+            "earnest_money",
+            "funds",
+            "Confirm earnest money deposited",
+            "Record due and paid dates and attach receipt evidence.",
+        ),
+        (
+            "open_title",
+            "title",
+            "Open file with closing attorney",
+            "Add the closing attorney and confirm file intake.",
+        ),
+        (
+            "seller_documents",
+            "title",
+            "Collect disclosures and payoff details",
+            "Track seller documents, liens, mortgage payoff, and title requests.",
+        ),
+        (
+            "due_diligence",
+            "deadlines",
+            "Complete due diligence",
+            "Resolve inspection issues before the contractual deadline.",
+        ),
+        (
+            "assignment",
+            "disposition",
+            "Confirm buyer or assignment plan",
+            "Attach buyer approval, proof of funds, and assignment documents when applicable.",
+        ),
+        (
+            "closing_confirmed",
+            "closing",
+            "Confirm closing package and date",
+            "Confirm parties, settlement statement, signing, and funding instructions.",
+        ),
     )
 
 

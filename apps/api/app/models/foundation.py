@@ -1722,6 +1722,9 @@ class Transaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    coordinator_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
     compensation_plan_version_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("compensation_plan_versions.id"), index=True
     )
@@ -1736,6 +1739,15 @@ class Transaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
     title_company: Mapped[str | None] = mapped_column(String(255), nullable=True)
     closing_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     inspection_period_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    earnest_money_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    earnest_money_paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    due_diligence_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    title_opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    title_cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    assignment_deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    funded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     contract_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -1758,11 +1770,151 @@ class TransactionChecklistItem(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("transactions.id"), index=True
     )
     responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    item_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    category: Mapped[str] = mapped_column(String(80), nullable=False, server_default="operations")
     title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_required: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    dependency_item_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transaction_checklist_items.id"), nullable=True
+    )
+    evidence_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transaction_documents.id"), nullable=True
+    )
+    evidence_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class ContractTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "contract_templates"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "document_type",
+            "state_code",
+            "version_number",
+            name="uq_contract_templates_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    document_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    state_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class ContractPackage(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "contract_packages"
+    __table_args__ = (
+        UniqueConstraint("transaction_id", "version_number", name="uq_contract_packages_version"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"))
+    template_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("contract_templates.id"))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("approval_requests.id")
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    seller_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    buyer_entity_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    purchase_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    earnest_money_cents: Mapped[int | None] = mapped_column(BigInteger)
+    closing_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    inspection_period_days: Mapped[int | None] = mapped_column(Integer)
+    terms_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TransactionDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_documents"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    contract_package_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("contract_packages.id"), index=True
+    )
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    document_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class TransactionParty(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_parties"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    party_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(320))
+    phone: Mapped[str | None] = mapped_column(String(80))
+    address: Mapped[str | None] = mapped_column(String(500))
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class TransactionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):

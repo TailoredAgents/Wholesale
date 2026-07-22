@@ -28,6 +28,7 @@ const navGroups = [
     items: [
       { href: "/os/underwriting", label: "Underwriting" },
       { href: "/os/approvals", label: "Approvals" },
+      { href: "/os/transactions", label: "Transactions" },
       { href: "/os/buyers", label: "Buyers" },
     ],
   },

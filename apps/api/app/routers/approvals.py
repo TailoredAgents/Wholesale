@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
 view_approvals_dependency = require_any_permission(
     PermissionKeys.VIEW_AUDIT_LOGS,
     PermissionKeys.APPROVE_OFFERS,
+    PermissionKeys.SEND_CONTRACTS,
 )
 
 

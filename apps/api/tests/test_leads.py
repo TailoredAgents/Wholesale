@@ -1556,7 +1556,7 @@ def test_open_lead_transaction_creates_deal_checklist_and_audit(
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["stage_key"] == "under_contract"
+    assert payload["stage_key"] == "new"
     assert payload["transactions"][0]["status"] == "contract_prep"
     assert payload["transactions"][0]["contract_type"] == "purchase_agreement"
     assert payload["transactions"][0]["purchase_price_cents"] == 17000000

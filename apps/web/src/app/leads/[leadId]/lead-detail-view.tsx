@@ -381,6 +381,9 @@ function DealTab({ lead, buyers }: { lead: LeadDetail; buyers: Awaited<ReturnTyp
                   <div><dt>Closing</dt><dd>{formatOptionalDate(transaction.closing_date)}</dd></div>
                 </dl>
                 <small>{transaction.title_company ?? "No title company recorded"}</small>
+                <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
+                  Open transaction coordination
+                </Link>
                 <div className={styles.checklist}>
                   {transaction.checklist_items.map((item) => <p key={item.id}><strong>{item.title}</strong><span>{labelize(item.status)}</span></p>)}
                 </div>
