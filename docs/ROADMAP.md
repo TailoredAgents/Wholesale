@@ -2,264 +2,330 @@
 
 Last updated: July 21, 2026
 
-`CURRENT_STATE.md` is the source of truth for what exists today. This roadmap keeps internal
-development moving while Twilio, domain, and email setup are pending.
-`OPERATING_MODEL.md` defines the business roles, handoffs, compensation policy, AI portfolio, and
-operating standards that these phases implement.
+This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
+from reliability through the integrated AI agent system.
 
-## Current Gate: Integration Closeout
+`CURRENT_STATE.md` is the source of truth for what exists today. `OPERATING_MODEL.md` defines the
+business roles, handoffs, compensation policy, AI portfolio, and operating standards that these
+phases implement.
 
-Status: Waiting on external A2P review.
+## Status Definitions
+
+- **Complete:** The phase exit criteria have been demonstrated.
+- **Partial:** Useful production code exists, but one or more material deliverables remain.
+- **Foundational:** Supporting records or screens exist, but the end-to-end workflow is not ready.
+- **Not started:** No material implementation exists yet.
+
+## Parallel Integration Track
+
+Status: Waiting on external A2P review and provider configuration.
+
+Twilio, Google Workspace email, and custom-domain setup run in parallel with the numbered build
+phases. They do not change the business-workflow order and should not leave internal development
+idle.
 
 The application code for SMS, Voice, recording/transcription, AI call review, and Google Workspace
-email is implemented. Production setup is intentionally paused while Stonegate's dedicated A2P
-Campaign is reviewed.
+email is implemented. Production acceptance remains pending for:
 
-Resume checklist:
+- Approval of Stonegate's dedicated A2P Campaign and attachment of its dedicated SMS number.
+- Final Twilio Messaging Service, sender, Voice API key, and TwiML App configuration.
+- Recording disclosure and retention-policy approval before recording is enabled.
+- Custom-domain selection and Render, Clerk, CORS, Google, and provider URL updates.
+- Google Workspace domain, operational mailboxes, OAuth configuration, and mailbox connections.
 
-- A2P Campaign shows approved or verified.
-- New Stonegate SMS number is attached only to the new Stonegate Messaging Service.
-- Final SMS sender and Messaging Service SID are entered in Render.
-- Voice credentials and TwiML App are configured.
-- Custom domain is selected and connected.
-- Google Workspace domain and operational mailboxes exist.
+## Phase Status Snapshot
 
-## Phase 1: Reliability, Security, And Operations
+| Phase | Status | Current position |
+| --- | --- | --- |
+| 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
+| 2. Operating Model Data Foundation | Partial | Roles, teams, permissions, calling lists, and audits exist; core business entities remain |
+| 3. Campaign and List Management | Partial | Calling-list execution exists; prospect import, suppression, cost, and quality workflows remain |
+| 4. VA Prospecting Workbench | Partial | Restricted execution and handoff exist; the dedicated guided workbench remains |
+| 5. Lead Manager Operating System | Partial, advanced | Most CRM workflow exists; guided acceptance, qualification, and scorecards remain |
+| 6. Appointments and Field Acquisitions | Partial | Internal calendar and appointment lifecycle exist; field workflow remains |
+| 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
+| 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
+| 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
+| 10. Integrated AI Agent System | Foundational | Agent controls and Call Intelligence exist; the complete agent portfolio remains |
 
-Status: Implementation complete; production operator checks remain.
+Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
+offer controls were prioritized for seller conversations. That work is retained. It does not mark
+the earlier dependencies complete or require any rework.
 
-Goal: Establish a production baseline before adding more business complexity.
+## Phase 1: Reliability And Test Foundation
 
-Deliver:
+Status: Partial. Implementation is complete; production verification remains.
 
-- Durable worker heartbeat, grouped failure tracking, isolated operation retries, and readiness.
+Goal: Make continued development and deployment safe without depending on live providers.
+
+Delivered:
+
+- Worker heartbeat, grouped failures, isolated retries, and readiness checks.
 - Threshold-based alert webhooks and an external `/ready` monitoring target.
 - Guarded database backup and isolated restore-verification scripts.
-- Deterministic synthetic demo workspace and provider-safe SMS/email simulators.
-- Production smoke-test script and CI shell validation.
-- User deactivation coverage and production simulation safeguards.
-- Detailed operator procedures in `PHASE_1_RELIABILITY.md`.
+- Deterministic demo organizations, users, leads, appointments, underwriting, transactions,
+  buyers, communications, and provider-safe SMS/email simulators.
+- Deployment smoke tests, CI shell validation, access-revocation coverage, and production
+  simulation safeguards.
+- Operator procedures in `PHASE_1_RELIABILITY.md`.
 
-Exit criteria:
+Remaining:
 
-- Code and automated safeguards are complete.
-- The owner configures an alert destination and external uptime monitor.
-- The first isolated restore drill and production access-revocation check are recorded.
+- Configure an owner-controlled production alert destination and external uptime monitor.
+- Run and record the first isolated production restore drill.
+- Run and record the production access-revocation check.
 
-## Phase 2: Acquisition Workflow Completion (Implemented July 21, 2026)
+Result: New features can be developed and tested without damaging production or requiring live
+providers.
 
-Goal: Make the OS complete for the owner, Lead Manager, Acquisitions Closer, and VA calling team.
+## Phase 2: Operating Model Data Foundation
 
-Deliver:
+Status: Partial.
 
-- User and team administration for owner, Lead Manager, Acquisitions Closer, disposition, and VA
-  roles.
-- Calling-list assignment and list-level progress.
-- Appointment reschedule, cancel, no-show, completed, and outcome workflows.
-- Internal appointment calendar and reminders.
-- Persistent user/team saved views.
-- Duplicate review, merge, and merge audit.
-- Notifications for new leads, handoffs, appointments, overdue tasks, and seller replies.
-- Follow-up plans and approval-based sequences.
-- Mobile inbox and lead-workspace refinement.
+Goal: Make the database and permissions accurately represent Stonegate's approved operating model.
 
-Exit criteria:
+Delivered:
 
-- A VA can prospect and hand off without seeing restricted business data.
-- The Lead Manager can qualify and book; the Acquisitions Closer can work every accepted
-  appointment through offer preparation and outcome.
-- The owner can monitor workload, SLA, and handoff quality without manual spreadsheets.
+- Separate owner, Lead Manager, Acquisitions Closer, disposition, coordination, and restricted VA
+  user/team responsibilities.
+- Organization-scoped permissions, user administration, team assignment, and append-only audits.
+- Calling-list records and assignments.
+- Foundational compensation rules, revenue, deduction, and calculation records.
 
-Implementation note: Stonegate is the calendar system of record. It does not require Google
-Calendar or another external calendar provider.
+Remaining:
 
-## Phase 3: Underwriting Validation And Offer Workflow
+- First-class markets, territories, campaigns, and pre-lead prospect records.
+- Versioned compensation plans and explicit role-credit records.
+- Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes.
+- Market launch checklists and approved market-specific controls.
+- Complete permission and audit coverage for the new entities.
 
-Goal: Turn comping into repeatable, explainable offer preparation.
+Result: The database accurately represents how Stonegate operates before specialized workspaces are
+built on it.
 
-Deliver:
+## Phase 3: Campaign And List Management
 
-- [Complete] Comp candidate review UI with include, exclude, documented reason, bounded manual
-  weighting, immutable recalculation versions, and audit history.
-- [Complete] RentCast address validation, canonical duplicate keys, provider match scoring,
-  non-owner property-fact provenance, and explicit subject-fact normalization.
-- Optional ATTOM or MLS/RESO enrichment behind the property-data adapter.
-- [Complete] Market-specific calibration cases, immutable prediction snapshots, verified outcome
-  history, and ARV/repair/disposition backtesting metrics.
-- [Complete] Repair scope presets, immutable contractor/walkthrough/internal estimates, and
+Status: Partial.
+
+Goal: Manage outreach lists, assignment, compliance evidence, cost, and quality inside Stonegate.
+
+Delivered:
+
+- Calling lists, lead entries, VA assignment, attempt history, dispositions, and progress.
+- Lead address normalization, conservative duplicate review, merge, and merge auditing.
+- Organization-level suppression and consent enforcement in communication workflows.
+
+Remaining:
+
+- CSV import with reusable field mapping and row-level validation feedback.
+- Prospect-level address and telephone normalization before CRM lead creation.
+- Import-time DNC and company-suppression screening with retained evidence.
+- Campaign budgets, list costs, labor attribution, and calling batches.
+- Campaign progress, bad-data reporting, duplicate rate, and list-quality reporting.
+
+Result: Stonegate can manage outreach internally without disconnected spreadsheets.
+
+## Phase 4: VA Prospecting Workbench
+
+Status: Partial.
+
+Goal: Give cold callers a focused, restricted workflow for working assigned prospects and handing
+off genuine seller interest.
+
+Delivered:
+
+- Restricted VA role, export prevention, assigned-list access, attempt history, dispositions, and
+  audited VA-to-acquisitions handoff.
+- Handoff ownership, watcher, notification, and read-only controls.
+- Simulated communication providers for development while Twilio remains pending.
+
+Remaining:
+
+- One-prospect-at-a-time calling workspace.
+- Versioned approved caller script and required outcome rules.
+- Guided interest questions and callback scheduling from the prospect queue.
+- Clear warm-lead creation and handoff review inside the dedicated workspace.
+- Daily VA performance, connect, handoff, data-quality, and call-quality scorecards.
+
+Result: A VA can work an assigned list and hand interested sellers to the Lead Manager without
+unnecessary access to the main OS.
+
+## Phase 5: Lead Manager Operating System
+
+Status: Partial, advanced.
+
+Goal: Ensure every interested seller receives structured qualification, ownership, nurture, and
+appointment follow-up.
+
+Delivered:
+
+- Audited warm handoff, conversation assignment, watchers, owner notifications, and workload
+  visibility.
+- Qualification gaps, lead quality, urgency, and deterministic next-best-action guidance.
+- Follow-up plans, next-contact tasks, neglected-lead notifications, saved views, duplicate merge,
+  and qualified appointment creation.
+- Shared inbox with chronological SMS, email, calls, recordings, transcripts, and internal notes.
+- Internal calendar, appointment reminders, and team workload reporting.
+
+Remaining:
+
+- Dedicated warm-handoff acceptance queue with acceptance SLA and rejection reasons.
+- Versioned guided qualification flow aligned with the operating model.
+- Lead Manager conversion, held-appointment, aging, and follow-up quality scorecards.
+- Final validation that one Lead Manager can run the complete daily queue without spreadsheets.
+
+Result: Every interested seller receives structured qualification and follow-up.
+
+## Phase 6: Appointments And Field Acquisitions
+
+Status: Partial.
+
+Goal: Prepare for, conduct, document, and complete acquisition appointments inside Stonegate.
+
+Delivered:
+
+- Internal Stonegate calendar with reschedule, cancel, no-show, complete, outcome, recovery, and
+  reminder workflows.
+- Appointment ownership, notifications, notes, lead context, and underwriting access.
+
+Remaining:
+
+- Territory, travel-time, closer availability, and daily capacity controls.
+- Pre-appointment acquisition brief combining seller, property, qualification, underwriting,
+  approved ceiling, unresolved questions, likely objections, and logistics.
+- Mobile property inspection with photographs and repair observations.
+- Decision-maker confirmation, seller objections, negotiation notes, and appointment follow-up.
+- Direct transfer of field observations into a new reviewed underwriting version.
+
+Result: The closer can prepare for, attend, document, and complete an acquisition appointment
+entirely inside Stonegate.
+
+## Phase 7: Underwriting And Offer Governance
+
+Status: Partial, advanced. Most of this phase was completed early.
+
+Goal: Make every price recommendation explainable, versioned, evidence-backed, and approved before
+use.
+
+Delivered:
+
+- Recorded-sale comparable search, scoring, visible exclusions, manual include/exclude review,
+  reason presets, bounded weighting, and immutable recalculation versions.
+- RentCast address validation, canonical duplicate keys, provider matching, property-fact
+  provenance, and subject normalization.
+- Repair presets, itemized scopes, contingency, contractor/walkthrough/internal estimates, and
   underwriting version comparison.
-- [Complete] Immutable offer-ceiling approval requests, bounded negotiation ladders, supersession,
-  stale-version protection, and accountable decisions.
-- Seller-meeting brief, objection preparation, and approved price discussion notes.
-- Final investor and client report polish with Stonegate's custom domain and contact information.
+- Verified outcomes, immutable calibration snapshots, and ARV, repair, range-coverage, and
+  disposition backtesting metrics.
+- Immutable offer-ceiling requests, opening/target/stretch/walk-away negotiation plans,
+  supersession, stale-version protection, human approval, and accountable decisions.
+- Investor and client PDF reports that remain available when renovation status is unconfirmed.
 
-Exit criteria:
+Remaining:
 
-- Every ARV and offer range can be explained from retained data and adjustments.
-- Material assumptions have an owner and timestamp.
-- No AI-generated value bypasses human comp review or offer approval.
+- Optional ATTOM or MLS/RESO enrichment behind the property-data adapter when justified.
+- Seller-meeting brief and objection preparation, coordinated with Phase 6.
+- Price-discussion notes, negotiation versions, and explicit concession tracking.
+- Final investor and client report branding after the custom domain and contact details are final.
 
-Implementation note: the first four Phase 3 increments are complete. Reviews use the retained
-provider snapshot, require a decision for every displayed sale, constrain reviewer weighting to
-50-150% of the engine match weight, and create a new linked underwriting analysis rather than
-changing the source version. Address validation preserves the staff-entered address, stores the
-provider result separately, invalidates stale confirmation after an address edit, and marks
-mismatches for review without blocking calculations or reports. Calibration compares the exact
-saved prediction with later expert, appraisal, resale, or verified-sale evidence. It reports
-directional bias, median absolute error, range coverage, and optional repair/disposition error by
-market. Formula review requires at least 50 cases and never changes formulas automatically.
-Repair presets populate an editable itemized scope, while saved estimates preserve contractor,
-walkthrough, or internal evidence as immutable records. Analyses snapshot the selected estimate,
-and the lead page compares saved ARV, repair, disposition, seller-ceiling, and opening values.
-Offer approvals snapshot the exact underwriting version and its economics. Opening, target,
-stretch, and walk-away values must remain ordered beneath the calculated seller ceiling. New
-requests cancel older pending plans, newer underwriting blocks stale approval, and authorized
-decisions update the plan, version, lead stage, activity timeline, and audit history together.
+Result: Every price recommendation is explainable, versioned, and approved before use.
 
-## Phase 4: Contracts And Transaction Coordination
+## Phase 8: Contracts And Transaction Coordination
 
-Goal: Run an accepted offer through closing without outside checklists.
+Status: Foundational.
 
-Deliver:
+Goal: Take an executed seller contract through funded closing without outside checklists.
 
-- Contract and addendum template records.
-- Offer and contract approval workflow.
-- E-signature provider adapter.
-- Secure object storage and document permissions.
-- Checklist completion, ownership, due dates, dependencies, and escalation.
-- Earnest money, inspection, title, payoff, closing, and assignment deadline tracking.
-- Closing attorney/title communication timeline.
+Delivered:
 
-Exit criteria:
+- Transaction records and a default closing checklist.
+- Foundational transaction activity visible from the lead workspace.
 
-- An approved offer can become a signed contract and completed transaction with a complete audit
-  trail.
+Remaining:
 
-## Phase 5: Buyers And Dispositions
+- Contract and addendum templates with offer and contract approval.
+- Secure document storage and manual signed-document upload before e-signature is selected.
+- Closing-attorney intake and seller, buyer, and attorney communication timeline.
+- Earnest money, due diligence, title, payoff, assignment, and closing deadlines.
+- Checklist ownership, dependencies, completion, escalation, and evidence.
+- E-signature provider adapter after the manual workflow is dependable.
 
-Goal: Match contracted deals to qualified buyers and manage assignment outcomes.
+Result: Stonegate can take an executed contract through closing without outside checklists.
 
-Deliver:
+## Phase 9: Buyers, Dispositions, And Finance
 
-- Buyer proof-of-funds documents and expiration.
-- Market, property, price, strategy, and volume criteria.
-- Ranked buyer matching with human review.
-- Deal room and approved marketing package.
-- Controlled email/SMS deal distribution.
-- Buyer response, showing, offer, deposit, selection, and backup-buyer workflows.
-- Disposition performance and buyer reliability reporting.
-- Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes without
-  retroactive compensation changes.
+Status: Foundational.
 
-Exit criteria:
+Goal: Move a contracted deal to a qualified buyer, reconcile proceeds, and calculate compensation
+correctly.
 
-- Stonegate can move a contract from deal approval to selected buyer without a separate buyer CRM.
+Delivered:
 
-## Phase 6: Finance, Compensation, And Accounting
+- Buyer CRM, criteria, proof-of-funds status, deal queue, and buyer offers.
+- Revenue, deductions, compensation rules and calculations, and marketing-spend records.
+- Source/campaign performance, CPL, contract cost, ROAS, and offline-conversion records.
 
-Goal: Close the loop from lead source to collected cash.
+Remaining:
 
-Deliver:
+- Proof-of-funds documents, expiration, buyer reliability scoring, and ranked matching.
+- Deal-package generation, simulated campaigns, and approved package export.
+- Buyer inquiries, showings, offers, deposits, selection, and backup-buyer workflows.
+- Adjusted Deal Margin and versioned CEO Management, Closer, Lead Manager, Disposition, and
+  Transaction Coordinator compensation plans and role credits.
+- Thirty-percent company-margin dashboard, closing reconciliation, payout approval, and accounting
+  export or QuickBooks Online integration.
+- Human-led and AI-assisted disposition performance comparison without retroactive compensation
+  changes.
 
-- Payment and collection status.
-- Monthly close and reconciliation.
-- Compensation approvals and payout status.
-- Adjusted Deal Margin, CEO Management, role credit, plan version, and 30% company-margin controls
-  defined by the operating model.
-- QuickBooks Online integration or controlled export.
-- Marketing spend imports.
-- Deal-level profitability and cash forecasting.
-- Owner P&L, revenue-by-source, and advertising-percentage reporting.
+Result: Stonegate can move a contract to a buyer, reconcile proceeds, and calculate compensation
+correctly.
 
-Exit criteria:
+## Phase 10: Integrated AI Agent System
 
-- Every collected dollar ties to a transaction, source, deductions, compensation, and accounting
-  record.
+Status: Foundational.
 
-## Phase 7: AI Agent Production Foundation
+Goal: Connect evaluated, permissioned AI agents to completed deterministic workflows.
 
-Goal: Move from AI-capable records to evaluated, permissioned agents.
+Delivered:
 
-Deliver:
+- Agent definitions, prompt versions, tool permissions, run and tool-call logs, approval records,
+  failure tracking, and cost telemetry.
+- Recording transcription, speaker segments, structured Call Intelligence notes, supporting
+  evidence, and required human review.
+- Deterministic safeguards that prevent AI from approving offers or bypassing communication rules.
 
-- Versioned evaluation datasets for intake, follow-up, calls, underwriting, and compliance.
-- Agent runner with dry-run mode, retries, budgets, and trace review.
-- Intake summarizer and qualification-gap agent.
-- Follow-up draft agent with human approval.
-- Speed-to-lead and missed-reply monitor.
-- Underwriting research assistant that cannot set approved values.
-- Compliance preflight agent that cannot override deterministic rules.
+Remaining:
 
-Exit criteria:
+- Stonegate Orchestrator with dry-run mode, retries, budgets, trace review, and rollback controls.
+- Versioned evaluation datasets and promotion thresholds for each agent capability.
+- Prospecting Intelligence, Lead Management, Appointment Preparation, Underwriting, Negotiation
+  Coach, Disposition, Buyer Relationship, Transaction, Finance, Marketing, Compliance, and
+  Executive agents.
+- Approval-based external actions and measured low-risk internal automation.
+- Agent quality, correction, failure, cost, and business-outcome reporting.
 
-- Every agent action is attributable to a prompt, model, tool permission, evidence, cost, and human
-  decision.
-- No external action is enabled without an explicit pilot decision.
-
-## Phase 8: Controlled Automation And Team Intelligence
-
-Goal: Automate repetitive low-risk work after measured accuracy.
-
-Deliver:
-
-- Approval-based follow-up sequences.
-- Call coaching and missed-opportunity detection.
-- AI-proposed CRM field updates with evidence.
-- Appointment reminders and unanswered-message escalation.
-- VA and acquisitions quality dashboards.
-- Low-risk automation pilots only after documented evaluation thresholds are met.
-- Separate Smartlead-style cold email integration if Stonegate approves that channel and its
-  compliance process.
-
-Exit criteria:
-
-- Automation saves measurable staff time without increasing complaints, corrections, missed
-  follow-up, or compliance failures.
-
-## Phase 9: Growth, Optimization, And Premium Product Quality
-
-Goal: Improve conversion, operating efficiency, and polish after core workflows are dependable.
-
-Deliver:
-
-- Additional seller-situation and campaign landing pages.
-- Branded photography, local proof, testimonials, and trust assets as they become available.
-- Google Ads offline conversion delivery and Meta Conversions API.
-- A/B testing with one controlled variable at a time.
-- Page-speed, accessibility, mobile, and Core Web Vitals passes.
-- OS information-density, keyboard flow, empty-state, and responsive refinement.
-- Executive reporting for funnel, team, deal, finance, marketing, and AI performance.
-
-Exit criteria:
-
-- Public conversion and internal workflow changes are driven by measured outcomes.
-- The platform meets Stonegate's premium quality bar on desktop and mobile.
-
-## Phase 10: Multi-Market Expansion And Operating Maturity
-
-Goal: Expand beyond the first Georgia market without losing financial or operating control.
-
-Deliver:
-
-- Versioned market profiles for pricing rules, disclosures, attorneys, vendors, and service areas.
-- Territory launch checklist, staffing capacity, and campaign budget controls.
-- Market-level conversion, margin, cycle-time, and compliance reporting.
-- Permissioned regional management and workload routing.
-- Disaster recovery review, quarterly restore drills, access reviews, and automation revalidation.
-
-Exit criteria:
-
-- A new market can be launched from an approved checklist without changing global code or silently
-  inheriting Georgia-specific assumptions.
-- Company and market-level profitability remain separately explainable.
+Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
+evidence requirements, compliance controls, or financial approvals.
 
 ## Ordering Rules
 
-- Complete Phase 1 operator checks before broad team onboarding.
-- Resume the external integration gate when providers are ready; it does not block Phase 2.
-- Complete acquisition and underwriting controls before contract automation.
-- Complete transactional records before accounting synchronization.
-- Complete evaluation and approval infrastructure before AI autonomy.
+- Finish Phase 1 production checks before broad team onboarding.
+- Resume the parallel integration track as provider approvals become available.
+- Return to the earliest incomplete dependency in Phases 2-6 before adding downstream automation.
+- Retain the completed Phase 7 work and finish its remaining items with the Phase 6 field workflow.
+- Complete deterministic operating workflows before enabling corresponding AI actions.
+- Do not enable AI authority over offers, contracts, buyers, payments, compensation, or legal
+  representations.
+- Treat security, accessibility, responsive behavior, speed, and visual quality as acceptance
+  criteria throughout the build rather than a substitute for missing workflows.
+
+## Next Build Checkpoint
+
+1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
+2. Resume Phase 2 with markets, territories, campaigns, prospects, compensation-plan versions,
+   role credits, disposition modes, and market launch checklists.
+3. Continue through Phases 3-6 in dependency order.
+4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred
 

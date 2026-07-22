@@ -39,6 +39,28 @@ Current public URLs:
 A branded custom domain is still pending. The Render URLs remain valid until the domain cutover is
 complete and should continue to resolve afterward.
 
+## Roadmap Alignment
+
+`ROADMAP.md` is the canonical ten-phase build sequence. Current implementation status against that
+sequence is:
+
+| Phase | Status |
+| --- | --- |
+| 1. Reliability and Test Foundation | Implementation complete; production checks remain |
+| 2. Operating Model Data Foundation | Partial |
+| 3. Campaign and List Management | Partial |
+| 4. VA Prospecting Workbench | Partial |
+| 5. Lead Manager Operating System | Partial, advanced |
+| 6. Appointments and Field Acquisitions | Partial |
+| 7. Underwriting and Offer Governance | Partial, advanced; substantial work completed early |
+| 8. Contracts and Transaction Coordination | Foundational |
+| 9. Buyers, Dispositions, and Finance | Foundational |
+| 10. Integrated AI Agent System | Foundational |
+
+The completed underwriting work remains valid. It does not imply that campaign management, the VA
+workbench, Lead Manager workflow, or field acquisitions are complete. Detailed delivered and
+remaining scope is maintained in `ROADMAP.md`.
+
 ## Delivered Capabilities
 
 ### Public Website
@@ -178,6 +200,17 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
+- Markets, territories, pre-lead prospects, compensation-plan versions, disposition modes, and
+  market launch checklists are not yet first-class operating records.
+- CSV list import, field mapping, import-time DNC screening, campaign budgets, list costs, and
+  list-quality reporting are not complete.
+- The VA workflow has assigned-list execution and handoff, but not the final one-prospect guided
+  workbench, versioned script, or performance scorecards.
+- The Lead Manager workflow has most CRM controls, but its dedicated handoff acceptance flow,
+  guided qualification, and conversion scorecard are not complete.
+- Field acquisitions does not yet include travel/capacity controls, the seller-meeting brief,
+  mobile inspection photographs, repair observations, or structured negotiation notes.
+- Underwriting meeting preparation, price-discussion notes, and concession tracking remain.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
 - Buyer matching and deal-distribution automation are not complete.
@@ -196,5 +229,7 @@ While A2P approval is pending:
 
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
-3. Continue Phase 3 with the seller-meeting brief, objection preparation, and approved price notes.
-4. Resume the external integration gate after A2P approval without blocking internal development.
+3. Record the production access-revocation check and close the Phase 1 exit criteria.
+4. Resume Phase 2 with markets, territories, campaigns, prospects, compensation-plan versions,
+   role credits, disposition modes, and market launch checklists.
+5. Resume the parallel integration track after A2P approval without blocking internal development.
