@@ -371,6 +371,14 @@
   align-items: end;
 }
 
+.prospectForm {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.prospectForm button {
+  justify-self: start;
+}
+
 .inlineForm label,
 .stackForm label,
 .formBand label {

@@ -95,6 +95,10 @@ remaining scope is maintained in `ROADMAP.md`.
   duplicate review, saved views, and follow-up plans.
 - Owner-managed individual users and operational teams for acquisitions, prospecting,
   dispositions, and coordination.
+- Management-only market, territory, outreach-campaign, and pre-lead prospect records with
+  organization scoping and append-only audit events.
+- Prospect normalization, source-row deduplication, campaign attribution, and suppression-pending
+  defaults that keep cold records outside the CRM lead pipeline.
 - VA-scoped calling-list execution with attempt history, dispositions, progress, and audited
   handoff to acquisitions.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
@@ -200,8 +204,8 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- Markets, territories, pre-lead prospects, compensation-plan versions, disposition modes, and
-  market launch checklists are not yet first-class operating records.
+- Compensation-plan versions, explicit role credits, disposition operating modes, and market
+  launch checklists are not yet first-class operating records.
 - CSV list import, field mapping, import-time DNC screening, campaign budgets, list costs, and
   list-quality reporting are not complete.
 - The VA workflow has assigned-list execution and handoff, but not the final one-prospect guided
@@ -230,6 +234,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Resume Phase 2 with markets, territories, campaigns, prospects, compensation-plan versions,
-   role credits, disposition modes, and market launch checklists.
+4. Continue Phase 2 with compensation-plan versions, role credits, disposition modes, and market
+   launch checklists.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

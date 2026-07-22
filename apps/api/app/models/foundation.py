@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -103,6 +103,109 @@ class TeamMembership(UuidPrimaryKeyMixin, TimestampMixin, Base):
     membership_role: Mapped[str] = mapped_column(String(80), nullable=False)
 
 
+class Market(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "markets"
+    __table_args__ = (UniqueConstraint("organization_id", "code", name="uq_markets_org_code"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    state_code: Mapped[str] = mapped_column(String(2), nullable=False)
+    timezone: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+
+class Territory(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "territories"
+    __table_args__ = (UniqueConstraint("market_id", "code", name="uq_territories_market_code"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    market_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("markets.id"), index=True)
+    assigned_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("teams.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    county_names: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    postal_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+
+
+class Campaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "campaigns"
+    __table_args__ = (UniqueConstraint("organization_id", "code", name="uq_campaigns_org_code"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    market_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("markets.id"), index=True)
+    territory_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("territories.id"), index=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    channel: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    starts_on: Mapped[date | None] = mapped_column(nullable=True)
+    ends_on: Mapped[date | None] = mapped_column(nullable=True)
+    budget_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+
+
+class Prospect(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospects"
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id",
+            "source_record_key",
+            name="uq_prospects_campaign_source_record",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    territory_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("territories.id"), index=True
+    )
+    assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    converted_lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id"), index=True
+    )
+    source_record_key: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    normalized_phone: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    normalized_email: Mapped[str | None] = mapped_column(String(320), nullable=True, index=True)
+    street_address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    state_code: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    normalized_address_key: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, index=True
+    )
+    suppression_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    suppression_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_contacted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
 class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "contacts"
 
@@ -150,9 +253,7 @@ class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
     address_validated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    address_validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    address_validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
 class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):

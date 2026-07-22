@@ -9,11 +9,12 @@ import type { AcquisitionOperations, LeadListItem } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./operations.module.css";
 
-type Tab = "today" | "calling" | "team" | "quality" | "follow-up";
+type Tab = "today" | "structure" | "calling" | "team" | "quality" | "follow-up";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: "today", label: "Calendar" },
+  { key: "structure", label: "Markets & campaigns" },
   { key: "calling", label: "Calling lists" },
   { key: "team", label: "Team" },
   { key: "quality", label: "Data quality" },
@@ -31,6 +32,13 @@ function formatDate(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+function splitValues(value: string) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 function roleLabel(user: AcquisitionOperations["users"][number]) {
@@ -119,6 +127,74 @@ export function OperationsWorkspace({
       name: formValue(data, "name"),
       team_type: formValue(data, "team_type"),
       manager_user_id: formValue(data, "manager_user_id") || null,
+    });
+    if (saved) form.reset();
+  }
+
+  async function submitMarket(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const saved = await mutate("/api/v1/operations/markets", "POST", {
+      name: formValue(data, "name"),
+      code: formValue(data, "code"),
+      state_code: formValue(data, "state_code"),
+      timezone: formValue(data, "timezone"),
+      is_primary: operations.markets.length === 0,
+    });
+    if (saved) form.reset();
+  }
+
+  async function submitTerritory(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const saved = await mutate("/api/v1/operations/territories", "POST", {
+      market_id: formValue(data, "market_id"),
+      assigned_team_id: formValue(data, "assigned_team_id") || null,
+      name: formValue(data, "name"),
+      code: formValue(data, "code"),
+      county_names: splitValues(formValue(data, "county_names")),
+      postal_codes: splitValues(formValue(data, "postal_codes")),
+    });
+    if (saved) form.reset();
+  }
+
+  async function submitCampaign(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const budget = formValue(data, "budget_dollars");
+    const saved = await mutate("/api/v1/operations/campaigns", "POST", {
+      market_id: formValue(data, "market_id"),
+      territory_id: formValue(data, "territory_id") || null,
+      owner_user_id: formValue(data, "owner_user_id") || null,
+      name: formValue(data, "name"),
+      code: formValue(data, "code"),
+      channel: formValue(data, "channel"),
+      starts_on: formValue(data, "starts_on") || null,
+      ends_on: null,
+      budget_cents: budget ? Math.round(Number(budget) * 100) : null,
+    });
+    if (saved) form.reset();
+  }
+
+  async function submitProspect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const saved = await mutate("/api/v1/operations/prospects", "POST", {
+      campaign_id: formValue(data, "campaign_id"),
+      assigned_user_id: formValue(data, "assigned_user_id") || null,
+      source_record_key: formValue(data, "source_record_key") || null,
+      legal_name: formValue(data, "legal_name"),
+      phone: formValue(data, "phone") || null,
+      email: formValue(data, "email") || null,
+      street_address: null,
+      city: null,
+      state_code: null,
+      postal_code: null,
+      source_payload: null,
     });
     if (saved) form.reset();
   }
@@ -245,7 +321,7 @@ export function OperationsWorkspace({
       </div>
 
       <div className={styles.tabBar} role="tablist" aria-label="Acquisition operations views">
-        {tabs.filter((tab) => operations.can_manage || !["team", "quality", "follow-up"].includes(tab.key)).map((tab) => (
+        {tabs.filter((tab) => operations.can_manage || !["structure", "team", "quality", "follow-up"].includes(tab.key)).map((tab) => (
           <button
             aria-selected={activeTab === tab.key}
             className={activeTab === tab.key ? styles.activeTab : undefined}
@@ -263,6 +339,127 @@ export function OperationsWorkspace({
         <div className={`${styles.feedback} ${styles[status]}`} role="status">
           {status === "saving" ? "Saving changes..." : status === "saved" ? "Changes saved." : message}
         </div>
+      ) : null}
+
+      {activeTab === "structure" ? (
+        <>
+          <div className={styles.twoColumn}>
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <div><span>Service area</span><h3>Markets and territories</h3></div>
+                <strong>{operations.markets.length}</strong>
+              </div>
+              <div className={styles.rows}>
+                {operations.markets.length === 0 ? <p className={styles.empty}>Create Stonegate&apos;s first operating market.</p> : null}
+                {operations.markets.map((market) => (
+                  <div className={styles.planRow} key={market.id}>
+                    <div>
+                      <strong>{market.name}</strong>
+                      <span>{market.state_code} · {market.timezone}</span>
+                      <small>{market.territory_count} territories · {market.campaign_count} campaigns · {market.prospect_count} prospects</small>
+                    </div>
+                    <span className={styles.badge}>{market.is_primary ? "Primary" : labelize(market.status)}</span>
+                  </div>
+                ))}
+                {operations.territories.map((territory) => (
+                  <div className={styles.planRow} key={territory.id}>
+                    <div>
+                      <strong>{territory.name}</strong>
+                      <span>{territory.market_name} · {territory.assigned_team_name ?? "No assigned team"}</span>
+                      <small>{territory.county_names.join(", ") || "No counties"} · {territory.postal_codes.length} ZIP codes</small>
+                    </div>
+                    <span className={styles.badge}>Territory</span>
+                  </div>
+                ))}
+              </div>
+              <form className={styles.stackForm} onSubmit={submitMarket}>
+                <h4>Create market</h4>
+                <label><span>Name</span><input name="name" required placeholder="Atlanta Metro" /></label>
+                <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="atlanta-metro" /></label>
+                <label><span>State</span><input maxLength={2} minLength={2} name="state_code" required defaultValue="GA" /></label>
+                <label><span>Timezone</span><select name="timezone" defaultValue="America/New_York"><option value="America/New_York">Eastern</option><option value="America/Chicago">Central</option></select></label>
+                <button type="submit">Create market</button>
+              </form>
+              {operations.markets.length ? (
+                <form className={styles.stackForm} onSubmit={submitTerritory}>
+                  <h4>Create territory</h4>
+                  <label><span>Market</span><select name="market_id" required>{operations.markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
+                  <label><span>Assigned team</span><select name="assigned_team_id"><option value="">No team</option>{operations.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
+                  <label><span>Name</span><input name="name" required placeholder="North Atlanta" /></label>
+                  <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="north-atlanta" /></label>
+                  <label><span>Counties</span><input name="county_names" placeholder="Gwinnett, Forsyth" /></label>
+                  <label><span>ZIP codes</span><input name="postal_codes" placeholder="30024, 30518" /></label>
+                  <button type="submit">Create territory</button>
+                </form>
+              ) : null}
+            </div>
+
+            <div className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <div><span>Attribution</span><h3>Outreach campaigns</h3></div>
+                <strong>{operations.campaigns.length}</strong>
+              </div>
+              <div className={styles.rows}>
+                {operations.campaigns.length === 0 ? <p className={styles.empty}>No outreach campaigns have been created.</p> : null}
+                {operations.campaigns.map((campaign) => (
+                  <div className={styles.planRow} key={campaign.id}>
+                    <div>
+                      <strong>{campaign.name}</strong>
+                      <span>{labelize(campaign.channel)} · {campaign.territory_name ?? campaign.market_name}</span>
+                      <small>{campaign.prospect_count} prospects · {campaign.converted_prospect_count} converted · {campaign.owner_name ?? "No owner"}</small>
+                    </div>
+                    <span className={styles.badge}>{labelize(campaign.status)}</span>
+                  </div>
+                ))}
+              </div>
+              {operations.markets.length ? (
+                <form className={styles.stackForm} onSubmit={submitCampaign}>
+                  <h4>Create campaign</h4>
+                  <label><span>Name</span><input name="name" required placeholder="Atlanta absentee owners" /></label>
+                  <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="atl-absentee-2026-07" /></label>
+                  <label><span>Market</span><select name="market_id" required>{operations.markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
+                  <label><span>Territory</span><select name="territory_id"><option value="">Entire market</option>{operations.territories.map((territory) => <option key={territory.id} value={territory.id}>{territory.name}</option>)}</select></label>
+                  <label><span>Channel</span><select name="channel" defaultValue="cold_call"><option value="cold_call">Cold call</option><option value="cold_email">Cold email</option><option value="direct_mail">Direct mail</option><option value="paid_search">Paid search</option><option value="paid_social">Paid social</option><option value="organic">Organic</option><option value="referral">Referral</option><option value="other">Other</option></select></label>
+                  <label><span>Owner</span><select name="owner_user_id"><option value="">No owner</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+                  <label><span>Start date</span><input name="starts_on" type="date" /></label>
+                  <label><span>Initial budget</span><input min="0" name="budget_dollars" placeholder="2500" step="0.01" type="number" /></label>
+                  <button type="submit">Create campaign</button>
+                </form>
+              ) : null}
+            </div>
+          </div>
+
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>Pre-CRM records</span><h3>Prospects</h3></div>
+              <strong>{operations.prospects.length}</strong>
+            </div>
+            <div className={styles.rows}>
+              {operations.prospects.length === 0 ? <p className={styles.empty}>Prospects stay outside the lead pipeline until genuine seller interest is confirmed.</p> : null}
+              {operations.prospects.map((prospect) => (
+                <div className={styles.planRow} key={prospect.id}>
+                  <div>
+                    <strong>{prospect.legal_name}</strong>
+                    <span>{prospect.property_address ?? prospect.phone ?? prospect.email ?? "No contact details"}</span>
+                    <small>{prospect.campaign_name} · {prospect.assigned_user_name ?? "Unassigned"} · suppression {labelize(prospect.suppression_status)}</small>
+                  </div>
+                  <span className={styles.badge}>{labelize(prospect.status)}</span>
+                </div>
+              ))}
+            </div>
+            {operations.campaigns.length ? (
+              <form className={`${styles.inlineForm} ${styles.prospectForm}`} onSubmit={submitProspect}>
+                <label><span>Campaign</span><select name="campaign_id" required>{operations.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
+                <label><span>Owner name</span><input name="legal_name" required /></label>
+                <label><span>Phone</span><input name="phone" required type="tel" /></label>
+                <label><span>Email</span><input name="email" type="email" /></label>
+                <label><span>Assigned caller</span><select name="assigned_user_id"><option value="">Unassigned</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+                <label><span>Source record</span><input name="source_record_key" /></label>
+                <button type="submit">Add prospect</button>
+              </form>
+            ) : null}
+          </div>
+        </>
       ) : null}
 
       {activeTab === "today" ? (

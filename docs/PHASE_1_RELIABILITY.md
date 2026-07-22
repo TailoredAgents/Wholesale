@@ -7,6 +7,23 @@ Last updated: July 21, 2026
 Implementation complete. The first production backup/restore drill and external uptime/alert
 destinations remain operator setup tasks because they require separate infrastructure credentials.
 
+## Verification Record
+
+| Date | Check | Result | Notes |
+| --- | --- | --- | --- |
+| July 21, 2026 | Live deployment smoke test | Passed | API `/health`, API `/ready`, website, cash-offer form, privacy policy, and terms returned successfully |
+| July 21, 2026 | Live readiness | Passed | Database reported `ready`; worker heartbeat reported `healthy` |
+| July 21, 2026 | Automated access-revocation coverage | Passed previously | The unchanged API test suite covers deactivated local and mapped Clerk users; the live non-owner exercise remains pending |
+
+Operator-pending items:
+
+- Production backup and isolated restore verification require the production database URL and a
+  separately provisioned restore target.
+- Failure alert delivery requires an owner-controlled webhook destination on `oakwell-worker`.
+- External uptime monitoring requires an owner-controlled monitoring account pointed at `/ready`.
+- Live access revocation requires a disposable non-owner Clerk user and an authenticated test
+  session.
+
 ## Local Demo Workspace
 
 Set `APP_ENV=local` and `COMMUNICATION_PROVIDER_MODE=simulate`, migrate, then seed:

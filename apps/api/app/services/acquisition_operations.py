@@ -17,6 +17,7 @@ from app.models.foundation import (
     CalendarEvent,
     CallingList,
     CallingListEntry,
+    Campaign,
     Contact,
     ContactMethod,
     DuplicateCandidate,
@@ -24,14 +25,17 @@ from app.models.foundation import (
     FollowUpPlan,
     Lead,
     LeadMergeEvent,
+    Market,
     Notification,
     Property,
+    Prospect,
     Role,
     RoleAssignment,
     SavedView,
     Task,
     Team,
     TeamMembership,
+    Territory,
     User,
 )
 from app.schemas.inbox import ConversationHandoffRequest
@@ -44,25 +48,34 @@ from app.schemas.operations import (
     CallingListEntryUpdate,
     CallingListLeadAdd,
     CallingListRead,
+    CampaignCreate,
+    CampaignRead,
     DuplicateCandidateRead,
     DuplicateResolution,
     FollowUpEnrollmentCreate,
     FollowUpPlanCreate,
     FollowUpPlanRead,
     FollowUpStep,
+    MarketCreate,
+    MarketRead,
     NotificationRead,
     OperationsUserCreate,
     OperationsUserRead,
     OperationsUserUpdate,
+    ProspectCreate,
+    ProspectRead,
     SavedViewCreate,
     SavedViewRead,
     TeamCreate,
     TeamMemberCreate,
     TeamMemberRead,
     TeamRead,
+    TerritoryCreate,
+    TerritoryRead,
 )
 from app.services.inbox import ensure_primary_conversation, handoff_conversation
 from app.services.leads import get_lead_detail
+from app.services.property_validation import canonical_address_key
 
 OPERATIONAL_ROLE_KEYS = {
     "administrator",
@@ -107,6 +120,10 @@ def get_operations_overview(
     duplicates = list_duplicate_candidates(db, principal) if manageable else []
     plans = list_follow_up_plans(db, principal) if manageable else []
     appointments = list_operational_appointments(db, principal, manageable=manageable)
+    markets = list_markets(db, principal) if manageable else []
+    territories = list_territories(db, principal) if manageable else []
+    campaigns = list_campaigns(db, principal) if manageable else []
+    prospects = list_prospects(db, principal) if manageable else []
     return AcquisitionOperationsOverview(
         can_manage=manageable,
         users=users,
@@ -118,7 +135,471 @@ def get_operations_overview(
         unread_notification_count=sum(item.read_at is None for item in notifications),
         duplicate_candidates=duplicates,
         follow_up_plans=plans,
+        markets=markets,
+        territories=territories,
+        campaigns=campaigns,
+        prospects=prospects,
     )
+
+
+def list_markets(db: Session, principal: Principal) -> list[MarketRead]:
+    markets = db.scalars(
+        select(Market)
+        .where(Market.organization_id == principal.organization_id)
+        .order_by(Market.is_primary.desc(), Market.name)
+    ).all()
+    return [market_read(db, market) for market in markets]
+
+
+def market_read(db: Session, market: Market) -> MarketRead:
+    territory_count = int(
+        db.scalar(
+            select(func.count()).select_from(Territory).where(Territory.market_id == market.id)
+        )
+        or 0
+    )
+    campaign_count = int(
+        db.scalar(select(func.count()).select_from(Campaign).where(Campaign.market_id == market.id))
+        or 0
+    )
+    prospect_count = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Prospect)
+            .join(Campaign, Campaign.id == Prospect.campaign_id)
+            .where(Campaign.market_id == market.id)
+        )
+        or 0
+    )
+    return MarketRead(
+        id=market.id,
+        name=market.name,
+        code=market.code,
+        state_code=market.state_code,
+        timezone=market.timezone,
+        status=market.status,
+        is_primary=market.is_primary,
+        territory_count=territory_count,
+        campaign_count=campaign_count,
+        prospect_count=prospect_count,
+    )
+
+
+def create_market(db: Session, principal: Principal, payload: MarketCreate) -> MarketRead:
+    existing_count = int(
+        db.scalar(
+            select(func.count())
+            .select_from(Market)
+            .where(Market.organization_id == principal.organization_id)
+        )
+        or 0
+    )
+    make_primary = payload.is_primary or existing_count == 0
+    if make_primary:
+        for current in db.scalars(
+            select(Market).where(Market.organization_id == principal.organization_id)
+        ):
+            current.is_primary = False
+    market = Market(
+        organization_id=principal.organization_id,
+        name=payload.name.strip(),
+        code=payload.code.strip().lower(),
+        state_code=payload.state_code.strip().upper(),
+        timezone=payload.timezone.strip(),
+        status="active",
+        is_primary=make_primary,
+    )
+    db.add(market)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("A market with this code already exists.") from exc
+    audit(
+        db,
+        principal,
+        "market.create",
+        "market",
+        market.id,
+        None,
+        {
+            "name": market.name,
+            "code": market.code,
+            "state_code": market.state_code,
+            "is_primary": market.is_primary,
+        },
+        "Operating market created",
+    )
+    db.commit()
+    return market_read(db, market)
+
+
+def list_territories(db: Session, principal: Principal) -> list[TerritoryRead]:
+    territories = db.scalars(
+        select(Territory)
+        .where(Territory.organization_id == principal.organization_id)
+        .order_by(Territory.name)
+    ).all()
+    return [territory_read(db, territory) for territory in territories]
+
+
+def territory_read(db: Session, territory: Territory) -> TerritoryRead:
+    market = db.get(Market, territory.market_id)
+    team = db.get(Team, territory.assigned_team_id) if territory.assigned_team_id else None
+    return TerritoryRead(
+        id=territory.id,
+        market_id=territory.market_id,
+        market_name=market.name if market else "Unknown market",
+        assigned_team_id=territory.assigned_team_id,
+        assigned_team_name=team.name if team else None,
+        name=territory.name,
+        code=territory.code,
+        status=territory.status,
+        county_names=territory.county_names,
+        postal_codes=territory.postal_codes,
+        campaign_count=int(
+            db.scalar(
+                select(func.count())
+                .select_from(Campaign)
+                .where(Campaign.territory_id == territory.id)
+            )
+            or 0
+        ),
+        prospect_count=int(
+            db.scalar(
+                select(func.count())
+                .select_from(Prospect)
+                .where(Prospect.territory_id == territory.id)
+            )
+            or 0
+        ),
+    )
+
+
+def create_territory(
+    db: Session,
+    principal: Principal,
+    payload: TerritoryCreate,
+) -> TerritoryRead:
+    market = get_market(db, principal.organization_id, payload.market_id)
+    if market is None:
+        raise ValueError("Select an active Stonegate market.")
+    team = None
+    if payload.assigned_team_id:
+        team = db.scalar(
+            select(Team).where(
+                Team.organization_id == principal.organization_id,
+                Team.id == payload.assigned_team_id,
+                Team.is_active.is_(True),
+            )
+        )
+        if team is None:
+            raise ValueError("Territory team must be active in this workspace.")
+    county_names = unique_clean_values(payload.county_names)
+    postal_codes = unique_clean_values(payload.postal_codes)
+    invalid_postal_codes = [
+        value for value in postal_codes if len(value) != 5 or not value.isdigit()
+    ]
+    if invalid_postal_codes:
+        raise ValueError("Territory ZIP codes must contain exactly five digits.")
+    territory = Territory(
+        organization_id=principal.organization_id,
+        market_id=market.id,
+        assigned_team_id=team.id if team else None,
+        name=payload.name.strip(),
+        code=payload.code.strip().lower(),
+        status="active",
+        county_names=county_names,
+        postal_codes=postal_codes,
+    )
+    db.add(territory)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("A territory with this code already exists in the market.") from exc
+    audit(
+        db,
+        principal,
+        "territory.create",
+        "territory",
+        territory.id,
+        None,
+        {
+            "market_id": str(market.id),
+            "name": territory.name,
+            "code": territory.code,
+            "assigned_team_id": str(team.id) if team else None,
+        },
+        "Operating territory created",
+    )
+    db.commit()
+    return territory_read(db, territory)
+
+
+def list_campaigns(db: Session, principal: Principal) -> list[CampaignRead]:
+    campaigns = db.scalars(
+        select(Campaign)
+        .where(Campaign.organization_id == principal.organization_id)
+        .order_by(Campaign.created_at.desc())
+    ).all()
+    return [campaign_read(db, campaign) for campaign in campaigns]
+
+
+def campaign_read(db: Session, campaign: Campaign) -> CampaignRead:
+    market = db.get(Market, campaign.market_id)
+    territory = db.get(Territory, campaign.territory_id) if campaign.territory_id else None
+    owner = db.get(User, campaign.owner_user_id) if campaign.owner_user_id else None
+    return CampaignRead(
+        id=campaign.id,
+        market_id=campaign.market_id,
+        market_name=market.name if market else "Unknown market",
+        territory_id=campaign.territory_id,
+        territory_name=territory.name if territory else None,
+        owner_user_id=campaign.owner_user_id,
+        owner_name=owner.display_name if owner else None,
+        name=campaign.name,
+        code=campaign.code,
+        channel=campaign.channel,
+        status=campaign.status,
+        starts_on=campaign.starts_on,
+        ends_on=campaign.ends_on,
+        budget_cents=campaign.budget_cents,
+        prospect_count=int(
+            db.scalar(
+                select(func.count())
+                .select_from(Prospect)
+                .where(Prospect.campaign_id == campaign.id)
+            )
+            or 0
+        ),
+        converted_prospect_count=int(
+            db.scalar(
+                select(func.count())
+                .select_from(Prospect)
+                .where(
+                    Prospect.campaign_id == campaign.id,
+                    Prospect.converted_lead_id.is_not(None),
+                )
+            )
+            or 0
+        ),
+    )
+
+
+def create_campaign(db: Session, principal: Principal, payload: CampaignCreate) -> CampaignRead:
+    market = get_market(db, principal.organization_id, payload.market_id)
+    if market is None:
+        raise ValueError("Select an active Stonegate market.")
+    territory = None
+    if payload.territory_id:
+        territory = get_territory(db, principal.organization_id, payload.territory_id)
+        if territory is None or territory.market_id != market.id:
+            raise ValueError("Campaign territory must belong to the selected market.")
+    owner = None
+    if payload.owner_user_id:
+        owner = get_active_user(db, principal.organization_id, payload.owner_user_id)
+        if owner is None:
+            raise ValueError("Campaign owner must be an active workspace user.")
+    campaign = Campaign(
+        organization_id=principal.organization_id,
+        market_id=market.id,
+        territory_id=territory.id if territory else None,
+        owner_user_id=owner.id if owner else None,
+        name=payload.name.strip(),
+        code=payload.code.strip().lower(),
+        channel=payload.channel,
+        status="draft",
+        starts_on=payload.starts_on,
+        ends_on=payload.ends_on,
+        budget_cents=payload.budget_cents,
+    )
+    db.add(campaign)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("A campaign with this code already exists.") from exc
+    audit(
+        db,
+        principal,
+        "campaign.create",
+        "campaign",
+        campaign.id,
+        None,
+        {
+            "market_id": str(market.id),
+            "territory_id": str(territory.id) if territory else None,
+            "name": campaign.name,
+            "code": campaign.code,
+            "channel": campaign.channel,
+        },
+        "Outreach campaign created",
+    )
+    db.commit()
+    return campaign_read(db, campaign)
+
+
+def list_prospects(db: Session, principal: Principal) -> list[ProspectRead]:
+    prospects = db.scalars(
+        select(Prospect)
+        .where(Prospect.organization_id == principal.organization_id)
+        .order_by(Prospect.created_at.desc())
+        .limit(200)
+    ).all()
+    return [prospect_read(db, prospect) for prospect in prospects]
+
+
+def prospect_read(db: Session, prospect: Prospect) -> ProspectRead:
+    campaign = db.get(Campaign, prospect.campaign_id)
+    territory = db.get(Territory, prospect.territory_id) if prospect.territory_id else None
+    assignee = db.get(User, prospect.assigned_user_id) if prospect.assigned_user_id else None
+    address_parts = [
+        prospect.street_address,
+        prospect.city,
+        prospect.state_code,
+        prospect.postal_code,
+    ]
+    return ProspectRead(
+        id=prospect.id,
+        campaign_id=prospect.campaign_id,
+        campaign_name=campaign.name if campaign else "Unknown campaign",
+        territory_id=prospect.territory_id,
+        territory_name=territory.name if territory else None,
+        assigned_user_id=prospect.assigned_user_id,
+        assigned_user_name=assignee.display_name if assignee else None,
+        converted_lead_id=prospect.converted_lead_id,
+        source_record_key=prospect.source_record_key,
+        status=prospect.status,
+        legal_name=prospect.legal_name,
+        phone=prospect.phone,
+        email=prospect.email,
+        property_address=", ".join(value for value in address_parts if value) or None,
+        suppression_status=prospect.suppression_status,
+        created_at=prospect.created_at,
+    )
+
+
+def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) -> ProspectRead:
+    campaign = db.scalar(
+        select(Campaign).where(
+            Campaign.organization_id == principal.organization_id,
+            Campaign.id == payload.campaign_id,
+        )
+    )
+    if campaign is None:
+        raise ValueError("Select a Stonegate campaign.")
+    territory_id = payload.territory_id or campaign.territory_id
+    territory = None
+    if territory_id:
+        territory = get_territory(db, principal.organization_id, territory_id)
+        if territory is None or territory.market_id != campaign.market_id:
+            raise ValueError("Prospect territory must belong to the campaign market.")
+    assignee = None
+    if payload.assigned_user_id:
+        assignee = get_active_user(db, principal.organization_id, payload.assigned_user_id)
+        if assignee is None:
+            raise ValueError("Prospect assignee must be an active workspace user.")
+    normalized_phone = normalize_prospect_phone(payload.phone)
+    normalized_email = payload.email.strip().lower() if payload.email else None
+    normalized_address = None
+    if payload.street_address and payload.city and payload.state_code and payload.postal_code:
+        normalized_address = canonical_address_key(
+            payload.street_address,
+            payload.city,
+            payload.state_code,
+            payload.postal_code,
+        )
+    prospect = Prospect(
+        organization_id=principal.organization_id,
+        campaign_id=campaign.id,
+        territory_id=territory.id if territory else None,
+        assigned_user_id=assignee.id if assignee else None,
+        converted_lead_id=None,
+        source_record_key=payload.source_record_key.strip() if payload.source_record_key else None,
+        status="new",
+        legal_name=payload.legal_name.strip(),
+        phone=payload.phone.strip() if payload.phone else None,
+        normalized_phone=normalized_phone,
+        email=payload.email.strip() if payload.email else None,
+        normalized_email=normalized_email,
+        street_address=payload.street_address.strip() if payload.street_address else None,
+        city=payload.city.strip() if payload.city else None,
+        state_code=payload.state_code.strip().upper() if payload.state_code else None,
+        postal_code=payload.postal_code.strip() if payload.postal_code else None,
+        normalized_address_key=normalized_address,
+        suppression_status="pending",
+        suppression_checked_at=None,
+        last_contacted_at=None,
+        source_payload=payload.source_payload,
+    )
+    db.add(prospect)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("This source record already exists in the campaign.") from exc
+    audit(
+        db,
+        principal,
+        "prospect.create",
+        "prospect",
+        prospect.id,
+        None,
+        {
+            "campaign_id": str(campaign.id),
+            "territory_id": str(territory.id) if territory else None,
+            "assigned_user_id": str(assignee.id) if assignee else None,
+            "status": prospect.status,
+            "suppression_status": prospect.suppression_status,
+        },
+        "Pre-lead prospect created",
+    )
+    db.commit()
+    return prospect_read(db, prospect)
+
+
+def get_market(db: Session, organization_id: UUID, market_id: UUID) -> Market | None:
+    return db.scalar(
+        select(Market).where(
+            Market.organization_id == organization_id,
+            Market.id == market_id,
+            Market.status == "active",
+        )
+    )
+
+
+def get_territory(db: Session, organization_id: UUID, territory_id: UUID) -> Territory | None:
+    return db.scalar(
+        select(Territory).where(
+            Territory.organization_id == organization_id,
+            Territory.id == territory_id,
+            Territory.status == "active",
+        )
+    )
+
+
+def unique_clean_values(values: list[str]) -> list[str]:
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        cleaned = value.strip()
+        key = cleaned.casefold()
+        if cleaned and key not in seen:
+            result.append(cleaned)
+            seen.add(key)
+    return result
+
+
+def normalize_prospect_phone(value: str | None) -> str | None:
+    if value is None:
+        return None
+    digits = "".join(character for character in value if character.isdigit())
+    if len(digits) == 10:
+        digits = f"1{digits}"
+    if len(digits) < 11 or len(digits) > 15:
+        raise ValueError("Enter a valid prospect phone number.")
+    return digits
 
 
 def list_users(

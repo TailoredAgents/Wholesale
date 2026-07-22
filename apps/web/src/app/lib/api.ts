@@ -168,6 +168,68 @@ export type AcquisitionOperations = {
     }>;
     active_enrollments: number;
   }>;
+  markets: Array<{
+    id: string;
+    name: string;
+    code: string;
+    state_code: string;
+    timezone: string;
+    status: string;
+    is_primary: boolean;
+    territory_count: number;
+    campaign_count: number;
+    prospect_count: number;
+  }>;
+  territories: Array<{
+    id: string;
+    market_id: string;
+    market_name: string;
+    assigned_team_id: string | null;
+    assigned_team_name: string | null;
+    name: string;
+    code: string;
+    status: string;
+    county_names: string[];
+    postal_codes: string[];
+    campaign_count: number;
+    prospect_count: number;
+  }>;
+  campaigns: Array<{
+    id: string;
+    market_id: string;
+    market_name: string;
+    territory_id: string | null;
+    territory_name: string | null;
+    owner_user_id: string | null;
+    owner_name: string | null;
+    name: string;
+    code: string;
+    channel: string;
+    status: string;
+    starts_on: string | null;
+    ends_on: string | null;
+    budget_cents: number | null;
+    prospect_count: number;
+    converted_prospect_count: number;
+  }>;
+  prospects: Array<{
+    id: string;
+    campaign_id: string;
+    campaign_name: string;
+    territory_id: string | null;
+    territory_name: string | null;
+    assigned_user_id: string | null;
+    assigned_user_name: string | null;
+    converted_lead_id: string | null;
+    source_record_key: string | null;
+    status: string;
+    legal_name: string;
+    phone: string | null;
+    email: string | null;
+    property_address: string | null;
+    suppression_status: string;
+    created_at: string;
+  }>;
 };
 
 export type LeadDetail = LeadListItem & {

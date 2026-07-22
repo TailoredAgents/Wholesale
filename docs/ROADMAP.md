@@ -38,7 +38,7 @@ email is implemented. Production acceptance remains pending for:
 | Phase | Status | Current position |
 | --- | --- | --- |
 | 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
-| 2. Operating Model Data Foundation | Partial | Roles, teams, permissions, calling lists, and audits exist; core business entities remain |
+| 2. Operating Model Data Foundation | Partial | Market, territory, campaign, and prospect foundations exist; compensation and launch controls remain |
 | 3. Campaign and List Management | Partial | Calling-list execution exists; prospect import, suppression, cost, and quality workflows remain |
 | 4. VA Prospecting Workbench | Partial | Restricted execution and handoff exist; the dedicated guided workbench remains |
 | 5. Lead Manager Operating System | Partial, advanced | Most CRM workflow exists; guided acceptance, qualification, and scorecards remain |
@@ -90,11 +90,14 @@ Delivered:
   user/team responsibilities.
 - Organization-scoped permissions, user administration, team assignment, and append-only audits.
 - Calling-list records and assignments.
+- First-class markets, territories, outreach campaigns, and pre-lead prospects with a management
+  workspace, normalization, source-row deduplication, and audit events.
+- Cold records remain prospects with suppression review pending until a later qualified handoff
+  creates a CRM lead.
 - Foundational compensation rules, revenue, deduction, and calculation records.
 
 Remaining:
 
-- First-class markets, territories, campaigns, and pre-lead prospect records.
 - Versioned compensation plans and explicit role-credit records.
 - Versioned human-led, AI-operated/human-managed, and human-oversight disposition modes.
 - Market launch checklists and approved market-specific controls.
@@ -111,6 +114,8 @@ Goal: Manage outreach lists, assignment, compliance evidence, cost, and quality 
 
 Delivered:
 
+- Foundational campaigns and pre-lead prospects that can receive later import, cost, suppression,
+  and list-quality workflows.
 - Calling lists, lead entries, VA assignment, attempt history, dispositions, and progress.
 - Lead address normalization, conservative duplicate review, merge, and merge auditing.
 - Organization-level suppression and consent enforcement in communication workflows.

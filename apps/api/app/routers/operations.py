@@ -14,29 +14,41 @@ from app.schemas.operations import (
     CallingListEntryUpdate,
     CallingListLeadAdd,
     CallingListRead,
+    CampaignCreate,
+    CampaignRead,
     DuplicateCandidateRead,
     DuplicateResolution,
     FollowUpEnrollmentCreate,
     FollowUpPlanCreate,
     FollowUpPlanRead,
+    MarketCreate,
+    MarketRead,
     NotificationRead,
     OperationsUserCreate,
     OperationsUserRead,
     OperationsUserUpdate,
+    ProspectCreate,
+    ProspectRead,
     SavedViewCreate,
     SavedViewRead,
     TeamCreate,
     TeamMemberCreate,
     TeamRead,
+    TerritoryCreate,
+    TerritoryRead,
 )
 from app.services.acquisition_operations import (
     add_calling_list_leads,
     add_team_member,
     create_calling_list,
+    create_campaign,
     create_follow_up_plan,
+    create_market,
     create_operations_user,
+    create_prospect,
     create_saved_view,
     create_team,
+    create_territory,
     enroll_follow_up_plan,
     get_operations_overview,
     mark_notification_read,
@@ -60,6 +72,54 @@ def read_operations_overview(
     principal: Annotated[Principal, Depends(view_operations_dependency)],
 ) -> AcquisitionOperationsOverview:
     return get_operations_overview(db, principal)
+
+
+@router.post("/markets", status_code=201)
+def create_workspace_market(
+    payload: MarketCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> MarketRead:
+    try:
+        return create_market(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/territories", status_code=201)
+def create_workspace_territory(
+    payload: TerritoryCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> TerritoryRead:
+    try:
+        return create_territory(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/campaigns", status_code=201)
+def create_workspace_campaign(
+    payload: CampaignCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> CampaignRead:
+    try:
+        return create_campaign(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/prospects", status_code=201)
+def create_workspace_prospect(
+    payload: ProspectCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> ProspectRead:
+    try:
+        return create_prospect(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/users", status_code=201)
