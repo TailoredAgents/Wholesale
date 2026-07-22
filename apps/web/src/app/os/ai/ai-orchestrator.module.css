@@ -1,0 +1,431 @@
+.workspace {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.legacyTools {
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-tight);
+}
+
+.legacyTools > summary {
+  min-height: 48px;
+  padding: 0 16px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+}
+
+.legacyTools[open] > summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.legacyTools > section {
+  margin-top: 0;
+  padding: 14px;
+}
+
+.commandBar,
+.listHeader,
+.detailHeader,
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.commandBar {
+  min-height: 82px;
+  padding: 18px 20px;
+  background: #172321;
+  color: #fff;
+}
+
+.commandBar > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.commandBar span {
+  color: #9cc7b2;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.commandBar strong {
+  font-size: 17px;
+}
+
+.actions,
+.rowActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.actions button,
+.rowActions button,
+.listHeader button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d7ded9;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e302b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.actions button {
+  border-color: #3a5750;
+  background: #213630;
+  color: #fff;
+}
+
+.actions button:last-child {
+  border-color: #9cc7b2;
+  background: #9cc7b2;
+  color: #14201f;
+}
+
+.actions button:disabled,
+.rowActions button:disabled,
+.listHeader button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.guardrail {
+  min-height: 48px;
+  padding: 11px 20px;
+  border-bottom: 1px solid #ead9b6;
+  background: #fff8e9;
+  color: #684a1d;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guardrail p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tabs {
+  min-height: 49px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: end;
+  gap: 18px;
+}
+
+.tabs button {
+  min-height: 48px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tabs .activeTab {
+  border-color: var(--brand);
+  color: var(--text);
+}
+
+.feedback {
+  margin: 0;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.controlGrid {
+  min-height: 520px;
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+}
+
+.agentRail {
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.agentRail > p,
+.listPanel > p {
+  padding: 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.agentRail button {
+  min-height: 52px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 3px;
+}
+
+.agentRail button:hover,
+.agentRail .selectedAgent {
+  border-color: var(--line);
+  background: #fff;
+}
+
+.agentRail span {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.agentRail small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.detailPanel {
+  padding: 26px;
+}
+
+.detailHeader {
+  align-items: flex-start;
+}
+
+.detailHeader > div {
+  max-width: 760px;
+}
+
+.detailHeader span,
+.detailHeader > strong {
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.detailHeader > strong {
+  padding: 7px 9px;
+  border-radius: 5px;
+  background: var(--brand-soft);
+}
+
+.detailHeader h3 {
+  margin: 5px 0 8px;
+  font-size: 22px;
+}
+
+.detailHeader p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.policyGrid {
+  margin: 22px 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.policyGrid div {
+  padding: 13px;
+  background: var(--surface-soft);
+}
+
+.policyGrid dt,
+.policyGrid dd {
+  margin: 0;
+}
+
+.policyGrid dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.policyGrid dd {
+  margin-top: 5px;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.toolTable {
+  border-top: 1px solid var(--line);
+}
+
+.toolTable > div {
+  min-height: 52px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(220px, 2fr) 120px;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolTable span,
+.toolTable code,
+.toolTable strong {
+  font-size: 12px;
+}
+
+.toolTable code {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.toolTable strong {
+  text-align: right;
+  color: var(--brand-strong);
+}
+
+.listPanel {
+  min-height: 430px;
+  padding: 20px;
+}
+
+.listHeader {
+  min-height: 46px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.listHeader > div {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.listRow {
+  min-height: 84px;
+  padding: 14px 2px;
+  border-bottom: 1px solid var(--line-soft);
+  align-items: flex-start;
+}
+
+.listRow > div:first-child {
+  min-width: 230px;
+  display: grid;
+  gap: 5px;
+}
+
+.listRow > div:first-child strong {
+  font-size: 13px;
+}
+
+.listRow > div:first-child span,
+.rowStats span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.rowStats {
+  min-width: 260px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+
+.rowStats b {
+  padding: 5px 7px;
+  border-radius: 5px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.pass {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.neutral {
+  background: var(--surface-muted);
+  color: var(--text-soft);
+}
+
+@media (max-width: 900px) {
+  .commandBar,
+  .listRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .controlGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .agentRail {
+    max-height: 270px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-y: auto;
+  }
+
+  .policyGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .toolTable > div {
+    grid-template-columns: 1fr;
+  }
+
+  .toolTable strong {
+    text-align: left;
+  }
+}
+
+@media (max-width: 560px) {
+  .tabs {
+    gap: 12px;
+    overflow-x: auto;
+  }
+
+  .detailPanel,
+  .listPanel {
+    padding: 16px;
+  }
+
+  .policyGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+}

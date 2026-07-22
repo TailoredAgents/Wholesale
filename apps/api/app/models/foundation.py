@@ -2457,6 +2457,17 @@ class AiAgentDefinition(UuidPrimaryKeyMixin, TimestampMixin, Base):
     requires_human_approval: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
+    autonomy_level: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="observe"
+    )
+    max_cost_microusd_per_run: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="100000"
+    )
+    max_daily_cost_microusd: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="1000000"
+    )
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="2")
+    rollback_owner_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
 class AiPromptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2505,6 +2516,26 @@ class AiToolPermission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     requires_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
 
+class AiOrchestratorEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_orchestrator_events"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "event_key", name="uq_ai_events_org_key"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    event_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    entity_type: Mapped[str | None] = mapped_column(String(120))
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(2000))
+
+
 class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_run_logs"
 
@@ -2532,6 +2563,32 @@ class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     run_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
+    orchestrator_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_orchestrator_events.id")
+    )
+    parent_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("ai_run_logs.id"))
+    requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    execution_mode: Mapped[str] = mapped_column(String(40), nullable=False, server_default="manual")
+    capability_key: Mapped[str] = mapped_column(
+        String(160), nullable=False, server_default="manual"
+    )
+    attempt_number: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    budget_limit_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    budget_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="within_budget"
+    )
+    trace_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="unreviewed"
+    )
+    trace_reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    trace_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trace_review_notes: Mapped[str | None] = mapped_column(String(2000))
+    rollback_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_required"
+    )
 
 
 class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2550,6 +2607,134 @@ class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     input_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class AiEvaluationDataset(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_datasets"
+    __table_args__ = (
+        UniqueConstraint(
+            "agent_definition_id",
+            "capability_key",
+            "version_number",
+            name="uq_ai_eval_dataset_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    description: Mapped[str | None] = mapped_column(String(2000))
+    minimum_case_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    minimum_pass_rate_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    maximum_critical_failures: Mapped[int] = mapped_column(Integer, nullable=False)
+    maximum_average_latency_ms: Mapped[int | None] = mapped_column(Integer)
+    maximum_average_cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiEvaluationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_cases"
+    __table_args__ = (UniqueConstraint("dataset_id", "case_key", name="uq_ai_eval_case_key"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    dataset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_datasets.id", ondelete="CASCADE"), index=True
+    )
+    case_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    input_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    expected_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    candidate_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    deterministic_checks: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    risk_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    is_critical: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+
+class AiEvaluationRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_runs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    dataset_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ai_evaluation_datasets.id"))
+    prompt_version_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ai_prompt_versions.id"))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(40), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    case_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    passed_case_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    pass_rate_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    critical_failure_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    average_latency_ms: Mapped[int | None] = mapped_column(Integer)
+    average_cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    total_cost_microusd: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    thresholds_passed: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiEvaluationResult(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_results"
+    __table_args__ = (
+        UniqueConstraint(
+            "evaluation_run_id",
+            "evaluation_case_id",
+            name="uq_ai_eval_result_case",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_runs.id", ondelete="CASCADE"), index=True
+    )
+    evaluation_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_cases.id")
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    critical_failure: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    actual_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    check_results: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+
+
+class AiCapabilityPromotion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_capability_promotions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id")
+    )
+    capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    evaluation_run_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("ai_evaluation_runs.id"))
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("approval_requests.id")
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    from_level: Mapped[str] = mapped_column(String(40), nullable=False)
+    to_level: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str] = mapped_column(String(2000), nullable=False)
+    decision_notes: Mapped[str | None] = mapped_column(String(2000))
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rollback_reason: Mapped[str | None] = mapped_column(String(2000))
 
 
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):

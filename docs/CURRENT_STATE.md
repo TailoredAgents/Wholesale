@@ -297,5 +297,6 @@ While A2P approval is pending:
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Begin Phase 10 with the deterministic agent runner and evaluation harness.
+6. Populate Phase 10 evaluations with redacted operating examples, approve the datasets, and run
+   the first draft-only Lead Management pilot.
 7. Resume the parallel integration track after A2P approval without blocking internal development.

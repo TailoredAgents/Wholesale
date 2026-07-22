@@ -177,6 +177,12 @@ handoff; correction and acceptance decisions preserve both the original and repl
 - `ai_tool_permissions`
 - `ai_run_logs`
 - `ai_tool_call_logs`
+- `ai_orchestrator_events`
+- `ai_evaluation_datasets`
+- `ai_evaluation_cases`
+- `ai_evaluation_runs`
+- `ai_evaluation_results`
+- `ai_capability_promotions`
 
 ## Platform Operations
 
@@ -209,7 +215,8 @@ handoff; correction and acceptance decisions preserve both the original and repl
 - Commission states, payout batches, disputes, and reversals.
 - Accounting sync, monthly close, reconciliation, cash forecast, and owner-distribution records.
 - Notification delivery and preference records.
-- AI orchestration event, evaluation dataset, evaluation result, pilot, and rollback records.
+- Dedicated pilot cohort records if promotion and rollback history no longer provides enough
+  reporting detail after the first measured pilots.
 
 ## Rules
 

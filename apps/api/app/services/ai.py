@@ -46,7 +46,14 @@ RISK_LEVELS = {"low", "medium", "high"}
 PROMPT_STATUSES = {"draft", "active", "retired"}
 RUN_STATUSES = {"queued", "running", "completed", "failed", "needs_review"}
 TOOL_PERMISSION_LEVELS = {"read", "draft", "propose", "write_blocked"}
-TOOL_CALL_STATUSES = {"proposed", "completed", "failed", "blocked", "pending_approval"}
+TOOL_CALL_STATUSES = {
+    "proposed",
+    "completed",
+    "failed",
+    "blocked",
+    "pending_approval",
+    "simulated",
+}
 LEAD_INTAKE_AGENT_KEY = "lead_intake_summary"
 LEAD_INTAKE_PROMPT = """You are Stonegate Home Buyers' lead intake summary agent.
 
@@ -69,6 +76,8 @@ CALL_QUALITY_MINIMUM_REVIEW_SAMPLE = 50
 
 
 def get_ai_overview(db: Session, principal: Principal) -> AiControlOverview:
+    from app.services.ai_orchestrator import get_overview as get_orchestrator_overview
+
     agents = db.scalars(
         select(AiAgentDefinition)
         .where(AiAgentDefinition.organization_id == principal.organization_id)
@@ -94,11 +103,11 @@ def get_ai_overview(db: Session, principal: Principal) -> AiControlOverview:
         summary=get_ai_summary(db, principal),
         call_intelligence_quality=get_call_intelligence_quality(db, principal),
         agents=[
-            agent_to_read(agent, tool_permissions_by_agent.get(agent.id, []))
-            for agent in agents
+            agent_to_read(agent, tool_permissions_by_agent.get(agent.id, [])) for agent in agents
         ],
         prompt_versions=[prompt_to_read(prompt) for prompt in prompt_versions],
         runs=[run_to_read(run, tool_calls_by_run.get(run.id, [])) for run in runs],
+        orchestrator=get_orchestrator_overview(db, principal),
     )
 
 
@@ -125,6 +134,11 @@ def create_ai_agent(
         model_name=payload.model_name,
         risk_level=payload.risk_level,
         requires_human_approval=payload.requires_human_approval,
+        autonomy_level="observe",
+        max_cost_microusd_per_run=payload.max_cost_microusd_per_run,
+        max_daily_cost_microusd=payload.max_daily_cost_microusd,
+        max_attempts=payload.max_attempts,
+        rollback_owner_user_id=principal.user_id,
     )
     db.add(agent)
     db.flush()
@@ -168,15 +182,18 @@ def create_ai_prompt_version(
     agent = get_agent(db, principal, agent_id)
     if agent is None:
         return None
-    version_number = int(
-        db.scalar(
-            select(func.coalesce(func.max(AiPromptVersion.version_number), 0)).where(
-                AiPromptVersion.organization_id == principal.organization_id,
-                AiPromptVersion.agent_definition_id == agent.id,
+    version_number = (
+        int(
+            db.scalar(
+                select(func.coalesce(func.max(AiPromptVersion.version_number), 0)).where(
+                    AiPromptVersion.organization_id == principal.organization_id,
+                    AiPromptVersion.agent_definition_id == agent.id,
+                )
             )
+            or 0
         )
-        or 0
-    ) + 1
+        + 1
+    )
     prompt = AiPromptVersion(
         organization_id=principal.organization_id,
         agent_definition_id=agent.id,
@@ -261,7 +278,8 @@ def create_ai_run(
         ),
         latency_ms=payload.latency_ms,
         started_at=started_at,
-        completed_at=payload.completed_at or (
+        completed_at=payload.completed_at
+        or (
             datetime.now(UTC) if payload.status in {"completed", "failed", "needs_review"} else None
         ),
         error_message=payload.error_message,
@@ -520,15 +538,18 @@ def ensure_lead_intake_prompt(
     if prompt is not None:
         return prompt
 
-    version_number = int(
-        db.scalar(
-            select(func.coalesce(func.max(AiPromptVersion.version_number), 0)).where(
-                AiPromptVersion.organization_id == principal.organization_id,
-                AiPromptVersion.agent_definition_id == agent.id,
+    version_number = (
+        int(
+            db.scalar(
+                select(func.coalesce(func.max(AiPromptVersion.version_number), 0)).where(
+                    AiPromptVersion.organization_id == principal.organization_id,
+                    AiPromptVersion.agent_definition_id == agent.id,
+                )
             )
+            or 0
         )
-        or 0
-    ) + 1
+        + 1
+    )
     prompt = AiPromptVersion(
         organization_id=principal.organization_id,
         agent_definition_id=agent.id,
@@ -784,8 +805,7 @@ def get_call_intelligence_quality(
         item.confidence_score for item in transcripts if item.confidence_score is not None
     ]
     review_metrics = [
-        (item.transcript_metadata or {}).get("review_metrics")
-        for item in transcripts
+        (item.transcript_metadata or {}).get("review_metrics") for item in transcripts
     ]
     agreements = [
         int(metric["field_agreement_percent"])
@@ -961,6 +981,11 @@ def agent_to_read(
         model_name=agent.model_name,
         risk_level=agent.risk_level,
         requires_human_approval=agent.requires_human_approval,
+        autonomy_level=agent.autonomy_level,
+        max_cost_microusd_per_run=agent.max_cost_microusd_per_run,
+        max_daily_cost_microusd=agent.max_daily_cost_microusd,
+        max_attempts=agent.max_attempts,
+        rollback_owner_user_id=agent.rollback_owner_user_id,
         tool_permissions=[tool_permission_to_read(permission) for permission in tool_permissions],
         created_at=agent.created_at,
     )
@@ -1010,6 +1035,19 @@ def run_to_read(run: AiRunLog, tool_calls: list[AiToolCallLog]) -> AiRunRead:
         completed_at=run.completed_at,
         error_message=run.error_message,
         run_metadata=run.run_metadata,
+        orchestrator_event_id=run.orchestrator_event_id,
+        parent_run_id=run.parent_run_id,
+        execution_mode=run.execution_mode,
+        capability_key=run.capability_key,
+        attempt_number=run.attempt_number,
+        idempotency_key=run.idempotency_key,
+        budget_limit_microusd=run.budget_limit_microusd,
+        budget_status=run.budget_status,
+        trace_status=run.trace_status,
+        trace_reviewed_by_user_id=run.trace_reviewed_by_user_id,
+        trace_reviewed_at=run.trace_reviewed_at,
+        trace_review_notes=run.trace_review_notes,
+        rollback_status=run.rollback_status,
         tool_calls=[tool_call_to_read(tool_call) for tool_call in tool_calls],
         created_at=run.created_at,
     )

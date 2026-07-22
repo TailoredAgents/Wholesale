@@ -341,7 +341,7 @@ correctly.
 
 ## Phase 10: Integrated AI Agent System
 
-Status: Foundational.
+Status: Control plane implemented; controlled pilots pending.
 
 Goal: Connect evaluated, permissioned AI agents to completed deterministic workflows.
 
@@ -352,15 +352,24 @@ Delivered:
 - Recording transcription, speaker segments, structured Call Intelligence notes, supporting
   evidence, and required human review.
 - Deterministic safeguards that prevent AI from approving offers or bypassing communication rules.
-
-Remaining:
-
 - Stonegate Orchestrator with dry-run mode, retries, budgets, trace review, and rollback controls.
 - Versioned evaluation datasets and promotion thresholds for each agent capability.
 - Prospecting Intelligence, Lead Management, Appointment Preparation, Underwriting, Negotiation
   Coach, Disposition, Buyer Relationship, Transaction, Finance, Marketing, Compliance, and
   Executive agents.
-- Approval-based external actions and measured low-risk internal automation.
+- Idempotent event intake, a governed 14-agent portfolio, deterministic fixture evaluations,
+  human-approved capability promotion, and an operator control-center UI.
+- External execution remains blocked in every baseline agent tool policy.
+
+Remaining:
+
+- Replace fixture outputs with recorded, redacted production examples and model replay for each
+  capability before its first pilot.
+- Run measured draft-only pilots and establish quality, correction, failure, cost, and business
+  outcome baselines.
+- Enable narrow, reversible internal actions one capability at a time only after owner approval.
+- Keep external actions blocked until the provider, compliance, monitoring, and rollback acceptance
+  checks are complete; offer, contract, payment, compensation, and legal authority remain human.
 - Agent quality, correction, failure, cost, and business-outcome reporting.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
@@ -383,7 +392,8 @@ evidence requirements, compliance controls, or financial approvals.
 2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
    template and redacted documents.
 3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
-4. Start Phase 10 with the deterministic agent runner and evaluation harness before adding agents.
+4. Populate Phase 10 evaluation datasets with redacted operating examples and run the first
+   draft-only Lead Management pilot.
 5. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

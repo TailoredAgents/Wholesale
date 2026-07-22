@@ -68,6 +68,16 @@ def decide_approval_request(
         from app.services.transactions import apply_contract_decision
 
         contract_context = apply_contract_decision(db, principal, request, payload)
+    elif request.request_type == "ai_capability_promotion":
+        from app.services.ai_orchestrator import apply_promotion_decision
+
+        apply_promotion_decision(
+            db,
+            principal,
+            request,
+            payload.status,
+            payload.decision_notes,
+        )
     previous_status = request.status
     request.status = payload.status
     request.decision_notes = payload.decision_notes
@@ -202,6 +212,8 @@ def approval_to_read(request: ApprovalRequest) -> ApprovalRequestRead:
         review_url = f"/os/leads/{metadata['lead_id']}?tab=underwriting#negotiation-governance"
     elif request.request_type == "contract_send" and metadata.get("transaction_id"):
         review_url = f"/os/transactions?transaction={metadata['transaction_id']}"
+    elif request.request_type == "ai_capability_promotion":
+        review_url = "/os/ai?view=governance"
     else:
         review_url = None
     return ApprovalRequestRead(

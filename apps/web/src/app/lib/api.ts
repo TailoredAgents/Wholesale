@@ -1289,6 +1289,11 @@ export type AiControlOverview = {
     model_name: string;
     risk_level: string;
     requires_human_approval: boolean;
+    autonomy_level: string;
+    max_cost_microusd_per_run: number;
+    max_daily_cost_microusd: number;
+    max_attempts: number;
+    rollback_owner_user_id: string | null;
     tool_permissions: Array<{
       id: string;
       tool_key: string;
@@ -1328,6 +1333,19 @@ export type AiControlOverview = {
     completed_at: string | null;
     error_message: string | null;
     run_metadata: Record<string, unknown> | null;
+    orchestrator_event_id: string | null;
+    parent_run_id: string | null;
+    execution_mode: string;
+    capability_key: string;
+    attempt_number: number;
+    idempotency_key: string | null;
+    budget_limit_microusd: number | null;
+    budget_status: string;
+    trace_status: string;
+    trace_reviewed_by_user_id: string | null;
+    trace_reviewed_at: string | null;
+    trace_review_notes: string | null;
+    rollback_status: string;
     tool_calls: Array<{
       id: string;
       ai_run_log_id: string;
@@ -1342,6 +1360,65 @@ export type AiControlOverview = {
     }>;
     created_at: string;
   }>;
+  orchestrator: {
+    metrics: {
+      portfolio_agent_count: number;
+      governed_run_count: number;
+      unreviewed_trace_count: number;
+      approved_dataset_count: number;
+      passing_evaluation_count: number;
+      pending_promotion_count: number;
+      active_promotion_count: number;
+      budget_blocked_run_count: number;
+    };
+    events: Array<{
+      id: string;
+      event_key: string;
+      event_type: string;
+      status: string;
+      occurred_at: string;
+    }>;
+    datasets: Array<{
+      id: string;
+      agent_definition_id: string;
+      capability_key: string;
+      name: string;
+      version_number: number;
+      status: string;
+      minimum_case_count: number;
+      minimum_pass_rate_basis_points: number;
+      maximum_critical_failures: number;
+      cases: Array<{ id: string; name: string; is_critical: boolean }>;
+      created_at: string;
+    }>;
+    evaluation_runs: Array<{
+      id: string;
+      dataset_id: string;
+      prompt_version_id: string;
+      status: string;
+      case_count: number;
+      passed_case_count: number;
+      pass_rate_basis_points: number;
+      critical_failure_count: number;
+      thresholds_passed: boolean;
+      created_at: string;
+    }>;
+    promotions: Array<{
+      id: string;
+      agent_definition_id: string;
+      capability_key: string;
+      evaluation_run_id: string;
+      approval_request_id: string | null;
+      from_level: string;
+      to_level: string;
+      status: string;
+      reason: string;
+      effective_at: string | null;
+      rolled_back_at: string | null;
+      rollback_reason: string | null;
+      created_at: string;
+    }>;
+  };
 };
 
 export type UnderwritingCalibrationCase = {
@@ -2024,6 +2101,22 @@ const emptyAiControlOverview: AiControlOverview = {
   agents: [],
   prompt_versions: [],
   runs: [],
+  orchestrator: {
+    metrics: {
+      portfolio_agent_count: 0,
+      governed_run_count: 0,
+      unreviewed_trace_count: 0,
+      approved_dataset_count: 0,
+      passing_evaluation_count: 0,
+      pending_promotion_count: 0,
+      active_promotion_count: 0,
+      budget_blocked_run_count: 0,
+    },
+    events: [],
+    datasets: [],
+    evaluation_runs: [],
+    promotions: [],
+  },
 };
 
 export async function getAiControlOverview(): Promise<{

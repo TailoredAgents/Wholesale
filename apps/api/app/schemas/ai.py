@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -20,6 +21,9 @@ class AiAgentCreate(BaseModel):
     model_name: str = Field(default="gpt-5.6-terra", max_length=120)
     risk_level: str = Field(default="medium", max_length=80)
     requires_human_approval: bool = True
+    max_cost_microusd_per_run: int = Field(default=100000, ge=0, le=100_000_000)
+    max_daily_cost_microusd: int = Field(default=1_000_000, ge=0, le=1_000_000_000)
+    max_attempts: int = Field(default=2, ge=1, le=5)
     tool_permissions: list[AiToolPermissionCreate] = Field(default_factory=list)
 
 
@@ -82,6 +86,11 @@ class AiAgentRead(BaseModel):
     model_name: str
     risk_level: str
     requires_human_approval: bool
+    autonomy_level: str
+    max_cost_microusd_per_run: int
+    max_daily_cost_microusd: int
+    max_attempts: int
+    rollback_owner_user_id: UUID | None
     tool_permissions: list[AiToolPermissionRead]
     created_at: datetime
 
@@ -128,8 +137,211 @@ class AiRunRead(BaseModel):
     completed_at: datetime | None
     error_message: str | None
     run_metadata: dict[str, object] | None
+    orchestrator_event_id: UUID | None
+    parent_run_id: UUID | None
+    execution_mode: str
+    capability_key: str
+    attempt_number: int
+    idempotency_key: str | None
+    budget_limit_microusd: int | None
+    budget_status: str
+    trace_status: str
+    trace_reviewed_by_user_id: UUID | None
+    trace_reviewed_at: datetime | None
+    trace_review_notes: str | None
+    rollback_status: str
     tool_calls: list[AiToolCallRead]
     created_at: datetime
+
+
+class AiPortfolioInstallRead(BaseModel):
+    created_agent_count: int
+    existing_agent_count: int
+    total_agent_count: int
+
+
+class AiOrchestratorEventCreate(BaseModel):
+    event_key: str = Field(min_length=1, max_length=255)
+    event_type: str = Field(min_length=1, max_length=120)
+    entity_type: str | None = Field(default=None, max_length=120)
+    entity_id: UUID | None = None
+    payload: dict[str, object] = Field(default_factory=dict)
+    occurred_at: datetime | None = None
+
+
+class AiOrchestratorEventRead(BaseModel):
+    id: UUID
+    event_key: str
+    event_type: str
+    entity_type: str | None
+    entity_id: UUID | None
+    status: str
+    payload: dict[str, object]
+    occurred_at: datetime
+    processed_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+
+
+class AiDryRunCreate(BaseModel):
+    agent_definition_id: UUID
+    capability_key: str = Field(min_length=1, max_length=160)
+    input_summary: str = Field(min_length=1, max_length=4000)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    lead_id: UUID | None = None
+    orchestrator_event_id: UUID | None = None
+    budget_limit_microusd: int | None = Field(default=None, ge=0)
+    proposed_tools: list[str] = Field(default_factory=list, max_length=30)
+
+
+class AiTraceReview(BaseModel):
+    status: Literal["reviewed", "flagged"]
+    notes: str = Field(min_length=1, max_length=2000)
+
+
+class AiEvaluationCaseCreate(BaseModel):
+    case_key: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=255)
+    input_payload: dict[str, object]
+    expected_output: dict[str, object] = Field(default_factory=dict)
+    candidate_output: dict[str, object] | None = None
+    deterministic_checks: dict[str, object] = Field(default_factory=dict)
+    risk_tags: list[str] = Field(default_factory=list)
+    is_critical: bool = False
+
+
+class AiEvaluationDatasetCreate(BaseModel):
+    agent_definition_id: UUID
+    capability_key: str = Field(min_length=1, max_length=160)
+    name: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=2000)
+    minimum_case_count: int = Field(default=3, ge=1, le=500)
+    minimum_pass_rate_basis_points: int = Field(default=9000, ge=0, le=10000)
+    maximum_critical_failures: int = Field(default=0, ge=0, le=500)
+    maximum_average_latency_ms: int | None = Field(default=None, ge=0)
+    maximum_average_cost_microusd: int | None = Field(default=None, ge=0)
+    cases: list[AiEvaluationCaseCreate] = Field(min_length=1, max_length=500)
+
+
+class AiEvaluationCaseRead(BaseModel):
+    id: UUID
+    case_key: str
+    name: str
+    input_payload: dict[str, object]
+    expected_output: dict[str, object]
+    candidate_output: dict[str, object] | None
+    deterministic_checks: dict[str, object]
+    risk_tags: list[str]
+    is_critical: bool
+
+
+class AiEvaluationDatasetRead(BaseModel):
+    id: UUID
+    agent_definition_id: UUID
+    capability_key: str
+    name: str
+    version_number: int
+    status: str
+    description: str | None
+    minimum_case_count: int
+    minimum_pass_rate_basis_points: int
+    maximum_critical_failures: int
+    maximum_average_latency_ms: int | None
+    maximum_average_cost_microusd: int | None
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    cases: list[AiEvaluationCaseRead]
+    created_at: datetime
+
+
+class AiEvaluationDecision(BaseModel):
+    decision: Literal["approve", "retire"]
+
+
+class AiEvaluationRunCreate(BaseModel):
+    dataset_id: UUID
+    prompt_version_id: UUID
+
+
+class AiEvaluationResultRead(BaseModel):
+    id: UUID
+    evaluation_case_id: UUID
+    status: str
+    score_basis_points: int
+    critical_failure: bool
+    actual_output: dict[str, object] | None
+    check_results: dict[str, object]
+    latency_ms: int | None
+    cost_microusd: int | None
+    error_message: str | None
+
+
+class AiEvaluationRunRead(BaseModel):
+    id: UUID
+    dataset_id: UUID
+    prompt_version_id: UUID
+    status: str
+    execution_mode: str
+    model_name: str
+    case_count: int
+    passed_case_count: int
+    pass_rate_basis_points: int
+    critical_failure_count: int
+    average_latency_ms: int | None
+    average_cost_microusd: int | None
+    total_cost_microusd: int
+    thresholds_passed: bool
+    summary: dict[str, object]
+    started_at: datetime
+    completed_at: datetime | None
+    results: list[AiEvaluationResultRead]
+    created_at: datetime
+
+
+class AiPromotionCreate(BaseModel):
+    evaluation_run_id: UUID
+    to_level: Literal["draft", "recommend", "execute_internal"]
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class AiPromotionRead(BaseModel):
+    id: UUID
+    agent_definition_id: UUID
+    capability_key: str
+    evaluation_run_id: UUID
+    approval_request_id: UUID | None
+    from_level: str
+    to_level: str
+    status: str
+    reason: str
+    decision_notes: str | None
+    effective_at: datetime | None
+    rolled_back_at: datetime | None
+    rollback_reason: str | None
+    created_at: datetime
+
+
+class AiRollbackCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=2000)
+
+
+class AiOrchestratorMetrics(BaseModel):
+    portfolio_agent_count: int
+    governed_run_count: int
+    unreviewed_trace_count: int
+    approved_dataset_count: int
+    passing_evaluation_count: int
+    pending_promotion_count: int
+    active_promotion_count: int
+    budget_blocked_run_count: int
+
+
+class AiOrchestratorOverview(BaseModel):
+    metrics: AiOrchestratorMetrics
+    events: list[AiOrchestratorEventRead]
+    datasets: list[AiEvaluationDatasetRead]
+    evaluation_runs: list[AiEvaluationRunRead]
+    promotions: list[AiPromotionRead]
 
 
 class AiControlSummary(BaseModel):
@@ -166,3 +378,4 @@ class AiControlOverview(BaseModel):
     agents: list[AiAgentRead]
     prompt_versions: list[AiPromptVersionRead]
     runs: list[AiRunRead]
+    orchestrator: AiOrchestratorOverview

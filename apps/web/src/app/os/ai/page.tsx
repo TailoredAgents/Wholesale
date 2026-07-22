@@ -1,7 +1,9 @@
 import { getAiControlOverview, getDashboardData } from "../../lib/api";
 import { labelize } from "../os-utils";
 import { AiForms } from "./ai-forms";
+import { AiOrchestratorWorkspace } from "./ai-orchestrator-workspace";
 import { LeadSummaryRunner } from "./lead-summary-runner";
+import aiStyles from "./ai-orchestrator.module.css";
 import styles from "../page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -79,6 +81,8 @@ export default async function AiControlPage() {
         </article>
       </section>
 
+      <AiOrchestratorWorkspace ai={ai} />
+
       <section className={styles.qualityBand}>
         <div className={styles.panelHeader}>
           <div>
@@ -137,7 +141,9 @@ export default async function AiControlPage() {
         )}
       </section>
 
-      <section className={styles.contentGrid}>
+      <details className={aiStyles.legacyTools}>
+        <summary>Manual testing utilities</summary>
+        <section className={styles.contentGrid}>
         <article className={styles.panel}>
           <div className={styles.panelHeader}>
             <h3>Control Entry</h3>
@@ -228,7 +234,8 @@ export default async function AiControlPage() {
             ))}
           </div>
         </article>
-      </section>
+        </section>
+      </details>
     </>
   );
 }
