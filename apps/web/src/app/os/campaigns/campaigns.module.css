@@ -1,0 +1,73 @@
+.workspace { display: grid; gap: 16px; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-tight); }
+.metrics > div { min-width: 0; padding: 17px 19px; display: grid; gap: 7px; border-right: 1px solid var(--line-soft); }
+.metrics > div:last-child { border-right: 0; }
+.metrics span, .sectionHeader span, .mappingForm label > span, .importForm label > span, .stackForm label > span, .previewMetrics span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.metrics strong { font-size: 24px; line-height: 1; }
+.tabBar { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-muted); overflow-x: auto; }
+.tabBar button { min-height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: 6px; background: transparent; color: var(--text-soft); font: inherit; font-size: 13px; font-weight: 800; white-space: nowrap; cursor: pointer; }
+.tabBar .activeTab { border-color: var(--line); background: var(--surface); color: var(--brand-strong); box-shadow: var(--shadow-tight); }
+.feedback { margin: 0; padding: 10px 13px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-weight: 750; }
+.saving { background: var(--info-soft); color: var(--info); }
+.saved { background: var(--brand-soft); color: var(--brand-strong); }
+.error { background: var(--danger-soft); color: var(--danger); }
+.twoColumn, .historyLayout { display: grid; grid-template-columns: minmax(330px, .72fr) minmax(0, 1.28fr); gap: 16px; align-items: start; }
+.historyLayout { grid-template-columns: minmax(280px, .38fr) minmax(0, 1.62fr); }
+.section { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
+.sectionHeader { min-height: 70px; padding: 14px 17px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); background: var(--surface-soft); }
+.sectionHeader > div { min-width: 0; display: grid; gap: 4px; }
+.sectionHeader h3 { font-size: 17px; line-height: 1.2; }
+.sectionHeader > strong { min-width: 36px; padding: 7px; border-radius: 5px; background: var(--surface-muted); color: var(--text-soft); text-align: center; }
+.qualityTable { min-width: 1040px; }
+.tableHeader, .qualityRow { display: grid; grid-template-columns: minmax(190px, 1.3fr) repeat(6, minmax(110px, .7fr)); gap: 12px; align-items: center; padding: 11px 16px; border-bottom: 1px solid var(--line-soft); }
+.tableHeader { background: var(--surface-muted); color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.qualityRow:last-child { border-bottom: 0; }
+.qualityRow > div { min-width: 0; display: grid; gap: 4px; }
+.qualityRow strong { font-size: 12px; }
+.qualityRow small { color: var(--muted); font-size: 10px; line-height: 1.35; }
+.progress { width: 100%; height: 4px; border-radius: 2px; background: var(--surface-muted); overflow: hidden; }
+.progress span { display: block; height: 100%; background: var(--brand); }
+.mappingForm, .importForm, .stackForm { padding: 17px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+.mappingForm label, .importForm label, .stackForm label { min-width: 0; display: grid; gap: 6px; }
+.mappingForm input, .importForm input, .importForm select, .stackForm input, .stackForm select, .stackForm textarea { min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.mappingForm button, .importForm button, .stackForm button, .preview > button { min-height: 38px; width: fit-content; padding: 0 13px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
+.mappingForm button, .formNote, .fileField, .full { grid-column: 1 / -1; }
+.formNote { margin: 0; padding: 9px 10px; border-left: 3px solid var(--info); background: var(--info-soft); color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.fileField input { padding: 7px; background: var(--surface-soft); }
+.preview { border-top: 1px solid var(--line); padding: 16px; display: grid; gap: 14px; background: var(--surface-soft); }
+.previewMetrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
+.previewMetrics > div { padding: 10px; display: grid; gap: 4px; border-right: 1px solid var(--line-soft); }
+.previewMetrics > div:last-child { border-right: 0; }
+.previewMetrics strong { font-size: 17px; }
+.previewRows, .historyRows, .batchEntries, .rows, .picker { display: grid; }
+.previewRows { max-height: 460px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.previewRows > div, .historyRows > div { min-width: 0; padding: 10px 12px; display: grid; grid-template-columns: 34px minmax(150px, .8fr) 95px minmax(210px, 1.2fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); }
+.previewRows > div:last-child, .historyRows > div:last-child { border-bottom: 0; }
+.previewRows > div > div, .historyRows > div > div { min-width: 0; display: grid; gap: 3px; }
+.previewRows strong, .historyRows strong { font-size: 11px; }
+.previewRows small, .historyRows small { color: var(--muted); font-size: 10px; }
+.previewRows p, .historyRows p { margin: 0; color: var(--text-soft); font-size: 10px; line-height: 1.4; }
+.badge { width: fit-content; padding: 4px 6px; border-radius: 4px; background: var(--surface-muted); color: var(--text-soft); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.valid { background: var(--brand-soft); color: var(--brand-strong); }
+.suppressed, .invalid { background: var(--danger-soft); color: var(--danger); }
+.review_required { background: var(--amber-soft); color: var(--amber); }
+.duplicate { background: var(--info-soft); color: var(--info); }
+.costRow { min-width: 0; padding: 13px 17px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.costRow:last-child { border-bottom: 0; }
+.costRow > div { min-width: 0; display: grid; gap: 4px; }
+.costRow > div:last-child { text-align: right; }
+.costRow strong { font-size: 12px; }
+.costRow span { color: var(--muted); font-size: 10px; }
+.picker button { min-width: 0; padding: 12px 16px; display: grid; gap: 4px; border: 0; border-bottom: 1px solid var(--line-soft); background: var(--surface); color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.picker button strong { font-size: 12px; }
+.picker button span { color: var(--muted); font-size: 10px; }
+.picker .selected { background: var(--brand-soft); box-shadow: inset 3px 0 0 var(--brand); }
+.batchEntries > div { min-width: 0; padding: 11px 15px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); }
+.batchEntries > div:last-child { border-bottom: 0; }
+.batchEntries > div > div { min-width: 0; display: grid; gap: 3px; }
+.batchEntries strong { font-size: 11px; }
+.batchEntries small { color: var(--muted); font-size: 10px; }
+.empty { margin: 0; padding: 28px 17px; color: var(--muted); font-size: 12px; text-align: center; }
+@media (max-width: 1180px) { .twoColumn, .historyLayout { grid-template-columns: 1fr; } .section:has(.qualityTable) { overflow-x: auto; } }
+@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
+@media (max-width: 480px) { .metrics { grid-template-columns: 1fr; } .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); } .metrics > div:last-child { border-bottom: 0; } .previewMetrics { grid-template-columns: repeat(2, 1fr); } .previewMetrics > div:nth-child(2n) { border-right: 0; } .previewMetrics > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } }

@@ -2,7 +2,7 @@
 
 Last updated: July 21, 2026
 
-The schema is managed through Alembic migrations. Migration `0031_operating_controls` is the
+The schema is managed through Alembic migrations. Migration `0032_campaign_list_management` is the
 current head.
 
 ## Identity And Access
@@ -96,8 +96,15 @@ notes, timestamp, and audit events. A later request preserves but cancels the fo
 
 - `markets`
 - `territories`
-- `outreach_campaigns`
+- `campaigns`
 - `prospects`
+- `prospect_import_mappings`
+- `prospect_import_batches`
+- `prospect_import_rows`
+- `prospect_suppression_checks`
+- `campaign_costs`
+- `prospect_calling_batches`
+- `prospect_calling_batch_entries`
 - `compensation_plan_versions`
 - `compensation_plan_roles`
 - `disposition_operating_modes`
@@ -109,6 +116,11 @@ Compensation plans preserve the exact approved economics in effect for a deal. R
 who performed each compensated function and require an auditable approval before later payment.
 Disposition operating modes define human and expected company shares without retroactively changing
 historical plans. Market checklists retain evidence and final approval for every launch version.
+
+Prospect import batches preserve the source file checksum, reusable mapping, every source row,
+normalization result, duplicate match, and call-eligibility decision. Suppression checks retain
+separate company and imported vendor DNC evidence. Calling batches reference only prospects with
+clear screening evidence; records that are blocked or require review remain outside caller queues.
 
 ## AI Control
 
@@ -139,8 +151,6 @@ historical plans. Market checklists retain evidence and final approval for every
 
 ## Planned Additions
 
-- Prospect import batches, reusable field mappings, assignments, dispositions, and retained
-  suppression-screening evidence.
 - Comparable candidate records if calibration volume or cross-analysis querying outgrows the
   current immutable analysis payload and audit-event review history.
 - Offer versions and negotiation-event records.

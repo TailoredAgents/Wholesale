@@ -228,6 +228,9 @@ export type AcquisitionOperations = {
     email: string | null;
     property_address: string | null;
     suppression_status: string;
+    phone_validation_status: string;
+    address_validation_status: string;
+    call_eligibility: string;
     created_at: string;
   }>;
 };
@@ -327,6 +330,134 @@ export type OperatingModelOverview = {
       completed_at: string | null;
       sort_order: number;
     }>;
+  }>;
+};
+
+export type CampaignManagementOverview = {
+  users: OperationsUser[];
+  campaigns: AcquisitionOperations["campaigns"];
+  mappings: Array<{
+    id: string;
+    name: string;
+    source_name: string | null;
+    field_mapping: Record<string, string>;
+    default_values: Record<string, string>;
+    created_by_user_id: string;
+    created_by_name: string;
+    is_active: boolean;
+    created_at: string;
+  }>;
+  import_batches: Array<{
+    id: string;
+    campaign_id: string;
+    campaign_name: string;
+    mapping_id: string;
+    mapping_name: string;
+    default_assignee_user_id: string | null;
+    default_assignee_name: string | null;
+    imported_by_user_id: string;
+    imported_by_name: string;
+    file_name: string;
+    file_sha256: string;
+    status: string;
+    total_rows: number;
+    valid_rows: number;
+    imported_rows: number;
+    invalid_rows: number;
+    duplicate_rows: number;
+    suppressed_rows: number;
+    review_required_rows: number;
+    completed_at: string | null;
+    created_at: string;
+    rows: Array<{
+      id: string;
+      row_number: number;
+      status: string;
+      prospect_id: string | null;
+      duplicate_prospect_id: string | null;
+      legal_name: string | null;
+      phone: string | null;
+      property_address: string | null;
+      validation_errors: string[];
+      eligibility_reasons: string[];
+    }>;
+  }>;
+  costs: Array<{
+    id: string;
+    campaign_id: string;
+    campaign_name: string;
+    import_batch_id: string | null;
+    worker_user_id: string | null;
+    worker_name: string | null;
+    category: string;
+    vendor_name: string | null;
+    amount_cents: number;
+    labor_minutes: number | null;
+    hourly_rate_cents: number | null;
+    incurred_on: string;
+    notes: string | null;
+    created_at: string;
+  }>;
+  calling_batches: Array<{
+    id: string;
+    campaign_id: string;
+    campaign_name: string;
+    import_batch_id: string | null;
+    assigned_user_id: string;
+    assigned_user_name: string;
+    name: string;
+    status: string;
+    due_at: string | null;
+    notes: string | null;
+    total_entries: number;
+    completed_entries: number;
+    created_at: string;
+    entries: Array<{
+      id: string;
+      prospect_id: string;
+      legal_name: string;
+      phone: string | null;
+      property_address: string | null;
+      sequence_number: number;
+      status: string;
+      attempt_count: number;
+      disposition: string | null;
+      call_eligibility: string;
+    }>;
+  }>;
+  screening_review: Array<{
+    id: string;
+    campaign_id: string;
+    campaign_name: string;
+    legal_name: string;
+    phone: string | null;
+    property_address: string | null;
+    call_eligibility: string;
+    suppression_status: string;
+    suppression_checked_at: string | null;
+  }>;
+  quality: Array<{
+    campaign_id: string;
+    campaign_name: string;
+    budget_cents: number | null;
+    actual_cost_cents: number;
+    remaining_budget_cents: number | null;
+    total_import_rows: number;
+    imported_prospects: number;
+    callable_prospects: number;
+    review_required_prospects: number;
+    blocked_prospects: number;
+    converted_prospects: number;
+    invalid_rows: number;
+    duplicate_rows: number;
+    suppressed_rows: number;
+    bad_data_rate_basis_points: number;
+    duplicate_rate_basis_points: number;
+    conversion_rate_basis_points: number;
+    cost_per_imported_prospect_cents: number | null;
+    cost_per_callable_prospect_cents: number | null;
+    calling_batch_entries: number;
+    calling_batch_completed: number;
   }>;
 };
 
@@ -1050,6 +1181,31 @@ export async function getOperatingModelOverview(): Promise<{
   } catch (error) {
     console.error("Stonegate operating model request failed.", error);
     return { operatingModel: null, apiConnected: false };
+  }
+}
+
+export async function getCampaignManagementOverview(): Promise<{
+  campaignManagement: CampaignManagementOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/campaign-management`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      campaignManagement: (await response.json()) as CampaignManagementOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate campaign management request failed.", error);
+    return { campaignManagement: null, apiConnected: false };
   }
 }
 

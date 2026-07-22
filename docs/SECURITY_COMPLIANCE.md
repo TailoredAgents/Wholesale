@@ -51,6 +51,10 @@ Stonegate's dedicated A2P Campaign covers opted-in seller follow-up only. It doe
 SMS or transferred consent. Recording remains disabled until the spoken disclosure and retention
 policy are approved for the operating states.
 
+Cold-call batches require a valid normalized phone, retained clear DNC evidence, and no active
+Stonegate Voice suppression. A blank or unknown imported DNC result is review-only. The current
+system retains vendor or manager-review evidence but is not itself a live national DNC provider.
+
 ## Production Hardening Still Required
 
 - Verify privileged-user MFA.

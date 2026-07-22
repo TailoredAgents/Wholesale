@@ -311,6 +311,9 @@ class ProspectRead(BaseModel):
     email: str | None
     property_address: str | None
     suppression_status: str
+    phone_validation_status: str
+    address_validation_status: str
+    call_eligibility: str
     created_at: datetime
 
 

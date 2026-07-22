@@ -39,7 +39,7 @@ email is implemented. Production acceptance remains pending for:
 | --- | --- | --- |
 | 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
 | 2. Operating Model Data Foundation | Complete | Markets, campaigns, versioned economics, role credits, operating modes, and launch controls are auditable |
-| 3. Campaign and List Management | Partial | Calling-list execution exists; prospect import, suppression, cost, and quality workflows remain |
+| 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
 | 4. VA Prospecting Workbench | Partial | Restricted execution and handoff exist; the dedicated guided workbench remains |
 | 5. Lead Manager Operating System | Partial, advanced | Most CRM workflow exists; guided acceptance, qualification, and scorecards remain |
 | 6. Appointments and Field Acquisitions | Partial | Internal calendar and appointment lifecycle exist; field workflow remains |
@@ -111,25 +111,30 @@ built on it.
 
 ## Phase 3: Campaign And List Management
 
-Status: Partial.
+Status: Complete.
 
 Goal: Manage outreach lists, assignment, compliance evidence, cost, and quality inside Stonegate.
 
 Delivered:
 
-- Foundational campaigns and pre-lead prospects that can receive later import, cost, suppression,
-  and list-quality workflows.
+- Campaign and pre-lead prospect records with import lineage, cost, suppression, and quality
+  workflows.
 - Calling lists, lead entries, VA assignment, attempt history, dispositions, and progress.
 - Lead address normalization, conservative duplicate review, merge, and merge auditing.
 - Organization-level suppression and consent enforcement in communication workflows.
-
-Remaining:
-
-- CSV import with reusable field mapping and row-level validation feedback.
-- Prospect-level address and telephone normalization before CRM lead creation.
-- Import-time DNC and company-suppression screening with retained evidence.
-- Campaign budgets, list costs, labor attribution, and calling batches.
-- Campaign progress, bad-data reporting, duplicate rate, and list-quality reporting.
+- CSV import with reusable vendor mappings, preview-before-commit, exact-file replay protection,
+  and retained row-level validation, duplicate, suppression, and review outcomes.
+- Prospect telephone and canonical property-address normalization before CRM lead creation.
+- Import-time company suppression and imported vendor DNC screening with durable evidence. Records
+  without clear DNC evidence may be retained for review but cannot enter a calling batch.
+- Audited manager screening review can attach a later provider/reference result and recalculate
+  eligibility without erasing the original import evidence.
+- Campaign budgets, list-purchase and enrichment costs, exact VA labor attribution, and prospect
+  calling batches that admit only eligible records.
+- Campaign progress, spend, remaining budget, bad-data rate, duplicate rate, conversion rate,
+  cost-per-prospect, cost-per-callable-record, and batch completion reporting.
+- A dedicated Campaigns workspace for performance, mappings, imports, costs, batches, and file
+  history.
 
 Result: Stonegate can manage outreach internally without disconnected spreadsheets.
 
@@ -330,9 +335,10 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Begin Phase 3 with CSV prospect import, reusable field mapping, and row-level validation.
-3. Continue Phase 3 suppression evidence, cost attribution, and list-quality reporting, then move
-   through Phases 4-6 in dependency order.
+2. Begin Phase 4 with the restricted one-prospect-at-a-time VA workbench and versioned caller
+   scripts.
+3. Complete Phase 4 guided dispositions, callbacks, warm-lead handoff, and performance scorecards,
+   then move through Phases 5-6 in dependency order.
 4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred

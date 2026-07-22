@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 All providers are adapters. PostgreSQL remains the business source of truth.
 
@@ -16,6 +16,7 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
 | Google Workspace | Operational seller email | Implemented | Domain, OAuth project, secrets, and mailbox connections pending |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
+| DNC screening vendor | Cold-call eligibility evidence | Evidence intake implemented | Live provider not selected; import or review a retained vendor result |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
 | Object storage | Contracts and persistent files | Not selected | Planned before transaction document automation |
 | E-signature | Contracts | Not selected | Planned in transaction phase |
@@ -34,6 +35,17 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 - Handle retries, stale cursors, rate limits, and provider outages.
 - Provide a disabled or test state before production activation.
 - Write audit events for material provider-backed actions.
+
+## DNC Screening
+
+Stonegate can retain DNC results supplied in a vendor list and can record a later manager-reviewed
+result with its provider or report reference. The system separately checks Stonegate's internal
+Voice suppression records. A prospect without clear retained DNC evidence remains review-only and
+cannot enter a calling batch.
+
+No live national DNC provider is currently connected. Selecting one remains an external vendor and
+legal-process decision; the integration must write through the existing evidence model rather than
+bypassing it.
 
 ## OpenAI
 

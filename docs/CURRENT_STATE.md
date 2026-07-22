@@ -47,8 +47,8 @@ sequence is:
 | Phase | Status |
 | --- | --- |
 | 1. Reliability and Test Foundation | Implementation complete; production checks remain |
-| 2. Operating Model Data Foundation | Partial |
-| 3. Campaign and List Management | Partial |
+| 2. Operating Model Data Foundation | Complete |
+| 3. Campaign and List Management | Complete |
 | 4. VA Prospecting Workbench | Partial |
 | 5. Lead Manager Operating System | Partial, advanced |
 | 6. Appointments and Field Acquisitions | Partial |
@@ -57,9 +57,9 @@ sequence is:
 | 9. Buyers, Dispositions, and Finance | Foundational |
 | 10. Integrated AI Agent System | Foundational |
 
-The completed underwriting work remains valid. It does not imply that campaign management, the VA
-workbench, Lead Manager workflow, or field acquisitions are complete. Detailed delivered and
-remaining scope is maintained in `ROADMAP.md`.
+The completed underwriting work remains valid. It does not imply that the VA workbench, Lead
+Manager workflow, or field acquisitions are complete. Detailed delivered and remaining scope is
+maintained in `ROADMAP.md`.
 
 ## Delivered Capabilities
 
@@ -99,6 +99,19 @@ remaining scope is maintained in `ROADMAP.md`.
   organization scoping and append-only audit events.
 - Prospect normalization, source-row deduplication, campaign attribution, and suppression-pending
   defaults that keep cold records outside the CRM lead pipeline.
+- Reusable CSV vendor mappings, preview-before-commit validation, exact-file replay protection,
+  and row-level retained import outcomes.
+- Phone and canonical property-address normalization plus exact prospect duplicate detection before
+  records enter campaign operations.
+- Imported vendor DNC and Stonegate company-suppression evidence. Unscreened records remain review
+  only and cannot enter callable batches.
+- Audited screening review can attach a later provider/reference decision before a prospect becomes
+  callable.
+- Campaign cost ledger with list, enrichment, software, advertising, mail, and exact VA labor
+  attribution.
+- Callable-only prospect batches and campaign reporting for budget, spend, data quality,
+  duplicates, suppression, conversions, unit costs, and batch completion.
+- Campaigns workspace for performance, imports, mappings, costs, assignments, and file history.
 - VA-scoped calling-list execution with attempt history, dispositions, progress, and audited
   handoff to acquisitions.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
@@ -214,8 +227,6 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- CSV list import, field mapping, import-time DNC screening, campaign budgets, list costs, and
-  list-quality reporting are not complete.
 - The VA workflow has assigned-list execution and handoff, but not the final one-prospect guided
   workbench, versioned script, or performance scorecards.
 - The Lead Manager workflow has most CRM controls, but its dedicated handoff acceptance flow,
@@ -242,6 +253,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Begin Phase 3 with CSV prospect import, reusable field mapping, row-level validation, and
-   import-time suppression evidence.
+4. Begin Phase 4 with the one-prospect VA workbench, versioned caller scripts, guided outcomes,
+   callbacks, and warm-lead handoff review.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

@@ -27,6 +27,20 @@ Last updated: July 21, 2026
 7. VA loses broad editing access after handoff.
 8. Assignment and activity history remain attached to the same record.
 
+## Prospect Import And Assignment
+
+1. Manager creates or selects the campaign and a reusable vendor-column mapping.
+2. OS parses the CSV, normalizes phone and property data, and previews every row without saving it.
+3. Exact source, phone, email, property, and within-file duplicates are separated from new records.
+4. OS checks Stonegate Voice suppression and retains the imported vendor DNC result independently.
+5. Invalid and duplicate rows remain in import history; blocked and unscreened prospects remain out
+   of calling batches.
+6. A manager can attach a later provider/reference screening decision to a review-only prospect.
+7. Only prospects with valid phones, clear DNC evidence, and no company suppression enter a caller
+   batch.
+8. Costs, labor, row outcomes, assignment, and campaign-quality metrics retain the same campaign
+   and import lineage.
+
 ## Shared Communications
 
 1. Staff opens the seller conversation.

@@ -1,6 +1,6 @@
 # Testing
 
-Last updated: July 20, 2026
+Last updated: July 21, 2026
 
 ## Required Checks
 
@@ -24,6 +24,9 @@ Also run:
 - Authentication, permission, and organization scope.
 - Bootstrap and migration idempotency.
 - Public intake, duplicate matching, consent, and attribution.
+- CSV dialect parsing, reusable mappings, row validation, prospect normalization, duplicate
+  detection, DNC/company suppression evidence, import replay protection, costs, and callable-only
+  prospect batches.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.

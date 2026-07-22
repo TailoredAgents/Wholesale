@@ -476,6 +476,9 @@ def prospect_read(db: Session, prospect: Prospect) -> ProspectRead:
         email=prospect.email,
         property_address=", ".join(value for value in address_parts if value) or None,
         suppression_status=prospect.suppression_status,
+        phone_validation_status=prospect.phone_validation_status,
+        address_validation_status=prospect.address_validation_status,
+        call_eligibility=prospect.call_eligibility,
         created_at=prospect.created_at,
     )
 
@@ -530,6 +533,9 @@ def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) 
         normalized_address_key=normalized_address,
         suppression_status="pending",
         suppression_checked_at=None,
+        phone_validation_status="valid" if normalized_phone else "missing",
+        address_validation_status="normalized" if normalized_address else "missing",
+        call_eligibility="review_required",
         last_contacted_at=None,
         source_payload=payload.source_payload,
     )
