@@ -79,12 +79,17 @@ Goal: Turn comping into repeatable, explainable offer preparation.
 
 Deliver:
 
-- Comp candidate review UI with include, exclude, reason, and manual weighting.
-- Address validation and stronger subject-property normalization.
+- [Complete] Comp candidate review UI with include, exclude, documented reason, bounded manual
+  weighting, immutable recalculation versions, and audit history.
+- [Complete] RentCast address validation, canonical duplicate keys, provider match scoring,
+  non-owner property-fact provenance, and explicit subject-fact normalization.
 - Optional ATTOM or MLS/RESO enrichment behind the property-data adapter.
-- Market-specific calibration datasets and backtesting against known sales.
-- Repair scope presets, contractor estimates, and version comparison.
-- Offer ceiling approval requests and negotiation scenarios.
+- [Complete] Market-specific calibration cases, immutable prediction snapshots, verified outcome
+  history, and ARV/repair/disposition backtesting metrics.
+- [Complete] Repair scope presets, immutable contractor/walkthrough/internal estimates, and
+  underwriting version comparison.
+- [Complete] Immutable offer-ceiling approval requests, bounded negotiation ladders, supersession,
+  stale-version protection, and accountable decisions.
 - Seller-meeting brief, objection preparation, and approved price discussion notes.
 - Final investor and client report polish with Stonegate's custom domain and contact information.
 
@@ -93,6 +98,23 @@ Exit criteria:
 - Every ARV and offer range can be explained from retained data and adjustments.
 - Material assumptions have an owner and timestamp.
 - No AI-generated value bypasses human comp review or offer approval.
+
+Implementation note: the first four Phase 3 increments are complete. Reviews use the retained
+provider snapshot, require a decision for every displayed sale, constrain reviewer weighting to
+50-150% of the engine match weight, and create a new linked underwriting analysis rather than
+changing the source version. Address validation preserves the staff-entered address, stores the
+provider result separately, invalidates stale confirmation after an address edit, and marks
+mismatches for review without blocking calculations or reports. Calibration compares the exact
+saved prediction with later expert, appraisal, resale, or verified-sale evidence. It reports
+directional bias, median absolute error, range coverage, and optional repair/disposition error by
+market. Formula review requires at least 50 cases and never changes formulas automatically.
+Repair presets populate an editable itemized scope, while saved estimates preserve contractor,
+walkthrough, or internal evidence as immutable records. Analyses snapshot the selected estimate,
+and the lead page compares saved ARV, repair, disposition, seller-ceiling, and opening values.
+Offer approvals snapshot the exact underwriting version and its economics. Opening, target,
+stretch, and walk-away values must remain ordered beneath the calculated seller ceiling. New
+requests cancel older pending plans, newer underwriting blocks stale approval, and authorized
+decisions update the plan, version, lead stage, activity timeline, and audit history together.
 
 ## Phase 4: Contracts And Transaction Coordination
 

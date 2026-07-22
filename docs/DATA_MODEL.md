@@ -2,7 +2,7 @@
 
 Last updated: July 21, 2026
 
-The schema is managed through Alembic migrations. Migration `0025_acquisition_operations` is the
+The schema is managed through Alembic migrations. Migration `0029_offer_negotiation_plans` is the
 current head.
 
 ## Identity And Access
@@ -30,6 +30,11 @@ current head.
 - `activity_events`
 - `audit_events`
 
+`properties` retains the staff-entered address as the CRM source of record. It also stores a
+canonical duplicate key and separate provider-validation status, provider property ID, formatted
+address, validation timestamp, match evidence, issues, and a restricted non-owner fact snapshot.
+Editing an address clears the provider confirmation until validation runs again.
+
 ## Communications
 
 - `conversations`
@@ -51,10 +56,29 @@ current head.
 
 - `underwriting_versions`
 - `underwriting_market_analyses`
+- `underwriting_calibration_cases`
+- `repair_estimates`
+- `offer_negotiation_plans`
 - `deals`
 - `transactions`
 - `transaction_checklist_items`
 - `approval_requests`
+
+`underwriting_calibration_cases` stores one verified outcome per immutable market analysis. It
+retains the predicted ARV range and point, repair budget, seller ceiling, and disposition value as
+they existed when evidence was recorded, alongside later human or market benchmarks. This supports
+market-level error analysis without rewriting historical analyses or automatically changing offer
+formulas.
+
+`repair_estimates` stores immutable contractor bids, walkthrough estimates, and internal scopes.
+Each record retains its itemized work, optional labor/material split, subtotal, contingency,
+evidence reference, and total. A market analysis snapshots the selected estimate identity and
+supporting metadata so later calculations and reports remain reproducible.
+
+`offer_negotiation_plans` snapshots the selected underwriting version, market analysis, ARV,
+repair budget, disposition value, seller asking price, and an ordered opening/target/stretch/
+walk-away ladder. The plan links to a human `approval_request`; decisions retain the deciding user,
+notes, timestamp, and audit events. A later request preserves but cancels the former pending plan.
 
 ## Buyers, Finance, And Marketing
 
@@ -99,7 +123,8 @@ current head.
 
 - Market, territory, launch-checklist, campaign, prospect, prospect-assignment, and
   prospect-disposition records.
-- Comparable candidate records if comp-level review outgrows the retained analysis payload.
+- Comparable candidate records if calibration volume or cross-analysis querying outgrows the
+  current immutable analysis payload and audit-event review history.
 - Offer versions and negotiation-event records.
 - Document, template, signature-envelope, and file-access records.
 - Buyer proof-of-funds document records.

@@ -91,7 +91,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert "Reply STOP to opt out or HELP for help." in sms_consent.wording
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
-    assert property_record.normalized_address_key == "55 auburn ave atlanta ga 30303"
+    assert property_record.normalized_address_key == "55 auburn ave|atlanta|GA|30303"
     lead = db_session.scalar(select(Lead))
     assert lead is not None
     assert lead.motivation == "Inherited property"

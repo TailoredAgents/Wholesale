@@ -34,6 +34,17 @@ export type LeadListItem = {
   property_postal_code: string;
   property_county: string | null;
   property_type: string | null;
+  property_validation: {
+    status: "unverified" | "provider_confirmed" | "needs_review" | "not_found";
+    provider: string | null;
+    provider_property_id: string | null;
+    requested_address: string;
+    validated_address: string | null;
+    match_score: number | null;
+    issues: string[];
+    facts: Record<string, unknown>;
+    validated_at: string | null;
+  };
   assigned_user_email: string | null;
   motivation: string | null;
   desired_timeline: string | null;
@@ -238,6 +249,12 @@ export type LeadDetail = LeadListItem & {
     notes: string | null;
     source: string;
     created_at: string;
+    arv_point_cents: number | null;
+    total_rehab_cents: number | null;
+    recommended_disposition_cents: number | null;
+    seller_contract_ceiling_cents: number | null;
+    report_stage: string | null;
+    repair_estimate_source: string | null;
   }>;
   transactions: Array<{
     id: string;
@@ -450,10 +467,12 @@ export type ApprovalRequestItem = {
   title: string;
   summary: string;
   decision_notes: string | null;
+  decided_by_user_id: string | null;
   due_at: string | null;
   decided_at: string | null;
   created_at: string;
   review_url: string | null;
+  approval_metadata: Record<string, unknown>;
 };
 
 export type AiControlOverview = {
@@ -545,6 +564,61 @@ export type AiControlOverview = {
     }>;
     created_at: string;
   }>;
+};
+
+export type UnderwritingCalibrationCase = {
+  id: string;
+  lead_id: string;
+  analysis_id: string;
+  seller_name: string;
+  property_address: string;
+  market_key: string;
+  benchmark_type: string;
+  evidence_date: string;
+  benchmark_arv_cents: number;
+  actual_rehab_cents: number | null;
+  actual_seller_contract_cents: number | null;
+  actual_disposition_cents: number | null;
+  predicted_arv_low_cents: number | null;
+  predicted_arv_point_cents: number | null;
+  predicted_arv_high_cents: number | null;
+  predicted_rehab_cents: number | null;
+  predicted_seller_ceiling_cents: number | null;
+  predicted_disposition_cents: number | null;
+  arv_error_cents: number | null;
+  arv_error_percentage: number | null;
+  arv_absolute_error_percentage: number | null;
+  arv_range_hit: boolean | null;
+  evidence_reference: string | null;
+  notes: string | null;
+  recorded_by_user_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UnderwritingCalibrationMetric = {
+  market_key: string;
+  sample_count: number;
+  median_error_percentage: number | null;
+  median_absolute_error_percentage: number | null;
+  range_coverage_percentage: number | null;
+  overestimate_count: number;
+  underestimate_count: number;
+  balanced_count: number;
+  repair_sample_count: number;
+  repair_median_absolute_error_percentage: number | null;
+  disposition_sample_count: number;
+  disposition_median_absolute_error_percentage: number | null;
+  readiness: string;
+};
+
+export type UnderwritingCalibration = {
+  overall: UnderwritingCalibrationMetric;
+  markets: UnderwritingCalibrationMetric[];
+  cases: UnderwritingCalibrationCase[];
+  uncalibrated_analysis_count: number;
+  minimum_sample_for_formula_review: number;
+  automatic_formula_changes_enabled: boolean;
 };
 
 export type SpeedToLeadTask = {
@@ -693,6 +767,31 @@ export async function getDashboardData(): Promise<DashboardData> {
       openTaskQueue: [],
       apiConnected: false,
     };
+  }
+}
+
+export async function getUnderwritingCalibration(): Promise<{
+  calibration: UnderwritingCalibration | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/underwriting/calibration`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      calibration: (await response.json()) as UnderwritingCalibration,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate underwriting calibration request failed.", error);
+    return { calibration: null, apiConnected: false };
   }
 }
 

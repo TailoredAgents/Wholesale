@@ -58,19 +58,38 @@ def analyze_underwriting_v2(
     contingency_override_percentage: int | None,
     holding_period_months: int,
     condition_overrides: dict[str, str],
+    comp_review_decisions: list[dict[str, Any]] | None = None,
+    address_validation_status: str,
     settings: Settings,
 ) -> UnderwritingV2Result:
-    subject = merge_subject_facts(subject_record, estimate.subject_property)
+    subject, subject_fact_provenance = canonical_subject_facts(
+        subject_record,
+        estimate.subject_property,
+        local_property_type=local_property_type,
+    )
     selected_comps, rejected_comps = analyze_recorded_sales(
         subject,
         sale_records,
         condition_overrides=condition_overrides,
+    )
+    selected_comps, rejected_comps = apply_comp_review(
+        selected_comps,
+        rejected_comps,
+        decisions=comp_review_decisions or [],
     )
     data_disagreements = find_data_disagreements(
         subject_record=subject_record,
         avm_subject=estimate.subject_property,
         local_property_type=local_property_type,
     )
+    if address_validation_status == "needs_review":
+        data_disagreements.append(
+            "Entered address differs from the provider property record and needs review."
+        )
+    elif address_validation_status == "not_found":
+        data_disagreements.append(
+            "No provider property record was found for the entered address."
+        )
 
     renovated = [
         comp for comp in selected_comps if comp.condition_classification == "renovated"
@@ -189,6 +208,12 @@ def analyze_underwriting_v2(
         "as_is_value_basis": as_is_value_basis,
         "arv_comp_count": len(arv_evidence),
         "subject_square_feet": subject_square_feet,
+        "canonical_subject_facts": {
+            key: value
+            for key, value in subject.items()
+            if key not in {"propertyTaxes"}
+        },
+        "subject_fact_provenance": subject_fact_provenance,
         "selected_median_price_per_square_foot_cents": median_optional_int(
             [
                 comp.price_per_square_foot_cents
@@ -201,6 +226,12 @@ def analyze_underwriting_v2(
             for comp in rejected_comps
         ),
         "comp_value_method": "subject_size_ppsf_indicator",
+        "comp_review_applied": bool(comp_review_decisions),
+        "manual_weight_method": (
+            "engine_match_weight_times_reviewer_percentage"
+            if comp_review_decisions
+            else None
+        ),
         "ppsf_outlier_method": "verified_renovated_median_mad_and_35_percent_guardrail",
         "purchase_cost_percentage": settings.underwriting_purchase_cost_percentage,
         "financing_holding_percentage": buyer_economics["assumptions"].get(
@@ -246,6 +277,85 @@ def analyze_underwriting_v2(
         review_reasons=dedupe(review_reasons),
         data_disagreements=data_disagreements,
         assumptions=assumptions,
+    )
+
+
+def apply_comp_review(
+    selected_comps: list[MarketAnalysisCompRead],
+    rejected_comps: list[MarketAnalysisCompRead],
+    *,
+    decisions: list[dict[str, Any]],
+) -> tuple[list[MarketAnalysisCompRead], list[MarketAnalysisCompRead]]:
+    if not decisions:
+        return selected_comps, rejected_comps
+
+    all_comps = [*selected_comps, *rejected_comps]
+    comps_by_key = {comp_key(comp): comp for comp in all_comps if comp_key(comp)}
+    decisions_by_key: dict[str, dict[str, Any]] = {}
+    for decision in decisions:
+        key = string(decision.get("comp_key"))
+        if not key or key in decisions_by_key:
+            raise ValueError("Each comparable must have one unique review decision.")
+        decisions_by_key[key] = decision
+
+    if set(decisions_by_key) != set(comps_by_key):
+        raise ValueError(
+            "Review every comparable shown in the source analysis before applying changes."
+        )
+
+    included: list[MarketAnalysisCompRead] = []
+    excluded: list[MarketAnalysisCompRead] = []
+    for key, comp in comps_by_key.items():
+        decision = decisions_by_key[key]
+        reason = string(decision.get("reason"))
+        if not reason or len(reason) < 3:
+            raise ValueError("Every comparable decision requires a review reason.")
+        is_included = decision.get("included") is True
+        weight_percentage = optional_int(decision.get("weight_percentage")) or 100
+        if weight_percentage < 50 or weight_percentage > 150:
+            raise ValueError("Comparable weights must be between 50% and 150%.")
+        if is_included:
+            if comp.price_cents is None or comp.sale_date is None:
+                raise ValueError(
+                    f"{comp.formatted_address or key} cannot be included without a sale "
+                    "price and date."
+                )
+            if comp.selection_reason.startswith("Subject property sale"):
+                raise ValueError("The subject property cannot be included as its own comparable.")
+            engine_weight = comp.weight or max(comp.score / 100, 0.5)
+            included.append(
+                comp.model_copy(
+                    update={
+                        "selection_status": "selected",
+                        "selection_reason": f"Reviewer included: {reason}",
+                        "weight": round(engine_weight * weight_percentage / 100, 3),
+                        "review_decision": "included",
+                        "review_reason": reason,
+                        "manual_weight_percentage": weight_percentage,
+                    }
+                )
+            )
+        else:
+            excluded.append(
+                comp.model_copy(
+                    update={
+                        "selection_status": "rejected",
+                        "selection_reason": f"Reviewer excluded: {reason}",
+                        "weight": None,
+                        "review_decision": "excluded",
+                        "review_reason": reason,
+                        "manual_weight_percentage": weight_percentage,
+                    }
+                )
+            )
+
+    if not included:
+        raise ValueError("Include at least one comparable before applying the review.")
+    if len(included) > 8:
+        raise ValueError("Include no more than eight comparable sales in one analysis.")
+    return (
+        sorted(included, key=lambda comp: comp.score, reverse=True),
+        sorted(excluded, key=lambda comp: comp.score, reverse=True),
     )
 
 
@@ -797,13 +907,48 @@ def find_data_disagreements(
     return disagreements
 
 
-def merge_subject_facts(
+def canonical_subject_facts(
     subject_record: dict[str, Any],
     avm_subject: dict[str, Any],
-) -> dict[str, Any]:
-    merged = dict(avm_subject)
-    merged.update({key: value for key, value in subject_record.items() if value is not None})
-    return merged
+    *,
+    local_property_type: str | None,
+) -> tuple[dict[str, Any], dict[str, str]]:
+    keys = (
+        "id",
+        "formattedAddress",
+        "addressLine1",
+        "addressLine2",
+        "city",
+        "state",
+        "zipCode",
+        "county",
+        "countyFips",
+        "stateFips",
+        "latitude",
+        "longitude",
+        "propertyType",
+        "bedrooms",
+        "bathrooms",
+        "squareFootage",
+        "lotSize",
+        "yearBuilt",
+        "lastSaleDate",
+        "lastSalePrice",
+        "propertyTaxes",
+    )
+    facts: dict[str, Any] = {}
+    provenance: dict[str, str] = {}
+    for key in keys:
+        if subject_record.get(key) is not None:
+            facts[key] = subject_record[key]
+            provenance[key] = "rentcast_property_record"
+        elif avm_subject.get(key) is not None:
+            facts[key] = avm_subject[key]
+            provenance[key] = "rentcast_avm_subject"
+    if facts.get("propertyType") is None and local_property_type:
+        facts["propertyType"] = local_property_type
+        provenance["propertyType"] = "stonegate_crm"
+    return facts, provenance
 
 
 def record_distance(subject: dict[str, Any], record: dict[str, Any]) -> float | None:

@@ -31,6 +31,7 @@ from app.schemas.public_intake import (
 from app.services.bootstrap import bootstrap_foundation
 from app.services.conversion_events import record_conversion_event
 from app.services.inbox import ensure_primary_conversation
+from app.services.property_validation import canonical_address_key
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -437,16 +438,12 @@ def normalize_phone(value: str) -> str:
 
 
 def normalize_address_key(payload: SellerIntakeCreate) -> str:
-    raw = "|".join(
-        [
-            payload.property_address,
-            payload.property_city,
-            payload.property_state,
-            payload.property_postal_code,
-        ]
+    return canonical_address_key(
+        payload.property_address,
+        payload.property_city,
+        payload.property_state,
+        payload.property_postal_code,
     )
-    normalized = "".join(character.lower() if character.isalnum() else " " for character in raw)
-    return " ".join(normalized.split())
 
 
 def get_default_organization(db: Session) -> Organization:

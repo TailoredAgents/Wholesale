@@ -4,6 +4,12 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CalibrationOutcomeForm } from "./calibration-outcome-form";
+import {
+  RepairEstimate,
+  RepairEstimateControl,
+  RepairEstimateItem,
+} from "./repair-estimate-control";
 import styles from "./page.module.css";
 
 type CompCondition = "unknown" | "as_is" | "renovated";
@@ -41,13 +47,17 @@ type PreMeetingInputs = {
   current_condition: string | null;
   target_condition: string;
   repair_level: string;
-  repair_estimate_source: "system_estimate" | "user_total" | "itemized";
+  repair_estimate_source: string;
   base_rehab_override_cents: number | null;
   repair_items: RepairItem[];
   contingency_override_percentage: number | null;
   holding_period_months: number;
   repair_notes: string | null;
   custom_inputs_applied: boolean;
+  repair_estimate_id?: string | null;
+  repair_estimate_contractor_name?: string | null;
+  repair_estimate_date?: string | null;
+  repair_estimate_reference?: string | null;
 };
 
 type MarketComparable = {
@@ -68,8 +78,19 @@ type MarketComparable = {
   condition_classification?: CompCondition | null;
   adjusted_value_cents?: number | null;
   price_per_square_foot_cents?: number | null;
+  weight?: number | null;
+  selection_status?: string;
   selection_reason?: string;
   score?: number;
+  review_decision?: "included" | "excluded" | null;
+  review_reason?: string | null;
+  manual_weight_percentage?: number | null;
+};
+
+type CompReviewDraft = {
+  included: boolean;
+  reason: string;
+  weight_percentage: number;
 };
 
 type MarketValueEstimate = {
@@ -108,6 +129,8 @@ type MarketValueEstimate = {
   pre_meeting_inputs?: PreMeetingInputs | null;
   comparables?: MarketComparable[];
   selected_comps?: MarketComparable[];
+  rejected_comps?: MarketComparable[];
+  subject_square_feet?: number | null;
   source_note: string;
 };
 
@@ -130,6 +153,90 @@ const REPAIR_CATEGORIES: { key: RepairCategory; label: string }[] = [
   { key: "permits", label: "Permits" },
   { key: "cleanup", label: "Cleanup" },
   { key: "other", label: "Other" },
+];
+
+const REPAIR_PRESET_WEIGHTS: Record<
+  string,
+  Partial<Record<RepairCategory, number>>
+> = {
+  light: {
+    kitchen: 20,
+    bathrooms: 15,
+    flooring: 20,
+    paint_drywall: 25,
+    windows_doors: 5,
+    exterior: 8,
+    landscaping: 3,
+    cleanup: 4,
+  },
+  moderate: {
+    roof: 10,
+    hvac: 8,
+    plumbing: 5,
+    electrical: 5,
+    kitchen: 22,
+    bathrooms: 16,
+    flooring: 12,
+    paint_drywall: 10,
+    windows_doors: 4,
+    exterior: 4,
+    permits: 2,
+    cleanup: 2,
+  },
+  heavy: {
+    roof: 10,
+    hvac: 9,
+    plumbing: 9,
+    electrical: 9,
+    foundation: 12,
+    kitchen: 16,
+    bathrooms: 12,
+    flooring: 6,
+    paint_drywall: 5,
+    windows_doors: 4,
+    exterior: 4,
+    permits: 2,
+    cleanup: 2,
+  },
+  structural: {
+    roof: 10,
+    hvac: 8,
+    plumbing: 10,
+    electrical: 10,
+    foundation: 22,
+    kitchen: 12,
+    bathrooms: 8,
+    flooring: 4,
+    paint_drywall: 4,
+    windows_doors: 4,
+    exterior: 4,
+    permits: 2,
+    cleanup: 2,
+  },
+};
+
+const REPAIR_CONTINGENCY: Record<string, number> = {
+  light: 10,
+  moderate: 15,
+  heavy: 20,
+  structural: 25,
+};
+
+const INCLUDED_REASONS = [
+  "Strong subject match",
+  "Best available nearby sale",
+  "Verified renovated sale",
+  "Verified as-is sale",
+  "Condition-adjusted match",
+];
+
+const EXCLUDED_REASONS = [
+  "Different condition",
+  "Location not comparable",
+  "Size or design mismatch",
+  "Sale too old",
+  "Price outlier",
+  "Data quality concern",
 ];
 
 function emptyRepairAmounts() {
@@ -188,6 +295,15 @@ function reportStageLabel(value: VerificationStatus | undefined) {
 }
 
 function repairSourceLabel(value: PreMeetingInputs["repair_estimate_source"] | undefined) {
+  if (value === "contractor_bid") {
+    return "Contractor bid";
+  }
+  if (value === "walkthrough_scope") {
+    return "Walkthrough scope";
+  }
+  if (value === "internal_scope") {
+    return "Saved internal scope";
+  }
   if (value === "itemized") {
     return "Itemized estimate";
   }
@@ -220,9 +336,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const [repairAmounts, setRepairAmounts] =
     useState<Record<RepairCategory, string>>(emptyRepairAmounts);
   const [repairNotes, setRepairNotes] = useState("");
+  const [contingencyInput, setContingencyInput] = useState("");
+  const [selectedRepairEstimateId, setSelectedRepairEstimateId] = useState<string | null>(null);
+  const [selectedRepairEstimateSource, setSelectedRepairEstimateSource] = useState<string | null>(
+    null,
+  );
   const [conditionOverrides, setConditionOverrides] = useState<Record<string, CompCondition>>(
     {},
   );
+  const [compReview, setCompReview] = useState<Record<string, CompReviewDraft>>({});
+  const [reviewSaving, setReviewSaving] = useState(false);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -246,13 +369,27 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const applyEstimate = useCallback((nextEstimate: MarketValueEstimate) => {
     setEstimate(nextEstimate);
     const nextOverrides: Record<string, CompCondition> = {};
-    for (const comp of nextEstimate.selected_comps ?? []) {
+    const allComps = [
+      ...(nextEstimate.selected_comps ?? nextEstimate.comparables ?? []),
+      ...(nextEstimate.rejected_comps ?? []),
+    ];
+    const nextReview: Record<string, CompReviewDraft> = {};
+    for (const comp of allComps) {
       const key = comp.provider_id ?? comp.formatted_address;
       if (key) {
         nextOverrides[key] = comp.condition_classification ?? "unknown";
+        const included = comp.selection_status !== "rejected";
+        nextReview[key] = {
+          included,
+          reason:
+            comp.review_reason ??
+            (included ? INCLUDED_REASONS[0] : EXCLUDED_REASONS[0]),
+          weight_percentage: comp.manual_weight_percentage ?? 100,
+        };
       }
     }
     setConditionOverrides(nextOverrides);
+    setCompReview(nextReview);
     const savedRepairLevel = nextEstimate.assumptions?.repair_level;
     if (typeof savedRepairLevel === "string") {
       setRepairLevel(savedRepairLevel);
@@ -262,7 +399,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       setVerificationStatus(inputs.report_stage);
       setRepairLevel(inputs.repair_level);
       setRepairNotes(inputs.repair_notes ?? "");
-      if (inputs.repair_estimate_source === "itemized") {
+      setContingencyInput(
+        inputs.contingency_override_percentage === null
+          ? ""
+          : String(inputs.contingency_override_percentage),
+      );
+      setSelectedRepairEstimateId(inputs.repair_estimate_id ?? null);
+      setSelectedRepairEstimateSource(
+        inputs.repair_estimate_id ? inputs.repair_estimate_source : null,
+      );
+      if (inputs.repair_estimate_id || inputs.repair_estimate_source === "itemized") {
         setRepairEntryMode("itemized");
         const nextAmounts = emptyRepairAmounts();
         for (const item of inputs.repair_items) {
@@ -283,11 +429,60 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         setBaseRehabInput("");
         setRepairAmounts(emptyRepairAmounts());
       }
+    } else {
+      setContingencyInput("");
+      setSelectedRepairEstimateId(null);
+      setSelectedRepairEstimateSource(null);
     }
   }, []);
 
   function markInputsReviewed() {
     setVerificationStatus("pre_meeting_reviewed");
+  }
+
+  function detachSavedRepairEstimate() {
+    setSelectedRepairEstimateId(null);
+    setSelectedRepairEstimateSource(null);
+  }
+
+  function applySavedRepairEstimate(repairEstimate: RepairEstimate) {
+    const nextAmounts = emptyRepairAmounts();
+    for (const item of repairEstimate.scope_items) {
+      if (item.category in nextAmounts) {
+        const category = item.category as RepairCategory;
+        const currentCents = dollarsToCents(nextAmounts[category]) ?? 0;
+        nextAmounts[category] = String(
+          (currentCents + item.estimated_cost_cents) / 100,
+        );
+      }
+    }
+    setRepairEntryMode("itemized");
+    setRepairAmounts(nextAmounts);
+    setContingencyInput(String(repairEstimate.contingency_percentage));
+    setRepairNotes(repairEstimate.notes ?? "");
+    setSelectedRepairEstimateId(repairEstimate.id);
+    setSelectedRepairEstimateSource(repairEstimate.source_type);
+    markInputsReviewed();
+  }
+
+  function applyRepairPreset() {
+    const baseCents = estimate?.base_rehab_cents;
+    if (!baseCents || baseCents <= 0) {
+      setError("Run the system analysis once before building an itemized preset.");
+      return;
+    }
+    const weights = REPAIR_PRESET_WEIGHTS[repairLevel] ?? REPAIR_PRESET_WEIGHTS.moderate;
+    const nextAmounts = emptyRepairAmounts();
+    for (const [category, percentage] of Object.entries(weights)) {
+      const roundedCents = Math.round((baseCents * percentage) / 10000) * 100;
+      nextAmounts[category as RepairCategory] = String(roundedCents / 100);
+    }
+    setRepairAmounts(nextAmounts);
+    setRepairEntryMode("itemized");
+    setContingencyInput(String(REPAIR_CONTINGENCY[repairLevel] ?? 15));
+    detachSavedRepairEstimate();
+    markInputsReviewed();
+    setError(null);
   }
 
   useEffect(() => {
@@ -328,43 +523,68 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     return () => controller.abort();
   }, [apiBaseUrl, applyEstimate, getHeaders, leadId]);
 
+  function buildAnalysisInputs() {
+    const usingSavedEstimate = selectedRepairEstimateId !== null;
+    const repairItems =
+      repairEntryMode === "itemized" && !usingSavedEstimate
+        ? REPAIR_CATEGORIES.flatMap(({ key }) => {
+            const estimatedCostCents = dollarsToCents(repairAmounts[key]);
+            return estimatedCostCents && estimatedCostCents > 0
+              ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
+              : [];
+          })
+        : [];
+    const baseRehabOverride =
+      repairEntryMode === "total" && !usingSavedEstimate
+        ? dollarsToCents(baseRehabInput)
+        : null;
+    if (repairEntryMode === "total" && baseRehabOverride === null) {
+      throw new Error("Enter the expected base remodel cost.");
+    }
+    if (
+      repairEntryMode === "itemized" &&
+      repairItems.length === 0 &&
+      !usingSavedEstimate
+    ) {
+      throw new Error("Enter at least one itemized repair cost.");
+    }
+    const contingencyPercentage = contingencyInput.trim()
+      ? Number(contingencyInput)
+      : null;
+    if (
+      contingencyPercentage !== null &&
+      (!Number.isInteger(contingencyPercentage) ||
+        contingencyPercentage < 0 ||
+        contingencyPercentage > 50)
+    ) {
+      throw new Error("Contingency must be a whole percentage from 0 to 50.");
+    }
+    return {
+      target_condition: "standard_flip",
+      current_condition: null,
+      repair_level: repairLevel,
+      input_verification_status: verificationStatus,
+      base_rehab_override_cents: baseRehabOverride,
+      repair_items: repairItems,
+      repair_estimate_id: selectedRepairEstimateId,
+      contingency_override_percentage: usingSavedEstimate ? null : contingencyPercentage,
+      holding_period_months: 6,
+      repair_notes: repairNotes.trim() || null,
+      comp_condition_overrides: conditionOverrides,
+    };
+  }
+
   async function createAnalysis(refreshMarketData = false) {
     setStatus("loading");
     setError(null);
     try {
-      const repairItems =
-        repairEntryMode === "itemized"
-          ? REPAIR_CATEGORIES.flatMap(({ key }) => {
-              const estimatedCostCents = dollarsToCents(repairAmounts[key]);
-              return estimatedCostCents && estimatedCostCents > 0
-                ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
-                : [];
-            })
-          : [];
-      const baseRehabOverride =
-        repairEntryMode === "total" ? dollarsToCents(baseRehabInput) : null;
-      if (repairEntryMode === "total" && baseRehabOverride === null) {
-        throw new Error("Enter the expected base remodel cost.");
-      }
-      if (repairEntryMode === "itemized" && repairItems.length === 0) {
-        throw new Error("Enter at least one itemized repair cost.");
-      }
       const headers = await getHeaders();
       headers["Content-Type"] = "application/json";
       const response = await fetch(
         `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis`,
         {
           body: JSON.stringify({
-            target_condition: "standard_flip",
-            current_condition: null,
-            repair_level: repairLevel,
-            input_verification_status: verificationStatus,
-            base_rehab_override_cents: baseRehabOverride,
-            repair_items: repairItems,
-            contingency_override_percentage: null,
-            holding_period_months: 6,
-            repair_notes: repairNotes.trim() || null,
-            comp_condition_overrides: conditionOverrides,
+            ...buildAnalysisInputs(),
             refresh_market_data: refreshMarketData,
           }),
           headers,
@@ -381,6 +601,52 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Unable to analyze comps.");
       setStatus("error");
+    }
+  }
+
+  async function applyCompReview() {
+    if (!estimate?.id) {
+      return;
+    }
+    const decisions = Object.entries(compReview).map(([compKey, decision]) => ({
+      comp_key: compKey,
+      included: decision.included,
+      reason: decision.reason,
+      weight_percentage: decision.weight_percentage,
+    }));
+    if (!decisions.length) {
+      setError("Run an analysis before reviewing comparable sales.");
+      return;
+    }
+    setReviewSaving(true);
+    setError(null);
+    try {
+      const headers = await getHeaders();
+      headers["Content-Type"] = "application/json";
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/leads/${leadId}/underwriting/market-analysis/review`,
+        {
+          body: JSON.stringify({
+            ...buildAnalysisInputs(),
+            source_analysis_id: estimate.id,
+            comp_review_decisions: decisions,
+            refresh_market_data: false,
+          }),
+          headers,
+          method: "POST",
+        },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.detail ?? "Unable to apply the comp review.");
+      }
+      applyEstimate((await response.json()) as MarketValueEstimate);
+      setStatus("loaded");
+      router.refresh();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Unable to apply the comp review.");
+    } finally {
+      setReviewSaving(false);
     }
   }
 
@@ -411,7 +677,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
   }
 
-  const comps = estimate?.selected_comps ?? estimate?.comparables ?? [];
+  const selectedComps = estimate?.selected_comps ?? estimate?.comparables ?? [];
+  const reviewComps = [...selectedComps, ...(estimate?.rejected_comps ?? [])];
+  const reviewIncludedCount = Object.values(compReview).filter(
+    (decision) => decision.included,
+  ).length;
   const reviewItems = [
     ...(estimate?.review_reasons ?? []),
     ...(estimate?.data_disagreements ?? []),
@@ -420,6 +690,14 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     (total, { key }) => total + (dollarsToCents(repairAmounts[key]) ?? 0),
     0,
   );
+  const currentRepairItems: RepairEstimateItem[] = REPAIR_CATEGORIES.flatMap(
+    ({ key }) => {
+      const estimatedCostCents = dollarsToCents(repairAmounts[key]);
+      return estimatedCostCents && estimatedCostCents > 0
+        ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
+        : [];
+    },
+  );
   const isLoading = status === "loading";
   const isV2 = estimate?.methodology_version === "v2.1";
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
@@ -427,11 +705,12 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales";
   const activeReportStage = estimate?.report_stage ?? verificationStatus;
   const activeRepairSource =
-    repairEntryMode === "itemized"
+    selectedRepairEstimateSource ??
+    (repairEntryMode === "itemized"
       ? "itemized"
       : repairEntryMode === "total"
         ? "user_total"
-        : "system_estimate";
+        : "system_estimate");
 
   return (
     <section className={styles.marketValuePanel}>
@@ -477,6 +756,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <select
                 onChange={(event) => {
                   setRepairLevel(event.target.value);
+                  detachSavedRepairEstimate();
                   markInputsReviewed();
                 }}
                 value={repairLevel}
@@ -508,6 +788,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                   key={value}
                   onClick={() => {
                     setRepairEntryMode(value);
+                    detachSavedRepairEstimate();
                     if (value !== "system") {
                       markInputsReviewed();
                     }
@@ -530,6 +811,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                   min="0"
                   onChange={(event) => {
                     setBaseRehabInput(event.target.value);
+                    detachSavedRepairEstimate();
                     markInputsReviewed();
                   }}
                   placeholder="0"
@@ -542,36 +824,74 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           ) : null}
 
           {repairEntryMode === "itemized" ? (
-            <div className={styles.itemizedRepairs}>
-              {REPAIR_CATEGORIES.map(({ key, label }) => (
-                <label key={key}>
-                  <span>{label}</span>
-                  <div className={styles.moneyInput}>
-                    <span>$</span>
-                    <input
-                      aria-label={`${label} estimated cost`}
-                      inputMode="decimal"
-                      min="0"
-                      onChange={(event) => {
-                        setRepairAmounts((current) => ({
-                          ...current,
-                          [key]: event.target.value,
-                        }));
-                        markInputsReviewed();
-                      }}
-                      placeholder="0"
-                      step="500"
-                      type="number"
-                      value={repairAmounts[key]}
-                    />
-                  </div>
-                </label>
-              ))}
-              <div className={styles.itemizedTotal}>
-                <span>Itemized base</span>
-                <strong>{formatMoney(itemizedBaseCents)}</strong>
+            <div className={styles.itemizedScope}>
+              <div className={styles.repairPresetBar}>
+                <div>
+                  <strong>{repairLevel.replaceAll("_", " ")} scope preset</strong>
+                  <span>
+                    Allocates the saved system base across common work categories.
+                  </span>
+                </div>
+                <button disabled={!estimate?.base_rehab_cents} onClick={applyRepairPreset} type="button">
+                  Apply preset
+                </button>
+              </div>
+              <div className={styles.itemizedRepairs}>
+                {REPAIR_CATEGORIES.map(({ key, label }) => (
+                  <label key={key}>
+                    <span>{label}</span>
+                    <div className={styles.moneyInput}>
+                      <span>$</span>
+                      <input
+                        aria-label={`${label} estimated cost`}
+                        inputMode="decimal"
+                        min="0"
+                        onChange={(event) => {
+                          setRepairAmounts((current) => ({
+                            ...current,
+                            [key]: event.target.value,
+                          }));
+                          detachSavedRepairEstimate();
+                          markInputsReviewed();
+                        }}
+                        placeholder="0"
+                        step="500"
+                        type="number"
+                        value={repairAmounts[key]}
+                      />
+                    </div>
+                  </label>
+                ))}
+                <div className={styles.itemizedTotal}>
+                  <span>Itemized base</span>
+                  <strong>{formatMoney(itemizedBaseCents)}</strong>
+                </div>
               </div>
             </div>
+          ) : null}
+
+          {repairEntryMode !== "system" ? (
+            <label className={styles.contingencyInput}>
+              <span>Contingency reserve</span>
+              <div>
+                <input
+                  disabled={selectedRepairEstimateId !== null}
+                  inputMode="numeric"
+                  max="50"
+                  min="0"
+                  onChange={(event) => {
+                    setContingencyInput(event.target.value);
+                    detachSavedRepairEstimate();
+                    markInputsReviewed();
+                  }}
+                  placeholder={String(REPAIR_CONTINGENCY[repairLevel] ?? 15)}
+                  step="1"
+                  type="number"
+                  value={contingencyInput}
+                />
+                <span>%</span>
+              </div>
+            </label>
           ) : null}
 
           <label className={styles.repairNotes}>
@@ -587,6 +907,20 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               value={repairNotes}
             />
           </label>
+
+          <RepairEstimateControl
+            contingencyPercentage={
+              contingencyInput.trim() === ""
+                ? REPAIR_CONTINGENCY[repairLevel] || 15
+                : Number(contingencyInput)
+            }
+            currentItems={currentRepairItems}
+            currentNotes={repairNotes}
+            leadId={leadId}
+            onApply={applySavedRepairEstimate}
+            onClear={detachSavedRepairEstimate}
+            selectedEstimateId={selectedRepairEstimateId}
+          />
         </div>
       </details>
 
@@ -745,21 +1079,62 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </button>
           </div>
 
+          {estimate.id ? <CalibrationOutcomeForm analysisId={estimate.id} /> : null}
+
           <div className={styles.compSectionHeader}>
             <div>
-              <strong>Recorded-sale evidence</strong>
-              <span>Classify condition from listing photos, MLS remarks, or a verified source.</span>
+              <strong>Comparable review</strong>
+              <span>Recorded sales, condition evidence, and reviewer judgment</span>
             </div>
-            <span>{comps.length} selected</span>
+            <span>
+              {reviewIncludedCount} included / {reviewComps.length - reviewIncludedCount}{" "}
+              excluded
+            </span>
           </div>
           <div className={styles.compList}>
-            {comps.slice(0, 5).map((comp, index) => {
+            {reviewComps.map((comp, index) => {
               const compKey = comp.provider_id ?? comp.formatted_address ?? `comp-${index}`;
               const condition = conditionOverrides[compKey] ?? "unknown";
+              const decision = compReview[compKey] ?? {
+                included: comp.selection_status !== "rejected",
+                reason:
+                  comp.selection_status === "rejected"
+                    ? EXCLUDED_REASONS[0]
+                    : INCLUDED_REASONS[0],
+                weight_percentage: 100,
+              };
+              const reasonOptions = decision.included ? INCLUDED_REASONS : EXCLUDED_REASONS;
               return (
-                <article key={compKey}>
+                <article
+                  className={decision.included ? styles.compIncluded : styles.compExcluded}
+                  key={compKey}
+                >
                   <div>
-                    <strong>{comp.formatted_address ?? "Unknown address"}</strong>
+                    <div className={styles.compIdentity}>
+                      <input
+                        aria-label={`${decision.included ? "Exclude" : "Include"} ${
+                          comp.formatted_address ?? "comparable"
+                        }`}
+                        checked={decision.included}
+                        onChange={(event) => {
+                          const included = event.target.checked;
+                          setCompReview((current) => ({
+                            ...current,
+                            [compKey]: {
+                              ...decision,
+                              included,
+                              reason: included ? INCLUDED_REASONS[0] : EXCLUDED_REASONS[0],
+                            },
+                          }));
+                          markInputsReviewed();
+                        }}
+                        type="checkbox"
+                      />
+                      <strong>{comp.formatted_address ?? "Unknown address"}</strong>
+                      <span className={styles.compDecisionBadge}>
+                        {decision.included ? "Included" : "Excluded"}
+                      </span>
+                    </div>
                     <span>{formatMoney(comp.price_cents)}</span>
                   </div>
                   <small>
@@ -774,29 +1149,94 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                   <small>
                     Match score {comp.score ?? "?"}/100. {comp.selection_reason}
                   </small>
-                  <label className={styles.compCondition}>
-                    <span>Condition at sale</span>
-                    <select
-                      aria-label={`Condition at sale for ${comp.formatted_address ?? "comparable"}`}
-                      onChange={(event) => {
-                        setConditionOverrides((current) => ({
-                          ...current,
-                          [compKey]: event.target.value as CompCondition,
-                        }));
-                        markInputsReviewed();
-                      }}
-                      value={condition}
-                    >
-                      {(["unknown", "as_is", "renovated"] as CompCondition[]).map((value) => (
-                        <option key={value} value={value}>
-                          {conditionLabel(value)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className={styles.compReviewControls}>
+                    <label>
+                      <span>Condition at sale</span>
+                      <select
+                        aria-label={`Condition at sale for ${comp.formatted_address ?? "comparable"}`}
+                        onChange={(event) => {
+                          setConditionOverrides((current) => ({
+                            ...current,
+                            [compKey]: event.target.value as CompCondition,
+                          }));
+                          markInputsReviewed();
+                        }}
+                        value={condition}
+                      >
+                        {(["unknown", "as_is", "renovated"] as CompCondition[]).map(
+                          (value) => (
+                            <option key={value} value={value}>
+                              {conditionLabel(value)}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Decision reason</span>
+                      <select
+                        aria-label={`Decision reason for ${comp.formatted_address ?? "comparable"}`}
+                        onChange={(event) => {
+                          setCompReview((current) => ({
+                            ...current,
+                            [compKey]: { ...decision, reason: event.target.value },
+                          }));
+                          markInputsReviewed();
+                        }}
+                        value={decision.reason}
+                      >
+                        {!reasonOptions.includes(decision.reason) ? (
+                          <option value={decision.reason}>{decision.reason}</option>
+                        ) : null}
+                        {reasonOptions.map((reason) => (
+                          <option key={reason} value={reason}>
+                            {reason}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Evidence weight</span>
+                      <div className={styles.weightInput}>
+                        <input
+                          aria-label={`Evidence weight for ${comp.formatted_address ?? "comparable"}`}
+                          disabled={!decision.included}
+                          max="150"
+                          min="50"
+                          onChange={(event) => {
+                            setCompReview((current) => ({
+                              ...current,
+                              [compKey]: {
+                                ...decision,
+                                weight_percentage: Number(event.target.value),
+                              },
+                            }));
+                            markInputsReviewed();
+                          }}
+                          step="5"
+                          type="number"
+                          value={decision.weight_percentage}
+                        />
+                        <span>%</span>
+                      </div>
+                    </label>
+                  </div>
                 </article>
               );
             })}
+          </div>
+          <div className={styles.compReviewFooter}>
+            <div>
+              <strong>Review version</strong>
+              <span>Applying creates a new saved analysis and keeps this version unchanged.</span>
+            </div>
+            <button
+              disabled={reviewSaving || isLoading || !reviewComps.length}
+              onClick={applyCompReview}
+              type="button"
+            >
+              {reviewSaving ? "Applying..." : "Apply review and recalculate"}
+            </button>
           </div>
           <p>{estimate.source_note}</p>
         </div>

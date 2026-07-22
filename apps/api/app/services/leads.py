@@ -38,12 +38,15 @@ from app.models.foundation import (
     DealDeduction,
     Lead,
     LeadFormSubmission,
+    OfferNegotiationPlan,
     OfflineConversionExport,
     Property,
+    RepairEstimate,
     RevenueRecord,
     Task,
     Transaction,
     TransactionChecklistItem,
+    UnderwritingCalibrationCase,
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
     User,
@@ -80,9 +83,12 @@ from app.schemas.leads import (
     MarketAnalysisCompRead,
     MarketComparableRead,
     PipelineStageCount,
+    PropertyValidationRead,
+    RepairEstimateItemInput,
     SourcePerformance,
     TransactionChecklistItemRead,
     TransactionRead,
+    UnderwritingCompReviewSummaryRead,
     UnderwritingPreMeetingInputsRead,
     UnderwritingVersionRead,
 )
@@ -92,6 +98,12 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
+from app.services.property_validation import (
+    canonical_address_key,
+    reset_property_validation,
+    validate_provider_record,
+)
+from app.services.repair_estimates import get_repair_estimate
 from app.services.underwriting_v2 import (
     METHODOLOGY_VERSION,
     UnderwritingV2Result,
@@ -195,6 +207,13 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         postal_code=payload.property.postal_code,
         county=payload.property.county,
         property_type=payload.property.property_type,
+        normalized_address_key=canonical_address_key(
+            payload.property.street_address,
+            payload.property.city,
+            payload.property.state,
+            payload.property.postal_code,
+        ),
+        address_validation_status="unverified",
     )
     db.add(property_record)
     db.flush()
@@ -507,6 +526,30 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                 notes=version.notes,
                 source=version.source,
                 created_at=version.created_at,
+                arv_point_cents=optional_int(
+                    (version.underwriting_metadata or {}).get("arv_point_cents")
+                ),
+                total_rehab_cents=optional_int(
+                    (version.underwriting_metadata or {}).get("total_rehab_cents")
+                ),
+                recommended_disposition_cents=optional_int(
+                    (version.underwriting_metadata or {}).get(
+                        "recommended_disposition_cents"
+                    )
+                ),
+                seller_contract_ceiling_cents=optional_int(
+                    (version.underwriting_metadata or {}).get(
+                        "seller_contract_ceiling_cents"
+                    )
+                ),
+                report_stage=string_or_none(
+                    (version.underwriting_metadata or {}).get("report_stage")
+                ),
+                repair_estimate_source=string_or_none(
+                    dict_value(
+                        (version.underwriting_metadata or {}).get("pre_meeting_inputs")
+                    ).get("repair_estimate_source")
+                ),
             )
             for version in underwriting_versions
         ],
@@ -1280,6 +1323,75 @@ def preview_lead_market_value(
     )
 
 
+def validate_lead_property_address(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> PropertyValidationRead | None:
+    settings = get_settings()
+    if settings.property_data_provider.lower() != "rentcast":
+        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for address validation.")
+    if not settings.rentcast_api_key:
+        raise ValueError("RENTCAST_API_KEY is not configured.")
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise ValueError("Lead is missing a property record.")
+
+    requested_address = format_property_address(property_record)
+    client = RentCastClient(
+        api_key=settings.rentcast_api_key,
+        base_url=settings.rentcast_base_url,
+        timeout_seconds=settings.openai_request_timeout_seconds,
+    )
+    try:
+        provider_record = client.get_property_record(address=requested_address)
+    except RentCastClientError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+    previous = {
+        "status": property_record.address_validation_status,
+        "validated_address": property_record.validated_formatted_address,
+    }
+    metadata = validate_provider_record(property_record, provider_record)
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="property.address_validated",
+            summary=(
+                "Property address validation returned "
+                f"{property_record.address_validation_status.replace('_', ' ')}."
+            ),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="property.address.validate",
+            entity_type="property",
+            entity_id=property_record.id,
+            previous_value=previous,
+            new_value={
+                "status": property_record.address_validation_status,
+                "validated_address": property_record.validated_formatted_address,
+                "match_score": metadata.get("match_score"),
+                "issues": metadata.get("issues"),
+            },
+            reason="Provider property-record validation",
+        )
+    )
+    db.commit()
+    db.refresh(property_record)
+    return property_validation_to_read(property_record)
+
+
 def create_lead_market_analysis(
     db: Session,
     principal: Principal,
@@ -1300,15 +1412,55 @@ def create_lead_market_analysis(
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
 
-    address = format_property_address(property_record)
-    cached_analysis = db.scalar(
-        select(UnderwritingMarketAnalysis)
-        .where(
-            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
-            UnderwritingMarketAnalysis.lead_id == lead.id,
+    repair_estimate = None
+    effective_base_rehab_cents = payload.base_rehab_override_cents
+    effective_repair_items = [item.model_dump(mode="json") for item in payload.repair_items]
+    effective_contingency_percentage = payload.contingency_override_percentage
+    effective_repair_notes = payload.repair_notes
+    if payload.repair_estimate_id is not None:
+        if (
+            payload.base_rehab_override_cents is not None
+            or payload.repair_items
+            or payload.contingency_override_percentage is not None
+        ):
+            raise ValueError(
+                "Choose either a saved repair estimate or direct repair inputs, not both."
+            )
+        repair_estimate = get_repair_estimate(
+            db,
+            principal,
+            lead.id,
+            payload.repair_estimate_id,
         )
-        .order_by(UnderwritingMarketAnalysis.created_at.desc())
+        if repair_estimate is None:
+            raise ValueError("The saved repair estimate was not found for this lead.")
+        effective_base_rehab_cents = None
+        effective_repair_items = repair_estimate.scope_items
+        effective_contingency_percentage = repair_estimate.contingency_percentage
+        effective_repair_notes = payload.repair_notes or repair_estimate.notes
+
+    address = format_property_address(property_record)
+    if payload.source_analysis_id is not None and payload.refresh_market_data:
+        raise ValueError("A comp review cannot refresh market data at the same time.")
+    analysis_query = select(UnderwritingMarketAnalysis).where(
+        UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+        UnderwritingMarketAnalysis.lead_id == lead.id,
     )
+    if payload.source_analysis_id is not None:
+        cached_analysis = db.scalar(
+            analysis_query.where(
+                UnderwritingMarketAnalysis.id == payload.source_analysis_id
+            )
+        )
+        if cached_analysis is None:
+            raise ValueError("The source market analysis was not found for this lead.")
+    else:
+        cached_analysis = db.scalar(
+            analysis_query.order_by(
+                UnderwritingMarketAnalysis.created_at.desc(),
+                UnderwritingMarketAnalysis.id.desc(),
+            )
+        )
     cached_raw = (
         cached_analysis.raw_response
         if cached_analysis is not None
@@ -1320,10 +1472,12 @@ def create_lead_market_analysis(
     )
     cached_avm = cached_raw.get("avm") if cached_raw else None
     reuse_market_data = (
-        not payload.refresh_market_data
+        (payload.source_analysis_id is not None or not payload.refresh_market_data)
         and isinstance(cached_avm, dict)
         and cached_avm.get("price") is not None
     )
+    if payload.comp_review_decisions and not reuse_market_data:
+        raise ValueError("Run a market analysis before reviewing comparable sales.")
     rent_error: str | None = None
     rent_estimate: RentCastRentEstimate | None = None
     if reuse_market_data:
@@ -1381,6 +1535,8 @@ def create_lead_market_analysis(
         except RentCastClientError as exc:
             rent_error = str(exc)
 
+    if subject_record:
+        validate_provider_record(property_record, subject_record)
     result = analyze_underwriting_v2(
         estimate=estimate,
         subject_record=subject_record,
@@ -1391,11 +1547,16 @@ def create_lead_market_analysis(
         current_condition_override=payload.current_condition,
         target_condition=payload.target_condition,
         repair_level_override=payload.repair_level,
-        base_rehab_override_cents=payload.base_rehab_override_cents,
-        repair_items=[item.model_dump(mode="json") for item in payload.repair_items],
-        contingency_override_percentage=payload.contingency_override_percentage,
+        base_rehab_override_cents=effective_base_rehab_cents,
+        repair_items=effective_repair_items,
+        contingency_override_percentage=effective_contingency_percentage,
         holding_period_months=payload.holding_period_months,
         condition_overrides=payload.comp_condition_overrides,
+        comp_review_decisions=[
+            decision.model_dump(mode="json")
+            for decision in payload.comp_review_decisions
+        ],
+        address_validation_status=property_record.address_validation_status,
         settings=settings,
     )
     custom_inputs_applied = any(
@@ -1407,7 +1568,9 @@ def create_lead_market_analysis(
             payload.contingency_override_percentage is not None,
             payload.holding_period_months != 6,
             payload.repair_notes,
+            payload.repair_estimate_id,
             payload.comp_condition_overrides,
+            payload.comp_review_decisions,
         )
     )
     report_stage = payload.input_verification_status
@@ -1420,21 +1583,55 @@ def create_lead_market_analysis(
         target_condition=payload.target_condition,
         repair_level=string_or_none(result.assumptions.get("repair_level")) or "moderate",
         repair_estimate_source=(
-            string_or_none(result.assumptions.get("repair_estimate_source"))
+            repair_estimate.source_type
+            if repair_estimate is not None
+            else string_or_none(result.assumptions.get("repair_estimate_source"))
             or "system_estimate"
         ),
-        base_rehab_override_cents=payload.base_rehab_override_cents,
-        repair_items=payload.repair_items,
-        contingency_override_percentage=payload.contingency_override_percentage,
+        base_rehab_override_cents=effective_base_rehab_cents,
+        repair_items=[
+            RepairEstimateItemInput.model_validate(item)
+            for item in effective_repair_items
+        ],
+        contingency_override_percentage=effective_contingency_percentage,
         holding_period_months=payload.holding_period_months,
-        repair_notes=payload.repair_notes,
+        repair_notes=effective_repair_notes,
         custom_inputs_applied=custom_inputs_applied,
+        repair_estimate_id=repair_estimate.id if repair_estimate else None,
+        repair_estimate_contractor_name=(
+            repair_estimate.contractor_name if repair_estimate else None
+        ),
+        repair_estimate_date=repair_estimate.estimate_date if repair_estimate else None,
+        repair_estimate_reference=(
+            repair_estimate.evidence_reference if repair_estimate else None
+        ),
     )
     assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
+    reviewed_at = datetime.now(UTC)
+    comp_review = (
+        {
+            "source_analysis_id": str(cached_analysis.id),
+            "reviewed_by_user_id": str(principal.user_id) if principal.user_id else None,
+            "reviewed_at": reviewed_at.isoformat(),
+            "included_count": sum(
+                decision.included for decision in payload.comp_review_decisions
+            ),
+            "excluded_count": sum(
+                not decision.included for decision in payload.comp_review_decisions
+            ),
+            "decisions": [
+                decision.model_dump(mode="json")
+                for decision in payload.comp_review_decisions
+            ],
+        }
+        if payload.comp_review_decisions and cached_analysis is not None
+        else None
+    )
     analysis_metadata = {
         "methodology_version": METHODOLOGY_VERSION,
         "report_stage": report_stage,
         "pre_meeting_inputs": pre_meeting_inputs.model_dump(mode="json"),
+        "repair_estimate_id": str(repair_estimate.id) if repair_estimate else None,
         "subject_square_feet": first_int(
             {**estimate.subject_property, **subject_record},
             ("squareFootage", "livingArea", "grossLivingArea"),
@@ -1449,6 +1646,11 @@ def create_lead_market_analysis(
         "source_analysis_id": (
             str(cached_analysis.id) if reuse_market_data and cached_analysis else None
         ),
+        "address_validation_status": property_record.address_validation_status,
+        "address_validation_match_score": (
+            (property_record.address_validation_metadata or {}).get("match_score")
+        ),
+        "comp_review": comp_review,
         "as_is_value_low_cents": result.as_is_low_cents,
         "as_is_value_cents": result.as_is_value_cents,
         "as_is_value_high_cents": result.as_is_high_cents,
@@ -1532,7 +1734,7 @@ def create_lead_market_analysis(
         rejected_comp_count=len(result.rejected_comps),
         selected_comps=[comp.model_dump(mode="json") for comp in result.selected_comps],
         rejected_comps=[comp.model_dump(mode="json") for comp in result.rejected_comps],
-        subject_property={**estimate.subject_property, **subject_record},
+        subject_property=dict_value(result.assumptions.get("canonical_subject_facts")),
         raw_response={
             "avm": estimate.raw_response,
             "subject_record": subject_record,
@@ -1556,10 +1758,22 @@ def create_lead_market_analysis(
             actor_user_id=principal.user_id,
             entity_type="lead",
             entity_id=lead.id,
-            event_type="lead.market_analysis_created",
+            event_type=(
+                "lead.comp_review_applied"
+                if comp_review
+                else "lead.market_analysis_created"
+            ),
             summary=(
-                f"Underwriting V2.1 created with {len(result.selected_comps)} recorded-sale comps "
-                f"and {result.confidence_score}% confidence."
+                (
+                    f"Comp review applied with {len(result.selected_comps)} included and "
+                    f"{len(result.rejected_comps)} excluded sales"
+                    if comp_review
+                    else (
+                        "Underwriting V2.1 created with "
+                        f"{len(result.selected_comps)} recorded-sale comps"
+                    )
+                )
+                + f" and {result.confidence_score}% confidence."
             ),
         )
     )
@@ -1568,7 +1782,11 @@ def create_lead_market_analysis(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
             actor_type="user",
-            action="underwriting.market_analysis.create",
+            action=(
+                "underwriting.comp_review.apply"
+                if comp_review
+                else "underwriting.market_analysis.create"
+            ),
             entity_type="underwriting_market_analysis",
             entity_id=analysis.id,
             previous_value={"stage_key": previous_stage},
@@ -1581,8 +1799,13 @@ def create_lead_market_analysis(
                 "seller_contract_ceiling_cents": result.seller_contract_ceiling_cents,
                 "recommended_offer_cents": result.recommended_opening_offer_cents,
                 "stage_key": lead.stage_key,
+                "comp_review": comp_review,
             },
-            reason="Recorded-sale analysis and buyer-economics draft",
+            reason=(
+                "Human-reviewed comparable set and bounded weight adjustments"
+                if comp_review
+                else "Recorded-sale analysis and buyer-economics draft"
+            ),
         )
     )
     db.commit()
@@ -1990,12 +2213,13 @@ def update_lead_staff_details(
     )
 
     if property_fields_changed(previous_values) or property_fields_changed(new_values):
-        property_record.normalized_address_key = normalize_address_key(
+        property_record.normalized_address_key = canonical_address_key(
             property_record.street_address,
             property_record.city,
             property_record.state,
             property_record.postal_code,
         )
+        reset_property_validation(property_record)
 
     if previous_values or new_values or phone_changed or email_changed:
         db.add(
@@ -2281,6 +2505,11 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
     property_id = lead.property_id
     deal_ids = list(db.scalars(select(Deal.id).where(Deal.lead_id == lead.id)))
     transaction_ids = list(db.scalars(select(Transaction.id).where(Transaction.lead_id == lead.id)))
+    offer_plan_ids = list(
+        db.scalars(
+            select(OfferNegotiationPlan.id).where(OfferNegotiationPlan.lead_id == lead.id)
+        )
+    )
 
     finance_filter = [RevenueRecord.lead_id == lead.id]
     deduction_filter = [DealDeduction.lead_id == lead.id]
@@ -2310,9 +2539,22 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                 TransactionChecklistItem.transaction_id.in_(transaction_ids)
             )
         )
+    if offer_plan_ids:
+        db.execute(
+            delete(OfferNegotiationPlan).where(OfferNegotiationPlan.id.in_(offer_plan_ids))
+        )
+        db.execute(
+            delete(ApprovalRequest).where(
+                ApprovalRequest.organization_id == principal.organization_id,
+                ApprovalRequest.entity_type == "offer_negotiation_plan",
+                ApprovalRequest.entity_id.in_(offer_plan_ids),
+            )
+        )
     for deletion_model in (
         BuyerOffer,
+        UnderwritingCalibrationCase,
         UnderwritingMarketAnalysis,
+        RepairEstimate,
         Transaction,
         Deal,
         UnderwritingVersion,
@@ -2536,17 +2778,6 @@ def normalize_email(value: str) -> str:
 
 def normalize_phone(value: str) -> str:
     return "".join(character for character in value if character.isdigit())
-
-
-def normalize_address_key(
-    street_address: str,
-    city: str,
-    state: str,
-    postal_code: str,
-) -> str:
-    raw = "|".join([street_address, city, state, postal_code])
-    normalized = "".join(character.lower() if character.isalnum() else " " for character in raw)
-    return " ".join(normalized.split())
 
 
 def format_property_address(property_record: Property) -> str:
@@ -2893,6 +3124,12 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             if isinstance(metadata.get("pre_meeting_inputs"), dict)
             else None
         ),
+        comp_review=(
+            UnderwritingCompReviewSummaryRead.model_validate(metadata.get("comp_review"))
+            if isinstance(metadata.get("comp_review"), dict)
+            else None
+        ),
+        subject_square_feet=optional_int(metadata.get("subject_square_feet")),
     )
 
 
@@ -2966,6 +3203,21 @@ def property_fields_changed(values: dict[str, Any]) -> bool:
     return any(key in values for key in property_keys)
 
 
+def property_validation_to_read(property_record: Property) -> PropertyValidationRead:
+    metadata = property_record.address_validation_metadata or {}
+    return PropertyValidationRead(
+        status=property_record.address_validation_status,
+        provider=property_record.address_validation_provider,
+        provider_property_id=property_record.provider_property_id,
+        requested_address=format_property_address(property_record),
+        validated_address=property_record.validated_formatted_address,
+        match_score=optional_int(metadata.get("match_score")),
+        issues=string_list(metadata.get("issues")),
+        facts=dict_value(metadata.get("facts")),
+        validated_at=property_record.address_validated_at,
+    )
+
+
 def lead_to_read(db: Session, lead: Lead) -> LeadRead:
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
@@ -2989,6 +3241,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         property_postal_code=property_record.postal_code,
         property_county=property_record.county,
         property_type=property_record.property_type,
+        property_validation=property_validation_to_read(property_record),
         assigned_user_email=assigned_user.email if assigned_user else None,
         motivation=lead.motivation,
         desired_timeline=lead.desired_timeline,

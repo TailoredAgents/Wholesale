@@ -70,7 +70,9 @@ export default async function ApprovalsPage() {
                       {approval.status === "pending" ? (
                         approval.review_url ? (
                           <Link className={styles.tableLink} href={approval.review_url}>
-                            Review in inbox
+                            {approval.request_type === "call_notes_review"
+                              ? "Review in inbox"
+                              : "Review request"}
                           </Link>
                         ) : (
                           <ApprovalDecisionButtons approvalId={approval.id} />

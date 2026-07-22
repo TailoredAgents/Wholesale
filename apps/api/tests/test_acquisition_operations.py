@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -48,24 +49,33 @@ def seed_owner(db_session: Session) -> None:
     )
 
 
-def create_user(client: TestClient, headers: dict[str, str], email: str, role: str) -> dict:
+def create_user(
+    client: TestClient,
+    headers: dict[str, str],
+    email: str,
+    role: str,
+) -> dict[str, Any]:
     response = client.post(
         "/api/v1/operations/users",
         headers=headers,
         json={"email": email, "display_name": email.split("@")[0].title(), "role_key": role},
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
-def create_lead(client: TestClient, headers: dict[str, str], address: str) -> dict:
+def create_lead(
+    client: TestClient,
+    headers: dict[str, str],
+    address: str,
+) -> dict[str, Any]:
     response = client.post(
         "/api/v1/leads",
         headers=headers,
         json=lead_payload(address),
     )
     assert response.status_code == 201, response.text
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
 def test_phase_two_acquisition_workflow(

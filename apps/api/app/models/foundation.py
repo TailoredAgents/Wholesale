@@ -141,6 +141,18 @@ class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
     county: Mapped[str | None] = mapped_column(String(120), nullable=True)
     property_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     normalized_address_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    address_validation_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unverified", server_default="unverified"
+    )
+    address_validation_provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_property_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    validated_formatted_address: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    address_validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    address_validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True
+    )
 
 
 class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -817,6 +829,103 @@ class UnderwritingMarketAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_calibration_cases"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "analysis_id",
+            name="uq_underwriting_calibration_org_analysis",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    analysis_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("underwriting_market_analyses.id"), index=True
+    )
+    recorded_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    market_key: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    benchmark_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    evidence_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    benchmark_arv_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    actual_rehab_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    actual_seller_contract_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    actual_disposition_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_arv_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_arv_point_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_arv_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_rehab_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_seller_ceiling_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    predicted_disposition_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class RepairEstimate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "repair_estimates"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    contractor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    estimate_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scope_items: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    subtotal_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    contingency_percentage: Mapped[int] = mapped_column(Integer, nullable=False)
+    contingency_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class OfferNegotiationPlan(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "offer_negotiation_plans"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    underwriting_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id"), index=True
+    )
+    market_analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("underwriting_market_analyses.id"), nullable=True, index=True
+    )
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("approval_requests.id"), nullable=True, index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    seller_asking_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_point_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    arv_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    total_rehab_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    disposition_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    opening_offer_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    target_contract_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    stretch_contract_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    seller_ceiling_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    seller_context: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    rationale: Mapped[str] = mapped_column(String(2000), nullable=False)
+    source_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "deals"
 
@@ -1057,6 +1166,7 @@ class ApprovalRequest(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     requested_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     request_type: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_type: Mapped[str] = mapped_column(String(120), nullable=False)
     entity_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)

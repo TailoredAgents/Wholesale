@@ -10,9 +10,12 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { MarketValuePreview } from "./market-value-preview";
+import { OfferApprovalControl } from "./offer-approval-control";
+import { PropertyValidationControl } from "./property-validation-control";
 import { StageUpdateForm } from "./stage-update-form";
 import { TransactionForm } from "./transaction-form";
 import { UnderwritingForm } from "./underwriting-form";
+import { UnderwritingVersionComparison } from "./underwriting-version-comparison";
 import styles from "./page.module.css";
 
 const tabs = [
@@ -132,6 +135,10 @@ function PropertyPanel({ lead }: { lead: LeadDetail }) {
   return (
     <section className={styles.sectionPanel}>
       <SectionHeader title="Property and seller situation" />
+      <PropertyValidationControl
+        initialValidation={lead.property_validation}
+        leadId={lead.id}
+      />
       <dl className={styles.factGrid}>
         <div><dt>Motivation</dt><dd>{lead.motivation ?? "Unknown"}</dd></div>
         <div><dt>Timeline</dt><dd>{labelize(lead.desired_timeline)}</dd></div>
@@ -317,6 +324,7 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
         </section>
         <section className={styles.sectionPanel}>
           <SectionHeader title="Underwriting versions" meta={`${lead.underwriting_versions.length} saved`} />
+          <UnderwritingVersionComparison versions={lead.underwriting_versions} />
           <div className={styles.recordList}>
             {lead.underwriting_versions.length === 0 ? <p className={styles.emptyState}>No underwriting version saved.</p> : null}
             {lead.underwriting_versions.map((version) => (
@@ -335,6 +343,14 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
           <ActionDisclosure label="Create manual underwriting version">
             <UnderwritingForm leadId={lead.id} />
           </ActionDisclosure>
+        </section>
+        <section className={styles.sectionPanel} id="offer-approval">
+          <SectionHeader title="Offer approval and negotiation" />
+          <OfferApprovalControl
+            askingPrice={lead.asking_price}
+            leadId={lead.id}
+            versions={lead.underwriting_versions}
+          />
         </section>
       </div>
       <aside className={styles.sideColumn}><PropertyPanel lead={lead} /></aside>

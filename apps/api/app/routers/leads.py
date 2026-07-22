@@ -7,6 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.schemas.approvals import (
+    OfferNegotiationPlanCreate,
+    OfferNegotiationPlanListResponse,
+    OfferNegotiationPlanRead,
+)
 from app.schemas.leads import (
     LeadAppointmentCreate,
     LeadAppointmentUpdate,
@@ -25,6 +30,9 @@ from app.schemas.leads import (
     LeadStageUpdate,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    PropertyValidationRead,
+    RepairEstimateCreate,
+    RepairEstimateRead,
 )
 from app.services.acquisition_operations import update_appointment
 from app.services.leads import (
@@ -46,7 +54,13 @@ from app.services.leads import (
     restore_lead,
     update_lead_staff_details,
     update_lead_stage,
+    validate_lead_property_address,
 )
+from app.services.offer_approvals import (
+    create_offer_negotiation_plan,
+    list_offer_negotiation_plans,
+)
+from app.services.repair_estimates import create_repair_estimate, list_repair_estimates
 from app.services.underwriting_reports import build_market_analysis_pdf
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
@@ -199,6 +213,62 @@ def create_underwriting_version(
     return lead
 
 
+@router.get("/{lead_id}/repair-estimates")
+def read_repair_estimates(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> list[RepairEstimateRead]:
+    estimates = list_repair_estimates(db, principal, lead_id)
+    if estimates is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return estimates
+
+
+@router.post("/{lead_id}/repair-estimates", status_code=201)
+def record_repair_estimate(
+    lead_id: UUID,
+    payload: RepairEstimateCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> RepairEstimateRead:
+    try:
+        estimate = create_repair_estimate(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if estimate is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return estimate
+
+
+@router.get("/{lead_id}/underwriting/offer-plans")
+def read_offer_negotiation_plans(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> OfferNegotiationPlanListResponse:
+    plans = list_offer_negotiation_plans(db, principal, lead_id)
+    if plans is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return plans
+
+
+@router.post("/{lead_id}/underwriting/offer-plans", status_code=201)
+def request_offer_ceiling_approval(
+    lead_id: UUID,
+    payload: OfferNegotiationPlanCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> OfferNegotiationPlanRead:
+    try:
+        plan = create_offer_negotiation_plan(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if plan is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return plan
+
+
 @router.get("/{lead_id}/underwriting/market-value")
 def preview_underwriting_market_value(
     lead_id: UUID,
@@ -220,6 +290,29 @@ def preview_underwriting_market_value(
     if estimate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return estimate
+
+
+@router.post("/{lead_id}/property-validation")
+def validate_property_address(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> PropertyValidationRead:
+    try:
+        validation = validate_lead_property_address(db, principal, lead_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    if validation is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return validation
 
 
 @router.get("/{lead_id}/underwriting/market-analysis")
@@ -244,6 +337,35 @@ def create_underwriting_market_analysis(
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
     payload: LeadMarketAnalysisCreate | None = None,
 ) -> LeadMarketAnalysisRead:
+    try:
+        analysis = create_lead_market_analysis(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        ) from exc
+    if analysis is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return analysis
+
+
+@router.post("/{lead_id}/underwriting/market-analysis/review", status_code=201)
+def apply_underwriting_comp_review(
+    lead_id: UUID,
+    payload: LeadMarketAnalysisCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> LeadMarketAnalysisRead:
+    if payload.source_analysis_id is None or not payload.comp_review_decisions:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A source analysis and comparable review decisions are required.",
+        )
     try:
         analysis = create_lead_market_analysis(db, principal, lead_id, payload)
     except ValueError as exc:

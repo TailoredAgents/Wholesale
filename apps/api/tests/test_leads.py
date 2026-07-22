@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import func, select
@@ -9,13 +11,16 @@ from app.main import app
 from app.models.foundation import (
     ActivityEvent,
     Appointment,
+    ApprovalRequest,
     AuditEvent,
     BuyerOffer,
     CommunicationRecord,
     Contact,
     Deal,
     Lead,
+    OfferNegotiationPlan,
     Property,
+    RepairEstimate,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -107,6 +112,95 @@ def test_create_and_list_lead(
     ) == 1
 
 
+def test_validate_property_address_preserves_crm_address_and_provider_provenance(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    get_settings.cache_clear()
+
+    class FakeRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            return {
+                "id": "123-Peachtree-St,-Atlanta,-GA-30303",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "addressLine1": "123 Peachtree St",
+                "addressLine2": None,
+                "city": "Atlanta",
+                "state": "GA",
+                "zipCode": "30303",
+                "county": "Fulton",
+                "countyFips": "121",
+                "latitude": 33.75,
+                "longitude": -84.39,
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "owner": {"names": ["Must Not Be Retained"]},
+            }
+
+    monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
+    client = TestClient(app)
+    create_payload = lead_payload()
+    assert isinstance(create_payload["property"], dict)
+    create_payload["property"]["street_address"] = "123 Peachtree Street"
+    create_payload["property"]["postal_code"] = "30303-1234"
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=create_payload,
+    )
+    assert created_response.status_code == 201
+    lead_id = created_response.json()["id"]
+    property_record = db_session.get(Property, UUID(created_response.json()["property_id"]))
+    assert property_record is not None
+    assert property_record.normalized_address_key == "123 peachtree st|atlanta|GA|30303"
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/property-validation",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200
+    validation = response.json()
+    assert validation["status"] == "provider_confirmed"
+    assert validation["match_score"] == 100
+    assert validation["validated_address"] == "123 Peachtree St, Atlanta, GA 30303"
+    assert validation["facts"]["squareFootage"] == 1800
+    assert "owner" not in validation["facts"]
+    detail = client.get(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()
+    assert detail["property_street_address"] == "123 Peachtree Street"
+    assert detail["property_validation"]["status"] == "provider_confirmed"
+
+    update_response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"property_street_address": "999 Peachtree Street"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["property_validation"]["status"] == "unverified"
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "property.address.validate"
+            )
+        )
+        or 0
+    ) == 1
+    get_settings.cache_clear()
+
+
 def test_archive_restore_and_permanently_delete_lead(
     db_session: Session,
     api_db_override: None,
@@ -124,6 +218,37 @@ def test_archive_restore_and_permanently_delete_lead(
         headers={"X-Dev-User-Email": OWNER_EMAIL},
         json={"title": "Call test seller", "priority": "normal"},
     )
+    repair_response = client.post(
+        f"/api/v1/leads/{lead_id}/repair-estimates",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "source_type": "walkthrough_scope",
+            "estimate_date": "2026-07-21T12:00:00Z",
+            "scope_items": [
+                {"category": "roof", "estimated_cost_cents": 1500000}
+            ],
+            "contingency_percentage": 15,
+        },
+    )
+    assert repair_response.status_code == 201
+    underwriting_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "max_offer_cents": 18000000,
+            "recommended_offer_cents": 16500000,
+        },
+    )
+    version_id = underwriting_response.json()["underwriting_versions"][0]["id"]
+    offer_plan_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "underwriting_version_id": version_id,
+            "rationale": "Deletion test negotiation plan with a pending approval.",
+        },
+    )
+    assert offer_plan_response.status_code == 201
 
     archive_response = client.delete(
         f"/api/v1/leads/{lead_id}",
@@ -174,6 +299,11 @@ def test_archive_restore_and_permanently_delete_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(RepairEstimate)) or 0) == 0
+    assert int(
+        db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0
+    ) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(ApprovalRequest)) or 0) == 0
     task = db_session.scalar(select(Task))
     assert task is not None
     assert task.lead_id is None
@@ -1204,6 +1334,195 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         ]
         == "itemized"
     )
+
+    missing_contractor_response = client.post(
+        f"/api/v1/leads/{lead_id}/repair-estimates",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "source_type": "contractor_bid",
+            "estimate_date": "2026-07-21T12:00:00Z",
+            "scope_items": [
+                {"category": "roof", "estimated_cost_cents": 1500000}
+            ],
+        },
+    )
+    assert missing_contractor_response.status_code == 422
+
+    repair_estimate_response = client.post(
+        f"/api/v1/leads/{lead_id}/repair-estimates",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "source_type": "contractor_bid",
+            "contractor_name": "Peachtree Renovations",
+            "estimate_date": "2026-07-21T12:00:00Z",
+            "scope_items": [
+                {
+                    "category": "roof",
+                    "estimated_cost_cents": 1500000,
+                    "labor_cost_cents": 600000,
+                    "material_cost_cents": 900000,
+                    "details": "Replace architectural shingles.",
+                },
+                {
+                    "category": "kitchen",
+                    "estimated_cost_cents": 2500000,
+                    "details": "Entry-level retail kitchen.",
+                },
+                {
+                    "category": "hvac",
+                    "estimated_cost_cents": 1000000,
+                    "details": "Replace system.",
+                },
+            ],
+            "contingency_percentage": 20,
+            "evidence_reference": "Bid PR-2048",
+            "notes": "Written contractor bid received after walkthrough.",
+        },
+    )
+    assert repair_estimate_response.status_code == 201
+    saved_estimate = repair_estimate_response.json()
+    assert saved_estimate["subtotal_cents"] == 5000000
+    assert saved_estimate["contingency_cents"] == 1000000
+    assert saved_estimate["total_cents"] == 6000000
+    assert int(db_session.scalar(select(func.count()).select_from(RepairEstimate)) or 0) == 1
+
+    estimate_list_response = client.get(
+        f"/api/v1/leads/{lead_id}/repair-estimates",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert estimate_list_response.status_code == 200
+    assert estimate_list_response.json()[0]["id"] == saved_estimate["id"]
+
+    saved_estimate_analysis_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_level": "moderate",
+            "repair_estimate_id": saved_estimate["id"],
+            "comp_condition_overrides": {
+                "comp-1": "renovated",
+                "comp-2": "renovated",
+                "comp-3": "renovated",
+                "comp-4": "as_is",
+                "comp-5": "as_is",
+                "reject-price-outlier": "renovated",
+            },
+        },
+    )
+    assert saved_estimate_analysis_response.status_code == 201
+    estimate_analysis = saved_estimate_analysis_response.json()
+    assert provider_calls == ["init", "value", "subject", "sales", "rent"]
+    assert estimate_analysis["base_rehab_cents"] == 5000000
+    assert estimate_analysis["total_rehab_cents"] == 6000000
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_source"] == (
+        "contractor_bid"
+    )
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_id"] == (
+        saved_estimate["id"]
+    )
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_contractor_name"] == (
+        "Peachtree Renovations"
+    )
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_reference"] == (
+        "Bid PR-2048"
+    )
+    assert estimate_analysis["pre_meeting_inputs"]["repair_items"][0][
+        "labor_cost_cents"
+    ] == 600000
+    assert estimate_analysis["pre_meeting_inputs"]["repair_items"][0][
+        "material_cost_cents"
+    ] == 900000
+
+    contractor_report_response = client.get(
+        (
+            f"/api/v1/leads/{lead_id}/underwriting/market-analysis/"
+            f"{estimate_analysis['id']}/report.pdf"
+        ),
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert contractor_report_response.status_code == 200
+    assert b"Peachtree Renovations" in contractor_report_response.content
+    assert b"Bid PR-2048" in contractor_report_response.content
+    assert b"$6,000" in contractor_report_response.content
+    assert b"$9,000" in contractor_report_response.content
+
+    conflicting_input_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_estimate_id": saved_estimate["id"],
+            "base_rehab_override_cents": 1000000,
+        },
+    )
+    assert conflicting_input_response.status_code == 422
+
+    lead_detail = client.get(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()
+    newest_version = lead_detail["underwriting_versions"][0]
+    assert newest_version["total_rehab_cents"] == 6000000
+    assert newest_version["repair_estimate_source"] == "contractor_bid"
+    assert newest_version["arv_point_cents"] == estimate_analysis["arv_point_cents"]
+
+    source_comps = [*payload["selected_comps"], *payload["rejected_comps"]]
+    review_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis/review",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "source_analysis_id": payload["id"],
+            "repair_level": "moderate",
+            "comp_condition_overrides": {
+                comp["provider_id"]: comp["condition_classification"]
+                for comp in source_comps
+            },
+            "comp_review_decisions": [
+                {
+                    "comp_key": comp["provider_id"],
+                    "included": comp["provider_id"]
+                    in {"comp-1", "comp-2", "comp-3", "comp-4", "comp-5"},
+                    "reason": (
+                        "Strong subject match"
+                        if comp["provider_id"]
+                        in {"comp-1", "comp-2", "comp-3", "comp-4", "comp-5"}
+                        else "Size or design mismatch"
+                    ),
+                    "weight_percentage": 150
+                    if comp["provider_id"] == "comp-2"
+                    else 100,
+                }
+                for comp in source_comps
+            ],
+        },
+    )
+
+    assert review_response.status_code == 201
+    reviewed = review_response.json()
+    assert reviewed["id"] != payload["id"]
+    assert reviewed["comp_review"]["source_analysis_id"] == payload["id"]
+    assert reviewed["comp_review"]["included_count"] == 5
+    assert reviewed["comp_review"]["excluded_count"] == 2
+    weighted_comp = next(
+        comp for comp in reviewed["selected_comps"] if comp["provider_id"] == "comp-2"
+    )
+    assert weighted_comp["manual_weight_percentage"] == 150
+    assert weighted_comp["review_decision"] == "included"
+    assert weighted_comp["weight"] == 1.5
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action == "underwriting.comp_review.apply"
+            )
+        )
+        or 0
+    ) == 1
+    assert int(
+        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis))
+        or 0
+    ) == 6
+    assert int(
+        db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0
+    ) == 6
     get_settings.cache_clear()
 
 
@@ -1371,6 +1690,195 @@ def test_update_lead_staff_details_requires_permission(api_db_override: None) ->
     )
 
     assert response.status_code == 401
+
+
+def test_offer_ceiling_approval_uses_immutable_negotiation_plan(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    lead_id = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    ).json()["id"]
+    underwriting = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "needs_review",
+            "arv_low_cents": 30000000,
+            "arv_high_cents": 33000000,
+            "repair_low_cents": 6000000,
+            "repair_high_cents": 7500000,
+            "max_offer_cents": 20000000,
+            "recommended_offer_cents": 18000000,
+            "offer_strategy": "cash_offer",
+            "notes": "Human-reviewed comp set and repair scope.",
+        },
+    )
+    assert underwriting.status_code == 201
+    version_id = underwriting.json()["underwriting_versions"][0]["id"]
+
+    invalid = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "underwriting_version_id": version_id,
+            "opening_offer_cents": 19000000,
+            "target_contract_cents": 18500000,
+            "rationale": "Validate that negotiation amounts cannot run backward.",
+        },
+    )
+    assert invalid.status_code == 422
+
+    first_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "underwriting_version_id": version_id,
+            "seller_asking_price_cents": 23500000,
+            "seller_context": "Seller wants certainty and a 30-day closing.",
+            "rationale": "Preserve the approved buyer economics and assignment target.",
+        },
+    )
+    assert first_response.status_code == 201
+    first = first_response.json()
+    assert first["opening_offer_cents"] == 18000000
+    assert first["target_contract_cents"] == 18800000
+    assert first["stretch_contract_cents"] == 19500000
+    assert first["seller_ceiling_cents"] == 20000000
+    assert first["source_snapshot"]["underwriting_version_number"] == 1
+    assert first["approval_status"] == "pending"
+
+    second_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "underwriting_version_id": version_id,
+            "opening_offer_cents": 18100000,
+            "target_contract_cents": 19000000,
+            "stretch_contract_cents": 19700000,
+            "rationale": "Updated ladder after reviewing the seller conversation.",
+        },
+    )
+    assert second_response.status_code == 201
+    second = second_response.json()
+    assert second["status"] == "pending"
+
+    plans_response = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert plans_response.status_code == 200
+    assert plans_response.json()["can_approve"] is True
+    assert [item["status"] for item in plans_response.json()["items"]] == [
+        "pending",
+        "cancelled",
+    ]
+    assert int(
+        db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0
+    ) == 2
+
+    approval_response = client.get(
+        "/api/v1/approvals",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    latest_approval = approval_response.json()["items"][0]
+    assert latest_approval["review_url"] == (
+        f"/os/leads/{lead_id}?tab=underwriting#offer-approval"
+    )
+    assert latest_approval["approval_metadata"]["seller_ceiling_cents"] == 20000000
+
+    missing_notes = client.patch(
+        f"/api/v1/approvals/{second['approval_request_id']}/decision",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"status": "rejected"},
+    )
+    assert missing_notes.status_code == 422
+
+    decision = client.patch(
+        f"/api/v1/approvals/{second['approval_request_id']}/decision",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"status": "approved", "decision_notes": "Approved for the seller meeting."},
+    )
+    assert decision.status_code == 200
+    assert decision.json()["status"] == "approved"
+    assert decision.json()["decided_by_user_id"] is not None
+    refreshed = client.get(
+        f"/api/v1/leads/{lead_id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()
+    assert refreshed["stage_key"] == "offer_ready"
+    assert refreshed["underwriting_versions"][0]["status"] == "approved"
+    decided_plan = db_session.get(OfferNegotiationPlan, UUID(second["id"]))
+    assert decided_plan is not None
+    assert decided_plan.status == "approved"
+    assert int(db_session.scalar(select(func.count()).select_from(ApprovalRequest)) or 0) == 2
+    assert int(
+        db_session.scalar(
+            select(func.count()).select_from(AuditEvent).where(
+                AuditEvent.action.in_(
+                    {
+                        "underwriting.offer_approval.request",
+                        "underwriting.offer_approval.decide",
+                    }
+                )
+            )
+        )
+        or 0
+    ) == 3
+
+    duplicate_decision = client.patch(
+        f"/api/v1/approvals/{second['approval_request_id']}/decision",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"status": "approved"},
+    )
+    assert duplicate_decision.status_code == 422
+
+    newer_underwriting = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "needs_review",
+            "arv_low_cents": 30500000,
+            "arv_high_cents": 33500000,
+            "repair_low_cents": 6000000,
+            "repair_high_cents": 7200000,
+            "max_offer_cents": 20500000,
+            "recommended_offer_cents": 18400000,
+        },
+    ).json()
+    newer_version_id = newer_underwriting["underwriting_versions"][0]["id"]
+    stale_plan = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/offer-plans",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "underwriting_version_id": newer_version_id,
+            "rationale": "Request approval before the final comp review is complete.",
+        },
+    ).json()
+    client.post(
+        f"/api/v1/leads/{lead_id}/underwriting",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "needs_review",
+            "arv_low_cents": 31000000,
+            "arv_high_cents": 34000000,
+            "repair_low_cents": 6000000,
+            "repair_high_cents": 7000000,
+            "max_offer_cents": 21000000,
+            "recommended_offer_cents": 18800000,
+        },
+    )
+    stale_decision = client.patch(
+        f"/api/v1/approvals/{stale_plan['approval_request_id']}/decision",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"status": "approved"},
+    )
+    assert stale_decision.status_code == 422
+    assert "newer underwriting version" in stale_decision.json()["detail"]
 
 
 def test_create_lead_requires_permission(api_db_override: None) -> None:

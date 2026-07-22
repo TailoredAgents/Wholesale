@@ -113,7 +113,36 @@ complete and should continue to resolve afterward.
 - Optional pre-meeting repair and renovation inputs.
 - Investor and client PDF reports.
 - Comparable inclusion and exclusion explanations retained for review.
+- Full selected/rejected comp review workspace with condition classification, include/exclude
+  decisions, required reason presets, and bounded evidence weighting.
+- Comp review recalculations create immutable underwriting versions and dedicated activity/audit
+  events while retaining the original market-data snapshot.
+- Canonical address keys normalize common street suffixes, directionals, state, and ZIP5 across
+  staff-created and website-created leads.
+- RentCast property-record validation retains match status, score, issues, provider address,
+  non-owner subject facts, timestamp, and audit history without replacing the CRM address.
+- Underwriting uses an explicit canonical subject-fact set with field-level provider/CRM
+  provenance; address mismatches reduce confidence and require review without gating outputs.
 - Reports remain available even when renovation status is not yet confirmed.
+- Lead-level verified outcome entry for expert reviews, appraisals, completed resales, and verified
+  market sales, with optional actual rehab, seller contract, and disposition values.
+- Immutable calibration snapshots preserve the prediction made at analysis time and report median
+  ARV bias, median absolute ARV error, ARV-range coverage, and optional repair/disposition error by
+  market.
+- The Underwriting workspace shows calibration readiness and verified outcome history. Formula
+  review requires at least 50 cases; calibration never adjusts formulas automatically.
+- Lead underwriting now includes light, moderate, heavy, and structural repair presets that
+  prefill an editable itemized scope with an explicit contingency.
+- Contractor bids, walkthrough estimates, and internal scopes can be retained as immutable repair
+  evidence and selected for a new analysis without rewriting the source estimate.
+- Investor reports identify the selected repair source, contractor, estimate date, reference,
+  labor, materials, contingency, and total. Saved underwriting versions can be compared directly
+  on the lead page.
+- The lead underwriting workspace creates immutable negotiation plans with opening, target,
+  stretch, and hard-ceiling values tied to one saved underwriting version.
+- Offer approval requests cancel superseded pending plans, reject stale versions, record the
+  deciding user and notes, and move an approved lead to `offer_ready` without allowing the ceiling
+  to exceed the saved underwriting result.
 
 Underwriting is decision support, not an appraisal. It requires continued comparison against real
 transactions and human judgment before Stonegate relies on it for offer ceilings.
@@ -167,5 +196,5 @@ While A2P approval is pending:
 
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
-3. Begin Phase 3 underwriting validation and offer workflow in `docs/ROADMAP.md`.
+3. Continue Phase 3 with the seller-meeting brief, objection preparation, and approved price notes.
 4. Resume the external integration gate after A2P approval without blocking internal development.

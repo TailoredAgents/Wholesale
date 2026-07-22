@@ -361,6 +361,12 @@
   font-weight: 850;
 }
 
+.metric .metricStatus {
+  max-width: 14ch;
+  font-size: 22px;
+  line-height: 1.12;
+}
+
 .metric small {
   line-height: 1.35;
 }
@@ -602,6 +608,76 @@
   gap: 16px;
 }
 
+.calibrationHistory {
+  margin-top: 16px;
+}
+
+.calibrationMarketList {
+  display: grid;
+}
+
+.calibrationMarketRow {
+  padding: 15px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  gap: 12px;
+}
+
+.calibrationMarketRow:last-child {
+  border-bottom: 0;
+}
+
+.calibrationMarketRow > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.calibrationMarketRow > div strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.calibrationMarketRow > div span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.calibrationMarketRow dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.calibrationMarketRow dl div {
+  display: grid;
+  gap: 2px;
+}
+
+.calibrationMarketRow dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.calibrationMarketRow dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.calibrationEmpty {
+  padding: 20px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .qualityBand {
   margin-bottom: 16px;
   border: 1px solid var(--line);
@@ -666,6 +742,7 @@
 }
 
 .panel {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);

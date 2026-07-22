@@ -4,14 +4,17 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_permission
+from app.core.auth import Principal, require_any_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.approvals import ApprovalDecision, ApprovalListResponse, ApprovalRequestRead
 from app.services.approvals import decide_approval_request, list_approval_requests
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
-view_approvals_dependency = require_permission(PermissionKeys.VIEW_AUDIT_LOGS)
+view_approvals_dependency = require_any_permission(
+    PermissionKeys.VIEW_AUDIT_LOGS,
+    PermissionKeys.APPROVE_OFFERS,
+)
 
 
 @router.get("")

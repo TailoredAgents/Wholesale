@@ -405,6 +405,118 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.propertyValidation {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e8e3d8;
+  background: #f6f7f5;
+  display: grid;
+  gap: 8px;
+}
+
+.propertyValidation[data-status="provider_confirmed"] {
+  background: #edf6f0;
+}
+
+.propertyValidation[data-status="needs_review"],
+.propertyValidation[data-status="not_found"] {
+  background: #fff8e8;
+}
+
+.propertyValidationHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propertyValidationHeader > div {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.propertyValidationHeader span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.propertyValidationHeader strong {
+  color: #273033;
+  font-size: 13px;
+}
+
+.propertyValidationHeader small {
+  color: #2f6f4e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.propertyValidationHeader button {
+  min-height: 32px;
+  padding: 0 9px;
+  border: 1px solid #b9c5bd;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #2f5f46;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.propertyValidationHeader button:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.propertyValidation > p {
+  margin: 0;
+  color: #3d4648;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.propertyValidation dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.propertyValidation dl div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.propertyValidation dt {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.propertyValidation dd {
+  margin: 0;
+  color: #273033;
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.propertyValidation ul {
+  margin: 0;
+  padding-left: 17px;
+  color: #714d15;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .qualificationSummary {
   padding: 16px;
   display: grid;
@@ -606,6 +718,131 @@
   color: #4f5658;
   font-size: 14px;
   line-height: 1.45;
+}
+
+.versionComparison {
+  border-bottom: 1px solid #e8e3d8;
+  display: grid;
+}
+
+.versionComparisonHeader {
+  padding: 14px 16px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  background: #fbfaf7;
+}
+
+.versionComparisonHeader > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.versionComparisonHeader strong {
+  color: #202426;
+  font-size: 14px;
+}
+
+.versionComparisonHeader span,
+.versionContext span {
+  color: #687073;
+  font-size: 12px;
+}
+
+.versionSelectors {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(130px, 1fr));
+  gap: 8px;
+}
+
+.versionSelectors label {
+  display: grid;
+  gap: 4px;
+}
+
+.versionSelectors label > span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.versionSelectors select {
+  min-height: 36px;
+  padding: 0 28px 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.versionContext {
+  padding: 9px 16px;
+  border-top: 1px solid #ece7df;
+  border-bottom: 1px solid #ece7df;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.versionComparisonTable {
+  overflow-x: auto;
+}
+
+.versionComparisonLabels,
+.versionComparisonRow {
+  min-width: 650px;
+  display: grid;
+  grid-template-columns: 1.25fr repeat(3, minmax(110px, 1fr));
+}
+
+.versionComparisonLabels {
+  background: #f5f2ec;
+}
+
+.versionComparisonLabels span,
+.versionComparisonRow > * {
+  min-height: 38px;
+  padding: 9px 12px;
+  border-right: 1px solid #ece7df;
+  display: flex;
+  align-items: center;
+}
+
+.versionComparisonLabels span:last-child,
+.versionComparisonRow > *:last-child {
+  border-right: 0;
+}
+
+.versionComparisonLabels span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.versionComparisonRow {
+  border-top: 1px solid #ece7df;
+}
+
+.versionComparisonRow strong,
+.versionComparisonRow span {
+  color: #343a3d;
+  font-size: 12px;
+}
+
+.versionComparisonRow strong {
+  font-weight: 800;
+}
+
+.versionChanged {
+  background: #edf6f0;
+  color: #245f43 !important;
+  font-weight: 800;
 }
 
 .moneyGrid {
@@ -1181,6 +1418,146 @@
   text-transform: uppercase;
 }
 
+.calibrationInputs {
+  border: 1px solid #d9d3c8;
+  border-radius: 8px;
+  background: #fbfaf7;
+  overflow: hidden;
+}
+
+.calibrationInputs summary {
+  min-height: 62px;
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.calibrationInputs summary::-webkit-details-marker {
+  display: none;
+}
+
+.calibrationInputs summary > div {
+  display: grid;
+  gap: 3px;
+}
+
+.calibrationInputs summary strong {
+  color: #202426;
+  font-size: 14px;
+}
+
+.calibrationInputs summary span {
+  color: #5d6365;
+  font-size: 12px;
+}
+
+.calibrationSaved,
+.calibrationPending {
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.calibrationSaved {
+  background: #e9f3ec;
+  color: #245f43 !important;
+}
+
+.calibrationPending {
+  background: #f4eee3;
+  color: #8a5c20 !important;
+}
+
+.calibrationForm {
+  padding: 14px;
+  border-top: 1px solid #e6e0d6;
+  display: grid;
+  gap: 14px;
+  background: #ffffff;
+}
+
+.calibrationGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.calibrationGrid label {
+  display: grid;
+  gap: 6px;
+  color: #343a3d;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.calibrationGrid input,
+.calibrationGrid select,
+.calibrationGrid textarea {
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border: 1px solid #cfc8bc;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+}
+
+.calibrationGrid textarea {
+  resize: vertical;
+}
+
+.calibrationWide {
+  grid-column: 1 / -1;
+}
+
+.calibrationFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.calibrationFooter button {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.calibrationFooter button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.calibrationError,
+.calibrationSuccess {
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.calibrationError {
+  color: #a13c2f;
+}
+
+.calibrationSuccess {
+  color: #245f43;
+}
+
 .marketValueActions button:disabled,
 .secondaryButton:disabled {
   opacity: 0.65;
@@ -1373,6 +1750,58 @@
   max-width: 320px;
 }
 
+.itemizedScope {
+  display: grid;
+  gap: 10px;
+}
+
+.repairPresetBar {
+  padding: 10px 0;
+  border-top: 1px solid #e8e3d8;
+  border-bottom: 1px solid #e8e3d8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repairPresetBar > div {
+  display: grid;
+  gap: 2px;
+}
+
+.repairPresetBar strong {
+  color: #202426;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.repairPresetBar span {
+  color: #687073;
+  font-size: 12px;
+}
+
+.repairPresetBar button,
+.repairEvidenceFooter button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.repairPresetBar button:disabled,
+.repairEvidenceFooter button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .itemizedRepairs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1394,11 +1823,487 @@
   font-size: 15px;
 }
 
+.contingencyInput {
+  max-width: 220px;
+  display: grid;
+  gap: 5px;
+}
+
+.contingencyInput > span {
+  color: #687073;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.contingencyInput > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.contingencyInput input {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 9px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+}
+
+.contingencyInput div span {
+  padding: 0 10px;
+  color: #687073;
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .repairNotes textarea {
   min-height: 76px;
   padding: 9px;
   line-height: 1.4;
   resize: vertical;
+}
+
+.repairEvidence {
+  border-top: 1px solid #e8e3d8;
+  border-bottom: 1px solid #e8e3d8;
+  display: grid;
+}
+
+.repairEvidenceHeader {
+  padding: 12px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.repairEvidenceHeader > div {
+  display: grid;
+  gap: 2px;
+}
+
+.repairEvidenceHeader strong {
+  color: #202426;
+  font-size: 13px;
+}
+
+.repairEvidenceHeader span,
+.repairEvidenceFooter span {
+  color: #687073;
+  font-size: 12px;
+}
+
+.repairEvidenceHeader select {
+  min-height: 38px;
+  max-width: 280px;
+  padding: 0 30px 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 12px;
+}
+
+.repairEvidenceSummary {
+  margin: 0;
+  padding: 10px 0;
+  border-top: 1px solid #ece7df;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.repairEvidenceSummary div {
+  display: grid;
+  gap: 2px;
+}
+
+.repairEvidenceSummary dt {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.repairEvidenceSummary dd {
+  margin: 0;
+  color: #202426;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.repairEvidenceForm {
+  border-top: 1px solid #ece7df;
+}
+
+.repairEvidenceForm summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  color: #245f43;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.repairEvidenceForm form {
+  padding: 4px 0 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.repairEvidenceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.repairEvidenceGrid label {
+  display: grid;
+  gap: 5px;
+}
+
+.repairEvidenceGrid label > span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.repairEvidenceGrid input,
+.repairEvidenceGrid select {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 12px;
+}
+
+.repairEvidenceFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repairEvidenceError {
+  margin: 0;
+  padding: 8px 0 10px;
+  color: #a13c2f;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.offerApprovalControl {
+  display: grid;
+}
+
+.offerPlanForm {
+  padding: 16px;
+  border-bottom: 1px solid #e8e3d8;
+  display: grid;
+  gap: 14px;
+}
+
+.offerPlanSource {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.8fr) minmax(0, 1.6fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.offerPlanSource > label,
+.offerNarrativeGrid label,
+.offerDecision label {
+  display: grid;
+  gap: 5px;
+}
+
+.offerPlanSource label > span,
+.offerLadderInputs label > span,
+.offerNarrativeGrid label > span,
+.offerDecision label > span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.offerPlanSource select,
+.offerNarrativeGrid textarea,
+.offerDecision textarea {
+  min-width: 0;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+}
+
+.offerPlanSource select {
+  min-height: 40px;
+  padding: 0 30px 0 10px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.offerPlanSource dl,
+.offerLadderSummary {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.offerPlanSource dl {
+  min-height: 58px;
+  border: 1px solid #e3ded4;
+  border-radius: 6px;
+  background: #fbfaf7;
+}
+
+.offerPlanSource dl div,
+.offerLadderSummary div {
+  padding: 9px;
+  border-right: 1px solid #e8e3d8;
+  display: grid;
+  gap: 3px;
+}
+
+.offerPlanSource dl div:last-child,
+.offerLadderSummary div:last-child {
+  border-right: 0;
+}
+
+.offerPlanSource dt,
+.offerLadderSummary dt {
+  color: #747b7d;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.offerPlanSource dd,
+.offerLadderSummary dd {
+  margin: 0;
+  color: #202426;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.offerLadderInputs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.offerLadderInputs label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.offerLadderInputs label > div {
+  min-width: 0;
+  min-height: 40px;
+  padding-left: 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+}
+
+.offerLadderInputs label:last-child > div {
+  border-color: #9fc4ad;
+  background: #edf6f0;
+}
+
+.offerLadderInputs b {
+  color: #687073;
+  font-size: 12px;
+}
+
+.offerLadderInputs input {
+  min-width: 0;
+  width: 100%;
+  min-height: 38px;
+  padding: 0 7px 0 4px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #202426;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.offerNarrativeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.offerNarrativeGrid textarea,
+.offerDecision textarea {
+  padding: 9px;
+  line-height: 1.4;
+  resize: vertical;
+}
+
+.offerPlanFooter,
+.offerPlanHistoryHeader,
+.offerPlanTitle,
+.offerDecision > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.offerPlanFooter > span,
+.offerPlanHistoryHeader span,
+.offerPlanTitle span {
+  color: #687073;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.offerPlanFooter button,
+.offerDecision button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.offerPlanFooter button:disabled,
+.offerDecision button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.offerPlanHistory {
+  padding: 14px 16px 16px;
+  display: grid;
+  gap: 9px;
+}
+
+.offerPlanHistory > p {
+  margin: 0;
+  padding: 10px 0;
+  color: #687073;
+  font-size: 13px;
+}
+
+.offerPlanHistory article {
+  padding: 12px;
+  border: 1px solid #e3ded4;
+  border-radius: 8px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 10px;
+}
+
+.offerPlanTitle > div {
+  display: grid;
+  gap: 2px;
+}
+
+.offerPlanTitle strong,
+.offerPlanHistoryHeader strong {
+  color: #202426;
+  font-size: 13px;
+}
+
+.offerStatus {
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: #ece9e3;
+  color: #535a5c !important;
+  font-size: 10px !important;
+  text-transform: uppercase;
+}
+
+.offerStatus_pending {
+  background: #fff0cf;
+  color: #805818 !important;
+}
+
+.offerStatus_approved {
+  background: #dcefe3;
+  color: #245f43 !important;
+}
+
+.offerStatus_rejected {
+  background: #f8dfda;
+  color: #923a2e !important;
+}
+
+.offerLadderSummary {
+  border: 1px solid #e8e3d8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.offerPlanHistory article > p {
+  margin: 0;
+  color: #4f5658;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.offerPlanHistory article > small {
+  color: #687073;
+  font-size: 11px;
+}
+
+.offerDecision {
+  padding-top: 10px;
+  border-top: 1px solid #e8e3d8;
+  display: grid;
+  gap: 9px;
+}
+
+.offerDecision > div {
+  justify-content: flex-end;
+}
+
+.offerDecision button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.offerDecision .rejectButton {
+  border: 1px solid #b85345;
+  background: #ffffff;
+  color: #9a3e32;
+}
+
+.offerPlanError {
+  margin: 0;
+  padding: 0 16px 14px;
+  color: #a13c2f;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 .marketValueResult {
@@ -1568,15 +2473,23 @@
   border-radius: 6px;
   background: #faf9f6;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  gap: 5px 14px;
+  gap: 6px;
+}
+
+.compList article.compIncluded {
+  border-left: 4px solid #2f6f4e;
+}
+
+.compList article.compExcluded {
+  border-left: 4px solid #9ca3a6;
+  background: #f5f4f1;
 }
 
 .compList article > div:first-child {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  grid-column: 1 / -1;
 }
 
 .compList article strong,
@@ -1586,12 +2499,146 @@
   line-height: 1.35;
 }
 
-.compCondition {
-  grid-column: 2;
-  grid-row: 2 / span 2;
+.compIdentity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.compIdentity input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  accent-color: #2f6f4e;
+}
+
+.compIdentity strong {
+  min-width: 0;
+}
+
+.compDecisionBadge {
+  padding: 3px 6px;
+  border: 1px solid #c5d6ca;
+  border-radius: 5px;
+  background: #edf6f0;
+  color: #285b42 !important;
+  font-size: 10px !important;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compExcluded .compDecisionBadge {
+  border-color: #d4d0c8;
+  background: #eceae5;
+  color: #61686a !important;
+}
+
+.compReviewControls {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 1px solid #e4dfd6;
   display: grid;
-  align-content: start;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(190px, 1.3fr) minmax(110px, 0.5fr);
+  gap: 8px;
+}
+
+.compReviewControls label {
+  min-width: 0;
+  display: grid;
   gap: 5px;
+}
+
+.compReviewControls label > span,
+.compCondition span {
+  color: #687073;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.compReviewControls select,
+.compReviewControls input {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 12px;
+}
+
+.compReviewControls select {
+  padding-right: 28px;
+}
+
+.weightInput {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.weightInput input {
+  border: 0;
+  border-radius: 0;
+}
+
+.weightInput > span {
+  padding: 0 9px;
+  color: #687073;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.compReviewFooter {
+  padding: 12px 0;
+  border-top: 1px solid #e8e3d8;
+  border-bottom: 1px solid #e8e3d8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compReviewFooter > div {
+  display: grid;
+  gap: 2px;
+}
+
+.compReviewFooter strong {
+  color: #202426;
+  font-size: 13px;
+}
+
+.compReviewFooter span {
+  color: #687073;
+  font-size: 12px;
+}
+
+.compReviewFooter button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.compReviewFooter button:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .appointmentList article,
@@ -1781,6 +2828,29 @@
     grid-template-columns: 1fr;
   }
 
+  .calibrationGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .versionComparisonHeader,
+  .repairEvidenceHeader,
+  .offerPlanFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repairEvidenceHeader select {
+    max-width: none;
+  }
+
+  .offerPlanSource {
+    grid-template-columns: 1fr;
+  }
+
+  .offerLadderInputs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .tabs {
     margin-right: -18px;
     margin-left: -18px;
@@ -1851,13 +2921,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .compList article {
+  .compList article,
+  .compReviewControls {
     grid-template-columns: 1fr;
-  }
-
-  .compCondition {
-    grid-column: 1;
-    grid-row: auto;
   }
 
   .appointmentForm,
@@ -1912,6 +2978,68 @@
     width: 100%;
   }
 
+  .calibrationInputs summary,
+  .calibrationFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calibrationSaved,
+  .calibrationPending {
+    align-self: flex-start;
+  }
+
+  .calibrationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .versionSelectors,
+  .versionContext,
+  .repairEvidenceGrid,
+  .repairEvidenceSummary,
+  .offerPlanSource dl,
+  .offerLadderInputs,
+  .offerNarrativeGrid,
+  .offerLadderSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .offerPlanSource dl div,
+  .offerLadderSummary div {
+    border-right: 0;
+    border-bottom: 1px solid #e8e3d8;
+  }
+
+  .offerPlanSource dl div:last-child,
+  .offerLadderSummary div:last-child {
+    border-bottom: 0;
+  }
+
+  .repairPresetBar,
+  .repairEvidenceFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .repairPresetBar button,
+  .repairEvidenceFooter button,
+  .offerPlanFooter button {
+    width: 100%;
+  }
+
+  .offerDecision > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .offerDecision button {
+    justify-content: center;
+  }
+
+  .calibrationFooter button {
+    width: 100%;
+  }
+
   .marketValueActions {
     display: grid;
     grid-template-columns: 1fr;
@@ -1937,6 +3065,28 @@
 
   .itemizedRepairs {
     grid-template-columns: 1fr;
+  }
+
+  .propertyValidationHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .propertyValidationHeader button {
+    width: 100%;
+  }
+
+  .propertyValidation dl {
+    grid-template-columns: 1fr;
+  }
+
+  .compReviewFooter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .compReviewFooter button {
+    width: 100%;
   }
 
   .tabs {

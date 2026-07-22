@@ -860,58 +860,67 @@ def repair_input_story(
     holding_months = optional_int(inputs.get("holding_period_months")) or optional_int(
         assumptions.get("holding_period_months")
     )
+    repair_rows = [
+        (
+            "Report stage",
+            report_stage_label(safe_string(metadata.get("report_stage"))),
+        ),
+        (
+            "Current condition",
+            labelize(
+                first_string(inputs, ("current_condition",))
+                or context.lead.property_condition
+            ),
+        ),
+        (
+            "Target finish",
+            labelize(
+                first_string(inputs, ("target_condition",))
+                or first_string(assumptions, ("target_condition",))
+            ),
+        ),
+        (
+            "Repair estimate source",
+            labelize(
+                first_string(inputs, ("repair_estimate_source",))
+                or first_string(assumptions, ("repair_estimate_source",))
+            ),
+        ),
+    ]
+    contractor_name = first_string(inputs, ("repair_estimate_contractor_name",))
+    estimate_date = first_string(inputs, ("repair_estimate_date",))
+    estimate_reference = first_string(inputs, ("repair_estimate_reference",))
+    if contractor_name:
+        repair_rows.append(("Contractor", contractor_name))
+    if estimate_date:
+        repair_rows.append(("Estimate date", format_sale_date(estimate_date)))
+    if estimate_reference:
+        repair_rows.append(("Evidence reference", estimate_reference))
+    repair_rows.extend(
+        [
+            (
+                "Base remodel estimate",
+                format_money(optional_int(metadata.get("base_rehab_cents"))),
+            ),
+            (
+                "Contingency",
+                f"{optional_int(metadata.get('rehab_contingency_percentage')) or 0}%",
+            ),
+            (
+                "Total remodel estimate",
+                format_money(optional_int(metadata.get("total_rehab_cents"))),
+            ),
+            ("Holding period", f"{holding_months or 6} months"),
+            (
+                "Repair notes",
+                first_string(inputs, ("repair_notes",))
+                or "No additional notes recorded.",
+            ),
+        ]
+    )
     story: list[Flowable] = [
         section_heading("Repair scope and input record", styles),
-        key_value_table(
-            [
-                (
-                    "Report stage",
-                    report_stage_label(safe_string(metadata.get("report_stage"))),
-                ),
-                (
-                    "Current condition",
-                    labelize(
-                        first_string(inputs, ("current_condition",))
-                        or context.lead.property_condition
-                    ),
-                ),
-                (
-                    "Target finish",
-                    labelize(
-                        first_string(inputs, ("target_condition",))
-                        or first_string(assumptions, ("target_condition",))
-                    ),
-                ),
-                (
-                    "Repair estimate source",
-                    labelize(
-                        first_string(inputs, ("repair_estimate_source",))
-                        or first_string(assumptions, ("repair_estimate_source",))
-                    ),
-                ),
-                (
-                    "Base remodel estimate",
-                    format_money(optional_int(metadata.get("base_rehab_cents"))),
-                ),
-                (
-                    "Contingency",
-                    f"{optional_int(metadata.get('rehab_contingency_percentage')) or 0}%",
-                ),
-                (
-                    "Total remodel estimate",
-                    format_money(optional_int(metadata.get("total_rehab_cents"))),
-                ),
-                (
-                    "Holding period",
-                    f"{holding_months or 6} months",
-                ),
-                (
-                    "Repair notes",
-                    first_string(inputs, ("repair_notes",)) or "No additional notes recorded.",
-                ),
-            ],
-            styles,
-        ),
+        key_value_table(repair_rows, styles),
     ]
     if repair_items:
         story.extend(
@@ -930,8 +939,10 @@ def repair_item_table(
 ) -> LongTable:
     rows: list[list[Paragraph]] = [
         [
-            Paragraph("Repair category", styles["table_header"]),
-            Paragraph("Estimated cost", styles["table_header"]),
+            Paragraph("Work item", styles["table_header"]),
+            Paragraph("Labor", styles["table_header"]),
+            Paragraph("Materials", styles["table_header"]),
+            Paragraph("Total", styles["table_header"]),
             Paragraph("Details", styles["table_header"]),
         ]
     ]
@@ -941,6 +952,14 @@ def repair_item_table(
                 Paragraph(
                     escape(labelize(first_string(item, ("category",)))),
                     styles["table_cell_bold"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(item.get("labor_cost_cents")))),
+                    styles["table_cell"],
+                ),
+                Paragraph(
+                    escape(format_money(optional_int(item.get("material_cost_cents")))),
+                    styles["table_cell"],
                 ),
                 Paragraph(
                     escape(format_money(optional_int(item.get("estimated_cost_cents")))),
@@ -954,7 +973,7 @@ def repair_item_table(
         )
     table = LongTable(
         rows,
-        colWidths=[1.7 * inch, 1.25 * inch, 4.45 * inch],
+        colWidths=[1.25 * inch, 0.9 * inch, 0.9 * inch, 1.0 * inch, 3.35 * inch],
         repeatRows=1,
     )
     apply_comp_table_style(table)

@@ -36,6 +36,18 @@ class LeadCreate(BaseModel):
     next_follow_up_at: datetime | None = None
 
 
+class PropertyValidationRead(BaseModel):
+    status: str
+    provider: str | None
+    provider_property_id: str | None
+    requested_address: str
+    validated_address: str | None
+    match_score: int | None
+    issues: list[str] = Field(default_factory=list)
+    facts: dict[str, Any] = Field(default_factory=dict)
+    validated_at: datetime | None
+
+
 class LeadRead(BaseModel):
     id: UUID
     contact_id: UUID
@@ -52,6 +64,7 @@ class LeadRead(BaseModel):
     property_postal_code: str
     property_county: str | None
     property_type: str | None
+    property_validation: PropertyValidationRead
     assigned_user_email: str | None
     motivation: str | None
     desired_timeline: str | None
@@ -154,6 +167,12 @@ class UnderwritingVersionRead(BaseModel):
     notes: str | None
     source: str
     created_at: datetime
+    arv_point_cents: int | None = None
+    total_rehab_cents: int | None = None
+    recommended_disposition_cents: int | None = None
+    seller_contract_ceiling_cents: int | None = None
+    report_stage: str | None = None
+    repair_estimate_source: str | None = None
 
 
 class MarketComparableRead(BaseModel):
@@ -202,6 +221,25 @@ class MarketAnalysisCompRead(MarketComparableRead):
     selection_status: str
     selection_reason: str
     score: int
+    review_decision: Literal["included", "excluded"] | None = None
+    review_reason: str | None = None
+    manual_weight_percentage: int | None = None
+
+
+class UnderwritingCompReviewDecisionInput(BaseModel):
+    comp_key: str = Field(min_length=1, max_length=500)
+    included: bool
+    reason: str = Field(min_length=3, max_length=500)
+    weight_percentage: int = Field(default=100, ge=50, le=150)
+
+
+class UnderwritingCompReviewSummaryRead(BaseModel):
+    source_analysis_id: UUID
+    reviewed_by_user_id: UUID | None
+    reviewed_at: datetime
+    included_count: int
+    excluded_count: int
+    decisions: list[UnderwritingCompReviewDecisionInput]
 
 
 RepairCategory = Literal[
@@ -229,6 +267,39 @@ class UnderwritingRepairItemInput(BaseModel):
     details: str | None = Field(default=None, max_length=500)
 
 
+class RepairEstimateItemInput(UnderwritingRepairItemInput):
+    labor_cost_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    material_cost_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+
+
+class RepairEstimateCreate(BaseModel):
+    source_type: Literal["contractor_bid", "walkthrough_scope", "internal_scope"]
+    contractor_name: str | None = Field(default=None, max_length=255)
+    estimate_date: datetime
+    scope_items: list[RepairEstimateItemInput] = Field(min_length=1, max_length=25)
+    contingency_percentage: int = Field(default=15, ge=0, le=50)
+    evidence_reference: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class RepairEstimateRead(BaseModel):
+    id: UUID
+    lead_id: UUID
+    property_id: UUID
+    source_type: str
+    contractor_name: str | None
+    estimate_date: datetime
+    scope_items: list[RepairEstimateItemInput]
+    subtotal_cents: int
+    contingency_percentage: int
+    contingency_cents: int
+    total_cents: int
+    evidence_reference: str | None
+    notes: str | None
+    created_by_user_id: UUID | None
+    created_at: datetime
+
+
 class UnderwritingPreMeetingInputsRead(BaseModel):
     verification_status: str
     report_stage: str
@@ -237,11 +308,15 @@ class UnderwritingPreMeetingInputsRead(BaseModel):
     repair_level: str
     repair_estimate_source: str
     base_rehab_override_cents: int | None
-    repair_items: list[UnderwritingRepairItemInput]
+    repair_items: list[RepairEstimateItemInput]
     contingency_override_percentage: int | None
     holding_period_months: int
     repair_notes: str | None
     custom_inputs_applied: bool
+    repair_estimate_id: UUID | None = None
+    repair_estimate_contractor_name: str | None = None
+    repair_estimate_date: datetime | None = None
+    repair_estimate_reference: str | None = None
 
 
 class LeadMarketAnalysisCreate(BaseModel):
@@ -262,7 +337,13 @@ class LeadMarketAnalysisCreate(BaseModel):
     contingency_override_percentage: int | None = Field(default=None, ge=0, le=50)
     holding_period_months: int = Field(default=6, ge=1, le=24)
     repair_notes: str | None = Field(default=None, max_length=2000)
+    repair_estimate_id: UUID | None = None
     comp_condition_overrides: dict[str, str] = Field(default_factory=dict)
+    source_analysis_id: UUID | None = None
+    comp_review_decisions: list[UnderwritingCompReviewDecisionInput] = Field(
+        default_factory=list,
+        max_length=50,
+    )
     refresh_market_data: bool = False
 
 
@@ -312,6 +393,8 @@ class LeadMarketAnalysisRead(BaseModel):
     assumptions: dict[str, Any] = Field(default_factory=dict)
     report_stage: str = "preliminary"
     pre_meeting_inputs: UnderwritingPreMeetingInputsRead | None = None
+    comp_review: UnderwritingCompReviewSummaryRead | None = None
+    subject_square_feet: int | None = None
 
 
 class TransactionChecklistItemRead(BaseModel):

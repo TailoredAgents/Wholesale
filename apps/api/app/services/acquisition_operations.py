@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -48,6 +49,7 @@ from app.schemas.operations import (
     FollowUpEnrollmentCreate,
     FollowUpPlanCreate,
     FollowUpPlanRead,
+    FollowUpStep,
     NotificationRead,
     OperationsUserCreate,
     OperationsUserRead,
@@ -961,7 +963,7 @@ def duplicate_score(db: Session, first: Lead, second: Lead) -> tuple[int, list[s
 
 
 def contact_method_values(db: Session, contact_id: UUID) -> dict[str, set[str]]:
-    values = {"email": set(), "phone": set()}
+    values: dict[str, set[str]] = {"email": set(), "phone": set()}
     for method in db.scalars(select(ContactMethod).where(ContactMethod.contact_id == contact_id)):
         if method.method_type in values:
             values[method.method_type].add(method.normalized_value.lower())
@@ -1139,7 +1141,7 @@ def follow_up_plan_read(db: Session, plan: FollowUpPlan) -> FollowUpPlanRead:
         name=plan.name,
         description=plan.description,
         status=plan.status,
-        steps=plan.steps,
+        steps=[FollowUpStep.model_validate(step) for step in plan.steps],
         active_enrollments=active,
     )
 
@@ -1599,8 +1601,8 @@ def audit(
     action: str,
     entity_type: str,
     entity_id: UUID,
-    previous: dict[str, object] | None,
-    new: dict[str, object],
+    previous: Mapping[str, object] | None,
+    new: Mapping[str, object],
     reason: str,
 ) -> None:
     db.add(
@@ -1611,8 +1613,8 @@ def audit(
             action=action,
             entity_type=entity_type,
             entity_id=entity_id,
-            previous_value=previous,
-            new_value=new,
+            previous_value=dict(previous) if previous is not None else None,
+            new_value=dict(new),
             reason=reason,
         )
     )

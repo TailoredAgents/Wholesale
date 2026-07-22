@@ -17,6 +17,7 @@ from app.routers import (
     operations,
     public,
     tasks,
+    underwriting,
     voice,
     webhooks,
 )
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(operations.router)
     app.include_router(public.router)
     app.include_router(tasks.router)
+    app.include_router(underwriting.router)
     app.include_router(voice.router)
     app.include_router(webhooks.router)
     return app

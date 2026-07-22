@@ -19,6 +19,20 @@ Recorded sale price and date are the core comp evidence. The `/avm/value` result
 as a benchmark and disagreement check; its comparable `price` fields are listing prices and
 are not treated as closed-sale prices.
 
+## Address And Subject Validation
+
+Stonegate keeps the staff-entered address as the CRM record and stores RentCast's returned address
+separately. Common suffixes, directionals, state codes, and ZIP+4/ZIP5 are normalized for duplicate
+matching. Provider confirmation compares street number/name, city, state, ZIP, and unit evidence;
+the match score, issues, provider property ID, reviewer-visible facts, and timestamp are audited.
+Editing the CRM address clears stale validation.
+
+The underwriting subject is assembled field by field from the RentCast property record, then the
+AVM subject, then the CRM property type when provider data is absent. Every retained subject field
+records its source. Owner names and provider mailing-address data are excluded from the property
+validation snapshot. An address mismatch or missing record lowers confidence and requires review,
+but does not hide the calculations or prevent report generation.
+
 ## Comparable Search
 
 The initial provider query uses:
@@ -191,6 +205,14 @@ Every run saves immutable raw provider responses, selected/rejected comps, class
 assumptions, review reasons, data disagreements, calculation outputs, and a linked
 underwriting version.
 
+A comp review covers every sale in the source analysis. The reviewer includes or excludes each
+sale, confirms its condition, selects a reason, and may apply 50-150% of the engine's original
+match weight. Applying the review reruns ARV, confidence, buyer economics, seller ceiling, and
+opening recommendation from the retained provider snapshot. It creates a new market analysis and
+underwriting version; it never edits the source result. The complete decision set, reviewer,
+timestamp, source analysis ID, and resulting values are retained in analysis metadata and the
+audit log.
+
 The investor PDF includes the report stage, structured repair inputs, itemized costs and
 notes, buyer economics, repair contingency, seller ceiling, opening recommendation, raw comp
 prices, price per square foot, subject-size indicators, comp rationale, and decision controls.
@@ -200,6 +222,62 @@ property facts, as-is/renovated value evidence, comparable sales, and limitation
 
 Changing classifications or repair scope reuses the latest saved provider evidence and does
 not consume another market-data pull. `Refresh market data` deliberately retrieves new data.
+
+## Repair Evidence And Presets
+
+Light, moderate, heavy, and structural presets are starting scopes, not market conclusions. They
+prefill a normalized item list that the underwriter must adjust for the property. The total is the
+sum of the current work items plus the explicit contingency percentage.
+
+Contractor bids, walkthrough estimates, and internal scopes are saved as immutable evidence.
+Selecting one uses its itemized scope and contingency in the next analysis and records the source,
+contractor, estimate date, and reference in the analysis snapshot. Editing a selected estimate
+detaches it and creates a direct working scope; the saved evidence remains unchanged.
+
+The investor report carries the evidence details and cost breakdown. The client report continues
+to omit Stonegate's repair and negotiation assumptions. Saved underwriting versions can be
+compared on the lead page, but comparison does not approve an offer or replace source review.
+
+## Offer Ceiling Approval
+
+An offer approval always references one immutable underwriting version. The negotiation plan
+snapshots its ARV, repair budget, buyer disposition, recommended opening, and seller ceiling before
+creating four controlled price points:
+
+- Opening: the first supported price presented to the seller.
+- Target: the preferred signed contract price.
+- Stretch: the final planned negotiating step below the walk-away limit.
+- Seller ceiling: the maximum supported contract price from the saved buyer economics.
+
+The invariant is `opening <= target <= stretch <= seller ceiling`. The UI may prefill intermediate
+steps, but the acquisitions user must review the numbers and provide a rationale. A new request
+cancels any older pending plan for that lead. Approval is blocked if a newer underwriting version
+exists, forcing the team to review the latest evidence instead of approving stale economics.
+
+Only a role with seller-offer approval permission can decide the request. Approval records the
+deciding user and notes, marks the source version approved, and moves the lead to `offer_ready`.
+Rejection requires notes and returns the lead to underwriting. Approval does not send an offer,
+create a contract, or authorize exceeding the recorded ceiling.
+
+## Market Calibration
+
+A verified outcome may be attached to any saved analysis after an expert review, appraisal,
+completed resale, or other verified market sale establishes a better benchmark. The case snapshots
+the prediction from that exact analysis before storing the later benchmark. Optional actual rehab,
+seller contract, and disposition values support additional operating-error checks.
+
+The Underwriting workspace reports these robust portfolio and market metrics:
+
+- Median percentage error to show whether ARV estimates systematically run high or low.
+- Median absolute percentage error to show typical ARV miss size without positive and negative
+  misses canceling each other.
+- Range coverage to show how often the verified ARV falls inside the saved low/high range.
+- Overestimate, underestimate, and balanced counts using a two-percentage-point neutral band.
+- Median absolute repair and disposition error when actual values are available.
+
+Fewer than 10 cases is an insufficient sample. Ten through 49 cases builds evidence. At 50 cases,
+the market is ready for a human formula review. No threshold enables automatic formula changes;
+changes require documented review, a new methodology version, and continued human offer approval.
 
 ## Validation Before Autonomy
 
