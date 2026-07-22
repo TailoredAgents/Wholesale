@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-The schema is managed through Alembic migrations. Migration `0033_va_prospecting_workbench` is the
+The schema is managed through Alembic migrations. Migration `0035_field_dispatch` is the
 current head.
 
 ## Identity And Access
@@ -27,6 +27,14 @@ current head.
 - `conversion_events`
 - `tasks`
 - `appointments`
+- `calendar_events`
+- `lead_qualification_script_versions`
+- `lead_management_cases`
+- `lead_qualification_sessions`
+- `closer_dispatch_profiles`
+- `closer_territory_coverages`
+- `closer_availability_blocks`
+- `appointment_dispatch_records`
 - `activity_events`
 - `audit_events`
 

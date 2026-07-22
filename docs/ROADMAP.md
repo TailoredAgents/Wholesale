@@ -42,7 +42,7 @@ email is implemented. Production acceptance remains pending for:
 | 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
 | 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
 | 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
-| 6. Appointments and Field Acquisitions | Partial | Internal calendar and appointment lifecycle exist; field workflow remains |
+| 6. Appointments and Field Acquisitions | Partial | Dispatch, territory, closer capacity, travel buffers, and calendar controls are operational; meeting workflow remains |
 | 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
 | 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
 | 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
@@ -211,10 +211,19 @@ Delivered:
 - Internal Stonegate calendar with reschedule, cancel, no-show, complete, outcome, recovery, and
   reminder workflows.
 - Appointment ownership, notifications, notes, lead context, and underwriting access.
+- Dedicated `/os/field-operations` dispatch desk with qualified-lead queue, explainable slot
+  evaluation, closer selection, and upcoming field calendar.
+- Effective working days and hours, daily appointment capacity, unavailable blocks, configured
+  territory coverage, and static travel buffers for each closer.
+- Manager-only conflict overrides requiring a reason, with the selected closer's violations,
+  candidate snapshot, appointment decision, activity, notification, and audit history preserved.
+- Lead Manager appointment requests route into Field Dispatch instead of silently assigning a new
+  field appointment to the Lead Manager; existing scheduled appointments remain intact.
 
 Remaining:
 
-- Territory, travel-time, closer availability, and daily capacity controls.
+- Optional live drive-time estimates if static travel buffers prove insufficient at operating
+  scale.
 - Pre-appointment acquisition brief combining seller, property, qualification, underwriting,
   approved ceiling, unresolved questions, likely objections, and logistics.
 - Mobile property inspection with photographs and repair observations.
@@ -346,8 +355,8 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Begin Phase 6 with appointment capacity, travel, and closer-availability controls.
-3. Build the seller-meeting brief and mobile field-acquisition workflow.
+2. Build the Phase 6 seller-meeting brief from qualification, underwriting, and appointment data.
+3. Build the mobile field-acquisition inspection and negotiation workflow.
 4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred

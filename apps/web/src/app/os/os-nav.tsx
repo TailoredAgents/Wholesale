@@ -17,6 +17,7 @@ const navGroups = [
       { href: "/os/campaigns", label: "Campaigns" },
       { href: "/os/prospecting", label: "Prospecting" },
       { href: "/os/lead-manager", label: "Lead Manager" },
+      { href: "/os/field-operations", label: "Field Ops" },
       { href: "/os/pipeline", label: "Pipeline" },
       { href: "/os/leads", label: "Leads" },
     ],

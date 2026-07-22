@@ -1240,6 +1240,101 @@ class CalendarEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class CloserDispatchProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "closer_dispatch_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "user_id",
+            name="uq_closer_dispatch_profiles_org_user",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    timezone: Mapped[str] = mapped_column(String(80), nullable=False)
+    working_days: Mapped[list[int]] = mapped_column(JSON, nullable=False)
+    workday_start_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    workday_end_minute: Mapped[int] = mapped_column(Integer, nullable=False)
+    daily_capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    default_appointment_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    travel_buffer_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    home_base_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    territory_enforcement_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+
+
+class CloserTerritoryCoverage(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "closer_territory_coverages"
+    __table_args__ = (
+        UniqueConstraint(
+            "dispatch_profile_id",
+            "territory_id",
+            name="uq_closer_territory_coverages_profile_territory",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    dispatch_profile_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("closer_dispatch_profiles.id", ondelete="CASCADE"),
+        index=True,
+    )
+    territory_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("territories.id", ondelete="CASCADE"), index=True
+    )
+
+
+class CloserAvailabilityBlock(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "closer_availability_blocks"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    dispatch_profile_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("closer_dispatch_profiles.id", ondelete="CASCADE"),
+        index=True,
+    )
+    block_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class AppointmentDispatchRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "appointment_dispatch_records"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    closer_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    territory_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("territories.id", ondelete="SET NULL"), index=True
+    )
+    decided_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    decision_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    scheduled_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    scheduled_end_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    daily_booked_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    travel_buffer_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    territory_match: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    violations: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    candidate_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    decision_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
 class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "underwriting_versions"
 

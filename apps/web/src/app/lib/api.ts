@@ -649,6 +649,100 @@ export type LeadManagerOverview = {
   }>;
 };
 
+export type DispatchCandidate = {
+  profile_id: string;
+  user_id: string;
+  user_name: string;
+  eligible: boolean;
+  territory_match: boolean;
+  territory_name: string | null;
+  daily_booked_count: number;
+  daily_capacity: number;
+  remaining_capacity: number;
+  travel_buffer_minutes: number;
+  violations: string[];
+};
+
+export type DispatchSlotEvaluation = {
+  lead_id: string;
+  scheduled_start_at: string;
+  scheduled_end_at: string;
+  territory_id: string | null;
+  territory_name: string | null;
+  candidates: DispatchCandidate[];
+};
+
+export type FieldOperationsOverview = {
+  can_manage: boolean;
+  metrics: {
+    ready_to_schedule: number;
+    appointments_today: number;
+    unassigned_today: number;
+    at_capacity_today: number;
+  };
+  users: Array<{
+    id: string;
+    name: string;
+    email: string;
+    profile_configured: boolean;
+  }>;
+  profiles: Array<{
+    id: string;
+    user_id: string;
+    user_name: string;
+    timezone: string;
+    working_days: number[];
+    workday_start_minute: number;
+    workday_end_minute: number;
+    daily_capacity: number;
+    default_appointment_minutes: number;
+    travel_buffer_minutes: number;
+    home_base_postal_code: string | null;
+    territory_enforcement_enabled: boolean;
+    is_active: boolean;
+    territory_ids: string[];
+    territory_names: string[];
+    blocks: Array<{
+      id: string;
+      block_type: string;
+      starts_at: string;
+      ends_at: string;
+      reason: string;
+    }>;
+  }>;
+  territories: Array<{
+    id: string;
+    name: string;
+    market_name: string;
+    county_names: string[];
+    postal_codes: string[];
+  }>;
+  ready_leads: Array<{
+    id: string;
+    seller_name: string;
+    property_address: string;
+    county: string | null;
+    postal_code: string;
+    stage_key: string;
+    current_owner_name: string | null;
+    next_follow_up_at: string | null;
+    lead_url: string;
+  }>;
+  upcoming_appointments: Array<{
+    id: string;
+    lead_id: string;
+    seller_name: string;
+    property_address: string;
+    closer_name: string;
+    status: string;
+    scheduled_start_at: string;
+    scheduled_end_at: string | null;
+    decision_status: string | null;
+    violations: string[];
+    lead_url: string;
+  }>;
+};
+
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
     method_type: string;
@@ -1444,6 +1538,31 @@ export async function getLeadManagerOverview(): Promise<{
   } catch (error) {
     console.error("Stonegate Lead Manager request failed.", error);
     return { leadManager: null, apiConnected: false };
+  }
+}
+
+export async function getFieldOperationsOverview(): Promise<{
+  fieldOperations: FieldOperationsOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/field-operations`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      fieldOperations: (await response.json()) as FieldOperationsOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate field operations request failed.", error);
+    return { fieldOperations: null, apiConnected: false };
   }
 }
 

@@ -134,6 +134,10 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
 - Internal Stonegate calendar plus appointment and overdue-task reminders, with no external
   calendar dependency.
+- Dedicated Field Dispatch desk for qualified sellers, closer availability, working hours,
+  territory coverage, daily appointment limits, travel buffers, and upcoming appointments.
+- Explainable slot evaluation with manager-only conflict overrides, required override reasons,
+  immutable candidate snapshots, and audit evidence tied to the actual appointment.
 - Conservative duplicate review and merge that archives the secondary lead while preserving
   evidence and a merge snapshot.
 - Human-approved SMS and email follow-up drafts; calls and tasks are created directly from plans.
@@ -244,8 +248,10 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- Field acquisitions does not yet include travel/capacity controls, the seller-meeting brief,
-  mobile inspection photographs, repair observations, or structured negotiation notes.
+- Field acquisitions does not yet include live route-duration estimates, the seller-meeting brief,
+  mobile inspection photographs, repair observations, or structured negotiation notes. Static
+  travel buffers are enforced now; a map provider is intentionally deferred until route precision
+  is operationally necessary.
 - Underwriting meeting preparation, price-discussion notes, and concession tracking remain.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
@@ -266,6 +272,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Begin Phase 6 with appointment capacity, seller-meeting preparation, and the mobile field
-   acquisition workflow built on the completed Lead Manager desk.
+4. Continue Phase 6 with the seller-meeting brief and mobile field acquisition workflow built on
+   the completed dispatch and capacity controls.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

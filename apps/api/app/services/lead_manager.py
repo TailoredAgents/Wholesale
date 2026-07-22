@@ -590,33 +590,18 @@ def apply_next_action(
             .order_by(Appointment.scheduled_start_at)
         )
         if appointment is None:
-            appointment = Appointment(
-                organization_id=case.organization_id,
-                lead_id=lead.id,
-                contact_id=lead.contact_id,
-                property_id=lead.property_id,
-                owner_user_id=case.assigned_user_id,
-                appointment_type="seller_appointment",
-                status="scheduled",
-                scheduled_start_at=payload.next_action_due_at,
-                scheduled_end_at=payload.next_action_due_at + timedelta(hours=1),
-                location_type="seller_property",
-                location=None,
-                notes="Scheduled from guided Lead Manager qualification.",
-                outcome=None,
-                external_calendar_id=None,
-                appointment_metadata={"source": "lead_manager_qualification"},
-            )
-            db.add(appointment)
+            case.status = "appointment_ready"
+            lead.stage_key = "appointment_scheduling"
+            lead.appointment_status = "needs_scheduling"
         else:
             appointment.owner_user_id = case.assigned_user_id
             appointment.scheduled_start_at = payload.next_action_due_at
             appointment.scheduled_end_at = payload.next_action_due_at + timedelta(hours=1)
-        db.flush()
-        upsert_internal_calendar_event(db, appointment)
-        case.status = "appointment_set"
-        lead.stage_key = "appointment_scheduled"
-        lead.appointment_status = "scheduled"
+            db.flush()
+            upsert_internal_calendar_event(db, appointment)
+            case.status = "appointment_set"
+            lead.stage_key = "appointment_scheduled"
+            lead.appointment_status = "scheduled"
     elif payload.next_action_type == "nurture":
         lead.stage_key = "long_term_follow_up"
     else:
