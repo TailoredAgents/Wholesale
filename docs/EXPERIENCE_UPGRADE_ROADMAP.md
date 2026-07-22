@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX3 are complete.
+Status: Implementation in progress. Phases UX1 through UX4 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -166,7 +166,7 @@ Implementation notes:
 
 ## Phase UX4: Command Center And Daily Workspaces
 
-Status: Not started.
+Status: Complete. The daily command workspaces were implemented on July 22, 2026.
 
 Goal: Make the start of every workday immediately actionable.
 
@@ -190,6 +190,19 @@ Exit criteria:
 - A user can identify the next required action within one screen after login.
 - Inbox, task, and calendar handoffs retain context and do not duplicate records.
 - Daily workflows remain usable at laptop and mobile widths.
+
+Implementation notes:
+
+- The Dashboard is now a role-aware daily command center focused on priority work, exceptions,
+  meetings, qualification gaps, offer preparation, and a compact pipeline pulse.
+- Work Queue provides saved All, Mine, Overdue, Due Next, and Unscheduled views with seller search,
+  owner filtering, explicit due state, contextual next actions, and confirmed bulk completion.
+- Inbox keeps one conversation record while supporting deep links to a lead or saved view, unified
+  communication history, urgency treatment, and mobile Inbox, Thread, and Details panes.
+- Calendar provides month, week, day, and 30-day agenda modes with closer filtering, capacity and
+  scheduling summaries, upcoming meetings, and direct links into field dispatch or lead context.
+- Dashboard, Work Queue, Inbox, and Calendar were verified with populated local data at 1440 and
+  390 pixel widths with no page errors or horizontal overflow.
 
 ## Phase UX5: Acquisition Workspaces
 

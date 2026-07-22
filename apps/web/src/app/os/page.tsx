@@ -1,382 +1,310 @@
+import {
+  AlertTriangle,
+  ArrowRight,
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Inbox,
+  ListChecks,
+  UserRoundCheck,
+} from "lucide-react";
 import Link from "next/link";
 
 import { CompleteTaskButton } from "../complete-task-button";
-import styles from "./page.module.css";
-import { getDashboardData } from "../lib/api";
 import {
-  boardStages,
+  getDashboardData,
+  getFieldOperationsOverview,
+  getWorkspaceProfile,
+  type LeadListItem,
+  type SpeedToLeadTask,
+} from "../lib/api";
+import { StatusBadge } from "./_components/design-system";
+import { PageHeader, WorkspacePage } from "./_components/page-contracts";
+import { isOwnerProfile, primaryRoleLabel } from "./os-navigation";
+import {
   formatDateTime,
-  formatMoney,
-  formatTime,
-  getTaskCountsByLead,
   getWorkspaceQueues,
   labelize,
   pipelineStages,
-  qualificationFieldCount,
-  qualificationFieldTarget,
 } from "./os-utils";
+import styles from "./dashboard.module.css";
 
 export const dynamic = "force-dynamic";
 
+type PriorityItem = {
+  id: string;
+  category: string;
+  title: string;
+  detail: string;
+  href: string;
+  status: string;
+  tone: "danger" | "warning" | "info" | "neutral";
+  task?: SpeedToLeadTask;
+};
+
+function dashboardDescription(roleKeys: string[]) {
+  if (roleKeys.includes("acquisition_rep")) {
+    return "Your assigned seller follow-up, meetings, and offer preparation in priority order.";
+  }
+  if (roleKeys.includes("acquisition_manager")) {
+    return "Team response, qualification, scheduling, and offer exceptions that need intervention.";
+  }
+  if (roleKeys.some((role) => ["owner", "founder_operator", "ceo"].includes(role))) {
+    return "Company priorities, seller response, appointments, and deal-readiness exceptions.";
+  }
+  return "The seller and acquisition work requiring attention across the operating system.";
+}
+
+function taskPriority(task: SpeedToLeadTask): PriorityItem {
+  const isOverdue = task.due_status === "overdue";
+  return {
+    id: `task-${task.task_id}`,
+    category: labelize(task.task_type),
+    title: task.title,
+    detail: `${task.seller_name} · ${formatDateTime(task.due_at)}`,
+    href: `/os/inbox?lead=${task.lead_id}`,
+    status: isOverdue ? "Overdue" : "Due next",
+    tone: isOverdue ? "danger" : "warning",
+    task,
+  };
+}
+
+function leadPriority(
+  lead: LeadListItem,
+  category: string,
+  status: string,
+  href: string,
+  tone: PriorityItem["tone"],
+): PriorityItem {
+  return {
+    id: `${category}-${lead.id}`,
+    category,
+    title: lead.seller_name,
+    detail: lead.property_address,
+    href,
+    status,
+    tone,
+  };
+}
+
+function isToday(value: string) {
+  return new Date(value).toDateString() === new Date().toDateString();
+}
+
 export default async function Home() {
-  const dashboard = await getDashboardData();
+  const [dashboard, profile, fieldResult] = await Promise.all([
+    getDashboardData(),
+    getWorkspaceProfile(),
+    getFieldOperationsOverview(),
+  ]);
+  const roleKeys = profile?.role_keys ?? [];
+  const individualAcquisitions = roleKeys.includes("acquisition_rep") &&
+    !roleKeys.includes("acquisition_manager");
+  const scopedLeads = individualAcquisitions && profile
+    ? dashboard.leads.filter((lead) => lead.assigned_user_email === profile.email)
+    : dashboard.leads;
+  const scopedTasks = individualAcquisitions && profile
+    ? dashboard.openTaskQueue.filter((task) => task.assigned_user_email === profile.email)
+    : dashboard.openTaskQueue;
+  const scopedAppointments = (fieldResult.fieldOperations?.upcoming_appointments ?? []).filter(
+    (appointment) =>
+      !individualAcquisitions ||
+      !profile ||
+      appointment.closer_name.toLowerCase() === profile.display_name.toLowerCase(),
+  );
+  const { overdueTasks, dueTasks, needsQualification, appointmentQueue, offerQueue } =
+    getWorkspaceQueues(scopedLeads, scopedTasks);
+  const speedTaskIds = new Set(dashboard.speedToLeadQueue.map((task) => task.task_id));
+  const scopedSpeedTasks = scopedTasks.filter((task) => speedTaskIds.has(task.task_id));
+  const seenTaskIds = new Set<string>();
+  const seenLeadIds = new Set<string>();
+  const priorities: PriorityItem[] = [];
+
+  for (const task of [...overdueTasks, ...scopedSpeedTasks, ...dueTasks]) {
+    if (seenTaskIds.has(task.task_id)) continue;
+    priorities.push(taskPriority(task));
+    seenTaskIds.add(task.task_id);
+    seenLeadIds.add(task.lead_id);
+  }
+  for (const appointment of scopedAppointments) {
+    if (seenLeadIds.has(appointment.lead_id)) continue;
+    priorities.push({
+      id: `appointment-${appointment.id}`,
+      category: "Seller meeting",
+      title: appointment.seller_name,
+      detail: `${formatDateTime(appointment.scheduled_start_at)} · ${appointment.property_address}`,
+      href: `/os/field-operations?view=meetings&appointment=${appointment.id}`,
+      status: isToday(appointment.scheduled_start_at) ? "Today" : "Scheduled",
+      tone: isToday(appointment.scheduled_start_at) ? "info" : "neutral",
+    });
+    seenLeadIds.add(appointment.lead_id);
+  }
+  for (const lead of needsQualification) {
+    if (seenLeadIds.has(lead.id)) continue;
+    priorities.push(
+      leadPriority(
+        lead,
+        "Qualification",
+        "Needs review",
+        `/os/leads/${lead.id}`,
+        "warning",
+      ),
+    );
+    seenLeadIds.add(lead.id);
+  }
+  for (const lead of offerQueue) {
+    if (seenLeadIds.has(lead.id)) continue;
+    priorities.push(
+      leadPriority(lead, "Offer preparation", "Ready for work", `/os/leads/${lead.id}`, "info"),
+    );
+    seenLeadIds.add(lead.id);
+  }
+
+  const unassignedLeads = dashboard.leads.filter((lead) => !lead.assigned_user_email).length;
+  const todayAppointments = scopedAppointments.filter((appointment) =>
+    isToday(appointment.scheduled_start_at),
+  ).length;
   const pipelineCounts = new Map(
     dashboard.summary.pipeline.map((stage) => [stage.stage_key, stage.count]),
   );
-  const sourcePerformance = dashboard.summary.source_performance;
-  const openTasks = dashboard.openTaskQueue;
-  const { overdueTasks, dueTasks, needsQualification, appointmentQueue, offerQueue } =
-    getWorkspaceQueues(dashboard.leads, openTasks);
-  const leadsByStage = new Map(
-    boardStages.map((stage) => [
-      stage.key,
-      dashboard.leads.filter((lead) => lead.stage_key === stage.key).slice(0, 5),
-    ]),
-  );
-  const openTaskCountsByLead = getTaskCountsByLead(openTasks);
-  const metrics = [
-    {
-      label: "New paid leads",
-      value: String(dashboard.summary.new_paid_leads),
-      detail: "Speed-to-lead queue",
-    },
-    {
-      label: "Open tasks",
-      value: String(openTasks.length),
-      detail: `${overdueTasks.length} overdue / ${dueTasks.length} due`,
-    },
-    {
-      label: "Offers pending",
-      value: String(dashboard.summary.offers_pending),
-      detail: "Manager approval",
-    },
-    {
-      label: "Active contracts",
-      value: String(dashboard.summary.active_contracts),
-      detail: "Transaction pipeline",
-    },
-    {
-      label: "Collected revenue",
-      value: formatMoney(dashboard.summary.collected_revenue_cents),
-      detail: "Current month",
-    },
-  ];
+  const roleLabel = profile ? primaryRoleLabel(profile) : "Workspace user";
+  const showTeamExceptions = !profile || isOwnerProfile(profile) ||
+    profile.role_keys.some((role) => ["administrator", "acquisition_manager"].includes(role));
 
   return (
-    <>
-        <header className={styles.header}>
+    <WorkspacePage>
+      <PageHeader
+        actions={
+          <div className={styles.headerActions}>
+            <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Inbox</Link>
+            <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Work Queue</Link>
+            <Link href="/os/calendar"><CalendarDays aria-hidden="true" size={16} />Calendar</Link>
+          </div>
+        }
+        description={dashboardDescription(roleKeys)}
+        eyebrow={profile ? `${profile.display_name} · ${roleLabel}` : "Daily command center"}
+        meta={dashboard.apiConnected ? "Live workspace data" : "API fallback view"}
+        title="Dashboard"
+      />
+
+      {!dashboard.apiConnected ? (
+        <div className={styles.connectionWarning} role="status">
+          <AlertTriangle aria-hidden="true" size={18} />
           <div>
-            <p className={styles.eyebrow}>Local foundation</p>
-            <h2>Dashboard</h2>
+            <strong>Live operations data is unavailable</strong>
+            <span>The page is showing an empty fallback until the API reconnects.</span>
           </div>
-          <div className={styles.statusGroup} aria-label="System status">
-            <span>API localhost:8000</span>
-            <strong className={dashboard.apiConnected ? styles.ready : styles.warning}>
-              {dashboard.apiConnected ? "Live database data" : "API fallback view"}
-            </strong>
-          </div>
-        </header>
+        </div>
+      ) : null}
 
-        <section className={styles.metrics} aria-label="Current month metrics">
-          {metrics.map((metric) => (
-            <article className={styles.metric} key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <small>{metric.detail}</small>
-            </article>
-          ))}
-        </section>
+      <section className={styles.dailyMetrics} aria-label="Daily work summary">
+        <Link className={styles.dangerMetric} href="/os/tasks?view=overdue">
+          <span><Clock3 aria-hidden="true" size={16} />Overdue</span>
+          <strong>{overdueTasks.length}</strong>
+          <small>Follow-up past due</small>
+        </Link>
+        <Link className={styles.warningMetric} href="/os/lead-manager">
+          <span><UserRoundCheck aria-hidden="true" size={16} />Qualification</span>
+          <strong>{needsQualification.length}</strong>
+          <small>Seller records incomplete</small>
+        </Link>
+        <Link className={styles.infoMetric} href="/os/calendar">
+          <span><CalendarDays aria-hidden="true" size={16} />Meetings today</span>
+          <strong>{todayAppointments}</strong>
+          <small>{appointmentQueue.length} awaiting appointment work</small>
+        </Link>
+        <Link className={styles.brandMetric} href="/os/underwriting">
+          <span><CheckCircle2 aria-hidden="true" size={16} />Offer prep</span>
+          <strong>{offerQueue.length}</strong>
+          <small>Underwriting or approval</small>
+        </Link>
+      </section>
 
-        <section className={styles.workQueues} id="work" aria-label="Acquisition work queues">
-          <article className={styles.queuePanel}>
-            <div className={styles.panelHeader}>
-              <h3>Overdue Follow-Up</h3>
-              <span>{overdueTasks.length} tasks</span>
-            </div>
-            <div className={styles.queueList}>
-              {overdueTasks.length === 0 ? <p>No overdue follow-up.</p> : null}
-              {overdueTasks.slice(0, 5).map((task) => (
-                <div className={styles.queueItem} key={task.task_id}>
-                  <div>
-                    <Link className={styles.tableLink} href={`/os/leads/${task.lead_id}`}>
-                      {task.seller_name}
-                    </Link>
-                    <span>{task.title}</span>
-                    <small>{formatDateTime(task.due_at)}</small>
-                  </div>
-                  <CompleteTaskButton taskId={task.task_id} />
-                </div>
-              ))}
-            </div>
-          </article>
-
-          <article className={styles.queuePanel}>
-            <div className={styles.panelHeader}>
-              <h3>Needs Qualification</h3>
-              <span>{needsQualification.length} leads</span>
-            </div>
-            <div className={styles.queueList}>
-              {needsQualification.length === 0 ? <p>No qualification gaps.</p> : null}
-              {needsQualification.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
-                  <strong>{lead.seller_name}</strong>
-                  <span>{lead.property_address}</span>
-                  <small>
-                    {qualificationFieldCount(lead)}/{qualificationFieldTarget} fields captured ·{" "}
-                    {labelize(lead.source)}
-                  </small>
-                </Link>
-              ))}
-            </div>
-          </article>
-
-          <article className={styles.queuePanel}>
-            <div className={styles.panelHeader}>
-              <h3>Appointments</h3>
-              <span>{appointmentQueue.length} leads</span>
-            </div>
-            <div className={styles.queueList}>
-              {appointmentQueue.length === 0 ? <p>No appointment work queued.</p> : null}
-              {appointmentQueue.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
-                  <strong>{lead.seller_name}</strong>
-                  <span>{labelize(lead.appointment_status ?? "not_scheduled")}</span>
-                  <small>{lead.property_address}</small>
-                </Link>
-              ))}
-            </div>
-          </article>
-
-          <article className={styles.queuePanel}>
-            <div className={styles.panelHeader}>
-              <h3>Offers To Prepare</h3>
-              <span>{offerQueue.length} leads</span>
-            </div>
-            <div className={styles.queueList}>
-              {offerQueue.length === 0 ? <p>No offers waiting.</p> : null}
-              {offerQueue.slice(0, 5).map((lead) => (
-                <Link className={styles.queueLead} href={`/os/leads/${lead.id}`} key={lead.id}>
-                  <strong>{lead.seller_name}</strong>
-                  <span>{labelize(lead.stage_key)}</span>
-                  <small>{lead.property_address}</small>
-                </Link>
-              ))}
-            </div>
-          </article>
-        </section>
-
-        <section className={styles.boardSection} id="pipeline" aria-label="Acquisition pipeline">
-          <div className={styles.sectionHeader}>
+      <section className={styles.commandGrid}>
+        <section className={styles.priorityPanel} aria-labelledby="priority-heading">
+          <header>
             <div>
-              <p className={styles.eyebrow}>Pipeline</p>
-              <h3>Seller acquisition board</h3>
+              <p>Priority order</p>
+              <h2 id="priority-heading">Work requiring attention</h2>
             </div>
-            <span>{dashboard.leads.length} active leads</span>
-          </div>
-          <div className={styles.pipelineBoard}>
-            {boardStages.map((stage) => (
-              <article className={styles.pipelineColumn} key={stage.key}>
-                <div className={styles.columnHeader}>
-                  <h4>{stage.label}</h4>
-                  <span>{pipelineCounts.get(stage.key) ?? 0}</span>
+            <Link href="/os/tasks">Open full queue <ArrowRight aria-hidden="true" size={15} /></Link>
+          </header>
+          <div className={styles.priorityList}>
+            {priorities.slice(0, 8).map((item) => (
+              <article key={item.id}>
+                <div className={styles.priorityCopy}>
+                  <span>{item.category}</span>
+                  <Link href={item.href}>{item.title}</Link>
+                  <small>{item.detail}</small>
                 </div>
-                <div className={styles.leadCards}>
-                  {(leadsByStage.get(stage.key) ?? []).length === 0 ? (
-                    <p className={styles.emptyColumn}>No leads</p>
-                  ) : null}
-                  {(leadsByStage.get(stage.key) ?? []).map((lead) => (
-                    <Link className={styles.leadCard} href={`/os/leads/${lead.id}`} key={lead.id}>
-                      <strong>{lead.seller_name}</strong>
-                      <span>{lead.property_address}</span>
-                      <small>
-                        {labelize(lead.source)} · {labelize(lead.lead_temperature ?? "no_temp")}
-                      </small>
-                      <small>
-                        Next: {formatDateTime(lead.next_follow_up_at)} · Tasks:{" "}
-                        {openTaskCountsByLead.get(lead.id) ?? 0}
-                      </small>
-                    </Link>
-                  ))}
-                </div>
+                <StatusBadge tone={item.tone}>{item.status}</StatusBadge>
+                <Link aria-label={`Open ${item.title}`} className={styles.openPriority} href={item.href}>
+                  <ArrowRight aria-hidden="true" size={16} />
+                </Link>
+                {item.task && profile?.permissions.includes("leads:edit") ? (
+                  <CompleteTaskButton taskId={item.task.task_id} />
+                ) : null}
               </article>
             ))}
+            {!priorities.length ? (
+              <div className={styles.clearState}>
+                <CheckCircle2 aria-hidden="true" size={24} />
+                <strong>No priority exceptions</strong>
+                <span>Open seller work will appear here in due-time order.</span>
+              </div>
+            ) : null}
           </div>
         </section>
 
-        <section className={styles.contentGrid}>
-          <div className={styles.panel} id="leads">
-            <div className={styles.panelHeader}>
-              <h3>Speed-To-Lead Queue</h3>
-              <span>Open contact tasks</span>
-            </div>
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Source</th>
-                    <th>Due</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.speedToLeadQueue.length === 0 ? (
-                    <tr>
-                      <td>No open contact tasks</td>
-                      <td>Waiting for seller submissions</td>
-                      <td>Clear</td>
-                      <td>Ready</td>
-                      <td></td>
-                    </tr>
-                  ) : null}
-                  {dashboard.speedToLeadQueue.map((task) => (
-                    <tr key={task.task_id}>
-                      <td>
-                        <Link className={styles.tableLink} href={`/os/leads/${task.lead_id}`}>
-                          {task.seller_name}
-                        </Link>
-                        <small className={styles.tableSubtext}>{task.property_address}</small>
-                      </td>
-                      <td>{labelize(task.source)}</td>
-                      <td>{formatTime(task.due_at)}</td>
-                      <td>
-                        <span className={styles[task.due_status]}>{labelize(task.due_status)}</span>
-                      </td>
-                      <td>
-                        <CompleteTaskButton taskId={task.task_id} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        <aside className={styles.exceptionPanel} aria-labelledby="exceptions-heading">
+          <header>
+            <p>Exceptions</p>
+            <h2 id="exceptions-heading">Needs intervention</h2>
+          </header>
+          <div>
+            <Link href="/os/inbox?view=unread">
+              <span>Unread conversations</span>
+              <strong>{profile?.unread_notification_count ?? 0}</strong>
+            </Link>
+            {showTeamExceptions ? (
+              <Link href="/os/leads">
+                <span>Unassigned seller leads</span>
+                <strong>{unassignedLeads}</strong>
+              </Link>
+            ) : null}
+            <Link href="/os/tasks?view=unscheduled">
+              <span>Tasks without due dates</span>
+              <strong>{scopedTasks.filter((task) => task.due_status === "unscheduled").length}</strong>
+            </Link>
+            <Link href="/os/approvals">
+              <span>Offers pending approval</span>
+              <strong>{dashboard.summary.offers_pending}</strong>
+            </Link>
           </div>
+          <footer>
+            <strong>{scopedLeads.length}</strong>
+            <span>{individualAcquisitions ? "assigned active leads" : "active seller leads"}</span>
+          </footer>
+        </aside>
+      </section>
 
-          <div className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h3>Lead List</h3>
-              <span>Recent sellers</span>
-            </div>
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Source</th>
-                    <th>Stage</th>
-                    <th>Owner</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {dashboard.leads.length === 0 ? (
-                    <tr>
-                      <td>No live seller leads yet</td>
-                      <td>Website</td>
-                      <td>Waiting for first submission</td>
-                      <td>Unassigned</td>
-                    </tr>
-                  ) : null}
-                  {dashboard.leads.map((lead) => (
-                    <tr key={lead.id}>
-                      <td>
-                        <Link className={styles.tableLink} href={`/os/leads/${lead.id}`}>
-                          {lead.seller_name}
-                        </Link>
-                      </td>
-                      <td>{labelize(lead.source)}</td>
-                      <td>{labelize(lead.stage_key)}</td>
-                      <td>{lead.assigned_user_email ?? "Unassigned"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+      <section className={styles.pipelinePulse} aria-labelledby="pipeline-heading">
+        <header>
+          <div>
+            <p>Pipeline pulse</p>
+            <h2 id="pipeline-heading">Active seller stages</h2>
           </div>
-
-          <div className={styles.panel}>
-            <div className={styles.panelHeader}>
-              <h3>Source Performance</h3>
-              <span>Public site conversion events</span>
-            </div>
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Source</th>
-                    <th>Views</th>
-                    <th>Starts</th>
-                    <th>Abandons</th>
-                    <th>Submits</th>
-                    <th>Calls</th>
-                    <th>Leads</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sourcePerformance.length === 0 ? (
-                    <tr>
-                      <td>No source data yet</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                    </tr>
-                  ) : null}
-                  {sourcePerformance.map((source) => (
-                    <tr key={`${source.source}-${source.medium}-${source.campaign}`}>
-                      <td>
-                        {labelize(source.source)}
-                        <small className={styles.tableSubtext}>
-                          {[source.medium, source.campaign]
-                            .filter((value) => !["unknown", "uncategorized"].includes(value))
-                            .map(labelize)
-                            .join(" / ") || "No campaign"}
-                        </small>
-                      </td>
-                      <td>{source.page_views}</td>
-                      <td>{source.form_starts}</td>
-                      <td>{source.form_abandons}</td>
-                      <td>{source.form_submits}</td>
-                      <td>{source.call_clicks}</td>
-                      <td>{source.leads_created}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className={styles.panel} id="underwriting">
-            <div className={styles.panelHeader}>
-              <h3>Seller Pipeline</h3>
-              <span>Core stages</span>
-            </div>
-            <ol className={styles.pipeline}>
-              {pipelineStages.map((stage) => (
-                <li key={stage.key}>
-                  <span>{stage.label}</span>
-                  <strong>{pipelineCounts.get(stage.key) ?? 0}</strong>
-                </li>
-              ))}
-            </ol>
-          </div>
-
-          <div className={styles.panel} id="approvals">
-            <div className={styles.panelHeader}>
-              <h3>Approval Queue</h3>
-              <span>Human controlled</span>
-            </div>
-            <div className={styles.approvals}>
-              <p>ARV approvals</p>
-              <p>Repair budgets</p>
-              <p>Seller offer ceilings</p>
-              <p>Contract sends</p>
-              <p>Buyer selection</p>
-            </div>
-          </div>
-        </section>
-    </>
+          <Link href="/os/pipeline">Open Seller Pipeline <ArrowRight aria-hidden="true" size={15} /></Link>
+        </header>
+        <div>
+          {pipelineStages.slice(0, 8).map((stage) => (
+            <Link href={`/os/pipeline?stage=${stage.key}`} key={stage.key}>
+              <span>{stage.label}</span>
+              <strong>{pipelineCounts.get(stage.key) ?? 0}</strong>
+            </Link>
+          ))}
+        </div>
+      </section>
+    </WorkspacePage>
   );
 }

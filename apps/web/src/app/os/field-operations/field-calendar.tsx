@@ -9,14 +9,14 @@ import {
   MapPin,
   UserRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 import type { FieldCalendarAppointment, FieldOperationsOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./field-operations.module.css";
 import { useFieldApi } from "./use-field-api";
 
-type CalendarMode = "month" | "week" | "day";
+type CalendarMode = "month" | "week" | "day" | "agenda";
 
 function startOfDay(value: Date) {
   const result = new Date(value);
@@ -62,6 +62,10 @@ function rangeFor(mode: CalendarMode, cursor: Date) {
     const startsAt = startOfWeek(cursor);
     return { startsAt, endsAt: addDays(startsAt, 7) };
   }
+  if (mode === "agenda") {
+    const startsAt = startOfDay(cursor);
+    return { startsAt, endsAt: addDays(startsAt, 30) };
+  }
   const startsAt = startOfDay(cursor);
   return { startsAt, endsAt: addDays(startsAt, 1) };
 }
@@ -75,6 +79,10 @@ function calendarTitle(mode: CalendarMode, cursor: Date) {
     const end = addDays(start, 6);
     return `${start.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
   }
+  if (mode === "agenda") {
+    const end = addDays(startOfDay(cursor), 29);
+    return `${cursor.toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${end.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
+  }
   return cursor.toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -86,7 +94,7 @@ function calendarTitle(mode: CalendarMode, cursor: Date) {
 function shiftCursor(mode: CalendarMode, cursor: Date, direction: number) {
   const result = new Date(cursor);
   if (mode === "month") result.setMonth(result.getMonth() + direction);
-  else result.setDate(result.getDate() + direction * (mode === "week" ? 7 : 1));
+  else result.setDate(result.getDate() + direction * (mode === "week" ? 7 : mode === "agenda" ? 30 : 1));
   return result;
 }
 
@@ -202,7 +210,7 @@ export function FieldCalendar({
             </label>
           ) : null}
           <div className={styles.calendarModes} aria-label="Calendar display" role="group">
-            {(["month", "week", "day"] as const).map((item) => (
+            {(["month", "week", "day", "agenda"] as const).map((item) => (
               <button
                 className={mode === item ? styles.activeMode : ""}
                 key={item}
@@ -289,6 +297,53 @@ export function FieldCalendar({
             </button>
           ))}
           {!appointments.length ? <p className={styles.empty}>No field meetings scheduled for this day.</p> : null}
+        </div>
+      ) : null}
+
+      {!loading && mode === "agenda" ? (
+        <div className={styles.agendaCalendar}>
+          {appointments
+            .slice()
+            .sort(
+              (left, right) =>
+                new Date(left.scheduled_start_at).getTime() -
+                new Date(right.scheduled_start_at).getTime(),
+            )
+            .map((appointment, index, sorted) => {
+              const appointmentDate = new Date(appointment.scheduled_start_at);
+              const previousDate = index
+                ? new Date(sorted[index - 1]!.scheduled_start_at)
+                : null;
+              const showDate = !previousDate || !sameDay(appointmentDate, previousDate);
+              return (
+                <Fragment key={appointment.id}>
+                  {showDate ? (
+                    <h4>
+                      {appointmentDate.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </h4>
+                  ) : null}
+                  <button onClick={() => open(appointment)} type="button">
+                    <time>{timeLabel(appointment.scheduled_start_at)}</time>
+                    <span>
+                      <strong>{appointment.seller_name}</strong>
+                      <small><MapPin size={14} />{appointment.property_address}</small>
+                    </span>
+                    <span>
+                      <strong>{appointment.closer_name}</strong>
+                      <small>{labelize(appointment.field_status)}</small>
+                    </span>
+                    <CalendarDays aria-hidden="true" size={18} />
+                  </button>
+                </Fragment>
+              );
+            })}
+          {!appointments.length ? (
+            <p className={styles.empty}>No field meetings scheduled in the next 30 days.</p>
+          ) : null}
         </div>
       ) : null}
     </section>

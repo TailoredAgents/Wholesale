@@ -238,7 +238,13 @@ type EmailTemplate = {
   is_active: boolean;
 };
 
-type FilterKey = "mine" | "unassigned" | "team" | "needs_reply" | "appointments" | "unread";
+export type InboxFilterKey =
+  | "mine"
+  | "unassigned"
+  | "team"
+  | "needs_reply"
+  | "appointments"
+  | "unread";
 type MobilePane = "conversations" | "thread" | "details";
 type ComposerChannel = "sms" | "email" | "call" | "note";
 type VoiceStatus =
@@ -277,7 +283,7 @@ type VoiceCallIntent = {
 };
 
 const filters: Array<{
-  key: FilterKey;
+  key: InboxFilterKey;
   label: string;
   icon: typeof Inbox;
 }> = [
@@ -634,7 +640,13 @@ function CallTranscriptPanel({
   );
 }
 
-export function InboxWorkspace() {
+export function InboxWorkspace({
+  initialFilter = "team",
+  initialLeadId = null,
+}: {
+  initialFilter?: InboxFilterKey;
+  initialLeadId?: string | null;
+}) {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
@@ -642,6 +654,7 @@ export function InboxWorkspace() {
   const voiceDeviceRef = useRef<Device | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const recordingUrlsRef = useRef<Record<string, string>>({});
+  const initialSelectionAppliedRef = useRef(false);
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
@@ -659,7 +672,7 @@ export function InboxWorkspace() {
     "idle" | "saving" | "saved" | "syncing"
   >("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterKey>("team");
+  const [filter, setFilter] = useState<InboxFilterKey>(initialFilter);
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
@@ -766,12 +779,17 @@ export function InboxWorkspace() {
   const loadConversations = useCallback(async () => {
     const payload = await request<{ items: Conversation[] }>("/api/v1/inbox/conversations");
     setConversations(payload.items);
+    const requestedConversation = !initialSelectionAppliedRef.current && initialLeadId
+      ? payload.items.find((item) => item.lead_id === initialLeadId)
+      : null;
+    initialSelectionAppliedRef.current = true;
     setSelectedId((current) => {
       if (current && payload.items.some((item) => item.id === current)) return current;
-      return payload.items[0]?.id ?? null;
+      return requestedConversation?.id ?? payload.items[0]?.id ?? null;
     });
+    if (requestedConversation) setMobilePane("thread");
     return payload.items;
-  }, [request]);
+  }, [initialLeadId, request]);
 
   const loadDetail = useCallback(
     async (conversationId: string) => {
@@ -1456,8 +1474,11 @@ export function InboxWorkspace() {
     <>
       <header className={styles.pageHeader}>
         <div>
-          <p className={styles.eyebrow}>Communications</p>
-          <h2>Shared inbox</h2>
+          <p className={styles.eyebrow}>Seller communications</p>
+          <h2>Inbox</h2>
+          <span className={styles.headerSummary}>
+            {counts.needs_reply} need reply · {counts.unread} unread · {counts.unassigned} unassigned
+          </span>
         </div>
         <div className={styles.headerActions}>
           {canUseEmail ? (
@@ -1680,6 +1701,7 @@ export function InboxWorkspace() {
                   <span className={styles.address}>{item.property_address}</span>
                   <span className={styles.listMeta}>
                     <span>{labelize(item.queue_key)}</span>
+                    {item.priority === "urgent" ? <em className={styles.urgentLabel}>Urgent</em> : null}
                     {hasNeedsReply(item) ? <em>Needs reply</em> : null}
                   </span>
                 </span>

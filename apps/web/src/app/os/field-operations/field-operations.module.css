@@ -1004,6 +1004,70 @@
   font-weight: 850;
 }
 
+.agendaCalendar {
+  min-height: 520px;
+  padding: 8px 18px 18px;
+}
+
+.agendaCalendar h4 {
+  margin: 0;
+  padding: 18px 12px 8px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.agendaCalendar > button {
+  width: 100%;
+  min-height: 76px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  grid-template-columns: 88px minmax(220px, 1fr) minmax(150px, 0.45fr) auto;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.agendaCalendar > button:hover {
+  background: var(--surface-soft);
+}
+
+.agendaCalendar time {
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.agendaCalendar > button > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.agendaCalendar > button strong,
+.agendaCalendar > button small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agendaCalendar > button strong {
+  font-size: 13px;
+}
+
+.agendaCalendar > button small {
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+}
+
 .dayAgenda > button > span {
   display: grid;
   gap: 5px;
@@ -1821,6 +1885,11 @@
 
   .calendarModes button {
     flex: 1 1 0;
+    min-width: 70px;
+  }
+
+  .calendarModes {
+    overflow-x: auto;
   }
 
   .monthCalendar {
@@ -1829,6 +1898,18 @@
 
   .monthDay {
     height: 112px;
+  }
+
+  .agendaCalendar {
+    padding: 4px 12px 14px;
+  }
+
+  .agendaCalendar > button {
+    grid-template-columns: 72px minmax(0, 1fr) auto;
+  }
+
+  .agendaCalendar > button > span:nth-of-type(2) {
+    display: none;
   }
 
   .meetingDesk {

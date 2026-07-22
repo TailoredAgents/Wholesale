@@ -79,6 +79,10 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   marketing, underwriting, inbox, and AI control pages.
 - Role-aware OS shell with five stable navigation groups, focused role landing routes, global
   workspace search, recent destinations, notification state, and a responsive navigation drawer.
+- Role-aware daily command center with prioritized seller work, intervention counts, meeting and
+  offer-preparation signals, and a compact pipeline pulse.
+- Dense Work Queue with saved ownership and due-state views, contextual next actions, and confirmed
+  bulk completion against the existing permission-protected task API.
 - Append-only activity and audit records for material operations.
 - Worker heartbeat and readiness monitoring with durable, grouped failure records.
 - Threshold-based failure webhook alerts that omit raw exception details.
@@ -134,13 +138,14 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Trailing 30-day Lead Manager scorecards for response time, SLA compliance, qualification,
   appointments, no-shows, contracts, and follow-up quality.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
-- Direct-navigation internal Stonegate calendar with month, week, and day views, plus appointment
+- Direct-navigation internal Stonegate calendar with month, week, day, and agenda views, plus appointment
   and overdue-task reminders, with no external calendar dependency.
 - Dedicated Field Dispatch desk for qualified sellers, closer availability, working hours,
   territory coverage, daily appointment limits, travel buffers, and upcoming appointments.
 - Explainable slot evaluation with manager-only conflict overrides, required override reasons,
   immutable candidate snapshots, and audit evidence tied to the actual appointment.
-- Full internal month, week, and day field calendar with closer filtering and meeting launch.
+- Full internal month, week, day, and 30-day agenda field calendar with closer filtering, capacity
+  context, and meeting launch.
 - Versioned seller-meeting briefs, mobile walkthrough evidence and photographs, structured repair
   scope, negotiation outcomes, and approved-ceiling enforcement.
 - Reviewed walkthrough transfer creates a new repair estimate and draft underwriting version while
@@ -156,6 +161,8 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 ### Shared Inbox And Team Workflow
 
 - Three-panel shared inbox with Mine, Unassigned, Team, Needs Reply, Appointments, and Unread views.
+- Inbox deep links preserve lead or saved-view context, and responsive Inbox, Thread, and Details
+  panes retain the complete shared conversation record on mobile.
 - One chronological timeline for SMS, email, calls, recordings, transcripts, and internal notes.
 - Conversation assignment, watchers, unread state, provider events, and assignment history.
 - Restricted VA prospecting role and audited VA-to-acquisitions handoff.

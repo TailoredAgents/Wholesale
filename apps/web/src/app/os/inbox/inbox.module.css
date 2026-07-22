@@ -23,6 +23,14 @@
   text-transform: uppercase;
 }
 
+.headerSummary {
+  margin-top: 5px;
+  color: var(--muted);
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .refreshButton {
   min-height: 38px;
   padding: 0 13px;
@@ -306,6 +314,10 @@
   color: var(--brand-strong);
 }
 
+.listMeta .urgentLabel {
+  color: var(--danger);
+}
+
 .listHeader {
   padding: 14px 12px 11px;
   border-bottom: 1px solid var(--line-soft);
@@ -482,6 +494,7 @@
 }
 
 .threadHeader {
+  min-width: 0;
   min-height: 76px;
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
@@ -558,6 +571,7 @@
 }
 
 .timeline {
+  min-width: 0;
   min-height: 0;
   padding: 20px 18px;
   background: #f7f6f2;
@@ -1048,6 +1062,7 @@
 }
 
 .composer {
+  min-width: 0;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
