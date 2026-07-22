@@ -58,7 +58,15 @@ function candidateStatus(candidate: DispatchCandidate) {
   return candidate.violations.map(labelize).join(" · ");
 }
 
-export function FieldOperationsWorkspace({ data }: { data: FieldOperationsOverview }) {
+export function FieldOperationsWorkspace({
+  data,
+  initialAppointmentId = "",
+  initialView = "dispatch",
+}: {
+  data: FieldOperationsOverview;
+  initialAppointmentId?: string;
+  initialView?: View;
+}) {
   const router = useRouter();
   const { getToken } = useAuth();
   const initialStart = useMemo(() => {
@@ -73,8 +81,8 @@ export function FieldOperationsWorkspace({ data }: { data: FieldOperationsOvervi
     value.setHours(11, 30, 0, 0);
     return localInputValue(value);
   }, []);
-  const [view, setView] = useState<View>("dispatch");
-  const [requestedAppointmentId, setRequestedAppointmentId] = useState("");
+  const [view, setView] = useState<View>(initialView);
+  const [requestedAppointmentId, setRequestedAppointmentId] = useState(initialAppointmentId);
   const [selectedLeadId, setSelectedLeadId] = useState(data.ready_leads[0]?.id ?? "");
   const [startAt, setStartAt] = useState(initialStart);
   const [endAt, setEndAt] = useState(initialEnd);

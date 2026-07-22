@@ -10,7 +10,7 @@ Status: Complete as of July 22, 2026.
 4. Prepare for today's appointments.
 5. Clear every neglected-lead exception before ending the shift.
 
-The Lead Manager desk is available at `/os/lead-manager`. Individual Lead Managers see their own
+The Lead Manager role uses the user-facing **Acquisitions Desk** at `/os/lead-manager`. Individual Lead Managers see their own
 cases. Acquisition managers and owners see the full team queue and scorecards.
 
 ## Workflow Controls

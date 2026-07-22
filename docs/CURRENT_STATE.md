@@ -121,7 +121,7 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   appointment, conversation assignment, owner watchers, and complete attempt history.
 - Acquisitions handoff acceptance and correction review plus daily connect, handoff, script-quality,
   DNC, and data-quality scorecards.
-- Dedicated Lead Manager desk for SLA-controlled handoff acceptance, guided qualification, due
+- Dedicated Acquisitions Desk for the Lead Manager role, with SLA-controlled handoff acceptance, guided qualification, due
   follow-up, same-day appointments, and neglected-lead exceptions.
 - Automatic workload-aware assignment of website inquiries and migration of existing active CRM
   leads into the same Lead Manager queue.
@@ -132,8 +132,8 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Trailing 30-day Lead Manager scorecards for response time, SLA compliance, qualification,
   appointments, no-shows, contracts, and follow-up quality.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
-- Internal Stonegate calendar plus appointment and overdue-task reminders, with no external
-  calendar dependency.
+- Direct-navigation internal Stonegate calendar with month, week, and day views, plus appointment
+  and overdue-task reminders, with no external calendar dependency.
 - Dedicated Field Dispatch desk for qualified sellers, closer availability, working hours,
   territory coverage, daily appointment limits, travel buffers, and upcoming appointments.
 - Explainable slot evaluation with manager-only conflict overrides, required override reasons,

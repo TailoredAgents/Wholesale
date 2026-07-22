@@ -158,7 +158,7 @@ export function LeadManagerWorkspace({ data }: { data: LeadManagerOverview }) {
 
   return (
     <div className={styles.workspace}>
-      <section className={styles.metrics} aria-label="Lead Manager queue summary">
+      <section className={styles.metrics} aria-label="Acquisitions Desk queue summary">
         <div><span>Awaiting acceptance</span><strong>{data.metrics.awaiting_acceptance}</strong></div>
         <div className={data.metrics.overdue_acceptance ? styles.riskMetric : ""}><span>Overdue SLA</span><strong>{data.metrics.overdue_acceptance}</strong></div>
         <div><span>Qualification due</span><strong>{data.metrics.qualification_due}</strong></div>
@@ -167,7 +167,7 @@ export function LeadManagerWorkspace({ data }: { data: LeadManagerOverview }) {
         <div className={data.metrics.neglected_leads ? styles.riskMetric : ""}><span>Neglected</span><strong>{data.metrics.neglected_leads}</strong></div>
       </section>
 
-      <nav className={styles.tabs} aria-label="Lead Manager views">
+      <nav className={styles.tabs} aria-label="Acquisitions Desk views">
         {([
           ["today", "Daily queue"],
           ["qualification", "Qualification"],
@@ -230,7 +230,7 @@ export function LeadManagerWorkspace({ data }: { data: LeadManagerOverview }) {
 
       {view === "performance" ? (
         <section className={styles.performance}>
-          <div className={styles.sectionHeader}><div><span>Trailing 30 days</span><h3>Lead Manager scorecard</h3></div></div>
+          <div className={styles.sectionHeader}><div><span>Trailing 30 days</span><h3>Acquisitions scorecard</h3></div></div>
           <div className={styles.tableWrap}><table><thead><tr><th>Manager</th><th>Accepted</th><th>Within SLA</th><th>Avg response</th><th>Qualified</th><th>Set</th><th>Held</th><th>No-show</th><th>Contracts</th><th>Follow-up quality</th></tr></thead><tbody>{data.scorecards.map((item) => <tr key={item.user_id}><td>{item.user_name}</td><td>{item.handoffs_accepted}/{item.handoffs_received}</td><td>{item.accepted_within_sla}</td><td>{item.average_acceptance_minutes === null ? "-" : `${item.average_acceptance_minutes}m`}</td><td>{item.qualifications_completed}</td><td>{item.appointments_set}</td><td>{item.appointments_held}</td><td>{item.appointment_no_shows}</td><td>{item.contracts_created}</td><td>{percent(item.follow_up_quality_basis_points)}</td></tr>)}</tbody></table></div>
         </section>
       ) : null}

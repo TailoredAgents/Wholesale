@@ -4,8 +4,18 @@ import { FieldOperationsWorkspace } from "./field-operations-workspace";
 
 export const dynamic = "force-dynamic";
 
-export default async function FieldOperationsPage() {
+const fieldViews = new Set(["dispatch", "calendar", "meetings", "capacity"]);
+
+export default async function FieldOperationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ appointment?: string; view?: string }>;
+}) {
+  const params = await searchParams;
   const { fieldOperations, apiConnected } = await getFieldOperationsOverview();
+  const initialView = fieldViews.has(params.view ?? "")
+    ? (params.view as "dispatch" | "calendar" | "meetings" | "capacity")
+    : "dispatch";
 
   return (
     <>
@@ -23,7 +33,11 @@ export default async function FieldOperationsPage() {
       </header>
 
       {fieldOperations ? (
-        <FieldOperationsWorkspace data={fieldOperations} />
+        <FieldOperationsWorkspace
+          data={fieldOperations}
+          initialAppointmentId={params.appointment ?? ""}
+          initialView={initialView}
+        />
       ) : (
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
