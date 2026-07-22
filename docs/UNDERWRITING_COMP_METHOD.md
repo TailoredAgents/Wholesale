@@ -259,6 +259,20 @@ deciding user and notes, marks the source version approved, and moves the lead t
 Rejection requires notes and returns the lead to underwriting. Approval does not send an offer,
 create a contract, or authorize exceeding the recorded ceiling.
 
+## Concession And Price-Discussion Governance
+
+An approved plan begins with its opening offer. Every increase is a sequential concession tied to
+that plan and must state why Stonegate is moving and what the seller gives in exchange. A proposed
+amount through target or stretch is authorized by the approved ladder. An amount above stretch and
+at or below the ceiling creates a manager approval request. An amount above the ceiling is rejected
+and requires revised underwriting and a newly approved plan.
+
+Only an authorized concession can be presented. Field and manual workflows store the presented
+amount, seller counter, channel, notes, actor, appointment, and concession in an append-only event
+ledger. An accepted amount must equal the most recently presented governed offer. Approving a new
+plan supersedes older approved plans and cancels their unused concession authority while retaining
+already presented offers and decisions as historical evidence.
+
 ## Market Calibration
 
 A verified outcome may be attached to any saved analysis after an expert review, appraisal,

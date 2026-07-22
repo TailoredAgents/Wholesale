@@ -15,6 +15,11 @@ from app.models.foundation import (
     UnderwritingVersion,
 )
 from app.schemas.approvals import ApprovalDecision, ApprovalRequestRead
+from app.services.offer_concessions import (
+    apply_concession_decision,
+    supersede_prior_offer_authority,
+    validate_concession_decision,
+)
 
 APPROVAL_STATUSES = {"pending", "approved", "rejected", "cancelled"}
 DECISION_STATUSES = {"approved", "rejected", "cancelled"}
@@ -51,8 +56,11 @@ def decide_approval_request(
     if request.request_type == "call_notes_review":
         raise ValueError("Call notes must be reviewed with the recording in the shared inbox.")
     offer_context = None
+    concession_context = None
     if request.request_type == "offer_ceiling":
         offer_context = validate_offer_decision(db, principal, request, payload)
+    elif request.request_type == "offer_concession":
+        concession_context = validate_concession_decision(db, principal, request, payload)
     previous_status = request.status
     request.status = payload.status
     request.decision_notes = payload.decision_notes
@@ -64,6 +72,7 @@ def decide_approval_request(
         if payload.status == "approved":
             version.status = "approved"
             lead.stage_key = "offer_ready"
+            supersede_prior_offer_authority(db, principal, plan)
         else:
             version.status = "needs_review"
             lead.stage_key = "underwriting"
@@ -96,6 +105,41 @@ def decide_approval_request(
                     "lead_stage": lead.stage_key,
                 },
                 reason="Human seller-offer ceiling decision",
+            )
+        )
+    if concession_context is not None:
+        concession, plan, lead = concession_context
+        apply_concession_decision(concession, principal, payload)
+        db.add(
+            ActivityEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type=f"underwriting.concession_{payload.status}",
+                summary=(
+                    f"Concession to ${concession.proposed_offer_cents / 100:,.0f} "
+                    f"was {payload.status}."
+                ),
+            )
+        )
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="underwriting.concession.decide",
+                entity_type="offer_concession",
+                entity_id=concession.id,
+                previous_value={"status": previous_status},
+                new_value={
+                    "status": concession.status,
+                    "decision_notes": concession.decision_notes,
+                    "offer_negotiation_plan_id": str(plan.id),
+                    "proposed_offer_cents": concession.proposed_offer_cents,
+                    "seller_ceiling_cents": plan.seller_ceiling_cents,
+                },
+                reason="Human seller-concession decision",
             )
         )
     db.add(
@@ -132,6 +176,8 @@ def approval_to_read(request: ApprovalRequest) -> ApprovalRequestRead:
         review_url = "/os/inbox"
     elif request.request_type == "offer_ceiling" and metadata.get("lead_id"):
         review_url = f"/os/leads/{metadata['lead_id']}?tab=underwriting#offer-approval"
+    elif request.request_type == "offer_concession" and metadata.get("lead_id"):
+        review_url = f"/os/leads/{metadata['lead_id']}?tab=underwriting#negotiation-governance"
     else:
         review_url = None
     return ApprovalRequestRead(

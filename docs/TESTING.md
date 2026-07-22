@@ -37,6 +37,8 @@ Also run:
 - Call transcription review, evidence, quality telemetry, and approval gates.
 - Gmail OAuth state, encryption, threading, synchronization, attachments, and role scope.
 - Underwriting calculations, comp filtering, confidence, report access, and nullable recommendations.
+- Offer-plan staleness, sequential concessions, manager exceptions, hard-ceiling enforcement,
+  presented-price agreement matching, superseded authority, and append-only negotiation events.
 - AI tool permissions, run logs, approval behavior, and cost calculations.
 
 ## Provider Acceptance Tests

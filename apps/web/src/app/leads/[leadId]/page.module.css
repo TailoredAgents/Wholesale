@@ -2940,6 +2940,406 @@
   }
 }
 
+.negotiationGovernance {
+  display: grid;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #d9d5cb;
+}
+
+.authorityHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  color: #f7f4ed;
+  background: #202b27;
+  border-radius: 6px;
+}
+
+.authorityHeader > div {
+  display: grid;
+  gap: 5px;
+}
+
+.authorityHeader span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #b9c9c0;
+  font-size: 12px;
+}
+
+.authorityHeader strong {
+  font-size: 18px;
+}
+
+.authorityHeader .governanceState {
+  flex: 0 0 auto;
+  padding: 5px 9px;
+  color: #174f37;
+  font-weight: 750;
+  background: #cfe9da;
+  border: 1px solid #9fcbb3;
+  border-radius: 4px;
+}
+
+.authorityLadder {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid #ded9cf;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.authorityLadder > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 13px 15px;
+  background: #fbfaf7;
+  border-right: 1px solid #ded9cf;
+}
+
+.authorityLadder > div:last-child {
+  border-right: 0;
+  background: #fff8eb;
+}
+
+.authorityLadder dt,
+.authorityLadder small {
+  color: #6d6a62;
+  font-size: 11px;
+}
+
+.authorityLadder dd {
+  margin: 0;
+  color: #202522;
+  font-size: 18px;
+  font-weight: 760;
+}
+
+.governanceWorkspaces {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border: 1px solid #ded9cf;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.governanceForm {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 17px;
+  background: #fff;
+}
+
+.governanceForm + .governanceForm {
+  border-left: 1px solid #ded9cf;
+  background: #fbfaf7;
+}
+
+.governanceForm header {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: #285a44;
+}
+
+.governanceForm header div {
+  display: grid;
+  gap: 2px;
+}
+
+.governanceForm header span,
+.governanceForm label > span {
+  color: #69675f;
+  font-size: 11px;
+}
+
+.governanceForm label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.governanceForm input,
+.governanceForm select,
+.governanceForm textarea,
+.concessionDecision input {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  color: #222724;
+  font: inherit;
+  background: #fff;
+  border: 1px solid #cbc8c0;
+  border-radius: 4px;
+}
+
+.governanceForm textarea {
+  resize: vertical;
+}
+
+.governanceForm label > div {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbc8c0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.governanceForm label > div b {
+  padding-left: 10px;
+  color: #77736a;
+}
+
+.governanceForm label > div input {
+  border: 0;
+}
+
+.governanceForm button,
+.concessionAction > button {
+  justify-self: start;
+  padding: 9px 13px;
+  color: #fff;
+  font-weight: 720;
+  background: #2d7352;
+  border: 1px solid #2d7352;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.governanceForm button:disabled,
+.concessionAction button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.governanceMoneyGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.governanceSelectGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.concessionLedger,
+.negotiationTimeline {
+  border: 1px solid #ded9cf;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.concessionLedger > header,
+.negotiationTimeline > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 15px;
+  background: #f3f1eb;
+  border-bottom: 1px solid #ded9cf;
+}
+
+.concessionLedger > header div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.concessionLedger > header span,
+.negotiationTimeline > header span {
+  color: #77736a;
+  font-size: 11px;
+}
+
+.concessionLedger > p,
+.negotiationTimeline > p {
+  margin: 0;
+  padding: 20px 15px;
+  color: #77736a;
+}
+
+.concessionLedger article {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) minmax(150px, 220px);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 15px;
+  background: #fff;
+  border-bottom: 1px solid #ece8df;
+}
+
+.concessionLedger article:last-child,
+.negotiationTimeline article:last-child {
+  border-bottom: 0;
+}
+
+.concessionSequence {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  color: #285a44;
+  font-size: 12px;
+  font-weight: 800;
+  background: #e6f0ea;
+  border-radius: 50%;
+}
+
+.concessionMain,
+.concessionAction {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.concessionMain > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.concessionMain strong span {
+  color: #878278;
+  font-weight: 500;
+}
+
+.concessionMain p {
+  margin: 2px 0;
+  color: #3f413d;
+}
+
+.concessionMain small,
+.concessionAction small,
+.concessionAction > span {
+  color: #77736a;
+  font-size: 11px;
+}
+
+.concessionStatus {
+  padding: 3px 7px;
+  color: #655f55;
+  font-size: 10px;
+  font-weight: 800;
+  background: #eeeae2;
+  border-radius: 3px;
+}
+
+.concessionStatus_authorized,
+.concessionStatus_approved,
+.concessionStatus_presented {
+  color: #18533a;
+  background: #dceee4;
+}
+
+.concessionStatus_pending {
+  color: #7a4c08;
+  background: #fff0cf;
+}
+
+.concessionStatus_rejected,
+.concessionStatus_cancelled {
+  color: #8c332e;
+  background: #f8dfdc;
+}
+
+.concessionAction {
+  justify-items: end;
+}
+
+.concessionDecision {
+  display: grid;
+  grid-template-columns: minmax(80px, 1fr) 34px 34px;
+  gap: 5px;
+  width: 100%;
+}
+
+.concessionDecision button {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #fff;
+  background: #2d7352;
+  border: 0;
+  border-radius: 4px;
+}
+
+.concessionDecision .rejectConcession {
+  background: #a6483e;
+}
+
+.negotiationTimeline article {
+  position: relative;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 13px 15px;
+  background: #fff;
+  border-bottom: 1px solid #ece8df;
+}
+
+.timelineMark {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  background: #2d7352;
+  border: 2px solid #dceee4;
+  border-radius: 50%;
+  box-sizing: content-box;
+}
+
+.negotiationTimeline article > div {
+  display: grid;
+  gap: 3px;
+}
+
+.negotiationTimeline article div > span,
+.negotiationTimeline article small {
+  color: #77736a;
+  font-size: 11px;
+}
+
+.negotiationTimeline article p {
+  margin: 3px 0;
+  color: #3f413d;
+}
+
+.timelineAmounts {
+  justify-items: end;
+  text-align: right;
+}
+
+.governanceNotice {
+  margin: 0;
+  padding: 10px 12px;
+  color: #174f37;
+  background: #e2f1e8;
+  border-left: 3px solid #2d7352;
+}
+
+@media (max-width: 900px) {
+  .governanceWorkspaces {
+    grid-template-columns: 1fr;
+  }
+
+  .governanceForm + .governanceForm {
+    border-top: 1px solid #ded9cf;
+    border-left: 0;
+  }
+}
+
 @media (max-width: 520px) {
   .identity h1 {
     font-size: 29px;
@@ -3000,8 +3400,41 @@
   .offerPlanSource dl,
   .offerLadderInputs,
   .offerNarrativeGrid,
-  .offerLadderSummary {
+  .offerLadderSummary,
+  .authorityLadder,
+  .governanceMoneyGrid,
+  .governanceSelectGrid {
     grid-template-columns: 1fr;
+  }
+
+  .authorityHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .authorityLadder > div {
+    border-right: 0;
+    border-bottom: 1px solid #ded9cf;
+  }
+
+  .authorityLadder > div:last-child {
+    border-bottom: 0;
+  }
+
+  .concessionLedger article,
+  .negotiationTimeline article {
+    grid-template-columns: 1fr;
+  }
+
+  .concessionSequence {
+    width: 28px;
+    height: 28px;
+  }
+
+  .concessionAction,
+  .timelineAmounts {
+    justify-items: start;
+    text-align: left;
   }
 
   .offerPlanSource dl div,

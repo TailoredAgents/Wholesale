@@ -52,7 +52,7 @@ sequence is:
 | 4. VA Prospecting Workbench | Complete |
 | 5. Lead Manager Operating System | Complete |
 | 6. Appointments and Field Acquisitions | Complete |
-| 7. Underwriting and Offer Governance | Partial, advanced; substantial work completed early |
+| 7. Underwriting and Offer Governance | Complete |
 | 8. Contracts and Transaction Coordination | Foundational |
 | 9. Buyers, Dispositions, and Finance | Foundational |
 | 10. Integrated AI Agent System | Foundational |
@@ -209,6 +209,13 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Offer approval requests cancel superseded pending plans, reject stale versions, record the
   deciding user and notes, and move an approved lead to `offer_ready` without allowing the ceiling
   to exceed the saved underwriting result.
+- The approved opening, target, stretch, and ceiling now govern every field or phone negotiation.
+  Sequential concessions require a documented reason and seller exchange; moves through stretch
+  are pre-authorized, moves above stretch require manager approval, and moves above ceiling are
+  blocked until new underwriting is approved.
+- Price discussions, seller counters, objections, presented concessions, and agreements are stored
+  in an append-only ledger. Field outcomes link to the exact governing concession, and approval of
+  a newer plan cancels prior unused authority without erasing historical offers.
 
 Underwriting is decision support, not an appraisal. It requires continued comparison against real
 transactions and human judgment before Stonegate relies on it for offer ceilings.
@@ -227,7 +234,6 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 - Evidence-backed, versioned market launch checklists require all 11 operational controls before
   owner approval.
 - Business Setup provides one workspace for operating economics, contribution review, and market
-  launch governance.
 - Source/campaign performance, CPL, contract cost, ROAS, and offline conversion export records.
 - AI agent definitions, prompt versions, tool permissions, run logs, tool-call logs, approvals,
   cost telemetry, and call-intelligence quality reporting.
@@ -256,8 +262,6 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
 - Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
   deferred until operating data demonstrates that route precision is necessary.
-- Underwriting concession governance beyond the approved field negotiation record remains Phase 7
-  work.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
 - Buyer matching and deal-distribution automation are not complete.
@@ -277,5 +281,5 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Continue Phase 7 with formal concession governance and the remaining offer-control workflow.
+4. Begin Phase 8 contract and transaction coordination.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

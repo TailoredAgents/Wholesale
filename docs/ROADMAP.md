@@ -43,7 +43,7 @@ email is implemented. Production acceptance remains pending for:
 | 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
 | 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
 | 6. Appointments and Field Acquisitions | Complete | Dispatch, month/week/day calendar, meeting brief, mobile inspection, negotiation, evidence transfer, and scorecards are operational |
-| 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
+| 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
 | 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
 | 10. Integrated AI Agent System | Foundational | Agent controls and Call Intelligence exist; the complete agent portfolio remains |
@@ -238,7 +238,7 @@ entirely inside Stonegate.
 
 ## Phase 7: Underwriting And Offer Governance
 
-Status: Partial, advanced. Most of this phase was completed early.
+Status: Complete.
 
 Goal: Make every price recommendation explainable, versioned, evidence-backed, and approved before
 use.
@@ -256,12 +256,17 @@ Delivered:
 - Immutable offer-ceiling requests, opening/target/stretch/walk-away negotiation plans,
   supersession, stale-version protection, human approval, and accountable decisions.
 - Investor and client PDF reports that remain available when renovation status is unconfirmed.
+- Versioned seller-meeting briefs, objection preparation, and field evidence coordinated with the
+  Phase 6 meeting workflow.
+- Append-only price-discussion history, sequential concession records, required concession reasons
+  and seller exchanges, and field outcomes linked to the governing authority.
+- Automatic authority through target and stretch, explicit manager approval above stretch, hard
+  blocking above the approved ceiling, and cancellation of unused authority when a newer plan is
+  approved.
 
-Remaining:
+Deferred enhancements, not Phase 7 blockers:
 
 - Optional ATTOM or MLS/RESO enrichment behind the property-data adapter when justified.
-- Seller-meeting brief and objection preparation, coordinated with Phase 6.
-- Price-discussion notes, negotiation versions, and explicit concession tracking.
 - Final investor and client report branding after the custom domain and contact details are final.
 
 Result: Every price recommendation is explainable, versioned, and approved before use.
@@ -347,8 +352,7 @@ evidence requirements, compliance controls, or financial approvals.
 
 - Finish Phase 1 production checks before broad team onboarding.
 - Resume the parallel integration track as provider approvals become available.
-- Return to the earliest incomplete dependency in Phases 2-6 before adding downstream automation.
-- Retain the completed Phase 7 work and finish its remaining items with the Phase 6 field workflow.
+- Retain the completed deterministic workflows in Phases 2-7 before adding downstream automation.
 - Complete deterministic operating workflows before enabling corresponding AI actions.
 - Do not enable AI authority over offers, contracts, buyers, payments, compensation, or legal
   representations.
@@ -358,9 +362,9 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Build the Phase 6 seller-meeting brief from qualification, underwriting, and appointment data.
-3. Build the mobile field-acquisition inspection and negotiation workflow.
-4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
+2. Start Phase 8 with the seller-contract data model, templates, and controlled document workflow.
+3. Build transaction coordination from execution through funded closing.
+4. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred
 

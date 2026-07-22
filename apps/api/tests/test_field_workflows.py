@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -10,6 +11,8 @@ from app.models.foundation import (
     ApprovalRequest,
     Contact,
     Lead,
+    OfferConcession,
+    OfferNegotiationEvent,
     OfferNegotiationPlan,
     Property,
     RepairEstimate,
@@ -250,8 +253,8 @@ def test_field_meeting_evidence_and_underwriting_transfer(
         json={
             "decision_makers_confirmed": True,
             "decision_makers": ["Jordan Seller"],
-            "offer_presented_cents": 17_000_000,
-            "agreed_price_cents": 17_500_000,
+            "offer_presented_cents": 16_000_000,
+            "agreed_price_cents": 16_000_000,
             "commitments": ["Send title information tomorrow"],
             "outcome": "accepted",
         },
@@ -284,6 +287,171 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     repair = db_session.scalar(select(RepairEstimate).where(RepairEstimate.lead_id == lead.id))
     assert repair is not None
     assert repair.total_cents == 2_300_000
+
+
+def test_offer_concessions_govern_field_negotiation(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    _, lead, appointment, underwriting = field_appointment(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    ledger_response = client.get(
+        f"/api/v1/leads/{lead.id}/underwriting/negotiation-ledger",
+        headers=headers,
+    )
+    assert ledger_response.status_code == 200, ledger_response.text
+    plan = ledger_response.json()["active_plan"]
+    assert plan["opening_offer_cents"] == 16_000_000
+    assert plan["seller_ceiling_cents"] == 18_000_000
+
+    undocumented_offer = client.put(
+        f"/api/v1/field-operations/appointments/{appointment.id}/negotiation",
+        headers=headers,
+        json={"offer_presented_cents": 17_000_000, "outcome": "pending"},
+    )
+    assert undocumented_offer.status_code == 422
+    assert "Record the concession reason" in undocumented_offer.json()["detail"]
+
+    authorized = client.post(
+        f"/api/v1/leads/{lead.id}/underwriting/concessions",
+        headers=headers,
+        json={
+            "offer_negotiation_plan_id": plan["id"],
+            "appointment_id": str(appointment.id),
+            "previous_offer_cents": 16_000_000,
+            "proposed_offer_cents": 17_000_000,
+            "seller_counter_cents": 19_000_000,
+            "reason": "Seller agreed to sign today at the target amount.",
+            "seller_exchange": "Signed contract today with flexible closing.",
+        },
+    )
+    assert authorized.status_code == 201, authorized.text
+    assert authorized.json()["status"] == "authorized"
+    assert authorized.json()["authority_basis"] == "approved_target"
+    concession_id = authorized.json()["id"]
+
+    presented = client.put(
+        f"/api/v1/field-operations/appointments/{appointment.id}/negotiation",
+        headers=headers,
+        json={
+            "offer_presented_cents": 17_000_000,
+            "seller_counter_cents": 19_000_000,
+            "notes": "Presented the documented target concession.",
+            "outcome": "pending",
+        },
+    )
+    assert presented.status_code == 200, presented.text
+    assert presented.json()["governing_concession_id"] == concession_id
+    db_session.expire_all()
+    governed = db_session.get(OfferConcession, UUID(concession_id))
+    assert governed is not None
+    assert governed.status == "presented"
+
+    exception = client.post(
+        f"/api/v1/leads/{lead.id}/underwriting/concessions",
+        headers=headers,
+        json={
+            "offer_negotiation_plan_id": plan["id"],
+            "appointment_id": str(appointment.id),
+            "previous_offer_cents": 17_000_000,
+            "proposed_offer_cents": 17_750_000,
+            "seller_counter_cents": 18_500_000,
+            "reason": "Seller resolved the title issue and will close this week.",
+            "seller_exchange": "Clear title and seven-day closing commitment.",
+        },
+    )
+    assert exception.status_code == 201, exception.text
+    assert exception.json()["status"] == "pending"
+    assert exception.json()["authority_basis"] == "manager_exception"
+    assert exception.json()["approval_request_id"] is not None
+
+    blocked_pending = client.put(
+        f"/api/v1/field-operations/appointments/{appointment.id}/negotiation",
+        headers=headers,
+        json={"offer_presented_cents": 17_750_000, "outcome": "pending"},
+    )
+    assert blocked_pending.status_code == 422
+
+    approved = client.patch(
+        f"/api/v1/approvals/{exception.json()['approval_request_id']}/decision",
+        headers=headers,
+        json={"status": "approved", "decision_notes": "Approved below the hard ceiling."},
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["review_url"] == (
+        f"/os/leads/{lead.id}?tab=underwriting#negotiation-governance"
+    )
+
+    accepted = client.put(
+        f"/api/v1/field-operations/appointments/{appointment.id}/negotiation",
+        headers=headers,
+        json={
+            "decision_makers_confirmed": True,
+            "decision_makers": ["Jordan Seller"],
+            "offer_presented_cents": 17_750_000,
+            "agreed_price_cents": 17_750_000,
+            "notes": "Seller accepted the manager-approved exception.",
+            "outcome": "accepted",
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    over_ceiling = client.post(
+        f"/api/v1/leads/{lead.id}/underwriting/concessions",
+        headers=headers,
+        json={
+            "offer_negotiation_plan_id": plan["id"],
+            "previous_offer_cents": 17_750_000,
+            "proposed_offer_cents": 18_500_000,
+            "reason": "Seller requested a price above the approved authority.",
+            "seller_exchange": "No additional seller concession offered.",
+        },
+    )
+    assert over_ceiling.status_code == 422
+    assert "exceeds the approved seller ceiling" in over_ceiling.json()["detail"]
+
+    event_types = list(
+        db_session.scalars(
+            select(OfferNegotiationEvent.event_type).where(
+                OfferNegotiationEvent.lead_id == lead.id
+            )
+        )
+    )
+    assert event_types.count("concession_requested") == 2
+    assert "field_offer_presented" in event_types
+    assert "agreement" in event_types
+
+    replacement = client.post(
+        f"/api/v1/leads/{lead.id}/underwriting/offer-plans",
+        headers=headers,
+        json={
+            "underwriting_version_id": str(underwriting.id),
+            "opening_offer_cents": 15_200_000,
+            "target_contract_cents": 16_200_000,
+            "stretch_contract_cents": 17_100_000,
+            "rationale": "Replace the prior authority after manager review of the seller meeting.",
+        },
+    )
+    assert replacement.status_code == 201, replacement.text
+    replacement_approval = client.patch(
+        f"/api/v1/approvals/{replacement.json()['approval_request_id']}/decision",
+        headers=headers,
+        json={"status": "approved", "decision_notes": "Replacement authority approved."},
+    )
+    assert replacement_approval.status_code == 200, replacement_approval.text
+    db_session.expire_all()
+    prior_plan = db_session.get(OfferNegotiationPlan, UUID(plan["id"]))
+    presented_concession = db_session.get(OfferConcession, UUID(concession_id))
+    assert prior_plan is not None and prior_plan.status == "superseded"
+    assert presented_concession is not None and presented_concession.status == "presented"
 
 
 def test_prospecting_caller_cannot_access_field_operations(

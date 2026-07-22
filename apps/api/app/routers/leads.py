@@ -8,6 +8,12 @@ from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.approvals import (
+    OfferConcessionCreate,
+    OfferConcessionPresent,
+    OfferConcessionRead,
+    OfferNegotiationEventCreate,
+    OfferNegotiationEventRead,
+    OfferNegotiationLedgerRead,
     OfferNegotiationPlanCreate,
     OfferNegotiationPlanListResponse,
     OfferNegotiationPlanRead,
@@ -59,6 +65,12 @@ from app.services.leads import (
 from app.services.offer_approvals import (
     create_offer_negotiation_plan,
     list_offer_negotiation_plans,
+)
+from app.services.offer_concessions import (
+    create_concession,
+    create_negotiation_event,
+    get_negotiation_ledger,
+    present_concession,
 )
 from app.services.repair_estimates import create_repair_estimate, list_repair_estimates
 from app.services.underwriting_reports import build_market_analysis_pdf
@@ -267,6 +279,67 @@ def request_offer_ceiling_approval(
     if plan is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return plan
+
+
+@router.get("/{lead_id}/underwriting/negotiation-ledger")
+def read_offer_negotiation_ledger(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> OfferNegotiationLedgerRead:
+    ledger = get_negotiation_ledger(db, principal, lead_id)
+    if ledger is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return ledger
+
+
+@router.post("/{lead_id}/underwriting/concessions", status_code=201)
+def request_offer_concession(
+    lead_id: UUID,
+    payload: OfferConcessionCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> OfferConcessionRead:
+    try:
+        concession = create_concession(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if concession is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return concession
+
+
+@router.post("/{lead_id}/underwriting/concessions/{concession_id}/present")
+def record_offer_concession_presented(
+    lead_id: UUID,
+    concession_id: UUID,
+    payload: OfferConcessionPresent,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> OfferConcessionRead:
+    try:
+        concession = present_concession(db, principal, lead_id, concession_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if concession is None:
+        raise HTTPException(status_code=404, detail="Concession not found.")
+    return concession
+
+
+@router.post("/{lead_id}/underwriting/negotiation-events", status_code=201)
+def record_offer_negotiation_event(
+    lead_id: UUID,
+    payload: OfferNegotiationEventCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> OfferNegotiationEventRead:
+    try:
+        event = create_negotiation_event(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return event
 
 
 @router.get("/{lead_id}/underwriting/market-value")

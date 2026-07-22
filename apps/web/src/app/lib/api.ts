@@ -835,6 +835,7 @@ export type FieldNegotiation = {
   appointment_id: string;
   lead_id: string;
   recorded_by_user_id: string;
+  governing_concession_id: string | null;
   decision_makers_confirmed: boolean;
   decision_makers: string[];
   seller_asking_price_cents: number | null;

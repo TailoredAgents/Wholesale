@@ -1545,6 +1545,139 @@
   font-size: 22px;
 }
 
+.fieldAuthority {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.fieldAuthority > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  color: white;
+  background: #24322c;
+}
+
+.fieldAuthority > header div {
+  display: grid;
+  gap: 3px;
+}
+
+.fieldAuthority > header span {
+  color: #b9c9c0;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fieldAuthority > header a {
+  color: #d7eadf;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.fieldAuthority dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fieldAuthority dl div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.fieldAuthority dl div:last-child {
+  border-right: 0;
+  background: #fff4dd;
+}
+
+.fieldAuthority dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fieldAuthority dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.fieldConcessionEditor {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.55fr) minmax(170px, 1fr) minmax(170px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  padding: 12px;
+}
+
+.fieldConcessionEditor label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.fieldConcessionEditor label span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.fieldConcessionEditor button {
+  min-height: 40px;
+  padding: 0 12px;
+  color: white;
+  font-weight: 850;
+  background: var(--brand);
+  border: 1px solid var(--brand-strong);
+  border-radius: 6px;
+}
+
+.fieldConcessionEditor button:disabled {
+  opacity: 0.5;
+}
+
+.fieldConcessionChoices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding: 0 12px 12px;
+}
+
+.fieldConcessionChoices button {
+  display: grid;
+  gap: 2px;
+  padding: 7px 10px;
+  color: var(--brand-strong);
+  text-align: left;
+  background: #e0eee6;
+  border: 1px solid #b7d4c3;
+  border-radius: 5px;
+}
+
+.fieldConcessionChoices button span,
+.fieldConcessionChoices p {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.fieldConcessionChoices p {
+  margin: 0;
+  padding: 9px 10px;
+  color: #744d12;
+  background: #fff0d1;
+  border-radius: 4px;
+}
+
 .confirmDecisionMakers {
   min-height: 56px;
   padding: 10px;
@@ -1590,9 +1723,12 @@
 
 @media (max-width: 1100px) {
   .dispatchLayout,
-  .capacityLayout,
-  .meetingShell {
+  .capacityLayout {
     grid-template-columns: 1fr;
+  }
+
+  .meetingShell {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .leadQueue {
@@ -1696,7 +1832,22 @@
   }
 
   .meetingDesk {
+    width: 100%;
+    max-width: 100%;
     padding: 15px;
+    overflow: hidden;
+  }
+
+  .negotiationForm,
+  .fieldAuthority,
+  .fieldAuthority > header > div {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .fieldAuthority > header strong {
+    overflow-wrap: anywhere;
   }
 
   .meetingRows {
@@ -1714,9 +1865,25 @@
   .briefFacts,
   .briefColumns,
   .walkthroughFields,
+  .fieldAuthority dl,
+  .fieldConcessionEditor,
   .priceGrid,
   .outcomeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .fieldAuthority > header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .fieldAuthority dl div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .fieldAuthority dl div:last-child {
+    border-bottom: 0;
   }
 
   .briefColumns {

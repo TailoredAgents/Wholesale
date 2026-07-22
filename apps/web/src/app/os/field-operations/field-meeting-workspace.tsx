@@ -30,6 +30,26 @@ import { useFieldApi } from "./use-field-api";
 
 type MeetingTab = "brief" | "walkthrough" | "negotiation";
 
+type FieldNegotiationLedger = {
+  active_plan: {
+    id: string;
+    opening_offer_cents: number;
+    target_contract_cents: number;
+    stretch_contract_cents: number;
+    seller_ceiling_cents: number;
+  } | null;
+  concessions: Array<{
+    id: string;
+    status: string;
+    proposed_offer_cents: number;
+    seller_exchange: string;
+  }>;
+  events: Array<{
+    event_type: string;
+    amount_cents: number | null;
+  }>;
+};
+
 const repairCategories = [
   "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen", "bathrooms",
   "flooring", "paint_drywall", "windows_doors", "exterior", "landscaping", "permits",
@@ -381,7 +401,7 @@ function NegotiationForm({
   workspace: FieldAppointmentWorkspace;
   run: <T>(operation: () => Promise<T>, success: string) => Promise<void>;
 }) {
-  const { requestJson } = useFieldApi();
+  const { request, requestJson } = useFieldApi();
   const existing = workspace.negotiation;
   const [decisionMakersConfirmed, setDecisionMakersConfirmed] = useState(existing?.decision_makers_confirmed ?? false);
   const [decisionMakers, setDecisionMakers] = useState(existing?.decision_makers.join(", ") ?? "");
@@ -394,6 +414,55 @@ function NegotiationForm({
   const [notes, setNotes] = useState(existing?.notes ?? "");
   const [commitments, setCommitments] = useState(existing?.commitments.join("\n") ?? "");
   const [objections, setObjections] = useState(existing?.objections ?? []);
+  const [ledger, setLedger] = useState<FieldNegotiationLedger | null>(null);
+  const [concessionAmount, setConcessionAmount] = useState("");
+  const [concessionReason, setConcessionReason] = useState("");
+  const [sellerExchange, setSellerExchange] = useState("");
+
+  const loadLedger = useCallback(async () => {
+    setLedger(
+      await request<FieldNegotiationLedger>(
+        `/api/v1/leads/${workspace.appointment.lead_id}/underwriting/negotiation-ledger`,
+      ),
+    );
+  }, [request, workspace.appointment.lead_id]);
+
+  useEffect(() => {
+    void loadLedger();
+  }, [loadLedger]);
+
+  const latestPresented = ledger?.events.find(
+    (item) =>
+      item.amount_cents !== null &&
+      ["concession_presented", "field_offer_presented", "agreement"].includes(item.event_type),
+  )?.amount_cents;
+  const currentOffer = latestPresented ?? ledger?.active_plan?.opening_offer_cents ?? null;
+
+  async function createConcession() {
+    if (!ledger?.active_plan || currentOffer === null) return;
+    await run(
+      async () => {
+        await requestJson(
+          `/api/v1/leads/${workspace.appointment.lead_id}/underwriting/concessions`,
+          "POST",
+          {
+            offer_negotiation_plan_id: ledger.active_plan?.id,
+            appointment_id: appointmentId,
+            previous_offer_cents: currentOffer,
+            proposed_offer_cents: cents(concessionAmount),
+            seller_counter_cents: cents(counter),
+            reason: concessionReason,
+            seller_exchange: sellerExchange,
+          },
+        );
+        await loadLedger();
+        setConcessionAmount("");
+        setConcessionReason("");
+        setSellerExchange("");
+      },
+      "Concession recorded against the approved offer plan.",
+    );
+  }
 
   return (
     <form className={styles.negotiationForm} onSubmit={(event) => {
@@ -414,9 +483,39 @@ function NegotiationForm({
     }}>
       <div className={styles.ceilingBanner}>
         <span>Approved seller ceiling</span>
-        <strong>{money(existing?.approved_ceiling_cents ?? asRecord(workspace.brief?.brief_data.approved_offer).seller_ceiling_cents)}</strong>
+        <strong>{money(existing?.approved_ceiling_cents ?? ledger?.active_plan?.seller_ceiling_cents ?? asRecord(workspace.brief?.brief_data.approved_offer).seller_ceiling_cents)}</strong>
         <small>The system blocks a presented or agreed price above this approved amount.</small>
       </div>
+      {ledger?.active_plan ? (
+        <section className={styles.fieldAuthority}>
+          <header>
+            <div><span>Live offer authority</span><strong>Use a documented step before raising the offer</strong></div>
+            <Link href={`/os/leads/${workspace.appointment.lead_id}?tab=underwriting#negotiation-governance`}>Full ledger</Link>
+          </header>
+          <dl>
+            <div><dt>Opening</dt><dd>{money(ledger.active_plan.opening_offer_cents)}</dd></div>
+            <div><dt>Current</dt><dd>{money(currentOffer)}</dd></div>
+            <div><dt>Target</dt><dd>{money(ledger.active_plan.target_contract_cents)}</dd></div>
+            <div><dt>Stretch</dt><dd>{money(ledger.active_plan.stretch_contract_cents)}</dd></div>
+            <div><dt>Ceiling</dt><dd>{money(ledger.active_plan.seller_ceiling_cents)}</dd></div>
+          </dl>
+          <div className={styles.fieldConcessionEditor}>
+            <label><span>Next offer</span><input min="0" onChange={(event) => setConcessionAmount(event.target.value)} step="500" type="number" value={concessionAmount} /></label>
+            <label><span>Why move?</span><input onChange={(event) => setConcessionReason(event.target.value)} placeholder="Seller evidence or negotiation reason" value={concessionReason} /></label>
+            <label><span>Seller exchange</span><input onChange={(event) => setSellerExchange(event.target.value)} placeholder="What Stonegate receives" value={sellerExchange} /></label>
+            <button disabled={saving || !concessionAmount || concessionReason.length < 10 || sellerExchange.length < 3} onClick={() => void createConcession()} type="button">Request step</button>
+          </div>
+          <div className={styles.fieldConcessionChoices}>
+            {ledger.concessions.filter((item) => ["authorized", "approved"].includes(item.status)).map((item) => (
+              <button key={item.id} onClick={() => setPresented(dollars(item.proposed_offer_cents))} type="button">
+                <strong>{money(item.proposed_offer_cents)}</strong>
+                <span>{item.status === "approved" ? "Manager approved" : "Pre-authorized"}</span>
+              </button>
+            ))}
+            {ledger.concessions.some((item) => item.status === "pending") ? <p>Manager exception pending. It cannot be presented yet.</p> : null}
+          </div>
+        </section>
+      ) : null}
       <label className={styles.confirmDecisionMakers}><input checked={decisionMakersConfirmed} onChange={(event) => setDecisionMakersConfirmed(event.target.checked)} type="checkbox" /><span><strong>Every decision maker is present or confirmed</strong><small>Required before an accepted agreement can be recorded.</small></span></label>
       <label><span>Decision makers</span><input onChange={(event) => setDecisionMakers(event.target.value)} placeholder="Names, separated by commas" value={decisionMakers} /></label>
       <div className={styles.priceGrid}>

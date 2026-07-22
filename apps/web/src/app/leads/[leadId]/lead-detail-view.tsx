@@ -10,6 +10,7 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadEditForm } from "./lead-edit-form";
 import { MarketValuePreview } from "./market-value-preview";
+import { NegotiationGovernance } from "./negotiation-governance";
 import { OfferApprovalControl } from "./offer-approval-control";
 import { PropertyValidationControl } from "./property-validation-control";
 import { StageUpdateForm } from "./stage-update-form";
@@ -351,6 +352,7 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
             leadId={lead.id}
             versions={lead.underwriting_versions}
           />
+          <NegotiationGovernance leadId={lead.id} />
         </section>
       </div>
       <aside className={styles.sideColumn}><PropertyPanel lead={lead} /></aside>

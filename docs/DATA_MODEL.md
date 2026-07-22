@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-The schema is managed through Alembic migrations. Migration `0036_phase6_field_workflow` is the
+The schema is managed through Alembic migrations. Migration `0037_offer_concession_governance` is the
 current head.
 
 ## Identity And Access
@@ -78,6 +78,8 @@ scaling boundary without changing the authorization or evidence metadata contrac
 - `underwriting_calibration_cases`
 - `repair_estimates`
 - `offer_negotiation_plans`
+- `offer_concessions`
+- `offer_negotiation_events`
 - `deals`
 - `transactions`
 - `transaction_checklist_items`
@@ -98,6 +100,13 @@ supporting metadata so later calculations and reports remain reproducible.
 repair budget, disposition value, seller asking price, and an ordered opening/target/stretch/
 walk-away ladder. The plan links to a human `approval_request`; decisions retain the deciding user,
 notes, timestamp, and audit events. A later request preserves but cancels the former pending plan.
+
+`offer_concessions` is the sequential authority ledger beneath an approved plan. Each row retains
+the prior and proposed amount, seller counter, required reason, seller exchange, authority basis,
+manager decision, presentation evidence, and immutable source snapshot. `offer_negotiation_events`
+stores the chronological price discussion, channel, seller response, objections, amount, actor,
+appointment, and governing concession. A field negotiation may reference the exact concession that
+authorized its presented or agreed price.
 
 ## Buyers, Finance, And Marketing
 

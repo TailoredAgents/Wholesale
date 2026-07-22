@@ -359,6 +359,7 @@ class FieldNegotiationRead(BaseModel):
     appointment_id: UUID
     lead_id: UUID
     recorded_by_user_id: UUID
+    governing_concession_id: UUID | None
     decision_makers_confirmed: bool
     decision_makers: list[str]
     seller_asking_price_cents: int | None

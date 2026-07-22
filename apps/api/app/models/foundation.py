@@ -1415,6 +1415,9 @@ class FieldNegotiationSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     recorded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    governing_concession_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("offer_concessions.id"), nullable=True, index=True
+    )
     decision_makers_confirmed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
@@ -1618,6 +1621,81 @@ class OfferNegotiationPlan(UuidPrimaryKeyMixin, TimestampMixin, Base):
     seller_context: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     rationale: Mapped[str] = mapped_column(String(2000), nullable=False)
     source_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class OfferConcession(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "offer_concessions"
+    __table_args__ = (
+        UniqueConstraint(
+            "offer_negotiation_plan_id",
+            "sequence_number",
+            name="uq_offer_concessions_plan_sequence",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    offer_negotiation_plan_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("offer_negotiation_plans.id"), index=True
+    )
+    underwriting_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("appointments.id"), nullable=True, index=True
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approval_request_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("approval_requests.id"), nullable=True, index=True
+    )
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    presented_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    authority_basis: Mapped[str] = mapped_column(String(80), nullable=False)
+    previous_offer_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    proposed_offer_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    concession_delta_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    seller_counter_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reason: Mapped[str] = mapped_column(String(2000), nullable=False)
+    seller_exchange: Mapped[str] = mapped_column(String(2000), nullable=False)
+    decision_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    presented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class OfferNegotiationEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "offer_negotiation_events"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    offer_negotiation_plan_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("offer_negotiation_plans.id"), index=True
+    )
+    concession_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("offer_concessions.id"), nullable=True, index=True
+    )
+    appointment_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("appointments.id"), nullable=True, index=True
+    )
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    previous_offer_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    amount_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    seller_counter_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    notes: Mapped[str] = mapped_column(String(2000), nullable=False)
+    seller_response: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    objections: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON, nullable=False)
 
 
 class Deal(UuidPrimaryKeyMixin, TimestampMixin, Base):

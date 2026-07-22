@@ -45,6 +45,7 @@ from app.schemas.field_operations import (
     FieldRoomObservation,
     FieldUnderwritingTransferRead,
 )
+from app.services.offer_concessions import record_field_agreement, record_field_offer
 
 ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
@@ -557,22 +558,48 @@ def save_negotiation(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
-    ceiling = approved_ceiling(db, appointment.lead_id)
-    if payload.offer_presented_cents is not None:
-        if ceiling is None:
-            raise ValueError("An approved offer plan is required before presenting a price.")
-        if payload.offer_presented_cents > ceiling:
-            raise ValueError("The presented offer cannot exceed the approved seller ceiling.")
-    if payload.agreed_price_cents is not None:
-        if ceiling is None:
-            raise ValueError("An approved offer plan is required before recording an agreement.")
-        if payload.agreed_price_cents > ceiling:
-            raise ValueError("The agreed price exceeds the approved seller ceiling.")
     negotiation = db.scalar(
         select(FieldNegotiationSession).where(
             FieldNegotiationSession.appointment_id == appointment.id
         )
     )
+    ceiling = approved_ceiling(db, appointment.lead_id)
+    governing_concession = None
+    if payload.offer_presented_cents is not None:
+        if ceiling is None:
+            raise ValueError("An approved offer plan is required before presenting a price.")
+        if payload.offer_presented_cents > ceiling:
+            raise ValueError("The presented offer cannot exceed the approved seller ceiling.")
+        _, governing_concession = record_field_offer(
+            db,
+            principal,
+            appointment.lead_id,
+            appointment.id,
+            payload.offer_presented_cents,
+            seller_counter_cents=payload.seller_counter_cents,
+            notes=payload.notes or "Field offer presented to seller.",
+        )
+    if payload.agreed_price_cents is not None:
+        if ceiling is None:
+            raise ValueError("An approved offer plan is required before recording an agreement.")
+        if payload.agreed_price_cents > ceiling:
+            raise ValueError("The agreed price exceeds the approved seller ceiling.")
+        effective_presented = payload.offer_presented_cents or (
+            negotiation.offer_presented_cents if negotiation else None
+        )
+        if effective_presented != payload.agreed_price_cents:
+            raise ValueError(
+                "The agreed price must match the most recently presented governed offer."
+            )
+        agreement_concession = record_field_agreement(
+            db,
+            principal,
+            appointment.lead_id,
+            appointment.id,
+            payload.agreed_price_cents,
+            payload.notes or "Seller agreement recorded in the field workflow.",
+        )
+        governing_concession = agreement_concession or governing_concession
     if negotiation is None:
         negotiation = FieldNegotiationSession(
             organization_id=principal.organization_id,
@@ -582,6 +609,9 @@ def save_negotiation(
         )
         db.add(negotiation)
     negotiation.recorded_by_user_id = principal.user_id
+    negotiation.governing_concession_id = (
+        governing_concession.id if governing_concession else negotiation.governing_concession_id
+    )
     negotiation.decision_makers_confirmed = payload.decision_makers_confirmed
     negotiation.decision_makers = payload.decision_makers
     negotiation.seller_asking_price_cents = payload.seller_asking_price_cents
@@ -871,6 +901,7 @@ def negotiation_read(negotiation: FieldNegotiationSession) -> FieldNegotiationRe
         appointment_id=negotiation.appointment_id,
         lead_id=negotiation.lead_id,
         recorded_by_user_id=negotiation.recorded_by_user_id,
+        governing_concession_id=negotiation.governing_concession_id,
         decision_makers_confirmed=negotiation.decision_makers_confirmed,
         decision_makers=negotiation.decision_makers,
         seller_asking_price_cents=negotiation.seller_asking_price_cents,
