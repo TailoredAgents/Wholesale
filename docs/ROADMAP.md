@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
 from reliability through the integrated AI agent system.
@@ -40,8 +40,8 @@ email is implemented. Production acceptance remains pending for:
 | 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
 | 2. Operating Model Data Foundation | Complete | Markets, campaigns, versioned economics, role credits, operating modes, and launch controls are auditable |
 | 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
-| 4. VA Prospecting Workbench | Partial | Restricted execution and handoff exist; the dedicated guided workbench remains |
-| 5. Lead Manager Operating System | Partial, advanced | Most CRM workflow exists; guided acceptance, qualification, and scorecards remain |
+| 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
+| 5. Lead Manager Operating System | Partial, advanced | Handoff review exists; SLA, full qualification, and conversion scorecards remain |
 | 6. Appointments and Field Acquisitions | Partial | Internal calendar and appointment lifecycle exist; field workflow remains |
 | 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
 | 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
@@ -140,7 +140,7 @@ Result: Stonegate can manage outreach internally without disconnected spreadshee
 
 ## Phase 4: VA Prospecting Workbench
 
-Status: Partial.
+Status: Complete.
 
 Goal: Give cold callers a focused, restricted workflow for working assigned prospects and handing
 off genuine seller interest.
@@ -151,14 +151,18 @@ Delivered:
   audited VA-to-acquisitions handoff.
 - Handoff ownership, watcher, notification, and read-only controls.
 - Simulated communication providers for development while Twilio remains pending.
-
-Remaining:
-
 - One-prospect-at-a-time calling workspace.
 - Versioned approved caller script and required outcome rules.
 - Guided interest questions and callback scheduling from the prospect queue.
 - Clear warm-lead creation and handoff review inside the dedicated workspace.
 - Daily VA performance, connect, handoff, data-quality, and call-quality scorecards.
+- Immutable attempt history tied to the exact approved script version and assigned prospect batch.
+- DNC and wrong-number outcomes immediately block further queue use; callback outcomes return only
+  when due.
+- Warm prospects become CRM leads only at handoff, preserving campaign attribution, qualification,
+  appointments, conversation ownership, owner watchers, and review history.
+- Acquisitions can accept or return a handoff with a required correction reason. Corrections create
+  a new attempt rather than rewriting the original call.
 
 Result: A VA can work an assigned list and hand interested sellers to the Lead Manager without
 unnecessary access to the main OS.
@@ -182,7 +186,7 @@ Delivered:
 
 Remaining:
 
-- Dedicated warm-handoff acceptance queue with acceptance SLA and rejection reasons.
+- Acceptance SLA, escalation, and aging controls for the implemented warm-handoff review queue.
 - Versioned guided qualification flow aligned with the operating model.
 - Lead Manager conversion, held-appointment, aging, and follow-up quality scorecards.
 - Final validation that one Lead Manager can run the complete daily queue without spreadsheets.
@@ -335,10 +339,10 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Begin Phase 4 with the restricted one-prospect-at-a-time VA workbench and versioned caller
-   scripts.
-3. Complete Phase 4 guided dispositions, callbacks, warm-lead handoff, and performance scorecards,
-   then move through Phases 5-6 in dependency order.
+2. Begin Phase 5 with the Lead Manager acceptance SLA, guided qualification, daily operating
+   queue, and conversion scorecards.
+3. Complete the Phase 5 follow-up and workload exit criteria, then move through Phase 6 in
+   dependency order.
 4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred

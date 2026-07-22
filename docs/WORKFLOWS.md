@@ -1,6 +1,6 @@
 # Workflows
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Seller Intake
 
@@ -17,15 +17,22 @@ Last updated: July 21, 2026
 
 ## VA Qualification And Handoff
 
-1. Manager assigns a list or conversation to a VA.
-2. VA sees only assigned seller context and permitted call/disposition actions.
-3. VA records qualification answers, call outcome, notes, and appointment.
-4. Interested lead changes to Qualified or Appointment Set.
-5. Handoff reassigns the lead, conversation, and open qualification tasks to the Lead Manager.
-6. Owner and assigned Lead Manager become watchers; the Acquisitions Closer becomes the appointment
-   owner when a qualified appointment is accepted.
-7. VA loses broad editing access after handoff.
-8. Assignment and activity history remain attached to the same record.
+1. Manager approves an immutable caller-script version and assigns screened prospects in a calling
+   batch.
+2. VA opens one assigned prospect at a time; another record cannot be started until the active
+   attempt has an outcome.
+3. Every attempt retains the exact script version, caller, answers, notes, outcome, timestamps, and
+   quality evidence.
+4. No-answer and voicemail outcomes schedule the next attempt; requested callbacks return only
+   when due. Wrong-number and DNC outcomes block further calling.
+5. Interested and appointment-set outcomes require the approved warm-handoff questions and an
+   acquisitions owner. The cold prospect becomes a CRM lead only at this point.
+6. The lead preserves campaign attribution, seller contact methods, property, qualification,
+   appointment, conversation assignment, and owner watchers.
+7. Acquisitions accepts the handoff or returns it with a required correction reason. A corrected
+   submission creates a new attempt and supersedes the return without rewriting history.
+8. Daily scorecards report attempts, connects, callbacks, handoffs, acceptance, required-answer
+   completion, wrong numbers, and DNC requests.
 
 ## Prospect Import And Assignment
 

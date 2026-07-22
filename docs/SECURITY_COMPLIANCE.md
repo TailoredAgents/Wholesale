@@ -1,6 +1,6 @@
 # Security And Compliance
 
-Last updated: July 20, 2026
+Last updated: July 22, 2026
 
 ## Highest Risks
 
@@ -54,6 +54,12 @@ policy are approved for the operating states.
 Cold-call batches require a valid normalized phone, retained clear DNC evidence, and no active
 Stonegate Voice suppression. A blank or unknown imported DNC result is review-only. The current
 system retains vendor or manager-review evidence but is not itself a live national DNC provider.
+
+The VA workbench queries only batch entries assigned to the current caller. It never exposes raw
+import files, unrelated prospects, underwriting, buyers, contracts, finance, or exports. Only an
+approved script can start an attempt, one caller can hold only one active record, and every outcome
+is audited. Warm handoffs require acquisitions review; prior attempts remain immutable when a
+handoff is returned for correction.
 
 ## Production Hardening Still Required
 

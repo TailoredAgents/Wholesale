@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Product
 
@@ -114,6 +114,14 @@ maintained in `ROADMAP.md`.
 - Campaigns workspace for performance, imports, mappings, costs, assignments, and file history.
 - VA-scoped calling-list execution with attempt history, dispositions, progress, and audited
   handoff to acquisitions.
+- Dedicated one-prospect VA workbench using callable prospect batches rather than prematurely
+  creating CRM leads.
+- Immutable versioned caller scripts with manager approval, guided qualification, required warm
+  handoff answers, callbacks, DNC handling, and wrong-number blocking.
+- Warm prospect conversion preserving campaign attribution, contact methods, property, internal
+  appointment, conversation assignment, owner watchers, and complete attempt history.
+- Acquisitions handoff acceptance and correction review plus daily connect, handoff, script-quality,
+  DNC, and data-quality scorecards.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
 - Internal Stonegate calendar plus appointment and overdue-task reminders, with no external
   calendar dependency.
@@ -227,9 +235,7 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- The VA workflow has assigned-list execution and handoff, but not the final one-prospect guided
-  workbench, versioned script, or performance scorecards.
-- The Lead Manager workflow has most CRM controls, but its dedicated handoff acceptance flow,
+- The Lead Manager workflow has handoff acceptance and most CRM controls, but its acceptance SLA,
   guided qualification, and conversion scorecard are not complete.
 - Field acquisitions does not yet include travel/capacity controls, the seller-meeting brief,
   mobile inspection photographs, repair observations, or structured negotiation notes.
@@ -253,6 +259,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Begin Phase 4 with the one-prospect VA workbench, versioned caller scripts, guided outcomes,
-   callbacks, and warm-lead handoff review.
+4. Begin Phase 5 with the Lead Manager acceptance SLA, guided qualification, daily queue, and
+   conversion scorecard built on the completed prospect handoff.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

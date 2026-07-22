@@ -1,6 +1,6 @@
 # Testing
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Required Checks
 
@@ -27,6 +27,9 @@ Also run:
 - CSV dialect parsing, reusable mappings, row validation, prospect normalization, duplicate
   detection, DNC/company suppression evidence, import replay protection, costs, and callable-only
   prospect batches.
+- Approved caller-script versioning, one-active-prospect enforcement, immutable attempts, guided
+  outcome validation, callbacks, DNC suppression, warm lead conversion, handoff correction and
+  acceptance, VA scope, attribution, appointments, and scorecards.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.

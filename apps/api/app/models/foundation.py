@@ -8,11 +8,13 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
@@ -380,6 +382,112 @@ class ProspectCallingBatchEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     disposition: Mapped[str | None] = mapped_column(String(120), nullable=True)
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProspectingScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_script_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "version_number",
+            name="uq_prospecting_scripts_org_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    opening_script: Mapped[str] = mapped_column(Text, nullable=False)
+    qualification_questions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    disposition_rules: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_attempts"
+    __table_args__ = (
+        Index(
+            "uq_prospecting_attempts_active_caller",
+            "organization_id",
+            "caller_user_id",
+            unique=True,
+            postgresql_where=text("status = 'in_progress'"),
+            sqlite_where=text("status = 'in_progress'"),
+        ),
+        Index(
+            "uq_prospecting_attempts_active_entry",
+            "batch_entry_id",
+            unique=True,
+            postgresql_where=text("status = 'in_progress'"),
+            sqlite_where=text("status = 'in_progress'"),
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    batch_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_calling_batch_entries.id", ondelete="CASCADE"), index=True
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospects.id"), index=True)
+    caller_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    script_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_script_versions.id"), index=True
+    )
+    call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("call_records.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    outcome: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    contact_made: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    qualification_answers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    callback_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    required_answer_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    answered_required_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    quality_score_basis_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospect_handoffs"
+    __table_args__ = (
+        UniqueConstraint("attempt_id", name="uq_prospect_handoffs_attempt"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospects.id"), index=True)
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_attempts.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    assigned_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    submitted_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
 class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):

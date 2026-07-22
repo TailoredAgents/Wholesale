@@ -1,0 +1,450 @@
+"use client";
+
+import { useAuth } from "@clerk/nextjs";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { FormEvent, useMemo, useState } from "react";
+
+import type {
+  ProspectHandoff,
+  ProspectingEntry,
+  ProspectingWorkbenchOverview,
+} from "../../lib/api";
+import { labelize } from "../os-utils";
+import styles from "./prospecting.module.css";
+
+type View = "workbench" | "handoffs" | "performance" | "scripts";
+type RequestStatus = "idle" | "saving" | "saved" | "error";
+
+const outcomes = [
+  ["no_answer", "No answer"],
+  ["left_voicemail", "Left voicemail"],
+  ["callback_requested", "Callback requested"],
+  ["follow_up", "Follow up later"],
+  ["interested", "Interested seller"],
+  ["appointment_set", "Appointment set"],
+  ["not_interested", "Not interested"],
+  ["wrong_number", "Wrong number"],
+  ["do_not_call", "Do not call"],
+] as const;
+
+const standardQuestions = [
+  ["motivation", "Reason for selling", "What has you considering selling the property?", true],
+  ["timeline", "Timeline", "When would you ideally like to sell?", true],
+  ["property_condition", "Property condition", "What repairs or updates does the property need?", true],
+  ["occupancy", "Occupancy", "Is the property owner occupied, tenant occupied, or vacant?", true],
+  ["asking_price", "Price expectation", "Do you have a price in mind?", false],
+  ["mortgage_balance", "Mortgage balance", "Is there a mortgage or other debt on the property?", false],
+] as const;
+
+function value(data: FormData, key: string) {
+  return String(data.get(key) ?? "").trim();
+}
+
+function formatDateTime(value: string | null) {
+  if (!value) return "Not scheduled";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatPercent(basisPoints: number) {
+  return `${(basisPoints / 100).toFixed(1)}%`;
+}
+
+function localDateTimeToIso(value: string) {
+  return value ? new Date(value).toISOString() : null;
+}
+
+export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverview }) {
+  const router = useRouter();
+  const { getToken } = useAuth();
+  const [view, setView] = useState<View>("workbench");
+  const [status, setStatus] = useState<RequestStatus>("idle");
+  const [message, setMessage] = useState("");
+  const [outcome, setOutcome] = useState("no_answer");
+  const [entry, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
+  const devUserEmail = useMemo(
+    () =>
+      process.env.NEXT_PUBLIC_DEV_USER_EMAIL ??
+      "richardaustindugger@users.noreply.github.com",
+    [],
+  );
+  const activeAttempt = entry?.active_attempt ?? null;
+  const requiresCallback = ["callback_requested", "follow_up"].includes(outcome);
+  const isWarm = ["interested", "appointment_set"].includes(outcome);
+  const isAppointment = outcome === "appointment_set";
+  const availableViews: Array<{ key: View; label: string; count?: number }> = [
+    { key: "workbench", label: "Work queue" },
+    ...(data.can_manage
+      ? [{ key: "handoffs" as const, label: "Handoff review", count: data.pending_handoffs.length }]
+      : []),
+    { key: "performance", label: "Performance" },
+    ...(data.can_manage ? [{ key: "scripts" as const, label: "Caller scripts" }] : []),
+  ];
+
+  async function request<T>(path: string, method: "POST", body?: object): Promise<T | null> {
+    setStatus("saving");
+    setMessage("");
+    try {
+      const token = await getToken().catch(() => null);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = devUserEmail;
+      const response = await fetch(`${apiBaseUrl}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        throw new Error(payload?.detail ?? "The operation could not be completed.");
+      }
+      setStatus("saved");
+      setMessage("Saved.");
+      return (await response.json()) as T;
+    } catch (error) {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "The operation could not be completed.");
+      return null;
+    }
+  }
+
+  async function startCurrent() {
+    if (!entry) return;
+    const result = await request<ProspectingEntry>(
+      `/api/v1/prospecting/entries/${entry.id}/start`,
+      "POST",
+    );
+    if (result) setEntry(result);
+  }
+
+  async function completeCurrent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!activeAttempt || !data.active_script) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const answers = Object.fromEntries(
+      data.active_script.qualification_questions
+        .map((question) => [question.key, value(formData, question.key)])
+        .filter(([, answer]) => Boolean(answer)),
+    );
+    const result = await request<ProspectingEntry>(
+      `/api/v1/prospecting/attempts/${activeAttempt.id}/complete`,
+      "POST",
+      {
+        outcome,
+        qualification_answers: answers,
+        notes: value(formData, "notes") || null,
+        callback_at: requiresCallback
+          ? localDateTimeToIso(value(formData, "callback_at"))
+          : null,
+        handoff_user_id: isWarm ? value(formData, "handoff_user_id") || null : null,
+        appointment_start_at: isAppointment
+          ? localDateTimeToIso(value(formData, "appointment_start_at"))
+          : null,
+        appointment_location_type: isAppointment
+          ? value(formData, "appointment_location_type") || null
+          : null,
+        appointment_location: isAppointment
+          ? value(formData, "appointment_location") || null
+          : null,
+      },
+    );
+    if (result) {
+      setEntry(result.status === "queued" && result.next_attempt_at === null ? result : null);
+      form.reset();
+      setOutcome("no_answer");
+      router.refresh();
+    }
+  }
+
+  async function reviewHandoff(
+    event: FormEvent<HTMLFormElement>,
+    handoff: ProspectHandoff,
+    decision: "accepted" | "needs_correction",
+  ) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const result = await request(
+      `/api/v1/prospecting/handoffs/${handoff.id}/decision`,
+      "POST",
+      { decision, reason: value(formData, "reason") || null },
+    );
+    if (result) router.refresh();
+  }
+
+  async function createScript(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const result = await request("/api/v1/prospecting/scripts", "POST", {
+      title: value(formData, "title"),
+      opening_script: value(formData, "opening_script"),
+      qualification_questions: standardQuestions.map(([key, label, fallbackPrompt, required]) => ({
+        key,
+        label,
+        prompt: value(formData, `${key}_prompt`) || fallbackPrompt,
+        answer_type:
+          key === "occupancy" ? "choice" : "text",
+        choices:
+          key === "occupancy" ? ["Owner occupied", "Tenant occupied", "Vacant"] : [],
+        required_for_handoff: required,
+      })),
+    });
+    if (result) {
+      form.reset();
+      router.refresh();
+    }
+  }
+
+  async function approveScript(scriptId: string) {
+    const result = await request(`/api/v1/prospecting/scripts/${scriptId}/approve`, "POST");
+    if (result) router.refresh();
+  }
+
+  return (
+    <div className={styles.workspace}>
+      <section className={styles.metrics} aria-label="Prospecting queue summary">
+        <div><span>Ready now</span><strong>{data.queue.ready}</strong></div>
+        <div><span>Callbacks due</span><strong>{data.queue.callbacks_due}</strong></div>
+        <div><span>In progress</span><strong>{data.queue.in_progress}</strong></div>
+        <div><span>Handoffs waiting</span><strong>{data.queue.handoff_pending}</strong></div>
+        <div><span>Completed</span><strong>{data.queue.completed}</strong></div>
+      </section>
+
+      <nav className={styles.viewTabs} aria-label="Prospecting views">
+        {availableViews.map((item) => (
+          <button
+            aria-pressed={view === item.key}
+            className={view === item.key ? styles.activeTab : undefined}
+            key={item.key}
+            onClick={() => setView(item.key)}
+            type="button"
+          >
+            {item.label}{item.count ? ` (${item.count})` : ""}
+          </button>
+        ))}
+      </nav>
+
+      {message ? (
+        <p className={status === "error" ? styles.error : styles.notice}>{message}</p>
+      ) : null}
+
+      {view === "workbench" ? (
+        <WorkbenchView
+          activeAttempt={activeAttempt}
+          activeScript={data.active_script}
+          acquisitionUsers={data.acquisition_users}
+          entry={entry}
+          isAppointment={isAppointment}
+          isWarm={isWarm}
+          onComplete={completeCurrent}
+          onOutcomeChange={setOutcome}
+          onStart={startCurrent}
+          outcome={outcome}
+          requiresCallback={requiresCallback}
+          returnedHandoffs={data.returned_handoffs}
+          saving={status === "saving"}
+        />
+      ) : null}
+
+      {view === "handoffs" && data.can_manage ? (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div><span>Acquisitions review</span><h3>Warm seller handoffs</h3></div>
+            <strong>{data.pending_handoffs.length} waiting</strong>
+          </div>
+          <div className={styles.handoffList}>
+            {data.pending_handoffs.length === 0 ? (
+              <p className={styles.empty}>No handoffs are awaiting review.</p>
+            ) : null}
+            {data.pending_handoffs.map((handoff) => (
+              <article className={styles.handoff} key={handoff.id}>
+                <header>
+                  <div><strong>{handoff.seller_name}</strong><span>{handoff.property_address}</span></div>
+                  <Link href={`/os/leads/${handoff.lead_id}`}>Open lead</Link>
+                </header>
+                <dl className={styles.handoffMeta}>
+                  <div><dt>Caller</dt><dd>{handoff.caller_name}</dd></div>
+                  <div><dt>Assigned to</dt><dd>{handoff.assigned_user_name}</dd></div>
+                  <div><dt>Outcome</dt><dd>{labelize(handoff.outcome)}</dd></div>
+                  <div><dt>Submitted</dt><dd>{formatDateTime(handoff.submitted_at)}</dd></div>
+                </dl>
+                <div className={styles.answerGrid}>
+                  {Object.entries(handoff.qualification_answers).map(([key, answer]) => (
+                    <div key={key}><span>{labelize(key)}</span><strong>{answer}</strong></div>
+                  ))}
+                </div>
+                {handoff.notes ? <p className={styles.handoffNotes}>{handoff.notes}</p> : null}
+                <div className={styles.reviewActions}>
+                  <form
+                    className={styles.reviewForm}
+                    onSubmit={(event) => reviewHandoff(event, handoff, "accepted")}
+                  >
+                    <label><span>Acceptance note</span><input name="reason" placeholder="Optional" /></label>
+                    <button className={styles.primaryButton} type="submit">Accept handoff</button>
+                  </form>
+                  <form
+                    className={styles.reviewForm}
+                    onSubmit={(event) => reviewHandoff(event, handoff, "needs_correction")}
+                  >
+                    <label><span>Required correction</span><input name="reason" placeholder="Tell the caller exactly what is missing" required /></label>
+                    <button className={styles.secondaryButton} type="submit">Return for correction</button>
+                  </form>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {view === "performance" ? (
+        <section className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <div><span>Trailing seven days</span><h3>Caller performance</h3></div>
+          </div>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead><tr><th>Date</th><th>Caller</th><th>Attempts</th><th>Contacts</th><th>Contact rate</th><th>Handoffs</th><th>Accepted</th><th>Script completion</th><th>Bad data</th><th>DNC</th></tr></thead>
+              <tbody>
+                {data.scorecards.map((row) => (
+                  <tr key={`${row.caller_user_id}-${row.score_date}`}>
+                    <td>{row.score_date}</td><td><strong>{row.caller_name}</strong></td><td>{row.attempts}</td><td>{row.contacts}</td><td>{formatPercent(row.contact_rate_basis_points)}</td><td>{row.handoffs}</td><td>{row.accepted_handoffs}</td><td>{formatPercent(row.script_completion_rate_basis_points)}</td><td>{formatPercent(row.data_quality_issue_rate_basis_points)}</td><td>{row.dnc_requests}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.scorecards.length === 0 ? <p className={styles.empty}>Performance appears after completed attempts.</p> : null}
+          </div>
+        </section>
+      ) : null}
+
+      {view === "scripts" && data.can_manage ? (
+        <section className={styles.scriptLayout}>
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}><div><span>Controlled revisions</span><h3>Caller script history</h3></div></div>
+            <div className={styles.scriptList}>
+              {data.scripts.map((script) => (
+                <article key={script.id}>
+                  <div><strong>v{script.version_number} · {script.title}</strong><span>{labelize(script.status)} · {script.created_by_name}</span></div>
+                  {script.status === "draft" ? <button onClick={() => approveScript(script.id)} type="button">Approve</button> : <span>{script.approved_at ? formatDateTime(script.approved_at) : "Not approved"}</span>}
+                </article>
+              ))}
+            </div>
+          </div>
+          <form className={styles.scriptForm} onSubmit={createScript}>
+            <div className={styles.sectionHeader}><div><span>New immutable version</span><h3>Draft caller script</h3></div></div>
+            <label><span>Version title</span><input name="title" placeholder="Stonegate seller conversation" required /></label>
+            <label><span>Opening</span><textarea name="opening_script" placeholder="Introduce Stonegate, identify the property, and ask permission to continue." required /></label>
+            {standardQuestions.map(([key, label, prompt]) => (
+              <label key={key}><span>{label} prompt</span><input defaultValue={prompt} name={`${key}_prompt`} required /></label>
+            ))}
+            <button className={styles.primaryButton} type="submit">Create draft version</button>
+          </form>
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function WorkbenchView({
+  activeAttempt,
+  activeScript,
+  acquisitionUsers,
+  entry,
+  isAppointment,
+  isWarm,
+  onComplete,
+  onOutcomeChange,
+  onStart,
+  outcome,
+  requiresCallback,
+  returnedHandoffs,
+  saving,
+}: {
+  activeAttempt: ProspectingEntry["active_attempt"];
+  activeScript: ProspectingWorkbenchOverview["active_script"];
+  acquisitionUsers: ProspectingWorkbenchOverview["acquisition_users"];
+  entry: ProspectingEntry | null;
+  isAppointment: boolean;
+  isWarm: boolean;
+  onComplete: (event: FormEvent<HTMLFormElement>) => void;
+  onOutcomeChange: (outcome: string) => void;
+  onStart: () => void;
+  outcome: string;
+  requiresCallback: boolean;
+  returnedHandoffs: ProspectHandoff[];
+  saving: boolean;
+}) {
+  if (!activeScript) {
+    return <section className={styles.emptyState}><span>Queue paused</span><h3>An approved caller script is required</h3><p>An acquisition manager must approve a script version before assigned prospects can be worked.</p></section>;
+  }
+  if (!entry) {
+    return <section className={styles.emptyState}><span>Queue clear</span><h3>No assigned prospect is due</h3><p>Future callbacks remain scheduled and will return here when due.</p></section>;
+  }
+  const returned = returnedHandoffs.find((handoff) => handoff.prospect_id === entry.prospect_id);
+  const priorAnswers =
+    entry.attempts.find((attempt) => attempt.status === "completed")
+      ?.qualification_answers ?? {};
+  return (
+    <section className={styles.workbenchGrid}>
+      <aside className={styles.prospectPanel}>
+        <div className={styles.queuePosition}><span>{entry.batch_name}</span><strong>Record {entry.sequence_number}</strong></div>
+        <div className={styles.sellerIdentity}><span>{entry.campaign_name}</span><h3>{entry.legal_name}</h3><p>{entry.property_address ?? "Property address unavailable"}</p></div>
+        <dl className={styles.contactList}>
+          <div><dt>Phone</dt><dd>{entry.phone ? <a href={`tel:${entry.phone}`}>{entry.phone}</a> : "Unavailable"}</dd></div>
+          <div><dt>Email</dt><dd>{entry.email ?? "Unavailable"}</dd></div>
+          <div><dt>Prior attempts</dt><dd>{entry.attempt_count}</dd></div>
+          <div><dt>Last outcome</dt><dd>{entry.disposition ? labelize(entry.disposition) : "None"}</dd></div>
+        </dl>
+        {returned ? <div className={styles.correction}><strong>Correction requested</strong><p>{returned.review_reason}</p></div> : null}
+        <div className={styles.attemptHistory}>
+          <span>Attempt history</span>
+          {entry.attempts.filter((attempt) => attempt.status === "completed").map((attempt) => (
+            <div key={attempt.id}><strong>{attempt.outcome ? labelize(attempt.outcome) : "Attempt"}</strong><span>{formatDateTime(attempt.completed_at)}</span></div>
+          ))}
+        </div>
+      </aside>
+
+      <div className={styles.scriptPanel}>
+        <div className={styles.scriptVersion}><span>Approved script</span><strong>v{activeScript.version_number} · {activeScript.title}</strong></div>
+        <blockquote>{activeScript.opening_script}</blockquote>
+        {!activeAttempt ? (
+          <div className={styles.startAction}><p>Start locks this record to you until an outcome is saved.</p><button className={styles.primaryButton} disabled={saving} onClick={onStart} type="button">Start prospect</button></div>
+        ) : (
+          <div className={styles.questionGuide}>
+            {activeScript.qualification_questions.map((question, index) => (
+              <div key={question.key}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{question.label}{question.required_for_handoff ? " *" : ""}</strong><p>{question.prompt}</p></div></div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <aside className={styles.outcomePanel}>
+        <div className={styles.sectionHeader}><div><span>Required record</span><h3>Call outcome</h3></div></div>
+        {activeAttempt ? (
+          <form onSubmit={onComplete}>
+            {activeScript.qualification_questions.map((question) => (
+              <label key={question.key}><span>{question.label}{question.required_for_handoff ? " *" : ""}</span>{question.answer_type === "choice" ? <select name={question.key} defaultValue={priorAnswers[question.key] ?? ""}><option value="">Select</option>{question.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input defaultValue={priorAnswers[question.key] ?? ""} name={question.key} />}</label>
+            ))}
+            <label><span>Disposition</span><select value={outcome} onChange={(event) => onOutcomeChange(event.target.value)}>{outcomes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+            {requiresCallback ? <label><span>Callback date and time</span><input name="callback_at" required type="datetime-local" /></label> : null}
+            {isWarm ? <label><span>Acquisitions owner</span><select name="handoff_user_id" required><option value="">Select owner</option>{acquisitionUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label> : null}
+            {isAppointment ? <><label><span>Appointment date and time</span><input name="appointment_start_at" required type="datetime-local" /></label><label><span>Meeting type</span><select defaultValue="seller_property" name="appointment_location_type"><option value="seller_property">Seller property</option><option value="phone">Phone</option><option value="video">Video</option><option value="office">Office</option></select></label><label><span>Meeting location</span><input name="appointment_location" placeholder="Defaults to the property" /></label></> : null}
+            <label><span>Call notes</span><textarea name="notes" placeholder="Objections, commitments, and next action" /></label>
+            <button className={styles.primaryButton} disabled={saving} type="submit">Save outcome</button>
+          </form>
+        ) : <p className={styles.empty}>Start the prospect to unlock the guided outcome form.</p>}
+      </aside>
+    </section>
+  );
+}

@@ -461,6 +461,116 @@ export type CampaignManagementOverview = {
   }>;
 };
 
+export type ProspectingScript = {
+  id: string;
+  version_number: number;
+  title: string;
+  status: string;
+  opening_script: string;
+  qualification_questions: Array<{
+    key: string;
+    label: string;
+    prompt: string;
+    answer_type: "text" | "choice";
+    choices: string[];
+    required_for_handoff: boolean;
+  }>;
+  created_by_name: string;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type ProspectingAttempt = {
+  id: string;
+  script_version_id: string;
+  script_version_number: number;
+  status: string;
+  outcome: string | null;
+  contact_made: boolean | null;
+  qualification_answers: Record<string, string>;
+  notes: string | null;
+  callback_at: string | null;
+  started_at: string;
+  completed_at: string | null;
+  quality_score_basis_points: number | null;
+};
+
+export type ProspectingEntry = {
+  id: string;
+  batch_id: string;
+  batch_name: string;
+  campaign_name: string;
+  prospect_id: string;
+  legal_name: string;
+  phone: string | null;
+  email: string | null;
+  property_address: string | null;
+  sequence_number: number;
+  status: string;
+  attempt_count: number;
+  disposition: string | null;
+  next_attempt_at: string | null;
+  active_attempt: ProspectingAttempt | null;
+  attempts: ProspectingAttempt[];
+};
+
+export type ProspectHandoff = {
+  id: string;
+  prospect_id: string;
+  attempt_id: string;
+  lead_id: string;
+  seller_name: string;
+  property_address: string | null;
+  caller_name: string;
+  assigned_user_id: string;
+  assigned_user_name: string;
+  status: string;
+  outcome: string;
+  qualification_answers: Record<string, string>;
+  notes: string | null;
+  submitted_at: string;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+};
+
+export type ProspectingWorkbenchOverview = {
+  current_user_id: string;
+  current_user_name: string;
+  can_manage: boolean;
+  active_script: ProspectingScript | null;
+  scripts: ProspectingScript[];
+  current_entry: ProspectingEntry | null;
+  queue: {
+    ready: number;
+    callbacks_due: number;
+    in_progress: number;
+    handoff_pending: number;
+    completed: number;
+  };
+  acquisition_users: OperationsUser[];
+  pending_handoffs: ProspectHandoff[];
+  returned_handoffs: ProspectHandoff[];
+  scorecards: Array<{
+    caller_user_id: string;
+    caller_name: string;
+    score_date: string;
+    attempts: number;
+    contacts: number;
+    callbacks: number;
+    handoffs: number;
+    accepted_handoffs: number;
+    wrong_numbers: number;
+    dnc_requests: number;
+    contact_rate_basis_points: number;
+    handoff_rate_basis_points: number;
+    accepted_handoff_rate_basis_points: number;
+    script_completion_rate_basis_points: number;
+    data_quality_issue_rate_basis_points: number;
+  }>;
+};
+
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
     method_type: string;
@@ -1206,6 +1316,31 @@ export async function getCampaignManagementOverview(): Promise<{
   } catch (error) {
     console.error("Stonegate campaign management request failed.", error);
     return { campaignManagement: null, apiConnected: false };
+  }
+}
+
+export async function getProspectingWorkbench(): Promise<{
+  prospecting: ProspectingWorkbenchOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/prospecting`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      prospecting: (await response.json()) as ProspectingWorkbenchOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate prospecting workbench request failed.", error);
+    return { prospecting: null, apiConnected: false };
   }
 }
 

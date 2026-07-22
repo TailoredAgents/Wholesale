@@ -1,8 +1,8 @@
 # Data Model
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
-The schema is managed through Alembic migrations. Migration `0032_campaign_list_management` is the
+The schema is managed through Alembic migrations. Migration `0033_va_prospecting_workbench` is the
 current head.
 
 ## Identity And Access
@@ -105,6 +105,9 @@ notes, timestamp, and audit events. A later request preserves but cancels the fo
 - `campaign_costs`
 - `prospect_calling_batches`
 - `prospect_calling_batch_entries`
+- `prospecting_script_versions`
+- `prospecting_attempts`
+- `prospect_handoffs`
 - `compensation_plan_versions`
 - `compensation_plan_roles`
 - `disposition_operating_modes`
@@ -121,6 +124,11 @@ Prospect import batches preserve the source file checksum, reusable mapping, eve
 normalization result, duplicate match, and call-eligibility decision. Suppression checks retain
 separate company and imported vendor DNC evidence. Calling batches reference only prospects with
 clear screening evidence; records that are blocked or require review remain outside caller queues.
+
+Prospecting scripts are immutable versions that require manager approval before queue use. Each
+started record creates a separate attempt tied to the exact script version, caller, batch entry,
+answers, outcome, callback, and quality evidence. Warm outcomes create a CRM lead and a reviewable
+handoff; correction and acceptance decisions preserve both the original and replacement attempts.
 
 ## AI Control
 
