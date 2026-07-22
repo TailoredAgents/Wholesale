@@ -17,6 +17,9 @@ from app.models.foundation import (
     CloserDispatchProfile,
     CloserTerritoryCoverage,
     Contact,
+    FieldInspection,
+    FieldMeetingBrief,
+    FieldNegotiationSession,
     Lead,
     LeadManagementCase,
     Market,
@@ -41,6 +44,7 @@ from app.schemas.field_operations import (
     DispatchSlotRequest,
     DispatchTerritoryRead,
     DispatchUserRead,
+    FieldCloserScorecardRead,
     FieldOperationsMetrics,
     FieldOperationsOverview,
 )
@@ -160,6 +164,9 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
             .order_by(CloserDispatchProfile.created_at)
         )
     )
+    if not can_manage(principal):
+        users = [user for user in users if user.id == principal.user_id]
+        profiles = [profile for profile in profiles if profile.user_id == principal.user_id]
     profile_user_ids = {profile.user_id for profile in profiles}
     territories = list(
         db.scalars(
@@ -184,8 +191,8 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
             )
         )
 
-    ready_leads = list_ready_leads(db, principal.organization_id)
-    appointments = list_upcoming_appointments(db, principal.organization_id)
+    ready_leads = list_ready_leads(db, principal)
+    appointments = list_upcoming_appointments(db, principal)
     now = datetime.now(UTC)
     today_count = sum(item.scheduled_start_at.date() == now.date() for item in appointments)
     active_profiles = [profile for profile in profiles if profile.is_active]
@@ -218,26 +225,100 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
         territories=territory_reads,
         ready_leads=ready_leads,
         upcoming_appointments=appointments,
+        scorecards=field_scorecards(db, principal, users),
     )
 
 
-def list_ready_leads(db: Session, organization_id: UUID) -> list[DispatchLeadRead]:
+def field_scorecards(
+    db: Session, principal: Principal, users: list[User]
+) -> list[FieldCloserScorecardRead]:
+    period_start = datetime.now(UTC) - timedelta(days=30)
+    result: list[FieldCloserScorecardRead] = []
+    for user in users:
+        appointments = list(
+            db.scalars(
+                select(Appointment).where(
+                    Appointment.organization_id == principal.organization_id,
+                    Appointment.owner_user_id == user.id,
+                    Appointment.scheduled_start_at >= period_start,
+                )
+            )
+        )
+        appointment_ids = [item.id for item in appointments]
+        if appointment_ids:
+            briefs = int(
+                db.scalar(
+                    select(func.count(func.distinct(FieldMeetingBrief.appointment_id))).where(
+                        FieldMeetingBrief.appointment_id.in_(appointment_ids)
+                    )
+                )
+                or 0
+            )
+            submitted_inspections = int(
+                db.scalar(
+                    select(func.count(FieldInspection.id)).where(
+                        FieldInspection.appointment_id.in_(appointment_ids),
+                        FieldInspection.status.in_(("submitted", "reviewed")),
+                    )
+                )
+                or 0
+            )
+            negotiations = list(
+                db.scalars(
+                    select(FieldNegotiationSession).where(
+                        FieldNegotiationSession.appointment_id.in_(appointment_ids),
+                        FieldNegotiationSession.outcome != "pending",
+                    )
+                )
+            )
+        else:
+            briefs = 0
+            submitted_inspections = 0
+            negotiations = []
+        assigned = len(appointments)
+        outcomes = len(negotiations)
+        result.append(
+            FieldCloserScorecardRead(
+                user_id=user.id,
+                user_name=user.display_name,
+                assigned_appointments=assigned,
+                briefs_prepared=briefs,
+                inspections_submitted=submitted_inspections,
+                outcomes_recorded=outcomes,
+                accepted_outcomes=sum(item.outcome == "accepted" for item in negotiations),
+                follow_up_outcomes=sum(
+                    item.outcome in {"follow_up", "not_decided"} for item in negotiations
+                ),
+                declined_outcomes=sum(item.outcome == "declined" for item in negotiations),
+                preparation_rate_basis_points=round(briefs * 10_000 / assigned) if assigned else 0,
+                documentation_rate_basis_points=round(outcomes * 10_000 / assigned)
+                if assigned
+                else 0,
+            )
+        )
+    return result
+
+
+def list_ready_leads(db: Session, principal: Principal) -> list[DispatchLeadRead]:
+    organization_id = principal.organization_id
     scheduled_lead_ids = select(Appointment.lead_id).where(
         Appointment.organization_id == organization_id,
         Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
         Appointment.scheduled_start_at >= datetime.now(UTC) - timedelta(hours=2),
     )
+    statement = select(Lead).where(
+        Lead.organization_id == organization_id,
+        Lead.archived_at.is_(None),
+        Lead.stage_key.in_(READY_TO_SCHEDULE_STAGES),
+        Lead.id.not_in(scheduled_lead_ids),
+    )
+    if not can_manage(principal):
+        statement = statement.where(Lead.assigned_user_id == principal.user_id)
     leads = list(
         db.scalars(
-            select(Lead)
-            .where(
-                Lead.organization_id == organization_id,
-                Lead.archived_at.is_(None),
-                Lead.stage_key.in_(READY_TO_SCHEDULE_STAGES),
-                Lead.id.not_in(scheduled_lead_ids),
+            statement.order_by(Lead.next_follow_up_at.asc().nulls_last(), Lead.created_at).limit(
+                100
             )
-            .order_by(Lead.next_follow_up_at.asc().nulls_last(), Lead.created_at)
-            .limit(100)
         )
     )
     result: list[DispatchLeadRead] = []
@@ -266,19 +347,15 @@ def list_ready_leads(db: Session, organization_id: UUID) -> list[DispatchLeadRea
     return result
 
 
-def list_upcoming_appointments(db: Session, organization_id: UUID) -> list[DispatchAppointmentRead]:
-    appointments = list(
-        db.scalars(
-            select(Appointment)
-            .where(
-                Appointment.organization_id == organization_id,
-                Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
-                Appointment.scheduled_start_at >= datetime.now(UTC) - timedelta(hours=2),
-            )
-            .order_by(Appointment.scheduled_start_at)
-            .limit(100)
-        )
+def list_upcoming_appointments(db: Session, principal: Principal) -> list[DispatchAppointmentRead]:
+    statement = select(Appointment).where(
+        Appointment.organization_id == principal.organization_id,
+        Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+        Appointment.scheduled_start_at >= datetime.now(UTC) - timedelta(hours=2),
     )
+    if not can_manage(principal):
+        statement = statement.where(Appointment.owner_user_id == principal.user_id)
+    appointments = list(db.scalars(statement.order_by(Appointment.scheduled_start_at).limit(100)))
     result: list[DispatchAppointmentRead] = []
     for appointment in appointments:
         contact = db.get(Contact, appointment.contact_id)
@@ -486,6 +563,8 @@ def evaluate_slot(
     )
     if lead is None:
         return None
+    if not can_manage(principal) and lead.assigned_user_id != principal.user_id:
+        raise PermissionError("Only the assigned closer can schedule this lead.")
     start = utc_value(payload.scheduled_start_at)
     end = (
         utc_value(payload.scheduled_end_at)
@@ -503,6 +582,8 @@ def evaluate_slot(
             .order_by(CloserDispatchProfile.created_at)
         )
     )
+    if not can_manage(principal):
+        profiles = [profile for profile in profiles if profile.user_id == principal.user_id]
     candidates = [evaluate_candidate(db, profile, territory, start, end) for profile in profiles]
     candidates.sort(
         key=lambda item: (
@@ -664,6 +745,8 @@ def dispatch_appointment(
     principal: Principal,
     payload: AppointmentDispatchCreate,
 ) -> AppointmentDispatchRead | None:
+    if not can_manage(principal) and payload.closer_user_id != principal.user_id:
+        raise PermissionError("Only a manager can dispatch an appointment to another closer.")
     profile = db.scalar(
         select(CloserDispatchProfile).where(
             CloserDispatchProfile.organization_id == principal.organization_id,

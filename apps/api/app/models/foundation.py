@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -465,9 +466,7 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prospect_handoffs"
-    __table_args__ = (
-        UniqueConstraint("attempt_id", name="uq_prospect_handoffs_attempt"),
-    )
+    __table_args__ = (UniqueConstraint("attempt_id", name="uq_prospect_handoffs_attempt"),)
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -516,9 +515,7 @@ class LeadQualificationScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class LeadManagementCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lead_management_cases"
-    __table_args__ = (
-        UniqueConstraint("lead_id", name="uq_lead_management_cases_lead"),
-    )
+    __table_args__ = (UniqueConstraint("lead_id", name="uq_lead_management_cases_lead"),)
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -544,9 +541,7 @@ class LeadManagementCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     qualification_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    qualification_quality_basis_points: Mapped[int | None] = mapped_column(
-        Integer, nullable=True
-    )
+    qualification_quality_basis_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
     next_action_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     next_action_due_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
@@ -1333,6 +1328,135 @@ class AppointmentDispatchRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     violations: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     candidate_snapshot: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
     decision_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class FieldMeetingBrief(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "field_meeting_briefs"
+    __table_args__ = (
+        UniqueConstraint(
+            "appointment_id", "version_number", name="uq_field_meeting_briefs_appointment_version"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    brief_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class FieldInspection(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "field_inspections"
+    __table_args__ = (UniqueConstraint("appointment_id", name="uq_field_inspections_appointment"),)
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    inspector_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    overall_condition: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    occupancy_observed: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    utilities_status: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    access_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    title_concerns: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    safety_concerns: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    room_observations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    repair_items: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    inspector_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class FieldInspectionPhoto(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "field_inspection_photos"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    inspection_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("field_inspections.id", ondelete="CASCADE"), index=True
+    )
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    area: Mapped[str] = mapped_column(String(120), nullable=False)
+    caption: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class FieldNegotiationSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "field_negotiation_sessions"
+    __table_args__ = (
+        UniqueConstraint("appointment_id", name="uq_field_negotiation_sessions_appointment"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    recorded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    decision_makers_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    decision_makers: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    seller_asking_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    offer_presented_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    seller_counter_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    agreed_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    approved_ceiling_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    objections: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    commitments: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    next_follow_up_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class FieldUnderwritingTransfer(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "field_underwriting_transfers"
+    __table_args__ = (
+        UniqueConstraint("inspection_id", name="uq_field_underwriting_transfers_inspection"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    inspection_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("field_inspections.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    source_underwriting_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id"), nullable=True
+    )
+    repair_estimate_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("repair_estimates.id"), nullable=True
+    )
+    created_underwriting_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id"), index=True
+    )
+    transfer_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
 class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):

@@ -1,58 +1,58 @@
 # Phase 6: Field Operations
 
-Status: Partial. Appointment dispatch and capacity controls are complete; seller-meeting and
-mobile field workflows remain.
+Status: Complete.
 
 ## Delivered
 
-The Field Dispatch desk is available at `/os/field-operations` for users with acquisition
-operations access. It uses Stonegate's internal `appointments` and `calendar_events` records as the
-calendar source of truth.
+The `/os/field-operations` workspace now covers the complete seller-appointment lifecycle:
 
-Managers can configure each closer's:
+- explainable appointment dispatch with territory, working-hours, capacity, unavailable-time, and
+  travel-buffer checks;
+- manager-only conflict overrides with reasons and immutable candidate evidence;
+- an internal month, week, and day calendar, with closer filtering and direct meeting launch;
+- a versioned seller-meeting brief generated from current seller, property, qualification,
+  underwriting, approved offer, tasks, unresolved questions, and likely objections;
+- a mobile field walkthrough for room observations, repair scope, access, title, safety, utilities,
+  occupancy, notes, and captured photographs;
+- structured decision-maker, seller price, offer, counter, objection, commitment, outcome, and
+  follow-up capture;
+- a hard server-side block against presenting or accepting a price above the currently approved
+  seller ceiling;
+- a reviewed transfer that creates a new repair estimate and draft underwriting version without
+  changing prior approved underwriting or silently creating a revised offer; and
+- trailing 30-day preparation and outcome-documentation scorecards for each closer.
 
-- timezone, working days, and working hours;
-- daily appointment limit and normal appointment duration;
-- static travel buffer and home ZIP;
-- active territories and whether territory matching is mandatory;
-- scheduled unavailable periods.
+The internal `appointments` record remains the source of truth. External calendar integration is
+not required for operations.
 
-The slot evaluator checks working hours, territory coverage, daily capacity, unavailable periods,
-and appointment-plus-travel overlap separately. It returns every closer with an explicit list of
-violations so dispatch decisions are reviewable rather than opaque.
+## Access And Evidence Controls
 
-An eligible dispatch creates the appointment, internal calendar event, closer notification, lead
-assignment and stage update, activity entry, and dispatch record in one transaction. Managers may
-override conflicts only by supplying a reason. The record preserves the violations and the full
-candidate snapshot as decision evidence.
+Acquisition managers can see the team calendar and all field appointments. Acquisition users see
+only their assigned leads and appointments. Prospecting callers cannot access Field Operations,
+underwriting, negotiation evidence, or inspection photographs.
 
-When a Lead Manager selects an appointment as the next action and no appointment already exists,
-the seller moves to `appointment_scheduling` and appears in Field Dispatch. The system no longer
-silently assigns that field visit to the Lead Manager. Existing appointments remain intact.
+Submitted walkthroughs and their photographs are immutable. Field evidence must be reviewed before
+transfer, and the transfer always creates a new draft underwriting version with its offer values
+cleared for recalculation and approval.
 
-## Current Boundary
+Inspection images currently use private, authenticated database storage with a 5 MB per-image and
+30-image per-inspection limit. This is appropriate for controlled launch volume. Before sustained
+high-volume operations, move image bytes to encrypted object storage while preserving the existing
+database metadata, checksums, authorization rules, and audit history.
 
-Travel protection currently uses a configurable buffer around each appointment. Stonegate does not
-yet call a mapping API for live drive time. That avoids a new paid dependency while the company has
-low appointment volume; a route provider can be added later without changing the dispatch record or
-calendar contract.
+## Deferred Optimization
 
-## Remaining Phase 6 Work
-
-1. Generate the seller-meeting brief from qualification, property, underwriting, approved offer,
-   unresolved questions, likely objections, and logistics.
-2. Add a mobile property walkthrough for photographs, room-by-room condition, repair evidence, and
-   access notes.
-3. Capture decision makers, objections, negotiation movement, commitments, and appointment outcome.
-4. Transfer reviewed field observations into a new underwriting version without overwriting prior
-   evidence.
-5. Add appointment preparation and outcome scorecards after real meeting data exists.
+Travel protection uses a configurable static buffer. Live route-duration estimates should only be
+added after operating data shows that static buffers are materially inadequate; this is an
+optimization, not an incomplete Phase 6 workflow.
 
 ## Verification
 
-- Focused dispatch tests cover normal scheduling, daily-capacity rejection, manager override audit,
-  and unavailable-time blocking.
-- The complete API suite passes with the new tables and routes.
-- Alembic upgrades from the foundation through `0035_field_dispatch`, downgrades to
-  `0034_lead_manager_os`, and upgrades again on PostgreSQL.
-- TypeScript, ESLint, and the production Next.js build include `/os/field-operations`.
+- API regression coverage exercises calendar retrieval, versioned meeting briefs, walkthrough
+  drafts, authenticated photographs, immutable submission, approved-ceiling enforcement,
+  negotiation outcomes, underwriting transfer, and prospecting-caller denial.
+- Python formatting, linting, and static typing pass.
+- TypeScript and ESLint pass for the new Field Operations interface.
+- Alembic upgrades through `0036_phase6_field_workflow`, downgrades one revision, and upgrades again
+  on PostgreSQL.
+- The complete API suite and production Next.js build pass.

@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-The schema is managed through Alembic migrations. Migration `0035_field_dispatch` is the
+The schema is managed through Alembic migrations. Migration `0036_phase6_field_workflow` is the
 current head.
 
 ## Identity And Access
@@ -35,6 +35,11 @@ current head.
 - `closer_territory_coverages`
 - `closer_availability_blocks`
 - `appointment_dispatch_records`
+- `field_meeting_briefs`
+- `field_inspections`
+- `field_inspection_photos`
+- `field_negotiation_sessions`
+- `field_underwriting_transfers`
 - `activity_events`
 - `audit_events`
 
@@ -42,6 +47,12 @@ current head.
 canonical duplicate key and separate provider-validation status, provider property ID, formatted
 address, validation timestamp, match evidence, issues, and a restricted non-owner fact snapshot.
 Editing an address clears the provider confirmation until validation runs again.
+
+Field meeting briefs are versioned evidence snapshots. Submitted inspections and photographs are
+immutable, and each underwriting transfer links the exact inspection, repair estimate, prior
+underwriting version, and newly created draft version. Photo bytes are privately stored in
+PostgreSQL for controlled launch volume with strict size/count limits; object storage is the planned
+scaling boundary without changing the authorization or evidence metadata contract.
 
 ## Communications
 

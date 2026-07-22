@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  ClipboardCheck,
   Clock3,
   ExternalLink,
   MapPin,
@@ -22,9 +23,11 @@ import type {
   FieldOperationsOverview,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
+import { FieldCalendar } from "./field-calendar";
+import { FieldMeetingWorkspace } from "./field-meeting-workspace";
 import styles from "./field-operations.module.css";
 
-type View = "dispatch" | "calendar" | "capacity";
+type View = "dispatch" | "calendar" | "meetings" | "capacity";
 
 function formatDateTime(value: string | null) {
   if (!value) return "Not scheduled";
@@ -71,6 +74,7 @@ export function FieldOperationsWorkspace({ data }: { data: FieldOperationsOvervi
     return localInputValue(value);
   }, []);
   const [view, setView] = useState<View>("dispatch");
+  const [requestedAppointmentId, setRequestedAppointmentId] = useState("");
   const [selectedLeadId, setSelectedLeadId] = useState(data.ready_leads[0]?.id ?? "");
   const [startAt, setStartAt] = useState(initialStart);
   const [endAt, setEndAt] = useState(initialEnd);
@@ -235,6 +239,7 @@ export function FieldOperationsWorkspace({ data }: { data: FieldOperationsOvervi
       <nav className={styles.tabs} aria-label="Field operations views">
         <button className={view === "dispatch" ? styles.activeTab : ""} onClick={() => setView("dispatch")} type="button"><Route size={16} />Dispatch</button>
         <button className={view === "calendar" ? styles.activeTab : ""} onClick={() => setView("calendar")} type="button"><CalendarDays size={16} />Calendar</button>
+        <button className={view === "meetings" ? styles.activeTab : ""} onClick={() => setView("meetings")} type="button"><ClipboardCheck size={16} />Meetings</button>
         {data.can_manage ? <button className={view === "capacity" ? styles.activeTab : ""} onClick={() => setView("capacity")} type="button"><Settings2 size={16} />Capacity</button> : null}
       </nav>
 
@@ -305,21 +310,20 @@ export function FieldOperationsWorkspace({ data }: { data: FieldOperationsOvervi
       ) : null}
 
       {view === "calendar" ? (
-        <section className={styles.calendarSection}>
-          <div className={styles.sectionHeader}><div><span>Internal source of truth</span><h3>Upcoming field appointments</h3></div><strong>{data.upcoming_appointments.length}</strong></div>
-          <div className={styles.appointmentRows}>
-            {data.upcoming_appointments.map((appointment) => (
-              <article key={appointment.id}>
-                <div className={styles.dateBlock}><strong>{new Date(appointment.scheduled_start_at).toLocaleDateString("en-US", { day: "2-digit" })}</strong><span>{new Date(appointment.scheduled_start_at).toLocaleDateString("en-US", { month: "short" })}</span></div>
-                <div><strong>{appointment.seller_name}</strong><span>{appointment.property_address}</span></div>
-                <div><strong>{formatDateTime(appointment.scheduled_start_at)}</strong><span>{appointment.closer_name}</span></div>
-                <div><span className={appointment.decision_status === "override" ? styles.overridePill : styles.statusPill}>{labelize(appointment.decision_status ?? appointment.status)}</span></div>
-                <Link aria-label={`Open ${appointment.seller_name}`} href={appointment.lead_url} title="Open lead"><ExternalLink size={16} /></Link>
-              </article>
-            ))}
-            {!data.upcoming_appointments.length ? <p className={styles.empty}>No upcoming field appointments.</p> : null}
-          </div>
-        </section>
+        <FieldCalendar
+          data={data}
+          onOpenMeeting={(appointmentId) => {
+            setRequestedAppointmentId(appointmentId);
+            setView("meetings");
+          }}
+        />
+      ) : null}
+
+      {view === "meetings" ? (
+        <FieldMeetingWorkspace
+          data={data}
+          requestedAppointmentId={requestedAppointmentId}
+        />
       ) : null}
 
       {view === "capacity" && data.can_manage ? (

@@ -741,6 +741,136 @@ export type FieldOperationsOverview = {
     violations: string[];
     lead_url: string;
   }>;
+  scorecards: Array<{
+    user_id: string;
+    user_name: string;
+    assigned_appointments: number;
+    briefs_prepared: number;
+    inspections_submitted: number;
+    outcomes_recorded: number;
+    accepted_outcomes: number;
+    follow_up_outcomes: number;
+    declined_outcomes: number;
+    preparation_rate_basis_points: number;
+    documentation_rate_basis_points: number;
+  }>;
+};
+
+export type FieldCalendarAppointment = {
+  id: string;
+  lead_id: string;
+  seller_name: string;
+  property_address: string;
+  closer_user_id: string | null;
+  closer_name: string;
+  appointment_type: string;
+  status: string;
+  scheduled_start_at: string;
+  scheduled_end_at: string | null;
+  location_type: string;
+  outcome: string | null;
+  field_status: string;
+  lead_url: string;
+};
+
+export type FieldMeetingBrief = {
+  id: string;
+  appointment_id: string;
+  version_number: number;
+  status: string;
+  source_snapshot: Record<string, unknown>;
+  brief_data: Record<string, unknown>;
+  created_at: string;
+};
+
+export type FieldRoomObservation = {
+  area: string;
+  condition: "good" | "fair" | "poor" | "not_inspected";
+  notes: string | null;
+};
+
+export type FieldRepairItem = {
+  category: string;
+  estimated_cost_cents: number;
+  details: string | null;
+};
+
+export type FieldInspection = {
+  id: string;
+  appointment_id: string;
+  lead_id: string;
+  property_id: string;
+  inspector_user_id: string;
+  inspector_name: string;
+  status: string;
+  started_at: string;
+  submitted_at: string | null;
+  reviewed_at: string | null;
+  overall_condition: string | null;
+  occupancy_observed: string | null;
+  utilities_status: string | null;
+  access_notes: string | null;
+  title_concerns: string | null;
+  safety_concerns: string | null;
+  room_observations: FieldRoomObservation[];
+  repair_items: FieldRepairItem[];
+  inspector_notes: string | null;
+  photos: Array<{
+    id: string;
+    area: string;
+    caption: string | null;
+    file_name: string;
+    content_type: string;
+    byte_size: number;
+    sha256: string;
+    captured_at: string | null;
+    content_url: string;
+    created_at: string;
+  }>;
+  repair_total_cents: number;
+};
+
+export type FieldNegotiation = {
+  id: string;
+  appointment_id: string;
+  lead_id: string;
+  recorded_by_user_id: string;
+  decision_makers_confirmed: boolean;
+  decision_makers: string[];
+  seller_asking_price_cents: number | null;
+  offer_presented_cents: number | null;
+  seller_counter_cents: number | null;
+  agreed_price_cents: number | null;
+  approved_ceiling_cents: number | null;
+  objections: Array<{
+    category: string;
+    details: string;
+    response: string | null;
+    resolved: boolean;
+  }>;
+  commitments: string[];
+  outcome: string;
+  notes: string | null;
+  next_follow_up_at: string | null;
+  updated_at: string;
+};
+
+export type FieldAppointmentWorkspace = {
+  appointment: FieldCalendarAppointment;
+  brief: FieldMeetingBrief | null;
+  inspection: FieldInspection | null;
+  negotiation: FieldNegotiation | null;
+  underwriting_transfer: {
+    id: string;
+    inspection_id: string;
+    source_underwriting_version_id: string | null;
+    repair_estimate_id: string | null;
+    created_underwriting_version_id: string;
+    created_underwriting_version_number: number;
+    created_at: string;
+  } | null;
+  can_edit: boolean;
+  can_review_underwriting: boolean;
 };
 
 export type LeadDetail = LeadListItem & {

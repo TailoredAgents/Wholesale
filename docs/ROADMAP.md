@@ -42,7 +42,7 @@ email is implemented. Production acceptance remains pending for:
 | 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
 | 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
 | 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
-| 6. Appointments and Field Acquisitions | Partial | Dispatch, territory, closer capacity, travel buffers, and calendar controls are operational; meeting workflow remains |
+| 6. Appointments and Field Acquisitions | Complete | Dispatch, month/week/day calendar, meeting brief, mobile inspection, negotiation, evidence transfer, and scorecards are operational |
 | 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
 | 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
 | 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
@@ -202,7 +202,7 @@ Result: Every interested seller receives structured qualification and follow-up.
 
 ## Phase 6: Appointments And Field Acquisitions
 
-Status: Partial.
+Status: Complete.
 
 Goal: Prepare for, conduct, document, and complete acquisition appointments inside Stonegate.
 
@@ -219,16 +219,19 @@ Delivered:
   candidate snapshot, appointment decision, activity, notification, and audit history preserved.
 - Lead Manager appointment requests route into Field Dispatch instead of silently assigning a new
   field appointment to the Lead Manager; existing scheduled appointments remain intact.
+- Full internal month, week, and day calendar with closer filters and direct meeting launch.
+- Versioned pre-appointment brief combining seller, property, qualification, underwriting,
+  approved ceiling, unresolved questions, likely objections, open tasks, and logistics.
+- Mobile property inspection with authenticated photographs, room observations, repair scope,
+  occupancy, utilities, access, title, and safety evidence.
+- Decision-maker confirmation, seller objections, commitments, price movement, outcome, and dated
+  follow-up capture with server-enforced approved offer ceilings.
+- Reviewed field-evidence transfer that creates a repair estimate and new draft underwriting
+  version without changing prior approved values.
+- Trailing 30-day closer preparation and outcome-documentation scorecards.
 
-Remaining:
-
-- Optional live drive-time estimates if static travel buffers prove insufficient at operating
-  scale.
-- Pre-appointment acquisition brief combining seller, property, qualification, underwriting,
-  approved ceiling, unresolved questions, likely objections, and logistics.
-- Mobile property inspection with photographs and repair observations.
-- Decision-maker confirmation, seller objections, negotiation notes, and appointment follow-up.
-- Direct transfer of field observations into a new reviewed underwriting version.
+Deferred optimization: optional live drive-time estimates if operating data shows that static
+travel buffers are insufficient at scale.
 
 Result: The closer can prepare for, attend, document, and complete an acquisition appointment
 entirely inside Stonegate.

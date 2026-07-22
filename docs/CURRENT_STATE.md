@@ -51,7 +51,7 @@ sequence is:
 | 3. Campaign and List Management | Complete |
 | 4. VA Prospecting Workbench | Complete |
 | 5. Lead Manager Operating System | Complete |
-| 6. Appointments and Field Acquisitions | Partial |
+| 6. Appointments and Field Acquisitions | Complete |
 | 7. Underwriting and Offer Governance | Partial, advanced; substantial work completed early |
 | 8. Contracts and Transaction Coordination | Foundational |
 | 9. Buyers, Dispositions, and Finance | Foundational |
@@ -138,6 +138,12 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   territory coverage, daily appointment limits, travel buffers, and upcoming appointments.
 - Explainable slot evaluation with manager-only conflict overrides, required override reasons,
   immutable candidate snapshots, and audit evidence tied to the actual appointment.
+- Full internal month, week, and day field calendar with closer filtering and meeting launch.
+- Versioned seller-meeting briefs, mobile walkthrough evidence and photographs, structured repair
+  scope, negotiation outcomes, and approved-ceiling enforcement.
+- Reviewed walkthrough transfer creates a new repair estimate and draft underwriting version while
+  preserving prior approved underwriting, plus 30-day closer preparation and documentation
+  scorecards.
 - Conservative duplicate review and merge that archives the secondary lead while preserving
   evidence and a merge snapshot.
 - Human-approved SMS and email follow-up drafts; calls and tasks are created directly from plans.
@@ -248,11 +254,10 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- Field acquisitions does not yet include live route-duration estimates, the seller-meeting brief,
-  mobile inspection photographs, repair observations, or structured negotiation notes. Static
-  travel buffers are enforced now; a map provider is intentionally deferred until route precision
-  is operationally necessary.
-- Underwriting meeting preparation, price-discussion notes, and concession tracking remain.
+- Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
+  deferred until operating data demonstrates that route precision is necessary.
+- Underwriting concession governance beyond the approved field negotiation record remains Phase 7
+  work.
 - Contract templates, e-signature, document storage, and checklist completion workflows are not
   complete.
 - Buyer matching and deal-distribution automation are not complete.
@@ -272,6 +277,5 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Continue Phase 6 with the seller-meeting brief and mobile field acquisition workflow built on
-   the completed dispatch and capacity controls.
+4. Continue Phase 7 with formal concession governance and the remaining offer-control workflow.
 5. Resume the parallel integration track after A2P approval without blocking internal development.
