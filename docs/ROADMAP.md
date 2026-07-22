@@ -41,7 +41,7 @@ email is implemented. Production acceptance remains pending for:
 | 2. Operating Model Data Foundation | Complete | Markets, campaigns, versioned economics, role credits, operating modes, and launch controls are auditable |
 | 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
 | 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
-| 5. Lead Manager Operating System | Partial, advanced | Handoff review exists; SLA, full qualification, and conversion scorecards remain |
+| 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
 | 6. Appointments and Field Acquisitions | Partial | Internal calendar and appointment lifecycle exist; field workflow remains |
 | 7. Underwriting and Offer Governance | Partial, advanced | Most work was completed early; meeting and concession workflow remains |
 | 8. Contracts and Transaction Coordination | Foundational | Transaction records and a default checklist exist |
@@ -169,7 +169,7 @@ unnecessary access to the main OS.
 
 ## Phase 5: Lead Manager Operating System
 
-Status: Partial, advanced.
+Status: Complete.
 
 Goal: Ensure every interested seller receives structured qualification, ownership, nurture, and
 appointment follow-up.
@@ -183,13 +183,20 @@ Delivered:
   and qualified appointment creation.
 - Shared inbox with chronological SMS, email, calls, recordings, transcripts, and internal notes.
 - Internal calendar, appointment reminders, and team workload reporting.
-
-Remaining:
-
-- Acceptance SLA, escalation, and aging controls for the implemented warm-handoff review queue.
-- Versioned guided qualification flow aligned with the operating model.
-- Lead Manager conversion, held-appointment, aging, and follow-up quality scorecards.
-- Final validation that one Lead Manager can run the complete daily queue without spreadsheets.
+- A configurable warm-handoff acceptance SLA with worker-driven escalation, management alerts,
+  age visibility, and immutable audit evidence.
+- A dedicated Lead Manager daily desk for handoff acceptance, qualification, due follow-up,
+  same-day appointments, and neglected-lead exceptions.
+- Automatic workload-aware routing for public website inquiries, plus migration of existing active
+  CRM leads into the same controlled queue.
+- Versioned, manager-approved guided qualification standards. Each completed session retains the
+  exact script version, structured answers, completeness score, user, and timestamp.
+- Required dated next actions for every active qualified lead. Completion creates the CRM task,
+  updates the lead, and creates an internal appointment when appropriate.
+- Trailing 30-day scorecards for acceptance speed, SLA compliance, qualification, appointments
+  set and held, no-shows, contracts, and follow-up protection.
+- Lead Manager and owner permissions keep individual queues scoped while management retains team
+  visibility and intervention rights.
 
 Result: Every interested seller receives structured qualification and follow-up.
 
@@ -339,10 +346,8 @@ evidence requirements, compliance controls, or financial approvals.
 ## Next Build Checkpoint
 
 1. Record the Phase 1 restore, alerting, uptime, and access-revocation operator checks.
-2. Begin Phase 5 with the Lead Manager acceptance SLA, guided qualification, daily operating
-   queue, and conversion scorecards.
-3. Complete the Phase 5 follow-up and workload exit criteria, then move through Phase 6 in
-   dependency order.
+2. Begin Phase 6 with appointment capacity, travel, and closer-availability controls.
+3. Build the seller-meeting brief and mobile field-acquisition workflow.
 4. Finish the remaining Phase 7 meeting and concession workflow before starting Phase 8.
 
 ## Explicitly Deferred

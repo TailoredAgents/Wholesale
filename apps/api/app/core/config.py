@@ -31,6 +31,12 @@ class Settings(BaseSettings):
         default=5,
         validation_alias="SPEED_TO_LEAD_DUE_MINUTES",
     )
+    lead_manager_handoff_sla_minutes: int = Field(
+        default=60,
+        ge=5,
+        le=480,
+        validation_alias="LEAD_MANAGER_HANDOFF_SLA_MINUTES",
+    )
     communication_provider_mode: Literal["disabled", "simulate", "live"] = Field(
         default="live",
         validation_alias="COMMUNICATION_PROVIDER_MODE",

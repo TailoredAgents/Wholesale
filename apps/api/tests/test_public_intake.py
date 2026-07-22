@@ -10,9 +10,11 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     ContactMethod,
+    Conversation,
     ConversionEvent,
     Lead,
     LeadFormSubmission,
+    LeadManagementCase,
     Property,
     Task,
 )
@@ -75,6 +77,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert payload["duplicate_status"] == "created"
     assert payload["matched_existing_lead"] is False
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 3
@@ -97,12 +100,28 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert lead.motivation == "Inherited property"
     assert lead.desired_timeline == "30 days"
     assert lead.asking_price == "180000"
+    assert lead.assigned_user_id is not None
     task = db_session.scalar(select(Task))
     assert task is not None
     assert task.task_type == "speed_to_lead"
     assert task.status == "open"
     assert task.priority == "urgent"
+    assert task.responsible_user_id == lead.assigned_user_id
     assert str(task.lead_id) == payload["lead_id"]
+    lead_manager_case = db_session.scalar(select(LeadManagementCase))
+    assert lead_manager_case is not None
+    assert lead_manager_case.status == "awaiting_acceptance"
+    assert lead_manager_case.assigned_user_id == lead.assigned_user_id
+    conversation = db_session.scalar(select(Conversation))
+    assert conversation is not None
+    assert conversation.assigned_user_id == lead.assigned_user_id
+    accepted = client.post(
+        f"/api/v1/lead-manager/cases/{lead_manager_case.id}/accept",
+        headers={"X-Dev-User-Email": "owner@example.com"},
+        json={"reason": "Website inquiry assigned for immediate qualification."},
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["status"] == "active"
     conversion_event = db_session.scalar(select(ConversionEvent))
     assert conversion_event is not None
     assert conversion_event.event_type == "form_submit"

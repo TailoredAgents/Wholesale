@@ -1,16 +1,20 @@
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
     Appointment,
     AuditEvent,
     Contact,
     Lead,
+    LeadManagementCase,
+    LeadQualificationSession,
     Prospect,
     ProspectHandoff,
     ProspectingAttempt,
@@ -18,6 +22,7 @@ from app.models.foundation import (
     SuppressionRecord,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.lead_manager import process_next_escalation
 
 OWNER_EMAIL = "owner@example.com"
 VA_EMAIL = "va@example.com"
@@ -333,6 +338,117 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     )
     assert lead is not None and lead.stage_key == "appointment_scheduled"
     assert prospect is not None and prospect.status == "converted"
+
+    lead_manager_overview = client.get("/api/v1/lead-manager", headers=owner_headers)
+    assert lead_manager_overview.status_code == 200, lead_manager_overview.text
+    lead_manager_case = lead_manager_overview.json()["qualification_queue"][0]
+    assert lead_manager_case["assigned_user_name"] == "Lead Manager"
+    assert lead_manager_case["accepted_at"] is not None
+
+    qualification_script = client.post(
+        "/api/v1/lead-manager/scripts",
+        headers=owner_headers,
+        json={
+            "title": "Stonegate Lead Manager Qualification",
+            "introduction": "Confirm the seller's needs before recommending the next action.",
+            "questions": [
+                {
+                    "key": "decision_makers",
+                    "label": "Decision makers",
+                    "prompt": "Who needs to approve a sale?",
+                    "required": True,
+                },
+                {
+                    "key": "motivation",
+                    "label": "Motivation",
+                    "prompt": "What is driving the possible sale?",
+                    "required": True,
+                },
+                {
+                    "key": "timeline",
+                    "label": "Timeline",
+                    "prompt": "When would the seller ideally close?",
+                    "required": True,
+                },
+                {
+                    "key": "property_condition",
+                    "label": "Condition",
+                    "prompt": "What repairs or updates are needed?",
+                    "required": True,
+                },
+                {
+                    "key": "occupancy",
+                    "label": "Occupancy",
+                    "prompt": "Who currently occupies the property?",
+                    "required": True,
+                },
+                {
+                    "key": "asking_price",
+                    "label": "Price expectation",
+                    "prompt": "Does the seller have a price in mind?",
+                    "required": False,
+                },
+            ],
+        },
+    )
+    assert qualification_script.status_code == 201, qualification_script.text
+    script_id = qualification_script.json()["id"]
+    approved_script = client.post(
+        f"/api/v1/lead-manager/scripts/{script_id}/approve",
+        headers=owner_headers,
+    )
+    assert approved_script.status_code == 200, approved_script.text
+
+    missing_qualification = client.post(
+        f"/api/v1/lead-manager/cases/{lead_manager_case['id']}/qualification",
+        headers=owner_headers,
+        json={
+            "answers": {"motivation": "Inherited property"},
+            "next_action_type": "call",
+            "next_action_due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert missing_qualification.status_code == 422
+    qualification = client.post(
+        f"/api/v1/lead-manager/cases/{lead_manager_case['id']}/qualification",
+        headers=owner_headers,
+        json={
+            "answers": {
+                "decision_makers": "Seller is the sole owner and decision-maker",
+                "motivation": "Inherited property and does not want to renovate",
+                "timeline": "Within 30 days",
+                "property_condition": "Needs roof and kitchen updates",
+                "occupancy": "Vacant",
+                "asking_price": "$180,000",
+            },
+            "next_action_type": "call",
+            "next_action_due_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+        },
+    )
+    assert qualification.status_code == 200, qualification.text
+    assert qualification.json()["script_version_number"] == 1
+    assert qualification.json()["quality_score_basis_points"] == 10000
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(LeadQualificationSession)) or 0)
+        == 1
+    )
+    updated_overview = client.get("/api/v1/lead-manager", headers=owner_headers).json()
+    assert updated_overview["metrics"]["qualification_due"] == 0
+    assert updated_overview["scorecards"][0]["qualifications_completed"] == 1
+
+    case_record = db_session.get(LeadManagementCase, UUID(lead_manager_case["id"]))
+    assert case_record is not None
+    case_record.status = "awaiting_acceptance"
+    case_record.accepted_at = None
+    case_record.accepted_by_user_id = None
+    case_record.acceptance_due_at = datetime.now(UTC) - timedelta(minutes=1)
+    case_record.escalated_at = None
+    db_session.commit()
+    escalated_id = process_next_escalation(db_session, get_settings())
+    assert escalated_id == case_record.id
+    db_session.refresh(case_record)
+    assert case_record.status == "overdue"
+    assert case_record.escalated_at is not None
 
     second_start = client.post(
         f"/api/v1/prospecting/entries/{batch['entries'][1]['id']}/start",

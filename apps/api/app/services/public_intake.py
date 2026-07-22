@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -31,6 +32,7 @@ from app.schemas.public_intake import (
 from app.services.bootstrap import bootstrap_foundation
 from app.services.conversion_events import record_conversion_event
 from app.services.inbox import ensure_primary_conversation
+from app.services.lead_manager import ensure_inbound_case
 from app.services.property_validation import canonical_address_key
 from app.services.tasks import ensure_speed_to_lead_task
 
@@ -75,6 +77,13 @@ def create_public_seller_lead(
     lead = duplicate_match.lead or create_lead(db, organization, contact, property_record, payload)
     ensure_primary_conversation(db, lead)
     matched_existing_lead = duplicate_match.lead is not None
+    ensure_inbound_case(
+        db,
+        organization_id=organization.id,
+        lead=lead,
+        submitted_at=datetime.now(UTC),
+        sla_minutes=get_settings().speed_to_lead_due_minutes,
+    )
     ensure_speed_to_lead_task(db, lead, contact)
 
     contact_channels = []

@@ -49,17 +49,16 @@ sequence is:
 | 1. Reliability and Test Foundation | Implementation complete; production checks remain |
 | 2. Operating Model Data Foundation | Complete |
 | 3. Campaign and List Management | Complete |
-| 4. VA Prospecting Workbench | Partial |
-| 5. Lead Manager Operating System | Partial, advanced |
+| 4. VA Prospecting Workbench | Complete |
+| 5. Lead Manager Operating System | Complete |
 | 6. Appointments and Field Acquisitions | Partial |
 | 7. Underwriting and Offer Governance | Partial, advanced; substantial work completed early |
 | 8. Contracts and Transaction Coordination | Foundational |
 | 9. Buyers, Dispositions, and Finance | Foundational |
 | 10. Integrated AI Agent System | Foundational |
 
-The completed underwriting work remains valid. It does not imply that the VA workbench, Lead
-Manager workflow, or field acquisitions are complete. Detailed delivered and remaining scope is
-maintained in `ROADMAP.md`.
+The completed underwriting work remains valid. It does not imply that field acquisitions are
+complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 
 ## Delivered Capabilities
 
@@ -122,6 +121,16 @@ maintained in `ROADMAP.md`.
   appointment, conversation assignment, owner watchers, and complete attempt history.
 - Acquisitions handoff acceptance and correction review plus daily connect, handoff, script-quality,
   DNC, and data-quality scorecards.
+- Dedicated Lead Manager desk for SLA-controlled handoff acceptance, guided qualification, due
+  follow-up, same-day appointments, and neglected-lead exceptions.
+- Automatic workload-aware assignment of website inquiries and migration of existing active CRM
+  leads into the same Lead Manager queue.
+- Worker-driven overdue-handoff escalation with assignee and management alerts, durable due times,
+  and append-only audit evidence.
+- Immutable, manager-approved Lead Manager qualification versions with required questions,
+  structured completion evidence, and mandatory dated next actions.
+- Trailing 30-day Lead Manager scorecards for response time, SLA compliance, qualification,
+  appointments, no-shows, contracts, and follow-up quality.
 - Appointment reschedule, completion, cancellation, no-show, outcome, and recovery workflows.
 - Internal Stonegate calendar plus appointment and overdue-task reminders, with no external
   calendar dependency.
@@ -235,8 +244,6 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 - Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
-- The Lead Manager workflow has handoff acceptance and most CRM controls, but its acceptance SLA,
-  guided qualification, and conversion scorecard are not complete.
 - Field acquisitions does not yet include travel/capacity controls, the seller-meeting brief,
   mobile inspection photographs, repair observations, or structured negotiation notes.
 - Underwriting meeting preparation, price-discussion notes, and concession tracking remain.
@@ -259,6 +266,6 @@ While A2P approval is pending:
 1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
 2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
 3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Begin Phase 5 with the Lead Manager acceptance SLA, guided qualification, daily queue, and
-   conversion scorecard built on the completed prospect handoff.
+4. Begin Phase 6 with appointment capacity, seller-meeting preparation, and the mobile field
+   acquisition workflow built on the completed Lead Manager desk.
 5. Resume the parallel integration track after A2P approval without blocking internal development.

@@ -490,6 +490,96 @@ class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
     review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 
+class LeadQualificationScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_qualification_script_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "version_number",
+            name="uq_lead_qualification_scripts_org_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    introduction: Mapped[str] = mapped_column(Text, nullable=False)
+    questions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    completion_rules: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LeadManagementCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_management_cases"
+    __table_args__ = (
+        UniqueConstraint("lead_id", name="uq_lead_management_cases_lead"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    handoff_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospect_handoffs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    assigned_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    acceptance_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    qualification_script_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("lead_qualification_script_versions.id"), nullable=True, index=True
+    )
+    qualification_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    qualification_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    qualification_quality_basis_points: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    next_action_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    next_action_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    last_contact_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LeadQualificationSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_qualification_sessions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("lead_management_cases.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    script_version_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("lead_qualification_script_versions.id"), index=True
+    )
+    completed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    answers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    missing_required_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    quality_score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    next_action_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    next_action_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "contacts"
 

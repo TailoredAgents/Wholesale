@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.core.config import get_settings
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -50,6 +51,7 @@ from app.services.acquisition_operations import (
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
 from app.services.property_validation import canonical_address_key
 
 ACQUISITION_ROLE_KEYS = {
@@ -447,6 +449,13 @@ def decide_handoff(
         entry.status = "needs_correction"
         entry.completed_at = None
         prospect.status = "handoff_correction"
+    sync_case_handoff_decision(
+        db,
+        handoff_id=handoff.id,
+        decision=payload.decision,
+        reviewer_user_id=principal.user_id,
+        reviewed_at=now,
+    )
     create_notification(
         db,
         organization_id=principal.organization_id,
@@ -528,6 +537,15 @@ def create_warm_handoff(
     if payload.outcome == "appointment_set" and payload.appointment_start_at:
         create_handoff_appointment(db, lead, payload, now)
     db.flush()
+    create_case_for_handoff(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        handoff_id=handoff.id,
+        assigned_user_id=payload.handoff_user_id,
+        submitted_at=now,
+        sla_minutes=get_settings().lead_manager_handoff_sla_minutes,
+    )
     create_notification(
         db,
         organization_id=principal.organization_id,

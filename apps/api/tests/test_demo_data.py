@@ -1,7 +1,15 @@
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.foundation import Buyer, Deal, Lead, Organization, User
+from app.models.foundation import (
+    Buyer,
+    Deal,
+    Lead,
+    LeadManagementCase,
+    LeadQualificationScriptVersion,
+    Organization,
+    User,
+)
 from app.services.demo_data import seed_demo_workspace
 
 
@@ -34,6 +42,16 @@ def test_demo_seed_is_repeatable(db_session: Session) -> None:
     assert db_session.scalar(
         select(func.count()).select_from(Lead).where(Lead.organization_id == organization.id)
     ) == 4
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(LeadManagementCase)
+        .where(LeadManagementCase.organization_id == organization.id)
+    ) == 4
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(LeadQualificationScriptVersion)
+        .where(LeadQualificationScriptVersion.organization_id == organization.id)
+    ) == 1
     assert db_session.scalar(
         select(func.count()).select_from(Deal).where(Deal.organization_id == organization.id)
     ) == 1

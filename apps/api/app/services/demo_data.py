@@ -15,6 +15,8 @@ from app.models.foundation import (
     Deal,
     EmailAccount,
     Lead,
+    LeadManagementCase,
+    LeadQualificationScriptVersion,
     Organization,
     Property,
     Role,
@@ -153,6 +155,11 @@ def seed_demo_workspace(
 
     leads_created = 0
     leads_reused = 0
+    qualification_script = ensure_demo_qualification_script(
+        db,
+        organization,
+        foundation.admin_user or users_by_role["acquisition_manager"],
+    )
     for scenario in SCENARIOS:
         lead, created = ensure_demo_lead(
             db,
@@ -163,6 +170,13 @@ def seed_demo_workspace(
         leads_created += int(created)
         leads_reused += int(not created)
         ensure_demo_timeline(db, lead, scenario)
+        ensure_demo_lead_manager_case(
+            db,
+            lead,
+            scenario,
+            users_by_role["acquisition_manager"],
+            qualification_script,
+        )
         if scenario.key == "appointment":
             ensure_demo_appointment(db, lead, users_by_role["acquisition_rep"])
             ensure_demo_underwriting(db, lead, users_by_role["acquisition_rep"])
@@ -176,6 +190,110 @@ def seed_demo_workspace(
         users_created=users_created,
         leads_created=leads_created,
         leads_reused=leads_reused,
+    )
+
+
+def ensure_demo_qualification_script(
+    db: Session,
+    organization: Organization,
+    approver: User,
+) -> LeadQualificationScriptVersion:
+    existing = db.scalar(
+        select(LeadQualificationScriptVersion).where(
+            LeadQualificationScriptVersion.organization_id == organization.id,
+            LeadQualificationScriptVersion.status == "approved",
+        )
+    )
+    if existing is not None:
+        return existing
+    now = datetime.now(UTC)
+    questions = [
+        {
+            "key": key,
+            "label": label,
+            "prompt": prompt,
+            "answer_type": "text",
+            "choices": [],
+            "required": required,
+        }
+        for key, label, prompt, required in (
+            ("ownership", "Ownership", "Who owns the property and how is title held?", True),
+            ("decision_makers", "Decision makers", "Who must approve a sale?", True),
+            ("motivation", "Motivation", "What is driving the possible sale?", True),
+            ("timeline", "Timeline", "When would the seller ideally close?", True),
+            ("property_condition", "Condition", "What repairs or updates are needed?", True),
+            ("occupancy", "Occupancy", "Who occupies the property?", True),
+            ("asking_price", "Price expectation", "Does the seller have a price in mind?", False),
+        )
+    ]
+    script = LeadQualificationScriptVersion(
+        organization_id=organization.id,
+        version_number=1,
+        title="Stonegate Demo Seller Qualification",
+        status="approved",
+        introduction="Confirm the seller's situation before recommending the next action.",
+        questions=questions,
+        completion_rules={
+            "require_all_required_questions": True,
+            "require_dated_next_action": True,
+        },
+        created_by_user_id=approver.id,
+        approved_by_user_id=approver.id,
+        approved_at=now,
+    )
+    db.add(script)
+    db.flush()
+    return script
+
+
+def ensure_demo_lead_manager_case(
+    db: Session,
+    lead: Lead,
+    scenario: DemoScenario,
+    lead_manager: User,
+    script: LeadQualificationScriptVersion,
+) -> None:
+    existing = db.scalar(select(LeadManagementCase).where(LeadManagementCase.lead_id == lead.id))
+    if existing is not None:
+        return
+    now = datetime.now(UTC)
+    accepted_at = None if scenario.key == "new-inbound" else now - timedelta(minutes=18)
+    qualification_completed_at = (
+        now - timedelta(minutes=8)
+        if scenario.key in {"appointment", "under-contract"}
+        else None
+    )
+    next_action_due_at = (
+        now + timedelta(days=1) if scenario.key == "appointment" else None
+    )
+    status = {
+        "new-inbound": "awaiting_acceptance",
+        "qualification": "active",
+        "appointment": "appointment_set",
+        "under-contract": "closed",
+    }[scenario.key]
+    db.add(
+        LeadManagementCase(
+            organization_id=lead.organization_id,
+            lead_id=lead.id,
+            handoff_id=None,
+            assigned_user_id=lead_manager.id,
+            status=status,
+            acceptance_due_at=now + timedelta(minutes=20),
+            accepted_at=accepted_at,
+            accepted_by_user_id=lead_manager.id if accepted_at else None,
+            escalated_at=None,
+            qualification_script_version_id=(
+                script.id if qualification_completed_at is not None else None
+            ),
+            qualification_started_at=accepted_at,
+            qualification_completed_at=qualification_completed_at,
+            qualification_quality_basis_points=(10000 if qualification_completed_at else None),
+            next_action_type="appointment" if scenario.key == "appointment" else None,
+            next_action_due_at=next_action_due_at,
+            last_contact_at=now - timedelta(hours=2),
+            closed_at=now if status == "closed" else None,
+        )
     )
 
 

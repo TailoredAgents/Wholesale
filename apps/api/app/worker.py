@@ -12,6 +12,7 @@ from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.call_intelligence import process_next_call_transcript
 from app.services.email import sync_next_email_account
+from app.services.lead_manager import process_next_escalation
 from app.services.operations import (
     COMMUNICATIONS_WORKER,
     operation_retry_due,
@@ -50,6 +51,7 @@ def run_worker(stop_event: threading.Event) -> None:
         ("recording_retention", purge_next_expired_recording),
         ("email_sync", sync_next_email_account),
         ("acquisition_reminders", process_next_acquisition_reminder),
+        ("lead_manager_escalations", process_next_escalation),
     )
     while not stop_event.is_set():
         processed_operation: str | None = None

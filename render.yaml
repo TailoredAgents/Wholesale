@@ -52,6 +52,8 @@ services:
         value: Owner
       - key: SPEED_TO_LEAD_DUE_MINUTES
         value: 5
+      - key: LEAD_MANAGER_HANDOFF_SLA_MINUTES
+        value: 60
       - key: COMMUNICATION_PROVIDER_MODE
         value: live
       - key: WORKER_READINESS_REQUIRED

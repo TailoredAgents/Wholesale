@@ -571,6 +571,84 @@ export type ProspectingWorkbenchOverview = {
   }>;
 };
 
+export type LeadManagerQualificationScript = {
+  id: string;
+  version_number: number;
+  title: string;
+  status: string;
+  introduction: string;
+  questions: Array<{
+    key: string;
+    label: string;
+    prompt: string;
+    answer_type: "text" | "choice" | "boolean";
+    choices: string[];
+    required: boolean;
+  }>;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type LeadManagerCase = {
+  id: string;
+  lead_id: string;
+  handoff_id: string | null;
+  seller_name: string;
+  property_address: string;
+  source: string;
+  stage_key: string;
+  assigned_user_id: string;
+  assigned_user_name: string;
+  status: string;
+  acceptance_due_at: string;
+  accepted_at: string | null;
+  escalated_at: string | null;
+  acceptance_minutes: number | null;
+  is_acceptance_overdue: boolean;
+  qualification_completed_at: string | null;
+  qualification_quality_basis_points: number | null;
+  next_action_type: string | null;
+  next_action_due_at: string | null;
+  is_next_action_overdue: boolean;
+  age_hours: number;
+  lead_url: string;
+};
+
+export type LeadManagerOverview = {
+  current_user_id: string;
+  current_user_name: string;
+  can_manage: boolean;
+  metrics: {
+    awaiting_acceptance: number;
+    overdue_acceptance: number;
+    qualification_due: number;
+    follow_up_due: number;
+    appointments_today: number;
+    neglected_leads: number;
+  };
+  active_script: LeadManagerQualificationScript | null;
+  scripts: LeadManagerQualificationScript[];
+  awaiting_acceptance: LeadManagerCase[];
+  qualification_queue: LeadManagerCase[];
+  follow_up_queue: LeadManagerCase[];
+  appointments_today: LeadManagerCase[];
+  neglected_queue: LeadManagerCase[];
+  scorecards: Array<{
+    user_id: string;
+    user_name: string;
+    handoffs_received: number;
+    handoffs_accepted: number;
+    accepted_within_sla: number;
+    average_acceptance_minutes: number | null;
+    qualifications_completed: number;
+    appointments_set: number;
+    appointments_held: number;
+    appointment_no_shows: number;
+    contracts_created: number;
+    follow_up_quality_basis_points: number;
+  }>;
+};
+
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
     method_type: string;
@@ -1341,6 +1419,31 @@ export async function getProspectingWorkbench(): Promise<{
   } catch (error) {
     console.error("Stonegate prospecting workbench request failed.", error);
     return { prospecting: null, apiConnected: false };
+  }
+}
+
+export async function getLeadManagerOverview(): Promise<{
+  leadManager: LeadManagerOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/lead-manager`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      leadManager: (await response.json()) as LeadManagerOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate Lead Manager request failed.", error);
+    return { leadManager: null, apiConnected: false };
   }
 }
 
