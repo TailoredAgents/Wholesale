@@ -72,6 +72,25 @@
   font-weight: var(--sg-font-weight-medium);
 }
 
+.headerActions a {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-md);
+  background: var(--sg-color-surface);
+  color: var(--sg-color-text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: var(--sg-font-size-sm);
+  font-weight: var(--sg-font-weight-strong);
+}
+
+.headerActions a:hover {
+  border-color: var(--sg-color-brand);
+  color: var(--sg-color-brand-strong);
+}
+
 .sectionPanel,
 .contractFrame,
 .recordSummary,

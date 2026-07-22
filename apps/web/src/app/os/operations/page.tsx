@@ -1,5 +1,6 @@
 import { getAcquisitionOperations, getDashboardData } from "../../lib/api";
-import styles from "../page.module.css";
+import { AcquisitionJourney } from "../_components/acquisition-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { OperationsWorkspace } from "./operations-workspace";
 
 export const dynamic = "force-dynamic";
@@ -11,30 +12,22 @@ export default async function AcquisitionOperationsPage() {
   ]);
 
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Acquisition operations</p>
-          <h2>Operations</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Workspace</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Live operations" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Acquisition capacity, assignments, team controls, quality, and execution exceptions."
+        eyebrow="Acquisition management"
+        meta={apiConnected ? "Live operations" : "API unavailable"}
+        title="Operations"
+      />
+      <AcquisitionJourney active="operations" />
 
       {operations ? (
         <OperationsWorkspace leads={dashboard.leads} operations={operations} />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Operations unavailable</h3>
-            <span>Check API authentication and deployment status</span>
-          </div>
-        </section>
+        <SectionPanel description="Check API authentication and deployment status." title="Operations unavailable">
+          <div />
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }

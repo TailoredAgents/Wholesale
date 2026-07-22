@@ -1,16 +1,29 @@
 import type { LeadListItem, SpeedToLeadTask } from "../lib/api";
 
 export const pipelineStages = [
-  { key: "new", label: "New" },
-  { key: "attempting_contact", label: "Attempting contact" },
-  { key: "contacted", label: "Contacted" },
-  { key: "qualification_in_progress", label: "Qualifying" },
-  { key: "qualified", label: "Qualified" },
-  { key: "appointment_scheduled", label: "Appointment" },
-  { key: "underwriting", label: "Underwriting" },
-  { key: "offer_ready", label: "Offer ready" },
-  { key: "under_contract", label: "Under contract" },
-];
+  { key: "new", label: "New", stageKeys: ["new", "contact_attempt_due", "reopened"] },
+  { key: "contacting", label: "Contacting", stageKeys: ["attempting_contact"] },
+  { key: "contacted", label: "Contacted", stageKeys: ["contacted"] },
+  { key: "qualifying", label: "Qualifying", stageKeys: ["qualification_in_progress"] },
+  {
+    key: "qualified",
+    label: "Qualified",
+    stageKeys: ["qualified", "qualification_complete"],
+  },
+  {
+    key: "appointment",
+    label: "Appointment",
+    stageKeys: ["appointment_scheduling", "appointment_set", "appointment_scheduled"],
+  },
+  { key: "underwriting", label: "Underwriting", stageKeys: ["underwriting"] },
+  {
+    key: "offer",
+    label: "Offer",
+    stageKeys: ["offer_pending_approval", "offer_ready", "offer_presented", "negotiating"],
+  },
+  { key: "nurture", label: "Nurture", stageKeys: ["long_term_follow_up"] },
+  { key: "under_contract", label: "Under contract", stageKeys: ["under_contract"] },
+] as const;
 
 export const boardStages = pipelineStages.slice(0, 6);
 const terminalStages = new Set(["dead", "disqualified", "under_contract"]);
@@ -144,7 +157,13 @@ export function getWorkspaceQueues(leads: LeadListItem[], openTasks: SpeedToLead
     ),
     appointmentQueue: leads.filter(
       (lead) =>
-        ["qualified", "appointment_scheduled"].includes(lead.stage_key) ||
+        [
+          "qualified",
+          "qualification_complete",
+          "appointment_scheduling",
+          "appointment_set",
+          "appointment_scheduled",
+        ].includes(lead.stage_key) ||
         ["appointment_requested", "not_scheduled"].includes(lead.appointment_status ?? ""),
     ),
     offerQueue: leads.filter((lead) =>
@@ -186,23 +205,58 @@ export function getFilteredLeads(
 }
 
 export function getLeadOperatingStatus(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {
+  if (lead.stage_key === "under_contract") {
+    return "Under contract";
+  }
+  if (["dead", "disqualified"].includes(lead.stage_key)) {
+    return "Closed out";
+  }
   const leadTasks = openTasks.filter((task) => task.lead_id === lead.id);
   if (leadTasks.some((task) => task.due_status === "overdue")) {
     return "Overdue follow-up";
   }
-  if (qualificationFieldCount(lead) < qualificationFieldTarget) {
+  if (
+    ["new", "contact_attempt_due", "attempting_contact", "contacted", "qualification_in_progress"].includes(
+      lead.stage_key,
+    ) && qualificationFieldCount(lead) < qualificationFieldTarget
+  ) {
     return "Needs qualification";
   }
-  if (["qualified", "appointment_scheduled"].includes(lead.stage_key)) {
+  if (
+    [
+      "qualified",
+      "qualification_complete",
+      "appointment_scheduling",
+      "appointment_set",
+      "appointment_scheduled",
+    ].includes(lead.stage_key)
+  ) {
     return "Appointment work";
   }
   if (["underwriting", "offer_pending_approval", "offer_ready"].includes(lead.stage_key)) {
     return "Offer prep";
   }
+  if (["offer_presented", "negotiating"].includes(lead.stage_key)) {
+    return "Negotiation";
+  }
+  if (lead.stage_key === "long_term_follow_up") {
+    return "Nurture";
+  }
   if (!lead.next_follow_up_at && !terminalStages.has(lead.stage_key)) {
     return "Needs follow-up";
   }
   return "On track";
+}
+
+export function getPipelineStage(stageKey: string) {
+  return pipelineStages.find((stage) => (stage.stageKeys as readonly string[]).includes(stageKey));
+}
+
+export function getPipelineStageCount(
+  stage: (typeof pipelineStages)[number],
+  counts: Map<string, number>,
+) {
+  return stage.stageKeys.reduce((total, stageKey) => total + (counts.get(stageKey) ?? 0), 0);
 }
 
 function leadMatchesView(
@@ -231,7 +285,13 @@ function leadMatchesView(
   }
   if (viewKey === "appointments") {
     return (
-      ["qualified", "appointment_scheduled"].includes(lead.stage_key) ||
+      [
+        "qualified",
+        "qualification_complete",
+        "appointment_scheduling",
+        "appointment_set",
+        "appointment_scheduled",
+      ].includes(lead.stage_key) ||
       ["appointment_requested", "not_scheduled"].includes(lead.appointment_status ?? "")
     );
   }

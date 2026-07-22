@@ -1,5 +1,6 @@
 import { getFieldOperationsOverview } from "../../lib/api";
-import styles from "../page.module.css";
+import { AcquisitionJourney } from "../_components/acquisition-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { FieldOperationsWorkspace } from "./field-operations-workspace";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,7 @@ const fieldViews = new Set(["dispatch", "calendar", "meetings", "capacity"]);
 export default async function FieldOperationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ appointment?: string; view?: string }>;
+  searchParams: Promise<{ appointment?: string; lead?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const { fieldOperations, apiConnected } = await getFieldOperationsOverview();
@@ -18,34 +19,27 @@ export default async function FieldOperationsPage({
     : "dispatch";
 
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Seller appointment operations</p>
-          <h2>Field Operations</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Internal calendar</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Capacity current" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Seller appointment dispatch, closer capacity, meeting preparation, property evidence, and visit outcomes."
+        eyebrow="Appointment execution"
+        meta={apiConnected ? "Capacity current" : "API unavailable"}
+        title="Field Operations"
+      />
+      <AcquisitionJourney active="field-operations" />
 
       {fieldOperations ? (
         <FieldOperationsWorkspace
           data={fieldOperations}
           initialAppointmentId={params.appointment ?? ""}
+          initialLeadId={params.lead ?? ""}
           initialView={initialView}
         />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Field dispatch unavailable</h3>
-            <span>An acquisitions or management role is required.</span>
-          </div>
-        </section>
+        <SectionPanel description="An acquisitions or management role is required." title="Field dispatch unavailable">
+          <div />
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }

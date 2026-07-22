@@ -83,6 +83,8 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   offer-preparation signals, and a compact pipeline pulse.
 - Dense Work Queue with saved ownership and due-state views, contextual next actions, and confirmed
   bulk completion against the existing permission-protected task API.
+- Role-filtered acquisition workspace sequence connecting Operations, Campaigns, Prospecting, Lead
+  Desk, All Leads, Seller Pipeline, and Field Operations without changing route URLs.
 - Append-only activity and audit records for material operations.
 - Worker heartbeat and readiness monitoring with durable, grouped failure records.
 - Threshold-based failure webhook alerts that omit raw exception details.
@@ -157,6 +159,12 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - Lead quality, urgency, qualification gaps, and deterministic next-best-action guidance.
 - Notes, appointments, underwriting versions, transactions, and buyer offers on the lead
   workspace.
+- Searchable All Leads system of record with saved views, owner and stage filters, compact operating
+  status, contextual next actions, and responsive seller previews.
+- Complete stage-family Seller Pipeline with local lead inspection, ownership and due context, and
+  direct handoffs to conversations, qualification, dispatch, offer preparation, and full records.
+- Lead Desk and Field Operations deep links preserve the selected seller through qualification and
+  appointment scheduling handoffs.
 
 ### Shared Inbox And Team Workflow
 

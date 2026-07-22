@@ -1,37 +1,35 @@
 import { getLeadManagerOverview } from "../../lib/api";
-import styles from "../page.module.css";
+import { AcquisitionJourney } from "../_components/acquisition-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { LeadManagerWorkspace } from "./lead-manager-workspace";
 
 export const dynamic = "force-dynamic";
 
-export default async function LeadManagerPage() {
+export default async function LeadManagerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ lead?: string }>;
+}) {
+  const params = await searchParams;
   const { leadManager, apiConnected } = await getLeadManagerOverview();
 
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Warm lead operations</p>
-          <h2>Lead Desk</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Daily control</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Queue current" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Today's warm handoffs, seller qualification, follow-up, appointments, and neglected-lead exceptions."
+        eyebrow="Warm lead operations"
+        meta={apiConnected ? "Queue current" : "API unavailable"}
+        title="Lead Desk"
+      />
+      <AcquisitionJourney active="lead-manager" />
 
       {leadManager ? (
-        <LeadManagerWorkspace data={leadManager} />
+        <LeadManagerWorkspace data={leadManager} initialLeadId={params.lead ?? ""} />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Acquisitions Desk unavailable</h3>
-            <span>An acquisitions or management role is required.</span>
-          </div>
-        </section>
+        <SectionPanel description="An acquisitions or management role is required." title="Lead Desk unavailable">
+          <div />
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }

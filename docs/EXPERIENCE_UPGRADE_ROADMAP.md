@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX4 are complete.
+Status: Implementation in progress. Phases UX1 through UX5 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -206,7 +206,7 @@ Implementation notes:
 
 ## Phase UX5: Acquisition Workspaces
 
-Status: Not started.
+Status: Complete. The acquisition workspace upgrade was implemented on July 22, 2026.
 
 Goal: Create one coherent seller-acquisition experience from source record through field meeting.
 
@@ -234,6 +234,25 @@ Exit criteria:
 - A warm prospect can be followed from source to appointment without losing ownership or context.
 - Users no longer need to guess which lead page contains a specific action.
 - VA-only views expose no restricted underwriting, buyer, contract, finance, or export controls.
+
+Implementation notes:
+
+- Operations, Campaigns, Prospecting, Lead Desk, All Leads, Seller Pipeline, and Field Operations
+  now use the standard workspace header and one role-filtered acquisition route sequence.
+- All Leads is the searchable active seller system of record with saved views, owner and stage
+  filters, compact rows, operating status, explicit next actions, and a responsive context drawer.
+- Seller Pipeline groups every supported acquisition stage, including contact-due, appointment
+  scheduling, approval, negotiation, nurture, and under-contract states, without dropping records.
+- Pipeline cards expose owner, status, due context, and the next workspace action. Seller details
+  open in a local inspector instead of forcing a full record-page change.
+- Lead Desk and Field Operations accept lead deep links so qualification and appointment handoffs
+  open with the matching seller highlighted or selected.
+- Under-contract and closed-out leads no longer receive misleading qualification statuses, and
+  appointment queues recognize scheduling-stage aliases used by the operational API.
+- The secondary acquisition route strip uses the same role and permission contract as the global
+  sidebar; restricted VA callers retain only their authorized Prospecting route and API scope.
+- All seven workspaces and the lead/pipeline drawers were verified at 1440 and 390 pixel widths
+  with no runtime errors or page-level horizontal overflow.
 
 ## Phase UX6: Deal Execution Workspaces
 

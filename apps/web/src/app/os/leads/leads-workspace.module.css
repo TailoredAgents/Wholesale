@@ -1,0 +1,84 @@
+.workspace { display: grid; gap: 16px; }
+.metrics { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-tight); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); overflow: hidden; }
+.metrics > div { min-height: 88px; padding: 14px 16px; border-right: 1px solid var(--line-soft); display: grid; align-content: center; gap: 5px; }
+.metrics > div:last-child { border-right: 0; }
+.metrics span, .preview header span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.metrics strong { font-size: 24px; line-height: 1; }
+.metrics small { color: var(--muted); font-size: 11px; }
+.views { display: flex; gap: 5px; overflow-x: auto; }
+.views button { flex: 1 0 auto; min-width: 122px; min-height: 42px; padding: 0 11px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); display: flex; align-items: center; justify-content: space-between; gap: 10px; font: inherit; font-size: 12px; font-weight: 800; }
+.views .activeView { border-color: #9ebcab; background: var(--brand-soft); color: var(--brand-strong); }
+.views strong { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); color: inherit; }
+.leadDesk { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
+.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(260px, 1fr) 180px 170px auto; align-items: center; gap: 8px; }
+.toolbar label { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); display: flex; align-items: center; gap: 7px; }
+.toolbar label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.toolbar input, .toolbar select { min-width: 0; width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+.toolbar > strong { color: var(--muted); font-size: 11px; text-align: right; }
+.content { min-height: 560px; display: grid; grid-template-columns: minmax(620px, 1fr) minmax(290px, 0.38fr); }
+.list { min-width: 0; border-right: 1px solid var(--line); }
+.listHeader, .list > button { min-width: 0; display: grid; grid-template-columns: minmax(260px, 1.25fr) minmax(130px, 0.7fr) minmax(120px, 0.55fr) minmax(150px, 0.7fr); align-items: center; gap: 12px; }
+.listHeader { min-height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.list > button { width: 100%; min-height: 79px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.list > button:hover, .list .selectedRow { background: var(--surface-soft); }
+.list .selectedRow { box-shadow: inset 3px 0 0 var(--brand); }
+.identity, .next { min-width: 0; display: grid; gap: 3px; }
+.identity strong, .identity small, .identity em, .next strong, .next small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity strong { font-size: 13px; }
+.identity small, .next small { color: var(--muted); font-size: 11px; }
+.identity em { color: var(--text-soft); font-size: 10px; font-style: normal; }
+.owner { min-width: 0; color: var(--text-soft); display: flex; align-items: center; gap: 5px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.next strong { color: var(--brand-strong); font-size: 11px; }
+.preview { min-width: 0; padding: 18px; background: #fbfaf7; }
+.preview header { padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.preview header > div { min-width: 0; }
+.preview h2 { margin-top: 3px; font-size: 20px; }
+.preview header p { margin-top: 4px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.preview header button { display: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); place-items: center; }
+.previewStatus { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.previewStatus > span:last-child { color: var(--muted); font-size: 11px; }
+.preview dl { margin: 0; border: 1px solid var(--line-soft); border-radius: 6px; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+.preview dl div { min-width: 0; padding: 9px 10px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); display: grid; gap: 3px; }
+.preview dt { color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.preview dd { min-width: 0; margin: 0; font-size: 11px; font-weight: 750; overflow-wrap: anywhere; }
+.preview section { padding: 15px 0; display: grid; gap: 8px; }
+.preview section h3 { font-size: 13px; }
+.preview section p { color: var(--text-soft); display: grid; gap: 2px; font-size: 11px; line-height: 1.4; }
+.preview section p strong { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.previewActions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.previewActions a { min-height: 36px; padding: 0 9px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-soft); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 800; text-align: center; }
+.previewActions .primaryAction { grid-column: 1 / -1; border-color: var(--brand-strong); background: var(--brand); color: white; }
+.empty { min-height: 220px; padding: 24px; color: var(--muted); display: grid; place-items: center; align-content: center; gap: 5px; text-align: center; }
+.empty strong { color: var(--text); }
+.backdrop { display: none; }
+
+@media (max-width: 1180px) {
+  .metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
+  .toolbar { grid-template-columns: minmax(240px, 1fr) 160px 150px auto; }
+  .content { grid-template-columns: minmax(560px, 1fr) minmax(270px, 0.4fr); }
+  .listHeader, .list > button { grid-template-columns: minmax(220px, 1fr) 120px 110px 130px; }
+}
+
+@media (max-width: 900px) {
+  .leadDesk { overflow: visible; }
+  .toolbar { grid-template-columns: 1fr 1fr; }
+  .toolbar .search { grid-column: 1 / -1; }
+  .content { min-height: 520px; grid-template-columns: minmax(0, 1fr); }
+  .list { border-right: 0; }
+  .preview { position: fixed; z-index: 80; top: 72px; right: 0; bottom: 0; width: min(390px, 94vw); transform: translateX(105%); transition: transform 160ms ease; overflow-y: auto; box-shadow: var(--shadow-raised); }
+  .previewOpen { transform: translateX(0); }
+  .preview header button { display: grid; }
+  .backdrop { position: fixed; z-index: 79; inset: 0; border: 0; background: rgba(16, 25, 24, 0.36); display: block; }
+}
+
+@media (max-width: 620px) {
+  .metrics { grid-template-columns: repeat(5, 132px); }
+  .toolbar { grid-template-columns: minmax(0, 1fr); }
+  .toolbar .search { grid-column: auto; }
+  .toolbar > strong { text-align: left; }
+  .listHeader { display: none; }
+  .list > button { min-height: 102px; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
+  .identity { grid-column: 1 / -1; }
+  .owner { display: none; }
+  .next { text-align: right; }
+}

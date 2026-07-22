@@ -23,6 +23,7 @@ import { PageHeader, WorkspacePage } from "./_components/page-contracts";
 import { isOwnerProfile, primaryRoleLabel } from "./os-navigation";
 import {
   formatDateTime,
+  getPipelineStageCount,
   getWorkspaceQueues,
   labelize,
   pipelineStages,
@@ -300,7 +301,7 @@ export default async function Home() {
           {pipelineStages.slice(0, 8).map((stage) => (
             <Link href={`/os/pipeline?stage=${stage.key}`} key={stage.key}>
               <span>{stage.label}</span>
-              <strong>{pipelineCounts.get(stage.key) ?? 0}</strong>
+              <strong>{getPipelineStageCount(stage, pipelineCounts)}</strong>
             </Link>
           ))}
         </div>

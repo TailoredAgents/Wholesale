@@ -1,0 +1,63 @@
+.workspace { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
+.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(260px, 1fr) 180px 170px auto; align-items: center; gap: 8px; }
+.toolbar label { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); display: flex; align-items: center; gap: 7px; }
+.toolbar label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.toolbar input, .toolbar select { min-width: 0; width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
+.toolbar > strong { color: var(--muted); font-size: 11px; text-align: right; }
+.body { min-width: 0; min-height: 590px; display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+.board { min-width: 0; padding: 12px; border-right: 1px solid var(--line); background: var(--surface-muted); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr); align-items: stretch; gap: 9px; overflow-x: auto; }
+.column { min-width: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-soft); overflow: hidden; }
+.column > header { min-height: 46px; padding: 0 12px; border-bottom: 1px solid var(--line-soft); background: var(--surface); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.column h2 { font-size: 13px; }
+.column header strong { min-width: 24px; height: 24px; padding: 0 6px; border-radius: 999px; background: var(--brand-soft); color: var(--brand-strong); display: grid; place-items: center; font-size: 11px; }
+.column > div { min-height: 520px; padding: 7px; display: grid; align-content: start; gap: 7px; }
+.column > div > p { padding: 10px 4px; color: var(--muted); font-size: 12px; }
+.column button { width: 100%; min-width: 0; min-height: 150px; padding: 11px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); display: grid; align-content: start; gap: 8px; font: inherit; text-align: left; box-shadow: var(--shadow-tight); cursor: pointer; }
+.column button:hover, .column .selectedCard { border-color: #91b19e; }
+.column .selectedCard { box-shadow: inset 3px 0 0 var(--brand), var(--shadow-tight); }
+.cardTop, .cardMeta { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.cardTop strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.cardTop em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 800; text-transform: uppercase; }
+.address { min-height: 31px; color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.cardMeta { color: var(--muted); font-size: 10px; }
+.cardMeta > span { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cardAction { padding-top: 7px; border-top: 1px solid var(--line-soft); color: var(--brand-strong); display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 850; }
+.inspector { min-width: 0; padding: 18px; background: #fbfaf7; }
+.inspector > header { padding-bottom: 14px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.inspector header > div { min-width: 0; }
+.inspector header span { color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.inspector h2 { margin-top: 3px; font-size: 19px; }
+.inspector header p { margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.inspector header button { display: none; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); place-items: center; }
+.inspectorStatus { padding: 12px 0; display: flex; align-items: center; justify-content: space-between; gap: 7px; }
+.inspectorStatus > span:last-child { color: var(--muted); font-size: 10px; }
+.inspector dl { margin: 0; border: 1px solid var(--line-soft); border-radius: 6px; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+.inspector dl div { min-width: 0; padding: 9px; border-right: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); display: grid; gap: 3px; }
+.inspector dt { color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.inspector dd { min-width: 0; margin: 0; font-size: 11px; font-weight: 750; overflow-wrap: anywhere; }
+.inspector section { padding: 14px 0; display: grid; gap: 8px; }
+.inspector section p { color: var(--text-soft); display: grid; gap: 2px; font-size: 11px; line-height: 1.4; }
+.inspector section strong { color: var(--muted); font-size: 9px; text-transform: uppercase; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.actions a { min-height: 36px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--text-soft); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; font-weight: 800; text-align: center; }
+.actions .primary { grid-column: 1 / -1; border-color: var(--brand-strong); background: var(--brand); color: white; }
+.empty { min-height: 220px; padding: 24px; color: var(--muted); display: grid; place-items: center; align-content: center; gap: 5px; text-align: center; }
+.empty strong { color: var(--text); }
+.backdrop { display: none; }
+
+@media (max-width: 1000px) {
+  .workspace { overflow: visible; }
+  .toolbar { grid-template-columns: minmax(220px, 1fr) 160px 150px auto; }
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .board { border-right: 0; }
+  .inspector { position: fixed; z-index: 80; top: 72px; right: 0; bottom: 0; width: min(390px, 94vw); transform: translateX(105%); transition: transform 160ms ease; overflow-y: auto; box-shadow: var(--shadow-raised); }
+  .inspectorOpen { transform: translateX(0); }
+  .inspector header button { display: grid; }
+  .backdrop { position: fixed; z-index: 79; inset: 0; border: 0; background: rgba(16, 25, 24, 0.36); display: block; }
+}
+
+@media (max-width: 620px) {
+  .toolbar { grid-template-columns: minmax(0, 1fr); }
+  .toolbar > strong { text-align: left; }
+  .board { grid-auto-columns: minmax(220px, 84vw); }
+}

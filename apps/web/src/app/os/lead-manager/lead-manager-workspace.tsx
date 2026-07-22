@@ -38,9 +38,17 @@ function percent(basisPoints: number) {
   return `${(basisPoints / 100).toFixed(0)}%`;
 }
 
-function CaseRow({ item, action }: { item: LeadManagerCase; action?: React.ReactNode }) {
+function CaseRow({
+  action,
+  highlighted = false,
+  item,
+}: {
+  action?: React.ReactNode;
+  highlighted?: boolean;
+  item: LeadManagerCase;
+}) {
   return (
-    <article className={styles.caseRow}>
+    <article className={`${styles.caseRow} ${highlighted ? styles.highlightedCase : ""}`}>
       <div className={styles.caseIdentity}>
         <strong>{item.seller_name}</strong>
         <span>{item.property_address}</span>
@@ -66,11 +74,22 @@ function CaseRow({ item, action }: { item: LeadManagerCase; action?: React.React
   );
 }
 
-export function LeadManagerWorkspace({ data }: { data: LeadManagerOverview }) {
+export function LeadManagerWorkspace({
+  data,
+  initialLeadId = "",
+}: {
+  data: LeadManagerOverview;
+  initialLeadId?: string;
+}) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [view, setView] = useState<View>("today");
-  const [selectedCaseId, setSelectedCaseId] = useState(data.qualification_queue[0]?.id ?? "");
+  const initialQualificationCase = data.qualification_queue.find(
+    (item) => item.lead_id === initialLeadId,
+  );
+  const [view, setView] = useState<View>(initialQualificationCase ? "qualification" : "today");
+  const [selectedCaseId, setSelectedCaseId] = useState(
+    initialQualificationCase?.id ?? data.qualification_queue[0]?.id ?? "",
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const apiBaseUrl = useMemo(
@@ -185,20 +204,20 @@ export function LeadManagerWorkspace({ data }: { data: LeadManagerOverview }) {
           <section className={styles.queueSection}>
             <div className={styles.sectionHeader}><div><span>First priority</span><h3>Accept warm handoffs</h3></div><Clock3 size={19} /></div>
             {data.awaiting_acceptance.length ? data.awaiting_acceptance.map((item) => (
-              <CaseRow action={<button disabled={saving} onClick={() => acceptCase(item.id)} type="button"><Check size={15} />Accept</button>} item={item} key={item.id} />
+              <CaseRow action={<button disabled={saving} onClick={() => acceptCase(item.id)} type="button"><Check size={15} />Accept</button>} highlighted={item.lead_id === initialLeadId} item={item} key={item.id} />
             )) : <p className={styles.empty}>No warm handoffs are waiting.</p>}
           </section>
           <section className={styles.queueSection}>
             <div className={styles.sectionHeader}><div><span>Due now</span><h3>Seller follow-up</h3></div><Clock3 size={19} /></div>
-            {data.follow_up_queue.length ? data.follow_up_queue.map((item) => <CaseRow item={item} key={item.id} />) : <p className={styles.empty}>No follow-ups are currently overdue.</p>}
+            {data.follow_up_queue.length ? data.follow_up_queue.map((item) => <CaseRow highlighted={item.lead_id === initialLeadId} item={item} key={item.id} />) : <p className={styles.empty}>No follow-ups are currently overdue.</p>}
           </section>
           <section className={styles.queueSection}>
             <div className={styles.sectionHeader}><div><span>Calendar</span><h3>Today&apos;s appointments</h3></div><Check size={19} /></div>
-            {data.appointments_today.length ? data.appointments_today.map((item) => <CaseRow item={item} key={item.id} />) : <p className={styles.empty}>No seller appointments today.</p>}
+            {data.appointments_today.length ? data.appointments_today.map((item) => <CaseRow highlighted={item.lead_id === initialLeadId} item={item} key={item.id} />) : <p className={styles.empty}>No seller appointments today.</p>}
           </section>
           <section className={styles.queueSection}>
             <div className={styles.sectionHeader}><div><span>Exception queue</span><h3>Neglected leads</h3></div><ShieldAlert size={19} /></div>
-            {data.neglected_queue.length ? data.neglected_queue.map((item) => <CaseRow item={item} key={item.id} />) : <p className={styles.empty}>Every active seller has a protected next action.</p>}
+            {data.neglected_queue.length ? data.neglected_queue.map((item) => <CaseRow highlighted={item.lead_id === initialLeadId} item={item} key={item.id} />) : <p className={styles.empty}>Every active seller has a protected next action.</p>}
           </section>
         </div>
       ) : null}

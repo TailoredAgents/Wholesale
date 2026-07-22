@@ -132,6 +132,11 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+.highlightedCase {
+  background: var(--brand-soft);
+  box-shadow: inset 3px 0 0 var(--brand);
+}
+
 .caseRow:last-child {
   border-bottom: 0;
 }

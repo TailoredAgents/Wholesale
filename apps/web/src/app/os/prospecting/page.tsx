@@ -1,5 +1,6 @@
 import { getProspectingWorkbench } from "../../lib/api";
-import styles from "../page.module.css";
+import { AcquisitionJourney } from "../_components/acquisition-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { ProspectingWorkspace } from "./prospecting-workspace";
 
 export const dynamic = "force-dynamic";
@@ -8,19 +9,14 @@ export default async function ProspectingPage() {
   const { prospecting, apiConnected } = await getProspectingWorkbench();
 
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>VA prospecting</p>
-          <h2>Prospecting</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Queue control</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Assigned records only" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Assigned outreach, call outcomes, qualification evidence, callbacks, and warm handoff."
+        eyebrow="Caller execution"
+        meta={apiConnected ? "Assigned records only" : "API unavailable"}
+        title="Prospecting"
+      />
+      <AcquisitionJourney active="prospecting" />
 
       {prospecting ? (
         <ProspectingWorkspace
@@ -32,13 +28,10 @@ export default async function ProspectingPage() {
           }
         />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Prospecting workbench unavailable</h3>
-            <span>An assigned caller or acquisition-management role is required.</span>
-          </div>
-        </section>
+        <SectionPanel description="An assigned caller or acquisition-management role is required." title="Prospecting workbench unavailable">
+          <div />
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }

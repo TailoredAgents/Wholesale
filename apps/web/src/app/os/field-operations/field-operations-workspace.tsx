@@ -61,10 +61,12 @@ function candidateStatus(candidate: DispatchCandidate) {
 export function FieldOperationsWorkspace({
   data,
   initialAppointmentId = "",
+  initialLeadId = "",
   initialView = "dispatch",
 }: {
   data: FieldOperationsOverview;
   initialAppointmentId?: string;
+  initialLeadId?: string;
   initialView?: View;
 }) {
   const router = useRouter();
@@ -83,7 +85,11 @@ export function FieldOperationsWorkspace({
   }, []);
   const [view, setView] = useState<View>(initialView);
   const [requestedAppointmentId, setRequestedAppointmentId] = useState(initialAppointmentId);
-  const [selectedLeadId, setSelectedLeadId] = useState(data.ready_leads[0]?.id ?? "");
+  const [selectedLeadId, setSelectedLeadId] = useState(
+    data.ready_leads.some((lead) => lead.id === initialLeadId)
+      ? initialLeadId
+      : data.ready_leads[0]?.id ?? "",
+  );
   const [startAt, setStartAt] = useState(initialStart);
   const [endAt, setEndAt] = useState(initialEnd);
   const [evaluation, setEvaluation] = useState<DispatchSlotEvaluation | null>(null);
