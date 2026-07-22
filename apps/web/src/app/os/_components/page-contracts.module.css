@@ -1,0 +1,365 @@
+.workspacePage {
+  width: 100%;
+  min-width: 0;
+  max-width: 1540px;
+  margin: 0 auto;
+  display: grid;
+  gap: var(--sg-space-4);
+}
+
+.pageHeader {
+  min-height: 104px;
+  padding: 4px 0 var(--sg-space-5);
+  border-bottom: 1px solid var(--sg-color-border);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sg-space-6);
+}
+
+.pageHeaderCopy {
+  min-width: 0;
+}
+
+.pageHeaderCopy > p,
+.sectionHeader p,
+.recordIdentity p {
+  margin: 0 0 var(--sg-space-1);
+  color: var(--sg-color-brand);
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-bold);
+  text-transform: uppercase;
+}
+
+.pageHeader h1 {
+  margin: 0;
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-2xl);
+  line-height: var(--sg-line-height-tight);
+}
+
+.pageHeaderCopy > span,
+.sectionHeader span,
+.recordIdentity > span {
+  display: block;
+  max-width: 72ch;
+  margin-top: 6px;
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-md);
+  line-height: var(--sg-line-height-body);
+}
+
+.pageHeaderRight,
+.headerActions,
+.sectionActions,
+.recordActions,
+.stickyActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2);
+}
+
+.pageHeaderRight {
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.headerMeta {
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-sm);
+  font-weight: var(--sg-font-weight-medium);
+}
+
+.sectionPanel,
+.contractFrame,
+.recordSummary,
+.managementContract {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-lg);
+  background: var(--sg-color-surface);
+  box-shadow: var(--sg-shadow-soft);
+  overflow: hidden;
+}
+
+.sectionHeader {
+  min-height: 64px;
+  padding: 14px var(--sg-space-4);
+  border-bottom: 1px solid var(--sg-color-border-soft);
+  background: var(--sg-color-surface-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-4);
+}
+
+.sectionHeader h2 {
+  margin: 0;
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-lg);
+}
+
+.sectionHeader span {
+  margin-top: 3px;
+  font-size: var(--sg-font-size-sm);
+}
+
+.sectionBody {
+  min-width: 0;
+}
+
+.recordSummary {
+  padding: var(--sg-space-4);
+  display: grid;
+  grid-template-columns: minmax(220px, 1.2fr) minmax(420px, 2fr) auto;
+  align-items: center;
+  gap: var(--sg-space-5);
+}
+
+.recordIdentity h1 {
+  margin: 0;
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-xl);
+}
+
+.recordIdentity > span {
+  margin-top: 4px;
+  font-size: var(--sg-font-size-sm);
+}
+
+.recordFacts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sg-space-3);
+}
+
+.recordFacts div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.recordFacts dt {
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-strong);
+  text-transform: uppercase;
+}
+
+.recordFacts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-md);
+  font-weight: var(--sg-font-weight-strong);
+  overflow-wrap: anywhere;
+}
+
+.stickyActionBar {
+  position: sticky;
+  z-index: 12;
+  bottom: var(--sg-space-3);
+  min-height: 60px;
+  padding: 9px var(--sg-space-3) 9px var(--sg-space-4);
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-lg);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--sg-shadow-raised);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sg-space-4);
+  backdrop-filter: blur(8px);
+}
+
+.stickyActionBar > div:first-child {
+  min-width: 0;
+  color: var(--sg-color-text-soft);
+  font-size: var(--sg-font-size-sm);
+}
+
+.contractToolbar {
+  min-height: 58px;
+  padding: var(--sg-space-2) var(--sg-space-3);
+  border-bottom: 1px solid var(--sg-color-border-soft);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--sg-space-2);
+}
+
+.contractToolbar > * {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.queueContract {
+  min-height: 560px;
+  display: grid;
+  grid-template-columns: minmax(240px, 0.72fr) minmax(420px, 1.5fr) minmax(260px, 0.8fr);
+}
+
+.queueContractCompact {
+  grid-template-columns: minmax(260px, 0.72fr) minmax(480px, 1.6fr);
+}
+
+.queueContract > *,
+.recordContract > *,
+.calendarContract > *,
+.managementContract > * {
+  min-width: 0;
+}
+
+.queueContract > * + *,
+.calendarContract > * + * {
+  border-left: 1px solid var(--sg-color-border-soft);
+}
+
+.recordContract {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.65fr);
+}
+
+.recordContractFull {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.recordContract > aside {
+  border-left: 1px solid var(--sg-color-border-soft);
+  background: var(--sg-color-surface-soft);
+}
+
+.pipelineContract {
+  min-height: 520px;
+  padding: var(--sg-space-3);
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(240px, 1fr);
+  gap: var(--sg-space-3);
+  overflow-x: auto;
+  background: var(--sg-color-surface-muted);
+}
+
+.calendarContract {
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(680px, 1.8fr);
+}
+
+.calendarContract > aside,
+.managementContract > aside {
+  background: var(--sg-color-surface-soft);
+}
+
+.managementContract {
+  min-height: 620px;
+  display: grid;
+  grid-template-columns: minmax(210px, 0.42fr) minmax(0, 1.8fr);
+}
+
+.managementContract > aside {
+  border-right: 1px solid var(--sg-color-border-soft);
+}
+
+@media (max-width: 1100px) {
+  .recordSummary {
+    grid-template-columns: minmax(220px, 1fr) minmax(360px, 1.5fr);
+  }
+
+  .recordActions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .queueContract {
+    grid-template-columns: minmax(240px, 0.7fr) minmax(420px, 1.4fr);
+  }
+
+  .queueContract > aside:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .pageHeader,
+  .stickyActionBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pageHeaderRight {
+    align-items: stretch;
+  }
+
+  .pageHeaderCopy,
+  .pageHeaderCopy > span,
+  .sectionHeader > div,
+  .sectionHeader span {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .sectionHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .sectionActions {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-x: auto;
+  }
+
+  .headerActions,
+  .stickyActions {
+    justify-content: flex-start;
+  }
+
+  .recordSummary,
+  .recordContract,
+  .calendarContract,
+  .managementContract {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recordFacts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .recordActions {
+    grid-column: auto;
+  }
+
+  .queueContract,
+  .queueContractCompact {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .queueContract > aside:first-child {
+    max-height: 300px;
+    border-bottom: 1px solid var(--sg-color-border-soft);
+  }
+
+  .queueContract > * + *,
+  .calendarContract > * + *,
+  .recordContract > aside,
+  .managementContract > aside {
+    border-left: 0;
+  }
+
+  .recordContract > aside,
+  .calendarContract > main,
+  .managementContract > main {
+    border-top: 1px solid var(--sg-color-border-soft);
+  }
+
+  .pipelineContract {
+    grid-auto-columns: minmax(220px, 86vw);
+  }
+}

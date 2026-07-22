@@ -21,6 +21,9 @@ Start with:
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
 - `docs/ROADMAP.md`: ordered development phases after provider setup.
+- `docs/EXPERIENCE_UPGRADE_ROADMAP.md`: ordered OS organization, aesthetics, and public conversion upgrade phases.
+- `docs/UX1_INFORMATION_ARCHITECTURE_AUDIT.md`: approved OS routes, labels, role visibility, and handoffs.
+- `docs/DESIGN_SYSTEM.md`: shared OS tokens, components, states, and responsive page contracts.
 - `docs/UNIFIED_BUILD_PLAN.md`: long-term product scope and quality standard.
 - `docs/INTEGRATIONS.md`: provider status and system boundaries.
 

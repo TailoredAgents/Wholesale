@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { AuthControls } from "./auth-controls";
 import { OsNav } from "./os-nav";
 import styles from "./page.module.css";
+import theme from "./os-theme.module.css";
 
 export const metadata = {
   title: "Stonegate Operating System",
@@ -11,7 +12,7 @@ export const metadata = {
 
 export default function OsLayout({ children }: { children: ReactNode }) {
   return (
-    <main className={styles.shell}>
+    <main className={`${theme.theme} ${styles.shell}`}>
       <aside className={styles.sidebar} aria-label="Primary navigation">
         <div className={styles.brandBlock}>
           <span className={styles.brandMark} aria-hidden="true" />

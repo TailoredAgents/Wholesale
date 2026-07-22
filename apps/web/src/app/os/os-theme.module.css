@@ -1,0 +1,100 @@
+.theme {
+  color-scheme: light;
+
+  --sg-color-canvas: #f3f1eb;
+  --sg-color-canvas-strong: #ebe6dc;
+  --sg-color-surface: #ffffff;
+  --sg-color-surface-soft: #faf8f3;
+  --sg-color-surface-muted: #f2eee7;
+  --sg-color-border: #ded7ca;
+  --sg-color-border-soft: #ece6dc;
+  --sg-color-text: #161a1d;
+  --sg-color-text-soft: #343a3d;
+  --sg-color-text-muted: #687073;
+  --sg-color-brand: #2f6f4e;
+  --sg-color-brand-strong: #245f43;
+  --sg-color-brand-soft: #edf5f0;
+  --sg-color-warning: #9a5b12;
+  --sg-color-warning-soft: #fbf1df;
+  --sg-color-info: #315f86;
+  --sg-color-info-soft: #edf3f8;
+  --sg-color-danger: #a13c2f;
+  --sg-color-danger-soft: #f8e8e4;
+  --sg-color-neutral-soft: #f1eee8;
+  --sg-color-nav: #10191b;
+  --sg-color-nav-soft: #19282a;
+  --sg-color-nav-border: #2c4242;
+  --sg-color-focus: #3f8f68;
+
+  --sg-font-sans: Arial, Helvetica, sans-serif;
+  --sg-font-size-xs: 11px;
+  --sg-font-size-sm: 12px;
+  --sg-font-size-md: 14px;
+  --sg-font-size-lg: 16px;
+  --sg-font-size-xl: 20px;
+  --sg-font-size-2xl: 28px;
+  --sg-font-size-3xl: 32px;
+  --sg-line-height-tight: 1.15;
+  --sg-line-height-body: 1.5;
+  --sg-font-weight-medium: 600;
+  --sg-font-weight-strong: 750;
+  --sg-font-weight-bold: 850;
+
+  --sg-space-1: 4px;
+  --sg-space-2: 8px;
+  --sg-space-3: 12px;
+  --sg-space-4: 16px;
+  --sg-space-5: 20px;
+  --sg-space-6: 24px;
+  --sg-space-8: 32px;
+  --sg-space-10: 40px;
+  --sg-space-12: 48px;
+
+  --sg-radius-sm: 4px;
+  --sg-radius-md: 6px;
+  --sg-radius-lg: 8px;
+  --sg-control-height-sm: 34px;
+  --sg-control-height-md: 42px;
+  --sg-control-height-lg: 46px;
+  --sg-shadow-tight: 0 1px 2px rgba(22, 26, 29, 0.04), 0 5px 14px rgba(22, 26, 29, 0.045);
+  --sg-shadow-soft: 0 1px 2px rgba(22, 26, 29, 0.04), 0 10px 24px rgba(22, 26, 29, 0.055);
+  --sg-shadow-raised: 0 1px 2px rgba(22, 26, 29, 0.05), 0 18px 42px rgba(22, 26, 29, 0.08);
+  --sg-focus-ring: 0 0 0 3px rgba(63, 143, 104, 0.18);
+  --sg-motion-fast: 120ms;
+  --sg-motion-standard: 160ms;
+
+  /* Compatibility aliases while existing pages migrate to the Stonegate tokens. */
+  --os-bg: var(--sg-color-canvas);
+  --os-bg-strong: var(--sg-color-canvas-strong);
+  --surface: var(--sg-color-surface);
+  --surface-soft: var(--sg-color-surface-soft);
+  --surface-muted: var(--sg-color-surface-muted);
+  --line: var(--sg-color-border);
+  --line-soft: var(--sg-color-border-soft);
+  --text: var(--sg-color-text);
+  --text-soft: var(--sg-color-text-soft);
+  --muted: var(--sg-color-text-muted);
+  --brand: var(--sg-color-brand);
+  --brand-strong: var(--sg-color-brand-strong);
+  --brand-soft: var(--sg-color-brand-soft);
+  --amber: var(--sg-color-warning);
+  --amber-soft: var(--sg-color-warning-soft);
+  --info: var(--sg-color-info);
+  --info-soft: var(--sg-color-info-soft);
+  --danger: var(--sg-color-danger);
+  --danger-soft: var(--sg-color-danger-soft);
+  --nav: var(--sg-color-nav);
+  --nav-soft: var(--sg-color-nav-soft);
+  --nav-line: var(--sg-color-nav-border);
+  --focus: var(--sg-color-focus);
+  --shadow: var(--sg-shadow-raised);
+  --shadow-soft: var(--sg-shadow-soft);
+  --shadow-tight: var(--sg-shadow-tight);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theme {
+    --sg-motion-fast: 0ms;
+    --sg-motion-standard: 0ms;
+  }
+}

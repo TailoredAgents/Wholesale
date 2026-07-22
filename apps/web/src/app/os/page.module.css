@@ -1,31 +1,4 @@
 .shell {
-  --os-bg: #f3f1eb;
-  --os-bg-strong: #ebe6dc;
-  --surface: #ffffff;
-  --surface-soft: #faf8f3;
-  --surface-muted: #f2eee7;
-  --line: #ded7ca;
-  --line-soft: #ece6dc;
-  --text: #161a1d;
-  --text-soft: #343a3d;
-  --muted: #687073;
-  --brand: #2f6f4e;
-  --brand-strong: #245f43;
-  --brand-soft: #edf5f0;
-  --amber: #a86419;
-  --amber-soft: #fbf1df;
-  --info: #315f86;
-  --info-soft: #edf3f8;
-  --danger: #a13c2f;
-  --danger-soft: #f8e8e4;
-  --nav: #10191b;
-  --nav-soft: #19282a;
-  --nav-line: #2c4242;
-  --focus: #3f8f68;
-  --shadow: 0 1px 2px rgba(22, 26, 29, 0.05), 0 18px 42px rgba(22, 26, 29, 0.08);
-  --shadow-soft: 0 1px 2px rgba(22, 26, 29, 0.04), 0 10px 24px rgba(22, 26, 29, 0.055);
-  --shadow-tight: 0 1px 2px rgba(22, 26, 29, 0.04), 0 5px 14px rgba(22, 26, 29, 0.045);
-
   min-height: 100vh;
   display: grid;
   grid-template-columns: 286px minmax(0, 1fr);

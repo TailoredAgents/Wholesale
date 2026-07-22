@@ -5,6 +5,10 @@ Last updated: July 22, 2026
 This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
 from reliability through the integrated AI agent system.
 
+The next interface and public-site modernization track is defined separately in
+`EXPERIENCE_UPGRADE_ROADMAP.md`. It improves organization, usability, aesthetics, accessibility,
+performance, and conversion measurement without replacing the business-workflow sequence below.
+
 `CURRENT_STATE.md` is the source of truth for what exists today. `OPERATING_MODEL.md` defines the
 business roles, handoffs, compensation policy, AI portfolio, and operating standards that these
 phases implement.
@@ -45,8 +49,8 @@ email is implemented. Production acceptance remains pending for:
 | 6. Appointments and Field Acquisitions | Complete | Dispatch, month/week/day calendar, meeting brief, mobile inspection, negotiation, evidence transfer, and scorecards are operational |
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
-| 9. Buyers, Dispositions, and Finance | Foundational | Core records exist; operational workflows and reconciliation remain |
-| 10. Integrated AI Agent System | Foundational | Agent controls and Call Intelligence exist; the complete agent portfolio remains |
+| 9. Buyers, Dispositions, and Finance | Complete | Provider-neutral buyer placement, disposition, reconciliation, compensation, and accounting export are operational |
+| 10. Integrated AI Agent System | Partial | Governed control plane and 14-agent portfolio are implemented; controlled model pilots remain |
 
 Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
 offer controls were prioritized for seller conversations. That work is retained. It does not mark
