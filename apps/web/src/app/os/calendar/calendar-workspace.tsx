@@ -66,7 +66,7 @@ export function CalendarWorkspace({ data }: { data: FieldOperationsOverview }) {
         </section>
       </aside>
 
-      <main className={styles.calendarArea}>
+      <section aria-label="Calendar schedule" className={styles.calendarArea}>
         <FieldCalendar
           data={data}
           onOpenMeeting={(appointmentId) =>
@@ -75,7 +75,7 @@ export function CalendarWorkspace({ data }: { data: FieldOperationsOverview }) {
             )
           }
         />
-      </main>
+      </section>
     </div>
   );
 }

@@ -10,7 +10,7 @@
   --sg-color-border-soft: #ece6dc;
   --sg-color-text: #161a1d;
   --sg-color-text-soft: #343a3d;
-  --sg-color-text-muted: #687073;
+  --sg-color-text-muted: #626a6d;
   --sg-color-brand: #2f6f4e;
   --sg-color-brand-strong: #245f43;
   --sg-color-brand-soft: #edf5f0;
@@ -92,9 +92,23 @@
   --shadow-tight: var(--sg-shadow-tight);
 }
 
+.theme :where(a[href], button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 3px solid var(--sg-color-focus) !important;
+  outline-offset: 2px !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .theme {
     --sg-motion-fast: 0ms;
     --sg-motion-standard: 0ms;
+  }
+
+  .theme *,
+  .theme *::before,
+  .theme *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

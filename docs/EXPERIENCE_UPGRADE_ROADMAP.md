@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX7 are complete.
+Status: Implementation in progress. Phases UX1 through UX8 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -360,7 +360,8 @@ Implementation notes:
 
 ## Phase UX8: OS Responsive, Accessibility, And Regression Pass
 
-Status: Not started.
+Status: Complete. The whole-OS quality pass was implemented on July 22, 2026. See
+[`UX8_OS_QUALITY_AUDIT.md`](UX8_OS_QUALITY_AUDIT.md).
 
 Goal: Validate the upgraded OS as one complete product rather than a collection of improved pages.
 
@@ -378,6 +379,28 @@ Exit criteria:
 - Critical workflows pass at 390, 768, 1280, and 1440 pixel widths.
 - No unresolved high-severity accessibility, overlap, navigation, or data-loss defect remains.
 - Owner completes a representative workflow for every internal role.
+
+Implementation notes:
+
+- The authenticated OS now has one main landmark and one page heading on every route, plus a
+  keyboard-accessible skip link and consistent visible focus treatment.
+- The mobile navigation drawer transfers focus on open, contains keyboard focus while active,
+  closes with Escape, restores focus to its trigger, and prevents background scrolling.
+- Buyer entry and lead archive/delete confirmation use the shared native dialog foundation for
+  focus containment, Escape handling, and focus restoration.
+- Reduced-motion preferences suppress nonessential animation and smooth scrolling throughout the
+  OS without changing business behavior.
+- A permanent `npm run audit:os` release check now covers every production OS route at 390, 768,
+  1280, and 1440 pixels. It checks overflow, document landmarks, control names, duplicate IDs,
+  image alternatives, reduced motion, keyboard navigation, key contrast pairs, browser errors,
+  and serious or critical axe-core WCAG findings.
+- The populated audit completed 88 route and viewport checks, including an active lead record,
+  with no unresolved high-severity accessibility, overlap, navigation, or data-loss defect.
+- Representative desktop and mobile screenshots were reviewed for Dashboard, Inbox, All Leads,
+  lead detail, Underwriting, and Dispositions. The complete lint, TypeScript, production build,
+  and API test suite pass.
+- Owner role acceptance remains a deployment checkpoint whenever permissions or representative
+  workflows change; the automated matrix does not replace that human verification.
 
 ## Phase UX9: Public Website Architecture, Brand, And Trust
 
@@ -444,6 +467,5 @@ Exit criteria:
 
 ## Recommended Next Checkpoint
 
-Proceed to UX8 with a complete route matrix at 390, 768, 1280, and 1440 pixel widths. Prioritize
-keyboard and screen-reader behavior, focus visibility, long-content and empty states, and critical
-role workflows before beginning the public-site visual phases.
+Proceed to UX9 with the public sitemap, trust-content inventory, claims review, and final visual
+direction before rebuilding the seller conversion journey in UX10.

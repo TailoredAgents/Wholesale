@@ -15,7 +15,7 @@ export default async function ArchivedLeadsPage() {
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Leads</p>
-          <h2>Archived leads</h2>
+          <h1>Archived leads</h1>
         </div>
         <Link className={styles.headerAction} href="/os/leads">
           Back to active leads

@@ -4,6 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { Button, Dialog, FormField, TextInput } from "../_components/design-system";
 import styles from "./lifecycle.module.css";
 
 type Status = "idle" | "working" | "error";
@@ -105,57 +106,41 @@ export function LeadLifecycleActions({
 
       {status === "error" ? <p className={styles.error}>Action failed. Please try again.</p> : null}
 
-      {archiveConfirmationOpen ? (
-        <div className={styles.backdrop} role="presentation">
-          <section aria-labelledby="archive-title" aria-modal="true" className={styles.dialog} role="dialog">
-            <h2 id="archive-title">Archive this lead?</h2>
-            <p>It will leave active lists and work queues. You can restore it later.</p>
-            <div className={styles.dialogActions}>
-              <button onClick={() => setArchiveConfirmationOpen(false)} type="button">
-                Cancel
-              </button>
-              <button
-                className={styles.archiveButton}
-                disabled={status === "working"}
-                onClick={() => runAction("archive")}
-                type="button"
-              >
-                {status === "working" ? "Archiving..." : "Archive lead"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <Dialog
+        description="It will leave active lists and work queues. You can restore it later."
+        footer={
+          <>
+            <Button onClick={() => setArchiveConfirmationOpen(false)} type="button" variant="quiet">Cancel</Button>
+            <Button disabled={status === "working"} onClick={() => runAction("archive")} type="button">
+              {status === "working" ? "Archiving..." : "Archive lead"}
+            </Button>
+          </>
+        }
+        onClose={() => setArchiveConfirmationOpen(false)}
+        open={archiveConfirmationOpen}
+        title="Archive this lead?"
+      >
+        <p>The seller record and its complete history will remain available in Archived Leads.</p>
+      </Dialog>
 
-      {deleteConfirmationOpen ? (
-        <div className={styles.backdrop} role="presentation">
-          <section aria-labelledby="delete-title" aria-modal="true" className={styles.dialog} role="dialog">
-            <h2 id="delete-title">Permanently delete this lead?</h2>
-            <p>This removes the seller record and its operational history. This cannot be undone.</p>
-            <label>
-              <span>Type DELETE to confirm</span>
-              <input
-                autoComplete="off"
-                onChange={(event) => setConfirmation(event.target.value)}
-                value={confirmation}
-              />
-            </label>
-            <div className={styles.dialogActions}>
-              <button onClick={() => setDeleteConfirmationOpen(false)} type="button">
-                Cancel
-              </button>
-              <button
-                className={styles.deleteButton}
-                disabled={confirmation !== "DELETE" || status === "working"}
-                onClick={() => runAction("delete")}
-                type="button"
-              >
-                {status === "working" ? "Deleting..." : "Permanently delete"}
-              </button>
-            </div>
-          </section>
-        </div>
-      ) : null}
+      <Dialog
+        description="This removes the seller record and its operational history. This cannot be undone."
+        footer={
+          <>
+            <Button onClick={() => setDeleteConfirmationOpen(false)} type="button" variant="quiet">Cancel</Button>
+            <Button disabled={confirmation !== "DELETE" || status === "working"} onClick={() => runAction("delete")} type="button" variant="danger">
+              {status === "working" ? "Deleting..." : "Permanently delete"}
+            </Button>
+          </>
+        }
+        onClose={() => setDeleteConfirmationOpen(false)}
+        open={deleteConfirmationOpen}
+        title="Permanently delete this lead?"
+      >
+        <FormField htmlFor={`delete-confirmation-${leadId}`} label="Type DELETE to confirm">
+          <TextInput id={`delete-confirmation-${leadId}`} autoComplete="off" onChange={(event) => setConfirmation(event.target.value)} value={confirmation} />
+        </FormField>
+      </Dialog>
     </div>
   );
 }

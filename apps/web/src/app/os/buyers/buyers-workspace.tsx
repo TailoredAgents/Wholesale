@@ -1,12 +1,12 @@
 "use client";
 
-import { BadgeDollarSign, Building2, Plus, Search, ShieldCheck, UsersRound, X } from "lucide-react";
+import { BadgeDollarSign, Building2, Plus, Search, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { BuyerListItem, LeadListItem } from "../../lib/api";
 import { DealControlStrip } from "../_components/deal-control-strip";
-import { StatusBadge } from "../_components/design-system";
+import { Drawer, StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { BuyerForm } from "./buyer-form";
 import styles from "./buyers.module.css";
@@ -40,7 +40,7 @@ export function BuyersWorkspace({ buyers, canEdit, contractLeads }: { buyers: Bu
   const blocker = !selected ? "No buyer selected" : !proofVerified(selected.proof_of_funds_status) ? "Proof of funds" : !selected.email && !selected.phone ? "Contact method" : !selected.criteria?.markets ? "Buy box criteria" : "No active blocker";
 
   return (
-    <main className={styles.workspace}>
+    <section aria-label="Buyer management" className={styles.workspace}>
       <DealControlStrip
         authority={{ label: "Authority", value: canEdit ? "Buyer CRM editor" : "View only", detail: canEdit ? "Changes remain audited" : "No edit permission", tone: canEdit ? "success" : "warning" }}
         blocker={{ label: "Primary blocker", value: blocker, detail: selected?.name ?? "No buyer evidence", tone: blocker === "No active blocker" ? "success" : "warning" }}
@@ -82,7 +82,14 @@ export function BuyersWorkspace({ buyers, canEdit, contractLeads }: { buyers: Bu
         <div><table><thead><tr><th>Buyer</th><th>Status</th><th>POF</th><th>Reliability</th><th>Maximum</th><th>Markets</th><th>Deal history</th></tr></thead><tbody>{filtered.map((buyer) => <tr key={buyer.id}><td><button onClick={() => setSelectedId(buyer.id)} type="button">{buyer.name}</button><small>{buyer.company_name}</small></td><td>{labelize(buyer.status)}</td><td>{labelize(buyer.proof_of_funds_status)}</td><td>{reliability(buyer)}</td><td>{money(buyer.max_purchase_price_cents)}</td><td>{buyer.criteria?.markets ?? "Not set"}</td><td>{buyer.completed_deals} closed / {buyer.failed_deals} failed</td></tr>)}</tbody></table></div>
       </section>
 
-      {showCreate ? <><button aria-label="Close add buyer drawer" className={styles.backdrop} onClick={() => setShowCreate(false)} type="button" /><aside aria-label="Add buyer" className={styles.drawer}><header><div><span>Buyer CRM</span><h2>Add qualified buyer</h2></div><button aria-label="Close" onClick={() => setShowCreate(false)} title="Close" type="button"><X size={18} /></button></header><div><BuyerForm onSaved={() => setShowCreate(false)} /></div></aside></> : null}
-    </main>
+      <Drawer
+        description="Create a qualified buyer record with contact, funding, and purchasing criteria."
+        onClose={() => setShowCreate(false)}
+        open={showCreate}
+        title="Add qualified buyer"
+      >
+        <BuyerForm onSaved={() => setShowCreate(false)} />
+      </Drawer>
+    </section>
   );
 }

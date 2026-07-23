@@ -278,7 +278,11 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       {status !== "idle" ? <p className={`${styles.feedback} ${styles[status]}`} role="status">{status === "saving" ? "Working..." : message}</p> : null}
 
       {activeTab === "performance" ? (
-        <section className={styles.section}>
+        <section
+          aria-label="Campaign performance table"
+          className={styles.section}
+          tabIndex={0}
+        >
           <div className={styles.sectionHeader}><div><span>Campaign economics and data health</span><h3>Performance by campaign</h3></div><strong>{data.quality.length}</strong></div>
           <div className={styles.qualityTable}>
             <div className={styles.tableHeader}><span>Campaign</span><span>Spend</span><span>Data quality</span><span>Callable</span><span>Conversions</span><span>Cost / callable</span><span>Batch progress</span></div>

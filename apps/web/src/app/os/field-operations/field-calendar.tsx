@@ -201,7 +201,11 @@ export function FieldCalendar({
           {data.can_manage ? (
             <label>
               <UserRound size={15} />
-              <select onChange={(event) => setOwnerId(event.target.value)} value={ownerId}>
+              <select
+                aria-label="Filter calendar by closer"
+                onChange={(event) => setOwnerId(event.target.value)}
+                value={ownerId}
+              >
                 <option value="">All closers</option>
                 {data.users.map((user) => (
                   <option key={user.id} value={user.id}>{user.name}</option>

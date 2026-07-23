@@ -1475,7 +1475,7 @@ export function InboxWorkspace({
       <header className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>Seller communications</p>
-          <h2>Inbox</h2>
+          <h1>Inbox</h1>
           <span className={styles.headerSummary}>
             {counts.needs_reply} need reply · {counts.unread} unread · {counts.unassigned} unassigned
           </span>
@@ -1713,7 +1713,7 @@ export function InboxWorkspace({
           </div>
         </aside>
 
-        <main className={styles.threadPane} data-mobile-active={mobilePane === "thread"}>
+        <section aria-label="Conversation thread" className={styles.threadPane} data-mobile-active={mobilePane === "thread"}>
           {!detail && !detailLoading ? (
             <div className={styles.threadEmpty}>
               <MessageSquare size={30} aria-hidden="true" />
@@ -2339,7 +2339,7 @@ export function InboxWorkspace({
               </form>
             </>
           ) : null}
-        </main>
+        </section>
 
         <aside className={styles.detailPane} data-mobile-active={mobilePane === "details"}>
           {!detail ? (

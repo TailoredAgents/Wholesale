@@ -471,10 +471,10 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
 
   if (!lead) {
     return (
-      <main className={styles.page}>
+      <div className={styles.page}>
         <Link className={styles.backLink} href="/os/leads">Back to leads</Link>
         <section className={styles.empty}><p>{apiConnected ? "Lead not found." : "API unavailable."}</p></section>
-      </main>
+      </div>
     );
   }
 
@@ -484,7 +484,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const tabHref = (tab: LeadTab) => `/os/leads/${lead.id}?tab=${tab}`;
 
   return (
-    <main className={styles.page}>
+    <div className={styles.page}>
       <div className={styles.breadcrumb}><Link href="/os/leads">Leads</Link><span>/</span><span>{lead.seller_name}</span></div>
       <header className={styles.commandHeader}>
         <div className={styles.identity}>
@@ -544,6 +544,6 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </section>
         </>
       )}
-    </main>
+    </div>
   );
 }

@@ -233,6 +233,10 @@
   min-width: 0;
 }
 
+.contractPrimary {
+  min-width: 0;
+}
+
 .queueContract > * + *,
 .calendarContract > * + * {
   border-left: 1px solid var(--sg-color-border-soft);
@@ -373,8 +377,8 @@
   }
 
   .recordContract > aside,
-  .calendarContract > main,
-  .managementContract > main {
+  .calendarContract > .contractPrimary,
+  .managementContract > .contractPrimary {
     border-top: 1px solid var(--sg-color-border-soft);
   }
 

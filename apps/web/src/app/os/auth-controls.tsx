@@ -9,6 +9,7 @@ export function AuthControls({ compact = false }: { compact?: boolean }) {
     <div
       className={`${styles.authControls} ${compact ? styles.authControlsCompact : ""}`}
       aria-label="Account controls"
+      role="group"
     >
       <Show when="signed-out">
         <SignInButton mode="modal">

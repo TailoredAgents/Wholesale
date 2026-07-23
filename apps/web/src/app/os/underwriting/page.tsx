@@ -126,7 +126,7 @@ export default async function UnderwritingPage({
           })}
         </aside>
 
-        <main className={styles.detail}>
+        <section aria-label="Underwriting detail" className={styles.detail}>
           {selected ? (
             <>
               <header className={styles.detailHeader}>
@@ -156,12 +156,12 @@ export default async function UnderwritingPage({
               </div>
             </>
           ) : <div className={styles.emptyState}><FileSearch size={24} /><h2>No underwriting work</h2><p>Qualified deals will appear here when they are ready for value analysis.</p></div>}
-        </main>
+        </section>
       </section>
 
       <section className={styles.section}>
         <header><div><span>Accuracy ledger</span><h3>Verified outcome history</h3></div><strong>{calibration?.cases.length ?? 0} records</strong></header>
-        <div className={styles.tableWrap}>
+        <div aria-label="Verified outcome history table" className={styles.tableWrap} tabIndex={0}>
           <table><thead><tr><th>Property</th><th>Market</th><th>Evidence</th><th>Predicted ARV</th><th>Verified ARV</th><th>Error</th><th>Range</th></tr></thead>
             <tbody>
               {calibration?.cases.length ? calibration.cases.map((item) => <tr key={item.id}><td><Link href={`/os/leads/${item.lead_id}#underwriting`}>{item.property_address}</Link><small>{item.seller_name}</small></td><td>{item.market_key}</td><td>{labelize(item.benchmark_type)}</td><td>{money(item.predicted_arv_point_cents)}</td><td>{money(item.benchmark_arv_cents)}</td><td>{percent(item.arv_error_percentage, true)}</td><td><StatusBadge tone={item.arv_range_hit ? "success" : item.arv_range_hit === false ? "danger" : "neutral"}>{item.arv_range_hit === null ? "No range" : item.arv_range_hit ? "Inside" : "Outside"}</StatusBadge></td></tr>) : <tr><td colSpan={7}>No verified outcomes have been recorded.</td></tr>}

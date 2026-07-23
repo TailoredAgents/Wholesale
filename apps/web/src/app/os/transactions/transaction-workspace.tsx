@@ -202,7 +202,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
             </button>
           ))}
         </aside>
-        <main className={styles.detail}>
+        <section aria-label="Transaction detail" className={styles.detail}>
           {!selectedId ? <div className={styles.emptyState}><FileText size={24} /><h3>No active transactions</h3><p>Open one from the Deal tab on a qualified lead.</p></div> : !detail ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={22} /> Loading transaction</div> : <>
             <header className={styles.dealHeader}><div><span>{labelize(detail.status)}</span><h3>{detail.seller_name}</h3><p>{detail.property_address}</p></div><div><span>Purchase</span><strong>{money(detail.purchase_price_cents)}</strong></div></header>
             <div className={styles.controlStrip}>
@@ -248,7 +248,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
 
             {tab === "timeline" ? <div className={styles.sectionGrid}><section className={styles.section}><div className={styles.sectionTitle}><div><span>Immutable history</span><h4>Transaction timeline</h4></div><History size={18} /></div><div className={styles.timeline}>{detail.events.map((event) => <div key={event.id}><span /><div><strong>{event.summary}</strong><small>{labelize(event.event_type)} · {event.actor_name ?? "System"} · {new Date(event.occurred_at).toLocaleString()}</small></div></div>)}</div></section><form className={styles.form} onSubmit={(event) => void addNote(event)}><div className={styles.sectionTitle}><div><span>Record context</span><h4>Add timeline note</h4></div></div><label><span>Note</span><textarea name="summary" required rows={5} /></label><button disabled={busy} type="submit"><Plus size={16} />Add note</button></form></div> : null}
           </>}
-        </main>
+        </section>
       </div>
     </div>
   );

@@ -138,7 +138,7 @@ export function QueuePageContract({
       {toolbar ? <div className={styles.contractToolbar}>{toolbar}</div> : null}
       <div className={classes(styles.queueContract, !context && styles.queueContractCompact)}>
         <aside aria-label="Queue">{queue}</aside>
-        <main>{detail}</main>
+        <section aria-label="Selected record" className={styles.contractPrimary}>{detail}</section>
         {context ? <aside aria-label="Context">{context}</aside> : null}
       </div>
     </div>
@@ -158,7 +158,7 @@ export function RecordPageContract({
     <div className={styles.contractFrame}>
       {navigation ? <div className={styles.contractToolbar}>{navigation}</div> : null}
       <div className={classes(styles.recordContract, !aside && styles.recordContractFull)}>
-        <main>{children}</main>
+        <section aria-label="Record workspace" className={styles.contractPrimary}>{children}</section>
         {aside ? <aside aria-label="Record context">{aside}</aside> : null}
       </div>
     </div>
@@ -188,7 +188,7 @@ export function CalendarPageContract({
       {toolbar ? <div className={styles.contractToolbar}>{toolbar}</div> : null}
       <div className={styles.calendarContract}>
         <aside aria-label="Calendar filters">{sidebar}</aside>
-        <main>{calendar}</main>
+        <section aria-label="Calendar schedule" className={styles.contractPrimary}>{calendar}</section>
       </div>
     </div>
   );
@@ -204,7 +204,7 @@ export function ManagementPageContract({
   return (
     <div className={styles.managementContract}>
       <aside aria-label="Management sections">{navigation}</aside>
-      <main>{children}</main>
+      <section aria-label="Management workspace" className={styles.contractPrimary}>{children}</section>
     </div>
   );
 }

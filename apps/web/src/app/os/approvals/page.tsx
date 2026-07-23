@@ -96,7 +96,7 @@ export default async function ApprovalsPage({
           ))}
         </aside>
 
-        <main className={styles.detail}>
+        <section aria-label="Approval detail" className={styles.detail}>
           {selected ? <>
             <header className={styles.detailHeader}><div><span>{labelize(selected.request_type)}</span><h2>{selected.title}</h2><p>{selected.summary}</p></div>{selected.review_url ? <Link className={styles.primaryLink} href={selected.review_url}>Open evidence <ArrowRight size={15} /></Link> : null}</header>
             <div className={styles.detailGrid}>
@@ -122,7 +122,7 @@ export default async function ApprovalsPage({
               </aside>
             </div>
           </> : <div className={styles.emptyState}><CheckCheck size={24} /><h2>Approval queue clear</h2><p>Controlled requests will appear here with their source evidence and consequences.</p></div>}
-        </main>
+        </section>
       </section>
 
       {sellerOffers.length ? <section className={styles.section}><header><div><span>Seller offers</span><h3>Deals approaching approval</h3></div><strong>{sellerOffers.length} deals</strong></header><div className={approvalStyles.offerGrid}>{sellerOffers.map((lead) => <Link href={`/os/leads/${lead.id}#underwriting`} key={lead.id}><div><strong>{lead.seller_name}</strong><StatusBadge tone="info">{labelize(lead.stage_key)}</StatusBadge></div><span>{lead.property_address}</span><small>{lead.asking_price ? `Seller asks ${lead.asking_price}` : "Seller asking price missing"}</small></Link>)}</div></section> : null}

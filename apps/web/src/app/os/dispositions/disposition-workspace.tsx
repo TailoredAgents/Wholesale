@@ -245,7 +245,7 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
   const post = (path: string) => request(path, { method: "POST", body: "{}" });
 
   return (
-    <main className={styles.workspace}>
+    <section aria-label="Disposition management" className={styles.workspace}>
       <section className={styles.metrics}>
         <div><Megaphone size={18} /><span>Active cases</span><strong>{data.metrics.active_cases}</strong></div>
         <div><FileCheck2 size={18} /><span>Packages pending</span><strong>{data.metrics.packages_pending}</strong></div>
@@ -325,6 +325,6 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
         </div>
       </section>
       {busy ? <div className={styles.busy}><LoaderCircle className={styles.spin} size={16} />Working</div> : null}
-    </main>
+    </section>
   );
 }

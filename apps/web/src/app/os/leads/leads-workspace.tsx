@@ -143,7 +143,7 @@ export function LeadsWorkspace({
 
   return (
     <div className={styles.workspace}>
-      <section className={styles.metrics} aria-label="Lead database summary">
+      <section className={styles.metrics} aria-label="Lead database summary" tabIndex={0}>
         <div><span>New</span><strong>{newLeadCount}</strong><small>First-contact records</small></div>
         <div><span>Qualified+</span><strong>{qualifiedCount}</strong><small>Appointment or offer work</small></div>
         <div><span>Unassigned</span><strong>{unassignedCount}</strong><small>Needs an owner</small></div>

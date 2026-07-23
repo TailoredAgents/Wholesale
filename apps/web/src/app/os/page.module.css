@@ -12,6 +12,24 @@
   background: rgba(47, 111, 78, 0.18);
 }
 
+.skipLink {
+  position: fixed;
+  z-index: 100;
+  top: 8px;
+  left: 8px;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--sg-color-text);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 800;
+  transform: translateY(-160%);
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+
 .sidebar {
   position: sticky;
   top: 0;
@@ -68,8 +86,10 @@
   min-width: 0;
 }
 
-.sidebar h1 {
+.brandTitle {
+  display: block;
   margin-top: 7px;
+  color: #f7f7f2;
   font-size: 23px;
   line-height: 1.1;
   font-weight: 800;
@@ -468,6 +488,7 @@
   border-bottom: 1px solid rgba(104, 112, 115, 0.18);
 }
 
+.header h1,
 .header h2 {
   margin-top: 6px;
   color: var(--text);
@@ -1589,6 +1610,7 @@
     padding: 16px;
   }
 
+  .header h1,
   .header h2 {
     font-size: 26px;
   }

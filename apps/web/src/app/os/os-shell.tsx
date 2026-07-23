@@ -46,6 +46,8 @@ export function OsShell({
   const pathname = usePathname();
   const router = useRouter();
   const searchRef = useRef<HTMLInputElement>(null);
+  const mobileMenuRef = useRef<HTMLButtonElement>(null);
+  const sidebarRef = useRef<HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
@@ -117,6 +119,43 @@ export function OsShell({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const sidebar = sidebarRef.current;
+    if (!sidebar) return;
+    const returnTarget = mobileMenuRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusables = Array.from(sidebar.querySelectorAll<HTMLElement>(focusableSelector));
+    focusables[0]?.focus();
+    const focusFrame = window.requestAnimationFrame(() => {
+      if (!sidebar.contains(document.activeElement)) focusables[0]?.focus();
+    });
+
+    function trapFocus(event: KeyboardEvent) {
+      if (event.key !== "Tab" || !focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    sidebar.addEventListener("keydown", trapFocus);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      sidebar.removeEventListener("keydown", trapFocus);
+      document.body.style.overflow = previousOverflow;
+      returnTarget?.focus();
+    };
+  }, [drawerOpen]);
+
   function closeTransientUi() {
     setDrawerOpen(false);
     setSearchOpen(false);
@@ -124,7 +163,10 @@ export function OsShell({
   }
 
   return (
-    <main className={`${theme.theme} ${styles.shell}`}>
+    <div className={`${theme.theme} ${styles.shell}`}>
+      <a className={styles.skipLink} href="#main-content">
+        Skip to main content
+      </a>
       {drawerOpen ? (
         <button
           aria-label="Close navigation"
@@ -135,15 +177,19 @@ export function OsShell({
       ) : null}
 
       <aside
+        aria-labelledby="stonegate-workspace-title"
+        aria-modal={drawerOpen ? true : undefined}
         aria-label="Primary navigation"
         className={`${styles.sidebar} ${drawerOpen ? styles.sidebarOpen : ""}`}
+        ref={sidebarRef}
+        role={drawerOpen ? "dialog" : undefined}
       >
         <div className={styles.sidebarTop}>
           <div className={styles.brandBlock}>
             <span className={styles.brandMark} aria-hidden="true" />
             <div className={styles.brandCopy}>
               <p className={styles.eyebrow}>Stonegate Home Buyers</p>
-              <h1>Operating System</h1>
+              <strong className={styles.brandTitle} id="stonegate-workspace-title">Operating System</strong>
               <span>Acquisitions and deal execution.</span>
             </div>
           </div>
@@ -172,7 +218,7 @@ export function OsShell({
         </div>
       </aside>
 
-      <section className={styles.workspaceArea}>
+      <div className={styles.workspaceArea}>
         <header className={styles.globalHeader}>
           <div className={styles.globalContext}>
             <button
@@ -180,6 +226,7 @@ export function OsShell({
               aria-label="Open navigation"
               className={styles.mobileMenu}
               onClick={() => setDrawerOpen(true)}
+              ref={mobileMenuRef}
               type="button"
             >
               <Menu aria-hidden="true" size={20} />
@@ -273,8 +320,10 @@ export function OsShell({
           </div>
         </header>
 
-        <section className={styles.workspace}>{children}</section>
-      </section>
-    </main>
+        <main className={styles.workspace} id="main-content" tabIndex={-1}>
+          {children}
+        </main>
+      </div>
+    </div>
   );
 }
