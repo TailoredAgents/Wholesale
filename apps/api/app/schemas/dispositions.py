@@ -166,3 +166,115 @@ class DispositionOverview(BaseModel):
     metrics: DispositionMetrics
     eligible_transactions: list[EligibleTransactionRead]
     cases: list[DispositionCaseRead]
+
+
+class DispositionBuyerRecommendation(BaseModel):
+    buyer_id: UUID
+    buyer_name: str
+    recommendation: Literal["priority", "backup", "hold", "exclude"]
+    rationale: list[str]
+    risks: list[str]
+    evidence: list[str]
+
+
+class DispositionOfferComparison(BaseModel):
+    offer_id: UUID
+    buyer_name: str
+    strength: Literal["strong", "acceptable", "weak", "ineligible"]
+    rationale: list[str]
+    risks: list[str]
+
+
+class DispositionCoordinationOutput(BaseModel):
+    status_summary: str
+    package_gaps: list[str]
+    package_highlights: list[str]
+    recommended_buyers: list[DispositionBuyerRecommendation]
+    offer_comparison: list[DispositionOfferComparison]
+    buyer_outreach_subject: str
+    buyer_outreach_body: str
+    recommended_internal_actions: list[str]
+    relationship_update_proposals: list[str]
+    risk_alerts: list[str]
+    uncertainties: list[str]
+    evidence: list[str]
+    confidence: int = Field(ge=0, le=100)
+
+
+class DispositionCopilotAnalyzeRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class DispositionCopilotRecommendationRead(BaseModel):
+    id: UUID
+    disposition_case_id: UUID
+    transaction_id: UUID
+    lead_id: UUID
+    ai_run_log_id: UUID | None
+    status: str
+    output_payload: DispositionCoordinationOutput
+    confidence_score: int | None
+    generated_at: datetime
+    reviewed_at: datetime | None
+
+
+class DispositionCopilotAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    recommendation: DispositionCopilotRecommendationRead | None
+
+
+class DispositionCopilotReviewRequest(BaseModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    final_output: dict[str, object] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    estimated_time_saved_seconds: int = Field(default=0, ge=0, le=86_400)
+
+    def model_post_init(self, __context: object) -> None:
+        if self.decision == "edited" and self.final_output is None:
+            raise ValueError("Edited guidance requires the corrected output.")
+        if self.decision != "edited" and self.final_output is not None:
+            raise ValueError("Corrected output is only accepted with an edited decision.")
+
+
+class DispositionCopilotReviewRead(BaseModel):
+    id: UUID
+    recommendation_id: UUID
+    decision: str
+    final_output: DispositionCoordinationOutput | None
+    notes: str | None
+    estimated_time_saved_seconds: int
+    reviewed_at: datetime
+
+
+class DispositionCopilotMetrics(BaseModel):
+    generated: int
+    reviewed: int
+    accepted_or_corrected_rate_basis_points: int
+    correction_rate_basis_points: int
+    estimated_time_saved_minutes: int
+
+
+class DispositionRiskAlert(BaseModel):
+    severity: Literal["info", "warning", "critical"]
+    item: str
+    reason: str
+    evidence: list[str]
+
+
+class DispositionCopilotOverview(BaseModel):
+    pilot_mode: Literal["draft_only"]
+    runtime_status: str
+    capability_status: str
+    external_actions_blocked: bool
+    readiness_score: int = Field(ge=0, le=100)
+    readiness_band: Literal["ready", "needs_review", "blocked"]
+    readiness_gaps: list[str]
+    risk_alerts: list[DispositionRiskAlert]
+    qualified_buyer_count: int
+    verified_buyer_count: int
+    offer_count: int
+    backup_coverage: bool
+    recommendations: list[DispositionCopilotRecommendationRead]
+    metrics: DispositionCopilotMetrics

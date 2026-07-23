@@ -345,15 +345,17 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   Factual-accuracy, evidence-coverage, critical-failure, latency, and cost thresholds are enforced.
   Executive and role-owner reviews, redaction validation, and corrected-production-case versioning
   are operational. Production signatures remain an operator checkpoint.
-- AI3-AI6 are implemented in code, and the AI7 provider-independent foundation is implemented:
+- AI3-AI8 are implemented in code:
   the governed production runtime, Lead Manager Copilot,
   Prospecting Copilot and Call Quality, and appointment-scoped Acquisitions Copilot all use the
   same control plane. AI6 provides deterministic meeting readiness, approved-authority controls,
   appointment and post-outcome drafts, immutable human review, and no external or CRM-write
   authority. AI7 adds transaction readiness, deadline risk, duplicate document protection,
   source-page confirmed facts, governed closing drafts, immutable review, and no legal,
-  external-send, checklist-write, deadline-write, or closing authority. Provider integrations,
-  production replay, and measured pilots remain checkpoints. All six completed AI4-AI7
+  external-send, checklist-write, deadline-write, or closing authority. AI8 adds disposition
+  readiness, buyer and offer risk, restricted-economics protection, governed buyer guidance,
+  immutable review, and no buyer, campaign, outreach, economics, or selection authority. Provider
+  integrations, production replay, and measured pilots remain checkpoints. All seven completed AI4-AI8
   capabilities are enabled for on-demand drafts with mandatory human review and read-only tools;
   global external actions remain disabled.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
@@ -374,6 +376,9 @@ While A2P approval is pending:
 6. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
    activate and separately measure the AI4 and AI5 draft-only pilots using
    `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
-7. Build the redacted AI7 transaction package dataset and complete the provider track in
-   `PHASE_AI7_TRANSACTION_COPILOT.md` while earlier copilots remain supervised.
-8. Resume the parallel integration track after A2P approval without blocking internal development.
+7. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
+   provider tracks in `PHASE_AI7_TRANSACTION_COPILOT.md` and
+   `PHASE_AI8_DISPOSITION_COPILOT.md` while earlier copilots remain supervised.
+8. Begin AI9 Finance, Marketing, and Executive Copilots without granting accounting, compensation,
+   budget, advertising, payment, or external authority.
+9. Resume the parallel integration track after A2P approval without blocking internal development.

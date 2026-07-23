@@ -34,6 +34,56 @@
 .dealHeader > div:last-child { text-align: right; display: grid; align-content: center; gap: 5px; }
 .dealHeader > div:last-child strong { font-size: 19px; }
 .controlStrip { padding: 12px 16px; border-bottom: 1px solid var(--line); background: var(--surface-soft); }
+.dispositionCopilot { margin: 16px; border: 1px solid var(--line); background: var(--surface); }
+.dispositionCopilot > header { min-height: 62px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--line-soft); }
+.dispositionCopilot > header > div { display: grid; gap: 4px; }
+.dispositionCopilot > header span { display: flex; align-items: center; gap: 6px; color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.dispositionCopilot > header h4 { margin: 0; font-size: 15px; }
+.copilotMode { padding: 6px 8px; border: 1px solid var(--line); background: var(--brand-soft); white-space: nowrap; }
+.copilotReadiness { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line-soft); }
+.copilotReadiness > div { min-height: 92px; padding: 12px 14px; display: grid; align-content: center; gap: 4px; border-right: 1px solid var(--line-soft); }
+.copilotReadiness > div:last-child { border-right: 0; }
+.copilotReadiness span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.copilotReadiness strong { font-size: 23px; }
+.copilotReadiness strong small { color: var(--muted); font-size: 11px; }
+.copilotReadiness em { color: var(--brand); font-size: 9px; font-style: normal; font-weight: 850; text-transform: uppercase; }
+.copilotReadiness p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.copilotRiskGrid { display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid var(--line-soft); }
+.copilotRiskGrid > div { padding: 12px 14px; display: grid; gap: 7px; border-right: 1px solid var(--line-soft); }
+.copilotRiskGrid > div:last-child { border-right: 0; }
+.copilotRiskGrid strong, .copilotColumns strong, .buyerRecommendations > strong, .offerComparisons > strong { font-size: 10px; text-transform: uppercase; }
+.copilotRiskGrid span, .copilotColumns span { display: flex; align-items: flex-start; gap: 6px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.copilotRiskGrid span[data-severity="critical"] { color: var(--danger); }
+.copilotCommand { min-height: 54px; padding: 9px 14px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.copilotCommand button, .copilotReviewActions button { min-height: 34px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
+.copilotCommand button { background: var(--brand); color: #fff; border-color: var(--brand); }
+.copilotCommand button:disabled, .copilotReviewActions button:disabled { opacity: .45; cursor: not-allowed; }
+.copilotCommand small { color: var(--muted); font-size: 10px; }
+.copilotDraft { display: grid; }
+.copilotDraftPicker { padding: 11px 14px; display: flex; align-items: end; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line-soft); }
+.copilotDraftPicker label { display: grid; gap: 5px; }
+.copilotDraftPicker label span, .outreachDraft > span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
+.copilotDraftPicker select { min-height: 34px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 10px; }
+.copilotDraftPicker > strong { color: var(--brand); font-size: 11px; }
+.copilotDraft > textarea { margin: 12px 14px 0; min-height: 76px; padding: 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface-soft); color: var(--text); font: inherit; font-size: 11px; line-height: 1.5; resize: vertical; }
+.copilotColumns { margin-top: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
+.copilotColumns > div { min-height: 100px; padding: 12px 14px; display: grid; align-content: start; gap: 7px; border-right: 1px solid var(--line-soft); }
+.copilotColumns > div:last-child { border-right: 0; }
+.buyerRecommendations, .offerComparisons { display: grid; border-bottom: 1px solid var(--line-soft); }
+.buyerRecommendations > strong, .offerComparisons > strong { padding: 11px 14px; border-bottom: 1px solid var(--line-soft); }
+.buyerRecommendations > div, .offerComparisons > div { padding: 10px 14px; display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; border-bottom: 1px solid var(--line-soft); }
+.buyerRecommendations span, .offerComparisons span { font-size: 11px; font-weight: 800; }
+.buyerRecommendations b, .offerComparisons b { color: var(--brand); font-size: 9px; text-transform: uppercase; }
+.buyerRecommendations p, .offerComparisons p { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.buyerRecommendations small, .offerComparisons small { grid-column: 1 / -1; color: var(--danger); font-size: 9px; }
+.buyerRecommendations em { grid-column: 1 / -1; color: var(--muted); font-size: 9px; font-style: normal; }
+.outreachDraft { padding: 13px 14px; display: grid; gap: 6px; border-bottom: 1px solid var(--line-soft); }
+.outreachDraft strong { font-size: 12px; }
+.outreachDraft p { margin: 0; color: var(--text); font-size: 11px; line-height: 1.55; white-space: pre-wrap; }
+.outreachDraft small { color: var(--muted); font-size: 9px; }
+.copilotReviewActions { padding: 11px 14px; display: flex; gap: 8px; }
+.copilotReviewActions button:first-child { background: var(--brand); color: #fff; border-color: var(--brand); }
+.reviewedDraft, .copilotEmpty { margin: 0; padding: 14px; color: var(--muted); font-size: 10px; }
 .tabs { min-height: 48px; padding: 0 20px; display: flex; align-items: end; gap: 20px; border-bottom: 1px solid var(--line); }
 .tabs button { height: 48px; padding: 0 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .tabs button.activeTab { color: var(--brand-strong); border-bottom-color: var(--brand); }
@@ -87,6 +137,8 @@
   .metrics > div { border-bottom: 1px solid var(--line-soft); }
   .body { grid-template-columns: 260px minmax(0, 1fr); }
   .sectionGrid { grid-template-columns: 1fr; }
+  .copilotReadiness { grid-template-columns: 1fr 1fr; }
+  .copilotReadiness > div { border-bottom: 1px solid var(--line-soft); }
 }
 @media (max-width: 760px) {
   .workspace { padding: 12px; }
@@ -96,4 +148,9 @@
   .tabs { padding: 0 12px; gap: 14px; overflow-x: auto; }
   .dealHeader { align-items: flex-start; }
   .sectionGrid { padding: 12px; }
+  .dispositionCopilot { margin: 12px; }
+  .dispositionCopilot > header, .copilotCommand, .copilotDraftPicker { align-items: flex-start; flex-direction: column; }
+  .copilotReadiness, .copilotRiskGrid, .copilotColumns { grid-template-columns: 1fr; }
+  .copilotReadiness > div, .copilotRiskGrid > div, .copilotColumns > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .copilotReviewActions { flex-wrap: wrap; }
 }

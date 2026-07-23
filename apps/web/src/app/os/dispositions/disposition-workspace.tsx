@@ -14,11 +14,17 @@ import {
   Upload,
   UsersRound,
 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import type { DispositionCase, DispositionOverview } from "../../lib/api";
+import type {
+  DispositionCase,
+  DispositionCopilotOverview,
+  DispositionCopilotRecommendation,
+  DispositionOverview,
+} from "../../lib/api";
 import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
+import { DispositionCopilotPanel } from "./disposition-copilot-panel";
 import styles from "./dispositions.module.css";
 
 type Tab = "package" | "buyers" | "offers" | "reconciliation";
@@ -46,6 +52,8 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
       : initialData.cases[0]?.id ?? null,
   );
   const [tab, setTab] = useState<Tab>("package");
+  const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
+  const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const apiBase = useMemo(
@@ -59,6 +67,31 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
     [],
   );
   const selected = data.cases.find((item) => item.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    void request<DispositionCopilotOverview>(
+      `/api/v1/dispositions/cases/${selectedId}/copilot`,
+    )
+      .then((result) => {
+        if (active) {
+          setCopilot(result);
+          setCopilotCaseId(selectedId);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCopilot(null);
+          setCopilotCaseId(selectedId);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  // The request helper intentionally follows the selected case and current Clerk session.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   async function headers(json = true) {
     const token = await getToken().catch(() => null);
@@ -93,6 +126,14 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
     try {
       await work();
       await reload();
+      if (selectedId) {
+        setCopilot(
+          await request<DispositionCopilotOverview>(
+            `/api/v1/dispositions/cases/${selectedId}/copilot`,
+          ),
+        );
+        setCopilotCaseId(selectedId);
+      }
       setMessage(success);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save.");
@@ -198,6 +239,41 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
     );
   }
 
+  async function generateCopilot() {
+    if (!selected) return;
+    await action(
+      () =>
+        request(`/api/v1/dispositions/cases/${selected.id}/copilot/analyze`, {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      "Disposition guidance prepared for review.",
+    );
+  }
+
+  async function reviewCopilot(
+    recommendation: DispositionCopilotRecommendation,
+    decision: "accepted" | "edited" | "rejected",
+    finalOutput?: DispositionCopilotRecommendation["output_payload"],
+  ) {
+    await action(
+      () =>
+        request(
+          `/api/v1/dispositions/copilot/recommendations/${recommendation.id}/review`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              decision,
+              final_output: finalOutput ?? null,
+              notes: "Disposition specialist reviewed the governed draft.",
+              estimated_time_saved_seconds: 600,
+            }),
+          },
+        ),
+      `Disposition guidance ${labelize(decision).toLowerCase()}.`,
+    );
+  }
+
   async function uploadProof(event: FormEvent<HTMLFormElement>, buyerId: string) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -292,6 +368,14 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
                   nextAction={{ label: "Authorized next step", value: selected.package_status !== "approved" ? "Approve investor package" : !selected.matches.length ? "Generate buyer ranking" : !selected.offers.length ? "Record buyer offers" : !selected.selected_buyer_id ? "Approve buyer selection" : "Reconcile closing", detail: `Floor ${money(selected.minimum_acceptable_cents)}`, tone: "info" }}
                 />
               </div>
+              {copilot && copilotCaseId === selected.id ? (
+                <DispositionCopilotPanel
+                  busy={busy}
+                  copilot={copilot}
+                  onGenerate={generateCopilot}
+                  onReview={reviewCopilot}
+                />
+              ) : null}
               <nav className={styles.tabs}>{(["package", "buyers", "offers", "reconciliation"] as Tab[]).map((item) => <button className={tab === item ? styles.activeTab : ""} key={item} onClick={() => setTab(item)} type="button">{labelize(item)}</button>)}</nav>
 
               {tab === "package" ? <div className={styles.sectionGrid}>

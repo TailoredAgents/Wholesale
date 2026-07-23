@@ -27,12 +27,18 @@ from app.models.foundation import (
     Appointment,
     ApprovalRequest,
     AuditEvent,
+    Buyer,
+    BuyerCriteria,
+    BuyerEngagement,
+    BuyerOffer,
     CallRecord,
     CallRecording,
     CallTranscript,
     Campaign,
     CommunicationRecord,
     ContractPackage,
+    DispositionCase,
+    DispositionMatch,
     FieldInspection,
     FieldInspectionPhoto,
     FieldMeetingBrief,
@@ -81,6 +87,7 @@ DRAFT_ONLY_ENABLED_CAPABILITIES = {
     "appointment.brief",
     "negotiation.coach",
     "transaction.coordinate",
+    "disposition.match",
 }
 OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -422,6 +429,85 @@ TRANSACTION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence",
     ],
 }
+STRING_ARRAY_SCHEMA = {"type": "array", "items": {"type": "string"}}
+DISPOSITION_BUYER_RECOMMENDATION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "buyer_id": {"type": "string"},
+        "buyer_name": {"type": "string"},
+        "recommendation": {
+            "type": "string",
+            "enum": ["priority", "backup", "hold", "exclude"],
+        },
+        "rationale": STRING_ARRAY_SCHEMA,
+        "risks": STRING_ARRAY_SCHEMA,
+        "evidence": STRING_ARRAY_SCHEMA,
+    },
+    "required": [
+        "buyer_id",
+        "buyer_name",
+        "recommendation",
+        "rationale",
+        "risks",
+        "evidence",
+    ],
+}
+DISPOSITION_OFFER_COMPARISON_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "offer_id": {"type": "string"},
+        "buyer_name": {"type": "string"},
+        "strength": {
+            "type": "string",
+            "enum": ["strong", "acceptable", "weak", "ineligible"],
+        },
+        "rationale": STRING_ARRAY_SCHEMA,
+        "risks": STRING_ARRAY_SCHEMA,
+    },
+    "required": ["offer_id", "buyer_name", "strength", "rationale", "risks"],
+}
+DISPOSITION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "status_summary": {"type": "string"},
+        "package_gaps": STRING_ARRAY_SCHEMA,
+        "package_highlights": STRING_ARRAY_SCHEMA,
+        "recommended_buyers": {
+            "type": "array",
+            "items": DISPOSITION_BUYER_RECOMMENDATION_SCHEMA,
+        },
+        "offer_comparison": {
+            "type": "array",
+            "items": DISPOSITION_OFFER_COMPARISON_SCHEMA,
+        },
+        "buyer_outreach_subject": {"type": "string"},
+        "buyer_outreach_body": {"type": "string"},
+        "recommended_internal_actions": STRING_ARRAY_SCHEMA,
+        "relationship_update_proposals": STRING_ARRAY_SCHEMA,
+        "risk_alerts": STRING_ARRAY_SCHEMA,
+        "uncertainties": STRING_ARRAY_SCHEMA,
+        "evidence": STRING_ARRAY_SCHEMA,
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "status_summary",
+        "package_gaps",
+        "package_highlights",
+        "recommended_buyers",
+        "offer_comparison",
+        "buyer_outreach_subject",
+        "buyer_outreach_body",
+        "recommended_internal_actions",
+        "relationship_update_proposals",
+        "risk_alerts",
+        "uncertainties",
+        "evidence",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -430,6 +516,7 @@ KNOWLEDGE_BY_CAPABILITY = {
     "negotiation": ["operating_model", "underwriting_method"],
     "prospecting": ["prospecting_scripts"],
     "transaction": ["operating_model", "ai_agent_policy"],
+    "disposition": ["operating_model", "ai_agent_policy"],
     "compliance": ["ai_agent_policy"],
     "operations": ["operating_model", "ai_agent_policy"],
 }
@@ -526,6 +613,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
                 "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                 "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
+                "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
             }.get(capability_key)
             if schema is not None:
                 existing_capability.output_schema = schema
@@ -550,6 +638,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
                     "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                     "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
+                    "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
                 }.get(capability_key, OUTPUT_SCHEMA),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
@@ -1202,6 +1291,11 @@ def _execute_read_tool(
             db, principal, payload
         )
         context["transaction"] = transaction_context
+    elif capability.capability_key == "disposition.match":
+        disposition_context, field_scope = _disposition_context(
+            db, principal, payload
+        )
+        context["disposition"] = disposition_context
     elif payload.lead_id is not None:
         lead_context = build_lead_context(db, principal, payload.lead_id)
         if lead_context is None:
@@ -1247,6 +1341,169 @@ def _execute_read_tool(
         },
     )
     return context, tool_call
+
+
+def _disposition_context(
+    db: Session,
+    principal: Principal,
+    payload: AiRuntimeExecuteCreate,
+) -> tuple[dict[str, Any], list[str]]:
+    if payload.transaction_id is None:
+        raise ValueError("Disposition analysis requires a transaction.")
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.organization_id == principal.organization_id,
+            DispositionCase.transaction_id == payload.transaction_id,
+        )
+    )
+    if case is None:
+        raise ValueError("Disposition case not found.")
+    if payload.lead_id is not None and payload.lead_id != case.lead_id:
+        raise ValueError("The disposition case and lead do not match.")
+
+    matches = list(
+        db.scalars(
+            select(DispositionMatch)
+            .where(
+                DispositionMatch.organization_id == principal.organization_id,
+                DispositionMatch.disposition_case_id == case.id,
+            )
+            .order_by(DispositionMatch.rank)
+        ).all()
+    )
+    buyer_ids = {item.buyer_id for item in matches}
+    buyers = {
+        item.id: item
+        for item in db.scalars(
+            select(Buyer).where(
+                Buyer.organization_id == principal.organization_id,
+                Buyer.id.in_(buyer_ids),
+            )
+        ).all()
+    } if buyer_ids else {}
+    criteria_by_buyer: dict[UUID, BuyerCriteria] = {}
+    if buyer_ids:
+        for item in db.scalars(
+            select(BuyerCriteria)
+            .where(
+                BuyerCriteria.organization_id == principal.organization_id,
+                BuyerCriteria.buyer_id.in_(buyer_ids),
+            )
+            .order_by(BuyerCriteria.created_at.desc())
+        ).all():
+            criteria_by_buyer.setdefault(item.buyer_id, item)
+    offers = list(
+        db.scalars(
+            select(BuyerOffer)
+            .where(
+                BuyerOffer.organization_id == principal.organization_id,
+                BuyerOffer.disposition_case_id == case.id,
+            )
+            .order_by(BuyerOffer.amount_cents.desc())
+        ).all()
+    )
+    engagements = list(
+        db.scalars(
+            select(BuyerEngagement)
+            .where(
+                BuyerEngagement.organization_id == principal.organization_id,
+                BuyerEngagement.disposition_case_id == case.id,
+            )
+            .order_by(BuyerEngagement.occurred_at.desc())
+            .limit(30)
+        ).all()
+    )
+
+    context = {
+        "case": {
+            "id": str(case.id),
+            "status": case.status,
+            "strategy": case.strategy,
+            "asking_price_cents": case.asking_price_cents,
+            "package_status": case.package_status,
+            "property_address": case.package_snapshot.get("property_address"),
+            "property_type": case.package_snapshot.get("property_type"),
+        },
+        "buyer_matches": [
+            {
+                "buyer_id": str(match.buyer_id),
+                "buyer_name": buyers[match.buyer_id].name,
+                "rank": match.rank,
+                "score_basis_points": match.score_basis_points,
+                "score_components": match.score_components,
+                "qualification_status": match.qualification_status,
+                "recipient_status": match.recipient_status,
+                "proof_status": buyers[match.buyer_id].proof_of_funds_status,
+                "proof_expires_at": _iso(
+                    buyers[match.buyer_id].proof_of_funds_expires_at
+                ),
+                "reliability_score_basis_points": buyers[
+                    match.buyer_id
+                ].reliability_score_basis_points,
+                "completed_deals": buyers[match.buyer_id].completed_deals,
+                "failed_deals": buyers[match.buyer_id].failed_deals,
+                "criteria": {
+                    "markets": criteria_by_buyer[match.buyer_id].markets,
+                    "property_types": criteria_by_buyer[
+                        match.buyer_id
+                    ].property_types,
+                    "rehab_levels": criteria_by_buyer[
+                        match.buyer_id
+                    ].rehab_levels,
+                }
+                if match.buyer_id in criteria_by_buyer
+                else None,
+            }
+            for match in matches
+            if match.buyer_id in buyers
+        ],
+        "offers": [
+            {
+                "offer_id": str(item.id),
+                "buyer_id": str(item.buyer_id),
+                "buyer_name": buyers[item.buyer_id].name
+                if item.buyer_id in buyers
+                else "Recorded buyer",
+                "amount_cents": item.amount_cents,
+                "meets_internal_floor": (
+                    item.amount_cents >= case.minimum_acceptable_cents
+                ),
+                "earnest_money_cents": item.earnest_money_cents,
+                "financing_type": item.financing_type,
+                "status": item.status,
+                "proof_of_funds_received": item.proof_of_funds_received,
+                "deposit_due_at": _iso(item.deposit_due_at),
+                "deposit_received_at": _iso(item.deposit_received_at),
+            }
+            for item in offers
+        ],
+        "engagements": [
+            {
+                "buyer_id": str(item.buyer_id),
+                "buyer_name": buyers[item.buyer_id].name
+                if item.buyer_id in buyers
+                else "Recorded buyer",
+                "engagement_type": item.engagement_type,
+                "status": item.status,
+                "scheduled_at": _iso(item.scheduled_at),
+                "occurred_at": _iso(item.occurred_at),
+            }
+            for item in engagements
+        ],
+        "human_approvals": {
+            "package_approved": case.package_status == "approved",
+            "buyer_selection_approved": case.selected_buyer_id is not None,
+            "backup_buyer_selected": case.backup_buyer_id is not None,
+        },
+    }
+    return context, [
+        "disposition.case",
+        "disposition.buyer_matches",
+        "disposition.buyer_evidence",
+        "disposition.offers",
+        "disposition.engagements",
+        "disposition.human_approvals",
+    ]
 
 
 def _transaction_context(

@@ -1342,6 +1342,74 @@ export type DispositionOverview = {
   cases: DispositionCase[];
 };
 
+export type DispositionCopilotRecommendation = {
+  id: string;
+  disposition_case_id: string;
+  transaction_id: string;
+  lead_id: string;
+  ai_run_log_id: string | null;
+  status: string;
+  output_payload: {
+    status_summary: string;
+    package_gaps: string[];
+    package_highlights: string[];
+    recommended_buyers: Array<{
+      buyer_id: string;
+      buyer_name: string;
+      recommendation: "priority" | "backup" | "hold" | "exclude";
+      rationale: string[];
+      risks: string[];
+      evidence: string[];
+    }>;
+    offer_comparison: Array<{
+      offer_id: string;
+      buyer_name: string;
+      strength: "strong" | "acceptable" | "weak" | "ineligible";
+      rationale: string[];
+      risks: string[];
+    }>;
+    buyer_outreach_subject: string;
+    buyer_outreach_body: string;
+    recommended_internal_actions: string[];
+    relationship_update_proposals: string[];
+    risk_alerts: string[];
+    uncertainties: string[];
+    evidence: string[];
+    confidence: number;
+  };
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
+export type DispositionCopilotOverview = {
+  pilot_mode: "draft_only";
+  runtime_status: string;
+  capability_status: string;
+  external_actions_blocked: boolean;
+  readiness_score: number;
+  readiness_band: "ready" | "needs_review" | "blocked";
+  readiness_gaps: string[];
+  risk_alerts: Array<{
+    severity: "info" | "warning" | "critical";
+    item: string;
+    reason: string;
+    evidence: string[];
+  }>;
+  qualified_buyer_count: number;
+  verified_buyer_count: number;
+  offer_count: number;
+  backup_coverage: boolean;
+  recommendations: DispositionCopilotRecommendation[];
+  metrics: {
+    generated: number;
+    reviewed: number;
+    accepted_or_corrected_rate_basis_points: number;
+    correction_rate_basis_points: number;
+    estimated_time_saved_minutes: number;
+  };
+};
+
 export type FinanceSummary = {
   collected_revenue_cents: number;
   pending_revenue_cents: number;

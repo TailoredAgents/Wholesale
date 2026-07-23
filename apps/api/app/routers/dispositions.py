@@ -12,6 +12,11 @@ from app.schemas.dispositions import (
     BuyerSelection,
     DispositionCaseCreate,
     DispositionCaseRead,
+    DispositionCopilotAnalyzeRead,
+    DispositionCopilotAnalyzeRequest,
+    DispositionCopilotOverview,
+    DispositionCopilotReviewRead,
+    DispositionCopilotReviewRequest,
     DispositionOverview,
     EngagementCreate,
     OfferCreate,
@@ -19,6 +24,11 @@ from app.schemas.dispositions import (
     ReconciliationDecision,
 )
 from app.services import dispositions
+from app.services.disposition_copilot import (
+    analyze_disposition,
+    get_disposition_copilot_overview,
+    review_recommendation,
+)
 
 router = APIRouter(prefix="/api/v1/dispositions", tags=["dispositions"])
 view_dependency = require_permission(PermissionKeys.VIEW_DEALS)
@@ -63,6 +73,55 @@ def read_case(
     if case is None:
         raise HTTPException(status_code=404, detail="Disposition case not found.")
     return dispositions.case_read(db, case)
+
+
+@router.get("/cases/{case_id}/copilot")
+def read_disposition_copilot(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> DispositionCopilotOverview:
+    result = get_disposition_copilot_overview(db, principal, case_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.post("/cases/{case_id}/copilot/analyze")
+def create_disposition_copilot_draft(
+    case_id: UUID,
+    payload: DispositionCopilotAnalyzeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionCopilotAnalyzeRead:
+    try:
+        result = analyze_disposition(db, principal, case_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Disposition case not found.")
+    return result
+
+
+@router.post("/copilot/recommendations/{recommendation_id}/review")
+def review_disposition_copilot_draft(
+    recommendation_id: UUID,
+    payload: DispositionCopilotReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> DispositionCopilotReviewRead:
+    try:
+        result = review_recommendation(
+            db,
+            principal,
+            recommendation_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found.")
+    return result
 
 
 @router.post("/cases/{case_id}/package/approve")

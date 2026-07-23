@@ -1,15 +1,20 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
     CompensationPlanRole,
     CompensationPlanVersion,
     DealDeduction,
+    DispositionCampaign,
+    DispositionCopilotRecommendation,
+    DispositionCopilotReview,
     DispositionOperatingMode,
     Lead,
     RevenueRecord,
@@ -311,3 +316,227 @@ def test_buyer_selection_requires_current_proof_of_funds(
     )
     assert response.status_code == 422
     assert "proof-of-funds" in response.json()["detail"]
+
+
+def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id, buyer_id = setup_case_foundation(db_session, client)
+    case = client.post(
+        "/api/v1/dispositions/cases",
+        headers=HEADERS,
+        json={
+            "transaction_id": transaction_id,
+            "asking_price_cents": 19000000,
+            "minimum_acceptable_cents": 18000000,
+        },
+    ).json()
+    case_id = case["id"]
+    assert client.post(
+        f"/api/v1/dispositions/cases/{case_id}/package/approve",
+        headers=HEADERS,
+    ).status_code == 200
+    proof = client.post(
+        f"/api/v1/dispositions/buyers/{buyer_id}/proof",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        params={
+            "file_name": "proof.pdf",
+            "content_type": "application/pdf",
+            "institution_name": "Example Bank",
+            "verified_amount_cents": 40000000,
+            "expires_at": (datetime.now(UTC) + timedelta(days=90)).isoformat(),
+        },
+        content=b"%PDF verified proof of funds",
+    )
+    assert proof.status_code == 201
+    matched = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/matches",
+        headers=HEADERS,
+    )
+    assert matched.status_code == 200
+    offer = client.post(
+        f"/api/v1/dispositions/cases/{case_id}/offers",
+        headers=HEADERS,
+        json={
+            "buyer_id": buyer_id,
+            "amount_cents": 19000000,
+            "earnest_money_cents": 500000,
+            "financing_type": "cash",
+            "proof_document_id": proof.json()["id"],
+        },
+    )
+    assert offer.status_code == 200
+    offer_id = offer.json()["offers"][0]["id"]
+
+    with monkeypatch.context() as configured_environment:
+        configured_environment.setenv("AI_ENABLED", "true")
+        configured_environment.setenv("OPENAI_API_KEY", "test-openai-key")
+        get_settings.cache_clear()
+        assert client.post(
+            "/api/v1/ai/orchestrator/portfolio/install",
+            headers=HEADERS,
+        ).status_code == 201
+        assert client.post(
+            "/api/v1/ai/copilots/install",
+            headers=HEADERS,
+        ).status_code == 201
+        assert client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=HEADERS,
+            json={"decision": "approve", "notes": "Approved for AI8 test."},
+        ).status_code == 200
+        installed = client.post("/api/v1/ai/runtime/install", headers=HEADERS)
+        assert installed.status_code == 201
+        capability = next(
+            item
+            for item in installed.json()["runtime"]["capabilities"]
+            if item["capability_key"] == "disposition.match"
+        )
+        assert capability["status"] == "enabled"
+        assert capability["requires_human_review"] is True
+
+        class FakeOpenAIResponsesClient:
+            def __init__(self, **_: object) -> None:
+                pass
+
+            def create_structured_response(self, **kwargs: object):
+                prompt = kwargs["user_prompt"]
+                assert isinstance(prompt, str)
+                assert "Disposition Seller" not in prompt
+                assert "purchase_price_cents" not in prompt
+                assert "minimum_acceptable_cents" not in prompt
+                assert "15000000" not in prompt
+                assert "18000000" not in prompt
+                assert '"meets_internal_floor": true' in prompt
+                schema = kwargs["json_schema"]
+                assert isinstance(schema, dict)
+                assert schema["additionalProperties"] is False
+                return (
+                    {
+                        "status_summary": (
+                            "One verified local buyer has submitted an acceptable offer."
+                        ),
+                        "package_gaps": [],
+                        "package_highlights": [
+                            "Atlanta single-family opportunity",
+                            "Human-approved asking price is $190,000",
+                        ],
+                        "recommended_buyers": [
+                            {
+                                "buyer_id": buyer_id,
+                                "buyer_name": "Reliable Atlanta Buyer",
+                                "recommendation": "priority",
+                                "rationale": [
+                                    "Verified funds cover the asking price.",
+                                    "The buyer matches the market and property type.",
+                                ],
+                                "risks": ["No Stonegate closing history is recorded."],
+                                "evidence": [
+                                    "Deterministic buyer rank 1",
+                                    "Current proof-of-funds record",
+                                ],
+                            }
+                        ],
+                        "offer_comparison": [
+                            {
+                                "offer_id": offer_id,
+                                "buyer_name": "Reliable Atlanta Buyer",
+                                "strength": "strong",
+                                "rationale": [
+                                    "Offer meets the approved economics.",
+                                    "Earnest money is recorded.",
+                                ],
+                                "risks": ["Deposit receipt has not been recorded."],
+                            }
+                        ],
+                        "buyer_outreach_subject": (
+                            "Atlanta single-family investment opportunity"
+                        ),
+                        "buyer_outreach_body": (
+                            "Stonegate has an Atlanta single-family opportunity "
+                            "available at $190,000. Reply for the approved package."
+                        ),
+                        "recommended_internal_actions": [
+                            "Confirm the deposit deadline before buyer selection."
+                        ],
+                        "relationship_update_proposals": [
+                            "Confirm the buyer's preferred Atlanta ZIP codes."
+                        ],
+                        "risk_alerts": [
+                            "Maintain a backup buyer before final placement."
+                        ],
+                        "uncertainties": [
+                            "Stonegate closing performance is not yet recorded."
+                        ],
+                        "evidence": [
+                            "Approved disposition package",
+                            "Buyer match and offer records",
+                        ],
+                        "confidence": 88,
+                    },
+                    {"input_tokens": 180, "output_tokens": 220, "total_tokens": 400},
+                )
+
+        monkeypatch.setattr(
+            "app.services.ai_runtime.OpenAIResponsesClient",
+            FakeOpenAIResponsesClient,
+        )
+        analyzed = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=HEADERS,
+            json={"idempotency_key": "disposition-copilot:test:1"},
+        )
+        assert analyzed.status_code == 200, analyzed.text
+        result = analyzed.json()
+        assert result["run_status"] == "needs_review"
+        assert result["recommendation"]["status"] == "draft"
+        recommendation_id = result["recommendation"]["id"]
+
+        repeated = client.post(
+            f"/api/v1/dispositions/cases/{case_id}/copilot/analyze",
+            headers=HEADERS,
+            json={"idempotency_key": "disposition-copilot:test:1"},
+        )
+        assert repeated.json()["recommendation"]["id"] == recommendation_id
+        review = client.post(
+            f"/api/v1/dispositions/copilot/recommendations/{recommendation_id}/review",
+            headers=HEADERS,
+            json={
+                "decision": "accepted",
+                "notes": "Disposition specialist reviewed the evidence.",
+                "estimated_time_saved_seconds": 600,
+            },
+        )
+        assert review.status_code == 200, review.text
+        assert review.json()["decision"] == "accepted"
+        overview = client.get(
+            f"/api/v1/dispositions/cases/{case_id}/copilot",
+            headers=HEADERS,
+        )
+        assert overview.status_code == 200
+        assert overview.json()["recommendations"][0]["status"] == "accepted"
+        assert overview.json()["external_actions_blocked"] is True
+        assert overview.json()["metrics"]["reviewed"] == 1
+
+    get_settings.cache_clear()
+    db_session.expire_all()
+    refreshed_case = client.get(
+        f"/api/v1/dispositions/cases/{case_id}",
+        headers=HEADERS,
+    ).json()
+    assert refreshed_case["selected_buyer_id"] is None
+    assert (
+        db_session.scalar(
+            select(func.count(DispositionCampaign.id)).where(
+                DispositionCampaign.disposition_case_id == UUID(case_id)
+            )
+        )
+        == 0
+    )
+    assert db_session.scalar(
+        select(func.count(DispositionCopilotRecommendation.id))
+    ) == 1
+    assert db_session.scalar(select(func.count(DispositionCopilotReview.id))) == 1

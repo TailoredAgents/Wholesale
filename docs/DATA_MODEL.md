@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0049_enable_completed_copilots` is the
+The schema is managed through Alembic migrations. Migration `0050_disposition_copilot` is the
 current head.
 
 ## Identity And Access
@@ -166,6 +166,8 @@ original output and immutable human acceptance, correction, or rejection.
 - `disposition_matches`
 - `disposition_campaigns`
 - `buyer_engagements`
+- `disposition_copilot_recommendations`
+- `disposition_copilot_reviews`
 - `deal_reconciliations`
 - `deal_payouts`
 
@@ -176,6 +178,9 @@ historical plans. Market checklists retain evidence and final approval for every
 
 Disposition cases freeze the governing plan and operating mode, retain the approved package and
 buyer-selection evidence, and connect one contracted transaction to its ranked buyer pool.
+Disposition Copilot recommendations retain idempotent buyer and offer guidance with its governed
+trace and evidence snapshot. Reviews preserve the original output and immutable human acceptance,
+correction, or rejection without changing buyers, campaigns, economics, or selection.
 Reconciliations use collected revenue and deal-specific deductions to produce auditable payout and
 company-profit records. Approval cannot silently allocate an unassigned commission.
 

@@ -81,7 +81,10 @@ Delivered:
 - AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
   deterministic closing readiness, deadline risk, duplicate-file protection, source-page
   confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
-- All six completed AI4-AI7 capabilities are available on demand in supervised draft-only mode.
+- AI8 provider-independent Disposition Copilot foundation embedded in Dispositions with
+  deterministic placement readiness, buyer and offer risk, governed buyer guidance, human
+  correction, restricted-economics protection, and no buyer, campaign, or selection mutation.
+- All seven completed AI4-AI8 capabilities are available on demand in supervised draft-only mode.
   Every output requires human review, tools remain read-only, and external actions remain blocked.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
@@ -369,6 +372,9 @@ Exit criteria:
 
 ## Phase AI8: Disposition Copilot And Buyer Intelligence
 
+Status: **Provider-independent foundation complete in code. Provider adapters, production replay,
+and a measured pilot remain. See `PHASE_AI8_DISPOSITION_COPILOT.md`.**
+
 Goal: Help the Disposition specialist place approved contracts quickly and accurately.
 
 Build:
@@ -508,12 +514,12 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Begin AI7 Transaction Copilot and Document Intelligence inside the existing transaction workspace.
-Start with deterministic document/checklist readiness, missing-item detection, deadline risk, and
-reviewed internal drafts. Do not add contract interpretation, signature, legal, or external-send
-authority.
+Begin AI9 Finance, Marketing, and Executive Copilots inside their existing OS workspaces. Start
+with deterministic reconciliation exceptions, source-economics evidence, and a fact-separated
+executive operating brief; retain human approval over accounting, compensation, budgets, ad
+changes, payments, and all external actions.
 
-In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI7
-draft-only pilots. Call Quality can produce a draft only from an approved transcript; keep
-recording ingestion disabled until Twilio disclosure, consent, and retention controls are
-operationally approved.
+In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI8
+draft-only pilots. Build the redacted AI7 transaction and AI8 disposition datasets, and keep
+recording ingestion and external communication disabled until their provider, disclosure, consent,
+retention, and operational controls are approved.
