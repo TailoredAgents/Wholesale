@@ -1,0 +1,135 @@
+.header {
+  position: relative;
+  z-index: 50;
+  min-height: 74px;
+  border-bottom: 1px solid #dfe4e0;
+  background: rgba(255, 255, 255, 0.97);
+}
+
+.inner {
+  width: min(1240px, calc(100% - 48px));
+  min-height: 74px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+}
+
+.brand {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #12231b;
+  font-size: 17px;
+}
+
+.brand span {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 4px;
+  background: #1d5a3d;
+  color: #ffffff;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.navigation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 20px;
+  color: #33423a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.navigation a:not(.offer):hover {
+  color: #1d5a3d;
+}
+
+.phone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #1d5a3d;
+  white-space: nowrap;
+}
+
+.offer {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border-radius: 6px;
+  background: #1d5a3d;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.offer:hover {
+  background: #174a32;
+}
+
+.menuButton {
+  display: none;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #cfd7d2;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #183d2a;
+}
+
+@media (max-width: 1060px) {
+  .menuButton {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  .navigation {
+    display: none;
+    position: absolute;
+    top: 74px;
+    right: 0;
+    left: 0;
+    padding: 18px 24px 24px;
+    border-bottom: 1px solid #dfe4e0;
+    background: #ffffff;
+    box-shadow: 0 18px 32px rgba(17, 35, 26, 0.12);
+    align-items: stretch;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .navigationOpen {
+    display: flex;
+  }
+
+  .navigation a {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid #edf0ee;
+  }
+
+  .navigation .offer {
+    margin-top: 14px;
+    border-bottom: 0;
+  }
+}
+
+@media (max-width: 520px) {
+  .inner {
+    width: calc(100% - 32px);
+  }
+
+  .brand {
+    font-size: 15px;
+  }
+}

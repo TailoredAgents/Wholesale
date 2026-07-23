@@ -64,12 +64,20 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 
 ### Public Website
 
-- Conversion-focused Stonegate homepage with no internal OS navigation.
+- Address-first Stonegate homepage with a full-bleed Georgia property image and no internal OS
+  navigation.
+- Shared responsive public navigation, footer, phone contact, direct-offer disclosure, and legal
+  access across all seller routes.
+- How It Works, About, and FAQs pages with transparent offer, company, assignment, timing, cost,
+  privacy, and retail-price tradeoff content.
 - Cash-offer request form with duplicate matching, attribution, and conversion tracking.
-- Seller pages for inherited homes, repair-heavy homes, and fast-sale situations.
+- Seller pages for inherited homes, repair-heavy homes, and fast-sale situations using local
+  project-bound visual assets and one shared conversion path.
 - Public privacy policy and SMS terms.
 - Separate, optional, unchecked SMS consent with versioned evidence.
 - Form-view, form-start, abandonment, submit, and phone-click conversion events.
+- Public canonical metadata, Organization and WebSite structured data, social image metadata,
+  sitemap, and OS/authentication search exclusions.
 
 ### Authentication And Operations
 

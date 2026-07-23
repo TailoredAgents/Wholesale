@@ -1,13 +1,13 @@
 :root {
   --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --foreground: #17221c;
+  --stonegate-green: #1d5a3d;
+  --stonegate-green-dark: #122f21;
+  --stonegate-gold: #b9852d;
+  --stonegate-ink: #17221c;
+  --stonegate-muted: #59655f;
+  --stonegate-line: #d9e0dc;
+  --stonegate-surface: #f5f7f5;
 }
 
 html {
@@ -42,8 +42,19 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(185, 133, 45, 0.72);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: #d9eadf;
+  color: #10251a;
 }

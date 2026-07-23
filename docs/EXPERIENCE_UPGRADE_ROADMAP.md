@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX8 are complete.
+Status: Implementation in progress. Phases UX1 through UX9 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -404,7 +404,7 @@ Implementation notes:
 
 ## Phase UX9: Public Website Architecture, Brand, And Trust
 
-Status: Not started.
+Status: Complete. See [`UX9_PUBLIC_WEBSITE_ARCHITECTURE.md`](UX9_PUBLIC_WEBSITE_ARCHITECTURE.md).
 
 Goal: Establish a credible, local, differentiated Stonegate seller experience before rebuilding the
 offer journey.
@@ -424,6 +424,24 @@ Exit criteria:
 - Every public page has one primary seller action and a clear next step.
 - Claims are supportable and do not imply an appraisal, guaranteed price, or superior net proceeds.
 - Real or approved high-quality property and team imagery is ready before final visual acceptance.
+
+Implementation notes:
+
+- The public site now uses one responsive header and footer with minimal navigation, visible phone
+  contact, legal links, and a consistent direct-offer disclosure.
+- The homepage is an address-first, full-bleed Georgia property experience with no unsupported
+  speed claim, fabricated review, or implied guarantee of retail value.
+- New How It Works, About, and FAQs pages explain offer inputs, company boundaries, assignment,
+  timing, costs, privacy, and the direct-offer versus retail-listing tradeoff.
+- Inherited-property, repair, and timeline pages use the same seller journey and local visual
+  system rather than remote stock-image dependencies.
+- Organization and WebSite structured data, canonical metadata, social metadata, sitemap, and
+  robots rules cover the new public architecture while excluding authenticated OS routes.
+- Three project-bound property images were generated for the public site. Real team photography,
+  verified reviews, and quantified proof remain intentionally unpublished until Stonegate supplies
+  approved evidence.
+- All ten public routes return `200` at desktop and mobile widths with no page overflow. Lint,
+  TypeScript, production build, and desktop/mobile axe-core WCAG A/AA checks pass.
 
 ## Phase UX10: Public Conversion Journey, Performance, And Measurement
 
@@ -467,5 +485,6 @@ Exit criteria:
 
 ## Recommended Next Checkpoint
 
-Proceed to UX9 with the public sitemap, trust-content inventory, claims review, and final visual
-direction before rebuilding the seller conversion journey in UX10.
+Proceed to UX10 by converting the preserved address into a progressive offer journey, completing
+field-level recovery and consent verification, and establishing measured performance and conversion
+baselines before testing content changes.

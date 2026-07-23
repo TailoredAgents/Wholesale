@@ -1,138 +1,138 @@
+import { ArrowRight, Check, Clock3, Hammer, HeartHandshake, House, Phone } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 
-import { CashOfferForm } from "./get-a-cash-offer/cash-offer-form";
+import { AddressOfferStart } from "./address-offer-start";
 import { PublicConversionTracker } from "./public-conversion-tracker";
 import { PublicSiteFooter } from "./public-site-footer";
-import styles from "./page.module.css";
+import { PublicSiteHeader } from "./public-site-header";
 import { sellerSituations } from "./seller-situations";
-import { TrackedPhoneLink } from "./tracked-phone-link";
-
-const proofPoints = [
-  "No repairs before review",
-  "No agent commissions",
-  "No obligation to accept",
-  "Close on a timeline that works",
-];
+import { directOfferDisclosure, siteConfig } from "./site-config";
+import styles from "./page.module.css";
 
 const processSteps = [
   {
-    title: "Tell us where the house is",
-    detail: "Start with the address, city, ZIP code, and the best way to reach you.",
+    title: "Share the property",
+    detail: "Start with the address. We will ask about condition, occupancy, timing, and your goals.",
   },
   {
-    title: "We review the property as-is",
-    detail: "Condition, repairs, occupancy, timing, and local buyer demand are part of the review.",
+    title: "Review your options",
+    detail: "A Stonegate team member reviews the property and explains how a direct offer is calculated.",
   },
   {
-    title: "You compare the offer",
-    detail: "You can compare a direct cash-sale path against listing, repairing, or waiting.",
+    title: "Choose what fits",
+    detail: "If we make an offer, you can accept, decline, or compare it with listing and repair options.",
   },
 ];
 
-const sellerObjections = [
-  {
-    title: "What if the house needs work?",
-    detail:
-      "That is exactly when a direct as-is review can help. You do not need to clean, stage, or hire contractors before requesting an offer.",
-  },
-  {
-    title: "What if I am only exploring?",
-    detail:
-      "The request is no obligation. The goal is to give you a clear option so you can decide whether it fits your timeline and net proceeds.",
-  },
-  {
-    title: "What if there are tenants or family items?",
-    detail:
-      "Share the basics first. Occupancy, cleanout, inherited property details, and timing can be handled in the follow-up conversation.",
-  },
-];
+const situationIcons = [HeartHandshake, Hammer, Clock3];
 
-const trustMetrics = [
-  { value: "24 hr", label: "typical first review window" },
-  { value: "0", label: "repairs required to start" },
-  { value: "GA", label: "local property focus" },
+const comparisonRows = [
+  { label: "Property condition", direct: "Sell as-is", listing: "Repairs or prep may help" },
+  { label: "Showings", direct: "Not part of our process", listing: "Usually expected" },
+  { label: "Agent commission", direct: "None paid to Stonegate", listing: "May apply" },
+  { label: "Potential price", direct: "Typically below retail value", listing: "May pursue retail value" },
+  { label: "Timeline", direct: "Set by written agreement", listing: "Depends on buyer and financing" },
 ];
 
 export default function PublicHomePage() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${siteConfig.siteUrl}/#organization`,
+        name: siteConfig.name,
+        url: siteConfig.siteUrl,
+        telephone: "+1-678-541-7725",
+        areaServed: { "@type": "State", name: "Georgia" },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteConfig.siteUrl}/#website`,
+        url: siteConfig.siteUrl,
+        name: siteConfig.name,
+        publisher: { "@id": `${siteConfig.siteUrl}/#organization` },
+      },
+    ],
+  };
+
   return (
     <main className={styles.page}>
       <PublicConversionTracker metadata={{ page: "home" }} />
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/">
-          Stonegate Home Buyers
-        </Link>
-        <nav className={styles.nav} aria-label="Primary navigation">
-          <Link href="/sell-inherited-house">Inherited</Link>
-          <Link href="/sell-house-needs-repairs">Repairs</Link>
-          <Link href="/sell-house-fast">Fast sale</Link>
-          <TrackedPhoneLink href="tel:+16785417725">Call Stonegate</TrackedPhoneLink>
-        </nav>
-      </header>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+      />
+      <PublicSiteHeader />
 
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>Georgia cash home buyers</p>
-          <h1>Sell your house as-is for cash without repairs, showings, or agent commissions.</h1>
-          <p>
-            Stonegate Home Buyers gives Georgia homeowners a direct sale option when repairs,
-            inheritance, relocation, tenants, or timing make a traditional listing harder.
+      <section className={styles.hero} aria-labelledby="home-title">
+        <Image
+          className={styles.heroImage}
+          src="/images/stonegate-georgia-home-hero.jpg"
+          alt="Red-brick Georgia home surrounded by mature trees"
+          fill
+          priority
+          sizes="100vw"
+        />
+        <div className={styles.heroOverlay} />
+        <div className={styles.heroInner}>
+          <p className={styles.heroEyebrow}>A direct home sale option in Georgia</p>
+          <h1 id="home-title">Sell your Georgia house as-is for a direct cash offer.</h1>
+          <p className={styles.heroLead}>
+            Skip repairs, listing prep, and showings. Start with the address, understand the
+            tradeoffs, and decide whether Stonegate fits your situation.
           </p>
-          <div className={styles.heroActions}>
-            <a className={styles.primaryAction} href="#cash-offer">
-              Start my offer request
+          <AddressOfferStart />
+          <div className={styles.heroContact}>
+            <a href={siteConfig.phoneHref}>
+              <Phone size={17} aria-hidden="true" />
+              Prefer to talk? {siteConfig.phoneDisplay}
             </a>
-            <TrackedPhoneLink className={styles.secondaryAction} href="tel:+16785417725">
-              Call instead
-            </TrackedPhoneLink>
-          </div>
-          <div className={styles.proofStrip} aria-label="Offer request benefits">
-            {proofPoints.map((point) => (
-              <span key={point}>{point}</span>
-            ))}
+            <span>Georgia-focused property review</span>
           </div>
         </div>
-
-        <aside className={styles.formPanel} id="cash-offer" aria-label="Cash offer request form">
-          <CashOfferForm />
-        </aside>
       </section>
 
-      <section className={styles.trustBar} aria-label="Stonegate cash offer highlights">
-        {trustMetrics.map((metric) => (
-          <p key={metric.label}>
-            <strong>{metric.value}</strong>
-            <span>{metric.label}</span>
+      <section className={styles.assurance} aria-label="Stonegate offer request assurances">
+        <div>
+          <Check size={19} aria-hidden="true" />
+          <span><strong>No obligation</strong> to accept an offer</span>
+        </div>
+        <div>
+          <Hammer size={19} aria-hidden="true" />
+          <span><strong>No repairs</strong> required before review</span>
+        </div>
+        <div>
+          <House size={19} aria-hidden="true" />
+          <span><strong>No showings</strong> in our direct process</span>
+        </div>
+      </section>
+
+      <section className={styles.introSection}>
+        <div className={styles.sectionLabel}>A clear option</div>
+        <div className={styles.introCopy}>
+          <h2>A home sale should start with the truth about your choices.</h2>
+          <p>
+            A direct cash offer is built for convenience and certainty, not the highest possible
+            sale price. Stonegate explains the property review, offer assumptions, and next steps
+            so you can compare the direct path with listing, repairing, or waiting.
           </p>
-        ))}
-      </section>
-
-      <section className={styles.fitSection} aria-label="Seller situations Stonegate can review">
-        <div className={styles.sectionHeading}>
-          <p className={styles.eyebrow}>When this helps</p>
-          <h2>A direct offer is most useful when certainty matters more than listing prep.</h2>
-        </div>
-        <div className={styles.reasons}>
-          {sellerSituations.map((situation) => (
-            <Link href={`/${situation.slug}`} key={situation.slug}>
-              <article>
-                <p className={styles.cardEyebrow}>{situation.eyebrow}</p>
-                <h3>{situation.title}</h3>
-                <p>{situation.description}</p>
-              </article>
-            </Link>
-          ))}
+          <Link className={styles.textLink} href="/how-it-works">
+            See exactly how the process works <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
       </section>
 
-      <section className={styles.process} aria-label="How the cash offer process works">
+      <section className={styles.processSection}>
         <div className={styles.sectionHeading}>
-          <p className={styles.eyebrow}>How it works</p>
-          <h2>Simple enough to start now, detailed enough for a real offer conversation.</h2>
+          <p>How it works</p>
+          <h2>Three practical steps. You stay in control.</h2>
         </div>
         <div className={styles.processGrid}>
           {processSteps.map((step, index) => (
             <article key={step.title}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
+              <span>{index + 1}</span>
               <h3>{step.title}</h3>
               <p>{step.detail}</p>
             </article>
@@ -140,30 +140,85 @@ export default function PublicHomePage() {
         </div>
       </section>
 
-      <section className={styles.objections} aria-label="Common seller questions">
+      <section className={styles.situationsSection} id="selling-situations">
         <div className={styles.sectionHeading}>
-          <p className={styles.eyebrow}>Common questions</p>
-          <h2>Built for sellers who need a practical option, not pressure.</h2>
+          <p>Selling situations</p>
+          <h2>Built for properties and timelines that need a simpler path.</h2>
         </div>
-        <div className={styles.objectionGrid}>
-          {sellerObjections.map((item) => (
-            <article key={item.title}>
-              <h3>{item.title}</h3>
-              <p>{item.detail}</p>
-            </article>
+        <div className={styles.situationGrid}>
+          {sellerSituations.map((situation, index) => {
+            const Icon = situationIcons[index];
+            return (
+              <article key={situation.slug}>
+                <div className={styles.situationImage}>
+                  <Image src={situation.image} alt={situation.imageAlt} fill sizes="(max-width: 760px) 100vw, 33vw" />
+                </div>
+                <div className={styles.situationBody}>
+                  <Icon size={20} aria-hidden="true" />
+                  <p>{situation.eyebrow}</p>
+                  <h3>{situation.shortTitle}</h3>
+                  <span>{situation.description}</span>
+                  <Link href={`/${situation.slug}`}>
+                    Explore this situation <ArrowRight size={16} aria-hidden="true" />
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={styles.comparisonSection}>
+        <div className={styles.comparisonCopy}>
+          <p className={styles.sectionKicker}>Compare the paths</p>
+          <h2>A direct offer trades some potential price for a simpler sale.</h2>
+          <p>
+            Neither path is automatically better. The right choice depends on condition, time,
+            available cash for repairs, and how much uncertainty you can carry.
+          </p>
+        </div>
+        <div className={styles.comparisonTable} role="table" aria-label="Direct offer and traditional listing comparison">
+          <div className={styles.comparisonHeader} role="row">
+            <span role="columnheader">Consideration</span>
+            <strong role="columnheader">Stonegate direct offer</strong>
+            <strong role="columnheader">Traditional listing</strong>
+          </div>
+          {comparisonRows.map((row) => (
+            <div className={styles.comparisonRow} role="row" key={row.label}>
+              <span role="cell">{row.label}</span>
+              <strong role="cell">{row.direct}</strong>
+              <span role="cell">{row.listing}</span>
+            </div>
           ))}
+        </div>
+      </section>
+
+      <section className={styles.localSection}>
+        <div>
+          <p className={styles.sectionKicker}>Local starting point</p>
+          <h2>Serving Georgia property owners, beginning in metro Atlanta.</h2>
+        </div>
+        <div>
+          <p>
+            Stonegate is building a Georgia-focused acquisitions operation with a real person
+            reviewing each seller inquiry. We only discuss properties in areas our team can
+            responsibly evaluate.
+          </p>
+          <Link className={styles.textLink} href="/about">
+            Learn about Stonegate <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
       </section>
 
       <section className={styles.finalCta}>
         <div>
-          <p className={styles.eyebrow}>Ready to compare?</p>
-          <h2>Start with the address and the best way to reach you.</h2>
+          <p>Start with the property</p>
+          <h2>See whether a direct offer fits your situation.</h2>
         </div>
-        <a className={styles.primaryAction} href="#cash-offer">
-          Request my cash offer
-        </a>
+        <AddressOfferStart compact />
       </section>
+
+      <p className={styles.homeDisclosure}>{directOfferDisclosure}</p>
       <PublicSiteFooter />
     </main>
   );

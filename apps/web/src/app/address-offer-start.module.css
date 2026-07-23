@@ -1,0 +1,88 @@
+.form {
+  width: min(650px, 100%);
+  display: grid;
+  gap: 8px;
+}
+
+.form label {
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.control {
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 8px;
+  background: #ffffff;
+  color: #456054;
+  box-shadow: 0 14px 30px rgba(10, 22, 16, 0.22);
+}
+
+.control input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17221c;
+  font: inherit;
+  font-size: 16px;
+}
+
+.control button {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 17px;
+  border: 0;
+  border-radius: 6px;
+  background: #b9852d;
+  color: #101a15;
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.control button:hover {
+  background: #c8953c;
+}
+
+.form > p {
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compact label {
+  color: #21352a;
+}
+
+.compact .control {
+  border-color: #cbd5cf;
+  box-shadow: none;
+}
+
+.compact > p {
+  color: #59655f;
+}
+
+@media (max-width: 620px) {
+  .control {
+    min-height: auto;
+    grid-template-columns: 24px minmax(0, 1fr);
+  }
+
+  .control button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+}

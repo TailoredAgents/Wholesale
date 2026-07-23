@@ -3,24 +3,18 @@ import Link from "next/link";
 
 import styles from "../legal-page.module.css";
 import { PublicSiteFooter } from "../public-site-footer";
+import { PublicSiteHeader } from "../public-site-header";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions | Stonegate Home Buyers",
   description: "Website and SMS terms for Stonegate Home Buyers.",
+  alternates: { canonical: "/terms" },
 };
 
 export default function TermsPage() {
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/">
-          Stonegate Home Buyers
-        </Link>
-        <nav aria-label="Primary navigation">
-          <Link href="/get-a-cash-offer">Get a cash offer</Link>
-          <Link href="/privacy-policy">Privacy Policy</Link>
-        </nav>
-      </header>
+      <PublicSiteHeader />
 
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>

@@ -1,6 +1,7 @@
 export type SellerSituation = {
   slug: string;
   eyebrow: string;
+  shortTitle: string;
   title: string;
   description: string;
   image: string;
@@ -14,12 +15,12 @@ export const sellerSituations: SellerSituation[] = [
   {
     slug: "sell-inherited-house",
     eyebrow: "Inherited property",
+    shortTitle: "An inherited property",
     title: "Sell an inherited house without repairs, cleanout, or listing pressure.",
     description:
       "When a family property needs a practical next step, Stonegate can review the house as-is and help you understand a direct cash-offer option.",
-    image:
-      "https://images.unsplash.com/photo-1568605114967-8130f3a36994?auto=format&fit=crop&w=1400&q=80",
-    imageAlt: "A well-kept suburban home with a front lawn.",
+    image: "/images/stonegate-inherited-home.jpg",
+    imageAlt: "Older red-brick Georgia home beneath mature trees.",
     concerns: [
       "Family members are still deciding what to do",
       "The property needs cleaning, repairs, or personal items removed",
@@ -39,12 +40,12 @@ export const sellerSituations: SellerSituation[] = [
   {
     slug: "sell-house-needs-repairs",
     eyebrow: "Repairs needed",
+    shortTitle: "A house that needs repairs",
     title: "Sell a house that needs repairs without managing contractors first.",
     description:
       "If repairs are blocking a traditional sale, Stonegate can evaluate the property in its current condition and make a direct offer.",
-    image:
-      "https://images.unsplash.com/photo-1570129477492-45c003edd2be?auto=format&fit=crop&w=1400&q=80",
-    imageAlt: "A single-family home exterior seen from the street.",
+    image: "/images/stonegate-repair-kitchen.jpg",
+    imageAlt: "Dated kitchen with older cabinets and flooring in need of renovation.",
     concerns: [
       "Major repairs may cost more than you want to invest",
       "Inspections could create surprise negotiation issues",
@@ -64,12 +65,12 @@ export const sellerSituations: SellerSituation[] = [
   {
     slug: "sell-house-fast",
     eyebrow: "Fast timeline",
+    shortTitle: "A sale with a tighter timeline",
     title: "Sell your house on a tighter timeline without waiting on a listing cycle.",
     description:
       "When timing matters, Stonegate gives you a direct path to compare against a traditional listing and decide what works.",
-    image:
-      "https://images.unsplash.com/photo-1605146769289-440113cc3d00?auto=format&fit=crop&w=1400&q=80",
-    imageAlt: "A bright home exterior with a garage and front walkway.",
+    image: "/images/stonegate-georgia-home-hero.jpg",
+    imageAlt: "Red-brick Georgia home surrounded by mature trees.",
     concerns: [
       "A move, job change, or life event has a deadline",
       "You need certainty before making the next decision",

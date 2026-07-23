@@ -3,24 +3,18 @@ import Link from "next/link";
 
 import styles from "../legal-page.module.css";
 import { PublicSiteFooter } from "../public-site-footer";
+import { PublicSiteHeader } from "../public-site-header";
 
 export const metadata: Metadata = {
   title: "Privacy Policy | Stonegate Home Buyers",
   description: "How Stonegate Home Buyers collects, uses, and protects personal information.",
+  alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/">
-          Stonegate Home Buyers
-        </Link>
-        <nav aria-label="Primary navigation">
-          <Link href="/get-a-cash-offer">Get a cash offer</Link>
-          <Link href="/terms">Terms &amp; Conditions</Link>
-        </nav>
-      </header>
+      <PublicSiteHeader />
 
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>

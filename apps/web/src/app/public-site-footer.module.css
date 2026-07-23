@@ -1,55 +1,100 @@
 .footer {
-  width: min(1200px, calc(100% - 64px));
-  margin: 14px auto 0;
-  padding: 28px 0 34px;
-  border-top: 1px solid #d8d3c8;
-  color: #4f5658;
+  width: 100%;
+  margin-top: auto;
+  padding: 48px max(24px, calc((100% - 1240px) / 2)) 28px;
+  border-top: 1px solid #d6ddd8;
+  background: #12231b;
+  color: #c8d2cc;
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
-  gap: 14px 32px;
+  grid-template-columns: minmax(240px, 0.8fr) minmax(360px, 1.2fr);
+  gap: 32px 64px;
   font-size: 13px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.brand span {
+  width: 34px;
+  height: 34px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid #4f755f;
+  border-radius: 4px;
+  color: #d6ae66;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+}
+
+.identity > p {
+  max-width: 330px;
+  margin-top: 12px;
+}
+
+.phone {
   display: inline-block;
-  color: #101820;
+  margin-top: 14px;
+  color: #ffffff;
   font-size: 15px;
   font-weight: 800;
 }
 
-.footer div > p {
-  margin-top: 5px;
+.links {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
 }
 
-.footer nav {
-  display: flex;
-  flex-wrap: wrap;
+.links nav {
+  display: grid;
   justify-content: flex-end;
-  gap: 16px;
-  color: #245f43;
-  font-weight: 800;
+  gap: 9px;
 }
 
-.footer nav a:hover {
+.links strong {
+  margin-bottom: 3px;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.links nav a:hover {
+  color: #ffffff;
   text-decoration: underline;
   text-underline-offset: 3px;
 }
 
+.disclosure {
+  grid-column: 1 / -1;
+  max-width: 1000px;
+  padding-top: 24px;
+  border-top: 1px solid #2b4035;
+  color: #aebbb4;
+  font-size: 12px;
+}
+
 .copyright {
   grid-column: 1 / -1;
+  color: #8fa097;
 }
 
 @media (max-width: 720px) {
   .footer {
-    width: calc(100% - 36px);
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+
+  .links {
     grid-template-columns: 1fr;
   }
 
-  .footer nav {
-    justify-content: flex-start;
-  }
-
+  .disclosure,
   .copyright {
     grid-column: auto;
   }

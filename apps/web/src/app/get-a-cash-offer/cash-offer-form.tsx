@@ -20,7 +20,11 @@ function getValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-export function CashOfferForm() {
+type CashOfferFormProps = {
+  initialAddress?: string;
+};
+
+export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -194,6 +198,7 @@ export function CashOfferForm() {
             <input
               name="property_address"
               autoComplete="street-address"
+              defaultValue={initialAddress}
               placeholder="123 Main St"
               required
             />

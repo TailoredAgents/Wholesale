@@ -1,53 +1,52 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { Check } from "lucide-react";
 
 import { PublicConversionTracker } from "../public-conversion-tracker";
 import { PublicSiteFooter } from "../public-site-footer";
+import { PublicSiteHeader } from "../public-site-header";
 import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
-export const metadata = {
-  title: "Get a Cash Offer | Stonegate Home Buyers",
-  description: "Request a cash offer for a Georgia property.",
+export const metadata: Metadata = {
+  title: "Get a Cash Offer for Your Georgia House | Stonegate",
+  description: "Share a Georgia property address and request a no-obligation, direct cash offer review from Stonegate Home Buyers.",
+  alternates: { canonical: "/get-a-cash-offer" },
 };
 
-export default function GetCashOfferPage() {
+type GetCashOfferPageProps = {
+  searchParams: Promise<{ address?: string | string[] }>;
+};
+
+export default async function GetCashOfferPage({ searchParams }: GetCashOfferPageProps) {
+  const params = await searchParams;
+  const initialAddress = Array.isArray(params.address) ? params.address[0] : params.address;
+
   return (
     <main className={styles.page}>
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
-      <header className={styles.header}>
-        <Link className={styles.brand} href="/">
-          Stonegate Home Buyers
-        </Link>
-        <nav className={styles.nav} aria-label="Primary navigation">
-          <Link href="/sell-inherited-house">Inherited</Link>
-          <Link href="/sell-house-needs-repairs">Repairs</Link>
-          <Link href="/sell-house-fast">Fast sale</Link>
-        </nav>
-      </header>
+      <PublicSiteHeader />
       <section className={styles.hero}>
         <div className={styles.copy}>
-          <p className={styles.eyebrow}>Fast as-is review</p>
-          <h1>Start with the address. We will handle the rest from there.</h1>
+          <p className={styles.eyebrow}>No-obligation property review</p>
+          <h1>Tell us about the house. We will review the direct-sale option.</h1>
           <p>
-            The fastest requests include the property address, city, ZIP code, your name, and
-            a phone or email. Extra details help, but they are optional.
+            The address and a phone number or email are enough to start. Additional property
+            details are optional and can help Stonegate prepare for the first conversation.
           </p>
           <div className={styles.trustStack}>
-            <p>
-              <strong>No obligation.</strong>
-              <span>You can compare the offer before making a decision.</span>
-            </p>
-            <p>
-              <strong>No repairs first.</strong>
-              <span>Condition, cleanup, and timing are part of the review.</span>
-            </p>
-            <p>
-              <strong>Clear consent.</strong>
-              <span>We only follow up using the contact details you submit.</span>
-            </p>
+            {[
+              ["No obligation", "Requesting a review does not commit you to sell."],
+              ["As-is condition", "No repairs, cleaning, or staging are required to start."],
+              ["Optional texting", "SMS requires a separate checkbox and is never required."],
+            ].map(([title, detail]) => (
+              <p key={title}>
+                <Check size={18} aria-hidden="true" />
+                <span><strong>{title}</strong>{detail}</span>
+              </p>
+            ))}
           </div>
         </div>
-        <CashOfferForm />
+        <CashOfferForm initialAddress={initialAddress ?? ""} />
       </section>
       <PublicSiteFooter />
     </main>
