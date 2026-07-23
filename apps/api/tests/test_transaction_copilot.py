@@ -77,6 +77,7 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
     )
     assert overview.status_code == 200, overview.text
     assert overview.json()["pilot_mode"] == "draft_only"
+    assert overview.json()["capability_status"] == "enabled"
     assert overview.json()["confirmed_document_fact_count"] == 1
     assert overview.json()["external_actions_blocked"] is True
 
@@ -142,12 +143,6 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
         headers=HEADERS,
         json={"provider_status": "enabled"},
     ).status_code == 200
-    assert client.patch(
-        "/api/v1/ai/runtime/capabilities/transaction.coordinate",
-        headers=HEADERS,
-        json={"status": "enabled", "model_route": "escalation"},
-    ).status_code == 200
-
     transaction = db_session.get(Transaction, UUID(transaction_id))
     assert transaction is not None
     transaction_snapshot = {

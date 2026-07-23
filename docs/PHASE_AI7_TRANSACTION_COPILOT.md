@@ -4,7 +4,8 @@ Last updated: July 23, 2026
 
 ## Status
 
-The provider-independent foundation is complete in code. Private object storage, automated
+The provider-independent foundation is complete in code and `transaction.coordinate` is enabled
+in draft-only mode with mandatory human review. Private object storage, automated
 document extraction, e-signature reconciliation, email delivery, attorney-approved production
 templates, production model replay, and a measured draft-only pilot remain operator or integration
 checkpoints.
@@ -54,8 +55,8 @@ Before production document intelligence is complete:
   claims, corrections, latency, cost, and estimated time saved.
 - Stop the pilot for invented terms, missing source references, legal interpretation, signature
   claims without evidence, external execution, or transaction mutation.
-- Keep `transaction.coordinate` disabled until the AI3 production runtime and AI7 dataset replay
-  pass.
+- Keep external execution and transaction writes blocked throughout the pilot. Disable the
+  capability immediately if the AI3 runtime or AI7 dataset replay exposes a critical failure.
 
 ## Verification
 

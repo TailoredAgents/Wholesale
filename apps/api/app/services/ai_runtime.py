@@ -525,7 +525,11 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 organization_id=principal.organization_id,
                 agent_definition_id=agent.id,
                 capability_key=capability_key,
-                status="disabled",
+                status=(
+                    "enabled"
+                    if capability_key == "transaction.coordinate"
+                    else "disabled"
+                ),
                 model_route=route,
                 output_schema={
                     "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
