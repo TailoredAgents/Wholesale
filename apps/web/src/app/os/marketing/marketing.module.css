@@ -1,0 +1,24 @@
+.exceptionRows { display: grid; }
+.exceptionRows > a { min-height: 68px; padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); color: inherit; display: grid; grid-template-columns: minmax(160px, 1fr) minmax(360px, 1.5fr) 20px; align-items: center; gap: 16px; }
+.exceptionRows > a:hover { background: var(--sg-color-surface-soft); }
+.exceptionRows > a > div { display: grid; gap: 3px; }
+.exceptionRows span { color: var(--sg-color-text-muted); font-size: 10px; }
+.exceptionRows dl { margin: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.exceptionRows dl div { display: grid; gap: 2px; }
+.exceptionRows dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.exceptionRows dd { margin: 0; font-size: 11px; font-weight: 750; }
+.exportLayout { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(260px, .7fr); }
+.exportLayout > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-right: 1px solid var(--sg-color-border); }
+.exportLayout article { padding: 12px 14px; border-right: 1px solid var(--sg-color-border-soft); border-bottom: 1px solid var(--sg-color-border-soft); }
+.exportLayout article > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.exportLayout dl { margin: 10px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.exportLayout dl div { display: grid; gap: 2px; }
+.exportLayout dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.exportLayout dd { margin: 0; font-size: 10px; font-weight: 750; }
+.exportLayout article > a { color: var(--sg-color-brand-strong); font-size: 10px; font-weight: 800; }
+.exportLayout article > p { color: var(--sg-color-danger); font-size: 10px; }
+.exportLayout aside { padding: 16px; }
+.exportLayout aside h3 { margin: 0; font-size: 14px; }
+.exportLayout aside p { color: var(--sg-color-text-muted); font-size: 10px; line-height: 1.55; }
+@media (max-width: 900px) { .exceptionRows > a { grid-template-columns: 1fr 20px; } .exceptionRows dl { grid-column: 1 / -1; grid-row: 2; } .exportLayout { grid-template-columns: 1fr; } .exportLayout > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } }

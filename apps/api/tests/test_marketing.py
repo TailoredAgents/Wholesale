@@ -1,9 +1,18 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import AuditEvent, OfflineConversionExport
+from app.models.foundation import (
+    AuditEvent,
+    ConversionEvent,
+    Lead,
+    MarketingSpend,
+    OfflineConversionExport,
+    RevenueRecord,
+)
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -91,6 +100,30 @@ def test_marketing_overview_and_offline_export_generation(
     assert google_row["leads_created"] == 1
     assert google_row["form_submits"] == 1
     assert google_row["collected_revenue_cents"] == 2500000
+
+    prior_period_at = datetime.now(UTC) - timedelta(days=45)
+    for event in db_session.scalars(select(ConversionEvent)).all():
+        event.created_at = prior_period_at
+    for lead in db_session.scalars(select(Lead)).all():
+        lead.created_at = prior_period_at
+    for revenue in db_session.scalars(select(RevenueRecord)).all():
+        revenue.received_at = prior_period_at
+    for spend in db_session.scalars(select(MarketingSpend)).all():
+        spend.spend_month_at = prior_period_at
+    db_session.commit()
+
+    period_response = client.get(
+        "/api/v1/marketing?period_days=30",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert period_response.status_code == 200
+    period = period_response.json()
+    assert period["period_days"] == 30
+    assert period["summary"]["leads_created"] == 0
+    assert period["summary"]["collected_revenue_cents"] == 0
+    assert period["previous_summary"]["leads_created"] == 1
+    assert period["previous_summary"]["collected_revenue_cents"] == 2500000
+    assert period["campaigns"] == []
     assert generate_response.status_code == 201
     assert generate_response.json() == {"created": 1}
     assert duplicate_generate_response.status_code == 201

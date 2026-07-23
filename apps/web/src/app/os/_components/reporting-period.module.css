@@ -1,0 +1,3 @@
+.period { min-height: 38px; padding: 3px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-md); background: var(--sg-color-surface-muted); display: inline-flex; gap: 2px; }
+.period a { min-height: 30px; padding: 0 10px; border-radius: 4px; color: var(--sg-color-text-muted); display: inline-flex; align-items: center; font-size: 10px; font-weight: 800; }
+.period .active { background: var(--sg-color-surface); color: var(--sg-color-brand-strong); box-shadow: var(--sg-shadow-tight); }

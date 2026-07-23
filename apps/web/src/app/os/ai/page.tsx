@@ -1,4 +1,11 @@
-import { getAiControlOverview, getDashboardData } from "../../lib/api";
+import { Activity, Bot, CircleDollarSign, Clock3, ShieldAlert } from "lucide-react";
+
+import { getAiControlOverview, getDashboardData, getWorkspaceProfile } from "../../lib/api";
+import { ManagementJourney } from "../_components/management-journey";
+import { ManagementSummaryStrip } from "../_components/management-summary-strip";
+import managementStyles from "../_components/management-workspaces.module.css";
+import { PageHeader, WorkspacePage } from "../_components/page-contracts";
+import { StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { AiForms } from "./ai-forms";
 import { AiOrchestratorWorkspace } from "./ai-orchestrator-workspace";
@@ -29,56 +36,52 @@ function formatLatency(value: number | null) {
 }
 
 export default async function AiControlPage() {
-  const [{ ai, apiConnected }, dashboard] = await Promise.all([
+  const [{ ai, apiConnected }, dashboard, profile] = await Promise.all([
     getAiControlOverview(),
     getDashboardData(),
+    getWorkspaceProfile(),
   ]);
+  const metrics = ai.orchestrator.metrics;
+  const canManage = Boolean(profile?.permissions.includes("ai:change_prompts"));
+  const openExceptions =
+    ai.summary.pending_approval_count +
+    metrics.unreviewed_trace_count +
+    metrics.budget_blocked_run_count +
+    ai.call_intelligence_quality.autonomy_blockers.length;
+  const nextAction = metrics.unreviewed_trace_count
+    ? "Review unverified traces"
+    : ai.summary.pending_approval_count
+      ? "Review AI approvals"
+      : metrics.pending_promotion_count
+        ? "Review promotion evidence"
+        : "Run controlled evaluations";
+  const primaryException = metrics.budget_blocked_run_count
+    ? `${metrics.budget_blocked_run_count} budget-blocked run${metrics.budget_blocked_run_count === 1 ? "" : "s"}`
+    : ai.call_intelligence_quality.autonomy_blockers[0] ?? "No control exception";
 
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>AI Control</p>
-          <h2>AI Control</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Control plane</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Live controls" : "API fallback"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Observe agent behavior, test changes, review evidence, control cost, and roll back promoted capabilities."
+        eyebrow="Control / governed automation"
+        meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Live controls" : "AI controls unavailable"}</StatusBadge>}
+        title="AI Control"
+      />
+      <ManagementJourney active="ai" />
+      <ManagementSummaryStrip
+        authority={{ label: "External authority", value: "Execution blocked", detail: canManage ? "You may test and request promotion" : "Control policy is view only", tone: "success" }}
+        comparison={{ label: "Portfolio coverage", value: `${ai.summary.active_agent_count} of ${ai.summary.agent_count} active`, detail: `${metrics.passing_evaluation_count} passing evaluations`, tone: ai.summary.active_agent_count ? "info" : "warning" }}
+        exception={{ label: "Primary exception", value: primaryException, detail: `${openExceptions} open control signals`, tone: openExceptions || ai.call_intelligence_quality.autonomy_blockers.length ? "warning" : "success" }}
+        nextAction={{ label: "Management next step", value: nextAction, detail: "Human approval remains mandatory", tone: "info" }}
+        period={{ label: "Reporting basis", value: "Lifetime governed usage", detail: `${metrics.governed_run_count} orchestrated runs`, tone: "neutral" }}
+      />
 
-      <section className={styles.metrics}>
-        <article className={styles.metric}>
-          <span>Agents</span>
-          <strong>{ai.summary.agent_count}</strong>
-          <small>{ai.summary.active_agent_count} active</small>
-        </article>
-        <article className={styles.metric}>
-          <span>Prompt versions</span>
-          <strong>{ai.summary.prompt_version_count}</strong>
-          <small>Versioned instructions</small>
-        </article>
-        <article className={styles.metric}>
-          <span>Runs logged</span>
-          <strong>{ai.summary.run_count}</strong>
-          <small>{formatLatency(ai.summary.average_latency_ms)} avg latency</small>
-        </article>
-        <article className={styles.metric}>
-          <span>Pending approvals</span>
-          <strong>{ai.summary.pending_approval_count}</strong>
-          <small>Human review required</small>
-        </article>
-        <article className={styles.metric}>
-          <span>AI cost</span>
-          <strong>{formatMicroUsd(ai.summary.total_cost_microusd)}</strong>
-          <small>
-            {ai.summary.unpriced_run_count
-              ? `${ai.summary.unpriced_run_count} unpriced runs`
-              : "All completed usage priced"}
-          </small>
-        </article>
+      <section className={managementStyles.metricGrid} aria-label="AI control performance">
+        <div><Bot size={17} /><span>Agent portfolio</span><strong>{ai.summary.agent_count}</strong><small>{ai.summary.active_agent_count} active</small></div>
+        <div><Activity size={17} /><span>Runs logged</span><strong>{ai.summary.run_count}</strong><small>{formatLatency(ai.summary.average_latency_ms)} average latency</small></div>
+        <div><ShieldAlert size={17} /><span>Pending approvals</span><strong>{ai.summary.pending_approval_count}</strong><small>{metrics.unreviewed_trace_count} traces need review</small></div>
+        <div><CircleDollarSign size={17} /><span>Recorded cost</span><strong>{formatMicroUsd(ai.summary.total_cost_microusd)}</strong><small>{ai.summary.unpriced_run_count ? `${ai.summary.unpriced_run_count} unpriced runs` : "Completed usage priced"}</small></div>
+        <div><Clock3 size={17} /><span>Promotions</span><strong>{metrics.active_promotion_count}</strong><small>{metrics.pending_promotion_count} pending · rollback available</small></div>
       </section>
 
       <AiOrchestratorWorkspace ai={ai} />
@@ -236,6 +239,6 @@ export default async function AiControlPage() {
         </article>
         </section>
       </details>
-    </>
+    </WorkspacePage>
   );
 }

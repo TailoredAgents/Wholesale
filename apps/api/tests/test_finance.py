@@ -1,3 +1,5 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -147,6 +149,30 @@ def test_finance_records_revenue_deductions_compensation_and_spend(
     }
     assert overview["compensation_calculations"][0]["basis_amount_cents"] == 2200000
     assert overview["compensation_calculations"][0]["calculated_amount_cents"] == 220000
+
+    prior_period_at = datetime.now(UTC) - timedelta(days=45)
+    for record in db_session.scalars(select(RevenueRecord)).all():
+        record.received_at = prior_period_at
+    for deduction in db_session.scalars(select(DealDeduction)).all():
+        deduction.incurred_at = prior_period_at
+    for spend in db_session.scalars(select(MarketingSpend)).all():
+        spend.spend_month_at = prior_period_at
+    db_session.commit()
+
+    period_response = client.get(
+        "/api/v1/finance?period_days=30",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert period_response.status_code == 200
+    period = period_response.json()
+    assert period["period_days"] == 30
+    assert period["period_start_at"] is not None
+    assert period["summary"]["collected_revenue_cents"] == 0
+    assert period["summary"]["company_net_cents"] == 0
+    assert period["previous_summary"]["collected_revenue_cents"] == 2500000
+    assert period["previous_summary"]["company_net_cents"] == 1480000
+    assert period["revenue_records"] == []
+    assert period["compensation_calculations"] == []
     assert int(
         db_session.scalar(
             select(func.count()).select_from(AuditEvent).where(

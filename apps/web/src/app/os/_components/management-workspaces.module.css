@@ -1,0 +1,49 @@
+.metricGrid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.metricGrid > div { min-width: 0; min-height: 86px; padding: 13px; border-right: 1px solid var(--sg-color-border-soft); display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; gap: 4px 7px; }
+.metricGrid > div:last-child { border-right: 0; }
+.metricGrid svg { grid-row: 1 / 4; color: var(--sg-color-brand); }
+.metricGrid span { color: var(--sg-color-text-muted); font-size: 10px; font-weight: 800; }
+.metricGrid strong { font-size: 19px; }
+.metricGrid small { color: var(--sg-color-text-muted); font-size: 9px; line-height: 1.35; }
+.section, .exceptionBand, .controlTools { border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.sectionHeading { min-height: 58px; padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sectionHeading span, .exceptionGrid header span { color: var(--sg-color-text-muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.sectionHeading h2, .exceptionGrid h3 { margin: 3px 0 0; font-size: 14px; }
+.sectionHeading > strong { color: var(--sg-color-brand); font-size: 11px; }
+.sectionHeading > a { color: var(--sg-color-brand-strong); font-size: 11px; font-weight: 800; }
+.exceptionGrid { display: grid; grid-template-columns: 1fr 1fr; }
+.exceptionGrid > section:first-child { border-right: 1px solid var(--sg-color-border-soft); }
+.exceptionGrid header { min-height: 56px; padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.exceptionGrid section > a { min-height: 56px; padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); color: inherit; display: grid; grid-template-columns: 20px 1fr 18px; align-items: center; gap: 9px; }
+.exceptionGrid section > a:hover { background: var(--sg-color-surface-soft); }
+.exceptionGrid section > a > svg:first-child { color: var(--sg-color-warning); }
+.exceptionGrid section > a div { display: grid; gap: 3px; }
+.exceptionGrid section > a strong { font-size: 11px; }
+.exceptionGrid section > a span { color: var(--sg-color-text-muted); font-size: 10px; }
+.tableWrap { width: 100%; overflow-x: auto; }
+.tableWrap table { width: 100%; border-collapse: collapse; }
+.tableWrap th { padding: 9px 11px; background: var(--sg-color-surface-muted); color: var(--sg-color-text-muted); font-size: 9px; text-align: left; text-transform: uppercase; }
+.tableWrap td { padding: 10px 11px; border-top: 1px solid var(--sg-color-border-soft); font-size: 10px; }
+.tableWrap td strong, .tableWrap td small { display: block; }
+.tableWrap td small { margin-top: 3px; color: var(--sg-color-text-muted); }
+.tableWrap td a { color: var(--sg-color-brand-strong); font-weight: 800; }
+.twoColumn { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.compList, .policyList { display: grid; }
+.compList > div, .policyList > div { padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); }
+.compList > div > div:first-child, .policyList > div > div:first-child { display: flex; justify-content: space-between; gap: 8px; }
+.compList dl { margin: 9px 0 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.compList dl div { display: grid; gap: 2px; }
+.compList dt, .policyList span, .policyList small { color: var(--sg-color-text-muted); font-size: 9px; }
+.compList dd { margin: 0; font-size: 10px; font-weight: 750; }
+.policyList > div { display: grid; grid-template-columns: 1fr auto; gap: 5px 10px; }
+.policyList > div div { display: grid !important; }
+.policyList b { color: var(--sg-color-brand-strong); }
+.policyList small { grid-column: 1 / -1; }
+.empty { margin: 0; padding: 20px 14px; color: var(--sg-color-text-muted); font-size: 11px; }
+.controlTools > summary { min-height: 50px; padding: 0 14px; display: flex; align-items: center; color: var(--sg-color-text-soft); font-size: 11px; font-weight: 800; cursor: pointer; }
+.controlTools[open] > summary { border-bottom: 1px solid var(--sg-color-border); }
+.controlTools > div { padding: 14px; }
+.controlTools > div > p { margin: 0 0 14px; color: var(--sg-color-text-muted); font-size: 11px; }
+@media (max-width: 1100px) { .metricGrid { grid-template-columns: repeat(3, 1fr); } .metricGrid > div { border-bottom: 1px solid var(--sg-color-border-soft); } }
+@media (max-width: 780px) { .exceptionGrid, .twoColumn { grid-template-columns: 1fr; } .exceptionGrid > section:first-child { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 560px) { .metricGrid { grid-template-columns: 1fr 1fr; } .metricGrid > div:last-child { grid-column: 1 / -1; } }

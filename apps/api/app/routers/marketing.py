@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission
@@ -20,8 +20,9 @@ view_marketing_dependency = require_any_permission(
 def read_marketing_overview(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_marketing_dependency)],
+    period_days: Annotated[int | None, Query(ge=7, le=3650)] = None,
 ) -> MarketingOverview:
-    return get_marketing_overview(db, principal)
+    return get_marketing_overview(db, principal, period_days=period_days)
 
 
 @router.post("/offline-conversions/generate", status_code=201)

@@ -1,8 +1,10 @@
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
 from app.models.foundation import (
@@ -39,8 +41,21 @@ class CampaignRow:
     marketing_spend_cents: int = 0
 
 
-def get_marketing_overview(db: Session, principal: Principal) -> MarketingOverview:
-    campaign_rows = build_campaign_rows(db, principal)
+def get_marketing_overview(
+    db: Session,
+    principal: Principal,
+    period_days: int | None = None,
+) -> MarketingOverview:
+    period_end_at = datetime.now(UTC)
+    period_start_at = (
+        period_end_at - timedelta(days=period_days) if period_days is not None else None
+    )
+    campaign_rows = build_campaign_rows(
+        db,
+        principal,
+        start_at=period_start_at,
+        end_at=period_end_at,
+    )
     exports = db.scalars(
         select(OfflineConversionExport)
         .where(OfflineConversionExport.organization_id == principal.organization_id)
@@ -59,21 +74,36 @@ def get_marketing_overview(db: Session, principal: Principal) -> MarketingOvervi
             ),
         )
     ]
-    total_spend = sum(row.marketing_spend_cents for row in campaign_rows.values())
-    total_revenue = sum(row.collected_revenue_cents for row in campaign_rows.values())
-    total_leads = sum(row.leads_created for row in campaign_rows.values())
-    total_contracts = sum(row.contracted_leads for row in campaign_rows.values())
+    pending_exports = count_pending_exports(
+        db,
+        principal,
+        start_at=period_start_at,
+        end_at=period_end_at,
+    )
+    previous_summary = None
+    if period_start_at is not None and period_days is not None:
+        previous_start = period_start_at - timedelta(days=period_days)
+        previous_rows = build_campaign_rows(
+            db,
+            principal,
+            start_at=previous_start,
+            end_at=period_start_at,
+        )
+        previous_summary = summarize_rows(
+            previous_rows,
+            count_pending_exports(
+                db,
+                principal,
+                start_at=previous_start,
+                end_at=period_start_at,
+            ),
+        )
     return MarketingOverview(
-        summary=MarketingSummary(
-            total_spend_cents=total_spend,
-            collected_revenue_cents=total_revenue,
-            leads_created=total_leads,
-            contracted_leads=total_contracts,
-            cost_per_lead_cents=safe_divide(total_spend, total_leads),
-            cost_per_contract_cents=safe_divide(total_spend, total_contracts),
-            return_on_ad_spend_basis_points=safe_basis_points(total_revenue, total_spend),
-            pending_offline_exports=sum(1 for export in exports if export.status == "pending"),
-        ),
+        period_days=period_days,
+        period_start_at=period_start_at,
+        period_end_at=period_end_at,
+        previous_summary=previous_summary,
+        summary=summarize_rows(campaign_rows, pending_exports),
         campaigns=campaigns[:100],
         offline_exports=[offline_export_to_read(export) for export in exports],
     )
@@ -158,12 +188,14 @@ def generate_offline_conversion_exports(db: Session, principal: Principal) -> in
 def build_campaign_rows(
     db: Session,
     principal: Principal,
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
 ) -> dict[tuple[str, str, str], CampaignRow]:
     rows: dict[tuple[str, str, str], CampaignRow] = {}
-    add_conversion_events(db, principal, rows)
-    add_leads(db, principal, rows)
-    add_revenue(db, principal, rows)
-    add_spend(db, principal, rows)
+    add_conversion_events(db, principal, rows, start_at, end_at)
+    add_leads(db, principal, rows, start_at, end_at)
+    add_revenue(db, principal, rows, start_at, end_at)
+    add_spend(db, principal, rows, start_at, end_at)
     return rows
 
 
@@ -171,6 +203,8 @@ def add_conversion_events(
     db: Session,
     principal: Principal,
     rows: dict[tuple[str, str, str], CampaignRow],
+    start_at: datetime | None,
+    end_at: datetime | None,
 ) -> None:
     event_rows = db.execute(
         select(
@@ -180,7 +214,10 @@ def add_conversion_events(
             ConversionEvent.event_type,
             func.count(ConversionEvent.id),
         )
-        .where(ConversionEvent.organization_id == principal.organization_id)
+        .where(
+            ConversionEvent.organization_id == principal.organization_id,
+            *period_conditions(ConversionEvent.created_at, start_at, end_at),
+        )
         .group_by(
             ConversionEvent.source,
             ConversionEvent.medium,
@@ -207,6 +244,8 @@ def add_leads(
     db: Session,
     principal: Principal,
     rows: dict[tuple[str, str, str], CampaignRow],
+    start_at: datetime | None,
+    end_at: datetime | None,
 ) -> None:
     lead_rows = db.execute(
         select(
@@ -228,6 +267,7 @@ def add_leads(
         .where(
             Lead.organization_id == principal.organization_id,
             Lead.archived_at.is_(None),
+            *period_conditions(Lead.created_at, start_at, end_at),
         )
         .group_by(
             func.coalesce(AttributionTouch.source, Lead.source),
@@ -247,6 +287,8 @@ def add_revenue(
     db: Session,
     principal: Principal,
     rows: dict[tuple[str, str, str], CampaignRow],
+    start_at: datetime | None,
+    end_at: datetime | None,
 ) -> None:
     revenue_rows = db.execute(
         select(
@@ -267,6 +309,7 @@ def add_revenue(
         .where(
             RevenueRecord.organization_id == principal.organization_id,
             RevenueRecord.status == "collected",
+            *period_conditions(RevenueRecord.received_at, start_at, end_at),
         )
         .group_by(
             func.coalesce(AttributionTouch.source, Lead.source),
@@ -283,6 +326,8 @@ def add_spend(
     db: Session,
     principal: Principal,
     rows: dict[tuple[str, str, str], CampaignRow],
+    start_at: datetime | None,
+    end_at: datetime | None,
 ) -> None:
     spend_rows = db.execute(
         select(
@@ -290,7 +335,10 @@ def add_spend(
             MarketingSpend.campaign,
             func.coalesce(func.sum(MarketingSpend.amount_cents), 0),
         )
-        .where(MarketingSpend.organization_id == principal.organization_id)
+        .where(
+            MarketingSpend.organization_id == principal.organization_id,
+            *period_conditions(MarketingSpend.spend_month_at, start_at, end_at),
+        )
         .group_by(MarketingSpend.source, MarketingSpend.campaign)
     ).all()
     for source, campaign, spend in spend_rows:
@@ -387,3 +435,54 @@ def safe_basis_points(revenue: int, spend: int) -> int | None:
     if spend == 0:
         return None
     return round(revenue / spend * 10000)
+
+
+def summarize_rows(
+    rows: dict[tuple[str, str, str], CampaignRow],
+    pending_exports: int,
+) -> MarketingSummary:
+    total_spend = sum(row.marketing_spend_cents for row in rows.values())
+    total_revenue = sum(row.collected_revenue_cents for row in rows.values())
+    total_leads = sum(row.leads_created for row in rows.values())
+    total_contracts = sum(row.contracted_leads for row in rows.values())
+    return MarketingSummary(
+        total_spend_cents=total_spend,
+        collected_revenue_cents=total_revenue,
+        leads_created=total_leads,
+        contracted_leads=total_contracts,
+        cost_per_lead_cents=safe_divide(total_spend, total_leads),
+        cost_per_contract_cents=safe_divide(total_spend, total_contracts),
+        return_on_ad_spend_basis_points=safe_basis_points(total_revenue, total_spend),
+        pending_offline_exports=pending_exports,
+    )
+
+
+def count_pending_exports(
+    db: Session,
+    principal: Principal,
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> int:
+    return int(
+        db.scalar(
+            select(func.count(OfflineConversionExport.id)).where(
+                OfflineConversionExport.organization_id == principal.organization_id,
+                OfflineConversionExport.status == "pending",
+                *period_conditions(OfflineConversionExport.created_at, start_at, end_at),
+            )
+        )
+        or 0
+    )
+
+
+def period_conditions(
+    column: InstrumentedAttribute[datetime],
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if start_at is not None:
+        conditions.append(column >= start_at)
+    if end_at is not None:
+        conditions.append(column < end_at)
+    return conditions

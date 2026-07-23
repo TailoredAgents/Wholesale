@@ -9,12 +9,13 @@ import type { LeadListItem, OperatingModelOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./operating-model.module.css";
 
-type Tab = "compensation" | "credits" | "launches";
+type Tab = "active" | "history" | "credits" | "launches";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
 const tabs: Array<{ key: Tab; label: string }> = [
-  { key: "compensation", label: "Compensation" },
-  { key: "credits", label: "Role credits" },
+  { key: "active", label: "Active policy" },
+  { key: "credits", label: "Pending decisions" },
+  { key: "history", label: "Policy history" },
   { key: "launches", label: "Market launches" },
 ];
 
@@ -57,7 +58,7 @@ export function OperatingModelWorkspace({
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("compensation");
+  const [activeTab, setActiveTab] = useState<Tab>("active");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [selectedChecklistId, setSelectedChecklistId] = useState(
@@ -227,7 +228,33 @@ export function OperatingModelWorkspace({
         <p className={`${styles.feedback} ${styles[status]}`} role="status">{status === "saving" ? "Saving..." : message}</p>
       ) : null}
 
-      {activeTab === "compensation" ? (
+      {activeTab === "active" ? (
+        <div className={styles.twoColumn}>
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>Current authority</span><h3>Active compensation policy</h3></div>
+              <strong>{activePlan ? `v${activePlan.version_number}` : "None"}</strong>
+            </div>
+            {activePlan ? <article className={styles.plan}>
+              <div className={styles.rowHeading}><div><strong>{activePlan.name} v{activePlan.version_number}</strong><span>Approved by {activePlan.approved_by_name ?? "System owner"}</span></div><span className={styles.badge}>{labelize(activePlan.status)}</span></div>
+              <div className={styles.roleGrid}>{activePlan.roles.map((role) => <div key={role.id}><span>{labelize(role.role_key)}</span><strong>{formatPercent(role.basis_points)}</strong><small>{role.cap_cents ? `${formatMoney(role.cap_cents)} cap` : "Uncapped"}</small></div>)}</div>
+              <div className={styles.modeTable}>{activePlan.disposition_modes.map((mode) => <div key={mode.id}><div><strong>{mode.name}</strong><span>{labelize(mode.ai_authority_level)}</span></div><div><span>Human share</span><strong>{modeShare(mode.human_share_min_basis_points, mode.human_share_max_basis_points)}</strong></div><div><span>Company share</span><strong>{modeShare(mode.expected_company_share_min_basis_points, mode.expected_company_share_max_basis_points)}</strong></div><span className={mode.status === "available" ? styles.available : styles.locked}>{labelize(mode.status)}</span></div>)}</div>
+            </article> : <p className={styles.empty}>No compensation policy is active. Activate a reviewed draft from Pending decisions.</p>}
+          </section>
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}><div><span>Policy effect</span><h3>Active guardrails</h3></div></div>
+            <dl className={styles.activeFacts}>
+              <div><dt>Acquisition reserve</dt><dd>{activePlan ? formatMoney(activePlan.acquisition_reserve_cents) : "Not set"}</dd></div>
+              <div><dt>Company margin target</dt><dd>{activePlan ? formatPercent(activePlan.target_company_margin_basis_points) : "Not set"}</dd></div>
+              <div><dt>Effective date</dt><dd>{activePlan?.effective_start_at ? new Date(activePlan.effective_start_at).toLocaleDateString() : "Not active"}</dd></div>
+              <div><dt>Pending role credits</dt><dd>{proposedCredits.length}</dd></div>
+              <div><dt>Markets governed</dt><dd>{operatingModel.markets.filter((market) => market.status === "active").length}</dd></div>
+            </dl>
+          </section>
+        </div>
+      ) : null}
+
+      {activeTab === "history" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -285,15 +312,15 @@ export function OperatingModelWorkspace({
       {activeTab === "credits" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>Contribution ledger</span><h3>Recorded role credits</h3></div><strong>{operatingModel.role_credits.length}</strong></div>
+            <div className={styles.sectionHeader}><div><span>Contribution decisions</span><h3>Role credits awaiting approval</h3></div><strong>{proposedCredits.length}</strong></div>
             <div className={styles.rows}>
-              {operatingModel.role_credits.map((credit) => (
+              {proposedCredits.map((credit) => (
                 <div className={styles.creditRow} key={credit.id}>
                   <div><Link href={`/leads/${credit.lead_id}`}>{credit.seller_name}</Link><span>{labelize(credit.role_key)} · {credit.user_name} · {formatPercent(credit.credit_basis_points)}</span></div>
                   <div className={styles.rowActions}><span className={styles.badge}>{labelize(credit.status)}</span>{credit.status === "proposed" ? <><button className={styles.secondary} onClick={() => decideCredit(credit.id, "reject")} type="button">Reject</button><button onClick={() => decideCredit(credit.id, "approve")} type="button">Approve</button></> : null}</div>
                 </div>
               ))}
-              {!operatingModel.role_credits.length ? <p className={styles.empty}>No contribution credits have been recorded.</p> : null}
+              {!proposedCredits.length ? <p className={styles.empty}>No role-credit decisions are pending.</p> : null}
             </div>
           </section>
           <section className={styles.section}>

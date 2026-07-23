@@ -129,7 +129,7 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
     <section className={styles.workspace}>
       <div className={styles.commandBar}>
         <div>
-          <span>Phase 10 control plane</span>
+          <span>Governed automation control</span>
           <strong>Observe, test, approve, then promote</strong>
         </div>
         <div className={styles.actions}>

@@ -114,6 +114,10 @@ class FinanceSummary(BaseModel):
 
 
 class FinanceOverview(BaseModel):
+    period_days: int | None
+    period_start_at: datetime | None
+    period_end_at: datetime
+    previous_summary: FinanceSummary | None
     summary: FinanceSummary
     revenue_records: list[RevenueRead]
     deductions: list[DealDeductionRead]

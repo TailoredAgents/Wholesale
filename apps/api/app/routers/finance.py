@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_permission
@@ -34,8 +34,9 @@ change_compensation_dependency = require_permission(PermissionKeys.CHANGE_COMPEN
 def read_finance_overview(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_financials_dependency)],
+    period_days: Annotated[int | None, Query(ge=7, le=3650)] = None,
 ) -> FinanceOverview:
-    return get_finance_overview(db, principal)
+    return get_finance_overview(db, principal, period_days=period_days)
 
 
 @router.post("/revenue", status_code=201)

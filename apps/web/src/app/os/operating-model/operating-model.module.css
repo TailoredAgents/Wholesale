@@ -3,6 +3,11 @@
   gap: 16px;
 }
 
+.activeFacts { margin: 0; padding: 4px 15px; }
+.activeFacts div { min-height: 44px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; gap: 12px; }
+.activeFacts dt { color: var(--muted); font-size: 11px; }
+.activeFacts dd { margin: 0; text-align: right; font-size: 11px; font-weight: 800; }
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

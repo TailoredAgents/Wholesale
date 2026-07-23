@@ -1,8 +1,9 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import Select, delete, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import InstrumentedAttribute, Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
 from app.models.foundation import (
@@ -39,16 +40,30 @@ DEDUCTION_CATEGORIES = {"title", "attorney", "transaction", "marketing", "seller
 COMPENSATION_APPLIES_TO = {"gross_revenue", "net_revenue"}
 
 
-def get_finance_overview(db: Session, principal: Principal) -> FinanceOverview:
+def get_finance_overview(
+    db: Session,
+    principal: Principal,
+    period_days: int | None = None,
+) -> FinanceOverview:
+    period_end_at = datetime.now(UTC)
+    period_start_at = (
+        period_end_at - timedelta(days=period_days) if period_days is not None else None
+    )
     revenue_records = db.scalars(
         select(RevenueRecord)
-        .where(RevenueRecord.organization_id == principal.organization_id)
+        .where(
+            RevenueRecord.organization_id == principal.organization_id,
+            *period_conditions(RevenueRecord.received_at, period_start_at, period_end_at),
+        )
         .order_by(RevenueRecord.received_at.desc(), RevenueRecord.created_at.desc())
         .limit(100)
     ).all()
     deductions = db.scalars(
         select(DealDeduction)
-        .where(DealDeduction.organization_id == principal.organization_id)
+        .where(
+            DealDeduction.organization_id == principal.organization_id,
+            *period_conditions(DealDeduction.incurred_at, period_start_at, period_end_at),
+        )
         .order_by(DealDeduction.incurred_at.desc(), DealDeduction.created_at.desc())
         .limit(100)
     ).all()
@@ -60,13 +75,20 @@ def get_finance_overview(db: Session, principal: Principal) -> FinanceOverview:
     ).all()
     calculations = db.scalars(
         select(CompensationCalculation)
-        .where(CompensationCalculation.organization_id == principal.organization_id)
+        .join(RevenueRecord, RevenueRecord.id == CompensationCalculation.revenue_record_id)
+        .where(
+            CompensationCalculation.organization_id == principal.organization_id,
+            *period_conditions(RevenueRecord.received_at, period_start_at, period_end_at),
+        )
         .order_by(CompensationCalculation.created_at.desc())
         .limit(100)
     ).all()
     marketing_spend = db.scalars(
         select(MarketingSpend)
-        .where(MarketingSpend.organization_id == principal.organization_id)
+        .where(
+            MarketingSpend.organization_id == principal.organization_id,
+            *period_conditions(MarketingSpend.spend_month_at, period_start_at, period_end_at),
+        )
         .order_by(MarketingSpend.spend_month_at.desc(), MarketingSpend.created_at.desc())
         .limit(100)
     ).all()
@@ -75,8 +97,25 @@ def get_finance_overview(db: Session, principal: Principal) -> FinanceOverview:
         principal,
         [record.lead_id for record in revenue_records if record.lead_id is not None],
     )
+    previous_summary = None
+    if period_start_at is not None and period_days is not None:
+        previous_summary = get_finance_summary(
+            db,
+            principal,
+            start_at=period_start_at - timedelta(days=period_days),
+            end_at=period_start_at,
+        )
     return FinanceOverview(
-        summary=get_finance_summary(db, principal),
+        period_days=period_days,
+        period_start_at=period_start_at,
+        period_end_at=period_end_at,
+        previous_summary=previous_summary,
+        summary=get_finance_summary(
+            db,
+            principal,
+            start_at=period_start_at,
+            end_at=period_end_at,
+        ),
         revenue_records=[
             revenue_to_read(record, lead_context.get(record.lead_id)) for record in revenue_records
         ],
@@ -295,12 +334,18 @@ def recalculate_compensation(db: Session, principal: Principal) -> None:
             )
 
 
-def get_finance_summary(db: Session, principal: Principal) -> FinanceSummary:
+def get_finance_summary(
+    db: Session,
+    principal: Principal,
+    start_at: datetime | None = None,
+    end_at: datetime | None = None,
+) -> FinanceSummary:
     collected_revenue = sum_int(
         db,
         select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
             RevenueRecord.organization_id == principal.organization_id,
             RevenueRecord.status == "collected",
+            *period_conditions(RevenueRecord.received_at, start_at, end_at),
         ),
     )
     pending_revenue = sum_int(
@@ -308,24 +353,30 @@ def get_finance_summary(db: Session, principal: Principal) -> FinanceSummary:
         select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
             RevenueRecord.organization_id == principal.organization_id,
             RevenueRecord.status == "pending",
+            *period_conditions(RevenueRecord.received_at, start_at, end_at),
         ),
     )
     deductions = sum_int(
         db,
         select(func.coalesce(func.sum(DealDeduction.amount_cents), 0)).where(
-            DealDeduction.organization_id == principal.organization_id
+            DealDeduction.organization_id == principal.organization_id,
+            *period_conditions(DealDeduction.incurred_at, start_at, end_at),
         ),
     )
     compensation = sum_int(
         db,
-        select(func.coalesce(func.sum(CompensationCalculation.calculated_amount_cents), 0)).where(
-            CompensationCalculation.organization_id == principal.organization_id
+        select(func.coalesce(func.sum(CompensationCalculation.calculated_amount_cents), 0))
+        .join(RevenueRecord, RevenueRecord.id == CompensationCalculation.revenue_record_id)
+        .where(
+            CompensationCalculation.organization_id == principal.organization_id,
+            *period_conditions(RevenueRecord.received_at, start_at, end_at),
         ),
     )
     marketing_spend = sum_int(
         db,
         select(func.coalesce(func.sum(MarketingSpend.amount_cents), 0)).where(
-            MarketingSpend.organization_id == principal.organization_id
+            MarketingSpend.organization_id == principal.organization_id,
+            *period_conditions(MarketingSpend.spend_month_at, start_at, end_at),
         ),
     )
     net_revenue = collected_revenue - deductions
@@ -338,6 +389,19 @@ def get_finance_summary(db: Session, principal: Principal) -> FinanceSummary:
         marketing_spend_cents=marketing_spend,
         company_net_cents=net_revenue - compensation - marketing_spend,
     )
+
+
+def period_conditions(
+    column: InstrumentedAttribute[datetime],
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> list[ColumnElement[bool]]:
+    conditions: list[ColumnElement[bool]] = []
+    if start_at is not None:
+        conditions.append(column >= start_at)
+    if end_at is not None:
+        conditions.append(column < end_at)
+    return conditions
 
 
 def resolve_finance_context(

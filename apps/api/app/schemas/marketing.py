@@ -52,6 +52,10 @@ class MarketingSummary(BaseModel):
 
 
 class MarketingOverview(BaseModel):
+    period_days: int | None
+    period_start_at: datetime | None
+    period_end_at: datetime
+    previous_summary: MarketingSummary | None
     summary: MarketingSummary
     campaigns: list[MarketingCampaignPerformance]
     offline_exports: list[OfflineConversionExportRead]

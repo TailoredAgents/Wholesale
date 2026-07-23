@@ -1129,16 +1129,22 @@ export type DispositionOverview = {
   cases: DispositionCase[];
 };
 
+export type FinanceSummary = {
+  collected_revenue_cents: number;
+  pending_revenue_cents: number;
+  deductions_cents: number;
+  net_revenue_cents: number;
+  compensation_cents: number;
+  marketing_spend_cents: number;
+  company_net_cents: number;
+};
+
 export type FinanceOverview = {
-  summary: {
-    collected_revenue_cents: number;
-    pending_revenue_cents: number;
-    deductions_cents: number;
-    net_revenue_cents: number;
-    compensation_cents: number;
-    marketing_spend_cents: number;
-    company_net_cents: number;
-  };
+  period_days: number | null;
+  period_start_at: string | null;
+  period_end_at: string;
+  previous_summary: FinanceSummary | null;
+  summary: FinanceSummary;
   revenue_records: Array<{
     id: string;
     lead_id: string | null;
@@ -1199,17 +1205,23 @@ export type FinanceOverview = {
   }>;
 };
 
+export type MarketingSummary = {
+  total_spend_cents: number;
+  collected_revenue_cents: number;
+  leads_created: number;
+  contracted_leads: number;
+  cost_per_lead_cents: number | null;
+  cost_per_contract_cents: number | null;
+  return_on_ad_spend_basis_points: number | null;
+  pending_offline_exports: number;
+};
+
 export type MarketingOverview = {
-  summary: {
-    total_spend_cents: number;
-    collected_revenue_cents: number;
-    leads_created: number;
-    contracted_leads: number;
-    cost_per_lead_cents: number | null;
-    cost_per_contract_cents: number | null;
-    return_on_ad_spend_basis_points: number | null;
-    pending_offline_exports: number;
-  };
+  period_days: number | null;
+  period_start_at: string | null;
+  period_end_at: string;
+  previous_summary: MarketingSummary | null;
+  summary: MarketingSummary;
   campaigns: Array<{
     source: string;
     medium: string;
@@ -2030,6 +2042,10 @@ export async function getBuyers(): Promise<{
 }
 
 const emptyFinanceOverview: FinanceOverview = {
+  period_days: null,
+  period_start_at: null,
+  period_end_at: new Date(0).toISOString(),
+  previous_summary: null,
   summary: {
     collected_revenue_cents: 0,
     pending_revenue_cents: 0,
@@ -2046,7 +2062,7 @@ const emptyFinanceOverview: FinanceOverview = {
   marketing_spend: [],
 };
 
-export async function getFinanceOverview(): Promise<{
+export async function getFinanceOverview(periodDays?: number): Promise<{
   finance: FinanceOverview;
   apiConnected: boolean;
 }> {
@@ -2054,7 +2070,8 @@ export async function getFinanceOverview(): Promise<{
 
   try {
     const headers = await getServerApiHeaders();
-    const response = await fetch(`${apiBaseUrl}/api/v1/finance`, {
+    const query = periodDays ? `?period_days=${periodDays}` : "";
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance${query}`, {
       headers,
       cache: "no-store",
     });
@@ -2070,6 +2087,10 @@ export async function getFinanceOverview(): Promise<{
 }
 
 const emptyMarketingOverview: MarketingOverview = {
+  period_days: null,
+  period_start_at: null,
+  period_end_at: new Date(0).toISOString(),
+  previous_summary: null,
   summary: {
     total_spend_cents: 0,
     collected_revenue_cents: 0,
@@ -2084,7 +2105,7 @@ const emptyMarketingOverview: MarketingOverview = {
   offline_exports: [],
 };
 
-export async function getMarketingOverview(): Promise<{
+export async function getMarketingOverview(periodDays?: number): Promise<{
   marketing: MarketingOverview;
   apiConnected: boolean;
 }> {
@@ -2092,7 +2113,8 @@ export async function getMarketingOverview(): Promise<{
 
   try {
     const headers = await getServerApiHeaders();
-    const response = await fetch(`${apiBaseUrl}/api/v1/marketing`, {
+    const query = periodDays ? `?period_days=${periodDays}` : "";
+    const response = await fetch(`${apiBaseUrl}/api/v1/marketing${query}`, {
       headers,
       cache: "no-store",
     });

@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX6 are complete.
+Status: Implementation in progress. Phases UX1 through UX7 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -307,7 +307,7 @@ Implementation notes:
 
 ## Phase UX7: Business, Reporting, And AI Control
 
-Status: Not started.
+Status: Complete. The management and control workspace upgrade was implemented on July 22, 2026.
 
 Goal: Give ownership and management a coherent view of economics, performance, configuration, and
 automation risk.
@@ -334,6 +334,29 @@ Exit criteria:
 - The owner can identify financial, marketing, policy, and AI exceptions without opening raw logs.
 - Metrics link back to the records that produced them.
 - AI autonomy and external-action restrictions remain unmistakable.
+
+Implementation notes:
+
+- Finance, Marketing, Operating Model, and AI Control now share one role-filtered Business and
+  Control sequence plus a consistent management summary for reporting basis, comparison state,
+  primary exception, authority, and next action.
+- Finance and Marketing support real 30-day, 90-day, and all-time periods. Fixed periods include
+  the immediately preceding equal-length period for comparisons, with API-tested timestamp
+  boundaries and source-record filtering.
+- Finance is organized around retained margin, pending revenue, deal reconciliation exceptions,
+  commission calculations, and linked ledger evidence. Manual entry controls are separated from
+  management reporting.
+- Marketing is organized around attributable source economics, spend without leads, leads without
+  contracts, sub-1.0 return on ad spend, source-to-lead drilldowns, and the offline conversion queue.
+- Operating Model separates the active compensation authority, pending role-credit decisions,
+  historical policy versions, and evidence-based market launch records without weakening audited
+  activation or approval controls.
+- AI Control surfaces portfolio coverage, evaluations, trace review, approvals, usage cost,
+  promotion state, and rollback controls. External execution remains visibly blocked and human
+  approval remains required for promotion.
+- All four routes were verified with populated data at 1440 and 390 pixel widths with no runtime
+  errors or page-level horizontal overflow. The complete API suite, frontend lint, TypeScript, and
+  production build pass.
 
 ## Phase UX8: OS Responsive, Accessibility, And Regression Pass
 
@@ -419,8 +442,8 @@ Exit criteria:
 - Do not add external communication, AI authority, legal claims, or provider activation merely as
   part of a visual phase.
 
-## Recommended First Checkpoint
+## Recommended Next Checkpoint
 
-Start UX1 by producing the route inventory, role-navigation matrix, duplicate-page assessment, and
-approved label map. The first implementation commit should not change visual styling; it should
-document and test the information architecture that the visual system will support.
+Proceed to UX8 with a complete route matrix at 390, 768, 1280, and 1440 pixel widths. Prioritize
+keyboard and screen-reader behavior, focus visibility, long-content and empty states, and critical
+role workflows before beginning the public-site visual phases.

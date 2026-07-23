@@ -1,0 +1,6 @@
+.journey { width: 100%; min-height: 48px; padding: 4px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface-muted); display: flex; gap: 3px; }
+.journey a { flex: 1; min-width: 0; min-height: 38px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--sg-radius-md); color: var(--sg-color-text-muted); display: flex; align-items: center; justify-content: center; gap: 7px; font-size: 12px; font-weight: 750; white-space: nowrap; }
+.journey a:hover { background: var(--sg-color-surface); color: var(--sg-color-text); }
+.journey .active { border-color: var(--sg-color-border); background: var(--sg-color-surface); color: var(--sg-color-brand-strong); box-shadow: var(--sg-shadow-tight); }
+@media (max-width: 720px) { .journey { overflow-x: auto; } .journey a { flex: 0 0 auto; } }
+@media (max-width: 480px) { .journey a { width: 46px; padding: 0; } .journey a span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; } }
