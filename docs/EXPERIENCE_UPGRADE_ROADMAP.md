@@ -5,7 +5,7 @@ Last updated: July 22, 2026
 Status: Phases UX1 through UX10 are implementation complete. Production baseline collection and
 business-content acceptance remain.
 
-This roadmap governs the next design track for the Stonegate Operating System and public seller
+This roadmap records the completed design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
 and platform capabilities. The purpose of this track is to make those completed capabilities easier
 to understand, faster to operate, visually consistent, accessible, and measurable.

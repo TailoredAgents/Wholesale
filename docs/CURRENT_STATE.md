@@ -54,8 +54,8 @@ sequence is:
 | 6. Appointments and Field Acquisitions | Complete |
 | 7. Underwriting and Offer Governance | Complete |
 | 8. Contracts and Transaction Coordination | Complete for the manual workflow |
-| 9. Buyers, Dispositions, and Finance | Foundational |
-| 10. Integrated AI Agent System | Foundational |
+| 9. Buyers, Dispositions, and Finance | Complete for the controlled provider-neutral workflow |
+| 10. Integrated AI Agent System | Partial: governed control plane built; model pilots remain |
 
 The completed underwriting work remains valid. It does not imply that field acquisitions are
 complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
@@ -291,6 +291,9 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 - Source/campaign performance, CPL, contract cost, ROAS, and offline conversion export records.
 - AI agent definitions, prompt versions, tool permissions, run logs, tool-call logs, approvals,
   cost telemetry, and call-intelligence quality reporting.
+- Governed fourteen-specialist portfolio, orchestrator events, dry runs, retries, budgets, trace
+  review, evaluation datasets, capability promotion, rollback controls, and external-execution
+  blocks.
 
 ## External Setup In Progress
 
@@ -316,14 +319,15 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
 - Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
   deferred until operating data demonstrates that route precision is necessary.
-- Contract templates, e-signature, document storage, and checklist completion workflows are not
-  complete.
+- The controlled manual contract and checklist workflow is operational; provider-backed object
+  storage, e-signature, and live closing acceptance remain incomplete.
 - External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
   is complete; buyer matching and human approval are operational.
 - QuickBooks/Xero synchronization is not implemented.
 - Google Ads and Meta conversion delivery adapters are not implemented.
-- AI agents do not autonomously send seller messages, change offers, send contracts, or make
-  financial or legal decisions.
+- AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
+  do not autonomously send seller messages, change offers, send contracts, or make financial or
+  legal decisions.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the
@@ -339,6 +343,6 @@ While A2P approval is pending:
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Populate Phase 10 evaluations with redacted operating examples, approve the datasets, and run
-   the first draft-only Lead Management pilot.
+6. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`, then run the first AI4 draft-only Lead
+   Operations pilot.
 7. Resume the parallel integration track after A2P approval without blocking internal development.

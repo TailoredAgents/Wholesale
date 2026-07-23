@@ -1,5 +1,10 @@
 # Phase 10 AI Control Plane
 
+Last updated: July 22, 2026
+
+`AI_AGENTS.md` now defines the complete technical architecture. The remaining implementation order
+is in `AI_AUTOMATION_ROADMAP.md`.
+
 ## Delivered
 
 Stonegate now has a governed AI lifecycle instead of disconnected agent prompts:
@@ -41,7 +46,7 @@ underwriting cases, transactions, and corrections, then run model replay against
 
 ## Next Pilot
 
-Start with Lead Management in draft mode because its output is reversible and internal. Measure
-human acceptance, correction rate, missed risk, latency, and cost for at least 50 reviewed cases.
-Do not promote seller communications, underwriting, negotiation, contracts, dispositions, or
-finance based on the generic baseline dataset.
+Complete AI1 through AI3 first, then start Lead Operations in draft mode because its output is
+reversible and internal. Measure human acceptance, correction rate, missed risk, latency, cost,
+time saved, and business outcomes. Do not promote seller communications, underwriting,
+negotiation, contracts, dispositions, or finance based on the generic baseline dataset.

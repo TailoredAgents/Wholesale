@@ -25,6 +25,8 @@ Start with:
 - `docs/UX1_INFORMATION_ARCHITECTURE_AUDIT.md`: approved OS routes, labels, role visibility, and handoffs.
 - `docs/DESIGN_SYSTEM.md`: shared OS tokens, components, states, and responsive page contracts.
 - `docs/UNIFIED_BUILD_PLAN.md`: long-term product scope and quality standard.
+- `docs/AI_AGENTS.md`: agent architecture, portfolio, model routing, tools, memory, and autonomy policy.
+- `docs/AI_AUTOMATION_ROADMAP.md`: ordered path from the current control plane to measured production automation.
 - `docs/INTEGRATIONS.md`: provider status and system boundaries.
 
 ## Prerequisites

@@ -1,6 +1,6 @@
 # Stonegate Operating Model
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Purpose
 
@@ -9,7 +9,8 @@ people, AI agents, software, money, approvals, and records work together from ca
 through funded closing.
 
 Implementation status belongs in `CURRENT_STATE.md`. Build order belongs in `ROADMAP.md`.
-Technical boundaries belong in `ARCHITECTURE.md` and `AI_AGENTS.md`.
+Technical boundaries belong in `ARCHITECTURE.md` and `AI_AGENTS.md`. The ordered path from the
+current control plane to production assistance belongs in `AI_AUTOMATION_ROADMAP.md`.
 
 ## Business Objective
 

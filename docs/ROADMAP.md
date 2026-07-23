@@ -5,13 +5,16 @@ Last updated: July 22, 2026
 This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
 from reliability through the integrated AI agent system.
 
-The next interface and public-site modernization track is defined separately in
+The completed interface and public-site modernization track is defined separately in
 `EXPERIENCE_UPGRADE_ROADMAP.md`. It improves organization, usability, aesthetics, accessibility,
 performance, and conversion measurement without replacing the business-workflow sequence below.
 
 `CURRENT_STATE.md` is the source of truth for what exists today. `OPERATING_MODEL.md` defines the
 business roles, handoffs, compensation policy, AI portfolio, and operating standards that these
 phases implement.
+
+Phase 10 now has a dedicated implementation sequence in `AI_AUTOMATION_ROADMAP.md`.
+`AI_AGENTS.md` is the technical source of truth for agent architecture and authority.
 
 ## Status Definitions
 
@@ -376,6 +379,10 @@ Remaining:
   checks are complete; offer, contract, payment, compensation, and legal authority remain human.
 - Agent quality, correction, failure, cost, and business-outcome reporting.
 
+The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`, beginning
+with redacted golden cases, runtime/tool hardening, and repeatable evaluation before the first
+Lead Operations pilot.
+
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
 
@@ -396,9 +403,10 @@ evidence requirements, compliance controls, or financial approvals.
 2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
    template and redacted documents.
 3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
-4. Populate Phase 10 evaluation datasets with redacted operating examples and run the first
-   draft-only Lead Management pilot.
-5. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
+4. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`: redacted golden cases, runtime/tool
+   hardening, and the evaluation factory.
+5. Run the AI4 draft-only Lead Operations pilot.
+6. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred
 

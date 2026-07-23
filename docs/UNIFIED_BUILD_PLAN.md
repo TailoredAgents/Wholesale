@@ -1,6 +1,6 @@
 # Unified Build Plan
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Objective
 
@@ -63,14 +63,14 @@ Required modules:
 | --- | --- | --- |
 | Public conversion | Built and live | A2P wording deployed; custom domain pending |
 | Clerk and RBAC | Built and live | MFA and access-revocation drill remain |
-| Acquisition CRM | Broad foundation built | Team administration, calendar, merge, notifications, and sequences remain |
+| Acquisition CRM | Operational | Team administration, internal calendar, merge, notifications, role desks, and field workflows are built; live operating validation continues |
 | Shared inbox | Built | Final SMS, Voice, and email provider activation pending |
-| Underwriting V2.1 | Built | Real-deal validation, comp review controls, and offer approvals remain |
-| Transactions | Manual workflow built | Live closing validation and e-signature adapter remain |
-| Buyers/dispositions | Manual workflow built | Live simulation and provider campaign delivery remain |
-| Finance | Deal reconciliation built | Payment lifecycle, accounting sync, and forecasting remain |
-| Marketing | Foundation built | Provider delivery, retry, and paid-channel optimization remain |
-| AI control | Foundation built | Evaluations, production runner, pilots, and measured automation remain |
+| Underwriting and offer governance | Operational | Comp review, versions, negotiation authority, and approvals are built; real-deal calibration continues |
+| Transactions | Controlled manual workflow operational | Redacted simulation, object storage selection, and e-signature adapter remain |
+| Buyers/dispositions | Controlled manual workflow operational | Redacted simulation and provider campaign delivery remain |
+| Finance | Reconciliation and compensation operational | QuickBooks sync, payment lifecycle, and forecasting remain |
+| Marketing | Measurement foundation built | Google/Meta outcome delivery, retry, and paid-channel optimization remain |
+| AI control | Governed control plane built | Redacted eval datasets, production model adapters, pilots, and measured capability promotion remain |
 
 ## Product Principles
 
@@ -136,7 +136,8 @@ Integrate:
 - Clerk for authentication.
 - Render for hosting.
 - Twilio for SMS and Voice.
-- Google Workspace for operational email and calendar.
+- Google Workspace for operational email.
+- Stonegate's internal calendar remains the appointment system of record.
 - Smartlead or a comparable dedicated platform for future cold email.
 - RentCast now, with ATTOM or MLS/RESO as optional property-data enrichment.
 - OpenAI for model and transcription calls.
@@ -150,7 +151,7 @@ Integrate:
 
 The comp engine must:
 
-- Prefer recorded sales over asking-price evidence.
+- Prefer verified closed-sale evidence over asking-price or active-listing evidence.
 - Compare property type, location, size, age, condition, recency, and liquidity.
 - Exclude or down-weight materially different properties with visible reasons.
 - Produce a range and confidence, not false precision.

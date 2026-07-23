@@ -1,6 +1,6 @@
 # Product Requirements
 
-Last updated: July 21, 2026
+Last updated: July 22, 2026
 
 ## Product
 
@@ -68,6 +68,11 @@ automation.
 ### AI
 
 - Every model run records model, prompt, tools, evidence, status, cost, and review outcome.
+- AI capabilities use the Stonegate orchestrator, narrow server-side tools, versioned schemas,
+  deterministic policy gates, and capability-specific evaluation datasets.
+- PostgreSQL and human-confirmed facts remain authoritative; model state is not a second CRM.
+- Autonomy is promoted per capability and tool after offline evaluation, a draft-only pilot,
+  monitored outcomes, rollback controls, and explicit owner approval.
 - AI cannot independently make offers, send contracts, select buyers, change payments, administer
   users, override compliance, or provide legal or financial advice.
 
@@ -127,7 +132,7 @@ Google Workspace activation is pending external/provider setup. See `CURRENT_STA
 - Recording disclosure and state coverage.
 - Object storage provider.
 - E-signature provider.
-- Calendar rollout details.
 - Accounting integration.
 - Error monitoring provider.
 - Secondary property-data provider.
+- Production AI pilot order and capability-specific thresholds after the first redacted datasets.

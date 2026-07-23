@@ -1,6 +1,6 @@
 # Architecture
 
-Last updated: July 20, 2026
+Last updated: July 22, 2026
 
 ## Stack
 
@@ -10,7 +10,8 @@ Last updated: July 20, 2026
 - Database: PostgreSQL.
 - Worker: `apps/api/app/worker.py` for provider synchronization, transcription, and retention.
 - Coordination/cache: Render Key Value-compatible Redis.
-- Files later: S3-compatible object storage.
+- Files later: private S3-compatible object storage.
+- AI: Stonegate orchestrator and policy control plane with OpenAI Responses API model execution.
 - Hosting: Render Blueprint connected to GitHub `main`.
 
 Official docs checked:
@@ -18,7 +19,9 @@ Official docs checked:
 - https://nextjs.org/docs
 - https://fastapi.tiangolo.com/tutorial/sql-databases/
 - https://render.com/docs/blueprint-spec
-- https://openai.github.io/openai-agents-python/
+- https://developers.openai.com/api/docs/guides/latest-model
+- https://developers.openai.com/api/docs/guides/agents
+- https://developers.openai.com/api/docs/guides/agent-evals
 
 ## Monorepo
 
@@ -41,6 +44,25 @@ docs
 - Browser code receives Clerk sessions and short-lived provider tokens only, never raw provider
   secrets.
 
+## AI Runtime
+
+- PostgreSQL stores agent definitions, prompt versions, tool policies, evaluation cases, runs,
+  approvals, traces, costs, promotions, and rollbacks.
+- Domain events enter the orchestrator after deterministic policy checks. The orchestrator selects
+  a specialist capability, approved context, model tier, and narrow tools.
+- The Responses API is the default model interface. The OpenAI Agents SDK may be used behind the
+  existing orchestrator when typed tools, specialist composition, resumable approvals, or tracing
+  reduce implementation work.
+- Models return structured proposals with evidence and uncertainty. Backend domain services, not
+  model text, perform permitted writes.
+- PostgreSQL is durable memory. Temporary model conversation state cannot create an independent
+  seller, buyer, deal, consent, or financial record.
+- Side-effect tools require stable idempotency keys. External tools additionally require the exact
+  approval and compliance policy defined for that capability.
+- Model, prompt, schema, tool, or reasoning changes create a version that must pass replayable
+  evaluation before promotion.
+- See `AI_AGENTS.md` for technical policy and `AI_AUTOMATION_ROADMAP.md` for delivery order.
+
 ## Rules
 
 - Major records carry `organization_id`.
@@ -48,6 +70,8 @@ docs
 - Business rules live in backend domain services.
 - Webhooks validate provider signatures and retain provider event identifiers for idempotency.
 - AI tools must be narrow, permissioned, structured, and audited.
+- Offers, contracts, buyer selection, payments, commissions, permissions, suppression overrides,
+  and legal or financial decisions remain human-controlled.
 - Public seller pages and private OS routes remain separate experiences.
 - Integration configuration uses the existing `oakwell-*` Render resources even though the
   customer-facing brand is Stonegate.

@@ -1,5 +1,7 @@
 # AI Comp Agent Research
 
+Last updated: July 22, 2026
+
 ## Recommendation
 
 Use OpenAI as the reasoning layer, not the source of truth for comps.
@@ -22,7 +24,10 @@ The comp agent needs current property data APIs before it can produce useful ARV
 Primary provider for the current build:
 
 - RentCast.
-- Use first because the account/API key is available now and it gives value estimates, sale comps, property records, listings, rent estimates, and market trends at a low starting cost.
+- Use first because the account/API key is available now and it gives value estimates, comparable
+  sale-listing candidates, property records, listings, rent estimates, and market trends at a low
+  starting cost. Provider candidates require source/status review before Stonegate describes them
+  as verified closed sales.
 
 Later enterprise provider:
 
@@ -47,7 +52,8 @@ Web search:
 
 1. Normalize and validate the subject property address.
 2. Pull property facts from the property data provider.
-3. Pull sold comps within configurable radius and lookback windows.
+3. Pull comparable candidates within configurable radius and lookback windows and retain their
+   source and sale/listing status.
 4. Filter comps by distance, sale recency, property type, beds/baths, square footage, year built, lot size, condition notes, and outlier price per square foot.
 5. Run deterministic scoring, condition review, repair, and buyer-economics calculations.
 6. Optionally ask OpenAI to summarize the normalized evidence and propose review tasks using
