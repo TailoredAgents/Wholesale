@@ -1332,6 +1332,273 @@
   text-transform: uppercase;
 }
 
+.acquisitionsCopilot {
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 14px;
+}
+
+.acquisitionsCopilot > header,
+.copilotDraftPicker,
+.copilotActions,
+.copilotReview > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.acquisitionsCopilot > header > div {
+  min-width: 0;
+}
+
+.acquisitionsCopilot > header > div > span {
+  color: var(--brand-strong);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.acquisitionsCopilot h4 {
+  margin-top: 4px;
+  font-size: 17px;
+}
+
+.draftOnly,
+.copilotReviewed {
+  color: var(--brand-strong);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.copilotReadiness {
+  border-block: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 0.55fr 1.25fr 1fr;
+}
+
+.copilotReadiness > div {
+  min-width: 0;
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.copilotReadiness > div:last-child {
+  border-right: 0;
+}
+
+.copilotReadiness span,
+.copilotDraftPicker label > span,
+.copilotReview label > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.copilotReadiness strong {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.copilotReadiness strong small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.copilotReadiness em {
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.copilotReadiness p,
+.copilotEmpty {
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.copilotGaps {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) repeat(2, minmax(0, 1fr));
+  gap: 7px 14px;
+  align-items: start;
+}
+
+.copilotGaps > strong {
+  font-size: 12px;
+}
+
+.copilotGaps > span {
+  color: #8a5a13;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.copilotGaps svg {
+  flex: 0 0 auto;
+}
+
+.copilotActions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.copilotActions button,
+.copilotReview button {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.copilotActions button:first-child {
+  border-color: var(--brand-strong);
+  background: var(--brand);
+  color: white;
+}
+
+.copilotActions button:disabled,
+.copilotReview button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.copilotActions small {
+  flex: 1 1 260px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.copilotDraft {
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 13px;
+}
+
+.copilotDraftPicker label {
+  display: grid;
+  gap: 4px;
+}
+
+.copilotDraftPicker select {
+  min-height: 36px;
+  max-width: 360px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.copilotDraftPicker > span {
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.copilotDraft h5 {
+  max-width: 90ch;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.copilotDraftColumns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.copilotDraftColumns section > strong {
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.copilotDraftColumns p {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--text-soft);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.copilotDraftColumns svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--brand-strong);
+}
+
+.copilotReview {
+  padding-top: 13px;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 9px;
+}
+
+.copilotReview label {
+  display: grid;
+  gap: 5px;
+}
+
+.copilotReview textarea {
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.copilotReview > div {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
+.copilotReview button:last-child {
+  color: var(--danger);
+}
+
+.copilotReviewed {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
 .emptyState {
   min-height: 180px;
   padding: 24px;
@@ -1945,6 +2212,9 @@
 
   .briefFacts,
   .briefColumns,
+  .copilotReadiness,
+  .copilotDraftColumns,
+  .copilotGaps,
   .walkthroughFields,
   .fieldAuthority dl,
   .fieldConcessionEditor,
@@ -1969,6 +2239,26 @@
 
   .briefColumns {
     gap: 8px;
+  }
+
+  .copilotReadiness > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .copilotReadiness > div:last-child {
+    border-bottom: 0;
+  }
+
+  .acquisitionsCopilot > header,
+  .copilotDraftPicker {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .copilotDraftPicker select {
+    max-width: 100%;
+    width: 100%;
   }
 
   .observationRow,

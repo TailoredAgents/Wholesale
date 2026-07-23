@@ -243,6 +243,116 @@ class FieldMeetingBriefRead(BaseModel):
     created_at: datetime
 
 
+class AcquisitionsObjectionGuidance(BaseModel):
+    objection: str = Field(max_length=1000)
+    response_guidance: str = Field(max_length=2000)
+    evidence: list[str] = Field(max_length=20)
+
+
+class AcquisitionsPreparationOutput(BaseModel):
+    executive_brief: str = Field(max_length=4000)
+    seller_goals: list[str] = Field(max_length=20)
+    meeting_objectives: list[str] = Field(max_length=20)
+    unresolved_questions: list[str] = Field(max_length=30)
+    walkthrough_focus: list[str] = Field(max_length=30)
+    underwriting_explanation: list[str] = Field(max_length=30)
+    comp_review_questions: list[str] = Field(max_length=30)
+    repair_evidence_gaps: list[str] = Field(max_length=30)
+    negotiation_questions: list[str] = Field(max_length=30)
+    objection_guidance: list[AcquisitionsObjectionGuidance] = Field(max_length=20)
+    authority_reminders: list[str] = Field(max_length=20)
+    risks: list[str] = Field(max_length=20)
+    evidence: list[str] = Field(max_length=50)
+    confidence: int = Field(ge=0, le=100)
+
+
+class AcquisitionsFollowUpOutput(BaseModel):
+    meeting_summary: str = Field(max_length=4000)
+    seller_position: list[str] = Field(max_length=20)
+    confirmed_facts: list[str] = Field(max_length=30)
+    unresolved_items: list[str] = Field(max_length=30)
+    objection_review: list[AcquisitionsObjectionGuidance] = Field(max_length=20)
+    authority_status: str = Field(max_length=2000)
+    recommended_internal_actions: list[str] = Field(max_length=30)
+    seller_follow_up_draft: str = Field(max_length=4000)
+    missing_documentation: list[str] = Field(max_length=30)
+    risks: list[str] = Field(max_length=20)
+    evidence: list[str] = Field(max_length=50)
+    confidence: int = Field(ge=0, le=100)
+
+
+class AcquisitionsCopilotRecommendationRead(BaseModel):
+    id: UUID
+    appointment_id: UUID
+    lead_id: UUID
+    recommendation_type: str
+    ai_run_log_id: UUID | None
+    status: str
+    output_payload: dict[str, Any]
+    confidence_score: int | None
+    generated_at: datetime
+    reviewed_at: datetime | None
+
+
+class AcquisitionsCopilotAnalyzeRequest(BaseModel):
+    recommendation_type: Literal["preparation", "follow_up"] = "preparation"
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class AcquisitionsCopilotAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    recommendation: AcquisitionsCopilotRecommendationRead | None
+
+
+class AcquisitionsCopilotReviewRequest(BaseModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    final_output: dict[str, Any] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    estimated_time_saved_seconds: int = Field(default=0, ge=0, le=14_400)
+
+    @model_validator(mode="after")
+    def corrected_output_is_required(self) -> "AcquisitionsCopilotReviewRequest":
+        if self.decision == "edited" and self.final_output is None:
+            raise ValueError("Edited recommendations require corrected output.")
+        return self
+
+
+class AcquisitionsCopilotReviewRead(BaseModel):
+    id: UUID
+    recommendation_id: UUID
+    decision: str
+    final_output: dict[str, Any] | None
+    notes: str | None
+    estimated_time_saved_seconds: int
+    reviewed_at: datetime
+
+
+class AcquisitionsCopilotMetrics(BaseModel):
+    generated: int
+    reviewed: int
+    accepted_or_corrected_rate_basis_points: int
+    correction_rate_basis_points: int
+    estimated_time_saved_minutes: int
+
+
+class AcquisitionsCopilotOverview(BaseModel):
+    pilot_mode: str
+    runtime_status: str
+    preparation_capability_status: str
+    follow_up_capability_status: str
+    external_actions_blocked: bool
+    readiness_score: int
+    readiness_band: str
+    readiness_gaps: list[str]
+    evidence_available: list[str]
+    authority_status: str
+    approved_ceiling_cents: int | None
+    recommendations: list[AcquisitionsCopilotRecommendationRead]
+    metrics: AcquisitionsCopilotMetrics
+
+
 class FieldRoomObservation(BaseModel):
     area: str = Field(min_length=1, max_length=120)
     condition: Literal["good", "fair", "poor", "not_inspected"]
@@ -391,5 +501,6 @@ class FieldAppointmentWorkspaceRead(BaseModel):
     inspection: FieldInspectionRead | None
     negotiation: FieldNegotiationRead | None
     underwriting_transfer: FieldUnderwritingTransferRead | None
+    copilot: AcquisitionsCopilotOverview
     can_edit: bool
     can_review_underwriting: bool

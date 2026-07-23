@@ -1532,6 +1532,102 @@ class FieldMeetingBrief(UuidPrimaryKeyMixin, TimestampMixin, Base):
     brief_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class AcquisitionsCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "acquisitions_copilot_recommendations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_acquisitions_copilot_org_idempotency",
+        ),
+        Index(
+            "ix_acquisitions_copilot_org_status",
+            "organization_id",
+            "status",
+        ),
+        Index("ix_acq_copilot_appointment", "appointment_id"),
+        Index("ix_acq_copilot_lead", "lead_id"),
+        Index("ix_acq_copilot_type", "recommendation_type"),
+        Index("ix_acq_copilot_brief", "field_meeting_brief_id"),
+        Index("ix_acq_copilot_inspection", "field_inspection_id"),
+        Index("ix_acq_copilot_negotiation", "field_negotiation_session_id"),
+        Index("ix_acq_copilot_underwriting", "underwriting_version_id"),
+        Index("ix_acq_copilot_offer_plan", "offer_negotiation_plan_id"),
+        Index("ix_acq_copilot_assignee", "generated_for_user_id"),
+        Index("ix_acq_copilot_run", "ai_run_log_id"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id")
+    )
+    appointment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("appointments.id", ondelete="CASCADE")
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
+    recommendation_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    field_meeting_brief_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("field_meeting_briefs.id", ondelete="SET NULL")
+    )
+    field_inspection_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("field_inspections.id", ondelete="SET NULL")
+    )
+    field_negotiation_session_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("field_negotiation_sessions.id", ondelete="SET NULL")
+    )
+    underwriting_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("underwriting_versions.id", ondelete="SET NULL")
+    )
+    offer_negotiation_plan_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("offer_negotiation_plans.id", ondelete="SET NULL")
+    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    output_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    confidence_score: Mapped[int | None] = mapped_column(Integer)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AcquisitionsCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "acquisitions_copilot_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "recommendation_id",
+            name="uq_acquisitions_copilot_review_recommendation",
+        ),
+        Index("ix_acq_copilot_review_org", "organization_id"),
+        Index("ix_acq_copilot_review_recommendation", "recommendation_id"),
+        Index("ix_acq_copilot_reviewer", "reviewed_by_user_id"),
+        Index("ix_acq_copilot_review_decision", "decision"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id")
+    )
+    recommendation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("acquisitions_copilot_recommendations.id", ondelete="CASCADE"),
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    decision: Mapped[str] = mapped_column(String(40), nullable=False)
+    original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    estimated_time_saved_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class FieldInspection(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "field_inspections"
     __table_args__ = (UniqueConstraint("appointment_id", name="uq_field_inspections_appointment"),)

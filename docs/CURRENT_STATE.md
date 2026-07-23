@@ -345,6 +345,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   Factual-accuracy, evidence-coverage, critical-failure, latency, and cost thresholds are enforced.
   Executive and role-owner reviews, redaction validation, and corrected-production-case versioning
   are operational. Production signatures remain an operator checkpoint.
+- AI3-AI6 are implemented in code: the governed production runtime, Lead Manager Copilot,
+  Prospecting Copilot and Call Quality, and appointment-scoped Acquisitions Copilot all use the
+  same control plane. AI6 provides deterministic meeting readiness, approved-authority controls,
+  appointment and post-outcome drafts, immutable human review, and no external or CRM-write
+  authority. Production replay, activation, and measured pilots remain operator checkpoints.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the
@@ -363,5 +368,6 @@ While A2P approval is pending:
 6. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
    activate and separately measure the AI4 and AI5 draft-only pilots using
    `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
-7. Build AI6 Acquisitions Copilot while the earlier copilots remain supervised.
+7. Begin AI7 Transaction Copilot and Document Intelligence while the earlier copilots remain
+   supervised.
 8. Resume the parallel integration track after A2P approval without blocking internal development.

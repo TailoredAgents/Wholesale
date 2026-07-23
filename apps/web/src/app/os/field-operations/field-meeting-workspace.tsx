@@ -4,21 +4,28 @@
 
 import {
   AlertTriangle,
+  Bot,
   Camera,
   Check,
+  CircleCheckBig,
   ClipboardCheck,
   FileSearch,
   LoaderCircle,
+  Pencil,
   Plus,
   RefreshCw,
+  ShieldCheck,
+  Sparkles,
   Trash2,
   UserRoundCheck,
   Wrench,
+  X,
 } from "lucide-react";
 import Link from "next/link";
-import { ChangeEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import type {
+  AcquisitionsCopilotRecommendation,
   FieldAppointmentWorkspace,
   FieldInspection,
   FieldOperationsOverview,
@@ -318,6 +325,12 @@ export function FieldMeetingWorkspace({
                       <section><h4>Likely objections</h4>{asList(brief?.likely_objections).map((item, index) => { const objection = asRecord(item); return <p key={index}><span>{labelize(String(objection.category ?? "other"))}</span>{String(objection.reason ?? "Review with seller")}</p>; })}</section>
                       <section><h4>Meeting sequence</h4>{asList(brief?.meeting_plan).map((item, index) => <p key={index}><strong>{index + 1}</strong>{String(item)}</p>)}</section>
                     </div>
+                    <AcquisitionsCopilotPanel
+                      appointmentId={appointmentId}
+                      run={run}
+                      saving={saving}
+                      workspace={workspace}
+                    />
                   </>
                 ) : <p className={styles.emptyState}>Generate the brief before leaving for the appointment. It freezes the current qualification, underwriting, and approved negotiation evidence into a versioned snapshot.</p>}
               </div>
@@ -387,6 +400,198 @@ export function FieldMeetingWorkspace({
       </div>
       </section>
     </div>
+  );
+}
+
+function textList(output: Record<string, unknown>, key: string): string[] {
+  return asList(output[key]).map(String);
+}
+
+function AcquisitionsCopilotPanel({
+  appointmentId,
+  saving,
+  workspace,
+  run,
+}: {
+  appointmentId: string;
+  saving: boolean;
+  workspace: FieldAppointmentWorkspace;
+  run: <T>(operation: () => Promise<T>, success: string) => Promise<void>;
+}) {
+  const { requestJson } = useFieldApi();
+  const [selectedId, setSelectedId] = useState(
+    workspace.copilot.recommendations[0]?.id ?? "",
+  );
+  const selected = workspace.copilot.recommendations.find(
+    (item) => item.id === selectedId,
+  ) ?? workspace.copilot.recommendations[0] ?? null;
+  const output = useMemo(() => selected?.output_payload ?? {}, [selected]);
+  const primaryKey = selected?.recommendation_type === "follow_up"
+    ? "meeting_summary"
+    : "executive_brief";
+  const [correction, setCorrection] = useState("");
+
+  useEffect(() => {
+    setSelectedId(workspace.copilot.recommendations[0]?.id ?? "");
+  }, [workspace.copilot.recommendations]);
+
+  useEffect(() => {
+    setCorrection(String(output[primaryKey] ?? ""));
+  }, [selected?.id, output, primaryKey]);
+
+  function generate(recommendationType: "preparation" | "follow_up") {
+    return run(
+      () => requestJson(
+        `/api/v1/field-operations/appointments/${appointmentId}/copilot/analyze`,
+        "POST",
+        { recommendation_type: recommendationType },
+      ),
+      recommendationType === "preparation"
+        ? "Appointment preparation draft generated."
+        : "Meeting follow-up draft generated.",
+    );
+  }
+
+  function review(
+    recommendation: AcquisitionsCopilotRecommendation,
+    decision: "accepted" | "edited" | "rejected",
+  ) {
+    const finalOutput = decision === "edited"
+      ? { ...recommendation.output_payload, [primaryKey]: correction }
+      : null;
+    return run(
+      () => requestJson(
+        `/api/v1/field-operations/copilot/recommendations/${recommendation.id}/review`,
+        "POST",
+        {
+          decision,
+          final_output: finalOutput,
+          estimated_time_saved_seconds: 300,
+        },
+      ),
+      decision === "accepted"
+        ? "Copilot draft accepted as reviewed guidance."
+        : decision === "edited"
+          ? "Corrected copilot guidance saved."
+          : "Copilot draft rejected.",
+    );
+  }
+
+  const canPrepare = workspace.copilot.preparation_capability_status === "enabled";
+  const canFollowUp = (
+    workspace.copilot.follow_up_capability_status === "enabled"
+    && workspace.negotiation !== null
+    && workspace.negotiation.outcome !== "pending"
+  );
+  const headline = selected
+    ? String(output[primaryKey] ?? "Draft guidance")
+    : "";
+  const questionItems = selected?.recommendation_type === "follow_up"
+    ? textList(output, "unresolved_items")
+    : textList(output, "unresolved_questions");
+  const actionItems = selected?.recommendation_type === "follow_up"
+    ? textList(output, "recommended_internal_actions")
+    : textList(output, "meeting_objectives");
+  const riskItems = textList(output, "risks");
+
+  return (
+    <section className={styles.acquisitionsCopilot}>
+      <header>
+        <div>
+          <span><Bot size={16} />Acquisitions Copilot</span>
+          <h4>Meeting preparation and follow-up</h4>
+        </div>
+        <span className={styles.draftOnly}><ShieldCheck size={15} />Draft only</span>
+      </header>
+
+      <div className={styles.copilotReadiness}>
+        <div>
+          <span>Readiness</span>
+          <strong>{workspace.copilot.readiness_score}<small>/100</small></strong>
+          <em>{labelize(workspace.copilot.readiness_band)}</em>
+        </div>
+        <div>
+          <span>Offer authority</span>
+          <strong>{money(workspace.copilot.approved_ceiling_cents)}</strong>
+          <p>{workspace.copilot.authority_status}</p>
+        </div>
+        <div>
+          <span>Evidence</span>
+          <strong>{workspace.copilot.evidence_available.length} sources</strong>
+          <p>{workspace.copilot.evidence_available.join(" · ") || "No reviewed evidence yet"}</p>
+        </div>
+      </div>
+
+      {workspace.copilot.readiness_gaps.length ? (
+        <div className={styles.copilotGaps}>
+          <strong>Resolve before the meeting</strong>
+          {workspace.copilot.readiness_gaps.map((gap) => (
+            <span key={gap}><AlertTriangle size={14} />{gap}</span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className={styles.copilotActions}>
+        <button disabled={saving || !canPrepare} onClick={() => void generate("preparation")} type="button">
+          <Sparkles size={16} />Prepare appointment
+        </button>
+        <button disabled={saving || !canFollowUp} onClick={() => void generate("follow_up")} type="button">
+          <RefreshCw size={16} />Draft follow-up
+        </button>
+        {!canPrepare ? <small>Appointment guidance is currently disabled in AI Controls.</small> : null}
+        {canPrepare && !canFollowUp ? <small>Follow-up becomes available after a meeting outcome is recorded and `negotiation.coach` is enabled.</small> : null}
+      </div>
+
+      {workspace.copilot.recommendations.length ? (
+        <div className={styles.copilotDraft}>
+          <div className={styles.copilotDraftPicker}>
+            <label>
+              <span>Governed draft</span>
+              <select onChange={(event) => setSelectedId(event.target.value)} value={selected?.id ?? ""}>
+                {workspace.copilot.recommendations.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.recommendation_type === "preparation" ? "Appointment prep" : "Follow-up"} · {labelize(item.status)} · {new Date(item.generated_at).toLocaleDateString()}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span>{selected?.confidence_score ?? 0}% confidence</span>
+          </div>
+          <h5>{headline}</h5>
+          <div className={styles.copilotDraftColumns}>
+            <section>
+              <strong>{selected?.recommendation_type === "follow_up" ? "Internal actions" : "Meeting objectives"}</strong>
+              {actionItems.map((item) => <p key={item}><CircleCheckBig size={14} />{item}</p>)}
+            </section>
+            <section>
+              <strong>Questions and gaps</strong>
+              {questionItems.map((item) => <p key={item}><FileSearch size={14} />{item}</p>)}
+            </section>
+            <section>
+              <strong>Risks</strong>
+              {riskItems.map((item) => <p key={item}><AlertTriangle size={14} />{item}</p>)}
+            </section>
+          </div>
+          {selected?.status === "draft" ? (
+            <div className={styles.copilotReview}>
+              <label>
+                <span>Correct the primary guidance before approval</span>
+                <textarea onChange={(event) => setCorrection(event.target.value)} rows={3} value={correction} />
+              </label>
+              <div>
+                <button disabled={saving} onClick={() => void review(selected, "accepted")} type="button"><Check size={15} />Accept</button>
+                <button disabled={saving || correction.trim() === headline.trim()} onClick={() => void review(selected, "edited")} type="button"><Pencil size={15} />Save correction</button>
+                <button disabled={saving} onClick={() => void review(selected, "rejected")} type="button"><X size={15} />Reject</button>
+              </div>
+            </div>
+          ) : (
+            <p className={styles.copilotReviewed}><ShieldCheck size={15} />Reviewed: {labelize(selected?.status ?? "")}. No CRM or seller-facing action was performed.</p>
+          )}
+        </div>
+      ) : (
+        <p className={styles.copilotEmpty}>No AI guidance has been generated for this appointment. The versioned meeting brief above remains the source of truth.</p>
+      )}
+    </section>
   );
 }
 

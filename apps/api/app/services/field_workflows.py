@@ -151,6 +151,10 @@ def calendar_appointment_read(
 def appointment_workspace(
     db: Session, principal: Principal, appointment_id: UUID
 ) -> FieldAppointmentWorkspaceRead | None:
+    from app.services.acquisitions_copilot import (
+        get_acquisitions_copilot_overview,
+    )
+
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
@@ -185,6 +189,7 @@ def appointment_workspace(
         inspection=inspection_read(db, inspection) if inspection else None,
         negotiation=negotiation_read(negotiation) if negotiation else None,
         underwriting_transfer=transfer_read(db, transfer) if transfer else None,
+        copilot=get_acquisitions_copilot_overview(db, principal, appointment),
         can_edit=can_manage(principal) or appointment.owner_user_id == principal.user_id,
         can_review_underwriting=can_review_underwriting(principal),
     )

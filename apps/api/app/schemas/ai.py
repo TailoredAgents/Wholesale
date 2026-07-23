@@ -360,6 +360,7 @@ class AiRuntimeExecuteCreate(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255)
     input_payload: dict[str, object] = Field(default_factory=dict)
     lead_id: UUID | None = None
+    appointment_id: UUID | None = None
     prospect_id: UUID | None = None
     prospecting_entry_id: UUID | None = None
     prospecting_attempt_id: UUID | None = None

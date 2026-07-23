@@ -24,17 +24,30 @@ from app.models.foundation import (
     AiRunLog,
     AiToolCallLog,
     AiToolPermission,
+    Appointment,
+    ApprovalRequest,
     AuditEvent,
     CallRecord,
     CallRecording,
     CallTranscript,
     Campaign,
+    CommunicationRecord,
+    FieldInspection,
+    FieldInspectionPhoto,
+    FieldMeetingBrief,
+    FieldNegotiationSession,
+    Lead,
+    LeadQualificationSession,
+    OfferNegotiationPlan,
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
     ProspectHandoff,
     ProspectingAttempt,
     ProspectingScriptVersion,
+    Task,
+    UnderwritingMarketAnalysis,
+    UnderwritingVersion,
 )
 from app.schemas.ai import (
     AiCapabilityRuntimeRead,
@@ -242,6 +255,93 @@ CALL_QUALITY_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence",
     ],
 }
+ACQUISITIONS_OBJECTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "objection": {"type": "string"},
+        "response_guidance": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["objection", "response_guidance", "evidence"],
+}
+ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "executive_brief": {"type": "string"},
+        "seller_goals": {"type": "array", "items": {"type": "string"}},
+        "meeting_objectives": {"type": "array", "items": {"type": "string"}},
+        "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+        "walkthrough_focus": {"type": "array", "items": {"type": "string"}},
+        "underwriting_explanation": {"type": "array", "items": {"type": "string"}},
+        "comp_review_questions": {"type": "array", "items": {"type": "string"}},
+        "repair_evidence_gaps": {"type": "array", "items": {"type": "string"}},
+        "negotiation_questions": {"type": "array", "items": {"type": "string"}},
+        "objection_guidance": {
+            "type": "array",
+            "items": ACQUISITIONS_OBJECTION_SCHEMA,
+        },
+        "authority_reminders": {"type": "array", "items": {"type": "string"}},
+        "risks": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "executive_brief",
+        "seller_goals",
+        "meeting_objectives",
+        "unresolved_questions",
+        "walkthrough_focus",
+        "underwriting_explanation",
+        "comp_review_questions",
+        "repair_evidence_gaps",
+        "negotiation_questions",
+        "objection_guidance",
+        "authority_reminders",
+        "risks",
+        "evidence",
+        "confidence",
+    ],
+}
+ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "meeting_summary": {"type": "string"},
+        "seller_position": {"type": "array", "items": {"type": "string"}},
+        "confirmed_facts": {"type": "array", "items": {"type": "string"}},
+        "unresolved_items": {"type": "array", "items": {"type": "string"}},
+        "objection_review": {
+            "type": "array",
+            "items": ACQUISITIONS_OBJECTION_SCHEMA,
+        },
+        "authority_status": {"type": "string"},
+        "recommended_internal_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "seller_follow_up_draft": {"type": "string"},
+        "missing_documentation": {"type": "array", "items": {"type": "string"}},
+        "risks": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "meeting_summary",
+        "seller_position",
+        "confirmed_facts",
+        "unresolved_items",
+        "objection_review",
+        "authority_status",
+        "recommended_internal_actions",
+        "seller_follow_up_draft",
+        "missing_documentation",
+        "risks",
+        "evidence",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -334,15 +434,14 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
             continue
         existing_capability = existing_capabilities.get(capability_key)
         if existing_capability is not None:
-            if capability_key in {
-                "lead.next_action",
-                "prospecting.prioritize",
-            }:
-                existing_capability.output_schema = (
-                    LEAD_MANAGER_OUTPUT_SCHEMA
-                    if capability_key == "lead.next_action"
-                    else PROSPECTING_OUTPUT_SCHEMA
-                )
+            schema = {
+                "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
+                "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
+                "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
+                "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
+            }.get(capability_key)
+            if schema is not None:
+                existing_capability.output_schema = schema
                 existing_capability.updated_by_user_id = principal.user_id
             continue
         route = "escalation" if risk_level == "high" else "default"
@@ -357,6 +456,8 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 output_schema={
                     "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
                     "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
+                    "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
+                    "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                 }.get(capability_key, OUTPUT_SCHEMA),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
@@ -709,6 +810,7 @@ def execute_runtime(
         "pricing_status": cost.pricing_status,
         "trace_redacted": runtime.trace_redaction_enabled,
         "knowledge_source_count": len(knowledge),
+        "appointment_id": str(payload.appointment_id) if payload.appointment_id else None,
         "prospect_id": str(payload.prospect_id) if payload.prospect_id else None,
         "prospecting_entry_id": (
             str(payload.prospecting_entry_id) if payload.prospecting_entry_id else None
@@ -997,7 +1099,12 @@ def _execute_read_tool(
         raise ValueError("The runtime read tool is not permitted for this capability.")
     context: dict[str, Any] = {"request": payload.input_payload}
     field_scope: list[str]
-    if payload.lead_id is not None:
+    if capability.capability_key in {"appointment.brief", "negotiation.coach"}:
+        acquisitions_context, field_scope = _acquisitions_context(
+            db, principal, capability.capability_key, payload
+        )
+        context["acquisitions"] = acquisitions_context
+    elif payload.lead_id is not None:
         lead_context = build_lead_context(db, principal, payload.lead_id)
         if lead_context is None:
             raise ValueError("Lead not found.")
@@ -1024,6 +1131,7 @@ def _execute_read_tool(
         requires_approval=False,
         input_payload={
             "lead_id": str(payload.lead_id) if payload.lead_id else None,
+            "appointment_id": str(payload.appointment_id) if payload.appointment_id else None,
             "prospect_id": str(payload.prospect_id) if payload.prospect_id else None,
             "prospecting_entry_id": (
                 str(payload.prospecting_entry_id) if payload.prospecting_entry_id else None
@@ -1040,6 +1148,338 @@ def _execute_read_tool(
         },
     )
     return context, tool_call
+
+
+def _acquisitions_context(
+    db: Session,
+    principal: Principal,
+    capability_key: str,
+    payload: AiRuntimeExecuteCreate,
+) -> tuple[dict[str, Any], list[str]]:
+    if payload.appointment_id is None:
+        raise ValueError("Acquisitions analysis requires an appointment.")
+    appointment = db.scalar(
+        select(Appointment).where(
+            Appointment.organization_id == principal.organization_id,
+            Appointment.id == payload.appointment_id,
+        )
+    )
+    if appointment is None:
+        raise ValueError("Appointment not found.")
+    can_manage = PermissionKeys.MANAGE_ACQUISITION_OPERATIONS in principal.permission_keys
+    if not can_manage and appointment.owner_user_id != principal.user_id:
+        raise ValueError("The appointment is not assigned to this closer.")
+    if payload.lead_id is not None and payload.lead_id != appointment.lead_id:
+        raise ValueError("The appointment and lead do not match.")
+
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == appointment.lead_id,
+        )
+    )
+    brief = db.scalar(
+        select(FieldMeetingBrief)
+        .where(
+            FieldMeetingBrief.organization_id == principal.organization_id,
+            FieldMeetingBrief.appointment_id == appointment.id,
+            FieldMeetingBrief.status == "current",
+        )
+        .order_by(FieldMeetingBrief.version_number.desc())
+    )
+    if brief is None:
+        raise ValueError("Generate the current deterministic meeting brief first.")
+    qualification = db.scalar(
+        select(LeadQualificationSession)
+        .where(
+            LeadQualificationSession.organization_id == principal.organization_id,
+            LeadQualificationSession.lead_id == appointment.lead_id,
+        )
+        .order_by(LeadQualificationSession.completed_at.desc())
+    )
+    underwriting = db.scalar(
+        select(UnderwritingVersion)
+        .where(
+            UnderwritingVersion.organization_id == principal.organization_id,
+            UnderwritingVersion.lead_id == appointment.lead_id,
+        )
+        .order_by(UnderwritingVersion.version_number.desc())
+    )
+    market_analysis = db.scalar(
+        select(UnderwritingMarketAnalysis)
+        .where(
+            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+            UnderwritingMarketAnalysis.lead_id == appointment.lead_id,
+        )
+        .order_by(UnderwritingMarketAnalysis.created_at.desc())
+    )
+    plan = db.scalar(
+        select(OfferNegotiationPlan)
+        .where(
+            OfferNegotiationPlan.organization_id == principal.organization_id,
+            OfferNegotiationPlan.lead_id == appointment.lead_id,
+        )
+        .order_by(OfferNegotiationPlan.created_at.desc())
+    )
+    approval = (
+        db.scalar(
+            select(ApprovalRequest).where(
+                ApprovalRequest.organization_id == principal.organization_id,
+                ApprovalRequest.id == plan.approval_request_id,
+            )
+        )
+        if plan and plan.approval_request_id
+        else None
+    )
+    plan_is_approved = bool(
+        plan and plan.status == "approved" and approval and approval.status == "approved"
+    )
+    inspection = db.scalar(
+        select(FieldInspection).where(
+            FieldInspection.organization_id == principal.organization_id,
+            FieldInspection.appointment_id == appointment.id,
+        )
+    )
+    photo_count = (
+        int(
+            db.scalar(
+                select(func.count(FieldInspectionPhoto.id)).where(
+                    FieldInspectionPhoto.organization_id == principal.organization_id,
+                    FieldInspectionPhoto.inspection_id == inspection.id,
+                )
+            )
+            or 0
+        )
+        if inspection
+        else 0
+    )
+    negotiation = db.scalar(
+        select(FieldNegotiationSession).where(
+            FieldNegotiationSession.organization_id == principal.organization_id,
+            FieldNegotiationSession.appointment_id == appointment.id,
+        )
+    )
+    if capability_key == "negotiation.coach" and (
+        negotiation is None or negotiation.outcome == "pending"
+    ):
+        raise ValueError("Record the human meeting outcome before generating follow-up coaching.")
+    communications = list(
+        db.scalars(
+            select(CommunicationRecord)
+            .where(
+                CommunicationRecord.organization_id == principal.organization_id,
+                CommunicationRecord.lead_id == appointment.lead_id,
+            )
+            .order_by(CommunicationRecord.occurred_at.desc())
+            .limit(12)
+        ).all()
+    )
+    calls = list(
+        db.scalars(
+            select(CallRecord)
+            .where(
+                CallRecord.organization_id == principal.organization_id,
+                CallRecord.lead_id == appointment.lead_id,
+            )
+            .order_by(CallRecord.started_at.desc())
+            .limit(5)
+        ).all()
+    )
+    approved_call_evidence: list[dict[str, Any]] = []
+    for call in calls:
+        recording = db.scalar(
+            select(CallRecording)
+            .where(
+                CallRecording.organization_id == principal.organization_id,
+                CallRecording.call_record_id == call.id,
+            )
+            .order_by(CallRecording.created_at.desc())
+        )
+        transcript = (
+            db.scalar(
+                select(CallTranscript)
+                .where(
+                    CallTranscript.organization_id == principal.organization_id,
+                    CallTranscript.recording_id == recording.id,
+                    CallTranscript.approved_at.is_not(None),
+                )
+                .order_by(CallTranscript.approved_at.desc())
+            )
+            if recording
+            else None
+        )
+        approved_call_evidence.append(
+            {
+                "direction": call.direction,
+                "status": call.status,
+                "started_at": call.started_at,
+                "duration_seconds": call.duration_seconds,
+                "disposition": call.disposition,
+                "approved_structured_notes": (
+                    (transcript.transcript_metadata or {}).get("structured_notes")
+                    if transcript
+                    else None
+                ),
+            }
+        )
+    tasks = list(
+        db.scalars(
+            select(Task)
+            .where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == appointment.lead_id,
+                Task.status.in_(("open", "pending", "in_progress")),
+            )
+            .order_by(Task.due_at.asc())
+            .limit(12)
+        ).all()
+    )
+
+    authority: dict[str, Any]
+    if plan_is_approved and plan:
+        authority = {
+            "status": "approved",
+            "opening_offer_cents": plan.opening_offer_cents,
+            "target_contract_cents": plan.target_contract_cents,
+            "stretch_contract_cents": plan.stretch_contract_cents,
+            "seller_ceiling_cents": plan.seller_ceiling_cents,
+            "rationale": plan.rationale,
+        }
+    else:
+        authority = {
+            "status": "not_approved",
+            "instruction": "Do not recommend or present a final price.",
+        }
+
+    return (
+        {
+            "appointment": {
+                "id": str(appointment.id),
+                "type": appointment.appointment_type,
+                "status": appointment.status,
+                "scheduled_start_at": appointment.scheduled_start_at,
+                "scheduled_end_at": appointment.scheduled_end_at,
+                "location_type": appointment.location_type,
+                "notes": appointment.notes,
+            },
+            "meeting_brief": {
+                "id": str(brief.id),
+                "version_number": brief.version_number,
+                "facts": brief.brief_data,
+            },
+            "lead_facts": {
+                "stage": lead.stage_key if lead else None,
+                "motivation": lead.motivation if lead else None,
+                "desired_timeline": lead.desired_timeline if lead else None,
+                "property_condition": lead.property_condition if lead else None,
+                "occupancy_status": lead.occupancy_status if lead else None,
+                "asking_price": lead.asking_price if lead else None,
+                "mortgage_balance": lead.mortgage_balance if lead else None,
+            },
+            "qualification": {
+                "answers": qualification.answers if qualification else {},
+                "missing_required_keys": (
+                    qualification.missing_required_keys if qualification else []
+                ),
+                "quality_score_basis_points": (
+                    qualification.quality_score_basis_points if qualification else None
+                ),
+            },
+            "underwriting": {
+                "version": underwriting.version_number if underwriting else None,
+                "status": underwriting.status if underwriting else None,
+                "arv_low_cents": underwriting.arv_low_cents if underwriting else None,
+                "arv_high_cents": underwriting.arv_high_cents if underwriting else None,
+                "repair_low_cents": underwriting.repair_low_cents if underwriting else None,
+                "repair_high_cents": underwriting.repair_high_cents if underwriting else None,
+                "recommended_offer_cents": (
+                    underwriting.recommended_offer_cents if underwriting else None
+                ),
+                "market_analysis": {
+                    "confidence_score": (
+                        market_analysis.confidence_score if market_analysis else None
+                    ),
+                    "selected_comp_count": (
+                        market_analysis.selected_comp_count if market_analysis else 0
+                    ),
+                    "rejected_comp_count": (
+                        market_analysis.rejected_comp_count if market_analysis else 0
+                    ),
+                    "selected_comps": (
+                        market_analysis.selected_comps[:12] if market_analysis else []
+                    ),
+                },
+            },
+            "offer_authority": authority,
+            "recent_communications": [
+                {
+                    "direction": item.direction,
+                    "channel": item.channel,
+                    "status": item.status,
+                    "subject": item.subject,
+                    "body": item.body[:800],
+                    "occurred_at": item.occurred_at,
+                }
+                for item in communications
+            ],
+            "approved_call_evidence": approved_call_evidence,
+            "open_tasks": [
+                {
+                    "title": item.title,
+                    "task_type": item.task_type,
+                    "priority": item.priority,
+                    "due_at": item.due_at,
+                }
+                for item in tasks
+            ],
+            "inspection": (
+                {
+                    "status": inspection.status,
+                    "overall_condition": inspection.overall_condition,
+                    "occupancy_observed": inspection.occupancy_observed,
+                    "utilities_status": inspection.utilities_status,
+                    "title_concerns": inspection.title_concerns,
+                    "safety_concerns": inspection.safety_concerns,
+                    "room_observations": inspection.room_observations,
+                    "repair_items": inspection.repair_items,
+                    "inspector_notes": inspection.inspector_notes,
+                    "photo_count": photo_count,
+                }
+                if inspection
+                else None
+            ),
+            "recorded_meeting_outcome": (
+                {
+                    "decision_makers_confirmed": negotiation.decision_makers_confirmed,
+                    "seller_asking_price_cents": negotiation.seller_asking_price_cents,
+                    "offer_presented_cents": negotiation.offer_presented_cents,
+                    "seller_counter_cents": negotiation.seller_counter_cents,
+                    "agreed_price_cents": negotiation.agreed_price_cents,
+                    "approved_ceiling_cents": negotiation.approved_ceiling_cents,
+                    "objections": negotiation.objections,
+                    "commitments": negotiation.commitments,
+                    "outcome": negotiation.outcome,
+                    "notes": negotiation.notes,
+                    "next_follow_up_at": negotiation.next_follow_up_at,
+                }
+                if negotiation
+                else None
+            ),
+        },
+        [
+            "appointment",
+            "meeting_brief",
+            "lead_facts",
+            "qualification",
+            "underwriting",
+            "offer_authority.approved_only",
+            "recent_communications.redacted",
+            "approved_call_evidence.no_raw_audio",
+            "open_tasks",
+            "inspection.no_image_bytes",
+            "recorded_meeting_outcome",
+        ],
+    )
 
 
 def _prospecting_context(
@@ -1353,6 +1793,7 @@ def _new_runtime_run(
             "external_actions": "blocked",
             "requires_human_review": True,
             "trace_redacted": True,
+            "appointment_id": str(payload.appointment_id) if payload.appointment_id else None,
         },
     )
 

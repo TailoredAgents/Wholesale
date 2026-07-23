@@ -9,6 +9,10 @@ from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.field_operations import (
+    AcquisitionsCopilotAnalyzeRead,
+    AcquisitionsCopilotAnalyzeRequest,
+    AcquisitionsCopilotReviewRead,
+    AcquisitionsCopilotReviewRequest,
     AppointmentDispatchCreate,
     AppointmentDispatchRead,
     CloserAvailabilityBlockCreate,
@@ -27,6 +31,10 @@ from app.schemas.field_operations import (
     FieldNegotiationUpdate,
     FieldOperationsOverview,
     FieldUnderwritingTransferRead,
+)
+from app.services.acquisitions_copilot import (
+    analyze_appointment,
+    review_recommendation,
 )
 from app.services.field_operations import (
     add_availability_block,
@@ -113,6 +121,46 @@ def create_meeting_brief(
         ) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Appointment not found.")
+    return result
+
+
+@router.post("/appointments/{appointment_id}/copilot/analyze")
+def create_acquisitions_copilot_draft(
+    appointment_id: UUID,
+    payload: AcquisitionsCopilotAnalyzeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> AcquisitionsCopilotAnalyzeRead:
+    try:
+        result = analyze_appointment(db, principal, appointment_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    return result
+
+
+@router.post("/copilot/recommendations/{recommendation_id}/review")
+def review_acquisitions_copilot_draft(
+    recommendation_id: UUID,
+    payload: AcquisitionsCopilotReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> AcquisitionsCopilotReviewRead:
+    try:
+        result = review_recommendation(db, principal, recommendation_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found.")
     return result
 
 

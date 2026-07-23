@@ -33,6 +33,9 @@ Also run:
 - Prospecting Copilot eligibility-first priority, assignment scope, idempotent draft generation,
   immutable review, zero queue mutation, transcript and disclosure gates, nullable quality scores,
   compliance escalation, coaching approval, and human-disposition preservation.
+- Acquisitions Copilot appointment scope, deterministic readiness, approved-authority exposure,
+  strict appointment and follow-up contracts, idempotent drafts, immutable correction review,
+  recorded-outcome gates, and zero lead, task, communication, underwriting, or offer mutation.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.

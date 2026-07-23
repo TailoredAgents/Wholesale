@@ -179,6 +179,13 @@ AI may build meeting briefs, organize walkthrough evidence, produce comp and rep
 identify uncertainty, prepare negotiation options, and remind the closer of approved authority. It
 cannot present or change a binding offer.
 
+Phase AI6 embeds this assistance in the existing seller-meeting workspace. Appointment guidance
+requires the current deterministic brief. Follow-up guidance requires a human-recorded outcome.
+Only an approved offer plan is exposed as authority; otherwise the runtime instructs the model not
+to recommend or present a final price. Every output remains an appointment-linked draft until a
+staff member accepts, corrects, or rejects it, and review never applies CRM or seller-facing
+actions.
+
 ### Transaction Coordination
 
 AI may classify documents, extract dates and parties, compare the file against a checklist, draft

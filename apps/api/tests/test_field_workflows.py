@@ -1,14 +1,19 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    AcquisitionsCopilotRecommendation,
+    AcquisitionsCopilotReview,
     Appointment,
     ApprovalRequest,
+    CommunicationRecord,
     Contact,
     Lead,
     OfferConcession,
@@ -18,6 +23,7 @@ from app.models.foundation import (
     RepairEstimate,
     Role,
     RoleAssignment,
+    Task,
     UnderwritingVersion,
     User,
 )
@@ -490,3 +496,243 @@ def test_prospecting_caller_cannot_access_field_operations(
         headers={"X-Dev-User-Email": caller.email},
     )
     assert response.status_code == 403
+
+
+def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    _, lead, appointment, _ = field_appointment(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    assert client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/brief",
+        headers=headers,
+    ).status_code == 200
+    assert client.post(
+        "/api/v1/ai/orchestrator/portfolio/install", headers=headers
+    ).status_code == 201
+    assert client.post(
+        "/api/v1/ai/copilots/install", headers=headers
+    ).status_code == 201
+    assert client.post(
+        "/api/v1/ai/copilots/foundation/decision",
+        headers=headers,
+        json={"decision": "approve", "notes": "Approved for acquisitions pilot test."},
+    ).status_code == 200
+    assert client.post(
+        "/api/v1/ai/runtime/install", headers=headers
+    ).status_code == 201
+
+    workspace = client.get(
+        f"/api/v1/field-operations/appointments/{appointment.id}/workspace",
+        headers=headers,
+    )
+    assert workspace.status_code == 200, workspace.text
+    assert workspace.json()["copilot"]["pilot_mode"] == "draft_only"
+    assert workspace.json()["copilot"]["approved_ceiling_cents"] == 18_000_000
+    assert workspace.json()["copilot"]["external_actions_blocked"] is True
+
+    blocked = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/copilot/analyze",
+        headers=headers,
+        json={
+            "recommendation_type": "preparation",
+            "idempotency_key": "acquisitions:blocked",
+        },
+    )
+    assert blocked.status_code == 200, blocked.text
+    assert blocked.json()["run_status"] == "blocked"
+    assert blocked.json()["recommendation"] is None
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    get_settings.cache_clear()
+
+    preparation_output = {
+        "executive_brief": "Inherited vacant property with an approved seller ceiling.",
+        "seller_goals": ["Close within 30 days"],
+        "meeting_objectives": ["Confirm condition", "Understand seller priorities"],
+        "unresolved_questions": ["Confirm title status"],
+        "walkthrough_focus": ["Kitchen", "Roof"],
+        "underwriting_explanation": ["Use the reviewed ARV range and repair evidence."],
+        "comp_review_questions": ["Are the selected sales similarly renovated?"],
+        "repair_evidence_gaps": ["Verify HVAC age"],
+        "negotiation_questions": ["What matters most besides price?"],
+        "objection_guidance": [
+            {
+                "objection": "Price",
+                "response_guidance": "Explain the reviewed repair and resale evidence.",
+                "evidence": ["Approved underwriting version"],
+            }
+        ],
+        "authority_reminders": ["Never exceed the approved seller ceiling."],
+        "risks": ["Title status is unconfirmed."],
+        "evidence": ["Meeting brief v1", "Approved offer authority"],
+        "confidence": 86,
+    }
+    follow_up_output = {
+        "meeting_summary": "Seller accepted the documented opening offer.",
+        "seller_position": ["Values a fast closing"],
+        "confirmed_facts": ["Property is vacant"],
+        "unresolved_items": ["Collect title information"],
+        "objection_review": [],
+        "authority_status": "Agreement remains within approved authority.",
+        "recommended_internal_actions": ["Begin transaction intake"],
+        "seller_follow_up_draft": "Thank you for meeting with Stonegate.",
+        "missing_documentation": ["Title information"],
+        "risks": [],
+        "evidence": ["Recorded accepted outcome"],
+        "confidence": 91,
+    }
+
+    class FakeOpenAIResponsesClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def create_structured_response(
+            self, **kwargs: object
+        ) -> tuple[dict[str, object], dict[str, int]]:
+            schema = kwargs["json_schema"]
+            assert isinstance(schema, dict)
+            output = (
+                preparation_output
+                if "executive_brief" in schema["properties"]
+                else follow_up_output
+            )
+            return output, {
+                "input_tokens": 160,
+                "output_tokens": 120,
+                "total_tokens": 280,
+            }
+
+    monkeypatch.setattr(
+        "app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient
+    )
+    assert client.patch(
+        "/api/v1/ai/runtime/policy",
+        headers=headers,
+        json={"provider_status": "enabled"},
+    ).status_code == 200
+    for capability in ("appointment.brief", "negotiation.coach"):
+        assert client.patch(
+            f"/api/v1/ai/runtime/capabilities/{capability}",
+            headers=headers,
+            json={"status": "enabled", "model_route": "default"},
+        ).status_code == 200
+
+    task_count = int(db_session.scalar(select(func.count()).select_from(Task)) or 0)
+    communication_count = int(
+        db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0
+    )
+    lead_snapshot = {
+        "stage_key": lead.stage_key,
+        "asking_price": lead.asking_price,
+        "motivation": lead.motivation,
+    }
+    request = {
+        "recommendation_type": "preparation",
+        "idempotency_key": "acquisitions:preparation:1",
+    }
+    first = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/copilot/analyze",
+        headers=headers,
+        json=request,
+    )
+    second = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/copilot/analyze",
+        headers=headers,
+        json=request,
+    )
+    assert first.status_code == 200, first.text
+    assert second.status_code == 200, second.text
+    recommendation = first.json()["recommendation"]
+    assert recommendation["status"] == "draft"
+    assert second.json()["recommendation"]["id"] == recommendation["id"]
+    assert recommendation["output_payload"]["confidence"] == 86
+
+    corrected = {**preparation_output, "executive_brief": "Human-corrected meeting brief."}
+    reviewed = client.post(
+        f"/api/v1/field-operations/copilot/recommendations/{recommendation['id']}/review",
+        headers=headers,
+        json={
+            "decision": "edited",
+            "final_output": corrected,
+            "estimated_time_saved_seconds": 300,
+        },
+    )
+    assert reviewed.status_code == 200, reviewed.text
+    assert reviewed.json()["final_output"]["executive_brief"].startswith("Human-corrected")
+    db_session.expire_all()
+    stored_lead = db_session.get(Lead, lead.id)
+    assert stored_lead is not None
+    assert stored_lead.stage_key == lead_snapshot["stage_key"]
+    assert stored_lead.asking_price == lead_snapshot["asking_price"]
+    assert stored_lead.motivation == lead_snapshot["motivation"]
+
+    outcome = client.put(
+        f"/api/v1/field-operations/appointments/{appointment.id}/negotiation",
+        headers=headers,
+        json={
+            "decision_makers_confirmed": True,
+            "decision_makers": ["Jordan Seller"],
+            "offer_presented_cents": 16_000_000,
+            "agreed_price_cents": 16_000_000,
+            "outcome": "accepted",
+        },
+    )
+    assert outcome.status_code == 200, outcome.text
+    db_session.expire_all()
+    stored_lead = db_session.get(Lead, lead.id)
+    assert stored_lead is not None
+    post_outcome_snapshot = {
+        "stage_key": stored_lead.stage_key,
+        "asking_price": stored_lead.asking_price,
+        "motivation": stored_lead.motivation,
+    }
+    follow_up = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/copilot/analyze",
+        headers=headers,
+        json={
+            "recommendation_type": "follow_up",
+            "idempotency_key": "acquisitions:follow-up:1",
+        },
+    )
+    assert follow_up.status_code == 200, follow_up.text
+    assert follow_up.json()["recommendation"]["output_payload"]["confidence"] == 91
+
+    db_session.expire_all()
+    stored_lead = db_session.get(Lead, lead.id)
+    assert stored_lead is not None
+    assert stored_lead.stage_key == post_outcome_snapshot["stage_key"]
+    assert stored_lead.asking_price == post_outcome_snapshot["asking_price"]
+    assert stored_lead.motivation == post_outcome_snapshot["motivation"]
+    assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == task_count
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0)
+        == communication_count
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count()).select_from(AcquisitionsCopilotRecommendation)
+            )
+            or 0
+        )
+        == 2
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count()).select_from(AcquisitionsCopilotReview)
+            )
+            or 0
+        )
+        == 1
+    )

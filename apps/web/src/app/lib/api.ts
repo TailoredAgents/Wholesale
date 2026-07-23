@@ -1043,6 +1043,41 @@ export type FieldNegotiation = {
   updated_at: string;
 };
 
+export type AcquisitionsCopilotRecommendation = {
+  id: string;
+  appointment_id: string;
+  lead_id: string;
+  recommendation_type: "preparation" | "follow_up";
+  ai_run_log_id: string | null;
+  status: "draft" | "accepted" | "edited" | "rejected";
+  output_payload: Record<string, unknown>;
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
+export type AcquisitionsCopilotOverview = {
+  pilot_mode: string;
+  runtime_status: string;
+  preparation_capability_status: string;
+  follow_up_capability_status: string;
+  external_actions_blocked: boolean;
+  readiness_score: number;
+  readiness_band: string;
+  readiness_gaps: string[];
+  evidence_available: string[];
+  authority_status: string;
+  approved_ceiling_cents: number | null;
+  recommendations: AcquisitionsCopilotRecommendation[];
+  metrics: {
+    generated: number;
+    reviewed: number;
+    accepted_or_corrected_rate_basis_points: number;
+    correction_rate_basis_points: number;
+    estimated_time_saved_minutes: number;
+  };
+};
+
 export type FieldAppointmentWorkspace = {
   appointment: FieldCalendarAppointment;
   brief: FieldMeetingBrief | null;
@@ -1057,6 +1092,7 @@ export type FieldAppointmentWorkspace = {
     created_underwriting_version_number: number;
     created_at: string;
   } | null;
+  copilot: AcquisitionsCopilotOverview;
   can_edit: boolean;
   can_review_underwriting: boolean;
 };

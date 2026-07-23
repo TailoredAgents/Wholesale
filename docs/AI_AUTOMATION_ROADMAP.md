@@ -75,6 +75,9 @@ Delivered:
   evidence, human correction, immutable reviews, and pilot metrics.
 - AI5 Prospecting Copilot workspace with eligibility-first priority, governed pre-call briefs,
   transcript-gated call coaching, human review, compliance escalation, and pilot metrics.
+- AI6 Acquisitions Copilot embedded in Field Operations with deterministic readiness, approved
+  authority controls, governed appointment and follow-up drafts, human correction, and pilot
+  metrics.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -271,6 +274,10 @@ Exit criteria:
 - Handoff quality improves without increasing complaints, unsupported facts, or correction burden.
 
 ## Phase AI6: Acquisitions Copilot
+
+Implementation status: **complete in code. Production model replay, activation, and the measured
+draft-only pilot remain operator checkpoints.** See
+`PHASE_AI6_ACQUISITIONS_COPILOT.md`.
 
 Goal: Prepare the closer for seller conversations, appointments, underwriting review, and
 negotiation while keeping price authority human.
@@ -491,11 +498,11 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Begin AI6 Acquisitions Copilot inside the existing acquisitions, field operations, and underwriting
-workflows. Build appointment preparation, evidence and repair gaps, valuation explanation,
-negotiation preparation, and reviewed post-appointment drafts without granting price or offer
+Begin AI7 Transaction Copilot and Document Intelligence inside the existing transaction workspace.
+Start with deterministic document/checklist readiness, missing-item detection, deadline risk, and
+reviewed internal drafts. Do not add contract interpretation, signature, legal, or external-send
 authority.
 
-In parallel, complete the AI3 production checkpoints and activate the separately measured AI4 and
-AI5 draft-only pilots. Keep AI5 recording-dependent coaching disabled until Twilio disclosure,
-consent, and retention controls are operationally approved.
+In parallel, complete the AI3 production checkpoints and activate the separately measured AI4,
+AI5, and AI6 draft-only pilots. Keep recording-dependent coaching disabled until Twilio
+disclosure, consent, and retention controls are operationally approved.

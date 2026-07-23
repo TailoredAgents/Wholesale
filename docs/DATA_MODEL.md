@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0045_prospecting_copilot` is the
+The schema is managed through Alembic migrations. Migration `0046_acquisitions_copilot` is the
 current head.
 
 ## Identity And Access
@@ -36,6 +36,8 @@ current head.
 - `closer_availability_blocks`
 - `appointment_dispatch_records`
 - `field_meeting_briefs`
+- `acquisitions_copilot_recommendations`
+- `acquisitions_copilot_reviews`
 - `field_inspections`
 - `field_inspection_photos`
 - `field_negotiation_sessions`
