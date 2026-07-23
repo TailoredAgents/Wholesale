@@ -30,14 +30,15 @@ be duplicated or renamed casually.
 
 Current public URLs:
 
+- Branded website and OS: `https://www.stonegatehomebuyer.com`
 - Website: `https://oakwell-web.onrender.com`
 - Cash-offer form: `https://oakwell-web.onrender.com/get-a-cash-offer`
 - Privacy policy: `https://oakwell-web.onrender.com/privacy-policy`
 - Terms: `https://oakwell-web.onrender.com/terms`
 - API health: `https://oakwell-api.onrender.com/health`
 
-A branded custom domain is still pending. The Render URLs remain valid until the domain cutover is
-complete and should continue to resolve afterward.
+The branded web domain is active. The Render URLs remain valid as deployment fallbacks. Both web
+origins must remain in `API_CORS_ORIGINS` and `CLERK_AUTHORIZED_PARTIES`.
 
 ## Roadmap Alignment
 

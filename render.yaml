@@ -43,7 +43,7 @@ services:
           name: oakwell-key-value
           property: connectionString
       - key: API_CORS_ORIGINS
-        sync: false
+        value: https://www.stonegatehomebuyer.com,https://stonegatehomebuyer.com,https://oakwell-web.onrender.com
       - key: DEFAULT_ORGANIZATION_NAME
         value: Stonegate Home Buyers
       - key: BOOTSTRAP_ADMIN_EMAIL
@@ -191,7 +191,7 @@ services:
       - key: CLERK_AUDIENCE
         sync: false
       - key: CLERK_AUTHORIZED_PARTIES
-        sync: false
+        value: https://www.stonegatehomebuyer.com,https://stonegatehomebuyer.com,https://oakwell-web.onrender.com
       - key: CLERK_SECRET_KEY
         sync: false
 

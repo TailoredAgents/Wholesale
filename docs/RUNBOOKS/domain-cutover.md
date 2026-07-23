@@ -2,7 +2,8 @@
 
 Last updated: July 20, 2026
 
-Current status: pending domain selection.
+Current status: branded web domain active at `https://www.stonegatehomebuyer.com`; provider
+callback and email-domain work remains.
 
 ## Recommended Structure
 
@@ -51,6 +52,14 @@ reliable. Do not configure DNS until Stonegate owns and controls the domain acco
 9. Add the exact new OAuth redirect URI in Google Cloud before enabling email.
 10. Update `TWILIO_WEBHOOK_BASE_URL` only if the public API host changes.
 11. Update public canonical links and policy URLs after the domain is serving successfully.
+
+Current trusted web origins:
+
+```text
+https://www.stonegatehomebuyer.com
+https://stonegatehomebuyer.com
+https://oakwell-web.onrender.com
+```
 
 ## Acceptance
 

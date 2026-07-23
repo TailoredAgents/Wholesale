@@ -30,6 +30,7 @@ name.
 
 ## Current URLs
 
+- Branded web and OS: `https://www.stonegatehomebuyer.com`
 - Web: `https://oakwell-web.onrender.com`
 - API: `https://oakwell-api.onrender.com`
 - Health: `https://oakwell-api.onrender.com/health`
@@ -37,13 +38,13 @@ name.
 
 ## Pending Deployment Work
 
-- Connect Stonegate's custom domain.
-- Update `API_CORS_ORIGINS`.
-- Update `CLERK_AUTHORIZED_PARTIES`.
 - Update email web origin and OAuth redirect if API/web custom subdomains are used.
 - Update Twilio callback base URL only if the API host changes.
 - Verify worker health after enabling Gmail sync, transcription, or retention jobs.
 - Run the production acceptance checks in `TESTING.md`.
+
+The Blueprint manages the public, apex, and Render fallback origins for `API_CORS_ORIGINS` and
+`CLERK_AUTHORIZED_PARTIES`. Do not replace that list with only one domain.
 
 ## Safety
 
