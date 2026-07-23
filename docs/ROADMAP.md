@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
 from reliability through the integrated AI agent system.
@@ -11,7 +11,7 @@ performance, and conversion measurement without replacing the business-workflow 
 
 `CURRENT_STATE.md` is the source of truth for what exists today. `OPERATING_MODEL.md` defines the
 business roles, handoffs, compensation policy, AI portfolio, and operating standards that these
-phases implement.
+phases implement. `USER_MANUAL.md` explains how staff use the completed workflows.
 
 Phase 10 now has a dedicated implementation sequence in `AI_AUTOMATION_ROADMAP.md`.
 `AI_AGENTS.md` is the technical source of truth for agent architecture and authority.
@@ -25,9 +25,10 @@ Phase 10 now has a dedicated implementation sequence in `AI_AUTOMATION_ROADMAP.m
 
 ## Parallel Integration Track
 
-Status: Waiting on external A2P review and provider configuration.
+Status: The branded web domain is live. Dedicated A2P, Voice, and Google Workspace provider
+acceptance remains.
 
-Twilio, Google Workspace email, and custom-domain setup run in parallel with the numbered build
+Twilio and Google Workspace email setup run in parallel with the numbered build
 phases. They do not change the business-workflow order and should not leave internal development
 idle.
 
@@ -37,7 +38,7 @@ email is implemented. Production acceptance remains pending for:
 - Approval of Stonegate's dedicated A2P Campaign and attachment of its dedicated SMS number.
 - Final Twilio Messaging Service, sender, Voice API key, and TwiML App configuration.
 - Recording disclosure and retention-policy approval before recording is enabled.
-- Custom-domain selection and Render, Clerk, CORS, Google, and provider URL updates.
+- Branded and Render fallback origins must remain aligned as provider callback URLs are activated.
 - Google Workspace domain, operational mailboxes, OAuth configuration, and mailbox connections.
 
 ## Phase Status Snapshot

@@ -1,6 +1,6 @@
 # Workflows
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 ## Seller Intake
 
@@ -122,3 +122,7 @@ Last updated: July 22, 2026
 5. Human approves, edits, or rejects.
 6. Tool executes idempotently within the approved scope.
 7. Run, evidence, tool arguments, result, cost, and audit are retained.
+
+External actions do not execute in the current release. AI10 evaluates a separate action contract,
+records readiness blockers and a zero-delivery simulation, and retains the result for owner review.
+Provider delivery requires a future, action-specific activation gate.

@@ -1,6 +1,6 @@
 # Stonegate Experience Upgrade Roadmap
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 Status: Phases UX1 through UX10 are implementation complete. Production baseline collection and
 business-content acceptance remain.
@@ -355,6 +355,9 @@ Implementation notes:
 - AI Control surfaces portfolio coverage, evaluations, trace review, approvals, usage cost,
   promotion state, and rollback controls. External execution remains visibly blocked and human
   approval remains required for promotion.
+- AI10 adds an Automation view for owner-reviewed action contracts, readiness blockers, canary
+  bounds, zero-delivery simulations, policy pause/resume, and the global emergency stop without
+  activating external delivery.
 - All four routes were verified with populated data at 1440 and 390 pixel widths with no runtime
   errors or page-level horizontal overflow. The complete API suite, frontend lint, TypeScript, and
   production build pass.

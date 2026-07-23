@@ -38,12 +38,12 @@ Tradeoffs:
 
 - Clerk introduces a third-party auth dependency.
 - User/role mapping must be designed carefully so Clerk identity does not replace internal RBAC.
-- Public-facing copy should use Stonegate Home Buyers; domains remain temporary until selected.
+- Public-facing copy uses Stonegate Home Buyers; Render domains remain deployment fallbacks.
 
 ## Follow-Up
 
 - Completed: Clerk project and Render variables.
 - Completed: first Clerk user mapped to the local owner.
 - Completed: development header auth rejected in production.
+- Completed: branded web domain added to Clerk origins and authorized parties.
 - Remaining: verify and enforce MFA for every privileged user.
-- Remaining: update Clerk origins and redirects during the custom-domain cutover.

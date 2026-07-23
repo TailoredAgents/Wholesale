@@ -61,7 +61,7 @@ Required modules:
 
 | Area | Foundation | Production status |
 | --- | --- | --- |
-| Public conversion | Built and live | A2P wording deployed; custom domain pending |
+| Public conversion | Built and live | Branded domain and A2P wording deployed; production field baselines remain |
 | Clerk and RBAC | Built and live | MFA and access-revocation drill remain |
 | Acquisition CRM | Operational | Team administration, internal calendar, merge, notifications, role desks, and field workflows are built; live operating validation continues |
 | Shared inbox | Built | Final SMS, Voice, and email provider activation pending |

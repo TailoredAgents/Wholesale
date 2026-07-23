@@ -14,6 +14,8 @@ surfaces:
 PostgreSQL is the operational source of truth. Clerk provides authentication, but Stonegate's
 local roles and permissions remain authoritative for access control.
 
+Operational instructions for staff are maintained in `USER_MANUAL.md`.
+
 ## Deployment
 
 The application is deployed from `TailoredAgents/Wholesale` on GitHub through a Render Blueprint.
@@ -58,8 +60,9 @@ sequence is:
 | 9. Buyers, Dispositions, and Finance | Complete for the controlled provider-neutral workflow |
 | 10. Integrated AI Agent System | Partial: governed control plane built; model pilots remain |
 
-The completed underwriting work remains valid. It does not imply that field acquisitions are
-complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
+The core manual operating workflow from seller intake through reconciliation is implemented.
+Provider-backed delivery, production operator checks, and measured AI pilots remain separate
+release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 
 ## Delivered Capabilities
 
@@ -312,7 +315,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Twilio Voice | Code complete; activation paused | Finish API key, TwiML App, Render variables, outbound test, and inbound webhook on the Voice number |
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
 | Google Workspace email | Code complete; provider configuration pending | Configure domain/mailboxes, Google OAuth, Render secrets, and per-user mailbox connections |
-| Custom domain | Not configured | Choose the domain, connect it to Render, and update Clerk, CORS, Google, and provider URLs |
+| Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 
@@ -323,7 +326,7 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 ## Known Limits
 
-- Final production messaging, Voice, email, and custom-domain acceptance tests are incomplete.
+- Final production messaging, Voice, and email acceptance tests are incomplete.
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
 - Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
   deferred until operating data demonstrates that route precision is necessary.
@@ -345,7 +348,7 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   Factual-accuracy, evidence-coverage, critical-failure, latency, and cost thresholds are enforced.
   Executive and role-owner reviews, redaction validation, and corrected-production-case versioning
   are operational. Production signatures remain an operator checkpoint.
-- AI3-AI9 are implemented in code:
+- AI3-AI10 are implemented in code:
   the governed production runtime, Lead Manager Copilot,
   Prospecting Copilot and Call Quality, and appointment-scoped Acquisitions Copilot all use the
   same control plane. AI6 provides deterministic meeting readiness, approved-authority controls,

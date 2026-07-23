@@ -1,6 +1,6 @@
 # AI Agent System
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 Stonegate uses one governed, event-driven AI system with specialized capabilities. It does not use
 fourteen independent chatbots with separate memory or authority.
@@ -232,6 +232,18 @@ Human approval always remains required for:
 - Payments, funded status, commission approval, accounting finalization, and budget changes.
 - User permissions, data export, broad deletion, suppression override, or retention override.
 - Cold AI voice, new outreach programs, or any unapproved communication policy.
+
+### AI10 External-Action Control Plane
+
+The current release defines seller acknowledgement, appointment reminder, consented seller
+follow-up, and approved buyer-campaign contracts. Each contract has a named owner, provider,
+audience, consent, template, schedule, frequency, volume, cost, evaluation, canary, pause,
+rollback, and prohibited-action policy.
+
+Owners can approve the control contract, run deterministic readiness simulations, and pause or
+resume simulations from `/os/ai`. Every attempt explicitly records that no external delivery was
+attempted. There is no activation or delivery endpoint in this release; see
+`PHASE_AI10_CONTROLLED_AUTOMATION.md`.
 
 ## Evaluation And Promotion
 

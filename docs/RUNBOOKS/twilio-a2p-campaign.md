@@ -68,12 +68,13 @@ campaign unless the campaign registration and samples are updated to disclose th
 
 ```text
 End users opt in only through the publicly accessible Stonegate Home Buyers cash-offer form at
-https://oakwell-web.onrender.com/get-a-cash-offer. They enter their own mobile number and
+https://www.stonegatehomebuyer.com/get-a-cash-offer. They enter their own mobile number and
 voluntarily check a separate, unchecked SMS consent box stating that they agree to recurring
 automated texts about their property inquiry, appointments, and cash-offer updates; message
 frequency varies; message and data rates may apply; reply STOP to opt out or HELP for help; and
 consent is not a condition of purchase. The form links directly to
-https://oakwell-web.onrender.com/terms and https://oakwell-web.onrender.com/privacy-policy.
+https://www.stonegatehomebuyer.com/terms and
+https://www.stonegatehomebuyer.com/privacy-policy.
 Stonegate stores the consent timestamp, source, wording version, IP address, and user agent.
 Stonegate does not use purchased, rented, or third-party lead consent and does not send unsolicited
 cold SMS.
@@ -81,11 +82,11 @@ cold SMS.
 
 ## Policy URLs
 
-- Privacy Policy: `https://oakwell-web.onrender.com/privacy-policy`
-- Terms and Conditions: `https://oakwell-web.onrender.com/terms`
+- Privacy Policy: `https://www.stonegatehomebuyer.com/privacy-policy`
+- Terms and Conditions: `https://www.stonegatehomebuyer.com/terms`
 
-Replace these URLs with Stonegate's branded custom domain before submitting if that domain is
-already live. Do not submit URLs that redirect to an unrelated brand or are not publicly accessible.
+The Render fallback URLs remain valid, but campaign registration should use the branded Stonegate
+URLs. Do not submit URLs that redirect to an unrelated brand or are not publicly accessible.
 
 ## Keyword Opt-In
 

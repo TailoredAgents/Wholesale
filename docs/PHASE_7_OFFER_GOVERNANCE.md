@@ -61,5 +61,5 @@ authority and separates approved authority from what staff actually present to a
   build pass.
 
 Optional ATTOM or MLS/RESO enrichment remains behind the property-data adapter until its accuracy
-benefit justifies the expense. Final PDF contact and domain branding remains tied to the later
-custom-domain decision; neither item weakens the completed governance workflow.
+benefit justifies the expense. The branded web domain is active; final PDF phone and mailbox
+details should be updated after dedicated provider contact information is accepted.

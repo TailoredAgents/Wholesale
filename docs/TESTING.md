@@ -1,6 +1,6 @@
 # Testing
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 ## Required Checks
 
@@ -50,6 +50,8 @@ Also run:
 - Offer-plan staleness, sequential concessions, manager exceptions, hard-ceiling enforcement,
   presented-price agreement matching, superseded authority, and append-only negotiation events.
 - AI tool permissions, run logs, approval behavior, and cost calculations.
+- AI10 action-contract installation, owner review, readiness and quality gates, idempotent
+  simulations, pause/resume, audit evidence, and zero external delivery.
 
 ## Provider Acceptance Tests
 
@@ -61,7 +63,7 @@ Use company-controlled accounts and numbers to test:
 - Voice browser registration, outbound, inbound, no-answer, missed-call task, and webhook signature.
 - Recording disclosure, playback permissions, transcript, review, retention, and deletion.
 - Gmail send, reply, thread, sync, signature, template, and attachment.
-- Custom-domain Clerk login, CORS, OAuth redirect, and public legal links.
+- Branded-domain Clerk login, CORS, OAuth redirect, and public legal links.
 
 ## Current Local Tooling Issue
 

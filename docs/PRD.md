@@ -1,6 +1,6 @@
 # Product Requirements
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 ## Product
 
@@ -89,13 +89,14 @@ automation.
 
 ## Current Release State
 
-The broad product foundation is implemented and deployed. Final SMS, Voice, custom-domain, and
-Google Workspace activation is pending external/provider setup. See `CURRENT_STATE.md`.
+The broad product foundation and branded web domain are implemented and deployed. Final dedicated
+SMS, Voice, and Google Workspace activation is pending external/provider setup. See
+`CURRENT_STATE.md`.
 
 ## Launch Gates
 
 - Dedicated A2P Campaign and Stonegate SMS sender approved.
-- SMS, Voice, email, domain, Clerk, and CORS acceptance tests pass.
+- SMS, Voice, email, Clerk, and CORS acceptance tests pass for every activated provider origin.
 - Recording remains disabled until disclosure policy is approved.
 - Backups, alerts, access revocation, and smoke tests are verified.
 - Underwriting is compared against real deals before it is treated as dependable offer support.
@@ -127,7 +128,6 @@ Google Workspace activation is pending external/provider setup. See `CURRENT_STA
 
 ## Open Decisions
 
-- Branded custom domain.
 - Google Workspace mailbox names.
 - Recording disclosure and state coverage.
 - Object storage provider.

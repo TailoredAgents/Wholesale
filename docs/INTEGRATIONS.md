@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 All providers are adapters. PostgreSQL remains the business source of truth.
 
@@ -8,8 +8,8 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 
 | Provider | Purpose | Code | External setup |
 | --- | --- | --- | --- |
-| Clerk | Staff authentication | Live | Verify MFA and final custom-domain origins |
-| Render | Web, API, worker, PostgreSQL, Key Value | Live | Custom domain and final production checks pending |
+| Clerk | Staff authentication | Live | Verify MFA for every privileged user and retain both branded and Render fallback origins |
+| Render | Web, API, worker, PostgreSQL, Key Value | Live | Branded web domain is active; final production operator checks remain |
 | RentCast | Property facts, valuation estimates, and sale-listing-based comps | Live | Continue validation; do not label provider estimates as appraisals or verified closed sales |
 | OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
 | Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
@@ -166,7 +166,7 @@ mailbox reputation with day-to-day seller and closing mail.
 
 ## Recommended API Sequence
 
-1. Finish dedicated Twilio SMS, Twilio Voice, recording policy, Google Workspace, and custom domain.
+1. Finish dedicated Twilio SMS, Twilio Voice, recording policy, and Google Workspace.
 2. Select error monitoring and private object storage.
 3. Complete OpenAI evaluation datasets, model routing, and the governed tool gateway.
 4. Add e-signature before transaction-document automation.

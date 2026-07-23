@@ -112,7 +112,6 @@ in local screenshots is also not part of the deployed production experience.
 
 Stonegate should supply these when they are real and approved:
 
-- Final branded domain for `NEXT_PUBLIC_SITE_URL`.
 - Legal entity and business mailing address if they should appear publicly.
 - Real team names, roles, biographies, and professional photographs.
 - Verifiable customer reviews with permission, source, date, and any required disclosure.
@@ -122,3 +121,5 @@ Stonegate should supply these when they are real and approved:
 
 These omissions are intentional. UX10 can measure the current truthful baseline before Stonegate
 adds verified proof or begins controlled conversion tests.
+
+The branded domain is active and is the production value for `NEXT_PUBLIC_SITE_URL`.

@@ -1,9 +1,12 @@
 # Phase 10 AI Control Plane
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
-`AI_AGENTS.md` now defines the complete technical architecture. The remaining implementation order
-is in `AI_AUTOMATION_ROADMAP.md`.
+Status: AI1-AI10 control planes are implemented in code. Production signoff, provider adapters,
+redacted model replay, measured pilots, and any future action-specific activation remain.
+
+`AI_AGENTS.md` defines the complete technical architecture. Production acceptance order is in
+`AI_AUTOMATION_ROADMAP.md`.
 
 ## Delivered
 
@@ -44,11 +47,9 @@ The included fixture harness proves the control flow. It does not prove model qu
 real pilot, replace fixture examples with redacted Stonegate calls, leads, appointments,
 underwriting cases, transactions, and corrections, then run model replay against that set.
 
-## Next Pilot
+## Next Acceptance Work
 
-Complete AI3 and the production AI2 signoff first, then start the Lead Manager Copilot in draft
-mode because its output is reversible and internal. The human Lead Manager remains accountable for qualification,
-communication, appointments, and handoff. Measure human acceptance, correction rate, missed risk,
-latency, cost, time saved, and business outcomes. Do not promote seller communications,
-underwriting, negotiation, contracts, dispositions, or finance based on the generic baseline
-dataset.
+Complete AI3 production monitoring and AI2 role-owner signoff, then measure each active draft-only
+copilot separately. Review AI10 control contracts and blocked readiness simulations while
+dedicated Twilio and Google Workspace setup is completed. Do not activate external delivery based
+on generic datasets or another capability's pilot.

@@ -1,6 +1,6 @@
 # Render Deployment
 
-Last updated: July 20, 2026
+Last updated: July 23, 2026
 
 ## Current Deployment
 
@@ -56,4 +56,4 @@ The Blueprint manages the public, apex, and Render fallback origins for `API_COR
 - Back up the database before destructive migrations or service consolidation.
 
 Use `RUNBOOKS/render-staging-checklist.md` for environment-variable inventory and
-`RUNBOOKS/domain-cutover.md` for the future custom-domain change.
+`RUNBOOKS/domain-cutover.md` for the completed cutover procedure and future domain changes.
