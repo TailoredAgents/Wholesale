@@ -14,12 +14,15 @@ from app.schemas.ai import (
     AiCopilotFoundationDecision,
     AiCopilotFoundationInstallRead,
     AiCopilotFoundationRead,
+    AiCorrectedEvaluationCaseCreate,
     AiDryRunCreate,
     AiEvaluationDatasetCreate,
     AiEvaluationDatasetRead,
     AiEvaluationDecision,
+    AiEvaluationReviewCreate,
     AiEvaluationRunCreate,
     AiEvaluationRunRead,
+    AiGoldenLibraryInstallRead,
     AiOrchestratorEventCreate,
     AiOrchestratorEventRead,
     AiPortfolioInstallRead,
@@ -44,7 +47,9 @@ from app.services.ai_copilots import (
     decide_copilot_foundation,
     install_copilot_foundation,
 )
+from app.services.ai_evaluation_library import install_golden_library
 from app.services.ai_orchestrator import (
+    add_corrected_case_version,
     create_dataset,
     create_dry_run,
     decide_dataset,
@@ -52,6 +57,7 @@ from app.services.ai_orchestrator import (
     register_event,
     request_promotion,
     retry_run,
+    review_dataset,
     review_trace,
     rollback_promotion,
     run_evaluation,
@@ -234,6 +240,54 @@ def decide_evaluation_dataset(
 ) -> AiEvaluationDatasetRead:
     try:
         result = decide_dataset(db, principal, dataset_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Evaluation dataset not found.")
+    return result
+
+
+@router.post("/evaluation-library/install", status_code=201)
+def install_ai2_golden_library(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiGoldenLibraryInstallRead:
+    try:
+        return install_golden_library(db, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/orchestrator/evaluation-datasets/{dataset_id}/reviews")
+def review_evaluation_dataset(
+    dataset_id: UUID,
+    payload: AiEvaluationReviewCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiEvaluationDatasetRead:
+    try:
+        result = review_dataset(db, principal, dataset_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Evaluation dataset not found.")
+    return result
+
+
+@router.post(
+    "/orchestrator/evaluation-datasets/{dataset_id}/corrected-cases",
+    status_code=201,
+)
+def create_corrected_evaluation_case_version(
+    dataset_id: UUID,
+    payload: AiCorrectedEvaluationCaseCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiEvaluationDatasetRead:
+    try:
+        result = add_corrected_case_version(db, principal, dataset_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if result is None:

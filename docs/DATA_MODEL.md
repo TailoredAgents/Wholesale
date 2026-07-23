@@ -180,6 +180,7 @@ handoff; correction and acceptance decisions preserve both the original and repl
 - `ai_orchestrator_events`
 - `ai_evaluation_datasets`
 - `ai_evaluation_cases`
+- `ai_evaluation_dataset_reviews`
 - `ai_evaluation_runs`
 - `ai_evaluation_results`
 - `ai_capability_promotions`
@@ -194,6 +195,12 @@ Role copilots are the staff-facing layer. Each copilot has one named human owner
 bounded specialist engines. Versioned capability contracts define triggers, inputs, outputs,
 permitted tools, evidence, approvals, escalation, and prohibited actions. Governance policies
 preserve field-level source precedence, overwrite behavior, redaction, retention, and audience.
+
+Evaluation datasets retain capability-specific accuracy, evidence, safety, latency, and cost
+thresholds. Cases identify operating, policy, failure, and adversarial scenarios with explicit
+redaction state, uncertainty, required evidence, and prohibited behavior. Dataset reviews preserve
+separate executive and operating-role decisions. Human-corrected production examples always create
+a new draft dataset version.
 
 ## Platform Operations
 

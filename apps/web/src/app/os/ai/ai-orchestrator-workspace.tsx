@@ -132,6 +132,21 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
     });
   }
 
+  async function installGoldenLibrary() {
+    await request("evaluation-library/install");
+  }
+
+  async function reviewDataset(datasetId: string, reviewScope: "executive" | "role_owner") {
+    await request(`orchestrator/evaluation-datasets/${datasetId}/reviews`, {
+      review_scope: reviewScope,
+      decision: "approve",
+      notes:
+        reviewScope === "executive"
+          ? "Executive review confirms authority boundaries, redaction, and promotion thresholds."
+          : "Operating-role review confirms scenarios and expected answers match Stonegate workflow.",
+    });
+  }
+
   async function runDataset(datasetId: string, agentId: string) {
     const prompt = ai.prompt_versions.find((item) => item.agent_definition_id === agentId);
     if (!prompt) {
@@ -370,38 +385,140 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
         <div className={styles.listPanel}>
           <div className={styles.listHeader}>
             <div><FlaskConical size={18} /><strong>Versioned evaluation gates</strong></div>
-            <button type="button" onClick={createBaseline} disabled={!selected || Boolean(busy)}>
-              Create baseline for selected agent
-            </button>
+            <div className={styles.rowActions}>
+              <button type="button" onClick={installGoldenLibrary} disabled={Boolean(busy)}>
+                <BookOpen size={15} /> Install AI2 golden cases
+              </button>
+              <button type="button" onClick={createBaseline} disabled={!selected || Boolean(busy)}>
+                Create manual baseline
+              </button>
+            </div>
           </div>
           {ai.orchestrator.datasets.length === 0 ? <p>No evaluation datasets yet.</p> : null}
           {ai.orchestrator.datasets.map((dataset) => {
             const latestRun = ai.orchestrator.evaluation_runs.find(
               (item) => item.dataset_id === dataset.id,
             );
+            const operatingCases = dataset.cases.filter(
+              (item) => item.case_type === "operating",
+            ).length;
+            const safetyCases = dataset.cases.length - operatingCases;
+            const approvedScopes = new Set(
+              dataset.reviews
+                .filter((review) => review.status === "approved")
+                .map((review) => review.review_scope),
+            );
+            const missingScopes = dataset.required_review_scopes.filter(
+              (scope) => !approvedScopes.has(scope),
+            );
             return (
-              <article className={styles.listRow} key={dataset.id}>
-                <div>
-                  <strong>{dataset.name}</strong>
-                  <span>{dataset.capability_key} · v{dataset.version_number}</span>
+              <article className={styles.evaluationRow} key={dataset.id}>
+                <div className={styles.listRow}>
+                  <div>
+                    <strong>{dataset.name}</strong>
+                    <span>{dataset.capability_key} · v{dataset.version_number}</span>
+                  </div>
+                  <div className={styles.rowStats}>
+                    <span>{operatingCases} operating</span>
+                    <span>{safetyCases} safety / failure</span>
+                    <span>
+                      {latestRun
+                        ? `${latestRun.pass_rate_basis_points / 100}% pass`
+                        : "Not run"}
+                    </span>
+                    <b className={latestRun?.thresholds_passed ? styles.pass : styles.neutral}>
+                      {latestRun
+                        ? latestRun.thresholds_passed
+                          ? "Passed"
+                          : "Blocked"
+                        : labelize(dataset.status)}
+                    </b>
+                  </div>
+                  <div className={styles.rowActions}>
+                    {missingScopes.includes("executive") ? (
+                      <button type="button" onClick={() => reviewDataset(dataset.id, "executive")}>
+                        Sign executive review
+                      </button>
+                    ) : null}
+                    {missingScopes.includes("role_owner") ? (
+                      <button type="button" onClick={() => reviewDataset(dataset.id, "role_owner")}>
+                        Sign role review
+                      </button>
+                    ) : null}
+                    {missingScopes.length === 0 && dataset.status !== "approved" ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          request(`orchestrator/evaluation-datasets/${dataset.id}/decision`, {
+                            decision: "approve",
+                          })
+                        }
+                      >
+                        Approve dataset
+                      </button>
+                    ) : null}
+                    {dataset.status === "approved" ? (
+                      <button
+                        type="button"
+                        onClick={() => runDataset(dataset.id, dataset.agent_definition_id)}
+                      >
+                        Run fixture evaluation
+                      </button>
+                    ) : null}
+                    {dataset.status === "approved" && latestRun?.thresholds_passed ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          request(
+                            `orchestrator/agents/${dataset.agent_definition_id}/promotions`,
+                            {
+                              evaluation_run_id: latestRun.id,
+                              to_level: "draft",
+                              reason: "Versioned AI2 evaluation thresholds passed.",
+                            },
+                          )
+                        }
+                      >
+                        Request draft promotion
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <div className={styles.rowStats}>
-                  <span>{dataset.cases.length} cases</span>
-                  <span>{latestRun ? `${latestRun.pass_rate_basis_points / 100}% pass` : "Not run"}</span>
-                  <b className={latestRun?.thresholds_passed ? styles.pass : styles.neutral}>
-                    {latestRun ? (latestRun.thresholds_passed ? "Passed" : "Blocked") : labelize(dataset.status)}
-                  </b>
-                </div>
-                <div className={styles.rowActions}>
-                  {dataset.status === "draft" ? (
-                    <button type="button" onClick={() => request(`orchestrator/evaluation-datasets/${dataset.id}/decision`, { decision: "approve" })}>Approve dataset</button>
-                  ) : (
-                    <button type="button" onClick={() => runDataset(dataset.id, dataset.agent_definition_id)}>Run fixture evaluation</button>
-                  )}
-                  {latestRun?.thresholds_passed ? (
-                    <button type="button" onClick={() => request(`orchestrator/agents/${dataset.agent_definition_id}/promotions`, { evaluation_run_id: latestRun.id, to_level: "draft", reason: "Versioned evaluation thresholds passed." })}>Request draft promotion</button>
-                  ) : null}
-                </div>
+                <details className={styles.evaluationDetails}>
+                  <summary>Standards and review evidence</summary>
+                  <div className={styles.evaluationStandards}>
+                    <div>
+                      <span>Pass rate</span>
+                      <strong>{dataset.minimum_pass_rate_basis_points / 100}%</strong>
+                    </div>
+                    <div>
+                      <span>Factual accuracy</span>
+                      <strong>{dataset.minimum_factual_accuracy_basis_points / 100}%</strong>
+                    </div>
+                    <div>
+                      <span>Evidence coverage</span>
+                      <strong>{dataset.minimum_evidence_coverage_basis_points / 100}%</strong>
+                    </div>
+                    <div>
+                      <span>Critical failures</span>
+                      <strong>Maximum {dataset.maximum_critical_failures}</strong>
+                    </div>
+                  </div>
+                  <p>{dataset.reviewer_instructions || "Manual baseline review."}</p>
+                  <div className={styles.reviewLedger}>
+                    {dataset.required_review_scopes.map((scope) => {
+                      const review = dataset.reviews.find(
+                        (item) => item.review_scope === scope,
+                      );
+                      return (
+                        <div key={scope}>
+                          <strong>{labelize(scope)}</strong>
+                          <span>{review ? labelize(review.status) : "Pending"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
               </article>
             );
           })}

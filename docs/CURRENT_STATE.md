@@ -332,6 +332,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   specialist mappings, field source and overwrite policies, an approved-knowledge registry,
   redaction and retention rules, deterministic data-quality rules, and owner approval controls are
   available in `/os/ai`. External execution remains disabled.
+- AI2 is implemented: the idempotent golden library contains 75 Lead Manager cases and 60 Call
+  Intelligence cases, including 25 policy, failure, and adversarial cases in each dataset.
+  Factual-accuracy, evidence-coverage, critical-failure, latency, and cost thresholds are enforced.
+  Executive and role-owner reviews, redaction validation, and corrected-production-case versioning
+  are operational. Production signatures remain an operator checkpoint.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the
@@ -347,6 +352,6 @@ While A2P approval is pending:
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Complete AI2 and AI3 in `AI_AUTOMATION_ROADMAP.md`, then run the first AI4 draft-only Lead
-   Manager Copilot pilot.
+6. Complete AI3 in `AI_AUTOMATION_ROADMAP.md`, approve the production AI2 datasets, then run the
+   first AI4 draft-only Lead Manager Copilot pilot.
 7. Resume the parallel integration track after A2P approval without blocking internal development.

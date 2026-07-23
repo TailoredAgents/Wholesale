@@ -46,8 +46,8 @@ underwriting cases, transactions, and corrections, then run model replay against
 
 ## Next Pilot
 
-Complete AI1 through AI3 first, then start the Lead Manager Copilot in draft mode because its output
-is reversible and internal. The human Lead Manager remains accountable for qualification,
+Complete AI3 and the production AI2 signoff first, then start the Lead Manager Copilot in draft
+mode because its output is reversible and internal. The human Lead Manager remains accountable for qualification,
 communication, appointments, and handoff. Measure human acceptance, correction rate, missed risk,
 latency, cost, time saved, and business outcomes. Do not promote seller communications,
 underwriting, negotiation, contracts, dispositions, or finance based on the generic baseline

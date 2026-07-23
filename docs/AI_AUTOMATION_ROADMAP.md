@@ -127,6 +127,8 @@ Exit criteria:
 
 ## Phase AI2: Golden Cases And Evaluation Standards
 
+Status: **Complete in code. Production executive and role-owner signoff remain in `/os/ai`.**
+
 Goal: Create the practice tests Stonegate will use to judge AI quality.
 
 Build:
@@ -469,10 +471,9 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Start AI2. Build the first redacted golden datasets for Lead Manager Copilot and Call
-Intelligence, covering ordinary, incomplete, conflicting, stale, duplicate, policy-blocked, and
-adversarial cases. Define expected structured outputs and measurable thresholds before connecting
-the production model runner.
+Start AI3. Connect the OpenAI Responses API behind the governed orchestrator, enforce structured
+outputs and strict server-side tools, retrieve only approved knowledge versions, redact traces,
+and replay the approved AI2 datasets without exposing external actions.
 
 The first production milestone is a Lead Manager Copilot that reliably organizes work, identifies
 gaps, drafts follow-up, and protects response SLAs while the human Lead Manager remains accountable

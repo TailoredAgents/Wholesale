@@ -1,6 +1,7 @@
 import json
+import re
 from datetime import UTC, datetime, time
-from typing import Any
+from typing import Any, Literal, cast
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -14,6 +15,7 @@ from app.models.foundation import (
     AiCopilotDefinition,
     AiEvaluationCase,
     AiEvaluationDataset,
+    AiEvaluationDatasetReview,
     AiEvaluationResult,
     AiEvaluationRun,
     AiOrchestratorEvent,
@@ -24,12 +26,17 @@ from app.models.foundation import (
     ApprovalRequest,
     AuditEvent,
     Lead,
+    Role,
+    RoleAssignment,
 )
 from app.schemas.ai import (
+    AiCorrectedEvaluationCaseCreate,
     AiDryRunCreate,
+    AiEvaluationCaseCreate,
     AiEvaluationDatasetCreate,
     AiEvaluationDatasetRead,
     AiEvaluationDecision,
+    AiEvaluationReviewCreate,
     AiEvaluationRunCreate,
     AiEvaluationRunRead,
     AiOrchestratorEventCreate,
@@ -474,6 +481,13 @@ def create_dataset(
     keys = [case.case_key for case in payload.cases]
     if len(keys) != len(set(keys)):
         raise ValueError("Evaluation case keys must be unique.")
+    for case in payload.cases:
+        violations = evaluation_case_redaction_violations(case)
+        if violations:
+            raise ValueError(
+                f"Evaluation case {case.case_key} failed redaction validation: "
+                + "; ".join(violations)
+            )
     version = (
         int(
             db.scalar(
@@ -490,15 +504,24 @@ def create_dataset(
         organization_id=principal.organization_id,
         agent_definition_id=payload.agent_definition_id,
         capability_key=payload.capability_key,
+        dataset_key=payload.dataset_key,
         name=payload.name,
         version_number=version,
         status="draft",
         description=payload.description,
         minimum_case_count=payload.minimum_case_count,
         minimum_pass_rate_basis_points=payload.minimum_pass_rate_basis_points,
+        minimum_factual_accuracy_basis_points=(payload.minimum_factual_accuracy_basis_points),
+        minimum_evidence_coverage_basis_points=(payload.minimum_evidence_coverage_basis_points),
         maximum_critical_failures=payload.maximum_critical_failures,
         maximum_average_latency_ms=payload.maximum_average_latency_ms,
         maximum_average_cost_microusd=payload.maximum_average_cost_microusd,
+        owner_role_key=payload.owner_role_key,
+        case_schema_version=payload.case_schema_version,
+        reviewer_instructions=payload.reviewer_instructions,
+        disagreement_policy=payload.disagreement_policy,
+        redaction_policy=payload.redaction_policy,
+        required_review_scopes=list(dict.fromkeys(payload.required_review_scopes)),
         created_by_user_id=principal.user_id,
     )
     db.add(dataset)
@@ -513,7 +536,7 @@ def create_dataset(
         )
     db.commit()
     db.refresh(dataset)
-    return _dataset_read(db, dataset)
+    return evaluation_dataset_to_read(db, dataset)
 
 
 def decide_dataset(
@@ -525,12 +548,167 @@ def decide_dataset(
     cases = _cases(db, dataset.id)
     if payload.decision == "approve" and len(cases) < dataset.minimum_case_count:
         raise ValueError(f"This dataset needs at least {dataset.minimum_case_count} cases.")
+    if payload.decision == "approve":
+        violations = []
+        for case in cases:
+            case_violations = evaluation_case_redaction_violations(case)
+            if case_violations:
+                violations.append((case.case_key, case_violations))
+        if violations:
+            raise ValueError(
+                f"Redaction review is incomplete for {len(violations)} evaluation case(s)."
+            )
+        approved_scopes = {
+            item.review_scope
+            for item in _dataset_reviews(db, dataset.id)
+            if item.status == "approved"
+        }
+        missing_scopes = set(dataset.required_review_scopes) - approved_scopes
+        if missing_scopes:
+            raise ValueError(
+                "Dataset approval still needs: "
+                + ", ".join(sorted(scope.replace("_", " ") for scope in missing_scopes))
+                + "."
+            )
     dataset.status = "approved" if payload.decision == "approve" else "retired"
     dataset.approved_by_user_id = principal.user_id if payload.decision == "approve" else None
     dataset.approved_at = datetime.now(UTC) if payload.decision == "approve" else None
     db.commit()
     db.refresh(dataset)
-    return _dataset_read(db, dataset)
+    return evaluation_dataset_to_read(db, dataset)
+
+
+def review_dataset(
+    db: Session,
+    principal: Principal,
+    dataset_id: UUID,
+    payload: AiEvaluationReviewCreate,
+) -> AiEvaluationDatasetRead | None:
+    dataset = _dataset(db, principal, dataset_id)
+    if dataset is None:
+        return None
+    if dataset.status in {"approved", "retired"}:
+        raise ValueError("Approved or retired datasets cannot receive new review decisions.")
+    if payload.review_scope not in dataset.required_review_scopes:
+        raise ValueError("This review scope is not required for the dataset.")
+    role_keys = _principal_role_keys(db, principal)
+    if payload.review_scope == "executive":
+        eligible_roles = ("owner", "founder_operator", "ceo")
+        reviewer_role = next((role for role in eligible_roles if role in role_keys), None)
+    else:
+        eligible_roles = (dataset.owner_role_key, "owner", "founder_operator")
+        reviewer_role = next((role for role in eligible_roles if role in role_keys), None)
+    if reviewer_role is None:
+        raise PermissionError("Your assigned role cannot sign this review scope.")
+
+    review = db.scalar(
+        select(AiEvaluationDatasetReview).where(
+            AiEvaluationDatasetReview.organization_id == principal.organization_id,
+            AiEvaluationDatasetReview.dataset_id == dataset.id,
+            AiEvaluationDatasetReview.review_scope == payload.review_scope,
+        )
+    )
+    now = datetime.now(UTC)
+    if review is None:
+        review = AiEvaluationDatasetReview(
+            organization_id=principal.organization_id,
+            dataset_id=dataset.id,
+            review_scope=payload.review_scope,
+            reviewer_role_key=reviewer_role,
+            status="approved" if payload.decision == "approve" else "changes_requested",
+            notes=payload.notes,
+            reviewed_by_user_id=principal.user_id,
+            reviewed_at=now,
+        )
+        db.add(review)
+    else:
+        review.reviewer_role_key = reviewer_role
+        review.status = "approved" if payload.decision == "approve" else "changes_requested"
+        review.notes = payload.notes
+        review.reviewed_by_user_id = principal.user_id
+        review.reviewed_at = now
+
+    reviews = {
+        item.review_scope: item.status
+        for item in _dataset_reviews(db, dataset.id)
+        if item.review_scope != payload.review_scope
+    }
+    reviews[payload.review_scope] = review.status
+    if review.status == "changes_requested":
+        dataset.status = "draft"
+    elif all(reviews.get(scope) == "approved" for scope in dataset.required_review_scopes):
+        dataset.status = "ready_for_approval"
+    _audit(
+        db,
+        principal,
+        "ai.evaluation_dataset_reviewed",
+        "ai_evaluation_dataset",
+        dataset.id,
+        {
+            "review_scope": payload.review_scope,
+            "decision": payload.decision,
+            "reviewer_role_key": reviewer_role,
+        },
+    )
+    db.commit()
+    db.refresh(dataset)
+    return evaluation_dataset_to_read(db, dataset)
+
+
+def add_corrected_case_version(
+    db: Session,
+    principal: Principal,
+    dataset_id: UUID,
+    payload: AiCorrectedEvaluationCaseCreate,
+) -> AiEvaluationDatasetRead | None:
+    dataset = _dataset(db, principal, dataset_id)
+    if dataset is None:
+        return None
+    corrected_case = payload.case.model_copy(
+        update={
+            "source_type": "corrected_production",
+            "source_reference": payload.source_reference,
+            "redaction_status": "verified",
+            "reviewer_notes": payload.correction_notes,
+        }
+    )
+    violations = evaluation_case_redaction_violations(corrected_case)
+    if violations:
+        raise ValueError(
+            "Corrected production case failed redaction validation: " + "; ".join(violations)
+        )
+    cases = [_case_to_create(case) for case in _cases(db, dataset.id)]
+    if corrected_case.case_key in {case.case_key for case in cases}:
+        raise ValueError("The corrected case key must be unique in the next dataset version.")
+    cases.append(corrected_case)
+    return create_dataset(
+        db,
+        principal,
+        AiEvaluationDatasetCreate(
+            agent_definition_id=dataset.agent_definition_id,
+            capability_key=dataset.capability_key,
+            dataset_key=dataset.dataset_key,
+            name=dataset.name,
+            description=dataset.description,
+            minimum_case_count=dataset.minimum_case_count,
+            minimum_pass_rate_basis_points=dataset.minimum_pass_rate_basis_points,
+            minimum_factual_accuracy_basis_points=(dataset.minimum_factual_accuracy_basis_points),
+            minimum_evidence_coverage_basis_points=(dataset.minimum_evidence_coverage_basis_points),
+            maximum_critical_failures=dataset.maximum_critical_failures,
+            maximum_average_latency_ms=dataset.maximum_average_latency_ms,
+            maximum_average_cost_microusd=dataset.maximum_average_cost_microusd,
+            owner_role_key=dataset.owner_role_key,
+            case_schema_version=dataset.case_schema_version,
+            reviewer_instructions=dataset.reviewer_instructions,
+            disagreement_policy=dataset.disagreement_policy,
+            redaction_policy=dataset.redaction_policy,
+            required_review_scopes=cast(
+                list[Literal["executive", "role_owner"]],
+                dataset.required_review_scopes,
+            ),
+            cases=cases,
+        ),
+    )
 
 
 def run_evaluation(
@@ -560,6 +738,8 @@ def run_evaluation(
         case_count=len(cases),
         passed_case_count=0,
         pass_rate_basis_points=0,
+        factual_accuracy_basis_points=0,
+        evidence_coverage_basis_points=0,
         critical_failure_count=0,
         average_latency_ms=0,
         average_cost_microusd=0,
@@ -572,13 +752,15 @@ def run_evaluation(
     db.flush()
     results: list[AiEvaluationResult] = []
     for case in cases:
-        passed, checks = _evaluate_case(case)
+        passed, checks, factual_accuracy, evidence_coverage = _evaluate_case(case)
         result = AiEvaluationResult(
             organization_id=principal.organization_id,
             evaluation_run_id=evaluation.id,
             evaluation_case_id=case.id,
             status="passed" if passed else "failed",
             score_basis_points=10_000 if passed else 0,
+            factual_accuracy_basis_points=factual_accuracy,
+            evidence_coverage_basis_points=evidence_coverage,
             critical_failure=case.is_critical and not passed,
             actual_output=case.candidate_output,
             check_results=checks,
@@ -590,22 +772,52 @@ def run_evaluation(
     passed_count = sum(item.status == "passed" for item in results)
     critical_count = sum(item.critical_failure for item in results)
     pass_rate = round(passed_count / len(cases) * 10_000) if cases else 0
+    factual_accuracy = (
+        round(sum(item.factual_accuracy_basis_points for item in results) / len(results))
+        if results
+        else 0
+    )
+    evidence_coverage = (
+        round(sum(item.evidence_coverage_basis_points for item in results) / len(results))
+        if results
+        else 0
+    )
+    latency_passed = (
+        dataset.maximum_average_latency_ms is None
+        or (evaluation.average_latency_ms or 0) <= dataset.maximum_average_latency_ms
+    )
+    cost_passed = (
+        dataset.maximum_average_cost_microusd is None
+        or (evaluation.average_cost_microusd or 0) <= dataset.maximum_average_cost_microusd
+    )
     thresholds = (
         len(cases) >= dataset.minimum_case_count
         and pass_rate >= dataset.minimum_pass_rate_basis_points
+        and factual_accuracy >= dataset.minimum_factual_accuracy_basis_points
+        and evidence_coverage >= dataset.minimum_evidence_coverage_basis_points
         and critical_count <= dataset.maximum_critical_failures
+        and latency_passed
+        and cost_passed
     )
     evaluation.status = "completed"
     evaluation.passed_case_count = passed_count
     evaluation.pass_rate_basis_points = pass_rate
+    evaluation.factual_accuracy_basis_points = factual_accuracy
+    evaluation.evidence_coverage_basis_points = evidence_coverage
     evaluation.critical_failure_count = critical_count
     evaluation.thresholds_passed = thresholds
     evaluation.summary = {
         "dataset_version": dataset.version_number,
         "thresholds": {
             "pass_rate": pass_rate >= dataset.minimum_pass_rate_basis_points,
+            "factual_accuracy": (factual_accuracy >= dataset.minimum_factual_accuracy_basis_points),
+            "evidence_coverage": (
+                evidence_coverage >= dataset.minimum_evidence_coverage_basis_points
+            ),
             "critical_failures": critical_count <= dataset.maximum_critical_failures,
             "case_count": len(cases) >= dataset.minimum_case_count,
+            "latency": latency_passed,
+            "cost": cost_passed,
         },
     }
     evaluation.completed_at = datetime.now(UTC)
@@ -780,27 +992,133 @@ def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
         metrics=metrics,
         foundation=get_copilot_foundation(db, principal),
         events=[_event_read(item) for item in events],
-        datasets=[_dataset_read(db, item) for item in datasets],
+        datasets=[evaluation_dataset_to_read(db, item) for item in datasets],
         evaluation_runs=[_evaluation_read(db, item) for item in evaluations],
         promotions=[_promotion_read(item) for item in promotions],
     )
 
 
-def _evaluate_case(case: AiEvaluationCase) -> tuple[bool, dict[str, Any]]:
+SENSITIVE_EVALUATION_KEYS = {
+    "name",
+    "email",
+    "phone",
+    "address",
+    "ssn",
+    "social_security",
+    "routing_number",
+    "account_number",
+    "card_number",
+    "api_key",
+    "token",
+    "password",
+    "secret",
+}
+SENSITIVE_EVALUATION_PATTERNS = (
+    re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+    re.compile(r"\b\d{3}[-.\s]\d{3}[-.\s]\d{4}\b"),
+    re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+    re.compile(r"\b(?:\d[ -]*?){13,19}\b"),
+)
+
+
+def _evaluate_case(
+    case: AiEvaluationCase,
+) -> tuple[bool, dict[str, Any], int, int]:
     actual = case.candidate_output
     checks: dict[str, Any] = {}
     checks["candidate_present"] = actual is not None
     if actual is None:
-        return False, checks
-    checks["expected_values"] = all(
-        actual.get(key) == value for key, value in case.expected_output.items()
+        return False, checks, 0, 0
+    expected_items = list(case.expected_output.items())
+    matching_items = sum(actual.get(key) == value for key, value in expected_items)
+    factual_accuracy = (
+        round(matching_items / len(expected_items) * 10_000) if expected_items else 10_000
     )
+    checks["expected_values"] = factual_accuracy == 10_000
     required = case.deterministic_checks.get("required_keys", [])
     checks["required_keys"] = all(key in actual for key in required)
     text = json.dumps(actual, sort_keys=True).lower()
     forbidden = case.deterministic_checks.get("forbidden_terms", [])
     checks["forbidden_terms"] = all(str(term).lower() not in text for term in forbidden)
-    return all(checks.values()), checks
+    actual_evidence = actual.get("evidence", [])
+    if isinstance(actual_evidence, str):
+        actual_evidence = [actual_evidence]
+    required_evidence = case.required_evidence
+    matched_evidence = sum(item in actual_evidence for item in required_evidence)
+    evidence_coverage = (
+        round(matched_evidence / len(required_evidence) * 10_000) if required_evidence else 10_000
+    )
+    checks["evidence_coverage"] = evidence_coverage == 10_000
+    checks["redaction"] = not evaluation_case_redaction_violations(case)
+    return all(checks.values()), checks, factual_accuracy, evidence_coverage
+
+
+def evaluation_case_redaction_violations(
+    case: AiEvaluationCaseCreate | AiEvaluationCase,
+) -> list[str]:
+    violations: list[str] = []
+    if case.redaction_status != "verified":
+        violations.append("redaction status is not verified")
+    for label, payload in (
+        ("input", case.input_payload),
+        ("expected", case.expected_output),
+        ("candidate", case.candidate_output),
+    ):
+        if payload is None:
+            continue
+        _scan_evaluation_value(payload, label, violations)
+    if case.source_reference:
+        _scan_evaluation_value(case.source_reference, "source reference", violations)
+    return sorted(set(violations))
+
+
+def _scan_evaluation_value(value: Any, path: str, violations: list[str]) -> None:
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized = str(key).lower().strip()
+            if normalized in SENSITIVE_EVALUATION_KEYS:
+                violations.append(f"{path} contains prohibited key '{key}'")
+            _scan_evaluation_value(nested, f"{path}.{key}", violations)
+        return
+    if isinstance(value, list):
+        for index, nested in enumerate(value):
+            _scan_evaluation_value(nested, f"{path}[{index}]", violations)
+        return
+    if not isinstance(value, str):
+        return
+    if any(pattern.search(value) for pattern in SENSITIVE_EVALUATION_PATTERNS):
+        violations.append(f"{path} contains a possible direct identifier or credential")
+
+
+def _case_to_create(case: AiEvaluationCase) -> AiEvaluationCaseCreate:
+    return AiEvaluationCaseCreate(
+        case_key=case.case_key,
+        name=case.name,
+        input_payload=case.input_payload,
+        expected_output=case.expected_output,
+        candidate_output=case.candidate_output,
+        deterministic_checks=case.deterministic_checks,
+        risk_tags=case.risk_tags,
+        is_critical=case.is_critical,
+        case_type=cast(
+            Literal["operating", "policy", "failure", "adversarial"],
+            case.case_type,
+        ),
+        scenario_family=case.scenario_family,
+        source_type=cast(
+            Literal["synthetic", "corrected_production"],
+            case.source_type,
+        ),
+        source_reference=case.source_reference,
+        redaction_status=cast(
+            Literal["verified", "needs_review"],
+            case.redaction_status,
+        ),
+        expected_uncertainty=case.expected_uncertainty,
+        required_evidence=case.required_evidence,
+        prohibited_behaviors=case.prohibited_behaviors,
+        reviewer_notes=case.reviewer_notes,
+    )
 
 
 def _agent(db: Session, principal: Principal, agent_id: UUID) -> AiAgentDefinition | None:
@@ -827,6 +1145,29 @@ def _cases(db: Session, dataset_id: UUID) -> list[AiEvaluationCase]:
             select(AiEvaluationCase)
             .where(AiEvaluationCase.dataset_id == dataset_id)
             .order_by(AiEvaluationCase.created_at)
+        ).all()
+    )
+
+
+def _dataset_reviews(db: Session, dataset_id: UUID) -> list[AiEvaluationDatasetReview]:
+    return list(
+        db.scalars(
+            select(AiEvaluationDatasetReview)
+            .where(AiEvaluationDatasetReview.dataset_id == dataset_id)
+            .order_by(AiEvaluationDatasetReview.review_scope)
+        ).all()
+    )
+
+
+def _principal_role_keys(db: Session, principal: Principal) -> set[str]:
+    return set(
+        db.scalars(
+            select(Role.key)
+            .join(RoleAssignment, RoleAssignment.role_id == Role.id)
+            .where(
+                RoleAssignment.organization_id == principal.organization_id,
+                RoleAssignment.user_id == principal.user_id,
+            )
         ).all()
     )
 
@@ -858,22 +1199,46 @@ def _event_read(item: AiOrchestratorEvent) -> AiOrchestratorEventRead:
     )
 
 
-def _dataset_read(db: Session, item: AiEvaluationDataset) -> AiEvaluationDatasetRead:
-    from app.schemas.ai import AiEvaluationCaseRead
+def evaluation_dataset_to_read(
+    db: Session,
+    item: AiEvaluationDataset,
+) -> AiEvaluationDatasetRead:
+    from app.schemas.ai import AiEvaluationCaseRead, AiEvaluationDatasetReviewRead
 
     return AiEvaluationDatasetRead(
         id=item.id,
         agent_definition_id=item.agent_definition_id,
         capability_key=item.capability_key,
+        dataset_key=item.dataset_key,
         name=item.name,
         version_number=item.version_number,
         status=item.status,
         description=item.description,
         minimum_case_count=item.minimum_case_count,
         minimum_pass_rate_basis_points=item.minimum_pass_rate_basis_points,
+        minimum_factual_accuracy_basis_points=(item.minimum_factual_accuracy_basis_points),
+        minimum_evidence_coverage_basis_points=(item.minimum_evidence_coverage_basis_points),
         maximum_critical_failures=item.maximum_critical_failures,
         maximum_average_latency_ms=item.maximum_average_latency_ms,
         maximum_average_cost_microusd=item.maximum_average_cost_microusd,
+        owner_role_key=item.owner_role_key,
+        case_schema_version=item.case_schema_version,
+        reviewer_instructions=item.reviewer_instructions,
+        disagreement_policy=item.disagreement_policy,
+        redaction_policy=item.redaction_policy,
+        required_review_scopes=item.required_review_scopes,
+        reviews=[
+            AiEvaluationDatasetReviewRead(
+                id=review.id,
+                review_scope=review.review_scope,
+                reviewer_role_key=review.reviewer_role_key,
+                status=review.status,
+                notes=review.notes,
+                reviewed_by_user_id=review.reviewed_by_user_id,
+                reviewed_at=review.reviewed_at,
+            )
+            for review in _dataset_reviews(db, item.id)
+        ],
         approved_by_user_id=item.approved_by_user_id,
         approved_at=item.approved_at,
         cases=[
@@ -887,6 +1252,15 @@ def _dataset_read(db: Session, item: AiEvaluationDataset) -> AiEvaluationDataset
                 deterministic_checks=case.deterministic_checks,
                 risk_tags=case.risk_tags,
                 is_critical=case.is_critical,
+                case_type=case.case_type,
+                scenario_family=case.scenario_family,
+                source_type=case.source_type,
+                source_reference=case.source_reference,
+                redaction_status=case.redaction_status,
+                expected_uncertainty=case.expected_uncertainty,
+                required_evidence=case.required_evidence,
+                prohibited_behaviors=case.prohibited_behaviors,
+                reviewer_notes=case.reviewer_notes,
             )
             for case in _cases(db, item.id)
         ],
@@ -912,6 +1286,8 @@ def _evaluation_read(db: Session, item: AiEvaluationRun) -> AiEvaluationRunRead:
         case_count=item.case_count,
         passed_case_count=item.passed_case_count,
         pass_rate_basis_points=item.pass_rate_basis_points,
+        factual_accuracy_basis_points=item.factual_accuracy_basis_points,
+        evidence_coverage_basis_points=item.evidence_coverage_basis_points,
         critical_failure_count=item.critical_failure_count,
         average_latency_ms=item.average_latency_ms,
         average_cost_microusd=item.average_cost_microusd,
@@ -926,6 +1302,8 @@ def _evaluation_read(db: Session, item: AiEvaluationRun) -> AiEvaluationRunRead:
                 evaluation_case_id=result.evaluation_case_id,
                 status=result.status,
                 score_basis_points=result.score_basis_points,
+                factual_accuracy_basis_points=(result.factual_accuracy_basis_points),
+                evidence_coverage_basis_points=(result.evidence_coverage_basis_points),
                 critical_failure=result.critical_failure,
                 actual_output=result.actual_output,
                 check_results=result.check_results,

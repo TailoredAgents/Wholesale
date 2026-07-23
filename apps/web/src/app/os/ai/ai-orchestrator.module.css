@@ -44,6 +44,79 @@
   gap: 18px;
 }
 
+.evaluationRow {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.evaluationRow .listRow {
+  border-bottom: 0;
+}
+
+.evaluationDetails {
+  padding: 0 2px 14px;
+}
+
+.evaluationDetails summary {
+  width: fit-content;
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.evaluationDetails > p {
+  max-width: 900px;
+  margin: 12px 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.evaluationStandards {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.evaluationStandards > div {
+  min-width: 0;
+  padding: 11px;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 4px;
+}
+
+.evaluationStandards > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.evaluationStandards span,
+.reviewLedger span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.evaluationStandards strong,
+.reviewLedger strong {
+  font-size: 12px;
+}
+
+.reviewLedger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.reviewLedger > div {
+  min-width: 150px;
+  padding: 9px 10px;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  display: grid;
+  gap: 3px;
+}
+
 .commandBar {
   min-height: 82px;
   padding: 18px 20px;
@@ -605,6 +678,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .evaluationStandards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .evaluationStandards > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .evaluationStandards > div:nth-child(4) {
+    border-top: 1px solid var(--line);
+  }
+
   .mappingGrid,
   .governanceGrid {
     grid-template-columns: 1fr;
@@ -636,5 +722,15 @@
 
   .contractBody {
     grid-template-columns: 1fr;
+  }
+
+  .evaluationStandards {
+    grid-template-columns: 1fr;
+  }
+
+  .evaluationStandards > div + div,
+  .evaluationStandards > div:nth-child(3) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
 }

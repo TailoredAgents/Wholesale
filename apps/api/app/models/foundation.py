@@ -2804,15 +2804,32 @@ class AiEvaluationDataset(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("ai_agent_definitions.id"), index=True
     )
     capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    dataset_key: Mapped[str] = mapped_column(String(160), nullable=False, server_default="manual")
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     description: Mapped[str | None] = mapped_column(String(2000))
     minimum_case_count: Mapped[int] = mapped_column(Integer, nullable=False)
     minimum_pass_rate_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    minimum_factual_accuracy_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="9000"
+    )
+    minimum_evidence_coverage_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="9000"
+    )
     maximum_critical_failures: Mapped[int] = mapped_column(Integer, nullable=False)
     maximum_average_latency_ms: Mapped[int | None] = mapped_column(Integer)
     maximum_average_cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False, server_default="owner")
+    case_schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    reviewer_instructions: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    disagreement_policy: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+    redaction_policy: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, server_default="{}"
+    )
+    required_review_scopes: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, server_default="[]"
+    )
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -2834,6 +2851,47 @@ class AiEvaluationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     deterministic_checks: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     risk_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     is_critical: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    case_type: Mapped[str] = mapped_column(String(40), nullable=False, server_default="operating")
+    scenario_family: Mapped[str] = mapped_column(
+        String(120), nullable=False, server_default="manual"
+    )
+    source_type: Mapped[str] = mapped_column(String(40), nullable=False, server_default="synthetic")
+    source_reference: Mapped[str | None] = mapped_column(String(255))
+    redaction_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="verified"
+    )
+    expected_uncertainty: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, server_default="[]"
+    )
+    required_evidence: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default="[]")
+    prohibited_behaviors: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, server_default="[]"
+    )
+    reviewer_notes: Mapped[str] = mapped_column(Text, nullable=False, server_default="")
+
+
+class AiEvaluationDatasetReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_dataset_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "dataset_id",
+            "review_scope",
+            name="uq_ai_evaluation_dataset_review_scope",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    dataset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_datasets.id", ondelete="CASCADE"), index=True
+    )
+    review_scope: Mapped[str] = mapped_column(String(40), nullable=False)
+    reviewer_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    notes: Mapped[str] = mapped_column(String(2000), nullable=False)
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class AiEvaluationRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2851,6 +2909,12 @@ class AiEvaluationRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
     case_count: Mapped[int] = mapped_column(Integer, nullable=False)
     passed_case_count: Mapped[int] = mapped_column(Integer, nullable=False)
     pass_rate_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    factual_accuracy_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    evidence_coverage_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     critical_failure_count: Mapped[int] = mapped_column(Integer, nullable=False)
     average_latency_ms: Mapped[int | None] = mapped_column(Integer)
     average_cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
@@ -2880,6 +2944,12 @@ class AiEvaluationResult(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    factual_accuracy_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    evidence_coverage_basis_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
     critical_failure: Mapped[bool] = mapped_column(Boolean, nullable=False)
     actual_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     check_results: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

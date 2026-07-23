@@ -334,18 +334,39 @@ class AiEvaluationCaseCreate(BaseModel):
     deterministic_checks: dict[str, object] = Field(default_factory=dict)
     risk_tags: list[str] = Field(default_factory=list)
     is_critical: bool = False
+    case_type: Literal["operating", "policy", "failure", "adversarial"] = "operating"
+    scenario_family: str = Field(default="manual", min_length=1, max_length=120)
+    source_type: Literal["synthetic", "corrected_production"] = "synthetic"
+    source_reference: str | None = Field(default=None, max_length=255)
+    redaction_status: Literal["verified", "needs_review"] = "verified"
+    expected_uncertainty: list[str] = Field(default_factory=list, max_length=30)
+    required_evidence: list[str] = Field(default_factory=list, max_length=30)
+    prohibited_behaviors: list[str] = Field(default_factory=list, max_length=30)
+    reviewer_notes: str = Field(default="", max_length=2000)
 
 
 class AiEvaluationDatasetCreate(BaseModel):
     agent_definition_id: UUID
     capability_key: str = Field(min_length=1, max_length=160)
+    dataset_key: str = Field(default="manual", min_length=1, max_length=160)
     name: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=2000)
     minimum_case_count: int = Field(default=3, ge=1, le=500)
     minimum_pass_rate_basis_points: int = Field(default=9000, ge=0, le=10000)
+    minimum_factual_accuracy_basis_points: int = Field(default=9000, ge=0, le=10000)
+    minimum_evidence_coverage_basis_points: int = Field(default=9000, ge=0, le=10000)
     maximum_critical_failures: int = Field(default=0, ge=0, le=500)
     maximum_average_latency_ms: int | None = Field(default=None, ge=0)
     maximum_average_cost_microusd: int | None = Field(default=None, ge=0)
+    owner_role_key: str = Field(default="owner", min_length=1, max_length=120)
+    case_schema_version: int = Field(default=1, ge=1, le=100)
+    reviewer_instructions: str = Field(default="", max_length=8000)
+    disagreement_policy: str = Field(default="", max_length=4000)
+    redaction_policy: dict[str, object] = Field(default_factory=dict)
+    required_review_scopes: list[Literal["executive", "role_owner"]] = Field(
+        default_factory=list,
+        max_length=2,
+    )
     cases: list[AiEvaluationCaseCreate] = Field(min_length=1, max_length=500)
 
 
@@ -359,21 +380,50 @@ class AiEvaluationCaseRead(BaseModel):
     deterministic_checks: dict[str, object]
     risk_tags: list[str]
     is_critical: bool
+    case_type: str
+    scenario_family: str
+    source_type: str
+    source_reference: str | None
+    redaction_status: str
+    expected_uncertainty: list[str]
+    required_evidence: list[str]
+    prohibited_behaviors: list[str]
+    reviewer_notes: str
+
+
+class AiEvaluationDatasetReviewRead(BaseModel):
+    id: UUID
+    review_scope: str
+    reviewer_role_key: str
+    status: str
+    notes: str
+    reviewed_by_user_id: UUID
+    reviewed_at: datetime
 
 
 class AiEvaluationDatasetRead(BaseModel):
     id: UUID
     agent_definition_id: UUID
     capability_key: str
+    dataset_key: str
     name: str
     version_number: int
     status: str
     description: str | None
     minimum_case_count: int
     minimum_pass_rate_basis_points: int
+    minimum_factual_accuracy_basis_points: int
+    minimum_evidence_coverage_basis_points: int
     maximum_critical_failures: int
     maximum_average_latency_ms: int | None
     maximum_average_cost_microusd: int | None
+    owner_role_key: str
+    case_schema_version: int
+    reviewer_instructions: str
+    disagreement_policy: str
+    redaction_policy: dict[str, object]
+    required_review_scopes: list[str]
+    reviews: list[AiEvaluationDatasetReviewRead]
     approved_by_user_id: UUID | None
     approved_at: datetime | None
     cases: list[AiEvaluationCaseRead]
@@ -382,6 +432,24 @@ class AiEvaluationDatasetRead(BaseModel):
 
 class AiEvaluationDecision(BaseModel):
     decision: Literal["approve", "retire"]
+
+
+class AiEvaluationReviewCreate(BaseModel):
+    review_scope: Literal["executive", "role_owner"]
+    decision: Literal["approve", "request_changes"]
+    notes: str = Field(min_length=1, max_length=2000)
+
+
+class AiCorrectedEvaluationCaseCreate(BaseModel):
+    case: AiEvaluationCaseCreate
+    source_reference: str = Field(min_length=1, max_length=255)
+    correction_notes: str = Field(min_length=1, max_length=2000)
+
+
+class AiGoldenLibraryInstallRead(BaseModel):
+    created_dataset_count: int
+    existing_dataset_count: int
+    datasets: list[AiEvaluationDatasetRead]
 
 
 class AiEvaluationRunCreate(BaseModel):
@@ -394,6 +462,8 @@ class AiEvaluationResultRead(BaseModel):
     evaluation_case_id: UUID
     status: str
     score_basis_points: int
+    factual_accuracy_basis_points: int
+    evidence_coverage_basis_points: int
     critical_failure: bool
     actual_output: dict[str, object] | None
     check_results: dict[str, object]
@@ -412,6 +482,8 @@ class AiEvaluationRunRead(BaseModel):
     case_count: int
     passed_case_count: int
     pass_rate_basis_points: int
+    factual_accuracy_basis_points: int
+    evidence_coverage_basis_points: int
     critical_failure_count: int
     average_latency_ms: int | None
     average_cost_microusd: int | None
