@@ -13,12 +13,14 @@ import Link from "next/link";
 import { CompleteTaskButton } from "../complete-task-button";
 import {
   getDashboardData,
+  getExecutiveCopilotOverview,
   getFieldOperationsOverview,
   getWorkspaceProfile,
   type LeadListItem,
   type SpeedToLeadTask,
 } from "../lib/api";
 import { StatusBadge } from "./_components/design-system";
+import { ManagementCopilotPanel } from "./_components/management-copilot-panel";
 import { PageHeader, WorkspacePage } from "./_components/page-contracts";
 import { isOwnerProfile, primaryRoleLabel } from "./os-navigation";
 import {
@@ -93,10 +95,11 @@ function isToday(value: string) {
 }
 
 export default async function Home() {
-  const [dashboard, profile, fieldResult] = await Promise.all([
+  const [dashboard, profile, fieldResult, executiveCopilot] = await Promise.all([
     getDashboardData(),
     getWorkspaceProfile(),
     getFieldOperationsOverview(),
+    getExecutiveCopilotOverview(30),
   ]);
   const roleKeys = profile?.role_keys ?? [];
   const individualAcquisitions = roleKeys.includes("acquisition_rep") &&
@@ -196,6 +199,12 @@ export default async function Home() {
             <span>The page is showing an empty fallback until the API reconnects.</span>
           </div>
         </div>
+      ) : null}
+      {executiveCopilot ? (
+        <ManagementCopilotPanel
+          endpointBase="/api/v1/dashboard/executive-copilot"
+          initialData={executiveCopilot}
+        />
       ) : null}
 
       <section className={styles.dailyMetrics} aria-label="Daily work summary">

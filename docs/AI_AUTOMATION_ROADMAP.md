@@ -84,7 +84,11 @@ Delivered:
 - AI8 provider-independent Disposition Copilot foundation embedded in Dispositions with
   deterministic placement readiness, buyer and offer risk, governed buyer guidance, human
   correction, restricted-economics protection, and no buyer, campaign, or selection mutation.
-- All seven completed AI4-AI8 capabilities are available on demand in supervised draft-only mode.
+- AI9 provider-independent Finance, Marketing, and Executive Copilot foundation embedded in their
+  existing management workspaces with deterministic health and exceptions, aggregate evidence,
+  governed drafts, human correction, and no financial, advertising, staffing, or external
+  authority.
+- All ten completed AI4-AI9 capabilities are available on demand in supervised draft-only mode.
   Every output requires human review, tools remain read-only, and external actions remain blocked.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
@@ -411,6 +415,9 @@ Exit criteria:
 
 ## Phase AI9: Finance, Marketing, And Executive Copilots
 
+Status: **Provider-independent foundation complete in code. Provider adapters, production replay,
+redacted datasets, and measured pilots remain. See `PHASE_AI9_MANAGEMENT_COPILOTS.md`.**
+
 Goal: Give management dependable financial, growth, and operating intelligence.
 
 Finance Copilot:
@@ -514,12 +521,13 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Begin AI9 Finance, Marketing, and Executive Copilots inside their existing OS workspaces. Start
-with deterministic reconciliation exceptions, source-economics evidence, and a fact-separated
-executive operating brief; retain human approval over accounting, compensation, budgets, ad
-changes, payments, and all external actions.
+Begin AI10 Controlled External Automation and Optimization by defining exact eligibility,
+audience, template, volume, cost, monitoring, canary, pause, and rollback contracts for each
+candidate action. Do not activate external automation until the corresponding provider,
+compliance, evaluation, and measured-pilot checkpoints are complete.
 
-In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI8
-draft-only pilots. Build the redacted AI7 transaction and AI8 disposition datasets, and keep
-recording ingestion and external communication disabled until their provider, disclosure, consent,
-retention, and operational controls are approved.
+In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI9
+draft-only pilots. Build the redacted AI7 transaction, AI8 disposition, and AI9 management datasets;
+keep recording ingestion, accounting posting, ad-platform delivery, and external communication
+disabled until their provider, disclosure, consent, retention, reconciliation, and operational
+controls are approved.

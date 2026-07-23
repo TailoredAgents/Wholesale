@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0050_disposition_copilot` is the
+The schema is managed through Alembic migrations. Migration `0051_management_copilots` is the
 current head.
 
 ## Identity And Access
@@ -220,6 +220,8 @@ certainty. Compliance flags and escalation state do not depend on transcript or 
 - `ai_data_governance_policies`
 - `ai_knowledge_sources`
 - `ai_data_quality_rules`
+- `management_copilot_recommendations`
+- `management_copilot_reviews`
 
 Role copilots are the staff-facing layer. Each copilot has one named human owner and maps to
 bounded specialist engines. Versioned capability contracts define triggers, inputs, outputs,
@@ -231,6 +233,11 @@ thresholds. Cases identify operating, policy, failure, and adversarial scenarios
 redaction state, uncertainty, required evidence, and prohibited behavior. Dataset reviews preserve
 separate executive and operating-role decisions. Human-corrected production examples always create
 a new draft dataset version.
+
+Management Copilot recommendations share one capability-scoped, period-bounded ledger for Finance,
+Marketing, and Executive drafts. The evidence snapshot and governed AI trace remain attached to
+the original output; one immutable review preserves acceptance, correction, or rejection without
+mutating financial, marketing, staffing, permission, or external systems.
 
 ## Platform Operations
 

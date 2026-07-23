@@ -1,8 +1,15 @@
 import { AlertTriangle, ArrowRight, BadgeDollarSign, Landmark, Receipt, WalletCards } from "lucide-react";
 import Link from "next/link";
 
-import { getDashboardData, getDispositionOverview, getFinanceOverview, getWorkspaceProfile } from "../../lib/api";
+import {
+  getDashboardData,
+  getDispositionOverview,
+  getFinanceCopilotOverview,
+  getFinanceOverview,
+  getWorkspaceProfile,
+} from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
+import { ManagementCopilotPanel } from "../_components/management-copilot-panel";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporting-period";
@@ -37,11 +44,13 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const params = await searchParams;
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
   const periodDays = period === "all" ? undefined : Number(period);
-  const [dashboard, financeData, dispositionData, profile] = await Promise.all([
+  const copilotPeriodDays = periodDays ?? 365;
+  const [dashboard, financeData, dispositionData, profile, financeCopilot] = await Promise.all([
     getDashboardData(),
     getFinanceOverview(periodDays),
     getDispositionOverview(),
     getWorkspaceProfile(),
+    getFinanceCopilotOverview(copilotPeriodDays),
   ]);
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
@@ -72,6 +81,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       nextAction={{ label: "Management next step", value: primaryException ? "Open deal reconciliation" : pendingRevenue.length ? "Review pending revenue" : "Monitor margin", detail: "Source records remain linked", tone: "info" }}
       period={{ label: "Reporting basis", value: periodLabel, detail: finance.period_start_at ? `${date(finance.period_start_at)} through today` : "Lifetime ledger", tone: "neutral" }}
     />
+    {financeCopilot ? (
+      <ManagementCopilotPanel
+        endpointBase="/api/v1/finance/copilot"
+        initialData={financeCopilot}
+      />
+    ) : null}
 
     <section className={styles.metricGrid} aria-label="Financial performance">
       <div><Landmark size={17} /><span>Collected revenue</span><strong>{money(finance.summary.collected_revenue_cents)}</strong><small>{delta(finance.summary.collected_revenue_cents, previous?.collected_revenue_cents)}</small></div>

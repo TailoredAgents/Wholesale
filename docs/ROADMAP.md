@@ -53,7 +53,7 @@ email is implemented. Production acceptance remains pending for:
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
 | 9. Buyers, Dispositions, and Finance | Complete | Provider-neutral buyer placement, disposition, reconciliation, compensation, and accounting export are operational |
-| 10. Integrated AI Agent System | Partial | AI1-AI8 are implemented in code; AI9-AI10, production signoff, and measured pilots remain |
+| 10. Integrated AI Agent System | Partial | AI1-AI9 are implemented in code; AI10, production signoff, provider adapters, and measured pilots remain |
 
 Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
 offer controls were prioritized for seller conversations. That work is retained. It does not mark
@@ -382,8 +382,9 @@ Remaining:
 The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`. AI1 role
 contracts, AI2 golden-case infrastructure, AI3 production runtime, AI4 Lead Manager Copilot, AI5
 Prospecting Copilot and Call Quality, AI6 Acquisitions Copilot, AI7 Transaction Copilot, and AI8
-Disposition Copilot are complete in code. Provider integrations, production acceptance, and
-approved-dataset replay remain before activating measured pilots.
+Disposition Copilot are complete in code. AI9 Finance, Marketing, and Executive Copilots are also
+complete in code. Provider integrations, production acceptance, and approved-dataset replay remain
+before activating measured pilots.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
@@ -411,9 +412,11 @@ evidence requirements, compliance controls, or financial approvals.
 6. Build AI7 redacted transaction packages and AI8 redacted disposition cases, then complete their
    provider acceptance without granting legal, signature, contract, buyer-selection, economics, or
    external-send authority.
-7. Begin AI9 Finance, Marketing, and Executive Copilots with deterministic evidence and human
-   financial, budget, advertising, and payment authority.
-8. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
+7. Build AI9 redacted finance, marketing, and executive datasets and complete controlled
+   accounting and ad-platform provider acceptance without granting financial, budget,
+   advertising, staffing, or external authority.
+8. Begin AI10 external-automation control contracts and canary design without activating delivery.
+9. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred
 

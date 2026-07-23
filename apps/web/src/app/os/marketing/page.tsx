@@ -1,8 +1,13 @@
 import { ArrowRight, BadgeDollarSign, ChartNoAxesCombined, CircleDollarSign, Megaphone, UsersRound } from "lucide-react";
 import Link from "next/link";
 
-import { getMarketingOverview, getWorkspaceProfile } from "../../lib/api";
+import {
+  getMarketingCopilotOverview,
+  getMarketingOverview,
+  getWorkspaceProfile,
+} from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
+import { ManagementCopilotPanel } from "../_components/management-copilot-panel";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporting-period";
@@ -56,9 +61,11 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
   const periodDays = period === "all" ? undefined : Number(period);
-  const [{ marketing, apiConnected }, profile] = await Promise.all([
+  const copilotPeriodDays = periodDays ?? 365;
+  const [{ marketing, apiConnected }, profile, marketingCopilot] = await Promise.all([
     getMarketingOverview(periodDays),
     getWorkspaceProfile(),
+    getMarketingCopilotOverview(copilotPeriodDays),
   ]);
   const previous = marketing.previous_summary;
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
@@ -99,6 +106,12 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
       nextAction={{ label: "Management next step", value: primary ? "Review source economics" : marketing.summary.pending_offline_exports ? "Process conversion exports" : "Monitor attribution", detail: "Metrics drill into source records", tone: "info" }}
       period={{ label: "Reporting basis", value: periodLabel, detail: marketing.period_start_at ? `${date(marketing.period_start_at)} through today` : "Lifetime attribution", tone: "neutral" }}
     />
+    {marketingCopilot ? (
+      <ManagementCopilotPanel
+        endpointBase="/api/v1/marketing/copilot"
+        initialData={marketingCopilot}
+      />
+    ) : null}
 
     <section className={styles.metricGrid} aria-label="Marketing performance">
       <div><BadgeDollarSign size={17} /><span>Marketing spend</span><strong>{money(marketing.summary.total_spend_cents)}</strong><small>{delta(marketing.summary.total_spend_cents, previous?.total_spend_cents)}</small></div>

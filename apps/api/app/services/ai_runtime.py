@@ -77,6 +77,7 @@ from app.schemas.ai import (
 from app.services.ai import build_lead_context, run_to_read
 from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
 from app.services.ai_orchestrator import PORTFOLIO
+from app.services.management_intelligence import build_management_facts
 
 MODEL_ROUTES = {"high_volume", "default", "escalation"}
 CAPABILITY_STATUSES = {"enabled", "disabled"}
@@ -88,6 +89,9 @@ DRAFT_ONLY_ENABLED_CAPABILITIES = {
     "negotiation.coach",
     "transaction.coordinate",
     "disposition.match",
+    "finance.reconcile",
+    "marketing.analyze",
+    "operations.brief",
 }
 OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -508,6 +512,129 @@ DISPOSITION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence",
     ],
 }
+MANAGEMENT_FACT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "label": {"type": "string"},
+        "value": {"type": "string"},
+        "evidence": STRING_ARRAY_SCHEMA,
+    },
+    "required": ["label", "value", "evidence"],
+}
+MANAGEMENT_EXCEPTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+        },
+        "category": {"type": "string"},
+        "title": {"type": "string"},
+        "detail": {"type": "string"},
+        "evidence": STRING_ARRAY_SCHEMA,
+    },
+    "required": ["severity", "category", "title", "detail", "evidence"],
+}
+MANAGEMENT_ANALYSIS_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "category": {"type": "string"},
+        "subject": {"type": "string"},
+        "signal": {
+            "type": "string",
+            "enum": ["positive", "neutral", "warning", "critical"],
+        },
+        "analysis": {"type": "string"},
+        "evidence": STRING_ARRAY_SCHEMA,
+    },
+    "required": ["category", "subject", "signal", "analysis", "evidence"],
+}
+MANAGEMENT_ACTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "action": {"type": "string"},
+        "reason": {"type": "string"},
+        "owner": {"type": "string"},
+        "workspace": {
+            "type": "string",
+            "enum": [
+                "dashboard",
+                "finance",
+                "marketing",
+                "operations",
+                "dispositions",
+                "transactions",
+                "ai",
+            ],
+        },
+        "evidence": STRING_ARRAY_SCHEMA,
+        "requires_human_decision": {"type": "boolean", "const": True},
+    },
+    "required": [
+        "action",
+        "reason",
+        "owner",
+        "workspace",
+        "evidence",
+        "requires_human_decision",
+    ],
+}
+MANAGEMENT_DECISION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "decision": {"type": "string"},
+        "why_now": {"type": "string"},
+        "options": STRING_ARRAY_SCHEMA,
+        "evidence": STRING_ARRAY_SCHEMA,
+    },
+    "required": ["decision", "why_now", "options", "evidence"],
+}
+MANAGEMENT_COPILOT_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "brief": {"type": "string"},
+        "confirmed_facts": {
+            "type": "array",
+            "items": MANAGEMENT_FACT_SCHEMA,
+        },
+        "exceptions": {
+            "type": "array",
+            "items": MANAGEMENT_EXCEPTION_SCHEMA,
+        },
+        "analysis": {
+            "type": "array",
+            "items": MANAGEMENT_ANALYSIS_SCHEMA,
+        },
+        "draft_actions": {
+            "type": "array",
+            "items": MANAGEMENT_ACTION_SCHEMA,
+        },
+        "decision_requests": {
+            "type": "array",
+            "items": MANAGEMENT_DECISION_SCHEMA,
+        },
+        "uncertainties": STRING_ARRAY_SCHEMA,
+        "evidence": STRING_ARRAY_SCHEMA,
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "brief",
+        "confirmed_facts",
+        "exceptions",
+        "analysis",
+        "draft_actions",
+        "decision_requests",
+        "uncertainties",
+        "evidence",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -517,6 +644,8 @@ KNOWLEDGE_BY_CAPABILITY = {
     "prospecting": ["prospecting_scripts"],
     "transaction": ["operating_model", "ai_agent_policy"],
     "disposition": ["operating_model", "ai_agent_policy"],
+    "finance": ["operating_model", "ai_agent_policy"],
+    "marketing": ["operating_model", "ai_agent_policy"],
     "compliance": ["ai_agent_policy"],
     "operations": ["operating_model", "ai_agent_policy"],
 }
@@ -614,6 +743,9 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                 "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                 "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
+                "finance.reconcile": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                "marketing.analyze": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                "operations.brief": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
             }.get(capability_key)
             if schema is not None:
                 existing_capability.output_schema = schema
@@ -639,6 +771,9 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                     "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                     "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
+                    "finance.reconcile": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                    "marketing.analyze": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                    "operations.brief": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                 }.get(capability_key, OUTPUT_SCHEMA),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
@@ -1296,6 +1431,27 @@ def _execute_read_tool(
             db, principal, payload
         )
         context["disposition"] = disposition_context
+    elif capability.capability_key in {
+        "finance.reconcile",
+        "marketing.analyze",
+        "operations.brief",
+    }:
+        period_days = int(payload.input_payload.get("period_days", 30))
+        if period_days < 7 or period_days > 365:
+            raise ValueError("Management analysis period must be between 7 and 365 days.")
+        management_facts = build_management_facts(
+            db,
+            principal,
+            capability.capability_key,
+            period_days,
+        )
+        context["management"] = management_facts["context"]
+        field_scope = [
+            "management.reporting_period",
+            f"management.{capability.capability_key}",
+            "management.approved_aggregates",
+            "management.source_timestamps",
+        ]
     elif payload.lead_id is not None:
         lead_context = build_lead_context(db, principal, payload.lead_id)
         if lead_context is None:

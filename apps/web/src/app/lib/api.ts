@@ -1410,6 +1410,92 @@ export type DispositionCopilotOverview = {
   };
 };
 
+export type ManagementCopilotOutput = {
+  brief: string;
+  confirmed_facts: Array<{
+    label: string;
+    value: string;
+    evidence: string[];
+  }>;
+  exceptions: Array<{
+    severity: "info" | "warning" | "critical";
+    category: string;
+    title: string;
+    detail: string;
+    evidence: string[];
+  }>;
+  analysis: Array<{
+    category: string;
+    subject: string;
+    signal: "positive" | "neutral" | "warning" | "critical";
+    analysis: string;
+    evidence: string[];
+  }>;
+  draft_actions: Array<{
+    action: string;
+    reason: string;
+    owner: string;
+    workspace: "dashboard" | "finance" | "marketing" | "operations" |
+      "dispositions" | "transactions" | "ai";
+    evidence: string[];
+    requires_human_decision: true;
+  }>;
+  decision_requests: Array<{
+    decision: string;
+    why_now: string;
+    options: string[];
+    evidence: string[];
+  }>;
+  uncertainties: string[];
+  evidence: string[];
+  confidence: number;
+};
+
+export type ManagementCopilotRecommendation = {
+  id: string;
+  capability_key: "finance.reconcile" | "marketing.analyze" | "operations.brief";
+  reporting_period_days: number;
+  ai_run_log_id: string | null;
+  status: string;
+  output_payload: ManagementCopilotOutput;
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
+export type ManagementCopilotOverview = {
+  capability_key: "finance.reconcile" | "marketing.analyze" | "operations.brief";
+  copilot_name: string;
+  pilot_mode: "draft_only";
+  runtime_status: string;
+  capability_status: string;
+  external_actions_blocked: boolean;
+  reporting_period_days: number;
+  health_score: number;
+  health_band: "healthy" | "needs_review" | "critical";
+  readiness_gaps: string[];
+  risk_alerts: Array<{
+    severity: "info" | "warning" | "critical";
+    item: string;
+    reason: string;
+    evidence: string[];
+  }>;
+  metric_cards: Array<{
+    label: string;
+    value: string;
+    detail: string;
+    tone: "neutral" | "info" | "success" | "warning" | "danger";
+  }>;
+  recommendations: ManagementCopilotRecommendation[];
+  metrics: {
+    generated: number;
+    reviewed: number;
+    accepted_or_corrected_rate_basis_points: number;
+    correction_rate_basis_points: number;
+    estimated_time_saved_minutes: number;
+  };
+};
+
 export type FinanceSummary = {
   collected_revenue_cents: number;
   pending_revenue_cents: number;
@@ -2680,6 +2766,36 @@ export async function getFinanceOverview(periodDays?: number): Promise<{
   } catch {
     return { finance: emptyFinanceOverview, apiConnected: false };
   }
+}
+
+async function getManagementCopilot(
+  path: string,
+  periodDays: number,
+): Promise<ManagementCopilotOverview | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}${path}?period_days=${periodDays}`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as ManagementCopilotOverview;
+  } catch {
+    return null;
+  }
+}
+
+export function getFinanceCopilotOverview(periodDays: number) {
+  return getManagementCopilot("/api/v1/finance/copilot", periodDays);
+}
+
+export function getMarketingCopilotOverview(periodDays: number) {
+  return getManagementCopilot("/api/v1/marketing/copilot", periodDays);
+}
+
+export function getExecutiveCopilotOverview(periodDays = 30) {
+  return getManagementCopilot("/api/v1/dashboard/executive-copilot", periodDays);
 }
 
 const emptyMarketingOverview: MarketingOverview = {
