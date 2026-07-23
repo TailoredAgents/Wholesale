@@ -183,6 +183,17 @@ handoff; correction and acceptance decisions preserve both the original and repl
 - `ai_evaluation_runs`
 - `ai_evaluation_results`
 - `ai_capability_promotions`
+- `ai_copilot_definitions`
+- `ai_copilot_agent_mappings`
+- `ai_capability_contracts`
+- `ai_data_governance_policies`
+- `ai_knowledge_sources`
+- `ai_data_quality_rules`
+
+Role copilots are the staff-facing layer. Each copilot has one named human owner and maps to
+bounded specialist engines. Versioned capability contracts define triggers, inputs, outputs,
+permitted tools, evidence, approvals, escalation, and prohibited actions. Governance policies
+preserve field-level source precedence, overwrite behavior, redaction, retention, and audience.
 
 ## Platform Operations
 

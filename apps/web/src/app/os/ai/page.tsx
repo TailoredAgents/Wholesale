@@ -70,14 +70,14 @@ export default async function AiControlPage() {
       <ManagementJourney active="ai" />
       <ManagementSummaryStrip
         authority={{ label: "External authority", value: "Execution blocked", detail: canManage ? "You may test and request promotion" : "Control policy is view only", tone: "success" }}
-        comparison={{ label: "Portfolio coverage", value: `${ai.summary.active_agent_count} of ${ai.summary.agent_count} active`, detail: `${metrics.passing_evaluation_count} passing evaluations`, tone: ai.summary.active_agent_count ? "info" : "warning" }}
+        comparison={{ label: "Copilot coverage", value: `${metrics.active_copilot_count} of ${metrics.copilot_count} approved`, detail: `${metrics.portfolio_agent_count} specialist engines`, tone: metrics.active_copilot_count ? "info" : "warning" }}
         exception={{ label: "Primary exception", value: primaryException, detail: `${openExceptions} open control signals`, tone: openExceptions || ai.call_intelligence_quality.autonomy_blockers.length ? "warning" : "success" }}
         nextAction={{ label: "Management next step", value: nextAction, detail: "Human approval remains mandatory", tone: "info" }}
         period={{ label: "Reporting basis", value: "Lifetime governed usage", detail: `${metrics.governed_run_count} orchestrated runs`, tone: "neutral" }}
       />
 
       <section className={managementStyles.metricGrid} aria-label="AI control performance">
-        <div><Bot size={17} /><span>Agent portfolio</span><strong>{ai.summary.agent_count}</strong><small>{ai.summary.active_agent_count} active</small></div>
+        <div><Bot size={17} /><span>Role copilots</span><strong>{metrics.copilot_count}</strong><small>{metrics.active_copilot_count} owner-approved</small></div>
         <div><Activity size={17} /><span>Runs logged</span><strong>{ai.summary.run_count}</strong><small>{formatLatency(ai.summary.average_latency_ms)} average latency</small></div>
         <div><ShieldAlert size={17} /><span>Pending approvals</span><strong>{ai.summary.pending_approval_count}</strong><small>{metrics.unreviewed_trace_count} traces need review</small></div>
         <div><CircleDollarSign size={17} /><span>Recorded cost</span><strong>{formatMicroUsd(ai.summary.total_cost_microusd)}</strong><small>{ai.summary.unpriced_run_count ? `${ai.summary.unpriced_run_count} unpriced runs` : "Completed usage priced"}</small></div>

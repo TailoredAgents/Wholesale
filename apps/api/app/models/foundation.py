@@ -2516,6 +2516,183 @@ class AiToolPermission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     requires_approval: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
 
 
+class AiCopilotDefinition(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_copilot_definitions"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "key", name="uq_ai_copilots_org_key"),
+        Index("ix_ai_copilots_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1200), nullable=False)
+    human_owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    human_owner_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    human_authority_summary: Mapped[str] = mapped_column(String(1200), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    phase_key: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiCopilotAgentMapping(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_copilot_agent_mappings"
+    __table_args__ = (
+        UniqueConstraint(
+            "copilot_definition_id",
+            "agent_definition_id",
+            name="uq_ai_copilot_agent_mapping",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    copilot_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_copilot_definitions.id", ondelete="CASCADE"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    purpose: Mapped[str] = mapped_column(String(800), nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AiCapabilityContract(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_capability_contracts"
+    __table_args__ = (
+        UniqueConstraint(
+            "copilot_definition_id",
+            "capability_key",
+            "version_number",
+            name="uq_ai_capability_contract_version",
+        ),
+        Index("ix_ai_capability_contracts_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    copilot_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_copilot_definitions.id", ondelete="CASCADE"), index=True
+    )
+    capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    trigger_events: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    input_requirements: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    output_requirements: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    allowed_tool_scopes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    evidence_requirements: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    approval_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    escalation_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    prohibited_actions: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiDataGovernancePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_data_governance_policies"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "key",
+            "version_number",
+            name="uq_ai_data_governance_policy_version",
+        ),
+        Index("ix_ai_data_governance_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    data_category: Mapped[str] = mapped_column(String(120), nullable=False)
+    field_scope: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_precedence: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    overwrite_policy: Mapped[str] = mapped_column(String(1600), nullable=False)
+    redaction_rule: Mapped[str] = mapped_column(String(1600), nullable=False)
+    retention_rule: Mapped[str] = mapped_column(String(1600), nullable=False)
+    permitted_role_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiKnowledgeSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_knowledge_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "key",
+            "version_number",
+            name="uq_ai_knowledge_source_version",
+        ),
+        Index("ix_ai_knowledge_sources_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    category: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    content_reference: Mapped[str] = mapped_column(String(1000), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    audience_role_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    is_authoritative: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    content_checksum: Mapped[str | None] = mapped_column(String(128))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiDataQualityRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_data_quality_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "key",
+            "version_number",
+            name="uq_ai_data_quality_rule_version",
+        ),
+        Index("ix_ai_data_quality_rules_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    record_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    field_scope: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    rule_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False)
+    is_deterministic: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    configuration: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    resolution_action: Mapped[str] = mapped_column(String(1000), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AiOrchestratorEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_orchestrator_events"
     __table_args__ = (

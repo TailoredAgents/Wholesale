@@ -1293,6 +1293,115 @@ export type ApprovalRequestItem = {
   approval_metadata: Record<string, unknown>;
 };
 
+export type AiCapabilityContract = {
+  id: string;
+  copilot_definition_id: string;
+  capability_key: string;
+  name: string;
+  version_number: number;
+  status: string;
+  owner_role_key: string;
+  trigger_events: string[];
+  input_requirements: string[];
+  output_requirements: string[];
+  allowed_tool_scopes: string[];
+  evidence_requirements: string[];
+  approval_policy: {
+    initial_level?: string;
+    human_approval_required_for?: string[];
+    external_execution_enabled?: boolean;
+  };
+  escalation_policy: {
+    when?: string[];
+    preserve_complete_history?: boolean;
+    stop_on_uncertainty?: boolean;
+  };
+  prohibited_actions: string[];
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  created_at: string;
+};
+
+export type AiCopilotFoundation = {
+  status: string;
+  copilots: Array<{
+    id: string;
+    key: string;
+    name: string;
+    description: string;
+    human_owner_role_key: string;
+    human_owner_title: string;
+    human_authority_summary: string;
+    status: string;
+    phase_key: string;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    specialist_mappings: Array<{
+      id: string;
+      agent_definition_id: string;
+      agent_key: string;
+      agent_name: string;
+      purpose: string;
+      display_order: number;
+    }>;
+    capability_contracts: AiCapabilityContract[];
+    created_at: string;
+  }>;
+  data_governance_policies: Array<{
+    id: string;
+    key: string;
+    name: string;
+    data_category: string;
+    field_scope: string[];
+    version_number: number;
+    status: string;
+    source_precedence: string[];
+    overwrite_policy: string;
+    redaction_rule: string;
+    retention_rule: string;
+    permitted_role_keys: string[];
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    created_at: string;
+  }>;
+  knowledge_sources: Array<{
+    id: string;
+    key: string;
+    title: string;
+    category: string;
+    source_type: string;
+    content_reference: string;
+    version_number: number;
+    status: string;
+    owner_role_key: string;
+    audience_role_keys: string[];
+    is_authoritative: boolean;
+    effective_at: string | null;
+    review_due_at: string | null;
+    content_checksum: string | null;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    created_at: string;
+  }>;
+  data_quality_rules: Array<{
+    id: string;
+    key: string;
+    name: string;
+    record_type: string;
+    field_scope: string[];
+    rule_type: string;
+    severity: string;
+    is_deterministic: boolean;
+    configuration: Record<string, unknown>;
+    resolution_action: string;
+    version_number: number;
+    status: string;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    created_at: string;
+  }>;
+};
+
 export type AiControlOverview = {
   summary: {
     agent_count: number;
@@ -1403,6 +1512,8 @@ export type AiControlOverview = {
   orchestrator: {
     metrics: {
       portfolio_agent_count: number;
+      copilot_count: number;
+      active_copilot_count: number;
       governed_run_count: number;
       unreviewed_trace_count: number;
       approved_dataset_count: number;
@@ -1411,6 +1522,7 @@ export type AiControlOverview = {
       active_promotion_count: number;
       budget_blocked_run_count: number;
     };
+    foundation: AiCopilotFoundation;
     events: Array<{
       id: string;
       event_key: string;
@@ -2193,6 +2305,8 @@ const emptyAiControlOverview: AiControlOverview = {
   orchestrator: {
     metrics: {
       portfolio_agent_count: 0,
+      copilot_count: 0,
+      active_copilot_count: 0,
       governed_run_count: 0,
       unreviewed_trace_count: 0,
       approved_dataset_count: 0,
@@ -2200,6 +2314,13 @@ const emptyAiControlOverview: AiControlOverview = {
       pending_promotion_count: 0,
       active_promotion_count: 0,
       budget_blocked_run_count: 0,
+    },
+    foundation: {
+      status: "not_installed",
+      copilots: [],
+      data_governance_policies: [],
+      knowledge_sources: [],
+      data_quality_rules: [],
     },
     events: [],
     datasets: [],

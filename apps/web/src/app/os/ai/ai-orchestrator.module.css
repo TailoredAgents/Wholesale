@@ -255,6 +255,178 @@
   line-height: 1.55;
 }
 
+.authorityNote {
+  margin: 22px 0;
+  padding: 15px;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+}
+
+.authorityNote div {
+  display: grid;
+  gap: 5px;
+}
+
+.authorityNote strong {
+  font-size: 13px;
+}
+
+.authorityNote p,
+.mappingGrid p,
+.contractBody p,
+.governanceGrid p,
+.emptyFoundation p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.registrySection {
+  margin-top: 24px;
+}
+
+.sectionHeading {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.sectionHeading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.sectionHeading strong {
+  font-size: 13px;
+}
+
+.sectionHeading span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mappingGrid,
+.governanceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mappingGrid > div,
+.governanceGrid article {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-soft);
+}
+
+.mappingGrid strong,
+.contractBody strong,
+.governanceGrid strong {
+  font-size: 12px;
+}
+
+.mappingGrid p {
+  margin-top: 5px;
+}
+
+.contractList {
+  border-top: 1px solid var(--line);
+}
+
+.contractList details {
+  border-bottom: 1px solid var(--line);
+}
+
+.contractList summary {
+  min-height: 58px;
+  padding: 10px 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contractList summary > span {
+  display: grid;
+  gap: 3px;
+}
+
+.contractList summary strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.contractList summary small,
+.governanceGrid small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.contractList summary b,
+.governanceGrid b {
+  color: var(--brand-strong);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.contractBody {
+  padding: 4px 4px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 18px;
+}
+
+.contractBody > div {
+  display: grid;
+  gap: 4px;
+}
+
+.foundationActions {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.foundationActions button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.foundationActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.emptyFoundation {
+  min-height: 360px;
+  color: var(--muted);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
 .policyGrid {
   margin: 22px 0;
   display: grid;
@@ -320,6 +492,35 @@
 .listPanel {
   min-height: 430px;
   padding: 20px;
+}
+
+.governanceSection + .governanceSection {
+  margin-top: 30px;
+}
+
+.governanceGrid {
+  padding-top: 12px;
+}
+
+.governanceGrid article > div {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.governanceGrid article > small {
+  margin-top: 5px;
+  display: block;
+}
+
+.governanceGrid article > p {
+  margin-top: 8px;
+}
+
+.governanceSection > p {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .listHeader {
@@ -404,6 +605,11 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .mappingGrid,
+  .governanceGrid {
+    grid-template-columns: 1fr;
+  }
+
   .toolTable > div {
     grid-template-columns: 1fr;
   }
@@ -426,5 +632,9 @@
 
   .policyGrid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .contractBody {
+    grid-template-columns: 1fr;
   }
 }

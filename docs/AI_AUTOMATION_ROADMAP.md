@@ -96,6 +96,8 @@ Every copilot is complete only when:
 
 ## Phase AI1: Copilot Contracts And Data Governance
 
+Status: **Complete in code. Owner review and approval are available in `/os/ai`.**
+
 Goal: Define exactly how humans and AI work together before adding production model behavior.
 
 Build:
@@ -467,14 +469,10 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Start AI1. The first implementation package should contain:
-
-1. The eight copilot definitions and backend-specialist mapping.
-2. The Lead Manager Copilot capability and prohibited-action contract.
-3. The field-level source and overwrite policy.
-4. The approved-knowledge registry.
-5. Redaction and evaluation-data rules.
-6. The first Lead Manager and Call Intelligence case templates for AI2.
+Start AI2. Build the first redacted golden datasets for Lead Manager Copilot and Call
+Intelligence, covering ordinary, incomplete, conflicting, stale, duplicate, policy-blocked, and
+adversarial cases. Define expected structured outputs and measurable thresholds before connecting
+the production model runner.
 
 The first production milestone is a Lead Manager Copilot that reliably organizes work, identifies
 gaps, drafts follow-up, and protects response SLAs while the human Lead Manager remains accountable

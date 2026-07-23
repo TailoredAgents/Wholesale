@@ -11,6 +11,7 @@ from app.models.foundation import (
     ActivityEvent,
     AiAgentDefinition,
     AiCapabilityPromotion,
+    AiCopilotDefinition,
     AiEvaluationCase,
     AiEvaluationDataset,
     AiEvaluationResult,
@@ -62,8 +63,8 @@ PORTFOLIO = (
     ),
     (
         "lead_management",
-        "Lead Management",
-        "Detect stale leads and recommend the next internal task.",
+        "Lead Manager Support",
+        "Assist the human Lead Manager with stale-lead protection and next-action proposals.",
         "lead.next_action",
         "medium",
     ),
@@ -164,6 +165,8 @@ def install_portfolio(db: Session, principal: Principal) -> AiPortfolioInstallRe
     created = 0
     for key, name, description, capability, risk in PORTFOLIO:
         if key in existing:
+            existing[key].name = name
+            existing[key].description = description
             continue
         agent = AiAgentDefinition(
             organization_id=principal.organization_id,
@@ -716,6 +719,8 @@ def rollback_promotion(
 
 
 def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
+    from app.services.ai_copilots import get_copilot_foundation
+
     events = db.scalars(
         select(AiOrchestratorEvent)
         .where(AiOrchestratorEvent.organization_id == principal.organization_id)
@@ -753,6 +758,8 @@ def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
 
     metrics = AiOrchestratorMetrics(
         portfolio_agent_count=count(AiAgentDefinition),
+        copilot_count=count(AiCopilotDefinition),
+        active_copilot_count=count(AiCopilotDefinition, AiCopilotDefinition.status == "active"),
         governed_run_count=count(AiRunLog, AiRunLog.execution_mode != "manual"),
         unreviewed_trace_count=count(
             AiRunLog, AiRunLog.execution_mode != "manual", AiRunLog.trace_status == "unreviewed"
@@ -771,6 +778,7 @@ def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
     )
     return AiOrchestratorOverview(
         metrics=metrics,
+        foundation=get_copilot_foundation(db, principal),
         events=[_event_read(item) for item in events],
         datasets=[_dataset_read(db, item) for item in datasets],
         evaluation_runs=[_evaluation_read(db, item) for item in evaluations],

@@ -53,7 +53,7 @@ email is implemented. Production acceptance remains pending for:
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
 | 9. Buyers, Dispositions, and Finance | Complete | Provider-neutral buyer placement, disposition, reconciliation, compensation, and accounting export are operational |
-| 10. Integrated AI Agent System | Partial | Governed control plane and 14-agent portfolio are implemented; controlled model pilots remain |
+| 10. Integrated AI Agent System | Partial | AI1 role-copilot contracts and data governance are implemented; golden cases, runtime hardening, and controlled pilots remain |
 
 Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
 offer controls were prioritized for seller conversations. That work is retained. It does not mark
@@ -379,9 +379,9 @@ Remaining:
   checks are complete; offer, contract, payment, compensation, and legal authority remain human.
 - Agent quality, correction, failure, cost, and business-outcome reporting.
 
-The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`, beginning
-with role-copilot contracts, data governance, redacted golden cases, runtime/tool hardening, and
-repeatable evaluation before the first Lead Manager Copilot pilot.
+The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`. AI1 role
+contracts and data governance are complete; AI2 begins with redacted golden cases and repeatable
+evaluation before the first Lead Manager Copilot pilot.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
@@ -403,8 +403,8 @@ evidence requirements, compliance controls, or financial approvals.
 2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
    template and redacted documents.
 3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
-4. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`: copilot contracts, data governance,
-   golden cases, runtime/tool hardening, and the evaluation factory.
+4. Complete AI2 and AI3 in `AI_AUTOMATION_ROADMAP.md`: golden cases, runtime/tool hardening, and
+   the evaluation factory.
 5. Run the AI4 draft-only Lead Manager Copilot pilot.
 6. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 

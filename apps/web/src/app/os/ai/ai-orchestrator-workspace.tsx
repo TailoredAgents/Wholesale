@@ -4,11 +4,14 @@ import { useAuth } from "@clerk/nextjs";
 import {
   Activity,
   BadgeCheck,
+  BookOpen,
+  Database,
   FlaskConical,
   Play,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
+  UsersRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -17,15 +20,18 @@ import type { AiControlOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./ai-orchestrator.module.css";
 
-type View = "portfolio" | "evaluations" | "traces" | "governance";
+type View = "copilots" | "portfolio" | "evaluations" | "traces" | "governance";
 
 export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [view, setView] = useState<View>("portfolio");
+  const [view, setView] = useState<View>("copilots");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [selectedAgent, setSelectedAgent] = useState(ai.agents[0]?.id ?? "");
+  const [selectedCopilot, setSelectedCopilot] = useState(
+    ai.orchestrator.foundation.copilots[0]?.id ?? "",
+  );
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -62,12 +68,25 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   }
 
   const selected = ai.agents.find((agent) => agent.id === selectedAgent) ?? ai.agents[0];
+  const copilot =
+    ai.orchestrator.foundation.copilots.find((item) => item.id === selectedCopilot) ??
+    ai.orchestrator.foundation.copilots[0];
   const capability = selected?.tool_permissions
     .find((tool) => tool.permission_level === "read")
     ?.tool_key.replace(/\.read$/, "");
 
-  async function installPortfolio() {
-    await request("orchestrator/portfolio/install");
+  async function installFoundation() {
+    await request("copilots/install");
+  }
+
+  async function decideFoundation(decision: "approve" | "return_to_draft") {
+    await request("copilots/foundation/decision", {
+      decision,
+      notes:
+        decision === "approve"
+          ? "Owner approved the AI1 capability contracts and data-governance foundation."
+          : "Owner returned the AI1 foundation to draft for revision.",
+    });
   }
 
   async function runDryRun() {
@@ -130,11 +149,11 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       <div className={styles.commandBar}>
         <div>
           <span>Governed automation control</span>
-          <strong>Observe, test, approve, then promote</strong>
+          <strong>Human-owned copilots with versioned authority</strong>
         </div>
         <div className={styles.actions}>
-          <button type="button" onClick={installPortfolio} disabled={Boolean(busy)}>
-            <RefreshCw size={16} /> Install portfolio
+          <button type="button" onClick={installFoundation} disabled={Boolean(busy)}>
+            <RefreshCw size={16} /> Install AI1 foundation
           </button>
           <button type="button" onClick={runDryRun} disabled={Boolean(busy) || !selected}>
             <Play size={16} /> Dry run
@@ -151,7 +170,7 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       </div>
 
       <nav className={styles.tabs} aria-label="AI control views">
-        {(["portfolio", "evaluations", "traces", "governance"] as View[]).map((item) => (
+        {(["copilots", "portfolio", "evaluations", "traces", "governance"] as View[]).map((item) => (
           <button
             type="button"
             key={item}
@@ -164,6 +183,138 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       </nav>
 
       {message ? <p className={styles.feedback}>{message}</p> : null}
+
+      {view === "copilots" ? (
+        <div className={styles.controlGrid}>
+          <aside className={styles.agentRail}>
+            {ai.orchestrator.foundation.copilots.length === 0 ? (
+              <p>Install the AI1 foundation to register Stonegate&apos;s role copilots.</p>
+            ) : null}
+            {ai.orchestrator.foundation.copilots.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                onClick={() => setSelectedCopilot(item.id)}
+                className={copilot?.id === item.id ? styles.selectedAgent : ""}
+              >
+                <span>{item.name}</span>
+                <small>{item.human_owner_title}</small>
+              </button>
+            ))}
+          </aside>
+          <article className={styles.detailPanel}>
+            {copilot ? (
+              <>
+                <div className={styles.detailHeader}>
+                  <div>
+                    <span>{copilot.phase_key} · human-owned</span>
+                    <h3>{copilot.name}</h3>
+                    <p>{copilot.description}</p>
+                  </div>
+                  <strong>{labelize(copilot.status)}</strong>
+                </div>
+
+                <div className={styles.authorityNote}>
+                  <UsersRound size={18} />
+                  <div>
+                    <strong>{copilot.human_owner_title} retains authority</strong>
+                    <p>{copilot.human_authority_summary}</p>
+                  </div>
+                </div>
+
+                <section className={styles.registrySection}>
+                  <div className={styles.sectionHeading}>
+                    <Database size={17} />
+                    <div>
+                      <strong>Specialist engines</strong>
+                      <span>Internal engines coordinated by this copilot</span>
+                    </div>
+                  </div>
+                  <div className={styles.mappingGrid}>
+                    {copilot.specialist_mappings.map((mapping) => (
+                      <div key={mapping.id}>
+                        <strong>{mapping.agent_name}</strong>
+                        <p>{mapping.purpose}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <section className={styles.registrySection}>
+                  <div className={styles.sectionHeading}>
+                    <ShieldCheck size={17} />
+                    <div>
+                      <strong>Capability contracts</strong>
+                      <span>Versioned rules applied before runtime access</span>
+                    </div>
+                  </div>
+                  <div className={styles.contractList}>
+                    {copilot.capability_contracts.map((contract) => (
+                      <details key={contract.id}>
+                        <summary>
+                          <span>
+                            <strong>{contract.name}</strong>
+                            <small>{contract.capability_key} · v{contract.version_number}</small>
+                          </span>
+                          <b>{labelize(contract.status)}</b>
+                        </summary>
+                        <div className={styles.contractBody}>
+                          <div>
+                            <strong>Produces</strong>
+                            <p>{contract.output_requirements.join(", ")}</p>
+                          </div>
+                          <div>
+                            <strong>Must cite</strong>
+                            <p>{contract.evidence_requirements.join(", ")}</p>
+                          </div>
+                          <div>
+                            <strong>Human approval</strong>
+                            <p>
+                              {contract.approval_policy.human_approval_required_for?.join(", ") ??
+                                "Required before material action"}
+                            </p>
+                          </div>
+                          <div>
+                            <strong>Escalates when</strong>
+                            <p>{contract.escalation_policy.when?.join(", ") ?? "Uncertain"}</p>
+                          </div>
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                </section>
+
+                <div className={styles.foundationActions}>
+                  {ai.orchestrator.foundation.status === "draft" ? (
+                    <button
+                      type="button"
+                      onClick={() => decideFoundation("approve")}
+                      disabled={Boolean(busy)}
+                    >
+                      <BadgeCheck size={16} /> Approve AI1 foundation
+                    </button>
+                  ) : null}
+                  {ai.orchestrator.foundation.status === "approved" ? (
+                    <button
+                      type="button"
+                      onClick={() => decideFoundation("return_to_draft")}
+                      disabled={Boolean(busy)}
+                    >
+                      <RotateCcw size={16} /> Return to draft
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            ) : (
+              <div className={styles.emptyFoundation}>
+                <UsersRound size={24} />
+                <strong>No role copilots are installed</strong>
+                <p>The installer creates the governed foundation without enabling external actions.</p>
+              </div>
+            )}
+          </article>
+        </div>
+      ) : null}
 
       {view === "portfolio" ? (
         <div className={styles.controlGrid}>
@@ -278,6 +429,70 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
 
       {view === "governance" ? (
         <div className={styles.listPanel}>
+          <section className={styles.governanceSection}>
+            <div className={styles.listHeader}>
+              <div><Database size={18} /><strong>Data authority and overwrite policy</strong></div>
+              <span>{ai.orchestrator.foundation.data_governance_policies.length} policies</span>
+            </div>
+            <div className={styles.governanceGrid}>
+              {ai.orchestrator.foundation.data_governance_policies.map((policy) => (
+                <article key={policy.id}>
+                  <div>
+                    <strong>{policy.name}</strong>
+                    <b>{labelize(policy.status)}</b>
+                  </div>
+                  <small>{policy.source_precedence.map(labelize).join(" → ")}</small>
+                  <p>{policy.overwrite_policy}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.governanceSection}>
+            <div className={styles.listHeader}>
+              <div><BookOpen size={18} /><strong>Approved knowledge registry</strong></div>
+              <span>{ai.orchestrator.foundation.knowledge_sources.length} sources</span>
+            </div>
+            <div className={styles.governanceGrid}>
+              {ai.orchestrator.foundation.knowledge_sources.map((source) => (
+                <article key={source.id}>
+                  <div>
+                    <strong>{source.title}</strong>
+                    <b>{labelize(source.status)}</b>
+                  </div>
+                  <small>
+                    {labelize(source.source_type)} · Owner: {labelize(source.owner_role_key)}
+                  </small>
+                  <p>
+                    {source.is_authoritative
+                      ? "Approved as an authoritative operational source."
+                      : "Reference-only until external review is complete."}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.governanceSection}>
+            <div className={styles.listHeader}>
+              <div><ShieldCheck size={18} /><strong>Deterministic data-quality rules</strong></div>
+              <span>{ai.orchestrator.foundation.data_quality_rules.length} rules</span>
+            </div>
+            <div className={styles.governanceGrid}>
+              {ai.orchestrator.foundation.data_quality_rules.map((rule) => (
+                <article key={rule.id}>
+                  <div>
+                    <strong>{rule.name}</strong>
+                    <b>{labelize(rule.severity)}</b>
+                  </div>
+                  <small>{labelize(rule.rule_type)} · {labelize(rule.record_type)}</small>
+                  <p>{rule.resolution_action}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.governanceSection}>
           <div className={styles.listHeader}><div><ShieldCheck size={18} /><strong>Promotion and rollback ledger</strong></div></div>
           {ai.orchestrator.promotions.length === 0 ? <p>No promotion requests yet.</p> : null}
           {ai.orchestrator.promotions.map((promotion) => (
@@ -289,6 +504,7 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
               </div>
             </article>
           ))}
+          </section>
         </div>
       ) : null}
     </section>

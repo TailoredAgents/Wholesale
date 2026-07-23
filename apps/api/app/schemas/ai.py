@@ -160,6 +160,132 @@ class AiPortfolioInstallRead(BaseModel):
     total_agent_count: int
 
 
+class AiCopilotAgentMappingRead(BaseModel):
+    id: UUID
+    agent_definition_id: UUID
+    agent_key: str
+    agent_name: str
+    purpose: str
+    display_order: int
+
+
+class AiCapabilityContractRead(BaseModel):
+    id: UUID
+    copilot_definition_id: UUID
+    capability_key: str
+    name: str
+    version_number: int
+    status: str
+    owner_role_key: str
+    trigger_events: list[str]
+    input_requirements: list[str]
+    output_requirements: list[str]
+    allowed_tool_scopes: list[str]
+    evidence_requirements: list[str]
+    approval_policy: dict[str, object]
+    escalation_policy: dict[str, object]
+    prohibited_actions: list[str]
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class AiCopilotRead(BaseModel):
+    id: UUID
+    key: str
+    name: str
+    description: str
+    human_owner_role_key: str
+    human_owner_title: str
+    human_authority_summary: str
+    status: str
+    phase_key: str
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    specialist_mappings: list[AiCopilotAgentMappingRead]
+    capability_contracts: list[AiCapabilityContractRead]
+    created_at: datetime
+
+
+class AiDataGovernancePolicyRead(BaseModel):
+    id: UUID
+    key: str
+    name: str
+    data_category: str
+    field_scope: list[str]
+    version_number: int
+    status: str
+    source_precedence: list[str]
+    overwrite_policy: str
+    redaction_rule: str
+    retention_rule: str
+    permitted_role_keys: list[str]
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class AiKnowledgeSourceRead(BaseModel):
+    id: UUID
+    key: str
+    title: str
+    category: str
+    source_type: str
+    content_reference: str
+    version_number: int
+    status: str
+    owner_role_key: str
+    audience_role_keys: list[str]
+    is_authoritative: bool
+    effective_at: datetime | None
+    review_due_at: datetime | None
+    content_checksum: str | None
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class AiDataQualityRuleRead(BaseModel):
+    id: UUID
+    key: str
+    name: str
+    record_type: str
+    field_scope: list[str]
+    rule_type: str
+    severity: str
+    is_deterministic: bool
+    configuration: dict[str, object]
+    resolution_action: str
+    version_number: int
+    status: str
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    created_at: datetime
+
+
+class AiCopilotFoundationRead(BaseModel):
+    status: str
+    copilots: list[AiCopilotRead]
+    data_governance_policies: list[AiDataGovernancePolicyRead]
+    knowledge_sources: list[AiKnowledgeSourceRead]
+    data_quality_rules: list[AiDataQualityRuleRead]
+
+
+class AiCopilotFoundationInstallRead(BaseModel):
+    created_copilot_count: int
+    created_mapping_count: int
+    created_contract_count: int
+    created_policy_count: int
+    created_knowledge_source_count: int
+    created_data_quality_rule_count: int
+    foundation: AiCopilotFoundationRead
+
+
+class AiCopilotFoundationDecision(BaseModel):
+    decision: Literal["approve", "return_to_draft"]
+    notes: str = Field(min_length=1, max_length=2000)
+
+
 class AiOrchestratorEventCreate(BaseModel):
     event_key: str = Field(min_length=1, max_length=255)
     event_type: str = Field(min_length=1, max_length=120)
@@ -327,6 +453,8 @@ class AiRollbackCreate(BaseModel):
 
 class AiOrchestratorMetrics(BaseModel):
     portfolio_agent_count: int
+    copilot_count: int
+    active_copilot_count: int
     governed_run_count: int
     unreviewed_trace_count: int
     approved_dataset_count: int
@@ -338,6 +466,7 @@ class AiOrchestratorMetrics(BaseModel):
 
 class AiOrchestratorOverview(BaseModel):
     metrics: AiOrchestratorMetrics
+    foundation: AiCopilotFoundationRead
     events: list[AiOrchestratorEventRead]
     datasets: list[AiEvaluationDatasetRead]
     evaluation_runs: list[AiEvaluationRunRead]

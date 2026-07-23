@@ -11,6 +11,9 @@ from app.schemas.ai import (
     AiAgentCreate,
     AiAgentRead,
     AiControlOverview,
+    AiCopilotFoundationDecision,
+    AiCopilotFoundationInstallRead,
+    AiCopilotFoundationRead,
     AiDryRunCreate,
     AiEvaluationDatasetCreate,
     AiEvaluationDatasetRead,
@@ -36,6 +39,10 @@ from app.services.ai import (
     create_ai_run,
     get_ai_overview,
     run_lead_intake_summary,
+)
+from app.services.ai_copilots import (
+    decide_copilot_foundation,
+    install_copilot_foundation,
 )
 from app.services.ai_orchestrator import (
     create_dataset,
@@ -132,6 +139,29 @@ def install_agent_portfolio(
     principal: Annotated[Principal, Depends(change_ai_dependency)],
 ) -> AiPortfolioInstallRead:
     return install_portfolio(db, principal)
+
+
+@router.post("/copilots/install", status_code=201)
+def install_ai_copilot_foundation(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiCopilotFoundationInstallRead:
+    try:
+        return install_copilot_foundation(db, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/copilots/foundation/decision")
+def decide_ai_copilot_foundation(
+    payload: AiCopilotFoundationDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiCopilotFoundationRead:
+    try:
+        return decide_copilot_foundation(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.post("/orchestrator/events", status_code=201)
