@@ -994,6 +994,7 @@ history.
 
 ## 25. Related Documentation
 
+- `LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for the Lead Manager role.
 - `OPERATING_MODEL.md`: roles, handoffs, compensation, and operating policy.
 - `WORKFLOWS.md`: concise system workflow sequence.
 - `CURRENT_STATE.md`: delivered functionality and known limits.

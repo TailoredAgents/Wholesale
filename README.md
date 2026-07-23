@@ -20,6 +20,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 Start with:
 
 - `docs/USER_MANUAL.md`: detailed role-based instructions for using the public site and private OS.
+- `docs/LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for Stonegate Lead Managers.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
 - `docs/ROADMAP.md`: ordered development phases after provider setup.
