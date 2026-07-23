@@ -81,6 +81,8 @@ Delivered:
 - AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
   deterministic closing readiness, deadline risk, duplicate-file protection, source-page
   confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
+- All six completed AI4-AI7 capabilities are available on demand in supervised draft-only mode.
+  Every output requires human review, tools remain read-only, and external actions remain blocked.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -511,6 +513,7 @@ Start with deterministic document/checklist readiness, missing-item detection, d
 reviewed internal drafts. Do not add contract interpretation, signature, legal, or external-send
 authority.
 
-In parallel, complete the AI3 production checkpoints and activate the separately measured AI4,
-AI5, and AI6 draft-only pilots. Keep recording-dependent coaching disabled until Twilio
-disclosure, consent, and retention controls are operationally approved.
+In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI7
+draft-only pilots. Call Quality can produce a draft only from an approved transcript; keep
+recording ingestion disabled until Twilio disclosure, consent, and retention controls are
+operationally approved.

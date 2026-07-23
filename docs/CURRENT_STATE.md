@@ -353,7 +353,9 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   authority. AI7 adds transaction readiness, deadline risk, duplicate document protection,
   source-page confirmed facts, governed closing drafts, immutable review, and no legal,
   external-send, checklist-write, deadline-write, or closing authority. Provider integrations,
-  production replay, activation, and measured pilots remain checkpoints.
+  production replay, and measured pilots remain checkpoints. All six completed AI4-AI7
+  capabilities are enabled for on-demand drafts with mandatory human review and read-only tools;
+  global external actions remain disabled.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the

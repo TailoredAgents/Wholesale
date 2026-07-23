@@ -102,7 +102,10 @@ def model_output() -> dict[str, object]:
 def test_copilot_prioritizes_work_and_blocks_generation_until_runtime_is_enabled(
     db_session: Session,
     api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    get_settings.cache_clear()
     seed_owner(db_session)
     client = TestClient(app)
     intake = client.post("/api/v1/public/seller-leads", json=seller_payload())
@@ -144,6 +147,7 @@ def test_copilot_prioritizes_work_and_blocks_generation_until_runtime_is_enabled
         )
         == 0
     )
+    get_settings.cache_clear()
 
 
 def test_copilot_generates_idempotent_draft_and_preserves_human_control(

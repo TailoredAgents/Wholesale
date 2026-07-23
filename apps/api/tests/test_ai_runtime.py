@@ -13,7 +13,7 @@ from app.models.foundation import (
     AiKnowledgeUseLog,
     AiRunLog,
 )
-from app.services.ai_runtime import _scope_lead_context
+from app.services.ai_runtime import DRAFT_ONLY_ENABLED_CAPABILITIES, _scope_lead_context
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -87,6 +87,20 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
     assert second["created_runtime_policy"] is False
     assert second["created_capability_policy_count"] == 0
 
+    capabilities_by_key = {
+        item["capability_key"]: item for item in first["runtime"]["capabilities"]
+    }
+    for capability_key in DRAFT_ONLY_ENABLED_CAPABILITIES:
+        capability = capabilities_by_key[capability_key]
+        assert capability["status"] == "enabled"
+        assert capability["requires_human_review"] is True
+        assert all(tool_key.endswith(".read") for tool_key in capability["allowed_tool_keys"])
+    assert {
+        key
+        for key, capability in capabilities_by_key.items()
+        if capability["status"] == "enabled"
+    } == DRAFT_ONLY_ENABLED_CAPABILITIES
+
     capability = first["runtime"]["capabilities"][0]
     blocked = client.post(
         "/api/v1/ai/runtime/execute",
@@ -136,6 +150,23 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
     assert shutdown.status_code == 200
     assert shutdown.json()["status"] == "emergency_stopped"
     assert shutdown.json()["metrics"]["enabled_capability_count"] == 0
+
+
+def test_runtime_starts_enabled_when_openai_is_configured(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    with monkeypatch.context() as configured_environment:
+        configured_environment.setenv("AI_ENABLED", "true")
+        configured_environment.setenv("OPENAI_API_KEY", "test-openai-key")
+        get_settings.cache_clear()
+        installed = install_ai_foundation(TestClient(app))
+        assert installed["runtime"]["status"] == "enabled"
+        assert installed["runtime"]["policy"]["provider_status"] == "enabled"
+        assert installed["runtime"]["policy"]["external_actions_enabled"] is False
+    get_settings.cache_clear()
 
 
 def test_production_runtime_is_structured_scoped_redacted_and_idempotent(

@@ -74,6 +74,14 @@ from app.services.ai_orchestrator import PORTFOLIO
 
 MODEL_ROUTES = {"high_volume", "default", "escalation"}
 CAPABILITY_STATUSES = {"enabled", "disabled"}
+DRAFT_ONLY_ENABLED_CAPABILITIES = {
+    "lead.next_action",
+    "prospecting.prioritize",
+    "call.quality_coach",
+    "appointment.brief",
+    "negotiation.coach",
+    "transaction.coordinate",
+}
 OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -477,6 +485,11 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
         default_model = settings.openai_default_model
         runtime = _new_runtime_policy(
             principal,
+            provider_status=(
+                "enabled"
+                if settings.ai_enabled and bool(settings.openai_api_key)
+                else "disabled"
+            ),
             high_volume_model=settings.openai_high_volume_model or default_model,
             default_model=default_model,
             escalation_model=settings.openai_escalation_model or default_model,
@@ -527,7 +540,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 capability_key=capability_key,
                 status=(
                     "enabled"
-                    if capability_key == "transaction.coordinate"
+                    if capability_key in DRAFT_ONLY_ENABLED_CAPABILITIES
                     else "disabled"
                 ),
                 model_route=route,
@@ -562,7 +575,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     organization_id=principal.organization_id,
                     agent_definition_id=call_agent.id,
                     capability_key="call.quality_coach",
-                    status="disabled",
+                    status="enabled",
                     model_route="escalation",
                     output_schema=CALL_QUALITY_OUTPUT_SCHEMA,
                     allowed_tool_keys=["call.summarize.read"],
@@ -1071,6 +1084,7 @@ def get_runtime_overview(db: Session, principal: Principal) -> AiRuntimeOverview
 def _new_runtime_policy(
     principal: Principal,
     *,
+    provider_status: str,
     high_volume_model: str,
     default_model: str,
     escalation_model: str,
@@ -1079,7 +1093,7 @@ def _new_runtime_policy(
 
     return AiRuntimePolicy(
         organization_id=principal.organization_id,
-        provider_status="disabled",
+        provider_status=provider_status,
         emergency_stop=False,
         high_volume_model=high_volume_model,
         default_model=default_model,

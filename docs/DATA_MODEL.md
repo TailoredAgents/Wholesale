@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0048_enable_transaction_copilot` is the
+The schema is managed through Alembic migrations. Migration `0049_enable_completed_copilots` is the
 current head.
 
 ## Identity And Access
