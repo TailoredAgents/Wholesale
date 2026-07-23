@@ -340,9 +340,7 @@ class AiRuntimePolicyUpdate(BaseModel):
     escalation_model: str | None = Field(default=None, min_length=1, max_length=120)
     max_context_characters: int | None = Field(default=None, ge=4000, le=200_000)
     max_requests_per_minute: int | None = Field(default=None, ge=1, le=1000)
-    max_daily_cost_microusd: int | None = Field(
-        default=None, ge=0, le=10_000_000_000
-    )
+    max_daily_cost_microusd: int | None = Field(default=None, ge=0, le=10_000_000_000)
     circuit_failure_threshold: int | None = Field(default=None, ge=1, le=20)
     circuit_cooldown_seconds: int | None = Field(default=None, ge=30, le=86_400)
 
@@ -362,6 +360,9 @@ class AiRuntimeExecuteCreate(BaseModel):
     idempotency_key: str = Field(min_length=1, max_length=255)
     input_payload: dict[str, object] = Field(default_factory=dict)
     lead_id: UUID | None = None
+    prospect_id: UUID | None = None
+    prospecting_entry_id: UUID | None = None
+    prospecting_attempt_id: UUID | None = None
 
 
 class AiRuntimePolicyRead(BaseModel):

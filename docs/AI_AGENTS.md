@@ -153,6 +153,11 @@ AI may clean and prioritize assigned data, present the approved script, detect m
 classify dispositions, schedule compliant callbacks, and prepare a handoff. Deterministic screening
 must establish calling eligibility before AI scoring is useful.
 
+Phase AI5 implements priority and preparation as draft-only assistance. The backend, not the model,
+enforces assignment, eligibility, suppression, script, transcript, disclosure, and role scope.
+Call coaching requires an approved transcript and manager review; compliance flags escalate even
+when no transcript or model output exists.
+
 AI-generated cold voice is not an initial Stonegate capability. Federal and state calling,
 prerecorded/artificial voice, consent, disclosure, and seller-liability requirements require a
 separate legal and operational approval before any pilot.

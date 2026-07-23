@@ -1,8 +1,8 @@
 # Data Model
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0037_offer_concession_governance` is the
+The schema is managed through Alembic migrations. Migration `0045_prospecting_copilot` is the
 current head.
 
 ## Identity And Access
@@ -135,6 +135,9 @@ authorized its presented or agreed price.
 - `prospect_calling_batch_entries`
 - `prospecting_script_versions`
 - `prospecting_attempts`
+- `prospecting_copilot_recommendations`
+- `prospecting_copilot_reviews`
+- `prospecting_call_quality_reviews`
 - `prospect_handoffs`
 - `compensation_plan_versions`
 - `compensation_plan_roles`
@@ -169,6 +172,12 @@ Prospecting scripts are immutable versions that require manager approval before 
 started record creates a separate attempt tied to the exact script version, caller, batch entry,
 answers, outcome, callback, and quality evidence. Warm outcomes create a CRM lead and a reviewable
 handoff; correction and acceptance decisions preserve both the original and replacement attempts.
+
+Prospecting Copilot recommendations preserve deterministic priority, the exact governed model
+output, evidence snapshot, model trace, intended caller, and immutable human review. Call-quality
+reviews remain tied to the human attempt and optionally to a disclosed recording, approved
+transcript, and governed AI run. Missing evidence produces nullable scores rather than invented
+certainty. Compliance flags and escalation state do not depend on transcript or model availability.
 
 ## AI Control
 

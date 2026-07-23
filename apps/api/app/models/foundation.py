@@ -464,6 +464,118 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
     quality_score_basis_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
+class ProspectingCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_copilot_recommendations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_prospecting_copilot_org_idempotency",
+        ),
+        Index(
+            "ix_prospecting_copilot_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    batch_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("prospect_calling_batch_entries.id", ondelete="CASCADE"),
+        index=True,
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospects.id"), index=True)
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    priority_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    priority_band: Mapped[str] = mapped_column(String(40), nullable=False)
+    output_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    confidence_score: Mapped[int | None] = mapped_column(Integer)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProspectingCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_copilot_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "recommendation_id",
+            name="uq_prospecting_copilot_review_recommendation",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    recommendation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_copilot_recommendations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    decision: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    estimated_time_saved_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ProspectingCallQualityReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_call_quality_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "attempt_id",
+            name="uq_prospecting_call_quality_attempt",
+        ),
+        Index(
+            "ix_prospecting_call_quality_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    attempt_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_attempts.id", ondelete="CASCADE"), index=True
+    )
+    caller_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("call_records.id", ondelete="SET NULL"), index=True
+    )
+    transcript_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("call_transcripts.id", ondelete="SET NULL"), index=True
+    )
+    ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    deterministic_scores: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    ai_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    compliance_flags: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    escalation_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    review_notes: Mapped[str | None] = mapped_column(String(2000))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prospect_handoffs"
     __table_args__ = (UniqueConstraint("attempt_id", name="uq_prospect_handoffs_attempt"),)
@@ -632,9 +744,7 @@ class LeadManagerCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
         ForeignKey("lead_manager_copilot_recommendations.id", ondelete="CASCADE"),
         index=True,
     )
-    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id"), index=True
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     decision: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -2766,9 +2876,7 @@ class AiDataQualityRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class AiRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_runtime_policies"
-    __table_args__ = (
-        UniqueConstraint("organization_id", name="uq_ai_runtime_policy_org"),
-    )
+    __table_args__ = (UniqueConstraint("organization_id", name="uq_ai_runtime_policy_org"),)
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -2776,9 +2884,7 @@ class AiRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
     provider_status: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default="disabled"
     )
-    emergency_stop: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    emergency_stop: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     emergency_stop_reason: Mapped[str | None] = mapped_column(String(1000))
     high_volume_model: Mapped[str] = mapped_column(String(120), nullable=False)
     default_model: Mapped[str] = mapped_column(String(120), nullable=False)
@@ -2833,18 +2939,12 @@ class AiCapabilityRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("ai_agent_definitions.id"), index=True
     )
     capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(40), nullable=False, server_default="disabled"
-    )
-    model_route: Mapped[str] = mapped_column(
-        String(40), nullable=False, server_default="default"
-    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, server_default="disabled")
+    model_route: Mapped[str] = mapped_column(String(40), nullable=False, server_default="default")
     output_schema: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     allowed_tool_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     allowed_knowledge_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
-    max_output_tokens: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="1200"
-    )
+    max_output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1200")
     max_cost_microusd_per_run: Mapped[int] = mapped_column(
         BigInteger, nullable=False, server_default="100000"
     )

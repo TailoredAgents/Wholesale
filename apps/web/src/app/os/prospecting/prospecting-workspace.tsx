@@ -1,19 +1,31 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import {
+  Brain,
+  CheckCircle2,
+  FileWarning,
+  Pencil,
+  ShieldAlert,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import type {
   ProspectHandoff,
+  ProspectingCallQuality,
+  ProspectingCopilotOutput,
+  ProspectingCopilotRecommendation,
   ProspectingEntry,
   ProspectingWorkbenchOverview,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./prospecting.module.css";
 
-type View = "workbench" | "handoffs" | "performance" | "scripts";
+type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
 const outcomes = [
@@ -67,6 +79,14 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [message, setMessage] = useState("");
   const [outcome, setOutcome] = useState("no_answer");
   const [entry, setEntry] = useState<ProspectingEntry | null>(data.current_entry);
+  const [selectedCopilotEntryId, setSelectedCopilotEntryId] = useState(
+    data.current_entry?.id ?? data.copilot.work_items[0]?.entry_id ?? "",
+  );
+  const [localRecommendation, setLocalRecommendation] =
+    useState<ProspectingCopilotRecommendation | null>(null);
+  const [editingBrief, setEditingBrief] = useState(false);
+  const [editedSummary, setEditedSummary] = useState("");
+  const [reviewNotes, setReviewNotes] = useState("");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -83,6 +103,11 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const isAppointment = outcome === "appointment_set";
   const availableViews: Array<{ key: View; label: string; count?: number }> = [
     { key: "workbench", label: "Work queue" },
+    {
+      key: "quality",
+      label: "Call quality",
+      count: data.copilot.metrics.escalations || undefined,
+    },
     ...(data.can_manage
       ? [{ key: "handoffs" as const, label: "Handoff review", count: data.pending_handoffs.length }]
       : []),
@@ -156,6 +181,9 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
         appointment_location: isAppointment
           ? value(formData, "appointment_location") || null
           : null,
+        compliance_flags: formData
+          .getAll("compliance_flags")
+          .map((flag) => String(flag)),
       },
     );
     if (result) {
@@ -211,6 +239,76 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     if (result) router.refresh();
   }
 
+  async function analyzeProspect(entryId: string) {
+    const result = await request<{
+      message: string;
+      recommendation: ProspectingCopilotRecommendation | null;
+    }>(`/api/v1/prospecting/entries/${entryId}/copilot/analyze`, "POST", {});
+    if (result?.recommendation) {
+      setLocalRecommendation(result.recommendation);
+      setEditedSummary(result.recommendation.output_payload.pre_call_summary);
+    } else if (result) {
+      setMessage(result.message);
+    }
+  }
+
+  async function reviewProspectBrief(
+    recommendation: ProspectingCopilotRecommendation,
+    decision: "accepted" | "edited" | "rejected",
+  ) {
+    const finalOutput: ProspectingCopilotOutput | undefined =
+      decision === "edited"
+        ? {
+            ...recommendation.output_payload,
+            pre_call_summary: editedSummary.trim(),
+          }
+        : undefined;
+    const result = await request(
+      `/api/v1/prospecting/copilot/recommendations/${recommendation.id}/review`,
+      "POST",
+      {
+        decision,
+        final_output: finalOutput,
+        notes: reviewNotes.trim() || null,
+        estimated_time_saved_seconds: 120,
+      },
+    );
+    if (result) {
+      setLocalRecommendation({
+        ...recommendation,
+        status: decision,
+        output_payload: finalOutput ?? recommendation.output_payload,
+        reviewed_at: new Date().toISOString(),
+      });
+      setEditingBrief(false);
+    }
+  }
+
+  async function analyzeQuality(attemptId: string) {
+    const result = await request(
+      `/api/v1/prospecting/attempts/${attemptId}/quality/analyze`,
+      "POST",
+    );
+    if (result) router.refresh();
+  }
+
+  async function reviewQuality(
+    item: ProspectingCallQuality,
+    decision: "approved" | "corrected" | "rejected",
+    finalOutput?: ProspectingCallQualityOutput,
+  ) {
+    const result = await request(
+      `/api/v1/prospecting/attempts/${item.attempt_id}/quality/review`,
+      "POST",
+      {
+        decision,
+        final_output: finalOutput,
+        notes: decision === "corrected" ? "Manager corrected the coaching output." : null,
+      },
+    );
+    if (result) router.refresh();
+  }
+
   return (
     <div className={styles.workspace}>
       <section className={styles.metrics} aria-label="Prospecting queue summary">
@@ -240,19 +338,50 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       ) : null}
 
       {view === "workbench" ? (
-        <WorkbenchView
-          activeAttempt={activeAttempt}
-          activeScript={data.active_script}
-          acquisitionUsers={data.acquisition_users}
-          entry={entry}
-          isAppointment={isAppointment}
-          isWarm={isWarm}
-          onComplete={completeCurrent}
-          onOutcomeChange={setOutcome}
-          onStart={startCurrent}
-          outcome={outcome}
-          requiresCallback={requiresCallback}
-          returnedHandoffs={data.returned_handoffs}
+        <>
+          <ProspectingCopilotPrep
+            copilot={data.copilot}
+            editing={editingBrief}
+            editedSummary={editedSummary}
+            localRecommendation={localRecommendation}
+            onAnalyze={analyzeProspect}
+            onEdit={() => setEditingBrief(true)}
+            onEditedSummary={setEditedSummary}
+            onReview={reviewProspectBrief}
+            onReviewNotes={setReviewNotes}
+            onSelect={(entryId) => {
+              setSelectedCopilotEntryId(entryId);
+              setLocalRecommendation(null);
+              setEditingBrief(false);
+            }}
+            reviewNotes={reviewNotes}
+            saving={status === "saving"}
+            selectedEntryId={selectedCopilotEntryId}
+          />
+          <WorkbenchView
+            activeAttempt={activeAttempt}
+            activeScript={data.active_script}
+            acquisitionUsers={data.acquisition_users}
+            entry={entry}
+            isAppointment={isAppointment}
+            isWarm={isWarm}
+            onComplete={completeCurrent}
+            onOutcomeChange={setOutcome}
+            onStart={startCurrent}
+            outcome={outcome}
+            requiresCallback={requiresCallback}
+            returnedHandoffs={data.returned_handoffs}
+            saving={status === "saving"}
+          />
+        </>
+      ) : null}
+
+      {view === "quality" ? (
+        <CallQualityView
+          canManage={data.can_manage}
+          items={data.copilot.quality_queue}
+          onAnalyze={analyzeQuality}
+          onReview={reviewQuality}
           saving={status === "saving"}
         />
       ) : null}
@@ -356,6 +485,212 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   );
 }
 
+function ProspectingCopilotPrep({
+  copilot,
+  editedSummary,
+  editing,
+  localRecommendation,
+  onAnalyze,
+  onEdit,
+  onEditedSummary,
+  onReview,
+  onReviewNotes,
+  onSelect,
+  reviewNotes,
+  saving,
+  selectedEntryId,
+}: {
+  copilot: ProspectingWorkbenchOverview["copilot"];
+  editedSummary: string;
+  editing: boolean;
+  localRecommendation: ProspectingCopilotRecommendation | null;
+  onAnalyze: (entryId: string) => void;
+  onEdit: () => void;
+  onEditedSummary: (value: string) => void;
+  onReview: (
+    recommendation: ProspectingCopilotRecommendation,
+    decision: "accepted" | "edited" | "rejected",
+  ) => void;
+  onReviewNotes: (value: string) => void;
+  onSelect: (entryId: string) => void;
+  reviewNotes: string;
+  saving: boolean;
+  selectedEntryId: string;
+}) {
+  const selected =
+    copilot.work_items.find((item) => item.entry_id === selectedEntryId) ?? null;
+  const recommendation =
+    localRecommendation?.entry_id === selectedEntryId
+      ? localRecommendation
+      : copilot.recommendations.find((item) => item.entry_id === selectedEntryId) ?? null;
+  const output = recommendation?.output_payload ?? null;
+  return (
+    <section className={styles.copilotPrep}>
+      <div className={styles.copilotGuard}>
+        <div><ShieldAlert size={17} /><strong>Draft-only Prospecting Copilot</strong></div>
+        <span>Cannot call, change eligibility, select a disposition, or submit a handoff.</span>
+        <small>
+          Runtime {labelize(copilot.runtime_status)} · Priority tools {labelize(copilot.priority_capability_status)}
+        </small>
+      </div>
+      <div className={styles.prepGrid}>
+        <aside className={styles.priorityQueue}>
+          <header><div><span>Eligibility-first ranking</span><h3>Assigned priorities</h3></div><Brain size={18} /></header>
+          {copilot.work_items.map((item) => (
+            <button
+              className={selectedEntryId === item.entry_id ? styles.selectedPriority : ""}
+              key={item.entry_id}
+              onClick={() => onSelect(item.entry_id)}
+              type="button"
+            >
+              <span>{item.priority_score} · {labelize(item.priority_band)}</span>
+              <strong>{item.seller_name}</strong>
+              <small>{item.property_address ?? "Address incomplete"}</small>
+              <p>{item.recommended_action}</p>
+            </button>
+          ))}
+          {!copilot.work_items.length ? <p className={styles.empty}>No eligible assigned record is due.</p> : null}
+        </aside>
+        <div className={styles.preCallBrief}>
+          {selected ? (
+            <>
+              <header>
+                <div><span>Pre-call preparation</span><h3>{selected.seller_name}</h3><p>{selected.campaign_name}</p></div>
+                <button
+                  disabled={saving || recommendation?.status === "draft"}
+                  onClick={() => onAnalyze(selected.entry_id)}
+                  type="button"
+                >
+                  <Sparkles size={15} />{recommendation ? "Refresh brief" : "Generate brief"}
+                </button>
+              </header>
+              <div className={styles.deterministicPrep}>
+                <strong>{selected.recommended_action}</strong>
+                {selected.reasons.map((reason) => <span key={reason}>{reason}</span>)}
+                {selected.data_quality_warnings.map((warning) => <span className={styles.warning} key={warning}><FileWarning size={14} />{warning}</span>)}
+              </div>
+              {output && recommendation ? (
+                <div className={styles.generatedPrep}>
+                  <div className={styles.prepSummary}>
+                    <div><span>Seller brief</span>{editing ? <textarea onChange={(event) => onEditedSummary(event.target.value)} rows={4} value={editedSummary} /> : <p>{output.pre_call_summary}</p>}</div>
+                    <strong>{output.confidence}% confidence</strong>
+                  </div>
+                  <div className={styles.prepColumns}>
+                    <section><span>Opening guidance</span><p>{output.opening_guidance}</p></section>
+                    <section><span>Why now</span><p>{output.priority_explanation}</p></section>
+                    <section><span>Required questions</span><ul>{output.required_questions.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                    <section><span>Compliance reminders</span><ul>{output.compliance_reminders.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                  </div>
+                  <details><summary>Property, attempts, evidence, and data warnings</summary><div className={styles.evidenceColumns}><section><span>Property</span><ul>{output.property_context.map((item) => <li key={item}>{item}</li>)}</ul></section><section><span>Prior attempts</span><ul>{output.prior_attempt_context.map((item) => <li key={item}>{item}</li>)}</ul></section><section><span>Evidence</span><ul>{output.evidence.map((item) => <li key={item}>{item}</li>)}</ul></section><section><span>Warnings</span><ul>{output.data_quality_warnings.map((item) => <li key={item}>{item}</li>)}</ul></section></div></details>
+                  {recommendation.status === "draft" ? (
+                    <footer className={styles.briefReview}>
+                      {editing ? <input onChange={(event) => onReviewNotes(event.target.value)} placeholder="What did you correct?" value={reviewNotes} /> : null}
+                      <div>
+                        <button className={styles.rejectAction} disabled={saving} onClick={() => onReview(recommendation, "rejected")} type="button"><XCircle size={15} />Reject</button>
+                        <button className={styles.editAction} disabled={saving} onClick={onEdit} type="button"><Pencil size={15} />Correct</button>
+                        <button disabled={saving} onClick={() => onReview(recommendation, editing ? "edited" : "accepted")} type="button"><CheckCircle2 size={15} />{editing ? "Save correction" : "Accept brief"}</button>
+                      </div>
+                    </footer>
+                  ) : <p className={styles.reviewedBrief}><CheckCircle2 size={15} />Reviewed: {labelize(recommendation.status)}. No call or record action was taken.</p>}
+                </div>
+              ) : (
+                <div className={styles.prepEmpty}><Brain size={22} /><strong>Generate a governed pre-call brief</strong><p>Deterministic eligibility and priority are already active. AI generation must be enabled separately.</p></div>
+              )}
+            </>
+          ) : <p className={styles.empty}>Select an eligible assigned prospect.</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CallQualityView({
+  canManage,
+  items,
+  onAnalyze,
+  onReview,
+  saving,
+}: {
+  canManage: boolean;
+  items: ProspectingCallQuality[];
+  onAnalyze: (attemptId: string) => void;
+  onReview: (
+    item: ProspectingCallQuality,
+    decision: "approved" | "corrected" | "rejected",
+    finalOutput?: ProspectingCallQualityOutput,
+  ) => void;
+  saving: boolean;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [correction, setCorrection] = useState<ProspectingCallQualityOutput | null>(null);
+
+  function beginCorrection(item: ProspectingCallQuality) {
+    if (!item.ai_output) return;
+    setEditingId(item.id);
+    setCorrection(structuredClone(item.ai_output));
+  }
+
+  function updateCorrection(
+    field: keyof ProspectingCallQualityOutput,
+    value: ProspectingCallQualityOutput[keyof ProspectingCallQualityOutput],
+  ) {
+    setCorrection((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  return (
+    <section className={styles.section}>
+      <div className={styles.sectionHeader}>
+        <div><span>Evidence-gated coaching</span><h3>Prospecting call quality</h3></div>
+        <strong>{items.filter((item) => item.escalation_required).length} escalations</strong>
+      </div>
+      <div className={styles.qualityList}>
+        {items.map((item) => {
+          const output = item.final_output ?? item.ai_output;
+          return (
+            <article className={item.escalation_required ? styles.escalatedQuality : ""} key={item.id}>
+              <header>
+                <div><strong>{item.seller_name}</strong><span>{item.caller_name} · {item.outcome ? labelize(item.outcome) : "No outcome"}</span></div>
+                <span className={styles.qualityStatus}>{labelize(item.status)}</span>
+              </header>
+              {item.compliance_flags.length ? <p className={styles.complianceAlert}><ShieldAlert size={15} />{item.compliance_flags.map(labelize).join(", ")}</p> : null}
+              <div className={styles.scoreStrip}>
+                {Object.entries(item.deterministic_scores).map(([key, score]) => (
+                  <div key={key}><span>{labelize(key.replace("_score", ""))}</span><strong>{score === null ? "Evidence needed" : `${score}%`}</strong></div>
+                ))}
+              </div>
+              {output ? (
+                <div className={styles.coachingOutput}>
+                  <p>{output.call_summary}</p>
+                  <div><section><span>Suggested disposition</span><strong>{labelize(output.suggested_disposition)}</strong><p>{output.disposition_reason}</p></section><section><span>Coaching</span><ul>{output.coaching_points.map((point) => <li key={point}>{point}</li>)}</ul></section></div>
+                </div>
+              ) : <p className={styles.qualityExplanation}>{item.transcript_available ? "Approved transcript ready for governed analysis." : "Transcript-based scores are unavailable until a disclosed recording is transcribed and approved."}</p>}
+              {editingId === item.id && correction ? (
+                <div className={styles.qualityCorrection}>
+                  <label><span>Manager summary</span><textarea rows={3} value={correction.call_summary} onChange={(event) => updateCorrection("call_summary", event.target.value)} /></label>
+                  <div className={styles.correctionGrid}>
+                    <label><span>Suggested disposition</span><select value={correction.suggested_disposition} onChange={(event) => updateCorrection("suggested_disposition", event.target.value as ProspectingCallQualityOutput["suggested_disposition"])}>{outcomes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+                    <label><span>Confidence</span><input max="100" min="0" type="number" value={correction.confidence} onChange={(event) => updateCorrection("confidence", Number(event.target.value))} /></label>
+                    {(["script_adherence_score", "qualification_completeness_score", "objection_handling_score", "data_quality_score", "handoff_quality_score"] as const).map((field) => (
+                      <label key={field}><span>{labelize(field.replace("_score", ""))}</span><input max="100" min="0" type="number" value={correction[field]} onChange={(event) => updateCorrection(field, Number(event.target.value))} /></label>
+                    ))}
+                  </div>
+                  <label><span>Disposition reason</span><textarea rows={2} value={correction.disposition_reason} onChange={(event) => updateCorrection("disposition_reason", event.target.value)} /></label>
+                  <label><span>Coaching points, one per line</span><textarea rows={3} value={correction.coaching_points.join("\n")} onChange={(event) => updateCorrection("coaching_points", event.target.value.split("\n").map((point) => point.trim()).filter(Boolean))} /></label>
+                </div>
+              ) : null}
+              <footer>
+                {item.transcript_available && !output ? <button disabled={saving} onClick={() => onAnalyze(item.attempt_id)} type="button"><Sparkles size={15} />Analyze call</button> : null}
+                {canManage && item.status === "needs_review" && item.ai_output ? editingId === item.id && correction ? <><button className={styles.rejectAction} disabled={saving} onClick={() => { setEditingId(null); setCorrection(null); }} type="button">Cancel correction</button><button disabled={saving} onClick={() => onReview(item, "corrected", correction)} type="button"><CheckCircle2 size={15} />Save correction</button></> : <><button className={styles.rejectAction} disabled={saving} onClick={() => onReview(item, "rejected")} type="button">Reject coaching</button><button className={styles.editAction} disabled={saving} onClick={() => beginCorrection(item)} type="button"><Pencil size={15} />Correct</button><button disabled={saving} onClick={() => onReview(item, "approved")} type="button">Approve coaching</button></> : null}
+              </footer>
+            </article>
+          );
+        })}
+        {!items.length ? <p className={styles.empty}>Quality records appear after completed prospecting attempts.</p> : null}
+      </div>
+    </section>
+  );
+}
+
 function WorkbenchView({
   activeAttempt,
   activeScript,
@@ -441,6 +776,13 @@ function WorkbenchView({
             {isWarm ? <label><span>Acquisitions owner</span><select name="handoff_user_id" required><option value="">Select owner</option>{acquisitionUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label> : null}
             {isAppointment ? <><label><span>Appointment date and time</span><input name="appointment_start_at" required type="datetime-local" /></label><label><span>Meeting type</span><select defaultValue="seller_property" name="appointment_location_type"><option value="seller_property">Seller property</option><option value="phone">Phone</option><option value="video">Video</option><option value="office">Office</option></select></label><label><span>Meeting location</span><input name="appointment_location" placeholder="Defaults to the property" /></label></> : null}
             <label><span>Call notes</span><textarea name="notes" placeholder="Objections, commitments, and next action" /></label>
+            <fieldset className={styles.complianceChecks}>
+              <legend>Escalate immediately</legend>
+              <label><input name="compliance_flags" type="checkbox" value="seller_complaint" /><span>Seller complaint</span></label>
+              <label><input name="compliance_flags" type="checkbox" value="identity_unclear" /><span>Caller identity unclear</span></label>
+              <label><input name="compliance_flags" type="checkbox" value="policy_uncertainty" /><span>Policy uncertainty</span></label>
+              <label><input name="compliance_flags" type="checkbox" value="recording_disclosure_issue" /><span>Recording disclosure issue</span></label>
+            </fieldset>
             <button className={styles.primaryButton} disabled={saving} type="submit">Save outcome</button>
           </form>
         ) : <p className={styles.empty}>Start the prospect to unlock the guided outcome form.</p>}

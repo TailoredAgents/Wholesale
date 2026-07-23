@@ -73,6 +73,8 @@ Delivered:
   rate/spend/circuit limits, source-use evidence, regression comparison, and emergency shutdown.
 - AI4 Lead Manager Copilot workspace with deterministic priority, governed seller briefs,
   evidence, human correction, immutable reviews, and pilot metrics.
+- AI5 Prospecting Copilot workspace with eligibility-first priority, governed pre-call briefs,
+  transcript-gated call coaching, human review, compliance escalation, and pilot metrics.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -230,6 +232,9 @@ Exit criteria:
 - Only reversible internal task creation may be considered for the first autonomy promotion.
 
 ## Phase AI5: Prospecting Copilot And Call Quality
+
+Implementation status: **complete in code. Evaluation signoff, activation, and measured pre-call
+and coaching pilots remain operator checkpoints.** See `PHASE_AI5_PROSPECTING_COPILOT.md`.
 
 Goal: Help VAs work assigned records consistently and hand off better opportunities.
 
@@ -486,12 +491,11 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Complete the AI3 production checkpoints and activate the AI4 draft-only pilot. Approve the
-production AI2 Lead Manager dataset, run the intended model and prompt configuration, compare it
-with the accepted baseline, and enable only `lead.next_action` after it passes. Measure review
-volume, corrections, latency, cost, time saved, and seller outcomes for four weeks before any
-promotion decision.
+Begin AI6 Acquisitions Copilot inside the existing acquisitions, field operations, and underwriting
+workflows. Build appointment preparation, evidence and repair gaps, valuation explanation,
+negotiation preparation, and reviewed post-appointment drafts without granting price or offer
+authority.
 
-The next build phase is AI5 Prospecting Copilot and call quality. Its draft and coaching work can
-proceed while AI4 remains in its measured pilot, but recording-dependent behavior stays disabled
-until Twilio disclosure, consent, and retention controls are operationally approved.
+In parallel, complete the AI3 production checkpoints and activate the separately measured AI4 and
+AI5 draft-only pilots. Keep AI5 recording-dependent coaching disabled until Twilio disclosure,
+consent, and retention controls are operationally approved.

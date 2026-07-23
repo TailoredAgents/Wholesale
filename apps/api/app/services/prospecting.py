@@ -89,6 +89,8 @@ def get_prospecting_overview(
     db: Session,
     principal: Principal,
 ) -> ProspectingWorkbenchOverview:
+    from app.services.prospecting_copilot import get_copilot_overview
+
     user = db.get(User, principal.user_id)
     if user is None:
         raise ValueError("Workspace user is unavailable.")
@@ -123,6 +125,7 @@ def get_prospecting_overview(
             manager_scope=False,
         ),
         scorecards=build_scorecards(db, principal, manageable=manageable),
+        copilot=get_copilot_overview(db, principal),
     )
 
 
@@ -131,14 +134,17 @@ def create_script(
     principal: Principal,
     payload: ProspectingScriptCreate,
 ) -> ProspectingScriptRead:
-    next_version = int(
-        db.scalar(
-            select(func.max(ProspectingScriptVersion.version_number)).where(
-                ProspectingScriptVersion.organization_id == principal.organization_id
+    next_version = (
+        int(
+            db.scalar(
+                select(func.max(ProspectingScriptVersion.version_number)).where(
+                    ProspectingScriptVersion.organization_id == principal.organization_id
+                )
             )
+            or 0
         )
-        or 0
-    ) + 1
+        + 1
+    )
     script = ProspectingScriptVersion(
         organization_id=principal.organization_id,
         version_number=next_version,
@@ -394,6 +400,9 @@ def complete_attempt(
         },
         reason="Guided prospecting outcome recorded",
     )
+    from app.services.prospecting_copilot import ensure_call_quality_review
+
+    ensure_call_quality_review(db, principal, attempt, payload.compliance_flags)
     refresh_batch_status(db, entry.prospect_calling_batch_id)
     db.commit()
     return entry_read(db, entry)
@@ -486,6 +495,11 @@ def decide_handoff(
         new={"status": handoff.status, "reason": handoff.review_reason},
         reason="Acquisitions reviewed the VA warm-lead handoff",
     )
+    attempt = db.get(ProspectingAttempt, handoff.attempt_id)
+    if attempt is not None:
+        from app.services.prospecting_copilot import ensure_call_quality_review
+
+        ensure_call_quality_review(db, principal, attempt, [])
     refresh_batch_status(db, entry.prospect_calling_batch_id)
     db.commit()
     return handoff_read(db, handoff)
@@ -742,10 +756,7 @@ def create_handoff_appointment(
             entity_type="lead",
             entity_id=lead.id,
             event_type="lead.appointment_scheduled_from_handoff",
-            summary=(
-                "Seller appointment scheduled for "
-                f"{appointment_start_at.isoformat()}."
-            ),
+            summary=(f"Seller appointment scheduled for {appointment_start_at.isoformat()}."),
         )
     )
 
@@ -847,9 +858,7 @@ def scoped_entry(
         ProspectCallingBatchEntry.id == entry_id,
     )
     if not can_manage(principal):
-        statement = statement.where(
-            ProspectCallingBatchEntry.assigned_user_id == principal.user_id
-        )
+        statement = statement.where(ProspectCallingBatchEntry.assigned_user_id == principal.user_id)
     return db.scalar(statement)
 
 
@@ -1054,9 +1063,7 @@ def queue_summary(
         .where(ProspectCallingBatchEntry.organization_id == principal.organization_id)
     )
     if not manageable:
-        statement = statement.where(
-            ProspectCallingBatchEntry.assigned_user_id == principal.user_id
-        )
+        statement = statement.where(ProspectCallingBatchEntry.assigned_user_id == principal.user_id)
     entries = db.scalars(statement).all()
     now = datetime.now(UTC)
     return ProspectingQueueSummary(
@@ -1094,9 +1101,7 @@ def build_scorecards(
     attempts = db.scalars(statement.order_by(ProspectingAttempt.completed_at.desc())).all()
     attempt_ids = [attempt.id for attempt in attempts]
     handoffs = (
-        db.scalars(
-            select(ProspectHandoff).where(ProspectHandoff.attempt_id.in_(attempt_ids))
-        ).all()
+        db.scalars(select(ProspectHandoff).where(ProspectHandoff.attempt_id.in_(attempt_ids))).all()
         if attempt_ids
         else []
     )
@@ -1134,15 +1139,11 @@ def build_scorecards(
                 dnc_requests=dnc_requests,
                 contact_rate_basis_points=rate_basis_points(contacts, len(rows)),
                 handoff_rate_basis_points=rate_basis_points(handoff_count, contacts),
-                accepted_handoff_rate_basis_points=rate_basis_points(
-                    accepted_count, handoff_count
-                ),
+                accepted_handoff_rate_basis_points=rate_basis_points(accepted_count, handoff_count),
                 script_completion_rate_basis_points=rate_basis_points(
                     answered_required, required_answers
                 ),
-                data_quality_issue_rate_basis_points=rate_basis_points(
-                    wrong_numbers, len(rows)
-                ),
+                data_quality_issue_rate_basis_points=rate_basis_points(wrong_numbers, len(rows)),
             )
         )
     return sorted(result, key=lambda item: (item.score_date, item.caller_name), reverse=True)

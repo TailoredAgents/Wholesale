@@ -150,6 +150,9 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   missed-reply and overdue alerts, governed seller briefs, qualification gaps, unsent communication
   drafts, task and appointment proposals, evidence, confidence, human correction, immutable review
   history, and pilot metrics.
+- Draft-only Prospecting Copilot inside the existing VA workbench, with eligibility-first priority,
+  governed pre-call briefs, immutable review, evidence-gated call coaching, nullable deterministic
+  scores, immediate compliance escalation, manager review, and pilot metrics.
 - Automatic workload-aware assignment of website inquiries and migration of existing active CRM
   leads into the same Lead Manager queue.
 - Worker-driven overdue-handoff escalation with assignee and management alerts, durable due times,
@@ -356,7 +359,8 @@ While A2P approval is pending:
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Complete AI3 production acceptance in `PHASE_AI3_PRODUCTION_RUNTIME.md`, approve and replay the
-   production AI2 datasets, then activate and measure the AI4 draft-only Lead Manager Copilot pilot
-   using `PHASE_AI4_LEAD_MANAGER_COPILOT.md`.
-7. Resume the parallel integration track after A2P approval without blocking internal development.
+6. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
+   activate and separately measure the AI4 and AI5 draft-only pilots using
+   `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
+7. Build AI6 Acquisitions Copilot while the earlier copilots remain supervised.
+8. Resume the parallel integration track after A2P approval without blocking internal development.

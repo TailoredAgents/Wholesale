@@ -54,15 +54,18 @@ def seed_owner(db: Session) -> None:
 
 
 def install_ai_foundation(client: TestClient) -> dict[str, object]:
-    assert client.post(
-        "/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS
-    ).status_code == 201
+    assert (
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code == 201
+    )
     assert client.post("/api/v1/ai/copilots/install", headers=HEADERS).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/foundation/decision",
-        headers=HEADERS,
-        json={"decision": "approve", "notes": "Approved for governed runtime tests."},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=HEADERS,
+            json={"decision": "approve", "notes": "Approved for governed runtime tests."},
+        ).status_code
+        == 200
+    )
     response = client.post("/api/v1/ai/runtime/install", headers=HEADERS)
     assert response.status_code == 201
     return response.json()
@@ -78,7 +81,7 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
     second = client.post("/api/v1/ai/runtime/install", headers=HEADERS).json()
 
     assert first["created_runtime_policy"] is True
-    assert first["created_capability_policy_count"] == 14
+    assert first["created_capability_policy_count"] == 15
     assert first["runtime"]["status"] == "disabled"
     assert first["runtime"]["policy"]["external_actions_enabled"] is False
     assert second["created_runtime_policy"] is False
@@ -109,16 +112,22 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
     assert blocked.json()["status"] == "blocked"
     assert duplicate.json()["id"] == blocked.json()["id"]
 
-    assert client.patch(
-        "/api/v1/ai/runtime/policy",
-        headers=HEADERS,
-        json={"provider_status": "enabled"},
-    ).status_code == 200
-    assert client.patch(
-        f"/api/v1/ai/runtime/capabilities/{capability['capability_key']}",
-        headers=HEADERS,
-        json={"status": "enabled"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
+            headers=HEADERS,
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.patch(
+            f"/api/v1/ai/runtime/capabilities/{capability['capability_key']}",
+            headers=HEADERS,
+            json={"status": "enabled"},
+        ).status_code
+        == 200
+    )
     shutdown = client.post(
         "/api/v1/ai/runtime/shutdown",
         headers=HEADERS,
@@ -175,19 +184,23 @@ def test_production_runtime_is_structured_scoped_redacted_and_idempotent(
                 {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150},
             )
 
-    monkeypatch.setattr(
-        "app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient
+    monkeypatch.setattr("app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient)
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
+            headers=HEADERS,
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
     )
-    assert client.patch(
-        "/api/v1/ai/runtime/policy",
-        headers=HEADERS,
-        json={"provider_status": "enabled"},
-    ).status_code == 200
-    assert client.patch(
-        "/api/v1/ai/runtime/capabilities/lead.next_action",
-        headers=HEADERS,
-        json={"status": "enabled", "model_route": "default"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/capabilities/lead.next_action",
+            headers=HEADERS,
+            json={"status": "enabled", "model_route": "default"},
+        ).status_code
+        == 200
+    )
 
     request = {
         "agent_definition_id": capability["agent_definition_id"],
@@ -199,12 +212,8 @@ def test_production_runtime_is_structured_scoped_redacted_and_idempotent(
             "seller_phone": "404-555-1212",
         },
     }
-    first = client.post(
-        "/api/v1/ai/runtime/execute", headers=HEADERS, json=request
-    )
-    second = client.post(
-        "/api/v1/ai/runtime/execute", headers=HEADERS, json=request
-    )
+    first = client.post("/api/v1/ai/runtime/execute", headers=HEADERS, json=request)
+    second = client.post("/api/v1/ai/runtime/execute", headers=HEADERS, json=request)
 
     assert first.status_code == 201
     result = first.json()
@@ -217,11 +226,14 @@ def test_production_runtime_is_structured_scoped_redacted_and_idempotent(
     assert "404-555-1212" not in result["input_summary"]
     assert "[REDACTED]" in result["input_summary"]
     assert second.json()["id"] == result["id"]
-    assert db_session.scalar(
-        select(func.count(AiRunLog.id)).where(
-            AiRunLog.idempotency_key == "runtime:lead-next-action:1"
+    assert (
+        db_session.scalar(
+            select(func.count(AiRunLog.id)).where(
+                AiRunLog.idempotency_key == "runtime:lead-next-action:1"
+            )
         )
-    ) == 1
+        == 1
+    )
     assert (
         db_session.scalar(
             select(func.count(AiKnowledgeUseLog.id)).where(
@@ -243,9 +255,7 @@ def test_same_dataset_comparison_blocks_a_regression(
     overview = client.get("/api/v1/ai", headers=HEADERS).json()
     agent = next(item for item in overview["agents"] if item["key"] == "compliance")
     prompt = next(
-        item
-        for item in overview["prompt_versions"]
-        if item["agent_definition_id"] == agent["id"]
+        item for item in overview["prompt_versions"] if item["agent_definition_id"] == agent["id"]
     )
     dataset = client.post(
         "/api/v1/ai/orchestrator/evaluation-datasets",

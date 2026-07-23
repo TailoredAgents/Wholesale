@@ -6,11 +6,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.rbac import PermissionKeys
 from app.integrations.openai_client import OpenAIClientError, OpenAIResponsesClient
 from app.models.foundation import (
     AiAgentDefinition,
@@ -24,6 +25,16 @@ from app.models.foundation import (
     AiToolCallLog,
     AiToolPermission,
     AuditEvent,
+    CallRecord,
+    CallRecording,
+    CallTranscript,
+    Campaign,
+    Prospect,
+    ProspectCallingBatch,
+    ProspectCallingBatchEntry,
+    ProspectHandoff,
+    ProspectingAttempt,
+    ProspectingScriptVersion,
 )
 from app.schemas.ai import (
     AiCapabilityRuntimeRead,
@@ -148,6 +159,89 @@ LEAD_MANAGER_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence",
     ],
 }
+PROSPECTING_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "pre_call_summary": {"type": "string"},
+        "priority_explanation": {"type": "string"},
+        "property_context": {"type": "array", "items": {"type": "string"}},
+        "prior_attempt_context": {"type": "array", "items": {"type": "string"}},
+        "opening_guidance": {"type": "string"},
+        "required_questions": {"type": "array", "items": {"type": "string"}},
+        "disposition_guidance": {"type": "array", "items": {"type": "string"}},
+        "data_quality_warnings": {"type": "array", "items": {"type": "string"}},
+        "compliance_reminders": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "pre_call_summary",
+        "priority_explanation",
+        "property_context",
+        "prior_attempt_context",
+        "opening_guidance",
+        "required_questions",
+        "disposition_guidance",
+        "data_quality_warnings",
+        "compliance_reminders",
+        "evidence",
+        "confidence",
+    ],
+}
+CALL_QUALITY_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "call_summary": {"type": "string"},
+        "suggested_disposition": {
+            "type": "string",
+            "enum": [
+                "no_answer",
+                "left_voicemail",
+                "callback_requested",
+                "follow_up",
+                "interested",
+                "appointment_set",
+                "not_interested",
+                "wrong_number",
+                "do_not_call",
+            ],
+        },
+        "disposition_reason": {"type": "string"},
+        "callback_recommendation": {"type": "string"},
+        "handoff_draft": {"type": "string"},
+        "script_adherence_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "qualification_completeness_score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+        },
+        "objection_handling_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "data_quality_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "handoff_quality_score": {"type": "integer", "minimum": 0, "maximum": 100},
+        "coaching_points": {"type": "array", "items": {"type": "string"}},
+        "compliance_flags": {"type": "array", "items": {"type": "string"}},
+        "evidence_timestamps": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "call_summary",
+        "suggested_disposition",
+        "disposition_reason",
+        "callback_recommendation",
+        "handoff_draft",
+        "script_adherence_score",
+        "qualification_completeness_score",
+        "objection_handling_score",
+        "data_quality_score",
+        "handoff_quality_score",
+        "coaching_points",
+        "compliance_flags",
+        "evidence_timestamps",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -240,8 +334,15 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
             continue
         existing_capability = existing_capabilities.get(capability_key)
         if existing_capability is not None:
-            if capability_key == "lead.next_action":
-                existing_capability.output_schema = LEAD_MANAGER_OUTPUT_SCHEMA
+            if capability_key in {
+                "lead.next_action",
+                "prospecting.prioritize",
+            }:
+                existing_capability.output_schema = (
+                    LEAD_MANAGER_OUTPUT_SCHEMA
+                    if capability_key == "lead.next_action"
+                    else PROSPECTING_OUTPUT_SCHEMA
+                )
                 existing_capability.updated_by_user_id = principal.user_id
             continue
         route = "escalation" if risk_level == "high" else "default"
@@ -253,11 +354,10 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 capability_key=capability_key,
                 status="disabled",
                 model_route=route,
-                output_schema=(
-                    LEAD_MANAGER_OUTPUT_SCHEMA
-                    if capability_key == "lead.next_action"
-                    else OUTPUT_SCHEMA
-                ),
+                output_schema={
+                    "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
+                    "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
+                }.get(capability_key, OUTPUT_SCHEMA),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
                     knowledge_prefix, ["operating_model"]
@@ -269,6 +369,35 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
             )
         )
         created_capabilities += 1
+
+    call_agent = agents.get("call_intelligence")
+    if call_agent is not None:
+        existing_quality = existing_capabilities.get("call.quality_coach")
+        if existing_quality is not None:
+            existing_quality.output_schema = CALL_QUALITY_OUTPUT_SCHEMA
+            existing_quality.updated_by_user_id = principal.user_id
+        else:
+            db.add(
+                AiCapabilityRuntimePolicy(
+                    organization_id=principal.organization_id,
+                    agent_definition_id=call_agent.id,
+                    capability_key="call.quality_coach",
+                    status="disabled",
+                    model_route="escalation",
+                    output_schema=CALL_QUALITY_OUTPUT_SCHEMA,
+                    allowed_tool_keys=["call.summarize.read"],
+                    allowed_knowledge_keys=[
+                        "operating_model",
+                        "prospecting_scripts",
+                        "ai_agent_policy",
+                    ],
+                    max_output_tokens=1600,
+                    max_cost_microusd_per_run=100_000,
+                    requires_human_review=True,
+                    updated_by_user_id=principal.user_id,
+                )
+            )
+            created_capabilities += 1
 
     updated_knowledge = 0
     knowledge_sources = db.scalars(
@@ -376,7 +505,7 @@ def emergency_shutdown(
     policy.emergency_stop_reason = reason
     policy.updated_by_user_id = principal.user_id
     db.execute(
-        AiCapabilityRuntimePolicy.__table__.update()
+        update(AiCapabilityRuntimePolicy)
         .where(AiCapabilityRuntimePolicy.organization_id == principal.organization_id)
         .values(status="disabled", updated_by_user_id=principal.user_id)
     )
@@ -439,9 +568,7 @@ def execute_runtime(
 
     block_reason = _runtime_block_reason(db, principal, runtime, capability, settings.ai_enabled)
     if block_reason:
-        return _record_blocked_run(
-            db, principal, payload, agent, prompt, capability, block_reason
-        )
+        return _record_blocked_run(db, principal, payload, agent, prompt, capability, block_reason)
     if not settings.openai_api_key:
         return _record_blocked_run(
             db,
@@ -453,9 +580,7 @@ def execute_runtime(
             "OPENAI_API_KEY is not configured.",
         )
 
-    tool_context, tool_log = _execute_read_tool(
-        db, principal, agent, capability, payload
-    )
+    tool_context, tool_log = _execute_read_tool(db, principal, agent, capability, payload)
     knowledge = _approved_knowledge(db, principal, capability.allowed_knowledge_keys)
     request_context = {
         "request": payload.input_payload,
@@ -509,9 +634,7 @@ def execute_runtime(
                 reasoning_effort=settings.openai_reasoning_effort,
                 max_output_tokens=capability.max_output_tokens,
                 safety_identifier=_safety_identifier(principal),
-                prompt_cache_key=(
-                    f"stonegate:{agent.key}:prompt-v{prompt.version_number}"
-                ),
+                prompt_cache_key=(f"stonegate:{agent.key}:prompt-v{prompt.version_number}"),
             )
             break
         except OpenAIClientError as exc:
@@ -545,10 +668,7 @@ def execute_runtime(
         input_tokens=usage.get("input_tokens"),
         output_tokens=usage.get("output_tokens"),
     )
-    if (
-        cost.cost_microusd is not None
-        and cost.cost_microusd > capability.max_cost_microusd_per_run
-    ):
+    if cost.cost_microusd is not None and cost.cost_microusd > capability.max_cost_microusd_per_run:
         parsed = {
             "summary": "The model result exceeded the capability cost ceiling and was blocked.",
             "recommended_actions": [],
@@ -589,6 +709,13 @@ def execute_runtime(
         "pricing_status": cost.pricing_status,
         "trace_redacted": runtime.trace_redaction_enabled,
         "knowledge_source_count": len(knowledge),
+        "prospect_id": str(payload.prospect_id) if payload.prospect_id else None,
+        "prospecting_entry_id": (
+            str(payload.prospecting_entry_id) if payload.prospecting_entry_id else None
+        ),
+        "prospecting_attempt_id": (
+            str(payload.prospecting_attempt_id) if payload.prospecting_attempt_id else None
+        ),
     }
     db.add(run)
     db.flush()
@@ -632,8 +759,7 @@ def compare_evaluations(
     existing = db.scalar(
         select(AiEvaluationComparison).where(
             AiEvaluationComparison.organization_id == principal.organization_id,
-            AiEvaluationComparison.baseline_evaluation_run_id
-            == payload.baseline_evaluation_run_id,
+            AiEvaluationComparison.baseline_evaluation_run_id == payload.baseline_evaluation_run_id,
             AiEvaluationComparison.challenger_evaluation_run_id
             == payload.challenger_evaluation_run_id,
         )
@@ -659,12 +785,8 @@ def compare_evaluations(
     if baseline.dataset_id != challenger.dataset_id:
         raise ValueError("Evaluation comparisons require the same dataset version.")
     quality_delta = challenger.pass_rate_basis_points - baseline.pass_rate_basis_points
-    latency_delta = _optional_delta(
-        challenger.average_latency_ms, baseline.average_latency_ms
-    )
-    cost_delta = _optional_delta(
-        challenger.average_cost_microusd, baseline.average_cost_microusd
-    )
+    latency_delta = _optional_delta(challenger.average_latency_ms, baseline.average_latency_ms)
+    cost_delta = _optional_delta(challenger.average_cost_microusd, baseline.average_cost_microusd)
     regression_reasons = []
     if not challenger.thresholds_passed:
         regression_reasons.append("challenger_failed_dataset_thresholds")
@@ -797,9 +919,7 @@ def _runtime_policy(db: Session, principal: Principal):
     from app.models.foundation import AiRuntimePolicy
 
     return db.scalar(
-        select(AiRuntimePolicy).where(
-            AiRuntimePolicy.organization_id == principal.organization_id
-        )
+        select(AiRuntimePolicy).where(AiRuntimePolicy.organization_id == principal.organization_id)
     )
 
 
@@ -876,18 +996,25 @@ def _execute_read_tool(
     if permission is None or not tool_key.endswith(".read"):
         raise ValueError("The runtime read tool is not permitted for this capability.")
     context: dict[str, Any] = {"request": payload.input_payload}
+    field_scope: list[str]
     if payload.lead_id is not None:
         lead_context = build_lead_context(db, principal, payload.lead_id)
         if lead_context is None:
             raise ValueError("Lead not found.")
-        context["lead"] = _scope_lead_context(
-            capability.capability_key, lead_context
-        )
-    field_scope = [
-        f"lead.{field}" for field in COMMON_LEAD_FIELDS
-    ] + [f"property.{field}" for field in COMMON_PROPERTY_FIELDS]
-    if capability.capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES:
-        field_scope.append("property.street_address")
+        context["lead"] = _scope_lead_context(capability.capability_key, lead_context)
+        field_scope = [f"lead.{field}" for field in COMMON_LEAD_FIELDS] + [
+            f"property.{field}" for field in COMMON_PROPERTY_FIELDS
+        ]
+        if capability.capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES:
+            field_scope.append("property.street_address")
+    elif capability.capability_key == "prospecting.prioritize":
+        prospect_context, field_scope = _prospecting_context(db, principal, payload)
+        context["prospect"] = prospect_context
+    elif capability.capability_key == "call.quality_coach":
+        quality_context, field_scope = _call_quality_context(db, principal, payload)
+        context["call_quality"] = quality_context
+    else:
+        field_scope = ["request"]
     tool_call = AiToolCallLog(
         organization_id=principal.organization_id,
         ai_run_log_id=UUID(int=0),
@@ -895,7 +1022,16 @@ def _execute_read_tool(
         tool_key=tool_key,
         status="completed",
         requires_approval=False,
-        input_payload={"lead_id": str(payload.lead_id) if payload.lead_id else None},
+        input_payload={
+            "lead_id": str(payload.lead_id) if payload.lead_id else None,
+            "prospect_id": str(payload.prospect_id) if payload.prospect_id else None,
+            "prospecting_entry_id": (
+                str(payload.prospecting_entry_id) if payload.prospecting_entry_id else None
+            ),
+            "prospecting_attempt_id": (
+                str(payload.prospecting_attempt_id) if payload.prospecting_attempt_id else None
+            ),
+        },
         output_payload={
             "record_scope": "organization",
             "field_scope": field_scope,
@@ -904,6 +1040,196 @@ def _execute_read_tool(
         },
     )
     return context, tool_call
+
+
+def _prospecting_context(
+    db: Session,
+    principal: Principal,
+    payload: AiRuntimeExecuteCreate,
+) -> tuple[dict[str, Any], list[str]]:
+    if payload.prospect_id is None or payload.prospecting_entry_id is None:
+        raise ValueError("Prospecting analysis requires a prospect and assigned queue entry.")
+    entry = db.scalar(
+        select(ProspectCallingBatchEntry).where(
+            ProspectCallingBatchEntry.organization_id == principal.organization_id,
+            ProspectCallingBatchEntry.id == payload.prospecting_entry_id,
+            ProspectCallingBatchEntry.prospect_id == payload.prospect_id,
+        )
+    )
+    prospect = db.scalar(
+        select(Prospect).where(
+            Prospect.organization_id == principal.organization_id,
+            Prospect.id == payload.prospect_id,
+        )
+    )
+    if entry is None or prospect is None:
+        raise ValueError("Assigned prospect not found.")
+    can_manage = PermissionKeys.MANAGE_ACQUISITION_OPERATIONS in principal.permission_keys
+    if not can_manage and entry.assigned_user_id != principal.user_id:
+        raise ValueError("The prospect is not assigned to this caller.")
+    if prospect.call_eligibility != "eligible" or prospect.suppression_status == "suppressed":
+        raise ValueError("Only eligible, unsuppressed prospects may be analyzed.")
+    batch = db.get(ProspectCallingBatch, entry.prospect_calling_batch_id)
+    campaign = db.get(Campaign, batch.campaign_id) if batch else None
+    attempts = list(
+        db.scalars(
+            select(ProspectingAttempt)
+            .where(
+                ProspectingAttempt.organization_id == principal.organization_id,
+                ProspectingAttempt.batch_entry_id == entry.id,
+            )
+            .order_by(ProspectingAttempt.started_at.desc())
+        ).all()
+    )
+    script = db.scalar(
+        select(ProspectingScriptVersion)
+        .where(
+            ProspectingScriptVersion.organization_id == principal.organization_id,
+            ProspectingScriptVersion.status == "approved",
+        )
+        .order_by(ProspectingScriptVersion.version_number.desc())
+    )
+    return (
+        {
+            "seller_name": prospect.legal_name,
+            "property": {
+                "street_address": prospect.street_address,
+                "city": prospect.city,
+                "state": prospect.state_code,
+                "postal_code": prospect.postal_code,
+                "address_validation_status": prospect.address_validation_status,
+            },
+            "campaign": campaign.name if campaign else None,
+            "eligibility": {
+                "call_eligibility": prospect.call_eligibility,
+                "suppression_status": prospect.suppression_status,
+                "suppression_checked_at": prospect.suppression_checked_at,
+                "phone_validation_status": prospect.phone_validation_status,
+            },
+            "queue": {
+                "status": entry.status,
+                "attempt_count": entry.attempt_count,
+                "last_attempt_at": entry.last_attempt_at,
+                "next_attempt_at": entry.next_attempt_at,
+                "last_disposition": entry.disposition,
+            },
+            "attempts": [
+                {
+                    "outcome": attempt.outcome,
+                    "answers": attempt.qualification_answers,
+                    "notes": attempt.notes,
+                    "callback_at": attempt.callback_at,
+                    "completed_at": attempt.completed_at,
+                }
+                for attempt in attempts[:5]
+            ],
+            "approved_script": (
+                {
+                    "version": script.version_number,
+                    "opening_script": script.opening_script,
+                    "questions": script.qualification_questions,
+                }
+                if script
+                else None
+            ),
+        },
+        [
+            "prospect.identity",
+            "prospect.property",
+            "prospect.eligibility",
+            "queue.assignment",
+            "queue.attempt_history",
+            "script.approved_version",
+        ],
+    )
+
+
+def _call_quality_context(
+    db: Session,
+    principal: Principal,
+    payload: AiRuntimeExecuteCreate,
+) -> tuple[dict[str, Any], list[str]]:
+    if payload.prospecting_attempt_id is None:
+        raise ValueError("Call-quality analysis requires a prospecting attempt.")
+    attempt = db.scalar(
+        select(ProspectingAttempt).where(
+            ProspectingAttempt.organization_id == principal.organization_id,
+            ProspectingAttempt.id == payload.prospecting_attempt_id,
+        )
+    )
+    if attempt is None:
+        raise ValueError("Prospecting attempt not found.")
+    can_manage = PermissionKeys.MANAGE_ACQUISITION_OPERATIONS in principal.permission_keys
+    if not can_manage and attempt.caller_user_id != principal.user_id:
+        raise ValueError("The call is not assigned to this caller.")
+    if attempt.call_record_id is None:
+        raise ValueError("An attached recorded call is required for call-quality analysis.")
+    call = db.scalar(
+        select(CallRecord).where(
+            CallRecord.organization_id == principal.organization_id,
+            CallRecord.id == attempt.call_record_id,
+        )
+    )
+    recording = db.scalar(
+        select(CallRecording).where(
+            CallRecording.organization_id == principal.organization_id,
+            CallRecording.call_record_id == attempt.call_record_id,
+            CallRecording.deleted_at.is_(None),
+        )
+    )
+    transcript = (
+        db.scalar(
+            select(CallTranscript)
+            .where(
+                CallTranscript.organization_id == principal.organization_id,
+                CallTranscript.recording_id == recording.id,
+                CallTranscript.status == "approved",
+            )
+            .order_by(CallTranscript.approved_at.desc())
+        )
+        if recording
+        else None
+    )
+    if call is None or recording is None or transcript is None:
+        raise ValueError("An approved transcript is required for call-quality analysis.")
+    if recording.consent_status != "disclosed":
+        raise ValueError("Recording disclosure evidence is required for call-quality analysis.")
+    script = db.get(ProspectingScriptVersion, attempt.script_version_id)
+    handoff = db.scalar(
+        select(ProspectHandoff).where(
+            ProspectHandoff.organization_id == principal.organization_id,
+            ProspectHandoff.attempt_id == attempt.id,
+        )
+    )
+    return (
+        {
+            "approved_script": {
+                "version": script.version_number if script else None,
+                "opening_script": script.opening_script if script else None,
+                "questions": script.qualification_questions if script else [],
+            },
+            "transcript": {
+                "text": transcript.transcript_text,
+                "speaker_segments": transcript.speaker_segments or [],
+                "confidence": transcript.confidence_score,
+            },
+            "human_record": {
+                "outcome": attempt.outcome,
+                "qualification_answers": attempt.qualification_answers,
+                "notes": attempt.notes,
+                "callback_at": attempt.callback_at,
+                "handoff_status": handoff.status if handoff else None,
+                "handoff_review_reason": handoff.review_reason if handoff else None,
+            },
+        },
+        [
+            "script.approved_version",
+            "call.approved_transcript",
+            "call.speaker_segments",
+            "attempt.human_disposition",
+            "attempt.handoff_review",
+        ],
+    )
 
 
 def _approved_knowledge(
@@ -945,17 +1271,11 @@ def _scope_lead_context(
     if capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES:
         property_fields.append("street_address")
     return {
-        "lead": {
-            field: scoped_lead.get(field)
-            for field in COMMON_LEAD_FIELDS
-        },
+        "lead": {field: scoped_lead.get(field) for field in COMMON_LEAD_FIELDS},
         "seller": {
             "preferred_name": scoped_seller.get("preferred_name"),
         },
-        "property": {
-            field: scoped_property.get(field)
-            for field in property_fields
-        },
+        "property": {field: scoped_property.get(field) for field in property_fields},
     }
 
 
@@ -984,9 +1304,7 @@ def _record_blocked_run(
         error_message=reason,
         attempts=0,
     )
-    run.budget_status = (
-        "limit_exceeded" if "limit" in reason.lower() else "within_budget"
-    )
+    run.budget_status = "limit_exceeded" if "limit" in reason.lower() else "within_budget"
     db.add(run)
     db.commit()
     db.refresh(run)
@@ -1056,9 +1374,9 @@ def _model_for_route(policy: Any, route: str) -> str:
 
 
 def _safety_identifier(principal: Principal) -> str:
-    return hashlib.sha256(
-        f"{principal.organization_id}:{principal.user_id}".encode()
-    ).hexdigest()[:64]
+    return hashlib.sha256(f"{principal.organization_id}:{principal.user_id}".encode()).hexdigest()[
+        :64
+    ]
 
 
 def _redacted_json(value: Any) -> str:
@@ -1086,9 +1404,7 @@ def _redact(value: Any, key: str = "") -> Any:
 
 def _tool_calls(db: Session, run_id: UUID) -> list[AiToolCallLog]:
     return list(
-        db.scalars(
-            select(AiToolCallLog).where(AiToolCallLog.ai_run_log_id == run_id)
-        ).all()
+        db.scalars(select(AiToolCallLog).where(AiToolCallLog.ai_run_log_id == run_id)).all()
     )
 
 
@@ -1114,9 +1430,7 @@ def _runtime_policy_read(item: Any) -> AiRuntimePolicyRead:
     )
 
 
-def _capability_read(
-    item: AiCapabilityRuntimePolicy, agent_name: str
-) -> AiCapabilityRuntimeRead:
+def _capability_read(item: AiCapabilityRuntimePolicy, agent_name: str) -> AiCapabilityRuntimeRead:
     return AiCapabilityRuntimeRead(
         id=item.id,
         agent_definition_id=item.agent_definition_id,

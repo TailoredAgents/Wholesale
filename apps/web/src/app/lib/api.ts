@@ -545,6 +545,70 @@ export type ProspectHandoff = {
   review_reason: string | null;
 };
 
+export type ProspectingCopilotOutput = {
+  pre_call_summary: string;
+  priority_explanation: string;
+  property_context: string[];
+  prior_attempt_context: string[];
+  opening_guidance: string;
+  required_questions: string[];
+  disposition_guidance: string[];
+  data_quality_warnings: string[];
+  compliance_reminders: string[];
+  evidence: string[];
+  confidence: number;
+};
+
+export type ProspectingCopilotRecommendation = {
+  id: string;
+  entry_id: string;
+  prospect_id: string;
+  ai_run_log_id: string | null;
+  status: string;
+  priority_score: number;
+  priority_band: string;
+  output_payload: ProspectingCopilotOutput;
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
+export type ProspectingCallQualityOutput = {
+  call_summary: string;
+  suggested_disposition: string;
+  disposition_reason: string;
+  callback_recommendation: string;
+  handoff_draft: string;
+  script_adherence_score: number;
+  qualification_completeness_score: number;
+  objection_handling_score: number;
+  data_quality_score: number;
+  handoff_quality_score: number;
+  coaching_points: string[];
+  compliance_flags: string[];
+  evidence_timestamps: string[];
+  confidence: number;
+};
+
+export type ProspectingCallQuality = {
+  id: string;
+  attempt_id: string;
+  caller_user_id: string;
+  caller_name: string;
+  seller_name: string;
+  outcome: string | null;
+  status: string;
+  deterministic_scores: Record<string, number | null>;
+  ai_output: ProspectingCallQualityOutput | null;
+  final_output: ProspectingCallQualityOutput | null;
+  compliance_flags: string[];
+  escalation_required: boolean;
+  transcript_available: boolean;
+  reviewed_at: string | null;
+  review_notes: string | null;
+  completed_at: string | null;
+};
+
 export type ProspectingWorkbenchOverview = {
   current_user_id: string;
   current_user_name: string;
@@ -579,6 +643,42 @@ export type ProspectingWorkbenchOverview = {
     script_completion_rate_basis_points: number;
     data_quality_issue_rate_basis_points: number;
   }>;
+  copilot: {
+    pilot_mode: string;
+    runtime_status: string;
+    priority_capability_status: string;
+    quality_capability_status: string;
+    external_actions_blocked: boolean;
+    work_items: Array<{
+      entry_id: string;
+      prospect_id: string;
+      seller_name: string;
+      property_address: string | null;
+      campaign_name: string;
+      priority_score: number;
+      priority_band: string;
+      recommended_action: string;
+      reasons: string[];
+      data_quality_warnings: string[];
+      eligibility_evidence: string[];
+      callback_due: boolean;
+      correction_required: boolean;
+    }>;
+    recommendations: ProspectingCopilotRecommendation[];
+    quality_queue: ProspectingCallQuality[];
+    metrics: {
+      generated_briefs: number;
+      reviewed_briefs: number;
+      accepted_or_corrected_rate_basis_points: number;
+      correction_rate_basis_points: number;
+      estimated_time_saved_minutes: number;
+      quality_reviews: number;
+      transcript_ready: number;
+      escalations: number;
+      coaching_approved: number;
+      coaching_corrected: number;
+    };
+  };
 };
 
 export type LeadManagerQualificationScript = {

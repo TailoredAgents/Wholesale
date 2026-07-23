@@ -105,6 +105,14 @@ class ProspectingAttemptComplete(BaseModel):
     appointment_start_at: datetime | None = None
     appointment_location_type: Literal["phone", "video", "seller_property", "office"] | None = None
     appointment_location: str | None = Field(default=None, max_length=500)
+    compliance_flags: list[
+        Literal[
+            "seller_complaint",
+            "identity_unclear",
+            "policy_uncertainty",
+            "recording_disclosure_issue",
+        ]
+    ] = Field(default_factory=list, max_length=4)
 
     @model_validator(mode="after")
     def outcome_fields_are_coherent(self) -> "ProspectingAttemptComplete":
@@ -176,6 +184,164 @@ class ProspectingScorecardRead(BaseModel):
     data_quality_issue_rate_basis_points: int
 
 
+class ProspectingCopilotWorkItemRead(BaseModel):
+    entry_id: UUID
+    prospect_id: UUID
+    seller_name: str
+    property_address: str | None
+    campaign_name: str
+    priority_score: int
+    priority_band: str
+    recommended_action: str
+    reasons: list[str]
+    data_quality_warnings: list[str]
+    eligibility_evidence: list[str]
+    callback_due: bool
+    correction_required: bool
+
+
+class ProspectingCopilotModelOutput(BaseModel):
+    pre_call_summary: str = Field(max_length=4000)
+    priority_explanation: str = Field(max_length=2000)
+    property_context: list[str] = Field(max_length=20)
+    prior_attempt_context: list[str] = Field(max_length=20)
+    opening_guidance: str = Field(max_length=2000)
+    required_questions: list[str] = Field(max_length=30)
+    disposition_guidance: list[str] = Field(max_length=20)
+    data_quality_warnings: list[str] = Field(max_length=20)
+    compliance_reminders: list[str] = Field(max_length=20)
+    evidence: list[str] = Field(max_length=40)
+    confidence: int = Field(ge=0, le=100)
+
+
+class ProspectingCopilotRecommendationRead(BaseModel):
+    id: UUID
+    entry_id: UUID
+    prospect_id: UUID
+    ai_run_log_id: UUID | None
+    status: str
+    priority_score: int
+    priority_band: str
+    output_payload: ProspectingCopilotModelOutput
+    confidence_score: int | None
+    generated_at: datetime
+    reviewed_at: datetime | None
+
+
+class ProspectingCopilotAnalyzeRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class ProspectingCopilotAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    recommendation: ProspectingCopilotRecommendationRead | None
+
+
+class ProspectingCopilotReviewRequest(BaseModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    final_output: dict[str, Any] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    estimated_time_saved_seconds: int = Field(default=0, ge=0, le=7200)
+
+    @model_validator(mode="after")
+    def edited_output_is_required(self) -> "ProspectingCopilotReviewRequest":
+        if self.decision == "edited" and self.final_output is None:
+            raise ValueError("Edited recommendations require corrected output.")
+        return self
+
+
+class ProspectingCopilotReviewRead(BaseModel):
+    id: UUID
+    recommendation_id: UUID
+    decision: str
+    final_output: dict[str, Any] | None
+    notes: str | None
+    estimated_time_saved_seconds: int
+    reviewed_at: datetime
+
+
+class ProspectingCallQualityModelOutput(BaseModel):
+    call_summary: str = Field(max_length=4000)
+    suggested_disposition: ProspectingOutcome
+    disposition_reason: str = Field(max_length=2000)
+    callback_recommendation: str = Field(max_length=1000)
+    handoff_draft: str = Field(max_length=3000)
+    script_adherence_score: int = Field(ge=0, le=100)
+    qualification_completeness_score: int = Field(ge=0, le=100)
+    objection_handling_score: int = Field(ge=0, le=100)
+    data_quality_score: int = Field(ge=0, le=100)
+    handoff_quality_score: int = Field(ge=0, le=100)
+    coaching_points: list[str] = Field(max_length=20)
+    compliance_flags: list[str] = Field(max_length=20)
+    evidence_timestamps: list[str] = Field(max_length=40)
+    confidence: int = Field(ge=0, le=100)
+
+
+class ProspectingCallQualityRead(BaseModel):
+    id: UUID
+    attempt_id: UUID
+    caller_user_id: UUID
+    caller_name: str
+    seller_name: str
+    outcome: str | None
+    status: str
+    deterministic_scores: dict[str, int | None]
+    ai_output: ProspectingCallQualityModelOutput | None
+    final_output: ProspectingCallQualityModelOutput | None
+    compliance_flags: list[str]
+    escalation_required: bool
+    transcript_available: bool
+    reviewed_at: datetime | None
+    review_notes: str | None
+    completed_at: datetime | None
+
+
+class ProspectingCallQualityAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    quality_review: ProspectingCallQualityRead
+
+
+class ProspectingCallQualityReviewRequest(BaseModel):
+    decision: Literal["approved", "corrected", "rejected"]
+    final_output: dict[str, Any] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def correction_requires_output(self) -> "ProspectingCallQualityReviewRequest":
+        if self.decision == "corrected" and self.final_output is None:
+            raise ValueError("Corrected coaching requires corrected output.")
+        return self
+
+
+class ProspectingCopilotMetrics(BaseModel):
+    generated_briefs: int
+    reviewed_briefs: int
+    accepted_or_corrected_rate_basis_points: int
+    correction_rate_basis_points: int
+    estimated_time_saved_minutes: int
+    quality_reviews: int
+    transcript_ready: int
+    escalations: int
+    coaching_approved: int
+    coaching_corrected: int
+
+
+class ProspectingCopilotOverview(BaseModel):
+    pilot_mode: str
+    runtime_status: str
+    priority_capability_status: str
+    quality_capability_status: str
+    external_actions_blocked: bool
+    work_items: list[ProspectingCopilotWorkItemRead]
+    recommendations: list[ProspectingCopilotRecommendationRead]
+    quality_queue: list[ProspectingCallQualityRead]
+    metrics: ProspectingCopilotMetrics
+
+
 class ProspectingWorkbenchOverview(BaseModel):
     current_user_id: UUID
     current_user_name: str
@@ -188,3 +354,4 @@ class ProspectingWorkbenchOverview(BaseModel):
     pending_handoffs: list[ProspectHandoffRead]
     returned_handoffs: list[ProspectHandoffRead]
     scorecards: list[ProspectingScorecardRead]
+    copilot: ProspectingCopilotOverview

@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -11,13 +12,20 @@ from app.main import app
 from app.models.foundation import (
     Appointment,
     AuditEvent,
+    CallRecord,
+    CallRecording,
+    CallTranscript,
     Contact,
+    Conversation,
     Lead,
     LeadManagementCase,
     LeadQualificationSession,
+    Notification,
     Prospect,
     ProspectHandoff,
     ProspectingAttempt,
+    ProspectingCallQualityReview,
+    ProspectingCopilotRecommendation,
     ProspectingScriptVersion,
     SuppressionRecord,
 )
@@ -208,17 +216,20 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     )
     assert no_script_start.status_code == 422
     assert "approve a caller script" in no_script_start.json()["detail"]
-    assert client.post(
-        "/api/v1/prospecting/scripts",
-        headers=va_headers,
-        json={
-            "title": "Unauthorized",
-            "opening_script": "This caller cannot create an approved company script.",
-            "qualification_questions": [
-                {"key": "motivation", "label": "Motivation", "prompt": "Why sell?"}
-            ],
-        },
-    ).status_code == 403
+    assert (
+        client.post(
+            "/api/v1/prospecting/scripts",
+            headers=va_headers,
+            json={
+                "title": "Unauthorized",
+                "opening_script": "This caller cannot create an approved company script.",
+                "qualification_questions": [
+                    {"key": "motivation", "label": "Motivation", "prompt": "Why sell?"}
+                ],
+            },
+        ).status_code
+        == 403
+    )
     script = create_approved_script(client, owner_headers)
     assert script["version_number"] == 1
     assert script["status"] == "approved"
@@ -283,11 +294,14 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     pending = manager_overview.json()["pending_handoffs"]
     assert len(pending) == 1
     assert pending[0]["seller_name"] == "Interested Seller"
-    assert client.post(
-        f"/api/v1/prospecting/handoffs/{pending[0]['id']}/decision",
-        headers=va_headers,
-        json={"decision": "accepted"},
-    ).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/prospecting/handoffs/{pending[0]['id']}/decision",
+            headers=va_headers,
+            json={"decision": "accepted"},
+        ).status_code
+        == 403
+    )
     correction = client.post(
         f"/api/v1/prospecting/handoffs/{pending[0]['id']}/decision",
         headers=owner_headers,
@@ -333,9 +347,7 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     )
     assert accepted.status_code == 200, accepted.text
     lead = db_session.scalar(select(Lead))
-    prospect = db_session.scalar(
-        select(Prospect).where(Prospect.legal_name == "Interested Seller")
-    )
+    prospect = db_session.scalar(select(Prospect).where(Prospect.legal_name == "Interested Seller"))
     assert lead is not None and lead.stage_key == "appointment_scheduled"
     assert prospect is not None and prospect.status == "converted"
 
@@ -429,8 +441,7 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     assert qualification.json()["script_version_number"] == 1
     assert qualification.json()["quality_score_basis_points"] == 10000
     assert (
-        int(db_session.scalar(select(func.count()).select_from(LeadQualificationSession)) or 0)
-        == 1
+        int(db_session.scalar(select(func.count()).select_from(LeadQualificationSession)) or 0) == 1
     )
     updated_overview = client.get("/api/v1/lead-manager", headers=owner_headers).json()
     assert updated_overview["metrics"]["qualification_due"] == 0
@@ -458,11 +469,39 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     dnc_completion = client.post(
         f"/api/v1/prospecting/attempts/{second_attempt_id}/complete",
         headers=va_headers,
-        json={"outcome": "do_not_call", "qualification_answers": {}},
+        json={
+            "outcome": "do_not_call",
+            "qualification_answers": {},
+            "compliance_flags": ["seller_complaint"],
+        },
     )
     assert dnc_completion.status_code == 200, dnc_completion.text
     assert dnc_completion.json()["status"] == "completed"
     assert int(db_session.scalar(select(func.count()).select_from(SuppressionRecord)) or 0) == 1
+    quality_review = db_session.scalar(
+        select(ProspectingCallQualityReview).where(
+            ProspectingCallQualityReview.attempt_id == UUID(second_attempt_id)
+        )
+    )
+    assert quality_review is not None
+    assert quality_review.status == "escalated"
+    assert quality_review.transcript_id is None
+    assert quality_review.compliance_flags == [
+        "do_not_call_request",
+        "seller_complaint",
+    ]
+    assert quality_review.deterministic_scores["script_adherence_score"] is None
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(Notification)
+                .where(Notification.notification_type == "prospecting_compliance_escalation")
+            )
+            or 0
+        )
+        >= 1
+    )
 
     third_start = client.post(
         f"/api/v1/prospecting/entries/{batch['entries'][2]['id']}/start",
@@ -494,8 +533,7 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     assert int(db_session.scalar(select(func.count()).select_from(ProspectingAttempt)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(ProspectHandoff)) or 0) == 2
     assert (
-        int(db_session.scalar(select(func.count()).select_from(ProspectingScriptVersion)) or 0)
-        == 1
+        int(db_session.scalar(select(func.count()).select_from(ProspectingScriptVersion)) or 0) == 1
     )
     actions = set(db_session.scalars(select(AuditEvent.action)))
     assert {
@@ -506,6 +544,301 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
         "prospecting.handoff_needs_correction",
         "prospecting.handoff_accepted",
     } <= actions
+
+
+def test_prospecting_copilot_is_draft_only_and_call_coaching_requires_review(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    va_headers = {"X-Dev-User-Email": VA_EMAIL}
+    va = create_user(client, owner_headers, VA_EMAIL, "VA Caller", "prospecting_caller")
+    acquisitions = create_user(
+        client,
+        owner_headers,
+        ACQUISITIONS_EMAIL,
+        "Lead Manager",
+        "acquisition_manager",
+    )
+    batch = create_prospecting_batch(client, owner_headers, va["id"])
+    create_approved_script(client, owner_headers)
+
+    initial = client.get("/api/v1/prospecting", headers=va_headers)
+    assert initial.status_code == 200, initial.text
+    assert initial.json()["copilot"]["pilot_mode"] == "draft_only"
+    assert initial.json()["copilot"]["external_actions_blocked"] is True
+    assert len(initial.json()["copilot"]["work_items"]) == 3
+    entry_id = batch["entries"][0]["id"]
+    initial_entry = next(
+        item for item in initial.json()["copilot"]["work_items"] if item["entry_id"] == entry_id
+    )
+    assert initial_entry["priority_score"] == 65
+    assert "eligible" in " ".join(initial_entry["eligibility_evidence"]).lower()
+
+    assert (
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=owner_headers).status_code
+        == 201
+    )
+    assert client.post("/api/v1/ai/copilots/install", headers=owner_headers).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=owner_headers,
+            json={"decision": "approve", "notes": "Approved for the AI5 integration test."},
+        ).status_code
+        == 200
+    )
+    assert client.post("/api/v1/ai/runtime/install", headers=owner_headers).status_code == 201
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    get_settings.cache_clear()
+
+    pre_call_output = {
+        "pre_call_summary": "First attempt for an eligible Atlanta owner record.",
+        "priority_explanation": "The assigned record is due and has no prior attempts.",
+        "property_context": ["Atlanta, Georgia", "Address has not been verified"],
+        "prior_attempt_context": ["No prior attempts"],
+        "opening_guidance": "Use the approved Stonegate opening and ask permission to continue.",
+        "required_questions": [
+            "Reason for selling",
+            "Timeline",
+            "Property condition",
+            "Occupancy",
+        ],
+        "disposition_guidance": ["Record only the outcome the caller observes."],
+        "data_quality_warnings": ["Phone and address validation remain unverified."],
+        "compliance_reminders": [
+            "Honor a stop request immediately.",
+            "Do not imply an offer has been approved.",
+        ],
+        "evidence": ["queue.status", "prospect.eligibility", "script.approved_version"],
+        "confidence": 84,
+    }
+    quality_output = {
+        "call_summary": "The seller expressed interest and discussed the property.",
+        "suggested_disposition": "interested",
+        "disposition_reason": "The seller agreed to acquisitions follow-up.",
+        "callback_recommendation": "Acquisitions should follow the accepted handoff.",
+        "handoff_draft": "Review motivation, timing, condition, and occupancy.",
+        "script_adherence_score": 91,
+        "qualification_completeness_score": 100,
+        "objection_handling_score": 78,
+        "data_quality_score": 96,
+        "handoff_quality_score": 88,
+        "coaching_points": ["Confirm decision-maker authority earlier."],
+        "compliance_flags": [],
+        "evidence_timestamps": ["00:12-00:24", "01:05-01:20"],
+        "confidence": 87,
+    }
+
+    class FakeOpenAIResponsesClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def create_structured_response(self, **kwargs: object):
+            schema = cast(dict[str, Any], kwargs["json_schema"])
+            output = (
+                quality_output
+                if "call_summary" in cast(dict[str, Any], schema["properties"])
+                else pre_call_output
+            )
+            return output, {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150}
+
+    monkeypatch.setattr(
+        "app.services.ai_runtime.OpenAIResponsesClient",
+        FakeOpenAIResponsesClient,
+    )
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
+            headers=owner_headers,
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
+    )
+    for capability_key in ("prospecting.prioritize", "call.quality_coach"):
+        assert (
+            client.patch(
+                f"/api/v1/ai/runtime/capabilities/{capability_key}",
+                headers=owner_headers,
+                json={"status": "enabled", "model_route": "default"},
+            ).status_code
+            == 200
+        )
+
+    analysis = client.post(
+        f"/api/v1/prospecting/entries/{entry_id}/copilot/analyze",
+        headers=va_headers,
+        json={},
+    )
+    assert analysis.status_code == 200, analysis.text
+    recommendation = analysis.json()["recommendation"]
+    assert recommendation["status"] == "draft"
+    assert recommendation["output_payload"]["confidence"] == 84
+    duplicate = client.post(
+        f"/api/v1/prospecting/entries/{entry_id}/copilot/analyze",
+        headers=va_headers,
+        json={},
+    )
+    assert duplicate.status_code == 200
+    assert duplicate.json()["recommendation"]["id"] == recommendation["id"]
+    accepted = client.post(
+        f"/api/v1/prospecting/copilot/recommendations/{recommendation['id']}/review",
+        headers=va_headers,
+        json={
+            "decision": "accepted",
+            "estimated_time_saved_seconds": 120,
+        },
+    )
+    assert accepted.status_code == 200, accepted.text
+    assert accepted.json()["decision"] == "accepted"
+    queue_entry = next(item for item in batch["entries"] if item["id"] == entry_id)
+    prospect = db_session.get(Prospect, UUID(queue_entry["prospect_id"]))
+    assert prospect is not None
+    assert prospect.call_eligibility == "eligible"
+    assert prospect.suppression_status != "suppressed"
+    assert (
+        db_session.scalar(select(func.count()).select_from(ProspectingCopilotRecommendation)) == 1
+    )
+
+    started = client.post(
+        f"/api/v1/prospecting/entries/{entry_id}/start",
+        headers=va_headers,
+    )
+    assert started.status_code == 200, started.text
+    attempt_id = started.json()["active_attempt"]["id"]
+    completed = client.post(
+        f"/api/v1/prospecting/attempts/{attempt_id}/complete",
+        headers=va_headers,
+        json={
+            "outcome": "interested",
+            "handoff_user_id": acquisitions["id"],
+            "qualification_answers": {
+                "motivation": "Inherited property",
+                "timeline": "Within 30 days",
+                "property_condition": "Needs updating",
+                "occupancy": "Vacant",
+            },
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    lead = db_session.scalar(select(Lead))
+    conversation = db_session.scalar(select(Conversation))
+    attempt = db_session.get(ProspectingAttempt, UUID(attempt_id))
+    assert lead is not None and conversation is not None and attempt is not None
+    now = datetime.now(UTC)
+    call = CallRecord(
+        organization_id=lead.organization_id,
+        conversation_id=conversation.id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        actor_user_id=UUID(va["id"]),
+        communication_record_id=None,
+        voice_line_id=None,
+        call_intent_id=None,
+        provider="twilio",
+        provider_call_id="CA-prospecting-ai5-test",
+        child_provider_call_id=None,
+        direction="outbound",
+        status="completed",
+        from_number="+14045550100",
+        to_number="+14045550101",
+        started_at=now,
+        answered_at=now,
+        ended_at=now,
+        duration_seconds=120,
+        disposition="interested",
+        recording_consent_status="disclosed",
+        call_metadata=None,
+    )
+    db_session.add(call)
+    db_session.flush()
+    recording = CallRecording(
+        organization_id=lead.organization_id,
+        call_record_id=call.id,
+        provider="twilio",
+        provider_recording_id="RE-prospecting-ai5-test",
+        status="completed",
+        media_reference="twilio://recordings/RE-prospecting-ai5-test",
+        duration_seconds=120,
+        channel_count=2,
+        consent_status="disclosed",
+        recorded_at=now,
+        retention_expires_at=None,
+        deleted_at=None,
+        deleted_by_user_id=None,
+        deletion_reason=None,
+        recording_metadata=None,
+    )
+    db_session.add(recording)
+    db_session.flush()
+    transcript = CallTranscript(
+        organization_id=lead.organization_id,
+        recording_id=recording.id,
+        provider="openai",
+        model_name="gpt-4o-transcribe-diarize",
+        status="approved",
+        language="en",
+        transcript_text="Caller: What has you considering selling? Seller: I inherited it.",
+        speaker_segments=[
+            {
+                "speaker": "Caller",
+                "start": 12.0,
+                "end": 24.0,
+                "text": "What has you considering selling?",
+            },
+            {
+                "speaker": "Seller",
+                "start": 25.0,
+                "end": 35.0,
+                "text": "I inherited it.",
+            },
+        ],
+        confidence_score=94,
+        approved_by_user_id=UUID(va["id"]),
+        approved_at=now,
+        error_message=None,
+        transcript_metadata=None,
+    )
+    db_session.add(transcript)
+    attempt.call_record_id = call.id
+    db_session.commit()
+
+    quality = client.post(
+        f"/api/v1/prospecting/attempts/{attempt_id}/quality/analyze",
+        headers=owner_headers,
+    )
+    assert quality.status_code == 200, quality.text
+    assert quality.json()["quality_review"]["status"] == "needs_review"
+    assert quality.json()["quality_review"]["ai_output"]["confidence"] == 87
+    corrected_output = {
+        **quality_output,
+        "call_summary": "Manager-confirmed summary based on the approved transcript.",
+        "objection_handling_score": 80,
+    }
+    approved = client.post(
+        f"/api/v1/prospecting/attempts/{attempt_id}/quality/review",
+        headers=owner_headers,
+        json={
+            "decision": "corrected",
+            "final_output": corrected_output,
+            "notes": "Compared with the approved transcript.",
+        },
+    )
+    assert approved.status_code == 200, approved.text
+    assert approved.json()["status"] == "corrected"
+    assert approved.json()["final_output"]["objection_handling_score"] == 80
+    db_session.refresh(attempt)
+    assert attempt.outcome == "interested"
+    assert attempt.notes is None
+    get_settings.cache_clear()
 
 
 def test_correction_reason_is_required(

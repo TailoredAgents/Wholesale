@@ -30,6 +30,9 @@ Also run:
 - Approved caller-script versioning, one-active-prospect enforcement, immutable attempts, guided
   outcome validation, callbacks, DNC suppression, warm lead conversion, handoff correction and
   acceptance, VA scope, attribution, appointments, and scorecards.
+- Prospecting Copilot eligibility-first priority, assignment scope, idempotent draft generation,
+  immutable review, zero queue mutation, transcript and disclosure gates, nullable quality scores,
+  compliance escalation, coaching approval, and human-disposition preservation.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.

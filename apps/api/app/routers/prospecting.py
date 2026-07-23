@@ -11,6 +11,13 @@ from app.schemas.prospecting import (
     ProspectHandoffDecision,
     ProspectHandoffRead,
     ProspectingAttemptComplete,
+    ProspectingCallQualityAnalyzeRead,
+    ProspectingCallQualityRead,
+    ProspectingCallQualityReviewRequest,
+    ProspectingCopilotAnalyzeRead,
+    ProspectingCopilotAnalyzeRequest,
+    ProspectingCopilotReviewRead,
+    ProspectingCopilotReviewRequest,
     ProspectingEntryRead,
     ProspectingScriptCreate,
     ProspectingScriptRead,
@@ -23,6 +30,12 @@ from app.services.prospecting import (
     decide_handoff,
     get_prospecting_overview,
     start_attempt,
+)
+from app.services.prospecting_copilot import (
+    analyze_call_quality,
+    analyze_entry,
+    review_call_quality,
+    review_recommendation,
 )
 
 router = APIRouter(prefix="/api/v1/prospecting", tags=["prospecting"])
@@ -130,3 +143,84 @@ def review_prospect_handoff(
     if handoff is None:
         raise HTTPException(status_code=404, detail="Warm handoff not found.")
     return handoff
+
+
+@router.post("/entries/{entry_id}/copilot/analyze")
+def analyze_prospecting_entry(
+    entry_id: UUID,
+    payload: ProspectingCopilotAnalyzeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingCopilotAnalyzeRead:
+    try:
+        result = analyze_entry(db, principal, entry_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Assigned prospect not found.")
+    return result
+
+
+@router.post("/copilot/recommendations/{recommendation_id}/review")
+def review_prospecting_copilot_recommendation(
+    recommendation_id: UUID,
+    payload: ProspectingCopilotReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingCopilotReviewRead:
+    try:
+        review = review_recommendation(db, principal, recommendation_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if review is None:
+        raise HTTPException(status_code=404, detail="Copilot recommendation not found.")
+    return review
+
+
+@router.post("/attempts/{attempt_id}/quality/analyze")
+def analyze_prospecting_call_quality(
+    attempt_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> ProspectingCallQualityAnalyzeRead:
+    try:
+        result = analyze_call_quality(db, principal, attempt_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Prospecting attempt not found.")
+    return result
+
+
+@router.post("/attempts/{attempt_id}/quality/review")
+def review_prospecting_call_quality_result(
+    attempt_id: UUID,
+    payload: ProspectingCallQualityReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_dependency)],
+) -> ProspectingCallQualityRead:
+    try:
+        result = review_call_quality(db, principal, attempt_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Call-quality review not found.")
+    return result
