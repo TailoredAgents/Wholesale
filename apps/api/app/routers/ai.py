@@ -10,12 +10,15 @@ from app.domain.rbac import PermissionKeys
 from app.schemas.ai import (
     AiAgentCreate,
     AiAgentRead,
+    AiCapabilityRuntimeUpdate,
     AiControlOverview,
     AiCopilotFoundationDecision,
     AiCopilotFoundationInstallRead,
     AiCopilotFoundationRead,
     AiCorrectedEvaluationCaseCreate,
     AiDryRunCreate,
+    AiEvaluationComparisonCreate,
+    AiEvaluationComparisonRead,
     AiEvaluationDatasetCreate,
     AiEvaluationDatasetRead,
     AiEvaluationDecision,
@@ -33,6 +36,11 @@ from app.schemas.ai import (
     AiRollbackCreate,
     AiRunCreate,
     AiRunRead,
+    AiRuntimeExecuteCreate,
+    AiRuntimeInstallRead,
+    AiRuntimeOverview,
+    AiRuntimePolicyUpdate,
+    AiRuntimeShutdownCreate,
     AiTraceReview,
     LeadIntakeSummaryRunCreate,
 )
@@ -61,6 +69,14 @@ from app.services.ai_orchestrator import (
     review_trace,
     rollback_promotion,
     run_evaluation,
+)
+from app.services.ai_runtime import (
+    compare_evaluations,
+    emergency_shutdown,
+    execute_runtime,
+    install_runtime,
+    update_capability_runtime,
+    update_runtime_policy,
 )
 
 router = APIRouter(prefix="/api/v1/ai", tags=["ai"])
@@ -187,6 +203,78 @@ def create_orchestrator_dry_run(
 ) -> AiRunRead:
     try:
         return create_dry_run(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/runtime/install", status_code=201)
+def install_ai_runtime(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRuntimeInstallRead:
+    try:
+        return install_runtime(db, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/runtime/policy")
+def patch_ai_runtime_policy(
+    payload: AiRuntimePolicyUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRuntimeOverview:
+    try:
+        return update_runtime_policy(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.patch("/runtime/capabilities/{capability_key:path}")
+def patch_ai_capability_runtime(
+    capability_key: str,
+    payload: AiCapabilityRuntimeUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRuntimeOverview:
+    try:
+        return update_capability_runtime(db, principal, capability_key, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/runtime/shutdown")
+def stop_ai_runtime(
+    payload: AiRuntimeShutdownCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRuntimeOverview:
+    try:
+        return emergency_shutdown(db, principal, payload.reason)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/runtime/execute", status_code=201)
+def execute_ai_runtime(
+    payload: AiRuntimeExecuteCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiRunRead:
+    try:
+        return execute_runtime(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/runtime/evaluation-comparisons", status_code=201)
+def compare_ai_evaluation_runs(
+    payload: AiEvaluationComparisonCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiEvaluationComparisonRead:
+    try:
+        return compare_evaluations(db, principal, payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 

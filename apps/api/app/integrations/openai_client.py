@@ -48,6 +48,8 @@ class OpenAIResponsesClient:
         reasoning_effort: str = "medium",
         enable_web_search: bool = False,
         max_output_tokens: int = 900,
+        safety_identifier: str | None = None,
+        prompt_cache_key: str | None = None,
     ) -> OpenAITextResponse:
         request_payload: dict[str, Any] = {
             "model": model,
@@ -73,7 +75,12 @@ class OpenAIResponsesClient:
             ],
             "reasoning": {"effort": reasoning_effort},
             "max_output_tokens": max_output_tokens,
+            "store": False,
         }
+        if safety_identifier:
+            request_payload["safety_identifier"] = safety_identifier[:64]
+        if prompt_cache_key:
+            request_payload["prompt_cache_key"] = prompt_cache_key
         if enable_web_search:
             request_payload["tools"] = [{"type": "web_search"}]
 
@@ -113,7 +120,10 @@ class OpenAIResponsesClient:
         json_schema: dict[str, Any],
         reasoning_effort: str = "medium",
         max_output_tokens: int = 1800,
+        safety_identifier: str | None = None,
+        prompt_cache_key: str | None = None,
     ) -> tuple[dict[str, Any], dict[str, int | None]]:
+        validate_strict_json_schema(json_schema)
         request_payload: dict[str, Any] = {
             "model": model,
             "input": [
@@ -122,6 +132,7 @@ class OpenAIResponsesClient:
             ],
             "reasoning": {"effort": reasoning_effort},
             "max_output_tokens": max_output_tokens,
+            "store": False,
             "text": {
                 "format": {
                     "type": "json_schema",
@@ -131,6 +142,10 @@ class OpenAIResponsesClient:
                 }
             },
         }
+        if safety_identifier:
+            request_payload["safety_identifier"] = safety_identifier[:64]
+        if prompt_cache_key:
+            request_payload["prompt_cache_key"] = prompt_cache_key
         payload = self._post_json("/responses", request_payload)
         raw_text = extract_response_text(payload)
         try:
@@ -271,3 +286,28 @@ def extract_response_text(payload: dict[str, Any]) -> str:
             if isinstance(text, str) and text.strip():
                 text_parts.append(text.strip())
     return "\n\n".join(text_parts)
+
+
+def validate_strict_json_schema(schema: dict[str, Any]) -> None:
+    """Reject schemas that cannot be enforced by Responses strict mode."""
+
+    def visit(value: object, path: str) -> None:
+        if not isinstance(value, dict):
+            return
+        value_type = value.get("type")
+        if value_type == "object":
+            properties = value.get("properties")
+            required = value.get("required")
+            if value.get("additionalProperties") is not False:
+                raise ValueError(f"{path} must set additionalProperties to false.")
+            if not isinstance(properties, dict) or not isinstance(required, list):
+                raise ValueError(f"{path} must define properties and required fields.")
+            if set(properties) != set(required):
+                raise ValueError(f"{path} must require every declared property.")
+            for key, child in properties.items():
+                visit(child, f"{path}.{key}")
+        items = value.get("items")
+        if isinstance(items, dict):
+            visit(items, f"{path}[]")
+
+    visit(schema, "$")

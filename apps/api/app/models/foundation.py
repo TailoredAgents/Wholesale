@@ -2657,6 +2657,7 @@ class AiKnowledgeSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
     effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_checksum: Mapped[str | None] = mapped_column(String(128))
+    content_snapshot: Mapped[str | None] = mapped_column(Text)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -2691,6 +2692,96 @@ class AiDataQualityRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AiRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_runtime_policies"
+    __table_args__ = (
+        UniqueConstraint("organization_id", name="uq_ai_runtime_policy_org"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    provider_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="disabled"
+    )
+    emergency_stop: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    emergency_stop_reason: Mapped[str | None] = mapped_column(String(1000))
+    high_volume_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    default_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    escalation_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    max_context_characters: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="24000"
+    )
+    max_requests_per_minute: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="30"
+    )
+    max_daily_cost_microusd: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="10000000"
+    )
+    circuit_failure_threshold: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="3"
+    )
+    circuit_cooldown_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="300"
+    )
+    consecutive_failure_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    circuit_open_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    trace_redaction_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    external_actions_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class AiCapabilityRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_capability_runtime_policies"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "capability_key",
+            name="uq_ai_capability_runtime_org_key",
+        ),
+        Index(
+            "ix_ai_capability_runtime_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    agent_definition_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_agent_definitions.id"), index=True
+    )
+    capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="disabled"
+    )
+    model_route: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="default"
+    )
+    output_schema: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    allowed_tool_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    allowed_knowledge_keys: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    max_output_tokens: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="1200"
+    )
+    max_cost_microusd_per_run: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="100000"
+    )
+    requires_human_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
 class AiOrchestratorEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2784,6 +2875,31 @@ class AiToolCallLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     input_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     output_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class AiKnowledgeUseLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_knowledge_use_logs"
+    __table_args__ = (
+        UniqueConstraint(
+            "ai_run_log_id",
+            "knowledge_source_id",
+            name="uq_ai_knowledge_use_run_source",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    ai_run_log_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="CASCADE"), index=True
+    )
+    knowledge_source_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_knowledge_sources.id"), index=True
+    )
+    source_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_checksum: Mapped[str] = mapped_column(String(128), nullable=False)
+    content_reference: Mapped[str] = mapped_column(String(1000), nullable=False)
 
 
 class AiEvaluationDataset(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2956,6 +3072,37 @@ class AiEvaluationResult(UuidPrimaryKeyMixin, TimestampMixin, Base):
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     cost_microusd: Mapped[int | None] = mapped_column(BigInteger)
     error_message: Mapped[str | None] = mapped_column(String(2000))
+
+
+class AiEvaluationComparison(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_evaluation_comparisons"
+    __table_args__ = (
+        UniqueConstraint(
+            "baseline_evaluation_run_id",
+            "challenger_evaluation_run_id",
+            name="uq_ai_evaluation_comparison_runs",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    dataset_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_datasets.id"), index=True
+    )
+    baseline_evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_runs.id"), index=True
+    )
+    challenger_evaluation_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_evaluation_runs.id"), index=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    regression_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    quality_delta_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    latency_delta_ms: Mapped[int | None] = mapped_column(Integer)
+    cost_delta_microusd: Mapped[int | None] = mapped_column(BigInteger)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
 class AiCapabilityPromotion(UuidPrimaryKeyMixin, TimestampMixin, Base):

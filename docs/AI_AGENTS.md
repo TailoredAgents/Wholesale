@@ -114,7 +114,7 @@ evaluation against Stonegate cases.
 | Work type | Starting model policy |
 | --- | --- |
 | High-volume classification, extraction, and routing | Evaluate `gpt-5.6-luna` against the default before promotion |
-| Qualification, summaries, briefs, drafts, packages, and operational copilots | `gpt-5.6-terra` with medium reasoning |
+| Qualification, summaries, briefs, drafts, packages, and operational copilots | `gpt-5.6-sol` with medium reasoning |
 | Difficult valuation review, negotiation preparation, policy analysis, and executive decisions | Escalate to `gpt-5.6-sol` only when the default is insufficient |
 | Recorded-call transcription with speakers | `gpt-4o-transcribe-diarize` |
 | Future consented live voice | OpenAI Realtime behind Twilio, disclosure, transfer, and shutdown controls |

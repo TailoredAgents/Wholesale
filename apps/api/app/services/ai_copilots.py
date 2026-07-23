@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -1003,14 +1004,13 @@ def _install_policies(db: Session, principal: Principal) -> int:
                 created_by_user_id=principal.user_id,
             )
         )
-        existing.add((spec["key"], 1))
         created += 1
     return created
 
 
 def _install_knowledge(db: Session, principal: Principal) -> int:
     existing = {
-        (item.key, item.version_number)
+        (item.key, item.version_number): item
         for item in db.scalars(
             select(AiKnowledgeSource).where(
                 AiKnowledgeSource.organization_id == principal.organization_id
@@ -1020,7 +1020,18 @@ def _install_knowledge(db: Session, principal: Principal) -> int:
     created = 0
     review_due = datetime.now(UTC) + timedelta(days=90)
     for spec in KNOWLEDGE_SOURCES:
-        if (spec["key"], 1) in existing:
+        snapshot = (
+            f"{spec['title']} is the registered {spec['category']} source for Stonegate. "
+            f"Runtime retrieval must use the approved version at {spec['reference']}; "
+            "the model must cite the source key, version, and checksum and must not treat "
+            "unapproved drafts or inferred content as policy."
+        )
+        checksum = hashlib.sha256(snapshot.encode("utf-8")).hexdigest()
+        existing_source = existing.get((spec["key"], 1))
+        if existing_source is not None:
+            if existing_source.content_snapshot is None:
+                existing_source.content_snapshot = snapshot
+                existing_source.content_checksum = checksum
             continue
         db.add(
             AiKnowledgeSource(
@@ -1037,10 +1048,11 @@ def _install_knowledge(db: Session, principal: Principal) -> int:
                 is_authoritative=spec["authoritative"],
                 effective_at=datetime.now(UTC),
                 review_due_at=review_due,
+                content_snapshot=snapshot,
+                content_checksum=checksum,
                 created_by_user_id=principal.user_id,
             )
         )
-        existing.add((spec["key"], 1))
         created += 1
     return created
 
@@ -1237,6 +1249,7 @@ def _knowledge_read(item: AiKnowledgeSource) -> AiKnowledgeSourceRead:
         effective_at=item.effective_at,
         review_due_at=item.review_due_at,
         content_checksum=item.content_checksum,
+        content_snapshot=item.content_snapshot,
         approved_by_user_id=item.approved_by_user_id,
         approved_at=item.approved_at,
         created_at=item.created_at,

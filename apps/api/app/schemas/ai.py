@@ -18,7 +18,7 @@ class AiAgentCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)
     description: str = Field(min_length=1, max_length=1000)
     status: str = Field(default="draft", max_length=80)
-    model_name: str = Field(default="gpt-5.6-terra", max_length=120)
+    model_name: str = Field(default="gpt-5.6-sol", max_length=120)
     risk_level: str = Field(default="medium", max_length=80)
     requires_human_approval: bool = True
     max_cost_microusd_per_run: int = Field(default=100000, ge=0, le=100_000_000)
@@ -240,6 +240,7 @@ class AiKnowledgeSourceRead(BaseModel):
     effective_at: datetime | None
     review_due_at: datetime | None
     content_checksum: str | None
+    content_snapshot: str | None
     approved_by_user_id: UUID | None
     approved_at: datetime | None
     created_at: datetime
@@ -323,6 +324,116 @@ class AiDryRunCreate(BaseModel):
 class AiTraceReview(BaseModel):
     status: Literal["reviewed", "flagged"]
     notes: str = Field(min_length=1, max_length=2000)
+
+
+class AiRuntimeInstallRead(BaseModel):
+    created_runtime_policy: bool
+    created_capability_policy_count: int
+    updated_knowledge_source_count: int
+    runtime: "AiRuntimeOverview"
+
+
+class AiRuntimePolicyUpdate(BaseModel):
+    provider_status: Literal["enabled", "disabled"] | None = None
+    high_volume_model: str | None = Field(default=None, min_length=1, max_length=120)
+    default_model: str | None = Field(default=None, min_length=1, max_length=120)
+    escalation_model: str | None = Field(default=None, min_length=1, max_length=120)
+    max_context_characters: int | None = Field(default=None, ge=4000, le=200_000)
+    max_requests_per_minute: int | None = Field(default=None, ge=1, le=1000)
+    max_daily_cost_microusd: int | None = Field(
+        default=None, ge=0, le=10_000_000_000
+    )
+    circuit_failure_threshold: int | None = Field(default=None, ge=1, le=20)
+    circuit_cooldown_seconds: int | None = Field(default=None, ge=30, le=86_400)
+
+
+class AiCapabilityRuntimeUpdate(BaseModel):
+    status: Literal["enabled", "disabled"]
+    model_route: Literal["high_volume", "default", "escalation"] | None = None
+
+
+class AiRuntimeShutdownCreate(BaseModel):
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class AiRuntimeExecuteCreate(BaseModel):
+    agent_definition_id: UUID
+    capability_key: str = Field(min_length=1, max_length=160)
+    idempotency_key: str = Field(min_length=1, max_length=255)
+    input_payload: dict[str, object] = Field(default_factory=dict)
+    lead_id: UUID | None = None
+
+
+class AiRuntimePolicyRead(BaseModel):
+    id: UUID
+    provider_status: str
+    emergency_stop: bool
+    emergency_stop_reason: str | None
+    high_volume_model: str
+    default_model: str
+    escalation_model: str
+    max_context_characters: int
+    max_requests_per_minute: int
+    max_daily_cost_microusd: int
+    circuit_failure_threshold: int
+    circuit_cooldown_seconds: int
+    consecutive_failure_count: int
+    circuit_open_until: datetime | None
+    trace_redaction_enabled: bool
+    external_actions_enabled: bool
+    updated_at: datetime
+
+
+class AiCapabilityRuntimeRead(BaseModel):
+    id: UUID
+    agent_definition_id: UUID
+    agent_name: str
+    capability_key: str
+    status: str
+    model_route: str
+    output_schema: dict[str, object]
+    allowed_tool_keys: list[str]
+    allowed_knowledge_keys: list[str]
+    max_output_tokens: int
+    max_cost_microusd_per_run: int
+    requires_human_review: bool
+    updated_at: datetime
+
+
+class AiEvaluationComparisonCreate(BaseModel):
+    baseline_evaluation_run_id: UUID
+    challenger_evaluation_run_id: UUID
+
+
+class AiEvaluationComparisonRead(BaseModel):
+    id: UUID
+    dataset_id: UUID
+    baseline_evaluation_run_id: UUID
+    challenger_evaluation_run_id: UUID
+    status: str
+    regression_blocked: bool
+    quality_delta_basis_points: int
+    latency_delta_ms: int | None
+    cost_delta_microusd: int | None
+    summary: dict[str, object]
+    created_at: datetime
+
+
+class AiRuntimeMetrics(BaseModel):
+    enabled_capability_count: int
+    blocked_run_count: int
+    failed_run_count: int
+    redacted_trace_count: int
+    knowledge_use_count: int
+    regression_block_count: int
+
+
+class AiRuntimeOverview(BaseModel):
+    status: str
+    policy: AiRuntimePolicyRead | None
+    capabilities: list[AiCapabilityRuntimeRead]
+    comparisons: list[AiEvaluationComparisonRead]
+    metrics: AiRuntimeMetrics
 
 
 class AiEvaluationCaseCreate(BaseModel):
@@ -543,6 +654,7 @@ class AiOrchestratorOverview(BaseModel):
     datasets: list[AiEvaluationDatasetRead]
     evaluation_runs: list[AiEvaluationRunRead]
     promotions: list[AiPromotionRead]
+    runtime: AiRuntimeOverview
 
 
 class AiControlSummary(BaseModel):

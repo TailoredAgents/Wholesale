@@ -8,9 +8,12 @@ import {
   Database,
   FlaskConical,
   Play,
+  Power,
   RefreshCw,
   RotateCcw,
+  ServerCog,
   ShieldCheck,
+  TriangleAlert,
   UsersRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -20,7 +23,7 @@ import type { AiControlOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./ai-orchestrator.module.css";
 
-type View = "copilots" | "portfolio" | "evaluations" | "traces" | "governance";
+type View = "copilots" | "runtime" | "portfolio" | "evaluations" | "traces" | "governance";
 
 export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   const router = useRouter();
@@ -136,6 +139,29 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
     await request("evaluation-library/install");
   }
 
+  async function installRuntime() {
+    await request("runtime/install");
+  }
+
+  async function setProviderStatus(providerStatus: "enabled" | "disabled") {
+    await request("runtime/policy", { provider_status: providerStatus }, "PATCH");
+  }
+
+  async function setCapabilityStatus(capabilityKey: string, status: "enabled" | "disabled") {
+    await request(
+      `runtime/capabilities/${encodeURIComponent(capabilityKey)}`,
+      { status },
+      "PATCH",
+    );
+  }
+
+  async function stopRuntime() {
+    if (!window.confirm("Stop the OpenAI provider and disable every AI capability?")) return;
+    await request("runtime/shutdown", {
+      reason: "Owner initiated emergency stop from the AI Control Center.",
+    });
+  }
+
   async function reviewDataset(datasetId: string, reviewScope: "executive" | "role_owner") {
     await request(`orchestrator/evaluation-datasets/${datasetId}/reviews`, {
       review_scope: reviewScope,
@@ -156,6 +182,20 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
     await request("orchestrator/evaluations", {
       dataset_id: datasetId,
       prompt_version_id: prompt.id,
+    });
+  }
+
+  async function compareLatestRuns(datasetId: string) {
+    const runs = ai.orchestrator.evaluation_runs.filter(
+      (evaluationRun) => evaluationRun.dataset_id === datasetId,
+    );
+    if (runs.length < 2) {
+      setMessage("Run this dataset twice before comparing versions.");
+      return;
+    }
+    await request("runtime/evaluation-comparisons", {
+      baseline_evaluation_run_id: runs[1].id,
+      challenger_evaluation_run_id: runs[0].id,
     });
   }
 
@@ -185,7 +225,7 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       </div>
 
       <nav className={styles.tabs} aria-label="AI control views">
-        {(["copilots", "portfolio", "evaluations", "traces", "governance"] as View[]).map((item) => (
+        {(["copilots", "runtime", "portfolio", "evaluations", "traces", "governance"] as View[]).map((item) => (
           <button
             type="button"
             key={item}
@@ -198,6 +238,179 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       </nav>
 
       {message ? <p className={styles.feedback}>{message}</p> : null}
+
+      {view === "runtime" ? (
+        <div className={styles.listPanel}>
+          <div className={styles.runtimeHeader}>
+            <div>
+              <span>AI3 production controls</span>
+              <strong>{labelize(ai.orchestrator.runtime.status)}</strong>
+              <small>
+                Structured responses, read-only tools, redacted traces, and human review
+              </small>
+            </div>
+            <div className={styles.rowActions}>
+              <button type="button" onClick={installRuntime} disabled={Boolean(busy)}>
+                <ServerCog size={15} /> Install runtime
+              </button>
+              {ai.orchestrator.runtime.policy?.provider_status === "enabled" ? (
+                <button
+                  type="button"
+                  onClick={() => setProviderStatus("disabled")}
+                  disabled={Boolean(busy)}
+                >
+                  <Power size={15} /> Disable provider
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setProviderStatus("enabled")}
+                  disabled={Boolean(busy) || !ai.orchestrator.runtime.policy}
+                >
+                  <Power size={15} /> Enable provider
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.dangerButton}
+                onClick={stopRuntime}
+                disabled={Boolean(busy) || !ai.orchestrator.runtime.policy}
+              >
+                <TriangleAlert size={15} /> Emergency stop
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.runtimeMetrics}>
+            <div>
+              <span>Enabled capabilities</span>
+              <strong>{ai.orchestrator.runtime.metrics.enabled_capability_count}</strong>
+            </div>
+            <div>
+              <span>Redacted traces</span>
+              <strong>{ai.orchestrator.runtime.metrics.redacted_trace_count}</strong>
+            </div>
+            <div>
+              <span>Source uses logged</span>
+              <strong>{ai.orchestrator.runtime.metrics.knowledge_use_count}</strong>
+            </div>
+            <div>
+              <span>Regressions blocked</span>
+              <strong>{ai.orchestrator.runtime.metrics.regression_block_count}</strong>
+            </div>
+          </div>
+
+          {ai.orchestrator.runtime.policy ? (
+            <section className={styles.runtimePolicy}>
+              <div>
+                <strong>Default model</strong>
+                <span>{ai.orchestrator.runtime.policy.default_model}</span>
+              </div>
+              <div>
+                <strong>Rate ceiling</strong>
+                <span>
+                  {ai.orchestrator.runtime.policy.max_requests_per_minute} requests/minute
+                </span>
+              </div>
+              <div>
+                <strong>Circuit breaker</strong>
+                <span>
+                  {ai.orchestrator.runtime.policy.consecutive_failure_count}/
+                  {ai.orchestrator.runtime.policy.circuit_failure_threshold} failures
+                </span>
+              </div>
+              <div>
+                <strong>External actions</strong>
+                <span>
+                  {ai.orchestrator.runtime.policy.external_actions_enabled
+                    ? "Unsafe configuration"
+                    : "Blocked"}
+                </span>
+              </div>
+            </section>
+          ) : (
+            <p>Install AI3 after the agent portfolio and AI1 foundation are installed.</p>
+          )}
+
+          <section className={styles.runtimeCapabilities}>
+            <div className={styles.listHeader}>
+              <div>
+                <ShieldCheck size={18} />
+                <strong>Capability runtime registry</strong>
+              </div>
+              <span>{ai.orchestrator.runtime.capabilities.length} governed capabilities</span>
+            </div>
+            {ai.orchestrator.runtime.capabilities.map((runtimeCapability) => (
+              <article className={styles.listRow} key={runtimeCapability.id}>
+                <div>
+                  <strong>{runtimeCapability.agent_name}</strong>
+                  <span>{runtimeCapability.capability_key}</span>
+                </div>
+                <div className={styles.rowStats}>
+                  <span>Route: {labelize(runtimeCapability.model_route)}</span>
+                  <span>{runtimeCapability.allowed_tool_keys.length} read tool</span>
+                  <span>{runtimeCapability.allowed_knowledge_keys.length} source scopes</span>
+                  <b
+                    className={
+                      runtimeCapability.status === "enabled" ? styles.pass : styles.neutral
+                    }
+                  >
+                    {labelize(runtimeCapability.status)}
+                  </b>
+                </div>
+                <div className={styles.rowActions}>
+                  <button
+                    type="button"
+                    disabled={Boolean(busy)}
+                    onClick={() =>
+                      setCapabilityStatus(
+                        runtimeCapability.capability_key,
+                        runtimeCapability.status === "enabled" ? "disabled" : "enabled",
+                      )
+                    }
+                  >
+                    <Power size={15} />
+                    {runtimeCapability.status === "enabled" ? "Disable" : "Enable"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </section>
+
+          <section className={styles.runtimeCapabilities}>
+            <div className={styles.listHeader}>
+              <div>
+                <FlaskConical size={18} />
+                <strong>Baseline comparisons</strong>
+              </div>
+              <span>{ai.orchestrator.runtime.comparisons.length} recorded</span>
+            </div>
+            {ai.orchestrator.runtime.comparisons.length === 0 ? (
+              <p>Run one approved dataset twice, then compare the latest runs.</p>
+            ) : null}
+            {ai.orchestrator.runtime.comparisons.map((comparison) => (
+              <article className={styles.listRow} key={comparison.id}>
+                <div>
+                  <strong>Dataset comparison</strong>
+                  <span>{comparison.dataset_id}</span>
+                </div>
+                <div className={styles.rowStats}>
+                  <span>Quality {comparison.quality_delta_basis_points / 100}%</span>
+                  <span>
+                    Latency{" "}
+                    {comparison.latency_delta_ms === null
+                      ? "not measured"
+                      : `${comparison.latency_delta_ms} ms`}
+                  </span>
+                  <b className={comparison.regression_blocked ? styles.neutral : styles.pass}>
+                    {comparison.regression_blocked ? "Regression blocked" : "Passed"}
+                  </b>
+                </div>
+              </article>
+            ))}
+          </section>
+        </div>
+      ) : null}
 
       {view === "copilots" ? (
         <div className={styles.controlGrid}>
@@ -463,6 +676,19 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
                         onClick={() => runDataset(dataset.id, dataset.agent_definition_id)}
                       >
                         Run fixture evaluation
+                      </button>
+                    ) : null}
+                    {dataset.status === "approved" ? (
+                      <button
+                        type="button"
+                        disabled={
+                          ai.orchestrator.evaluation_runs.filter(
+                            (evaluationRun) => evaluationRun.dataset_id === dataset.id,
+                          ).length < 2
+                        }
+                        onClick={() => compareLatestRuns(dataset.id)}
+                      >
+                        Compare latest
                       </button>
                     ) : null}
                     {dataset.status === "approved" && latestRun?.thresholds_passed ? (

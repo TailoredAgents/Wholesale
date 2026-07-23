@@ -352,6 +352,6 @@ While A2P approval is pending:
 4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Complete AI3 in `AI_AUTOMATION_ROADMAP.md`, approve the production AI2 datasets, then run the
-   first AI4 draft-only Lead Manager Copilot pilot.
+6. Complete AI3 production acceptance in `PHASE_AI3_PRODUCTION_RUNTIME.md`, approve and replay the
+   production AI2 datasets, then run the first AI4 draft-only Lead Manager Copilot pilot.
 7. Resume the parallel integration track after A2P approval without blocking internal development.

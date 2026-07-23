@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.core.config import get_settings
 from app.models.foundation import (
     ActivityEvent,
     AiAgentDefinition,
@@ -161,6 +162,7 @@ Return a concise recommendation with evidence, risks, and the next human decisio
 
 
 def install_portfolio(db: Session, principal: Principal) -> AiPortfolioInstallRead:
+    default_model = get_settings().openai_default_model
     existing = {
         item.key: item
         for item in db.scalars(
@@ -181,7 +183,7 @@ def install_portfolio(db: Session, principal: Principal) -> AiPortfolioInstallRe
             name=name,
             description=description,
             status="draft",
-            model_name="gpt-5.6-terra",
+            model_name=default_model,
             risk_level=risk,
             requires_human_approval=True,
             autonomy_level="observe",
@@ -932,6 +934,7 @@ def rollback_promotion(
 
 def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
     from app.services.ai_copilots import get_copilot_foundation
+    from app.services.ai_runtime import get_runtime_overview
 
     events = db.scalars(
         select(AiOrchestratorEvent)
@@ -995,6 +998,7 @@ def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
         datasets=[evaluation_dataset_to_read(db, item) for item in datasets],
         evaluation_runs=[_evaluation_read(db, item) for item in evaluations],
         promotions=[_promotion_read(item) for item in promotions],
+        runtime=get_runtime_overview(db, principal),
     )
 
 

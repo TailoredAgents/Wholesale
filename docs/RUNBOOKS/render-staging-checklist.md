@@ -35,7 +35,9 @@ not create a second set of resources. Current deployment status is in `../RENDER
 - `AI_ENABLED`: `true`.
 - `OPENAI_API_KEY`: OpenAI project API key.
 - `OPENAI_BASE_URL`: `https://api.openai.com/v1`.
-- `OPENAI_DEFAULT_MODEL`: `gpt-5.6-terra`.
+- `OPENAI_DEFAULT_MODEL`: `gpt-5.6-sol`.
+- `OPENAI_HIGH_VOLUME_MODEL`: optional; blank uses the default model.
+- `OPENAI_ESCALATION_MODEL`: optional; blank uses the default model.
 - `OPENAI_REASONING_EFFORT`: `medium`.
 - `OPENAI_WEB_SEARCH_ENABLED`: `false`.
 - `OPENAI_REQUEST_TIMEOUT_SECONDS`: `30`.

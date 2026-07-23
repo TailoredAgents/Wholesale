@@ -248,7 +248,7 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
             pass
 
         def create_text_response(self, **kwargs: object) -> OpenAITextResponse:
-            assert kwargs["model"] == "gpt-5.6-terra"
+            assert kwargs["model"] == "gpt-5.6-sol"
             assert "Inherited property" in str(kwargs["user_prompt"])
             assert kwargs["reasoning_effort"] == "medium"
             assert kwargs["enable_web_search"] is False
@@ -278,7 +278,7 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
     assert payload["total_tokens"] == 321
     assert payload["input_tokens"] == 200
     assert payload["output_tokens"] == 121
-    assert payload["cost_microusd"] == 2315
+    assert payload["cost_microusd"] == 4630
     assert payload["run_metadata"]["pricing_status"] == "priced"
     assert "inherited" in payload["output_summary"].lower()
     assert payload["lead_id"] == lead_id

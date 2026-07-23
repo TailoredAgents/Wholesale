@@ -246,8 +246,8 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert ai_run.input_tokens == 3000
     assert ai_run.output_tokens == 600
     assert ai_run.total_tokens == 3600
-    assert ai_run.cost_microusd == 16_000
-    assert ai_run.cost_cents == 2
+    assert ai_run.cost_microusd == 28_500
+    assert ai_run.cost_cents == 3
     assert ai_run.run_metadata is not None
     assert ai_run.run_metadata["pricing_status"] == "priced"
 

@@ -143,7 +143,7 @@ export function AiForms({ ai }: { ai: AiControlOverview }) {
         </div>
         <label>
           <span>Model</span>
-          <input name="model_name" defaultValue="gpt-5.6-terra" maxLength={120} required />
+          <input name="model_name" defaultValue="gpt-5.6-sol" maxLength={120} required />
         </label>
         <div className={styles.formGrid}>
           <label>

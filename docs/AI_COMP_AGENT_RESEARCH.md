@@ -1,6 +1,6 @@
 # AI Comp Agent Research
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 ## Recommendation
 
@@ -8,12 +8,13 @@ Use OpenAI as the reasoning layer, not the source of truth for comps.
 
 Default model:
 
-- `gpt-5.6-terra`
+- `gpt-5.6-sol`
 - `reasoning.effort=medium`
 
 Why:
 
-- OpenAI currently recommends `gpt-5.6-terra` as the balanced intelligence/cost model.
+- `gpt-5.6-sol` is Stonegate's current deployment target; AI2/AI3 evaluation comparisons determine
+  whether a lower-cost route can replace it for any exact capability.
 - The Responses API is the correct API surface for reasoning, tool-calling, and multi-turn agent workflows.
 - Structured Outputs should be used for comp decisions so the OS receives predictable fields instead of free-form valuation prose.
 
@@ -94,7 +95,7 @@ The comp agent should return a strict JSON object with:
 OpenAI:
 
 - `OPENAI_API_KEY`
-- `OPENAI_DEFAULT_MODEL=gpt-5.6-terra`
+- `OPENAI_DEFAULT_MODEL=gpt-5.6-sol`
 - `OPENAI_REASONING_EFFORT=medium`
 - `OPENAI_WEB_SEARCH_ENABLED=false`
 

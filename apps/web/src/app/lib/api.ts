@@ -1379,6 +1379,7 @@ export type AiCopilotFoundation = {
     effective_at: string | null;
     review_due_at: string | null;
     content_checksum: string | null;
+    content_snapshot: string | null;
     approved_by_user_id: string | null;
     approved_at: string | null;
     created_at: string;
@@ -1614,6 +1615,64 @@ export type AiControlOverview = {
       rollback_reason: string | null;
       created_at: string;
     }>;
+    runtime: {
+      status: string;
+      policy: {
+        id: string;
+        provider_status: string;
+        emergency_stop: boolean;
+        emergency_stop_reason: string | null;
+        high_volume_model: string;
+        default_model: string;
+        escalation_model: string;
+        max_context_characters: number;
+        max_requests_per_minute: number;
+        max_daily_cost_microusd: number;
+        circuit_failure_threshold: number;
+        circuit_cooldown_seconds: number;
+        consecutive_failure_count: number;
+        circuit_open_until: string | null;
+        trace_redaction_enabled: boolean;
+        external_actions_enabled: boolean;
+        updated_at: string;
+      } | null;
+      capabilities: Array<{
+        id: string;
+        agent_definition_id: string;
+        agent_name: string;
+        capability_key: string;
+        status: string;
+        model_route: string;
+        output_schema: Record<string, unknown>;
+        allowed_tool_keys: string[];
+        allowed_knowledge_keys: string[];
+        max_output_tokens: number;
+        max_cost_microusd_per_run: number;
+        requires_human_review: boolean;
+        updated_at: string;
+      }>;
+      comparisons: Array<{
+        id: string;
+        dataset_id: string;
+        baseline_evaluation_run_id: string;
+        challenger_evaluation_run_id: string;
+        status: string;
+        regression_blocked: boolean;
+        quality_delta_basis_points: number;
+        latency_delta_ms: number | null;
+        cost_delta_microusd: number | null;
+        summary: Record<string, unknown>;
+        created_at: string;
+      }>;
+      metrics: {
+        enabled_capability_count: number;
+        blocked_run_count: number;
+        failed_run_count: number;
+        redacted_trace_count: number;
+        knowledge_use_count: number;
+        regression_block_count: number;
+      };
+    };
   };
 };
 
@@ -2370,6 +2429,20 @@ const emptyAiControlOverview: AiControlOverview = {
     datasets: [],
     evaluation_runs: [],
     promotions: [],
+    runtime: {
+      status: "not_installed",
+      policy: null,
+      capabilities: [],
+      comparisons: [],
+      metrics: {
+        enabled_capability_count: 0,
+        blocked_run_count: 0,
+        failed_run_count: 0,
+        redacted_trace_count: 0,
+        knowledge_use_count: 0,
+        regression_block_count: 0,
+      },
+    },
   },
 };
 

@@ -86,8 +86,16 @@ class Settings(BaseSettings):
         validation_alias="OPENAI_BASE_URL",
     )
     openai_default_model: str = Field(
-        default="gpt-5.6-terra",
+        default="gpt-5.6-sol",
         validation_alias="OPENAI_DEFAULT_MODEL",
+    )
+    openai_high_volume_model: str | None = Field(
+        default=None,
+        validation_alias="OPENAI_HIGH_VOLUME_MODEL",
+    )
+    openai_escalation_model: str | None = Field(
+        default=None,
+        validation_alias="OPENAI_ESCALATION_MODEL",
     )
     openai_reasoning_effort: str = Field(
         default="medium",

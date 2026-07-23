@@ -62,7 +62,7 @@ agents must use the permission, approval, trace, and evaluation controls describ
 `AI_AGENTS.md`. `AI_AUTOMATION_ROADMAP.md` defines the promotion order.
 
 The recommended model interface is the Responses API behind Stonegate's existing orchestrator.
-`gpt-5.6-terra` with medium reasoning remains the balanced default until Stonegate evaluations
+`gpt-5.6-sol` with medium reasoning is the deployment default until Stonegate evaluations
 show a cheaper or stronger tier is better for a specific capability. Use
 `gpt-4o-transcribe-diarize` for recorded calls that need speaker separation. Web search is
 restricted to approved research workflows with citations and is not a comparable-sales source.

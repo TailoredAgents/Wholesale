@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -65,6 +65,12 @@ Delivered:
 - Tool permission, approval, run, tool-call, trace, cost, promotion, and rollback records.
 - Idempotent orchestrator events, budgets, bounded retries, and dry-run controls.
 - Evaluation datasets, cases, runs, results, and deterministic fixture evaluations.
+- Eight human-owned copilot definitions, specialist mappings, and versioned capability contracts.
+- Data-governance policies, authoritative knowledge registry, source snapshots, checksums, and
+  deterministic data-quality rules.
+- AI2 Lead Manager and Call Intelligence golden-case libraries with dual-review gates.
+- AI3 structured production runtime, model routes, field-scoped read tools, redacted traces,
+  rate/spend/circuit limits, source-use evidence, regression comparison, and emergency shutdown.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -72,9 +78,8 @@ Delivered:
 
 Still required:
 
-- Group the backend specialists into the eight role-facing copilots.
-- Approved knowledge sources, redaction rules, and representative evaluation cases.
-- Production model execution and strict production tools for every capability.
+- Complete production review of the AI2 datasets and live model replay for the first capability.
+- Configure provider error monitoring and pass the AI3 staging acceptance checklist.
 - Copilot workspace experiences inside each role's existing OS workflow.
 - Measured draft-only pilots and capability-specific promotion decisions.
 - Provider integrations required for documents, accounting, advertising, and approved external
@@ -151,6 +156,10 @@ Exit criteria:
 - The CEO and relevant role owner approve the expected results and promotion thresholds.
 
 ## Phase AI3: Production Runtime, Tools, And Monitoring
+
+Implementation status: complete in code. Production dataset signoff, live model replay, external
+error-monitoring configuration, and the first controlled activation remain operator checkpoints.
+See `PHASE_AI3_PRODUCTION_RUNTIME.md`.
 
 Goal: Connect models to Stonegate through narrow, observable, recoverable controls.
 
@@ -471,9 +480,10 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Start AI3. Connect the OpenAI Responses API behind the governed orchestrator, enforce structured
-outputs and strict server-side tools, retrieve only approved knowledge versions, redact traces,
-and replay the approved AI2 datasets without exposing external actions.
+Complete the AI3 production checkpoints, then begin AI4 in draft-only mode. Approve the production
+AI2 Lead Manager dataset, run the intended model and prompt configuration, compare it with the
+accepted baseline, and enable only `lead.next_action` after it passes. Build the role-facing Lead
+Manager Copilot workspace without exposing external sends or transferring lead ownership to AI.
 
 The first production milestone is a Lead Manager Copilot that reliably organizes work, identifies
 gaps, drafts follow-up, and protects response SLAs while the human Lead Manager remains accountable

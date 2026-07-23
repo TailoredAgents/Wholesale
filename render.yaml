@@ -67,7 +67,11 @@ services:
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: OPENAI_DEFAULT_MODEL
-        value: gpt-5.6-terra
+        value: gpt-5.6-sol
+      - key: OPENAI_HIGH_VOLUME_MODEL
+        value: ""
+      - key: OPENAI_ESCALATION_MODEL
+        value: ""
       - key: OPENAI_REASONING_EFFORT
         value: medium
       - key: OPENAI_WEB_SEARCH_ENABLED
@@ -230,7 +234,11 @@ services:
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: OPENAI_DEFAULT_MODEL
-        value: gpt-5.6-terra
+        value: gpt-5.6-sol
+      - key: OPENAI_HIGH_VOLUME_MODEL
+        value: ""
+      - key: OPENAI_ESCALATION_MODEL
+        value: ""
       - key: OPENAI_REASONING_EFFORT
         value: medium
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS

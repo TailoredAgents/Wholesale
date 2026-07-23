@@ -656,9 +656,85 @@
   color: var(--text-soft);
 }
 
+.runtimeHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.runtimeHeader > div:first-child {
+  display: grid;
+  gap: 5px;
+}
+
+.runtimeHeader span,
+.runtimeHeader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.runtimeHeader strong {
+  font-size: 20px;
+}
+
+.dangerButton {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line)) !important;
+  color: var(--danger) !important;
+}
+
+.runtimeMetrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.runtimeMetrics > div {
+  display: grid;
+  gap: 7px;
+  padding: 16px;
+}
+
+.runtimeMetrics > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.runtimeMetrics span,
+.runtimePolicy span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.runtimeMetrics strong {
+  font-size: 18px;
+}
+
+.runtimePolicy {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px 0;
+}
+
+.runtimePolicy > div {
+  display: grid;
+  gap: 5px;
+}
+
+.runtimePolicy strong {
+  font-size: 12px;
+}
+
+.runtimeCapabilities {
+  padding-top: 8px;
+}
+
 @media (max-width: 900px) {
   .commandBar,
-  .listRow {
+  .listRow,
+  .runtimeHeader {
     align-items: stretch;
     flex-direction: column;
   }
@@ -696,6 +772,11 @@
     grid-template-columns: 1fr;
   }
 
+  .runtimeMetrics,
+  .runtimePolicy {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .toolTable > div {
     grid-template-columns: 1fr;
   }
@@ -730,6 +811,16 @@
 
   .evaluationStandards > div + div,
   .evaluationStandards > div:nth-child(3) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .runtimeMetrics,
+  .runtimePolicy {
+    grid-template-columns: 1fr;
+  }
+
+  .runtimeMetrics > div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
   }
