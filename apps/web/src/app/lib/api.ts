@@ -2040,6 +2040,68 @@ export type AiControlOverview = {
         regression_block_count: number;
       };
     };
+    automation: {
+      phase_status: string;
+      external_delivery_globally_enabled: boolean;
+      emergency_stop: boolean;
+      metrics: {
+        policy_count: number;
+        control_only_count: number;
+        paused_count: number;
+        canary_ready_count: number;
+        external_delivery_enabled_count: number;
+        simulation_count: number;
+        blocked_simulation_count: number;
+        external_delivery_attempt_count: number;
+        delivered_message_count: number;
+      };
+      policies: Array<{
+        id: string;
+        action_key: string;
+        name: string;
+        description: string;
+        capability_key: string;
+        channel: string;
+        provider_key: string;
+        owner_role_key: string;
+        status: string;
+        audience_policy: Record<string, unknown>;
+        consent_policy: Record<string, unknown>;
+        template_policy: Record<string, unknown>;
+        schedule_policy: Record<string, unknown>;
+        volume_policy: Record<string, unknown>;
+        cost_policy: Record<string, unknown>;
+        quality_policy: Record<string, unknown>;
+        canary_policy: Record<string, unknown>;
+        pause_policy: Record<string, unknown>;
+        rollback_policy: Record<string, unknown>;
+        prohibited_actions: string[];
+        dry_run_only: boolean;
+        external_delivery_enabled: boolean;
+        approved_by_user_id: string | null;
+        approved_at: string | null;
+        last_pause_reason: string | null;
+        paused_at: string | null;
+        readiness_status: string;
+        readiness_blockers: string[];
+        attempts: Array<{
+          id: string;
+          policy_id: string;
+          idempotency_key: string;
+          execution_mode: string;
+          status: string;
+          audience_count: number;
+          estimated_cost_microusd: number;
+          policy_checks: Record<string, unknown>;
+          block_reasons: string[];
+          external_delivery_attempted: boolean;
+          delivered_count: number;
+          requested_by_user_id: string;
+          created_at: string;
+        }>;
+        updated_at: string;
+      }>;
+    };
   };
 };
 
@@ -2921,6 +2983,23 @@ const emptyAiControlOverview: AiControlOverview = {
         knowledge_use_count: 0,
         regression_block_count: 0,
       },
+    },
+    automation: {
+      phase_status: "not_installed",
+      external_delivery_globally_enabled: false,
+      emergency_stop: false,
+      metrics: {
+        policy_count: 0,
+        control_only_count: 0,
+        paused_count: 0,
+        canary_ready_count: 0,
+        external_delivery_enabled_count: 0,
+        simulation_count: 0,
+        blocked_simulation_count: 0,
+        external_delivery_attempt_count: 0,
+        delivered_message_count: 0,
+      },
+      policies: [],
     },
   },
 };

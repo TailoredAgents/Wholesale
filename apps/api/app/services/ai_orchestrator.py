@@ -933,6 +933,7 @@ def rollback_promotion(
 
 
 def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
+    from app.services.ai_automation import get_external_automation_overview
     from app.services.ai_copilots import get_copilot_foundation
     from app.services.ai_runtime import get_runtime_overview
 
@@ -999,6 +1000,7 @@ def get_overview(db: Session, principal: Principal) -> AiOrchestratorOverview:
         evaluation_runs=[_evaluation_read(db, item) for item in evaluations],
         promotions=[_promotion_read(item) for item in promotions],
         runtime=get_runtime_overview(db, principal),
+        automation=get_external_automation_overview(db, principal),
     )
 
 

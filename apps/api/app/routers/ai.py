@@ -44,12 +44,29 @@ from app.schemas.ai import (
     AiTraceReview,
     LeadIntakeSummaryRunCreate,
 )
+from app.schemas.ai_automation import (
+    AiExternalActionAttemptRead,
+    AiExternalActionPauseCreate,
+    AiExternalActionPolicyDecision,
+    AiExternalActionPolicyInstallRead,
+    AiExternalActionPolicyRead,
+    AiExternalActionSimulationCreate,
+    AiExternalAutomationOverview,
+)
 from app.services.ai import (
     create_ai_agent,
     create_ai_prompt_version,
     create_ai_run,
     get_ai_overview,
     run_lead_intake_summary,
+)
+from app.services.ai_automation import (
+    decide_external_action_policy,
+    get_external_automation_overview,
+    install_external_action_policies,
+    pause_external_action_policy,
+    resume_external_action_control,
+    simulate_external_action,
 )
 from app.services.ai_copilots import (
     decide_copilot_foundation,
@@ -89,6 +106,79 @@ def read_ai_overview(
     principal: Annotated[Principal, Depends(change_ai_dependency)],
 ) -> AiControlOverview:
     return get_ai_overview(db, principal)
+
+
+@router.get("/automation")
+def read_external_automation(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalAutomationOverview:
+    return get_external_automation_overview(db, principal)
+
+
+@router.post("/automation/install", status_code=201)
+def install_external_automation_controls(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalActionPolicyInstallRead:
+    return install_external_action_policies(db, principal)
+
+
+@router.post("/automation/policies/{policy_id}/decision")
+def decide_external_automation_control(
+    policy_id: UUID,
+    payload: AiExternalActionPolicyDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalActionPolicyRead:
+    result = decide_external_action_policy(db, principal, policy_id, payload)
+    if result is None:
+        raise HTTPException(status_code=404, detail="External-action policy not found.")
+    return result
+
+
+@router.post("/automation/policies/{policy_id}/simulations", status_code=201)
+def simulate_external_automation_control(
+    policy_id: UUID,
+    payload: AiExternalActionSimulationCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalActionAttemptRead:
+    try:
+        result = simulate_external_action(db, principal, policy_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="External-action policy not found.")
+    return result
+
+
+@router.post("/automation/policies/{policy_id}/pause")
+def pause_external_automation_control(
+    policy_id: UUID,
+    payload: AiExternalActionPauseCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalActionPolicyRead:
+    result = pause_external_action_policy(db, principal, policy_id, payload)
+    if result is None:
+        raise HTTPException(status_code=404, detail="External-action policy not found.")
+    return result
+
+
+@router.post("/automation/policies/{policy_id}/resume-control")
+def resume_external_automation_simulations(
+    policy_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(change_ai_dependency)],
+) -> AiExternalActionPolicyRead:
+    try:
+        result = resume_external_action_control(db, principal, policy_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="External-action policy not found.")
+    return result
 
 
 @router.post("/agents", status_code=201)

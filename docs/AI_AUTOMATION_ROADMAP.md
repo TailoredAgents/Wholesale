@@ -88,7 +88,11 @@ Delivered:
   existing management workspaces with deterministic health and exceptions, aggregate evidence,
   governed drafts, human correction, and no financial, advertising, staffing, or external
   authority.
-- All ten completed AI4-AI9 capabilities are available on demand in supervised draft-only mode.
+- AI10 external-action control plane embedded in the AI Control Center with named action owners,
+  audience and consent policy, approved-template requirements, contact and frequency rules,
+  volume and cost ceilings, quality thresholds, canary ramps, automatic-pause criteria, rollback,
+  deterministic readiness simulations, and immutable zero-delivery evidence.
+- All ten AI4-AI9 copilot capabilities are available on demand in supervised draft-only mode.
   Every output requires human review, tools remain read-only, and external actions remain blocked.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
@@ -460,6 +464,11 @@ Exit criteria:
 Goal: Permit only proven, bounded external actions and operate the AI system as a measured business
 capability.
 
+Implementation status: the control plane is implemented in code. Seller acknowledgement,
+appointment reminder, consented seller follow-up, and approved buyer-campaign contracts can be
+installed, owner-reviewed, simulated, paused, and audited from `/os/ai`. External delivery remains
+structurally locked in this release.
+
 Eligible only after earlier pilots:
 
 - Consented seller acknowledgements.
@@ -521,10 +530,10 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Begin AI10 Controlled External Automation and Optimization by defining exact eligibility,
-audience, template, volume, cost, monitoring, canary, pause, and rollback contracts for each
-candidate action. Do not activate external automation until the corresponding provider,
-compliance, evaluation, and measured-pilot checkpoints are complete.
+Review the installed AI10 contracts with the human role owners and record deterministic readiness
+simulations. Complete the provider, consent, template, evaluation, monitoring, and canary evidence
+for one candidate action before designing a separate activation migration and approval gate. Do
+not activate external automation as part of the control-plane release.
 
 In parallel, complete the AI3 production checkpoints and separately measure the active AI4-AI9
 draft-only pilots. Build the redacted AI7 transaction, AI8 disposition, and AI9 management datasets;

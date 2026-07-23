@@ -53,7 +53,7 @@ email is implemented. Production acceptance remains pending for:
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
 | 9. Buyers, Dispositions, and Finance | Complete | Provider-neutral buyer placement, disposition, reconciliation, compensation, and accounting export are operational |
-| 10. Integrated AI Agent System | Partial | AI1-AI9 are implemented in code; AI10, production signoff, provider adapters, and measured pilots remain |
+| 10. Integrated AI Agent System | Partial | AI1-AI10 control planes are implemented; production signoff, provider adapters, approved canaries, and measured pilots remain |
 
 Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
 offer controls were prioritized for seller conversations. That work is retained. It does not mark
@@ -415,7 +415,9 @@ evidence requirements, compliance controls, or financial approvals.
 7. Build AI9 redacted finance, marketing, and executive datasets and complete controlled
    accounting and ad-platform provider acceptance without granting financial, budget,
    advertising, staffing, or external authority.
-8. Begin AI10 external-automation control contracts and canary design without activating delivery.
+8. Review the installed AI10 external-action contracts, record blocked readiness simulations, and
+   retain the delivery lock until provider, consent, template, evaluation, and canary approvals
+   pass.
 9. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

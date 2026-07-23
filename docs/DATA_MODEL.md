@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0051_management_copilots` is the
+The schema is managed through Alembic migrations. Migration `0052_ai10_action_controls` is the
 current head.
 
 ## Identity And Access
@@ -222,6 +222,8 @@ certainty. Compliance flags and escalation state do not depend on transcript or 
 - `ai_data_quality_rules`
 - `management_copilot_recommendations`
 - `management_copilot_reviews`
+- `ai_external_action_policies`
+- `ai_external_action_attempts`
 
 Role copilots are the staff-facing layer. Each copilot has one named human owner and maps to
 bounded specialist engines. Versioned capability contracts define triggers, inputs, outputs,
@@ -238,6 +240,12 @@ Management Copilot recommendations share one capability-scoped, period-bounded l
 Marketing, and Executive drafts. The evidence snapshot and governed AI trace remain attached to
 the original output; one immutable review preserves acceptance, correction, or rejection without
 mutating financial, marketing, staffing, permission, or external systems.
+
+AI10 external-action policies retain the approved audience, consent, template, schedule, volume,
+cost, quality, canary, pause, rollback, provider, and human-owner contract for every candidate
+action. Simulation attempts store deterministic checks, blockers, cost and audience bounds, and
+explicit proof that no external delivery was attempted. The control-plane release cannot activate
+delivery.
 
 ## Platform Operations
 

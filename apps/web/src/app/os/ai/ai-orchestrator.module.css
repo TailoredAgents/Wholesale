@@ -238,6 +238,228 @@
   font-weight: 700;
 }
 
+.automationWorkspace {
+  min-height: 560px;
+}
+
+.automationWorkspace > .runtimeHeader {
+  padding: 18px;
+}
+
+.automationGrid {
+  display: grid;
+  grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+  border-top: 1px solid var(--line);
+}
+
+.automationRail {
+  padding: 10px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.automationRail button {
+  min-height: 64px;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+}
+
+.automationRail button:hover,
+.automationRail .selectedAgent {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.automationRail span {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.automationRail small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.automationDetail {
+  min-width: 0;
+  padding: 18px;
+}
+
+.automationDetail .detailHeader {
+  align-items: flex-start;
+}
+
+.automationDetail .detailHeader > div {
+  min-width: 0;
+}
+
+.automationDetail .detailHeader span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.automationDetail .detailHeader h3 {
+  margin: 5px 0;
+  font-size: 18px;
+}
+
+.automationDetail .detailHeader p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.automationDetail .detailHeader > b {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+
+.automationFacts,
+.policyLedger {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.automationFacts > div,
+.policyLedger > div {
+  min-width: 0;
+  padding: 11px;
+  display: grid;
+  gap: 4px;
+}
+
+.automationFacts > div + div,
+.policyLedger > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.automationFacts span,
+.policyLedger dt {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.automationFacts strong,
+.policyLedger dd {
+  min-width: 0;
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.automationSection {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.automationSection > p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.blockerList {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.blockerList > div {
+  min-height: 34px;
+  padding: 7px 9px;
+  border-left: 3px solid #b8782f;
+  background: #fff8e9;
+  color: #684a1d;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.simulationRow {
+  min-height: 52px;
+  padding: 9px 2px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.simulationRow > div {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.simulationRow strong,
+.simulationRow b {
+  font-size: 11px;
+}
+
+.simulationRow span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.automationActions {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.automationActions button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid #d7ded9;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e302b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.automationActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.emptyAutomation {
+  min-height: 280px;
+  color: var(--muted);
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
 .controlGrid {
   min-height: 520px;
   display: grid;
@@ -743,6 +965,33 @@
     grid-template-columns: 1fr;
   }
 
+  .automationGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .automationRail {
+    max-height: 250px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-y: auto;
+  }
+
+  .automationFacts,
+  .policyLedger {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .automationFacts > div:nth-child(3),
+  .policyLedger > div:nth-child(3) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .automationFacts > div:nth-child(4),
+  .policyLedger > div:nth-child(4) {
+    border-top: 1px solid var(--line);
+  }
+
   .agentRail {
     max-height: 270px;
     border-right: 0;
@@ -823,5 +1072,27 @@
   .runtimeMetrics > div + div {
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .automationDetail {
+    padding: 14px;
+  }
+
+  .automationFacts,
+  .policyLedger {
+    grid-template-columns: 1fr;
+  }
+
+  .automationFacts > div + div,
+  .automationFacts > div:nth-child(3),
+  .policyLedger > div + div,
+  .policyLedger > div:nth-child(3) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .simulationRow {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

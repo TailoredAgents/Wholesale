@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.ai_automation import AiExternalAutomationOverview
+
 
 class AiToolPermissionCreate(BaseModel):
     tool_key: str = Field(min_length=1, max_length=160)
@@ -658,6 +660,7 @@ class AiOrchestratorOverview(BaseModel):
     evaluation_runs: list[AiEvaluationRunRead]
     promotions: list[AiPromotionRead]
     runtime: AiRuntimeOverview
+    automation: AiExternalAutomationOverview
 
 
 class AiControlSummary(BaseModel):

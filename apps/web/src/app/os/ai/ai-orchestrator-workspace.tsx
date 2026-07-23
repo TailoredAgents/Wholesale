@@ -5,8 +5,12 @@ import {
   Activity,
   BadgeCheck,
   BookOpen,
+  CircleCheck,
   Database,
   FlaskConical,
+  Gauge,
+  LockKeyhole,
+  Pause,
   Play,
   Power,
   RefreshCw,
@@ -23,7 +27,14 @@ import type { AiControlOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./ai-orchestrator.module.css";
 
-type View = "copilots" | "runtime" | "portfolio" | "evaluations" | "traces" | "governance";
+type View =
+  | "copilots"
+  | "runtime"
+  | "automation"
+  | "portfolio"
+  | "evaluations"
+  | "traces"
+  | "governance";
 
 export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   const router = useRouter();
@@ -34,6 +45,9 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   const [selectedAgent, setSelectedAgent] = useState(ai.agents[0]?.id ?? "");
   const [selectedCopilot, setSelectedCopilot] = useState(
     ai.orchestrator.foundation.copilots[0]?.id ?? "",
+  );
+  const [selectedAutomationPolicy, setSelectedAutomationPolicy] = useState(
+    ai.orchestrator.automation.policies[0]?.id ?? "",
   );
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -77,6 +91,10 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
   const capability = selected?.tool_permissions
     .find((tool) => tool.permission_level === "read")
     ?.tool_key.replace(/\.read$/, "");
+  const automationPolicy =
+    ai.orchestrator.automation.policies.find(
+      (item) => item.id === selectedAutomationPolicy,
+    ) ?? ai.orchestrator.automation.policies[0];
 
   async function installFoundation() {
     await request("copilots/install");
@@ -141,6 +159,47 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
 
   async function installRuntime() {
     await request("runtime/install");
+  }
+
+  async function installAutomationControls() {
+    await request("automation/install");
+  }
+
+  async function decideAutomationPolicy(
+    policyId: string,
+    decision: "approve_control" | "return_to_draft",
+  ) {
+    await request(`automation/policies/${policyId}/decision`, {
+      decision,
+      notes:
+        decision === "approve_control"
+          ? "Owner approved the AI10 control contract for simulations only."
+          : "Owner returned the AI10 control contract for revision.",
+    });
+  }
+
+  async function simulateAutomationPolicy(policyId: string) {
+    await request(`automation/policies/${policyId}/simulations`, {
+      idempotency_key: `ai10-control:${policyId}:${crypto.randomUUID()}`,
+      audience_count: 1,
+      estimated_cost_microusd: 10_000,
+      consent_verified: true,
+      template_approved: true,
+      within_contact_hours: true,
+      frequency_allowed: true,
+      suppression_checked: true,
+      human_takeover_ready: true,
+    });
+  }
+
+  async function pauseAutomationPolicy(policyId: string) {
+    await request(`automation/policies/${policyId}/pause`, {
+      reason: "Owner paused this external-action control from the AI Control Center.",
+    });
+  }
+
+  async function resumeAutomationPolicy(policyId: string) {
+    await request(`automation/policies/${policyId}/resume-control`);
   }
 
   async function setProviderStatus(providerStatus: "enabled" | "disabled") {
@@ -219,22 +278,32 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
       <div className={styles.guardrail}>
         <ShieldCheck size={18} />
         <p>
-          External execution is blocked. Promotion requires a passing evaluation and a separate
-          human approval; every promoted capability can be rolled back.
+          External delivery is locked. AI10 controls may be approved and simulated, but they
+          cannot send messages or change external systems.
         </p>
       </div>
 
       <nav className={styles.tabs} aria-label="AI control views">
-        {(["copilots", "runtime", "portfolio", "evaluations", "traces", "governance"] as View[]).map((item) => (
-          <button
-            type="button"
-            key={item}
-            className={view === item ? styles.activeTab : ""}
-            onClick={() => setView(item)}
-          >
-            {labelize(item)}
-          </button>
-        ))}
+        {(
+          [
+            "copilots",
+            "runtime",
+            "automation",
+            "portfolio",
+            "evaluations",
+            "traces",
+            "governance",
+          ] as View[]
+        ).map((item) => (
+            <button
+              type="button"
+              key={item}
+              className={view === item ? styles.activeTab : ""}
+              onClick={() => setView(item)}
+            >
+              {labelize(item)}
+            </button>
+          ))}
       </nav>
 
       {message ? <p className={styles.feedback}>{message}</p> : null}
@@ -409,6 +478,256 @@ export function AiOrchestratorWorkspace({ ai }: { ai: AiControlOverview }) {
               </article>
             ))}
           </section>
+        </div>
+      ) : null}
+
+      {view === "automation" ? (
+        <div className={styles.automationWorkspace}>
+          <div className={styles.runtimeHeader}>
+            <div>
+              <span>AI10 external-action controls</span>
+              <strong>{labelize(ai.orchestrator.automation.phase_status)}</strong>
+              <small>
+                {ai.orchestrator.automation.metrics.external_delivery_enabled_count} delivery
+                policies enabled
+              </small>
+            </div>
+            <div className={styles.rowActions}>
+              <button
+                type="button"
+                onClick={installAutomationControls}
+                disabled={Boolean(busy)}
+              >
+                <LockKeyhole size={15} /> Install controls
+              </button>
+              <button
+                type="button"
+                className={styles.dangerButton}
+                onClick={stopRuntime}
+                disabled={Boolean(busy) || !ai.orchestrator.runtime.policy}
+              >
+                <TriangleAlert size={15} /> Emergency stop
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.runtimeMetrics}>
+            <div>
+              <span>Action contracts</span>
+              <strong>{ai.orchestrator.automation.metrics.policy_count}</strong>
+            </div>
+            <div>
+              <span>Canary ready</span>
+              <strong>{ai.orchestrator.automation.metrics.canary_ready_count}</strong>
+            </div>
+            <div>
+              <span>Simulations</span>
+              <strong>{ai.orchestrator.automation.metrics.simulation_count}</strong>
+            </div>
+            <div>
+              <span>External deliveries</span>
+              <strong>{ai.orchestrator.automation.metrics.delivered_message_count}</strong>
+            </div>
+          </div>
+
+          {ai.orchestrator.automation.policies.length === 0 ? (
+            <div className={styles.emptyAutomation}>
+              <LockKeyhole size={20} />
+              <strong>No external-action controls installed</strong>
+            </div>
+          ) : (
+            <div className={styles.automationGrid}>
+              <aside className={styles.automationRail}>
+                {ai.orchestrator.automation.policies.map((policy) => (
+                  <button
+                    type="button"
+                    key={policy.id}
+                    className={automationPolicy?.id === policy.id ? styles.selectedAgent : ""}
+                    onClick={() => setSelectedAutomationPolicy(policy.id)}
+                  >
+                    <span>{policy.name}</span>
+                    <small>
+                      {labelize(policy.channel)} · {labelize(policy.status)}
+                    </small>
+                  </button>
+                ))}
+              </aside>
+
+              {automationPolicy ? (
+                <div className={styles.automationDetail}>
+                  <div className={styles.detailHeader}>
+                    <div>
+                      <span>{automationPolicy.action_key}</span>
+                      <h3>{automationPolicy.name}</h3>
+                      <p>{automationPolicy.description}</p>
+                    </div>
+                    <b
+                      className={
+                        automationPolicy.readiness_status === "ready_for_activation_review"
+                          ? styles.pass
+                          : styles.neutral
+                      }
+                    >
+                      {labelize(automationPolicy.readiness_status)}
+                    </b>
+                  </div>
+
+                  <div className={styles.automationFacts}>
+                    <div>
+                      <span>Human owner</span>
+                      <strong>{labelize(automationPolicy.owner_role_key)}</strong>
+                    </div>
+                    <div>
+                      <span>Provider</span>
+                      <strong>{labelize(automationPolicy.provider_key)}</strong>
+                    </div>
+                    <div>
+                      <span>Capability</span>
+                      <strong>{automationPolicy.capability_key}</strong>
+                    </div>
+                    <div>
+                      <span>Delivery</span>
+                      <strong>
+                        {automationPolicy.external_delivery_enabled ? "Enabled" : "Locked"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <section className={styles.automationSection}>
+                    <div className={styles.listHeader}>
+                      <div>
+                        <Gauge size={18} />
+                        <strong>Canary contract</strong>
+                      </div>
+                    </div>
+                    <dl className={styles.policyLedger}>
+                      <div>
+                        <dt>Initial recipients</dt>
+                        <dd>
+                          {String(automationPolicy.canary_policy.initial_recipient_limit)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Initial daily limit</dt>
+                        <dd>{String(automationPolicy.canary_policy.initial_daily_limit)}</dd>
+                      </div>
+                      <div>
+                        <dt>Human review</dt>
+                        <dd>
+                          {String(automationPolicy.canary_policy.human_review_percentage)}%
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Observation window</dt>
+                        <dd>
+                          {String(automationPolicy.canary_policy.minimum_observation_days)} days
+                        </dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className={styles.automationSection}>
+                    <div className={styles.listHeader}>
+                      <div>
+                        <LockKeyhole size={18} />
+                        <strong>Activation blockers</strong>
+                      </div>
+                      <span>{automationPolicy.readiness_blockers.length}</span>
+                    </div>
+                    <div className={styles.blockerList}>
+                      {automationPolicy.readiness_blockers.map((blocker) => (
+                        <div key={blocker}>
+                          <TriangleAlert size={15} />
+                          <span>{blocker}</span>
+                        </div>
+                      ))}
+                      {automationPolicy.readiness_blockers.length === 0 ? (
+                        <div>
+                          <CircleCheck size={15} />
+                          <span>No unresolved activation blocker.</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </section>
+
+                  <section className={styles.automationSection}>
+                    <div className={styles.listHeader}>
+                      <div>
+                        <FlaskConical size={18} />
+                        <strong>Control evidence</strong>
+                      </div>
+                      <span>{automationPolicy.attempts.length} recent attempts</span>
+                    </div>
+                    {automationPolicy.attempts.length === 0 ? (
+                      <p>No readiness simulations recorded.</p>
+                    ) : null}
+                    {automationPolicy.attempts.map((attempt) => (
+                      <article className={styles.simulationRow} key={attempt.id}>
+                        <div>
+                          <strong>{labelize(attempt.status)}</strong>
+                          <span>{new Date(attempt.created_at).toLocaleString()}</span>
+                        </div>
+                        <div>
+                          <span>{attempt.audience_count} simulated recipient</span>
+                          <span>{attempt.block_reasons.length} blockers</span>
+                          <b>{attempt.delivered_count} delivered</b>
+                        </div>
+                      </article>
+                    ))}
+                  </section>
+
+                  <div className={styles.automationActions}>
+                    {automationPolicy.approved_at ? (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          decideAutomationPolicy(automationPolicy.id, "return_to_draft")
+                        }
+                        disabled={Boolean(busy)}
+                      >
+                        <RotateCcw size={15} /> Return contract to draft
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          decideAutomationPolicy(automationPolicy.id, "approve_control")
+                        }
+                        disabled={Boolean(busy)}
+                      >
+                        <BadgeCheck size={15} /> Approve control contract
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => simulateAutomationPolicy(automationPolicy.id)}
+                      disabled={Boolean(busy) || automationPolicy.status === "paused"}
+                    >
+                      <Play size={15} /> Run readiness simulation
+                    </button>
+                    {automationPolicy.status === "paused" ? (
+                      <button
+                        type="button"
+                        onClick={() => resumeAutomationPolicy(automationPolicy.id)}
+                        disabled={Boolean(busy)}
+                      >
+                        <Power size={15} /> Resume controls
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={styles.dangerButton}
+                        onClick={() => pauseAutomationPolicy(automationPolicy.id)}
+                        disabled={Boolean(busy)}
+                      >
+                        <Pause size={15} /> Pause policy
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          )}
         </div>
       ) : null}
 

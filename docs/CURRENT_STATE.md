@@ -358,9 +358,12 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   integrations, production replay, and measured pilots remain checkpoints. AI9 adds aggregate,
   period-bounded Finance, Marketing, and Executive copilots with deterministic management health,
   governed analysis, immutable review, prompt minimization, and no accounting, compensation,
-  payment, budget, campaign, staffing, permission, or external authority. All ten completed AI4-AI9
+  payment, budget, campaign, staffing, permission, or external authority. All ten AI4-AI9 copilot
   capabilities are enabled for on-demand drafts with mandatory human review and read-only tools;
-  global external actions remain disabled.
+  global external actions remain disabled. AI10 adds four versioned external-action control
+  contracts, owner approval, provider and evaluation readiness gates, canary bounds, deterministic
+  simulation evidence, per-policy pause/resume, and a global emergency stop. This release cannot
+  activate delivery.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the
@@ -384,6 +387,8 @@ While A2P approval is pending:
    `PHASE_AI8_DISPOSITION_COPILOT.md` while earlier copilots remain supervised.
 8. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
    track in `PHASE_AI9_MANAGEMENT_COPILOTS.md`.
-9. Begin AI10 external-automation control contracts without activating provider delivery.
+9. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
+   keep external delivery locked until the corresponding provider, consent, template, evaluation,
+   and canary checkpoints pass.
 10. Resume the parallel integration track after A2P approval without blocking internal
     development.

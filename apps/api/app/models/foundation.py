@@ -3292,6 +3292,93 @@ class AiCapabilityRuntimePolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
     updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
+class AiExternalActionPolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_external_action_policies"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "action_key",
+            name="uq_ai_external_action_policy_org_key",
+        ),
+        Index(
+            "ix_ai_external_action_policy_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    action_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(String(1200), nullable=False)
+    capability_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="control_only"
+    )
+    audience_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    consent_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    template_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    schedule_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    volume_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    cost_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    quality_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    canary_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    pause_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    rollback_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    prohibited_actions: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    dry_run_only: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    external_delivery_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_pause_reason: Mapped[str | None] = mapped_column(String(1000))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class AiExternalActionAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ai_external_action_attempts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_ai_external_action_attempt_org_idempotency",
+        ),
+        Index(
+            "ix_ai_external_action_attempt_policy_created",
+            "policy_id",
+            "created_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    policy_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("ai_external_action_policies.id", ondelete="CASCADE"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    execution_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="simulation"
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    audience_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    estimated_cost_microusd: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    policy_checks: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    block_reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    external_delivery_attempted: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    delivered_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
 class AiOrchestratorEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_orchestrator_events"
     __table_args__ = (
