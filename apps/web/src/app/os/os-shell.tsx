@@ -61,6 +61,7 @@ export function OsShell({
   const [accessState, setAccessState] = useState<AccessState>(
     profile ? "resolved" : "verifying",
   );
+  const [accessError, setAccessError] = useState<string | null>(null);
   const [accessRetry, setAccessRetry] = useState(0);
   const effectiveProfile =
     isSignedIn === false
@@ -89,6 +90,7 @@ export function OsShell({
 
     async function verifyAccess() {
       setAccessState("verifying");
+      setAccessError(null);
       const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
       let lastError: Error | null = null;
 
@@ -131,6 +133,7 @@ export function OsShell({
 
       if (!cancelled) {
         console.error("Stonegate browser access verification failed.", lastError);
+        setAccessError(friendlyAccessError(lastError));
         setAccessState("error");
       }
     }
@@ -288,13 +291,14 @@ export function OsShell({
             </strong>
             <span>
               {visibleAccessState === "error"
-                ? "Retry with the current signed-in session."
+                ? accessError ?? "Sign in again or retry with the current session."
                 : "Workspace navigation will appear automatically."}
             </span>
             {visibleAccessState === "error" ? (
               <button
                 onClick={() => {
                   setAccessState("verifying");
+                  setAccessError(null);
                   setAccessRetry((current) => current + 1);
                 }}
                 type="button"
@@ -434,4 +438,18 @@ function isWorkspaceProfile(
     Array.isArray(profile.permissions) &&
     typeof profile.unread_notification_count === "number"
   );
+}
+
+function friendlyAccessError(error: Error | null) {
+  const detail = error?.message.toLowerCase() ?? "";
+  if (detail.includes("unknown user") || detail.includes("not mapped")) {
+    return "This sign-in is not linked to an active Stonegate user.";
+  }
+  if (detail.includes("authorized party") || detail.includes("invalid clerk")) {
+    return "Stonegate rejected this Clerk session. The authentication settings need review.";
+  }
+  if (detail.includes("session token") || detail.includes("missing bearer")) {
+    return "Clerk did not finish creating the signed-in session. Retry access.";
+  }
+  return "Stonegate could not verify the current session. Retry access.";
 }
