@@ -21,6 +21,7 @@ import {
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type { TransactionDetail, TransactionOverview } from "../../lib/api";
+import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import styles from "./transactions.module.css";
 
@@ -167,6 +168,24 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
     } catch (error) { setMessage(error instanceof Error ? error.message : "Download failed."); }
   }
 
+  const requiredOpen = detail?.checklist.filter(
+    (item) => item.is_required && item.status !== "complete",
+  ) ?? [];
+  const nextDeadline = detail
+    ? [
+        ...detail.checklist.map((item) => item.due_at),
+        detail.earnest_money_due_at,
+        detail.due_diligence_deadline,
+        detail.assignment_deadline,
+        detail.closing_date,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => new Date(value))
+        .filter((value) => !Number.isNaN(value.getTime()) && value >= new Date())
+        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null
+    : null;
+  const pendingPackage = detail?.contract_packages.some((item) => item.status === "pending_approval") ?? false;
+
   return (
     <div className={styles.workspace}>
       <section className={styles.metrics} aria-label="Transaction summary">
@@ -186,6 +205,15 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
         <main className={styles.detail}>
           {!selectedId ? <div className={styles.emptyState}><FileText size={24} /><h3>No active transactions</h3><p>Open one from the Deal tab on a qualified lead.</p></div> : !detail ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={22} /> Loading transaction</div> : <>
             <header className={styles.dealHeader}><div><span>{labelize(detail.status)}</span><h3>{detail.seller_name}</h3><p>{detail.property_address}</p></div><div><span>Purchase</span><strong>{money(detail.purchase_price_cents)}</strong></div></header>
+            <div className={styles.controlStrip}>
+              <DealControlStrip
+                authority={{ label: "Authority", value: pendingPackage ? "Owner approval" : "Coordinator controls", detail: pendingPackage ? "Contract remains blocked" : detail.coordinator_name ?? "Coordinator unassigned", tone: pendingPackage ? "warning" : "info" }}
+                blocker={{ label: "Primary blocker", value: requiredOpen[0]?.title ?? "No required blocker", detail: requiredOpen.length ? `${requiredOpen.length} required items open` : "Required checklist is clear", tone: requiredOpen.length ? "warning" : "success" }}
+                deadline={{ label: "Next deadline", value: nextDeadline ? date(nextDeadline.toISOString()) : "No future deadline", detail: detail.closing_date ? `Closing ${date(detail.closing_date)}` : "Closing date missing", tone: nextDeadline ? "info" : "warning" }}
+                evidence={{ label: "Evidence", value: `${detail.documents.length} documents`, detail: `${detail.checklist.filter((item) => item.status === "complete").length}/${detail.checklist.length} checklist complete`, tone: detail.documents.length ? "success" : "warning" }}
+                nextAction={{ label: "Authorized next step", value: pendingPackage ? "Resolve contract approval" : requiredOpen[0]?.title ?? (detail.status === "funded" ? "Closing complete" : "Confirm funding"), detail: "Server gates remain enforced", tone: detail.status === "funded" ? "success" : "info" }}
+              />
+            </div>
             <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
             {message ? <div className={message === "Saved." ? styles.success : styles.notice}>{message}</div> : null}
 

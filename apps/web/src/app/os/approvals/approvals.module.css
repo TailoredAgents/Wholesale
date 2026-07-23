@@ -1,0 +1,13 @@
+.decisionPanel { border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.decisionPanel > header { min-height: 56px; padding: 11px 14px; border-bottom: 1px solid var(--sg-color-border-soft); }
+.decisionPanel > header span { color: var(--sg-color-text-muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.decisionPanel > header h3 { margin: 3px 0 0; font-size: 14px; }
+.decisionPanel > div { padding: 14px; }
+.decisionPanel p { margin: 0 0 14px; color: var(--sg-color-text-muted); font-size: 11px; line-height: 1.55; }
+.offerGrid { padding: 12px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.offerGrid > a { min-width: 0; padding: 12px; border: 1px solid var(--sg-color-border-soft); border-radius: var(--sg-radius-md); color: inherit; display: grid; gap: 6px; }
+.offerGrid > a:hover { border-color: var(--sg-color-border); background: var(--sg-color-surface-soft); }
+.offerGrid a div { display: flex; justify-content: space-between; gap: 8px; }
+.offerGrid span, .offerGrid small { overflow: hidden; color: var(--sg-color-text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 850px) { .offerGrid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .offerGrid { grid-template-columns: 1fr; } }

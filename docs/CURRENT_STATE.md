@@ -165,6 +165,16 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   direct handoffs to conversations, qualification, dispatch, offer preparation, and full records.
 - Lead Desk and Field Operations deep links preserve the selected seller through qualification and
   appointment scheduling handoffs.
+- Deal execution follows one visible progression from Underwriting through Approvals, Transactions,
+  Dispositions, and Buyers. Each selected record exposes evidence, authority, deadlines, blockers,
+  and the authorized next action before detailed controls.
+- Underwriting is organized around the active analysis queue, decision inputs, calibration metrics,
+  and immutable verified outcomes. Approvals is a deadline-aware decision queue with source context
+  and explicit consequences.
+- Transactions and Dispositions retain their server-enforced contract, document, buyer-selection,
+  funding, and reconciliation gates while surfacing exceptions above local workflow tabs.
+- Buyer CRM supports searchable qualification and capacity comparison, active-deal context,
+  proof-of-funds expiration, and permission-gated buyer creation in a drawer.
 
 ### Shared Inbox And Team Workflow
 

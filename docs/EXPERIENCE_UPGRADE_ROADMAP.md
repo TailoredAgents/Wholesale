@@ -2,7 +2,7 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX5 are complete.
+Status: Implementation in progress. Phases UX1 through UX6 are complete.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -256,7 +256,7 @@ Implementation notes:
 
 ## Phase UX6: Deal Execution Workspaces
 
-Status: Not started.
+Status: Complete. The deal execution workspace upgrade was implemented on July 22, 2026.
 
 Goal: Make high-risk deal work compact, evidence-led, and difficult to perform out of sequence.
 
@@ -282,6 +282,28 @@ Exit criteria:
 - Users can identify blocking evidence and the authorized next step from each workspace header.
 - No visual control implies authority the current user does not have.
 - Contract, offer, buyer-selection, funding, and reconciliation gates remain server-enforced.
+
+Implementation notes:
+
+- Underwriting, Approvals, Transactions, Dispositions, and Buyers now share one role-filtered Deal
+  Flow sequence while preserving every existing route and API permission boundary.
+- A shared execution control strip exposes evidence, authority, the next deadline, the primary
+  blocker, and the authorized next step without requiring long-page scanning.
+- Underwriting separates the active analysis queue from selected seller evidence and makes sample
+  size, error, bias, range coverage, and verified outcomes directly comparable.
+- Approvals behaves as a consequence-led decision queue with source-record links, affected entity
+  context, deadline risk, metadata evidence, view-only treatment, and audited human decisions.
+- Transactions preserves its checklist, contract version, document, party, timeline, and funding
+  gates while surfacing required open items, evidence count, approval authority, and the next
+  operational deadline above the record tabs.
+- Dispositions preserves package approval, buyer qualification, offer selection, proof-of-funds,
+  and reconciliation gates while showing the current sequence blocker and buyer evidence before
+  any release or payout action.
+- Buyers is a searchable comparison workspace with proof-of-funds status, expiration, reliability,
+  purchasing criteria, capacity, active deal inventory, and an authorized add-buyer drawer. Users
+  without `buyers:edit` never receive an edit control.
+- Secondary transaction and disposition forms remain inside their relevant local tabs; buyer entry
+  moved out of the primary comparison surface into a responsive drawer.
 
 ## Phase UX7: Business, Reporting, And AI Control
 

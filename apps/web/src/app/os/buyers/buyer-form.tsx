@@ -25,7 +25,7 @@ function optionalCents(formData: FormData, key: string) {
   return Math.round(Number(value) * 100);
 }
 
-export function BuyerForm() {
+export function BuyerForm({ onSaved }: { onSaved?: () => void }) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
@@ -87,6 +87,7 @@ export function BuyerForm() {
       form.reset();
       setStatus("saved");
       router.refresh();
+      onSaved?.();
     } catch {
       setStatus("error");
     }

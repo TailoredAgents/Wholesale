@@ -1,5 +1,7 @@
 import { getTransactionOverview } from "../../lib/api";
-import styles from "../page.module.css";
+import { DealJourney } from "../_components/deal-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
+import { StatusBadge } from "../_components/design-system";
 import { TransactionWorkspace } from "./transaction-workspace";
 
 export const dynamic = "force-dynamic";
@@ -14,29 +16,21 @@ export default async function TransactionsPage({
     searchParams,
   ]);
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Contract to funding</p>
-          <h2>Transactions</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Closing control</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Queue current" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Control contracts, evidence, deadlines, closing parties, and funding from one record."
+        eyebrow="Deal flow / contract to funding"
+        meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Closing queue current" : "Queue unavailable"}</StatusBadge>}
+        title="Transactions"
+      />
+      <DealJourney active="transactions" />
       {transactions ? (
         <TransactionWorkspace initialData={transactions} initialTransactionId={params.transaction} />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Transaction workspace unavailable</h3>
-            <span>A deal-access role is required.</span>
-          </div>
-        </section>
+        <SectionPanel description="A deal-access role and an available API connection are required." title="Transaction workspace unavailable">
+          The server did not return transaction data.
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }

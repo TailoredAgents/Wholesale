@@ -17,6 +17,7 @@ import {
 import { FormEvent, useMemo, useState } from "react";
 
 import type { DispositionCase, DispositionOverview } from "../../lib/api";
+import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import styles from "./dispositions.module.css";
 
@@ -36,10 +37,14 @@ function cents(value: FormDataEntryValue | null) {
   return Math.round(Number(String(value ?? "").replace(/[$,]/g, "")) * 100);
 }
 
-export function DispositionWorkspace({ initialData }: { initialData: DispositionOverview }) {
+export function DispositionWorkspace({ initialCaseId, initialData }: { initialCaseId?: string; initialData: DispositionOverview }) {
   const { getToken } = useAuth();
   const [data, setData] = useState(initialData);
-  const [selectedId, setSelectedId] = useState(initialData.cases[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState(
+    initialData.cases.some((item) => item.id === initialCaseId)
+      ? initialCaseId ?? null
+      : initialData.cases[0]?.id ?? null,
+  );
   const [tab, setTab] = useState<Tab>("package");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -278,6 +283,15 @@ export function DispositionWorkspace({ initialData }: { initialData: Disposition
           {!selected ? <div className={styles.empty}><UsersRound size={30} /><h3>No disposition cases</h3><p>Executed transactions will appear here when ready for buyer placement.</p></div> : (
             <>
               <header className={styles.dealHeader}><div><span>{labelize(selected.strategy)} · {selected.operating_mode_label}</span><h3>{selected.property_address}</h3><p>{selected.seller_name} · {selected.compensation_plan_label}</p></div><div><span>Approved floor</span><strong>{money(selected.minimum_acceptable_cents)}</strong></div></header>
+              <div className={styles.controlStrip}>
+                <DealControlStrip
+                  authority={{ label: "Authority", value: selected.selected_buyer_id ? "Selection approved" : "Human approval required", detail: selected.operating_mode_label, tone: selected.selected_buyer_id ? "success" : "warning" }}
+                  blocker={{ label: "Primary blocker", value: selected.package_status !== "approved" ? "Package approval" : !selected.matches.length ? "Buyer matching" : !selected.offers.length ? "Buyer offers" : !selected.selected_buyer_id ? "Buyer selection" : selected.reconciliation?.status !== "approved" ? "Reconciliation" : "No active blocker", detail: "Sequence is server enforced", tone: selected.reconciliation?.status === "approved" ? "success" : "warning" }}
+                  deadline={{ label: "Buyer urgency", value: `${selected.engagements.length} activities`, detail: `${selected.offers.length} offers received`, tone: selected.offers.length ? "info" : "warning" }}
+                  evidence={{ label: "Buyer evidence", value: `${selected.matches.filter((item) => item.latest_proof_document_id).length}/${selected.matches.length} POF verified`, detail: `${selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified matches`, tone: selected.matches.some((item) => item.latest_proof_document_id) ? "success" : "warning" }}
+                  nextAction={{ label: "Authorized next step", value: selected.package_status !== "approved" ? "Approve investor package" : !selected.matches.length ? "Generate buyer ranking" : !selected.offers.length ? "Record buyer offers" : !selected.selected_buyer_id ? "Approve buyer selection" : "Reconcile closing", detail: `Floor ${money(selected.minimum_acceptable_cents)}`, tone: "info" }}
+                />
+              </div>
               <nav className={styles.tabs}>{(["package", "buyers", "offers", "reconciliation"] as Tab[]).map((item) => <button className={tab === item ? styles.activeTab : ""} key={item} onClick={() => setTab(item)} type="button">{labelize(item)}</button>)}</nav>
 
               {tab === "package" ? <div className={styles.sectionGrid}>

@@ -1,0 +1,58 @@
+.workspace { display: grid; gap: 14px; }
+.metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.metrics > div { min-height: 70px; padding: 12px 14px; border-right: 1px solid var(--sg-color-border-soft); display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 7px; }
+.metrics > div:last-child { border-right: 0; }
+.metrics svg { color: var(--sg-color-brand); }
+.metrics span { color: var(--sg-color-text-muted); font-size: 11px; font-weight: 750; }
+.metrics strong { font-size: 20px; }
+.toolbar { min-height: 48px; display: flex; align-items: center; gap: 10px; }
+.toolbar label { min-width: 240px; max-width: 520px; flex: 1; min-height: 40px; padding: 0 11px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-md); background: var(--sg-color-surface); display: flex; align-items: center; gap: 8px; color: var(--sg-color-text-muted); }
+.toolbar input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--sg-color-text); font: inherit; font-size: 12px; }
+.toolbar > button { min-height: 40px; padding: 0 13px; border: 0; border-radius: var(--sg-radius-md); background: var(--sg-color-brand); color: white; display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.split { min-height: 590px; display: grid; grid-template-columns: 310px minmax(0, 1fr); border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.queue { border-right: 1px solid var(--sg-color-border); background: var(--sg-color-surface-soft); }
+.queue > header { min-height: 58px; padding: 12px 15px; border-bottom: 1px solid var(--sg-color-border); display: grid; gap: 3px; }
+.queue > header span, .buyerHeader span, .panel header span, .dealPool header span, .comparison header span, .drawer header span { color: var(--sg-color-text-muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.buyerRow, .selectedBuyer { width: 100%; padding: 14px 15px; border: 0; border-bottom: 1px solid var(--sg-color-border-soft); background: transparent; color: inherit; display: grid; gap: 6px; text-align: left; cursor: pointer; }
+.selectedBuyer { background: var(--sg-color-brand-soft); box-shadow: inset 3px 0 var(--sg-color-brand); }
+.buyerRow > div:first-child, .selectedBuyer > div:first-child { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.buyerRow > span, .selectedBuyer > span { color: var(--sg-color-text-muted); font-size: 11px; }
+.buyerRow dl, .selectedBuyer dl { margin: 4px 0 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.buyerRow dl div, .selectedBuyer dl div { display: grid; gap: 2px; }
+.buyerRow dt, .selectedBuyer dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.buyerRow dd, .selectedBuyer dd { margin: 0; font-size: 11px; font-weight: 750; }
+.detail { min-width: 0; }
+.buyerHeader { min-height: 84px; padding: 14px 17px; border-bottom: 1px solid var(--sg-color-border); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.buyerHeader h2 { margin: 3px 0; font-size: 20px; }
+.buyerHeader p { margin: 0; color: var(--sg-color-text-muted); font-size: 11px; }
+.detailGrid { padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.panel, .dealPool, .comparison { border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-lg); background: var(--sg-color-surface); overflow: hidden; }
+.panel > header, .dealPool > header, .comparison > header { min-height: 54px; padding: 11px 13px; border-bottom: 1px solid var(--sg-color-border-soft); display: flex; align-items: center; justify-content: space-between; }
+.panel h3, .dealPool h3, .comparison h3 { margin: 3px 0 0; font-size: 14px; }
+.panel dl { margin: 0; padding: 3px 13px; }
+.panel dl div { min-height: 41px; padding: 8px 0; border-bottom: 1px solid var(--sg-color-border-soft); display: flex; justify-content: space-between; gap: 10px; }
+.panel dt { color: var(--sg-color-text-muted); font-size: 10px; }
+.panel dd { margin: 0; max-width: 65%; text-align: right; font-size: 10px; font-weight: 750; }
+.dealPool { margin: 0 14px 14px; }
+.dealPool > a { padding: 11px 13px; border-bottom: 1px solid var(--sg-color-border-soft); color: inherit; display: grid; gap: 4px; }
+.dealPool > a div { display: flex; justify-content: space-between; gap: 8px; }
+.dealPool > a span, .dealPool > a small { color: var(--sg-color-text-muted); font-size: 10px; }
+.comparison > div { overflow-x: auto; }
+.comparison table { width: 100%; border-collapse: collapse; }
+.comparison th { padding: 9px 11px; background: var(--sg-color-surface-muted); color: var(--sg-color-text-muted); font-size: 9px; text-align: left; text-transform: uppercase; }
+.comparison td { padding: 10px 11px; border-top: 1px solid var(--sg-color-border-soft); font-size: 10px; }
+.comparison td button { padding: 0; border: 0; background: transparent; color: var(--sg-color-brand-strong); font: inherit; font-weight: 800; cursor: pointer; }
+.comparison td small { display: block; margin-top: 2px; color: var(--sg-color-text-muted); }
+.empty { padding: 20px 14px; color: var(--sg-color-text-muted); font-size: 11px; }
+.emptyState { min-height: 400px; display: grid; place-content: center; justify-items: center; gap: 7px; color: var(--sg-color-text-muted); text-align: center; }
+.emptyState h2, .emptyState p { margin: 0; }
+.backdrop { position: fixed; inset: 0; z-index: 50; border: 0; background: rgba(16, 25, 27, .36); }
+.drawer { position: fixed; z-index: 51; top: 0; right: 0; width: min(480px, calc(100vw - 24px)); height: 100dvh; background: var(--sg-color-surface); box-shadow: var(--sg-shadow-raised); overflow-y: auto; }
+.drawer > header { position: sticky; top: 0; z-index: 1; min-height: 66px; padding: 12px 15px; border-bottom: 1px solid var(--sg-color-border); background: var(--sg-color-surface); display: flex; justify-content: space-between; align-items: center; }
+.drawer h2 { margin: 3px 0 0; font-size: 18px; }
+.drawer header button { width: 36px; height: 36px; border: 1px solid var(--sg-color-border); border-radius: var(--sg-radius-md); background: var(--sg-color-surface); display: grid; place-items: center; cursor: pointer; }
+.drawer > div { padding: 14px; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+@media (max-width: 1000px) { .split { grid-template-columns: 260px minmax(0, 1fr); } .detailGrid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .metrics { grid-template-columns: 1fr 1fr; } .split { display: block; overflow: visible; } .queue { max-height: 320px; overflow-y: auto; border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 520px) { .toolbar { align-items: stretch; flex-direction: column; } .toolbar label { min-width: 0; width: 100%; } .toolbar > button { width: 100%; justify-content: center; } .metrics { grid-template-columns: 1fr; } .buyerHeader { align-items: flex-start; } }

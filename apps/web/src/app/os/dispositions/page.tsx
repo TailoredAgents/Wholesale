@@ -1,35 +1,36 @@
 import { getDispositionOverview } from "../../lib/api";
-import styles from "../page.module.css";
+import { DealJourney } from "../_components/deal-journey";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
+import { StatusBadge } from "../_components/design-system";
 import { DispositionWorkspace } from "./disposition-workspace";
 
 export const dynamic = "force-dynamic";
 
-export default async function DispositionsPage() {
-  const { dispositions, apiConnected } = await getDispositionOverview();
+export default async function DispositionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ case?: string }>;
+}) {
+  const [{ dispositions, apiConnected }, params] = await Promise.all([
+    getDispositionOverview(),
+    searchParams,
+  ]);
   return (
-    <>
-      <header className={styles.header}>
-        <div>
-          <p className={styles.eyebrow}>Contract to buyer</p>
-          <h2>Dispositions</h2>
-        </div>
-        <div className={styles.statusGroup}>
-          <span>Buyer placement</span>
-          <strong className={apiConnected ? styles.ready : styles.warning}>
-            {apiConnected ? "Queue current" : "API unavailable"}
-          </strong>
-        </div>
-      </header>
+    <WorkspacePage>
+      <PageHeader
+        description="Release approved deal evidence, compare qualified buyers, and reconcile the result."
+        eyebrow="Deal flow / contract to buyer"
+        meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Buyer placement current" : "Queue unavailable"}</StatusBadge>}
+        title="Dispositions"
+      />
+      <DealJourney active="dispositions" />
       {dispositions ? (
-        <DispositionWorkspace initialData={dispositions} />
+        <DispositionWorkspace initialCaseId={params.case} initialData={dispositions} />
       ) : (
-        <section className={styles.panel}>
-          <div className={styles.panelHeader}>
-            <h3>Disposition workspace unavailable</h3>
-            <span>A deal-access role and active business plan are required.</span>
-          </div>
-        </section>
+        <SectionPanel description="A deal-access role and active operating plan are required." title="Disposition workspace unavailable">
+          The server did not return disposition data.
+        </SectionPanel>
       )}
-    </>
+    </WorkspacePage>
   );
 }
