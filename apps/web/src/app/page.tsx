@@ -72,7 +72,9 @@ export default function PublicHomePage() {
           src="/images/stonegate-georgia-home-hero.jpg"
           alt="Red-brick Georgia home surrounded by mature trees"
           fill
-          priority
+          loading="eager"
+          fetchPriority="high"
+          quality={60}
           sizes="100vw"
         />
         <div className={styles.heroOverlay} />
@@ -151,7 +153,7 @@ export default function PublicHomePage() {
             return (
               <article key={situation.slug}>
                 <div className={styles.situationImage}>
-                  <Image src={situation.image} alt={situation.imageAlt} fill sizes="(max-width: 760px) 100vw, 33vw" />
+                  <Image src={situation.image} alt={situation.imageAlt} fill quality={60} sizes="(max-width: 760px) 100vw, 33vw" />
                 </div>
                 <div className={styles.situationBody}>
                   <Icon size={20} aria-hidden="true" />

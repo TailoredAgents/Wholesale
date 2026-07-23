@@ -75,6 +75,7 @@ def create_public_seller_lead(
     ensure_contact_methods(db, organization, contact, payload)
     property_record = duplicate_match.property_record or create_property(db, organization, payload)
     lead = duplicate_match.lead or create_lead(db, organization, contact, property_record, payload)
+    apply_public_intake_context(lead, property_record, payload)
     ensure_primary_conversation(db, lead)
     matched_existing_lead = duplicate_match.lead is not None
     ensure_inbound_case(
@@ -144,6 +145,7 @@ def create_public_seller_lead(
         attribution=payload.attribution,
         ip_address=ip_address,
         user_agent=user_agent,
+        session_id=payload.conversion_session_id,
         metadata={"matched_existing_lead": matched_existing_lead},
     )
     db.add(
@@ -377,7 +379,7 @@ def create_property(
         state=payload.property_state.upper(),
         postal_code=payload.property_postal_code,
         county=None,
-        property_type=None,
+        property_type=payload.property_type,
         normalized_address_key=normalize_address_key(payload),
     )
     db.add(property_record)
@@ -402,10 +404,10 @@ def create_lead(
         lead_temperature=None,
         motivation=payload.reason_for_selling,
         desired_timeline=payload.desired_timeline,
-        property_condition=None,
-        occupancy_status=None,
+        property_condition=payload.property_condition,
+        occupancy_status=payload.occupancy_status,
         asking_price=payload.asking_price,
-        mortgage_balance=None,
+        mortgage_balance=payload.mortgage_balance,
         appointment_status=None,
         next_follow_up_at=None,
     )
@@ -413,6 +415,28 @@ def create_lead(
     db.flush()
     ensure_primary_conversation(db, lead)
     return lead
+
+
+def apply_public_intake_context(
+    lead: Lead,
+    property_record: Property,
+    payload: SellerIntakeCreate,
+) -> None:
+    """Fill missing CRM context without overwriting staff-reviewed values."""
+    if not property_record.property_type and payload.property_type:
+        property_record.property_type = payload.property_type
+
+    fields = {
+        "motivation": payload.reason_for_selling,
+        "desired_timeline": payload.desired_timeline,
+        "property_condition": payload.property_condition,
+        "occupancy_status": payload.occupancy_status,
+        "asking_price": payload.asking_price,
+        "mortgage_balance": payload.mortgage_balance,
+    }
+    for field_name, value in fields.items():
+        if value and not getattr(lead, field_name):
+            setattr(lead, field_name, value)
 
 
 def create_attribution_touch(

@@ -20,5 +20,27 @@
 .exportLayout aside { padding: 16px; }
 .exportLayout aside h3 { margin: 0; font-size: 14px; }
 .exportLayout aside p { color: var(--sg-color-text-muted); font-size: 10px; line-height: 1.55; }
+.funnelLayout { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(250px, .6fr); border-bottom: 1px solid var(--sg-color-border); }
+.funnelRows { display: grid; border-right: 1px solid var(--sg-color-border); }
+.funnelRows > div { min-height: 42px; padding: 8px 14px; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; border-bottom: 1px solid var(--sg-color-border-soft); }
+.funnelRows > div:last-child { border-bottom: 0; }
+.funnelRows span { width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid var(--sg-color-border); border-radius: 50%; color: var(--sg-color-text-muted); font-size: 9px; font-weight: 800; }
+.funnelRows strong { font-size: 11px; }
+.funnelRows b { color: var(--sg-color-brand-strong); font-size: 13px; }
+.funnelLayout aside { padding: 14px; }
+.funnelLayout aside h3 { font-size: 13px; }
+.funnelLayout aside dl { margin: 12px 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.funnelLayout aside dl div { display: grid; gap: 2px; }
+.funnelLayout aside dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.funnelLayout aside dd { margin: 0; font-size: 12px; font-weight: 800; }
+.funnelLayout aside p { color: var(--sg-color-text-muted); font-size: 9px; line-height: 1.5; }
+.vitalGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.vitalGrid article { padding: 12px 14px; border-right: 1px solid var(--sg-color-border-soft); }
+.vitalGrid article:last-child { border-right: 0; }
+.vitalGrid article > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.vitalGrid article strong { font-size: 11px; }
+.vitalGrid article p { margin-top: 7px; color: var(--sg-color-text-muted); font-size: 9px; }
+.vitalGrid > p { padding: 14px; }
 @media (max-width: 900px) { .exceptionRows > a { grid-template-columns: 1fr 20px; } .exceptionRows dl { grid-column: 1 / -1; grid-row: 2; } .exportLayout { grid-template-columns: 1fr; } .exportLayout > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
-@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .funnelLayout { grid-template-columns: 1fr; } .funnelRows { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } .vitalGrid { grid-template-columns: 1fr; } .vitalGrid article { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } }

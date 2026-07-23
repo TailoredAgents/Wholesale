@@ -7,7 +7,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "audit:os": "node scripts/os-quality-audit.mjs"
+    "audit:os": "node scripts/os-quality-audit.mjs",
+    "audit:public": "node scripts/public-offer-audit.mjs"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.17",

@@ -1,3 +1,4 @@
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -22,6 +23,8 @@ from app.schemas.marketing import (
     MarketingOverview,
     MarketingSummary,
     OfflineConversionExportRead,
+    PublicFunnelSummary,
+    WebVitalSummary,
 )
 
 
@@ -80,6 +83,12 @@ def get_marketing_overview(
         start_at=period_start_at,
         end_at=period_end_at,
     )
+    public_funnel, web_vitals = get_public_experience_summary(
+        db,
+        principal,
+        start_at=period_start_at,
+        end_at=period_end_at,
+    )
     previous_summary = None
     if period_start_at is not None and period_days is not None:
         previous_start = period_start_at - timedelta(days=period_days)
@@ -104,9 +113,91 @@ def get_marketing_overview(
         period_end_at=period_end_at,
         previous_summary=previous_summary,
         summary=summarize_rows(campaign_rows, pending_exports),
+        public_funnel=public_funnel,
+        web_vitals=web_vitals,
         campaigns=campaigns[:100],
         offline_exports=[offline_export_to_read(export) for export in exports],
     )
+
+
+def get_public_experience_summary(
+    db: Session,
+    principal: Principal,
+    *,
+    start_at: datetime | None,
+    end_at: datetime | None,
+) -> tuple[PublicFunnelSummary, list[WebVitalSummary]]:
+    event_types = {
+        "page_view",
+        "offer_start",
+        "form_start",
+        "form_step_complete",
+        "form_validation_error",
+        "form_submit_attempt",
+        "form_submit",
+        "form_submit_error",
+        "form_abandon",
+        "web_vital",
+    }
+    events = db.scalars(
+        select(ConversionEvent).where(
+            ConversionEvent.organization_id == principal.organization_id,
+            ConversionEvent.event_type.in_(event_types),
+            *period_conditions(ConversionEvent.created_at, start_at, end_at),
+        )
+    ).all()
+    counts = Counter(event.event_type for event in events)
+    step_completions: Counter[str] = Counter()
+    vital_values: defaultdict[str, list[tuple[float, str]]] = defaultdict(list)
+    for event in events:
+        metadata = event.event_metadata or {}
+        if event.event_type == "form_step_complete":
+            step_key = metadata.get("step_key")
+            if isinstance(step_key, str) and step_key in {
+                "property",
+                "situation",
+                "details",
+                "contact",
+            }:
+                step_completions[step_key] += 1
+        elif event.event_type == "web_vital":
+            metric = metadata.get("metric")
+            value = metadata.get("value")
+            rating = metadata.get("rating")
+            if metric in {"LCP", "INP", "CLS"} and isinstance(value, (int, float)):
+                vital_values[str(metric)].append((float(value), str(rating or "unknown")))
+
+    starts = counts["form_start"]
+    submits = counts["form_submit"]
+    funnel = PublicFunnelSummary(
+        page_views=counts["page_view"],
+        offer_starts=counts["offer_start"],
+        form_starts=starts,
+        step_completions=dict(step_completions),
+        validation_errors=counts["form_validation_error"],
+        submit_attempts=counts["form_submit_attempt"],
+        form_submits=submits,
+        submit_errors=counts["form_submit_error"],
+        form_abandons=counts["form_abandon"],
+        start_to_submit_rate_basis_points=(round(submits / starts * 10000) if starts else None),
+    )
+    vitals = []
+    for metric in ("LCP", "INP", "CLS"):
+        samples = vital_values.get(metric, [])
+        if not samples:
+            continue
+        values = sorted(value for value, _ in samples)
+        p75_index = max(0, min(len(values) - 1, (3 * len(values) - 1) // 4))
+        good_count = sum(1 for _, rating in samples if rating == "good")
+        vitals.append(
+            WebVitalSummary(
+                metric=metric,
+                sample_count=len(samples),
+                p75_value=values[p75_index],
+                good_rate_basis_points=round(good_count / len(samples) * 10000),
+            )
+        )
+    return funnel, vitals
 
 
 def generate_offline_conversion_exports(db: Session, principal: Principal) -> int:

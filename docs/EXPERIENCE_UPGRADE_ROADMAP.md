@@ -2,7 +2,8 @@
 
 Last updated: July 22, 2026
 
-Status: Implementation in progress. Phases UX1 through UX9 are complete.
+Status: Phases UX1 through UX10 are implementation complete. Production baseline collection and
+business-content acceptance remain.
 
 This roadmap governs the next design track for the Stonegate Operating System and public seller
 website. It does not replace `ROADMAP.md`, which remains the source of truth for business workflows
@@ -445,7 +446,9 @@ Implementation notes:
 
 ## Phase UX10: Public Conversion Journey, Performance, And Measurement
 
-Status: Not started.
+Status: Implementation complete. See
+[`UX10_PUBLIC_CONVERSION_JOURNEY.md`](UX10_PUBLIC_CONVERSION_JOURNEY.md). Production field baselines
+remain.
 
 Goal: Ship a fast, accessible, compliant offer experience and establish the data needed to improve
 conversion honestly.
@@ -472,6 +475,25 @@ Exit criteria:
 - The first optimization test has a written hypothesis, primary metric, guardrail metric, and
   minimum observation rule before launch.
 
+Implementation notes:
+
+- The offer request is now a four-step property, situation, optional-details, and contact journey
+  with clear required/optional boundaries, progress, back navigation, field-level errors, and
+  answer preservation.
+- A failed API request preserves all answers and can be retried. A successful request stores a
+  tab-scoped confirmation and reference so a refresh does not repost the lead.
+- Property type, condition, occupancy, mortgage context, and the anonymous conversion session now
+  reach the CRM. Duplicate intake fills only missing fields and never overwrites staff-reviewed
+  values.
+- SMS consent remains separate, optional, unchecked, versioned, and excluded from draft storage.
+- Privacy-safe funnel and Core Web Vitals events feed a new public-experience baseline in Marketing.
+- Desktop and mobile Playwright journeys, serious/critical axe checks, overflow checks, ESLint,
+  TypeScript, production build, Ruff, and all 114 API tests pass.
+- Mobile Lighthouse lab results were 98 performance for the offer route and 93-95 for the homepage,
+  with 100 accessibility and SEO and zero measured CLS. The offer route LCP was 2.4 seconds; the
+  homepage hero LCP varied from 2.9 to 3.3 seconds. Field p75 collection is enabled and remains the
+  release evidence for the shared Core Web Vitals target.
+
 ## Implementation Order Rules
 
 - Do not begin broad page restyling before UX1 navigation and naming approval.
@@ -485,6 +507,7 @@ Exit criteria:
 
 ## Recommended Next Checkpoint
 
-Proceed to UX10 by converting the preserved address into a progressive offer journey, completing
-field-level recovery and consent verification, and establishing measured performance and conversion
-baselines before testing content changes.
+Deploy UX10, verify conversion and Web Vitals events in the production Marketing workspace, and
+collect an unmodified baseline before launching the first controlled optimization test. Complete
+the real-team, verified-review, final-domain, Twilio, and email checkpoints only when the required
+business evidence and provider approvals are available.

@@ -48,13 +48,17 @@ class SellerIntakeCreate(BaseModel):
     property_city: str = Field(min_length=1, max_length=120)
     property_state: str = Field(default="GA", min_length=2, max_length=2)
     property_postal_code: str = Field(min_length=1, max_length=20)
+    property_type: str | None = Field(default=None, max_length=80)
     name: str = Field(min_length=1, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     email: EmailStr | None = None
     preferred_contact_method: str = Field(default="phone", max_length=40)
     reason_for_selling: str | None = Field(default=None, max_length=500)
     desired_timeline: str | None = Field(default=None, max_length=120)
+    property_condition: str | None = Field(default=None, max_length=120)
+    occupancy_status: str | None = Field(default=None, max_length=120)
     asking_price: str | None = Field(default=None, max_length=120)
+    mortgage_balance: str | None = Field(default=None, max_length=120)
     comments: str | None = Field(default=None, max_length=1000)
     company_website: str | None = Field(default=None, max_length=255)
     consent_to_contact: bool
@@ -64,6 +68,7 @@ class SellerIntakeCreate(BaseModel):
         default=SMS_CONSENT_WORDING_VERSION,
         max_length=80,
     )
+    conversion_session_id: str | None = Field(default=None, max_length=120)
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
 
     @model_validator(mode="after")
@@ -76,6 +81,10 @@ class SellerIntakeCreate(BaseModel):
             raise ValueError("A phone number is required to consent to text messages.")
         if self.preferred_contact_method == "sms" and not self.sms_consent:
             raise ValueError("Text message consent is required when text is selected.")
+        if self.preferred_contact_method == "phone" and not self.phone:
+            raise ValueError("A phone number is required when phone is selected.")
+        if self.preferred_contact_method == "email" and not self.email:
+            raise ValueError("An email address is required when email is selected.")
         return self
 
 

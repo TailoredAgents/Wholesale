@@ -38,6 +38,20 @@ function mask(value: string) {
   return value.length <= 10 ? value : `${value.slice(0, 6)}...${value.slice(-4)}`;
 }
 
+function percentage(basisPoints: number | null) {
+  return basisPoints === null ? "No baseline" : `${(basisPoints / 100).toFixed(1)}%`;
+}
+
+function vitalValue(metric: string, value: number) {
+  return metric === "CLS" ? value.toFixed(3) : `${Math.round(value)} ms`;
+}
+
+function vitalTone(metric: string, value: number) {
+  const good = metric === "LCP" ? value <= 2500 : metric === "INP" ? value <= 200 : value <= 0.1;
+  const poor = metric === "LCP" ? value > 4000 : metric === "INP" ? value > 500 : value > 0.25;
+  return good ? "success" : poor ? "danger" : "warning";
+}
+
 export default async function MarketingPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const params = await searchParams;
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
@@ -58,6 +72,16 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   const submitRate = marketing.campaigns.reduce((total, item) => total + item.form_starts, 0)
     ? marketing.campaigns.reduce((total, item) => total + item.form_submits, 0) / marketing.campaigns.reduce((total, item) => total + item.form_starts, 0) * 100
     : 0;
+  const funnel = marketing.public_funnel;
+  const funnelRows = [
+    ["Public page views", funnel.page_views],
+    ["Address offer starts", funnel.offer_starts],
+    ["Form starts", funnel.form_starts],
+    ["Property step complete", funnel.step_completions.property ?? 0],
+    ["Situation step complete", funnel.step_completions.situation ?? 0],
+    ["Details step complete", funnel.step_completions.details ?? 0],
+    ["Successful submissions", funnel.form_submits],
+  ] as const;
 
   return <WorkspacePage>
     <PageHeader
@@ -82,6 +106,28 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
       <div><UsersRound size={17} /><span>Cost per lead</span><strong>{money(marketing.summary.cost_per_lead_cents)}</strong><small>{marketing.summary.leads_created} attributed leads</small></div>
       <div><Megaphone size={17} /><span>Cost per contract</span><strong>{money(marketing.summary.cost_per_contract_cents)}</strong><small>{marketing.summary.contracted_leads} contracts</small></div>
       <div><ChartNoAxesCombined size={17} /><span>Return on ad spend</span><strong>{roas(marketing.summary.return_on_ad_spend_basis_points)}</strong><small>{submitRate.toFixed(1)}% form-start conversion</small></div>
+    </section>
+
+    <section className={styles.section}>
+      <div className={styles.sectionHeading}><div><span>Public experience baseline</span><h2>Offer journey and real-user performance</h2></div><strong>{percentage(funnel.start_to_submit_rate_basis_points)} start-to-submit</strong></div>
+      <div className={marketingStyles.funnelLayout}>
+        <div className={marketingStyles.funnelRows}>
+          {funnelRows.map(([label, count], index) => <div key={label}><span>{index + 1}</span><strong>{label}</strong><b>{count}</b></div>)}
+        </div>
+        <aside>
+          <h3>Journey friction</h3>
+          <dl>
+            <div><dt>Validation events</dt><dd>{funnel.validation_errors}</dd></div>
+            <div><dt>Submit attempts</dt><dd>{funnel.submit_attempts}</dd></div>
+            <div><dt>Submit failures</dt><dd>{funnel.submit_errors}</dd></div>
+            <div><dt>Abandonments</dt><dd>{funnel.form_abandons}</dd></div>
+          </dl>
+          <p>Counts are anonymous browser-session events. Field values are not included.</p>
+        </aside>
+      </div>
+      <div className={marketingStyles.vitalGrid} aria-label="Core Web Vitals p75">
+        {marketing.web_vitals.length ? marketing.web_vitals.map((metric) => <article key={metric.metric}><div><strong>{metric.metric} p75</strong><StatusBadge tone={vitalTone(metric.metric, metric.p75_value)}>{vitalValue(metric.metric, metric.p75_value)}</StatusBadge></div><p>{metric.sample_count} real-user samples · {percentage(metric.good_rate_basis_points)} rated good</p></article>) : <p className={styles.empty}>No real-user Core Web Vitals samples have been recorded in this period.</p>}
+      </div>
     </section>
 
     <section className={styles.exceptionBand}>

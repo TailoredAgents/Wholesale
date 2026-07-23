@@ -71,11 +71,18 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
 - How It Works, About, and FAQs pages with transparent offer, company, assignment, timing, cost,
   privacy, and retail-price tradeoff content.
 - Cash-offer request form with duplicate matching, attribution, and conversion tracking.
+- Four-step cash-offer journey with explicit optional steps, progress, back navigation, tab-scoped
+  draft recovery, field-level errors, API-failure retry, and refresh-safe confirmation references.
+- Public property type, condition, occupancy, asking-price, mortgage, and situation context flows
+  into the CRM without overwriting staff-reviewed values on duplicate submissions.
 - Seller pages for inherited homes, repair-heavy homes, and fast-sale situations using local
   project-bound visual assets and one shared conversion path.
 - Public privacy policy and SMS terms.
 - Separate, optional, unchecked SMS consent with versioned evidence.
-- Form-view, form-start, abandonment, submit, and phone-click conversion events.
+- Offer-start, form-start, step-completion, validation, abandonment, submit-attempt, submit-error,
+  successful-submit, phone-click, and privacy-safe Core Web Vitals conversion events.
+- Marketing baseline reporting for the public funnel, validation friction, submission failures,
+  abandonment, and LCP/INP/CLS p75 samples.
 - Public canonical metadata, Organization and WebSite structured data, social image metadata,
   sitemap, and OS/authentication search exclusions.
 

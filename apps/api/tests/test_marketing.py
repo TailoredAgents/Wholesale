@@ -73,6 +73,24 @@ def test_marketing_overview_and_offline_export_generation(
             "amount_cents": 2500000,
         },
     )
+    for event_type, metadata in (
+        ("offer_start", {"entry_point": "homepage_hero"}),
+        ("form_start", {"starting_step": 1}),
+        ("form_step_complete", {"step_key": "property", "step_number": 1}),
+        ("form_validation_error", {"step_key": "contact", "fields": ["phone"]}),
+        ("form_submit_attempt", {"completed_steps": 4}),
+        ("web_vital", {"metric": "LCP", "value": 2200.0, "rating": "good"}),
+        ("web_vital", {"metric": "LCP", "value": 2800.0, "rating": "needs-improvement"}),
+    ):
+        event_response = client.post(
+            "/api/v1/public/conversion-events",
+            json={
+                "event_type": event_type,
+                "session_id": "marketing-session",
+                "metadata": metadata,
+            },
+        )
+        assert event_response.status_code == 201
 
     overview_response = client.get(
         "/api/v1/marketing",
@@ -100,6 +118,21 @@ def test_marketing_overview_and_offline_export_generation(
     assert google_row["leads_created"] == 1
     assert google_row["form_submits"] == 1
     assert google_row["collected_revenue_cents"] == 2500000
+    assert overview["public_funnel"]["offer_starts"] == 1
+    assert overview["public_funnel"]["form_starts"] == 1
+    assert overview["public_funnel"]["step_completions"] == {"property": 1}
+    assert overview["public_funnel"]["validation_errors"] == 1
+    assert overview["public_funnel"]["submit_attempts"] == 1
+    assert overview["public_funnel"]["form_submits"] == 1
+    assert overview["public_funnel"]["start_to_submit_rate_basis_points"] == 10000
+    assert overview["web_vitals"] == [
+        {
+            "metric": "LCP",
+            "sample_count": 2,
+            "p75_value": 2800.0,
+            "good_rate_basis_points": 5000,
+        }
+    ]
 
     prior_period_at = datetime.now(UTC) - timedelta(days=45)
     for event in db_session.scalars(select(ConversionEvent)).all():

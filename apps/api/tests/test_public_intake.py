@@ -27,16 +27,21 @@ def public_payload() -> dict[str, object]:
         "property_city": "Atlanta",
         "property_state": "GA",
         "property_postal_code": "30303",
+        "property_type": "single_family",
         "name": "Sam Seller",
         "phone": "4045551212",
         "email": "sam@example.com",
         "preferred_contact_method": "phone",
         "reason_for_selling": "Inherited property",
         "desired_timeline": "30 days",
+        "property_condition": "major_repairs",
+        "occupancy_status": "vacant",
         "asking_price": "180000",
+        "mortgage_balance": "90000",
         "comments": "Needs repairs",
         "consent_to_contact": True,
         "sms_consent": True,
+        "conversion_session_id": "session-intake-123",
         "attribution": {
             "landing_page": "/get-a-cash-offer",
             "referrer": "https://www.google.com/",
@@ -100,6 +105,10 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert lead.motivation == "Inherited property"
     assert lead.desired_timeline == "30 days"
     assert lead.asking_price == "180000"
+    assert lead.property_condition == "major_repairs"
+    assert lead.occupancy_status == "vacant"
+    assert lead.mortgage_balance == "90000"
+    assert property_record.property_type == "single_family"
     assert lead.assigned_user_id is not None
     task = db_session.scalar(select(Task))
     assert task is not None
@@ -129,6 +138,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert conversion_event.source == "google_ppc"
     assert conversion_event.medium == "cpc"
     assert conversion_event.event_metadata == {"matched_existing_lead": False}
+    assert conversion_event.session_id == "session-intake-123"
 
 
 def test_public_seller_intake_bootstraps_default_organization_when_missing(
@@ -257,6 +267,23 @@ def test_public_seller_intake_requires_sms_opt_in_when_text_is_preferred(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
+def test_public_seller_intake_requires_selected_contact_channel(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["preferred_contact_method"] = "email"
+    payload["email"] = None
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "email address is required" in str(response.json())
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
 def test_public_seller_intake_allows_autofilled_honeypot_field(
     db_session: Session,
     api_db_override: None,
@@ -302,6 +329,42 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2
+
+
+def test_duplicate_public_intake_fills_missing_context_without_overwriting_reviewed_values(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    initial = public_payload()
+    initial["property_type"] = None
+    initial["property_condition"] = None
+    initial["occupancy_status"] = None
+    initial["mortgage_balance"] = None
+    first_response = client.post("/api/v1/public/seller-leads", json=initial)
+    assert first_response.status_code == 201
+
+    lead = db_session.scalar(select(Lead))
+    property_record = db_session.scalar(select(Property))
+    assert lead is not None
+    assert property_record is not None
+    lead.motivation = "staff_reviewed_motivation"
+    db_session.commit()
+
+    updated = public_payload()
+    updated["reason_for_selling"] = "seller_updated_motivation"
+    second_response = client.post("/api/v1/public/seller-leads", json=updated)
+
+    assert second_response.status_code == 201
+    assert second_response.json()["matched_existing_lead"] is True
+    db_session.refresh(lead)
+    db_session.refresh(property_record)
+    assert lead.motivation == "staff_reviewed_motivation"
+    assert lead.property_condition == "major_repairs"
+    assert lead.occupancy_status == "vacant"
+    assert lead.mortgage_balance == "90000"
+    assert property_record.property_type == "single_family"
 
 
 def test_speed_to_lead_queue_and_completion(

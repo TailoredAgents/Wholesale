@@ -1,5 +1,9 @@
-import { ArrowRight, MapPin } from "lucide-react";
+"use client";
 
+import { ArrowRight, MapPin } from "lucide-react";
+import { useMemo } from "react";
+
+import { recordConversionEvent } from "./lib/conversion-events";
 import styles from "./address-offer-start.module.css";
 
 type AddressOfferStartProps = {
@@ -7,11 +11,23 @@ type AddressOfferStartProps = {
 };
 
 export function AddressOfferStart({ compact = false }: AddressOfferStartProps) {
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
+
   return (
     <form
       action="/get-a-cash-offer"
       className={`${styles.form} ${compact ? styles.compact : ""}`}
       method="get"
+      onSubmit={() => {
+        window.sessionStorage.removeItem("stonegate_cash_offer_draft_v1");
+        window.sessionStorage.removeItem("stonegate_cash_offer_confirmation_v1");
+        void recordConversionEvent(apiBaseUrl, "offer_start", {
+          entry_point: compact ? "supporting_cta" : "homepage_hero",
+        });
+      }}
     >
       <label htmlFor={compact ? "property-address-compact" : "property-address"}>
         Property address

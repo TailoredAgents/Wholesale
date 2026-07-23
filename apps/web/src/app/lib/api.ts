@@ -1222,6 +1222,24 @@ export type MarketingOverview = {
   period_end_at: string;
   previous_summary: MarketingSummary | null;
   summary: MarketingSummary;
+  public_funnel: {
+    page_views: number;
+    offer_starts: number;
+    form_starts: number;
+    step_completions: Record<string, number>;
+    validation_errors: number;
+    submit_attempts: number;
+    form_submits: number;
+    submit_errors: number;
+    form_abandons: number;
+    start_to_submit_rate_basis_points: number | null;
+  };
+  web_vitals: Array<{
+    metric: string;
+    sample_count: number;
+    p75_value: number;
+    good_rate_basis_points: number;
+  }>;
   campaigns: Array<{
     source: string;
     medium: string;
@@ -2101,6 +2119,19 @@ const emptyMarketingOverview: MarketingOverview = {
     return_on_ad_spend_basis_points: null,
     pending_offline_exports: 0,
   },
+  public_funnel: {
+    page_views: 0,
+    offer_starts: 0,
+    form_starts: 0,
+    step_completions: {},
+    validation_errors: 0,
+    submit_attempts: 0,
+    form_submits: 0,
+    submit_errors: 0,
+    form_abandons: 0,
+    start_to_submit_rate_basis_points: null,
+  },
+  web_vitals: [],
   campaigns: [],
   offline_exports: [],
 };

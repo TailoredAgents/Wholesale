@@ -51,12 +51,34 @@ class MarketingSummary(BaseModel):
     pending_offline_exports: int
 
 
+class PublicFunnelSummary(BaseModel):
+    page_views: int
+    offer_starts: int
+    form_starts: int
+    step_completions: dict[str, int]
+    validation_errors: int
+    submit_attempts: int
+    form_submits: int
+    submit_errors: int
+    form_abandons: int
+    start_to_submit_rate_basis_points: int | None
+
+
+class WebVitalSummary(BaseModel):
+    metric: str
+    sample_count: int
+    p75_value: float
+    good_rate_basis_points: int
+
+
 class MarketingOverview(BaseModel):
     period_days: int | None
     period_start_at: datetime | None
     period_end_at: datetime
     previous_summary: MarketingSummary | None
     summary: MarketingSummary
+    public_funnel: PublicFunnelSummary
+    web_vitals: list[WebVitalSummary]
     campaigns: list[MarketingCampaignPerformance]
     offline_exports: list[OfflineConversionExportRead]
 
