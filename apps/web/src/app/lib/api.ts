@@ -2067,6 +2067,20 @@ export type TransactionDetail = {
     occurred_at: string;
     notes: string | null;
     download_url: string;
+    facts: Array<{
+      id: string;
+      document_id: string;
+      field_key: string;
+      value_text: string;
+      source_page: number | null;
+      source_excerpt: string | null;
+      extraction_method: string;
+      status: string;
+      confidence_score: number | null;
+      reviewed_by_name: string | null;
+      reviewed_at: string | null;
+      created_at: string;
+    }>;
   }>;
   parties: Array<{
     id: string;
@@ -2105,6 +2119,68 @@ export type TransactionDetail = {
     actor_name: string | null;
     occurred_at: string;
   }>;
+};
+
+export type TransactionCopilotRecommendation = {
+  id: string;
+  transaction_id: string;
+  lead_id: string;
+  ai_run_log_id: string | null;
+  status: string;
+  output_payload: {
+    status_summary: string;
+    missing_items: string[];
+    deadline_risks: Array<{
+      item: string;
+      due_at: string;
+      severity: "info" | "warning" | "critical";
+      reason: string;
+      evidence: string[];
+    }>;
+    document_findings: Array<{
+      finding: string;
+      document_id: string | null;
+      source_page: number | null;
+      evidence: string;
+    }>;
+    party_gaps: string[];
+    recommended_internal_actions: string[];
+    closing_attorney_email_draft: string;
+    seller_email_draft: string;
+    legal_escalations: string[];
+    evidence: string[];
+    confidence: number;
+  };
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
+export type TransactionCopilotOverview = {
+  pilot_mode: "draft_only";
+  runtime_status: string;
+  capability_status: string;
+  external_actions_blocked: boolean;
+  readiness_score: number;
+  readiness_band: "ready" | "needs_review" | "blocked";
+  readiness_gaps: string[];
+  deadline_risks: Array<{
+    item: string;
+    due_at: string;
+    severity: "info" | "warning" | "critical";
+    reason: string;
+    evidence: string[];
+  }>;
+  evidence_available: string[];
+  confirmed_document_fact_count: number;
+  recommendations: TransactionCopilotRecommendation[];
+  metrics: {
+    generated: number;
+    reviewed: number;
+    accepted_or_corrected_rate_basis_points: number;
+    correction_rate_basis_points: number;
+    estimated_time_saved_minutes: number;
+  };
 };
 
 const emptySummary: DashboardSummary = {

@@ -13,7 +13,14 @@ from app.schemas.transactions import (
     ContractPackageRead,
     ContractTemplateRead,
     TransactionClose,
+    TransactionCopilotAnalyzeRead,
+    TransactionCopilotAnalyzeRequest,
+    TransactionCopilotOverview,
+    TransactionCopilotReviewRead,
+    TransactionCopilotReviewRequest,
     TransactionDetail,
+    TransactionDocumentFactCreate,
+    TransactionDocumentFactRead,
     TransactionDocumentRead,
     TransactionEventCreate,
     TransactionEventRead,
@@ -22,7 +29,13 @@ from app.schemas.transactions import (
     TransactionPartyRead,
     TransactionUpdate,
 )
+from app.services.transaction_copilot import (
+    analyze_transaction,
+    get_transaction_copilot_overview,
+    review_recommendation,
+)
 from app.services.transactions import (
+    add_document_fact,
     add_party,
     approve_template,
     close_transaction,
@@ -121,6 +134,61 @@ def read_transaction(
     result = get_transaction_detail(db, principal, transaction_id)
     if result is None:
         raise not_found()
+    return result
+
+
+@router.get("/{transaction_id}/copilot")
+def read_transaction_copilot(
+    transaction_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> TransactionCopilotOverview:
+    result = get_transaction_copilot_overview(db, principal, transaction_id)
+    if result is None:
+        raise not_found()
+    return result
+
+
+@router.post("/{transaction_id}/copilot/analyze")
+def create_transaction_copilot_draft(
+    transaction_id: UUID,
+    payload: TransactionCopilotAnalyzeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> TransactionCopilotAnalyzeRead:
+    try:
+        result = analyze_transaction(db, principal, transaction_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise not_found()
+    return result
+
+
+@router.post("/copilot/recommendations/{recommendation_id}/review")
+def review_transaction_copilot_draft(
+    recommendation_id: UUID,
+    payload: TransactionCopilotReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> TransactionCopilotReviewRead:
+    try:
+        result = review_recommendation(
+            db,
+            principal,
+            recommendation_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Recommendation not found.")
     return result
 
 
@@ -258,6 +326,29 @@ def download_transaction_document(
             "Cache-Control": "private, no-store",
         },
     )
+
+
+@router.post(
+    "/{transaction_id}/documents/{document_id}/facts",
+    status_code=201,
+)
+def create_transaction_document_fact(
+    transaction_id: UUID,
+    document_id: UUID,
+    payload: TransactionDocumentFactCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_dependency)],
+) -> TransactionDocumentFactRead:
+    result = add_document_fact(
+        db,
+        principal,
+        transaction_id,
+        document_id,
+        payload,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Transaction document not found.")
+    return result
 
 
 @router.post("/{transaction_id}/parties", status_code=201)

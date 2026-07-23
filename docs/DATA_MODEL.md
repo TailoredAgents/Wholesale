@@ -2,7 +2,7 @@
 
 Last updated: July 23, 2026
 
-The schema is managed through Alembic migrations. Migration `0046_acquisitions_copilot` is the
+The schema is managed through Alembic migrations. Migration `0047_transaction_copilot` is the
 current head.
 
 ## Identity And Access
@@ -85,6 +85,14 @@ scaling boundary without changing the authorization or evidence metadata contrac
 - `deals`
 - `transactions`
 - `transaction_checklist_items`
+- `contract_templates`
+- `contract_packages`
+- `transaction_documents`
+- `transaction_document_facts`
+- `transaction_parties`
+- `transaction_events`
+- `transaction_copilot_recommendations`
+- `transaction_copilot_reviews`
 - `approval_requests`
 
 `underwriting_calibration_cases` stores one verified outcome per immutable market analysis. It
@@ -109,6 +117,12 @@ manager decision, presentation evidence, and immutable source snapshot. `offer_n
 stores the chronological price discussion, channel, seller response, objections, amount, actor,
 appointment, and governing concession. A field negotiation may reference the exact concession that
 authorized its presented or agreed price.
+
+`transaction_document_facts` stores human-confirmed or future proposed facts with the source
+document, page, excerpt, extraction method, confidence, status, and reviewer. Raw document bytes
+are excluded from AI context. `transaction_copilot_recommendations` stores idempotent draft
+coordination guidance and its evidence snapshot; `transaction_copilot_reviews` preserves the
+original output and immutable human acceptance, correction, or rejection.
 
 ## Buyers, Finance, And Marketing
 
@@ -237,7 +251,7 @@ a new draft dataset version.
 - Comparable candidate records if calibration volume or cross-analysis querying outgrows the
   current immutable analysis payload and audit-event review history.
 - Offer versions and negotiation-event records.
-- Document, template, signature-envelope, and file-access records.
+- Signature-envelope, private object-storage, file-scan, and signed-access records.
 - Buyer proof-of-funds document records.
 - Disposition package, campaign, buyer-response, showing, selection, deposit, and deal-level
   operating-mode assignment records.

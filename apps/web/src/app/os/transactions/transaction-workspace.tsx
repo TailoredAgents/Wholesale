@@ -9,6 +9,7 @@ import {
   Clock3,
   Download,
   FileCheck2,
+  FileSearch,
   FileText,
   History,
   Landmark,
@@ -20,9 +21,15 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import type { TransactionDetail, TransactionOverview } from "../../lib/api";
+import type {
+  TransactionCopilotOverview,
+  TransactionCopilotRecommendation,
+  TransactionDetail,
+  TransactionOverview,
+} from "../../lib/api";
 import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
+import { TransactionCopilotPanel } from "./transaction-copilot-panel";
 import styles from "./transactions.module.css";
 
 type Tab = "closing" | "contract" | "documents" | "parties" | "timeline";
@@ -44,6 +51,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
   const [overview, setOverview] = useState(initialData);
   const [selectedId, setSelectedId] = useState(initialTransactionId ?? initialData.items[0]?.id ?? null);
   const [detail, setDetail] = useState<TransactionDetail | null>(null);
+  const [copilot, setCopilot] = useState<TransactionCopilotOverview | null>(null);
   const [templates, setTemplates] = useState<ContractTemplate[]>([]);
   const [tab, setTab] = useState<Tab>("closing");
   const [busy, setBusy] = useState(false);
@@ -71,14 +79,16 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
 
   async function reload(transactionId = selectedId) {
     if (!transactionId) return;
-    const [nextDetail, nextOverview, nextTemplates] = await Promise.all([
+    const [nextDetail, nextOverview, nextTemplates, nextCopilot] = await Promise.all([
       request<TransactionDetail>(`/api/v1/transactions/${transactionId}`),
       request<TransactionOverview>("/api/v1/transactions"),
       request<ContractTemplate[]>("/api/v1/transactions/templates"),
+      request<TransactionCopilotOverview>(`/api/v1/transactions/${transactionId}/copilot`),
     ]);
     setDetail(nextDetail);
     setOverview(nextOverview);
     setTemplates(nextTemplates);
+    setCopilot(nextCopilot);
   }
 
   useEffect(() => {
@@ -87,8 +97,9 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
     Promise.all([
       request<TransactionDetail>(`/api/v1/transactions/${selectedId}`),
       request<ContractTemplate[]>("/api/v1/transactions/templates"),
+      request<TransactionCopilotOverview>(`/api/v1/transactions/${selectedId}/copilot`),
     ])
-      .then(([value, nextTemplates]) => { if (active) { setDetail(value); setTemplates(nextTemplates); } })
+      .then(([value, nextTemplates, nextCopilot]) => { if (active) { setDetail(value); setTemplates(nextTemplates); setCopilot(nextCopilot); } })
       .catch((error) => { if (active) setMessage(error instanceof Error ? error.message : "Unable to load transaction."); });
     return () => { active = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -146,6 +157,50 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
     event.currentTarget.reset();
   }
 
+  async function addDocumentFact(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const documentId = String(data.get("document_id"));
+    await action(() => request(
+      `/api/v1/transactions/${selectedId}/documents/${documentId}/facts`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          field_key: data.get("field_key"),
+          value_text: data.get("value_text"),
+          source_page: data.get("source_page") ? Number(data.get("source_page")) : null,
+          source_excerpt: data.get("source_excerpt") || null,
+        }),
+      },
+    ));
+    event.currentTarget.reset();
+  }
+
+  async function generateCopilot() {
+    await action(() => request(
+      `/api/v1/transactions/${selectedId}/copilot/analyze`,
+      { method: "POST", body: JSON.stringify({}) },
+    ));
+  }
+
+  async function reviewCopilot(
+    recommendation: TransactionCopilotRecommendation,
+    decision: "accepted" | "edited" | "rejected",
+    finalOutput?: TransactionCopilotRecommendation["output_payload"],
+  ) {
+    await action(() => request(
+      `/api/v1/transactions/copilot/recommendations/${recommendation.id}/review`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          decision,
+          final_output: finalOutput ?? null,
+          estimated_time_saved_seconds: 420,
+        }),
+      },
+    ));
+  }
+
   async function addParty(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); const data = new FormData(event.currentTarget);
     await action(() => request(`/api/v1/transactions/${selectedId}/parties`, { method: "POST", body: JSON.stringify(Object.fromEntries(data)) }));
@@ -195,7 +250,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
         <aside className={styles.queue}>
           <div className={styles.queueHeader}><div><span>Closing queue</span><strong>{overview.items.length} active</strong></div></div>
           {overview.items.length === 0 ? <p className={styles.empty}>Open a transaction from a lead&apos;s Deal tab.</p> : overview.items.map((item) => (
-            <button className={selectedId === item.id ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => { setDetail(null); setSelectedId(item.id); }} type="button">
+            <button className={selectedId === item.id ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => { setDetail(null); setCopilot(null); setSelectedId(item.id); }} type="button">
               <div><strong>{item.seller_name}</strong><ChevronRight size={16} /></div><span>{item.property_address}</span>
               <dl><div><dt>Close</dt><dd>{date(item.closing_date)}</dd></div><div><dt>Progress</dt><dd>{item.checklist_complete}/{item.checklist_total}</dd></div></dl>
               {item.risk_flags[0] ? <small><AlertTriangle size={13} />{item.risk_flags[0]}</small> : <small className={styles.clear}><Check size={13} />On track</small>}
@@ -217,7 +272,16 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
             <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
             {message ? <div className={message === "Saved." ? styles.success : styles.notice}>{message}</div> : null}
 
-            {tab === "closing" ? <div className={styles.sectionGrid}>
+            {tab === "closing" ? <>
+              {copilot ? (
+                <TransactionCopilotPanel
+                  busy={busy}
+                  copilot={copilot}
+                  onGenerate={generateCopilot}
+                  onReview={reviewCopilot}
+                />
+              ) : null}
+              <div className={styles.sectionGrid}>
               <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing controls</span><h4>Required workflow</h4></div><strong>{detail.checklist.filter((item) => item.status === "complete").length}/{detail.checklist.length}</strong></div>
                 <div className={styles.checklist}>{detail.checklist.map((item) => <div className={styles.checkItem} key={item.id}><button aria-label={item.status === "complete" ? "Reopen item" : "Complete item"} disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/checklist/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: item.status === "complete" ? "open" : "complete" }) }))} type="button">{item.status === "complete" ? <Check size={15} /> : null}</button><div><strong>{item.title}</strong><span>{item.description}</span><small>{labelize(item.category)} · {item.due_at ? date(item.due_at) : "No deadline"}</small></div></div>)}</div>
               </section>
@@ -225,7 +289,8 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
                 <button className={styles.fundButton} disabled={busy || detail.status === "funded"} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/close`, { method: "POST", body: JSON.stringify({ outcome: "funded", notes: "Funding and closing confirmed by transaction coordinator." }) }))} type="button"><CircleDollarSign size={16} />Record funded closing</button></aside>
                 <form className={styles.form} onSubmit={(event) => void updateClosing(event)}><div className={styles.sectionTitle}><div><span>Milestones</span><h4>Update closing schedule</h4></div></div><label><span>Closing attorney / title company</span><input defaultValue={detail.title_company ?? ""} name="title_company" /></label><label><span>Closing date</span><input defaultValue={detail.closing_date?.slice(0, 16)} name="closing_date" type="datetime-local" /></label><label><span>Earnest money due</span><input defaultValue={detail.earnest_money_due_at?.slice(0, 16)} name="earnest_money_due_at" type="datetime-local" /></label><label><span>Due diligence deadline</span><input defaultValue={detail.due_diligence_deadline?.slice(0, 16)} name="due_diligence_deadline" type="datetime-local" /></label><label><span>Assignment deadline</span><input defaultValue={detail.assignment_deadline?.slice(0, 16)} name="assignment_deadline" type="datetime-local" /></label><button disabled={busy} type="submit"><Check size={16} />Save milestones</button></form>
               </div>
-            </div> : null}
+              </div>
+            </> : null}
 
             {tab === "contract" ? <div className={styles.sectionGrid}>
               <section className={styles.section}><div className={styles.sectionTitle}><div><span>Version control</span><h4>Contract packages</h4></div></div>
@@ -240,8 +305,11 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
             </div> : null}
 
             {tab === "documents" ? <div className={styles.sectionGrid}>
-              <section className={styles.section}><div className={styles.sectionTitle}><div><span>Private file room</span><h4>Transaction documents</h4></div></div><div className={styles.documentList}>{detail.documents.length === 0 ? <p className={styles.empty}>No files uploaded.</p> : detail.documents.map((document) => <div key={document.id}><FileText size={18} /><div><strong>{document.title}</strong><span>{labelize(document.document_type)} · {(document.file_size / 1024).toFixed(0)} KB</span></div><button aria-label={`Download ${document.title}`} onClick={() => void downloadDocument(document)} title="Download" type="button"><Download size={16} /></button></div>)}</div></section>
-              <form className={styles.form} onSubmit={(event) => void uploadDocument(event)}><div className={styles.sectionTitle}><div><span>Evidence</span><h4>Upload document</h4></div><Upload size={18} /></div><label><span>File</span><input name="file" required type="file" /></label><label><span>Title</span><input name="title" placeholder="Signed purchase agreement" required /></label><label><span>Document type</span><select name="document_type"><option value="signed_purchase_agreement">Signed purchase agreement</option><option value="earnest_money_receipt">Earnest money receipt</option><option value="seller_disclosure">Seller disclosure</option><option value="title_document">Title document</option><option value="payoff_statement">Payoff statement</option><option value="assignment_contract">Assignment contract</option><option value="closing_statement">Closing statement</option><option value="funding_confirmation">Funding confirmation</option><option value="other">Other</option></select></label><label><span>Contract package</span><select name="package_id"><option value="">No package</option>{detail.contract_packages.map((pkg) => <option key={pkg.id} value={pkg.id}>Version {pkg.version_number}</option>)}</select></label><input name="document_status" type="hidden" value="final" /><button disabled={busy} type="submit"><Upload size={16} />Upload privately</button></form>
+              <section className={styles.section}><div className={styles.sectionTitle}><div><span>Private file room</span><h4>Transaction documents</h4></div></div><div className={styles.documentList}>{detail.documents.length === 0 ? <p className={styles.empty}>No files uploaded.</p> : detail.documents.map((document) => <div key={document.id}><FileText size={18} /><div><strong>{document.title}</strong><span>{labelize(document.document_type)} · {(document.file_size / 1024).toFixed(0)} KB</span>{document.facts.map((fact) => <small key={fact.id}>{labelize(fact.field_key)}: {fact.value_text}{fact.source_page ? ` · page ${fact.source_page}` : ""}</small>)}</div><button aria-label={`Download ${document.title}`} onClick={() => void downloadDocument(document)} title="Download" type="button"><Download size={16} /></button></div>)}</div></section>
+              <div className={styles.rightStack}>
+                <form className={styles.form} onSubmit={(event) => void uploadDocument(event)}><div className={styles.sectionTitle}><div><span>Evidence</span><h4>Upload document</h4></div><Upload size={18} /></div><label><span>File</span><input name="file" required type="file" /></label><label><span>Title</span><input name="title" placeholder="Signed purchase agreement" required /></label><label><span>Document type</span><select name="document_type"><option value="signed_purchase_agreement">Signed purchase agreement</option><option value="earnest_money_receipt">Earnest money receipt</option><option value="seller_disclosure">Seller disclosure</option><option value="title_document">Title document</option><option value="payoff_statement">Payoff statement</option><option value="assignment_contract">Assignment contract</option><option value="closing_statement">Closing statement</option><option value="funding_confirmation">Funding confirmation</option><option value="other">Other</option></select></label><label><span>Contract package</span><select name="package_id"><option value="">No package</option>{detail.contract_packages.map((pkg) => <option key={pkg.id} value={pkg.id}>Version {pkg.version_number}</option>)}</select></label><input name="document_status" type="hidden" value="final" /><button disabled={busy} type="submit"><Upload size={16} />Upload privately</button></form>
+                <form className={styles.form} onSubmit={(event) => void addDocumentFact(event)}><div className={styles.sectionTitle}><div><span>Page evidence</span><h4>Confirm document fact</h4></div><FileSearch size={18} /></div><label><span>Document</span><select disabled={!detail.documents.length} name="document_id" required><option value="">Select document</option>{detail.documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></label><label><span>Fact name</span><input name="field_key" placeholder="Closing date" required /></label><label><span>Confirmed value</span><input name="value_text" placeholder="August 14, 2026" required /></label><label><span>Source page</span><input min="1" name="source_page" type="number" /></label><label><span>Source wording</span><textarea name="source_excerpt" placeholder="Short supporting excerpt" rows={3} /></label><button disabled={busy || !detail.documents.length} type="submit"><Check size={16} />Confirm evidence</button></form>
+              </div>
             </div> : null}
 
             {tab === "parties" ? <div className={styles.sectionGrid}><section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing team</span><h4>Parties and contacts</h4></div><UsersRound size={18} /></div><div className={styles.partyList}>{detail.parties.length === 0 ? <p className={styles.empty}>No closing parties added.</p> : detail.parties.map((party) => <div key={party.id}><UserRound size={18} /><div><strong>{party.name}</strong><span>{labelize(party.party_type)}{party.company_name ? ` · ${party.company_name}` : ""}</span><small>{party.email ?? party.phone ?? "No contact method"}</small></div></div>)}</div></section><form className={styles.form} onSubmit={(event) => void addParty(event)}><div className={styles.sectionTitle}><div><span>New contact</span><h4>Add closing party</h4></div></div><label><span>Role</span><select name="party_type"><option value="closing_attorney">Closing attorney</option><option value="title_company">Title company</option><option value="seller">Seller</option><option value="buyer">Buyer</option><option value="lender">Lender</option><option value="other">Other</option></select></label><label><span>Name</span><input name="name" required /></label><label><span>Company</span><input name="company_name" /></label><div className={styles.twoFields}><label><span>Email</span><input name="email" type="email" /></label><label><span>Phone</span><input name="phone" /></label></div><button disabled={busy} type="submit"><Plus size={16} />Add party</button></form></div> : null}

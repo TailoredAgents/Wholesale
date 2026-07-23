@@ -64,6 +64,28 @@ class ContractPackageRead(BaseModel):
     created_at: datetime
 
 
+class TransactionDocumentFactCreate(BaseModel):
+    field_key: str = Field(min_length=1, max_length=120)
+    value_text: str = Field(min_length=1, max_length=2000)
+    source_page: int | None = Field(default=None, ge=1, le=10_000)
+    source_excerpt: str | None = Field(default=None, max_length=1000)
+
+
+class TransactionDocumentFactRead(BaseModel):
+    id: UUID
+    document_id: UUID
+    field_key: str
+    value_text: str
+    source_page: int | None
+    source_excerpt: str | None
+    extraction_method: str
+    status: str
+    confidence_score: int | None
+    reviewed_by_name: str | None
+    reviewed_at: datetime | None
+    created_at: datetime
+
+
 class TransactionDocumentRead(BaseModel):
     id: UUID
     contract_package_id: UUID | None
@@ -76,6 +98,7 @@ class TransactionDocumentRead(BaseModel):
     occurred_at: datetime
     notes: str | None
     download_url: str
+    facts: list[TransactionDocumentFactRead] = Field(default_factory=list)
 
 
 class TransactionPartyCreate(BaseModel):
@@ -170,6 +193,104 @@ class ContractTemplateRead(BaseModel):
     file_name: str
     approved_at: datetime | None
     created_at: datetime
+
+
+class TransactionDeadlineRisk(BaseModel):
+    item: str
+    due_at: datetime
+    severity: Literal["info", "warning", "critical"]
+    reason: str
+    evidence: list[str]
+
+
+class TransactionDocumentFinding(BaseModel):
+    finding: str
+    document_id: UUID | None = None
+    source_page: int | None = Field(default=None, ge=1)
+    evidence: str
+
+
+class TransactionCoordinationOutput(BaseModel):
+    status_summary: str
+    missing_items: list[str]
+    deadline_risks: list[TransactionDeadlineRisk]
+    document_findings: list[TransactionDocumentFinding]
+    party_gaps: list[str]
+    recommended_internal_actions: list[str]
+    closing_attorney_email_draft: str
+    seller_email_draft: str
+    legal_escalations: list[str]
+    evidence: list[str]
+    confidence: int = Field(ge=0, le=100)
+
+
+class TransactionCopilotAnalyzeRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class TransactionCopilotRecommendationRead(BaseModel):
+    id: UUID
+    transaction_id: UUID
+    lead_id: UUID
+    ai_run_log_id: UUID | None
+    status: str
+    output_payload: dict[str, object]
+    confidence_score: int | None
+    generated_at: datetime
+    reviewed_at: datetime | None
+
+
+class TransactionCopilotAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    recommendation: TransactionCopilotRecommendationRead | None
+
+
+class TransactionCopilotReviewRequest(BaseModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    final_output: dict[str, object] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    estimated_time_saved_seconds: int = Field(default=0, ge=0, le=86_400)
+
+    def model_post_init(self, __context: object) -> None:
+        if self.decision == "edited" and self.final_output is None:
+            raise ValueError("Edited guidance requires the corrected output.")
+        if self.decision != "edited" and self.final_output is not None:
+            raise ValueError("Corrected output is only accepted with an edited decision.")
+
+
+class TransactionCopilotReviewRead(BaseModel):
+    id: UUID
+    recommendation_id: UUID
+    decision: str
+    final_output: dict[str, object] | None
+    notes: str | None
+    estimated_time_saved_seconds: int
+    reviewed_at: datetime
+
+
+class TransactionCopilotMetrics(BaseModel):
+    generated: int
+    reviewed: int
+    accepted_or_corrected_rate_basis_points: int
+    correction_rate_basis_points: int
+    estimated_time_saved_minutes: int
+
+
+class TransactionCopilotOverview(BaseModel):
+    pilot_mode: Literal["draft_only"]
+    runtime_status: str
+    capability_status: str
+    external_actions_blocked: bool
+    readiness_score: int = Field(ge=0, le=100)
+    readiness_band: Literal["ready", "needs_review", "blocked"]
+    readiness_gaps: list[str]
+    deadline_risks: list[TransactionDeadlineRisk]
+    evidence_available: list[str]
+    confirmed_document_fact_count: int
+    recommendations: list[TransactionCopilotRecommendationRead]
+    metrics: TransactionCopilotMetrics
 
 
 class TransactionDetail(BaseModel):

@@ -36,6 +36,10 @@ Also run:
 - Acquisitions Copilot appointment scope, deterministic readiness, approved-authority exposure,
   strict appointment and follow-up contracts, idempotent drafts, immutable correction review,
   recorded-outcome gates, and zero lead, task, communication, underwriting, or offer mutation.
+- Transaction Copilot duplicate-file protection, page-linked confirmed facts, deterministic
+  closing readiness and deadlines, transaction-scoped model evidence, raw-file exclusion,
+  idempotent drafts, immutable correction review, and zero mutation of transaction records,
+  checklist items, deadlines, or timeline events.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.

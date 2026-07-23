@@ -155,3 +155,62 @@ def test_contract_template_requires_explicit_approval(
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
+
+
+def test_transaction_document_facts_preserve_page_evidence_and_reject_duplicates(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    _, transaction_id = setup_transaction(db_session, client)
+    path = (
+        f"/api/v1/transactions/{transaction_id}/documents"
+        "?file_name=contract.pdf"
+        "&document_type=signed_purchase_agreement"
+        "&title=Executed%20agreement"
+        "&document_status=executed"
+    )
+    content = b"%PDF unique executed agreement"
+    uploaded = client.post(
+        path,
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        content=content,
+    )
+    assert uploaded.status_code == 201, uploaded.text
+    duplicate = client.post(
+        path,
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        content=content,
+    )
+    assert duplicate.status_code == 422
+    assert "already stored" in duplicate.json()["detail"]
+
+    fact = client.post(
+        (
+            f"/api/v1/transactions/{transaction_id}/documents/"
+            f"{uploaded.json()['id']}/facts"
+        ),
+        headers=HEADERS,
+        json={
+            "field_key": "Closing Date",
+            "value_text": "August 14, 2026",
+            "source_page": 4,
+            "source_excerpt": "Closing shall occur on August 14, 2026.",
+        },
+    )
+    assert fact.status_code == 201, fact.text
+    assert fact.json()["field_key"] == "closing_date"
+    assert fact.json()["status"] == "confirmed"
+    assert fact.json()["source_page"] == 4
+
+    detail = client.get(
+        f"/api/v1/transactions/{transaction_id}",
+        headers=HEADERS,
+    )
+    stored_document = next(
+        item
+        for item in detail.json()["documents"]
+        if item["id"] == uploaded.json()["id"]
+    )
+    assert stored_document["facts"][0]["value_text"] == "August 14, 2026"
+    assert stored_document["facts"][0]["reviewed_by_name"] == "Owner"

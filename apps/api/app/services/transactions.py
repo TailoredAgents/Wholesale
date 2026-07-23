@@ -19,6 +19,7 @@ from app.models.foundation import (
     Transaction,
     TransactionChecklistItem,
     TransactionDocument,
+    TransactionDocumentFact,
     TransactionEvent,
     TransactionParty,
     User,
@@ -32,6 +33,8 @@ from app.schemas.transactions import (
     TransactionChecklistRead,
     TransactionClose,
     TransactionDetail,
+    TransactionDocumentFactCreate,
+    TransactionDocumentFactRead,
     TransactionDocumentRead,
     TransactionEventCreate,
     TransactionEventRead,
@@ -220,6 +223,24 @@ def get_transaction_detail(
             select(User).where(User.organization_id == principal.organization_id)
         ).all()
     }
+    document_facts: dict[UUID, list[TransactionDocumentFactRead]] = {}
+    for fact in db.scalars(
+        select(TransactionDocumentFact)
+        .where(TransactionDocumentFact.transaction_id == transaction.id)
+        .order_by(
+            TransactionDocumentFact.document_id,
+            TransactionDocumentFact.field_key,
+            TransactionDocumentFact.source_page,
+        )
+    ).all():
+        document_facts.setdefault(fact.document_id, []).append(
+            document_fact_read(
+                fact,
+                users.get(fact.reviewed_by_user_id)
+                if fact.reviewed_by_user_id
+                else None,
+            )
+        )
     return TransactionDetail(
         id=transaction.id,
         lead_id=transaction.lead_id,
@@ -247,7 +268,10 @@ def get_transaction_detail(
         cancelled_at=transaction.cancelled_at,
         notes=transaction.notes,
         contract_packages=[package_read(item) for item in packages],
-        documents=[document_read(item) for item in documents],
+        documents=[
+            document_read(item, document_facts.get(item.id, []))
+            for item in documents
+        ],
         parties=[
             TransactionPartyRead(
                 id=item.id,
@@ -557,6 +581,18 @@ def upload_document(
         is None
     ):
         raise ValueError("Contract package does not belong to this transaction.")
+    checksum = sha256(content).hexdigest()
+    duplicate = db.scalar(
+        select(TransactionDocument).where(
+            TransactionDocument.organization_id == principal.organization_id,
+            TransactionDocument.transaction_id == transaction.id,
+            TransactionDocument.sha256 == checksum,
+        )
+    )
+    if duplicate is not None:
+        raise ValueError(
+            f"This file is already stored as '{duplicate.title}'."
+        )
     document = TransactionDocument(
         organization_id=principal.organization_id,
         transaction_id=transaction.id,
@@ -568,7 +604,7 @@ def upload_document(
         file_name=file_name,
         content_type=content_type,
         file_size=len(content),
-        sha256=sha256(content).hexdigest(),
+        sha256=checksum,
         file_data=content,
         occurred_at=datetime.now(UTC),
         notes=notes,
@@ -586,6 +622,53 @@ def upload_document(
     db.commit()
     db.refresh(document)
     return document_read(document)
+
+
+def add_document_fact(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    document_id: UUID,
+    payload: TransactionDocumentFactCreate,
+) -> TransactionDocumentFactRead | None:
+    transaction = scoped_transaction(db, principal, transaction_id)
+    document = get_document(db, principal, transaction_id, document_id)
+    if transaction is None or document is None:
+        return None
+    user = db.get(User, principal.user_id)
+    now = datetime.now(UTC)
+    fact = TransactionDocumentFact(
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        document_id=document.id,
+        field_key=payload.field_key.strip().lower().replace(" ", "_"),
+        value_text=payload.value_text.strip(),
+        source_page=payload.source_page,
+        source_excerpt=payload.source_excerpt,
+        extraction_method="manual",
+        status="confirmed",
+        confidence_score=100,
+        created_by_user_id=principal.user_id,
+        reviewed_by_user_id=principal.user_id,
+        reviewed_at=now,
+    )
+    db.add(fact)
+    db.flush()
+    add_event(
+        db,
+        principal,
+        transaction,
+        "document.fact_confirmed",
+        f"Confirmed {fact.field_key} from {document.title}.",
+        {
+            "document_id": str(document.id),
+            "fact_id": str(fact.id),
+            "source_page": fact.source_page,
+        },
+    )
+    db.commit()
+    db.refresh(fact)
+    return document_fact_read(fact, user.display_name if user else None)
 
 
 def get_document(
@@ -906,7 +989,10 @@ def package_read(item: ContractPackage) -> ContractPackageRead:
     )
 
 
-def document_read(item: TransactionDocument) -> TransactionDocumentRead:
+def document_read(
+    item: TransactionDocument,
+    facts: list[TransactionDocumentFactRead] | None = None,
+) -> TransactionDocumentRead:
     return TransactionDocumentRead(
         id=item.id,
         contract_package_id=item.contract_package_id,
@@ -919,6 +1005,27 @@ def document_read(item: TransactionDocument) -> TransactionDocumentRead:
         occurred_at=item.occurred_at,
         notes=item.notes,
         download_url=f"/api/v1/transactions/{item.transaction_id}/documents/{item.id}/content",
+        facts=facts or [],
+    )
+
+
+def document_fact_read(
+    item: TransactionDocumentFact,
+    reviewed_by_name: str | None,
+) -> TransactionDocumentFactRead:
+    return TransactionDocumentFactRead(
+        id=item.id,
+        document_id=item.document_id,
+        field_key=item.field_key,
+        value_text=item.value_text,
+        source_page=item.source_page,
+        source_excerpt=item.source_excerpt,
+        extraction_method=item.extraction_method,
+        status=item.status,
+        confidence_score=item.confidence_score,
+        reviewed_by_name=reviewed_by_name,
+        reviewed_at=item.reviewed_at,
+        created_at=item.created_at,
     )
 
 

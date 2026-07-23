@@ -32,6 +32,7 @@ from app.models.foundation import (
     CallTranscript,
     Campaign,
     CommunicationRecord,
+    ContractPackage,
     FieldInspection,
     FieldInspectionPhoto,
     FieldMeetingBrief,
@@ -46,6 +47,12 @@ from app.models.foundation import (
     ProspectingAttempt,
     ProspectingScriptVersion,
     Task,
+    Transaction,
+    TransactionChecklistItem,
+    TransactionDocument,
+    TransactionDocumentFact,
+    TransactionEvent,
+    TransactionParty,
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
 )
@@ -342,6 +349,71 @@ ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence",
     ],
 }
+TRANSACTION_DEADLINE_RISK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "item": {"type": "string"},
+        "due_at": {"type": "string"},
+        "severity": {
+            "type": "string",
+            "enum": ["info", "warning", "critical"],
+        },
+        "reason": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["item", "due_at", "severity", "reason", "evidence"],
+}
+TRANSACTION_DOCUMENT_FINDING_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "finding": {"type": "string"},
+        "document_id": {"type": ["string", "null"]},
+        "source_page": {"type": ["integer", "null"], "minimum": 1},
+        "evidence": {"type": "string"},
+    },
+    "required": ["finding", "document_id", "source_page", "evidence"],
+}
+TRANSACTION_COORDINATION_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "status_summary": {"type": "string"},
+        "missing_items": {"type": "array", "items": {"type": "string"}},
+        "deadline_risks": {
+            "type": "array",
+            "items": TRANSACTION_DEADLINE_RISK_SCHEMA,
+        },
+        "document_findings": {
+            "type": "array",
+            "items": TRANSACTION_DOCUMENT_FINDING_SCHEMA,
+        },
+        "party_gaps": {"type": "array", "items": {"type": "string"}},
+        "recommended_internal_actions": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "closing_attorney_email_draft": {"type": "string"},
+        "seller_email_draft": {"type": "string"},
+        "legal_escalations": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "status_summary",
+        "missing_items",
+        "deadline_risks",
+        "document_findings",
+        "party_gaps",
+        "recommended_internal_actions",
+        "closing_attorney_email_draft",
+        "seller_email_draft",
+        "legal_escalations",
+        "evidence",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -349,6 +421,7 @@ KNOWLEDGE_BY_CAPABILITY = {
     "underwriting": ["underwriting_method"],
     "negotiation": ["operating_model", "underwriting_method"],
     "prospecting": ["prospecting_scripts"],
+    "transaction": ["operating_model", "ai_agent_policy"],
     "compliance": ["ai_agent_policy"],
     "operations": ["operating_model", "ai_agent_policy"],
 }
@@ -439,6 +512,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
                 "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
                 "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
+                "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
             }.get(capability_key)
             if schema is not None:
                 existing_capability.output_schema = schema
@@ -458,6 +532,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
                     "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
                     "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
+                    "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                 }.get(capability_key, OUTPUT_SCHEMA),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
@@ -1104,6 +1179,11 @@ def _execute_read_tool(
             db, principal, capability.capability_key, payload
         )
         context["acquisitions"] = acquisitions_context
+    elif capability.capability_key == "transaction.coordinate":
+        transaction_context, field_scope = _transaction_context(
+            db, principal, payload
+        )
+        context["transaction"] = transaction_context
     elif payload.lead_id is not None:
         lead_context = build_lead_context(db, principal, payload.lead_id)
         if lead_context is None:
@@ -1132,6 +1212,7 @@ def _execute_read_tool(
         input_payload={
             "lead_id": str(payload.lead_id) if payload.lead_id else None,
             "appointment_id": str(payload.appointment_id) if payload.appointment_id else None,
+            "transaction_id": str(payload.transaction_id) if payload.transaction_id else None,
             "prospect_id": str(payload.prospect_id) if payload.prospect_id else None,
             "prospecting_entry_id": (
                 str(payload.prospecting_entry_id) if payload.prospecting_entry_id else None
@@ -1148,6 +1229,199 @@ def _execute_read_tool(
         },
     )
     return context, tool_call
+
+
+def _transaction_context(
+    db: Session,
+    principal: Principal,
+    payload: AiRuntimeExecuteCreate,
+) -> tuple[dict[str, Any], list[str]]:
+    if payload.transaction_id is None:
+        raise ValueError("Transaction coordination requires a transaction.")
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.id == payload.transaction_id,
+        )
+    )
+    if transaction is None:
+        raise ValueError("Transaction not found.")
+    if payload.lead_id is not None and payload.lead_id != transaction.lead_id:
+        raise ValueError("The transaction and lead do not match.")
+    packages = list(
+        db.scalars(
+            select(ContractPackage)
+            .where(
+                ContractPackage.organization_id == principal.organization_id,
+                ContractPackage.transaction_id == transaction.id,
+            )
+            .order_by(ContractPackage.version_number.desc())
+        ).all()
+    )
+    documents = list(
+        db.scalars(
+            select(TransactionDocument)
+            .where(
+                TransactionDocument.organization_id == principal.organization_id,
+                TransactionDocument.transaction_id == transaction.id,
+            )
+            .order_by(TransactionDocument.occurred_at.desc())
+        ).all()
+    )
+    facts = list(
+        db.scalars(
+            select(TransactionDocumentFact)
+            .where(
+                TransactionDocumentFact.organization_id == principal.organization_id,
+                TransactionDocumentFact.transaction_id == transaction.id,
+                TransactionDocumentFact.status == "confirmed",
+            )
+            .order_by(
+                TransactionDocumentFact.document_id,
+                TransactionDocumentFact.field_key,
+            )
+        ).all()
+    )
+    parties = list(
+        db.scalars(
+            select(TransactionParty)
+            .where(
+                TransactionParty.organization_id == principal.organization_id,
+                TransactionParty.transaction_id == transaction.id,
+            )
+            .order_by(TransactionParty.party_type, TransactionParty.created_at)
+        ).all()
+    )
+    checklist = list(
+        db.scalars(
+            select(TransactionChecklistItem)
+            .where(
+                TransactionChecklistItem.organization_id
+                == principal.organization_id,
+                TransactionChecklistItem.transaction_id == transaction.id,
+            )
+            .order_by(TransactionChecklistItem.sort_order)
+        ).all()
+    )
+    events = list(
+        db.scalars(
+            select(TransactionEvent)
+            .where(
+                TransactionEvent.organization_id == principal.organization_id,
+                TransactionEvent.transaction_id == transaction.id,
+            )
+            .order_by(TransactionEvent.occurred_at.desc())
+            .limit(30)
+        ).all()
+    )
+    document_names = {item.id: item.title for item in documents}
+    context = {
+        "record": {
+            "id": str(transaction.id),
+            "status": transaction.status,
+            "contract_type": transaction.contract_type,
+            "purchase_price_cents": transaction.purchase_price_cents,
+            "earnest_money_cents": transaction.earnest_money_cents,
+            "title_company": transaction.title_company,
+            "closing_date": _iso(transaction.closing_date),
+            "earnest_money_due_at": _iso(transaction.earnest_money_due_at),
+            "earnest_money_paid_at": _iso(transaction.earnest_money_paid_at),
+            "due_diligence_deadline": _iso(transaction.due_diligence_deadline),
+            "title_opened_at": _iso(transaction.title_opened_at),
+            "title_cleared_at": _iso(transaction.title_cleared_at),
+            "assignment_deadline": _iso(transaction.assignment_deadline),
+            "contract_executed_at": _iso(transaction.contract_executed_at),
+        },
+        "contract_packages": [
+            {
+                "id": str(item.id),
+                "version": item.version_number,
+                "status": item.status,
+                "seller_name": item.seller_name,
+                "buyer_entity_name": item.buyer_entity_name,
+                "purchase_price_cents": item.purchase_price_cents,
+                "earnest_money_cents": item.earnest_money_cents,
+                "closing_date": _iso(item.closing_date),
+                "inspection_period_days": item.inspection_period_days,
+                "approved_at": _iso(item.approved_at),
+                "executed_at": _iso(item.executed_at),
+            }
+            for item in packages
+        ],
+        "documents": [
+            {
+                "id": str(item.id),
+                "document_type": item.document_type,
+                "title": item.title,
+                "status": item.status,
+                "occurred_at": _iso(item.occurred_at),
+                "sha256": item.sha256,
+            }
+            for item in documents
+        ],
+        "confirmed_document_facts": [
+            {
+                "document_id": str(item.document_id),
+                "document_title": document_names.get(
+                    item.document_id, "Unknown document"
+                ),
+                "field_key": item.field_key,
+                "value": item.value_text,
+                "source_page": item.source_page,
+                "source_excerpt": item.source_excerpt,
+                "reviewed_at": _iso(item.reviewed_at),
+            }
+            for item in facts
+        ],
+        "parties": [
+            {
+                "party_type": item.party_type,
+                "name": item.name,
+                "company_name": item.company_name,
+                "is_primary": item.is_primary,
+            }
+            for item in parties
+        ],
+        "checklist": [
+            {
+                "id": str(item.id),
+                "category": item.category,
+                "title": item.title,
+                "status": item.status,
+                "required": item.is_required,
+                "due_at": _iso(item.due_at),
+                "evidence_document_id": (
+                    str(item.evidence_document_id)
+                    if item.evidence_document_id
+                    else None
+                ),
+                "evidence_notes": item.evidence_notes,
+            }
+            for item in checklist
+        ],
+        "timeline": [
+            {
+                "event_type": item.event_type,
+                "summary": item.summary,
+                "occurred_at": _iso(item.occurred_at),
+            }
+            for item in events
+        ],
+    }
+    field_scope = [
+        "transaction.record",
+        "transaction.contract_packages",
+        "transaction.document_metadata",
+        "transaction.confirmed_document_facts",
+        "transaction.parties",
+        "transaction.checklist",
+        "transaction.timeline",
+    ]
+    return context, field_scope
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
 
 
 def _acquisitions_context(

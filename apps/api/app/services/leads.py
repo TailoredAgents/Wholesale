@@ -54,7 +54,10 @@ from app.models.foundation import (
     Task,
     Transaction,
     TransactionChecklistItem,
+    TransactionCopilotRecommendation,
+    TransactionCopilotReview,
     TransactionDocument,
+    TransactionDocumentFact,
     TransactionEvent,
     TransactionParty,
     UnderwritingCalibrationCase,
@@ -2604,6 +2607,30 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                 )
             )
         )
+        recommendation_ids = list(
+            db.scalars(
+                select(TransactionCopilotRecommendation.id).where(
+                    TransactionCopilotRecommendation.transaction_id.in_(
+                        transaction_ids
+                    )
+                )
+            )
+        )
+        if recommendation_ids:
+            db.execute(
+                delete(TransactionCopilotReview).where(
+                    TransactionCopilotReview.recommendation_id.in_(
+                        recommendation_ids
+                    )
+                )
+            )
+            db.execute(
+                delete(TransactionCopilotRecommendation).where(
+                    TransactionCopilotRecommendation.id.in_(
+                        recommendation_ids
+                    )
+                )
+            )
         db.execute(
             update(TransactionChecklistItem)
             .where(TransactionChecklistItem.transaction_id.in_(transaction_ids))
@@ -2612,6 +2639,11 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         db.execute(
             delete(TransactionChecklistItem).where(
                 TransactionChecklistItem.transaction_id.in_(transaction_ids)
+            )
+        )
+        db.execute(
+            delete(TransactionDocumentFact).where(
+                TransactionDocumentFact.transaction_id.in_(transaction_ids)
             )
         )
         db.execute(

@@ -78,6 +78,9 @@ Delivered:
 - AI6 Acquisitions Copilot embedded in Field Operations with deterministic readiness, approved
   authority controls, governed appointment and follow-up drafts, human correction, and pilot
   metrics.
+- AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
+  deterministic closing readiness, deadline risk, duplicate-file protection, source-page
+  confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -319,6 +322,11 @@ Exit criteria:
 - AI cannot present, approve, or change a binding offer.
 
 ## Phase AI7: Transaction Copilot And Document Intelligence
+
+Implementation status: **provider-independent foundation complete in code. Object storage,
+automated page extraction, e-signature and email reconciliation, approved production templates,
+production replay, and the measured draft-only pilot remain.** See
+`PHASE_AI7_TRANSACTION_COPILOT.md`.
 
 Goal: Help the Transaction Coordinator move executed contracts to closing without missing
 documents, parties, or deadlines.

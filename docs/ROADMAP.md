@@ -381,8 +381,9 @@ Remaining:
 
 The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`. AI1 role
 contracts, AI2 golden-case infrastructure, AI3 production runtime, AI4 Lead Manager Copilot, AI5
-Prospecting Copilot and Call Quality, and AI6 Acquisitions Copilot are complete in code. Production
-acceptance and approved-dataset replay remain before activating measured pilots.
+Prospecting Copilot and Call Quality, AI6 Acquisitions Copilot, and the provider-independent AI7
+Transaction Copilot foundation are complete in code. Provider integrations, production acceptance,
+and approved-dataset replay remain before activating measured pilots.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
@@ -407,8 +408,9 @@ evidence requirements, compliance controls, or financial approvals.
 4. Complete the AI3 production acceptance checklist: provider monitoring, staging shutdown test,
    and approved-dataset model replay.
 5. Activate and separately measure the AI4 Lead Manager and AI5 Prospecting draft-only pilots.
-6. Begin AI7 Transaction Copilot and Document Intelligence without granting legal, signature,
-   contract, or external-send authority.
+6. Build AI7 redacted transaction packages and complete object-storage, extraction, e-signature,
+   template, and email acceptance without granting legal, signature, contract, or external-send
+   authority.
 7. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

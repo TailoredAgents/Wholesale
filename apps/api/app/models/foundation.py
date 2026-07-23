@@ -2157,6 +2157,38 @@ class TransactionDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(1000))
 
 
+class TransactionDocumentFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_document_facts"
+    __table_args__ = (
+        Index("ix_transaction_document_facts_transaction", "transaction_id"),
+        Index("ix_transaction_document_facts_document", "document_id"),
+        Index("ix_transaction_document_facts_field", "field_key"),
+        Index("ix_transaction_document_facts_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id")
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id", ondelete="CASCADE")
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transaction_documents.id", ondelete="CASCADE")
+    )
+    field_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    value_text: Mapped[str] = mapped_column(String(2000), nullable=False)
+    source_page: Mapped[int | None] = mapped_column(Integer)
+    source_excerpt: Mapped[str | None] = mapped_column(String(1000))
+    extraction_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    confidence_score: Mapped[int | None] = mapped_column(Integer)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class TransactionParty(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "transaction_parties"
 
@@ -2191,6 +2223,74 @@ class TransactionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     summary: Mapped[str] = mapped_column(String(500), nullable=False)
     details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TransactionCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_copilot_recommendations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_transaction_copilot_org_idempotency",
+        ),
+        Index("ix_transaction_copilot_transaction", "transaction_id"),
+        Index("ix_transaction_copilot_lead", "lead_id"),
+        Index("ix_transaction_copilot_run", "ai_run_log_id"),
+        Index("ix_transaction_copilot_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id")
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id", ondelete="CASCADE")
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    output_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    confidence_score: Mapped[int | None] = mapped_column(Integer)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TransactionCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "transaction_copilot_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "recommendation_id",
+            name="uq_transaction_copilot_review_recommendation",
+        ),
+        Index("ix_transaction_copilot_review_org", "organization_id"),
+        Index("ix_transaction_copilot_review_recommendation", "recommendation_id"),
+        Index("ix_transaction_copilot_reviewer", "reviewed_by_user_id"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id")
+    )
+    recommendation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("transaction_copilot_recommendations.id", ondelete="CASCADE"),
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    decision: Mapped[str] = mapped_column(String(40), nullable=False)
+    original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    estimated_time_saved_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
