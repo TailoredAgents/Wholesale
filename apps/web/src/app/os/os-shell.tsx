@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { Bell, History, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -24,6 +25,8 @@ type RecentDestination = {
   label: string;
 };
 
+type AccessState = "verifying" | "resolved" | "error";
+
 const recentStorageKey = "stonegate:recent-destinations";
 
 const developmentProfile: WorkspaceProfile = {
@@ -45,6 +48,7 @@ export function OsShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
   const mobileMenuRef = useRef<HTMLButtonElement>(null);
   const sidebarRef = useRef<HTMLElement>(null);
@@ -53,8 +57,19 @@ export function OsShell({
   const [recentOpen, setRecentOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<RecentDestination[]>([]);
+  const [resolvedProfile, setResolvedProfile] = useState<WorkspaceProfile | null>(profile);
+  const [accessState, setAccessState] = useState<AccessState>(
+    profile ? "resolved" : "verifying",
+  );
+  const [accessRetry, setAccessRetry] = useState(0);
   const effectiveProfile =
-    profile ?? (process.env.NODE_ENV === "development" ? developmentProfile : null);
+    isSignedIn === false
+      ? null
+      : profile ??
+        resolvedProfile ??
+        (process.env.NODE_ENV === "development" ? developmentProfile : null);
+  const visibleAccessState =
+    isLoaded && !isSignedIn ? "error" : effectiveProfile ? "resolved" : accessState;
   const context = navigationContext(pathname);
   const navGroups = useMemo(
     () => (effectiveProfile ? visibleNavGroups(effectiveProfile) : []),
@@ -65,6 +80,67 @@ export function OsShell({
     `${item.label} ${item.href}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
   const canOpenOperations = destinations.some((item) => item.href === "/os/operations");
+
+  useEffect(() => {
+    if (profile || resolvedProfile || !isLoaded || !isSignedIn) return;
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    async function verifyAccess() {
+      setAccessState("verifying");
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const token = await getToken({ skipCache: attempt > 0 });
+          if (!token) throw new Error("Clerk did not provide an active session token.");
+          const response = await fetch(`${apiBaseUrl}/api/v1/me`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            const payload = (await response.json().catch(() => null)) as {
+              detail?: unknown;
+            } | null;
+            const detail =
+              typeof payload?.detail === "string"
+                ? payload.detail
+                : "The Stonegate API rejected the account session.";
+            throw new Error(detail);
+          }
+          const candidate = (await response.json()) as Partial<WorkspaceProfile>;
+          if (!isWorkspaceProfile(candidate)) {
+            throw new Error("The Stonegate API returned an incomplete workspace profile.");
+          }
+          if (cancelled) return;
+          setResolvedProfile(candidate);
+          setAccessState("resolved");
+          router.refresh();
+          return;
+        } catch (error) {
+          if (controller.signal.aborted) return;
+          lastError = error instanceof Error ? error : new Error("Access verification failed.");
+          if (attempt < 2) {
+            await new Promise((resolve) => window.setTimeout(resolve, 500 * (attempt + 1)));
+          }
+        }
+      }
+
+      if (!cancelled) {
+        console.error("Stonegate browser access verification failed.", lastError);
+        setAccessState("error");
+      }
+    }
+
+    void verifyAccess();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [accessRetry, getToken, isLoaded, isSignedIn, profile, resolvedProfile, router]);
 
   useEffect(() => {
     if (!effectiveProfile || pathname !== "/os") return;
@@ -207,7 +283,25 @@ export function OsShell({
           <OsNav onNavigate={closeTransientUi} profile={effectiveProfile} />
         ) : (
           <div className={styles.navUnavailable} role="status">
-            Workspace navigation is unavailable while account access is being verified.
+            <strong>
+              {visibleAccessState === "error" ? "Account access could not be verified." : "Verifying account access..."}
+            </strong>
+            <span>
+              {visibleAccessState === "error"
+                ? "Retry with the current signed-in session."
+                : "Workspace navigation will appear automatically."}
+            </span>
+            {visibleAccessState === "error" ? (
+              <button
+                onClick={() => {
+                  setAccessState("verifying");
+                  setAccessRetry((current) => current + 1);
+                }}
+                type="button"
+              >
+                Retry access
+              </button>
+            ) : null}
           </div>
         )}
 
@@ -325,5 +419,19 @@ export function OsShell({
         </main>
       </div>
     </div>
+  );
+}
+
+function isWorkspaceProfile(
+  profile: Partial<WorkspaceProfile>,
+): profile is WorkspaceProfile {
+  return (
+    typeof profile.user_id === "string" &&
+    typeof profile.organization_id === "string" &&
+    typeof profile.email === "string" &&
+    typeof profile.display_name === "string" &&
+    Array.isArray(profile.role_keys) &&
+    Array.isArray(profile.permissions) &&
+    typeof profile.unread_notification_count === "number"
   );
 }

@@ -193,12 +193,41 @@
 }
 
 .navUnavailable {
+  display: grid;
+  gap: 7px;
   padding: 14px 12px;
   border: 1px solid rgba(156, 199, 178, 0.18);
   border-radius: 8px;
   color: #b6c3bd;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.navUnavailable strong {
+  color: #f7f7f2;
+  font-size: 13px;
+}
+
+.navUnavailable span {
+  color: #b6c3bd;
+  font-size: 12px;
+}
+
+.navUnavailable button {
+  min-height: 34px;
+  margin-top: 3px;
+  border: 1px solid rgba(156, 199, 178, 0.35);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f7f7f2;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.navUnavailable button:hover {
+  background: rgba(255, 255, 255, 0.13);
 }
 
 .authControls {

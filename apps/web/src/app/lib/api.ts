@@ -2143,7 +2143,13 @@ export async function getWorkspaceProfile(): Promise<WorkspaceProfile | null> {
       return null;
     }
     return profile as WorkspaceProfile;
-  } catch {
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("Dynamic server usage")
+    ) {
+      console.error("Stonegate workspace profile verification failed.", error);
+    }
     return null;
   }
 }

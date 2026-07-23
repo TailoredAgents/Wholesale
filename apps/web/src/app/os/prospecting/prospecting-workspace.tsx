@@ -17,6 +17,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type {
   ProspectHandoff,
   ProspectingCallQuality,
+  ProspectingCallQualityOutput,
   ProspectingCopilotOutput,
   ProspectingCopilotRecommendation,
   ProspectingEntry,
