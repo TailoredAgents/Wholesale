@@ -10,6 +10,10 @@ from app.domain.rbac import PermissionKeys
 from app.schemas.lead_manager import (
     LeadManagerAcceptRequest,
     LeadManagerCaseRead,
+    LeadManagerCopilotAnalyzeRead,
+    LeadManagerCopilotAnalyzeRequest,
+    LeadManagerCopilotReviewRead,
+    LeadManagerCopilotReviewRequest,
     LeadManagerOverview,
     QualificationCompleteRequest,
     QualificationScriptCreate,
@@ -23,6 +27,7 @@ from app.services.lead_manager import (
     create_script,
     get_overview,
 )
+from app.services.lead_manager_copilot import analyze_case, review_recommendation
 
 router = APIRouter(prefix="/api/v1/lead-manager", tags=["lead-manager"])
 work_dependency = require_any_permission(
@@ -104,3 +109,43 @@ def complete_guided_qualification(
     if session is None:
         raise HTTPException(status_code=404, detail="Lead Manager case not found.")
     return session
+
+
+@router.post("/cases/{case_id}/copilot/analyze")
+def analyze_lead_manager_case(
+    case_id: UUID,
+    payload: LeadManagerCopilotAnalyzeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> LeadManagerCopilotAnalyzeRead:
+    try:
+        result = analyze_case(db, principal, case_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Lead Manager case not found.")
+    return result
+
+
+@router.post("/copilot/recommendations/{recommendation_id}/review")
+def review_lead_manager_recommendation(
+    recommendation_id: UUID,
+    payload: LeadManagerCopilotReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> LeadManagerCopilotReviewRead:
+    try:
+        review = review_recommendation(db, principal, recommendation_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if review is None:
+        raise HTTPException(status_code=404, detail="Copilot recommendation not found.")
+    return review

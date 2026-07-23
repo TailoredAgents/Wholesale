@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 22, 2026
+Last updated: July 23, 2026
 
 ## Product
 
@@ -146,6 +146,10 @@ complete. Detailed delivered and remaining scope is maintained in `ROADMAP.md`.
   DNC, and data-quality scorecards.
 - Dedicated Acquisitions Desk for the Lead Manager role, with SLA-controlled handoff acceptance, guided qualification, due
   follow-up, same-day appointments, and neglected-lead exceptions.
+- Draft-only Lead Manager Copilot inside the existing Lead Desk, with deterministic work priority,
+  missed-reply and overdue alerts, governed seller briefs, qualification gaps, unsent communication
+  drafts, task and appointment proposals, evidence, confidence, human correction, immutable review
+  history, and pilot metrics.
 - Automatic workload-aware assignment of website inquiries and migration of existing active CRM
   leads into the same Lead Manager queue.
 - Worker-driven overdue-handoff escalation with assignee and management alerts, durable due times,
@@ -353,5 +357,6 @@ While A2P approval is pending:
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
 6. Complete AI3 production acceptance in `PHASE_AI3_PRODUCTION_RUNTIME.md`, approve and replay the
-   production AI2 datasets, then run the first AI4 draft-only Lead Manager Copilot pilot.
+   production AI2 datasets, then activate and measure the AI4 draft-only Lead Manager Copilot pilot
+   using `PHASE_AI4_LEAD_MANAGER_COPILOT.md`.
 7. Resume the parallel integration track after A2P approval without blocking internal development.

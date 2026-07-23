@@ -1,16 +1,32 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Check, Clock3, ExternalLink, ShieldAlert } from "lucide-react";
+import {
+  Brain,
+  Check,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  MessageSquareText,
+  Pencil,
+  ShieldAlert,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
-import type { LeadManagerCase, LeadManagerOverview } from "../../lib/api";
+import type {
+  LeadManagerCase,
+  LeadManagerCopilotOutput,
+  LeadManagerCopilotRecommendation,
+  LeadManagerOverview,
+} from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./lead-manager.module.css";
 
-type View = "today" | "qualification" | "performance" | "standards";
+type View = "copilot" | "today" | "qualification" | "performance" | "standards";
 
 const standardQuestions = [
   ["ownership", "Ownership", "Please confirm who owns the property and how title is held.", true],
@@ -86,12 +102,24 @@ export function LeadManagerWorkspace({
   const initialQualificationCase = data.qualification_queue.find(
     (item) => item.lead_id === initialLeadId,
   );
-  const [view, setView] = useState<View>(initialQualificationCase ? "qualification" : "today");
+  const initialCopilotItem = data.copilot.work_items.find((item) => item.lead_id === initialLeadId);
+  const [view, setView] = useState<View>(
+    initialQualificationCase ? "qualification" : "copilot",
+  );
   const [selectedCaseId, setSelectedCaseId] = useState(
     initialQualificationCase?.id ?? data.qualification_queue[0]?.id ?? "",
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [selectedCopilotCaseId, setSelectedCopilotCaseId] = useState(
+    initialCopilotItem?.case_id ?? data.copilot.work_items[0]?.case_id ?? "",
+  );
+  const [localRecommendation, setLocalRecommendation] =
+    useState<LeadManagerCopilotRecommendation | null>(null);
+  const [editingRecommendation, setEditingRecommendation] = useState(false);
+  const [editedSummary, setEditedSummary] = useState("");
+  const [editedMessageBody, setEditedMessageBody] = useState("");
+  const [reviewNotes, setReviewNotes] = useState("");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -101,8 +129,17 @@ export function LeadManagerWorkspace({
     [],
   );
   const selectedCase = data.qualification_queue.find((item) => item.id === selectedCaseId) ?? null;
+  const selectedCopilotItem =
+    data.copilot.work_items.find((item) => item.case_id === selectedCopilotCaseId) ?? null;
+  const recommendation =
+    localRecommendation?.case_id === selectedCopilotCaseId
+      ? localRecommendation
+      : data.copilot.recommendations.find(
+          (item) => item.case_id === selectedCopilotCaseId,
+        ) ?? null;
+  const copilotOutput = recommendation?.output_payload ?? null;
 
-  async function request(path: string, body?: object) {
+  async function request<T = unknown>(path: string, body?: object): Promise<T | null> {
     setSaving(true);
     setMessage("");
     try {
@@ -121,10 +158,10 @@ export function LeadManagerWorkspace({
       }
       setMessage("Saved.");
       router.refresh();
-      return true;
+      return (await response.json()) as T;
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "The operation could not be completed.");
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -132,6 +169,55 @@ export function LeadManagerWorkspace({
 
   async function acceptCase(caseId: string) {
     await request(`/api/v1/lead-manager/cases/${caseId}/accept`, {});
+  }
+
+  async function analyzeCopilotCase(caseId: string) {
+    const result = await request<{
+      message: string;
+      recommendation: LeadManagerCopilotRecommendation | null;
+    }>(`/api/v1/lead-manager/cases/${caseId}/copilot/analyze`, {});
+    if (result?.recommendation) {
+      setLocalRecommendation(result.recommendation);
+      setEditedSummary(result.recommendation.output_payload.summary);
+      setEditedMessageBody(result.recommendation.output_payload.message_draft.body);
+    } else if (result) {
+      setMessage(result.message);
+    }
+  }
+
+  async function reviewCopilotRecommendation(
+    decision: "accepted" | "edited" | "rejected",
+  ) {
+    if (!recommendation || !copilotOutput) return;
+    const finalOutput: LeadManagerCopilotOutput | undefined =
+      decision === "edited"
+        ? {
+            ...copilotOutput,
+            summary: editedSummary.trim(),
+            message_draft: {
+              ...copilotOutput.message_draft,
+              body: editedMessageBody.trim(),
+            },
+          }
+        : undefined;
+    const result = await request(
+      `/api/v1/lead-manager/copilot/recommendations/${recommendation.id}/review`,
+      {
+        decision,
+        final_output: finalOutput,
+        notes: reviewNotes.trim() || null,
+        estimated_time_saved_seconds: 180,
+      },
+    );
+    if (result) {
+      setLocalRecommendation({
+        ...recommendation,
+        status: decision,
+        output_payload: finalOutput ?? copilotOutput,
+        reviewed_at: new Date().toISOString(),
+      });
+      setEditingRecommendation(false);
+    }
   }
 
   async function submitQualification(event: FormEvent<HTMLFormElement>) {
@@ -188,6 +274,7 @@ export function LeadManagerWorkspace({
 
       <nav className={styles.tabs} aria-label="Acquisitions Desk views">
         {([
+          ["copilot", "Copilot"],
           ["today", "Daily queue"],
           ["qualification", "Qualification"],
           ["performance", "Performance"],
@@ -198,6 +285,203 @@ export function LeadManagerWorkspace({
       </nav>
 
       {message ? <p className={message === "Saved." ? styles.notice : styles.error}>{message}</p> : null}
+
+      {view === "copilot" ? (
+        <div className={styles.copilotView}>
+          <section className={styles.copilotGuard}>
+            <div>
+              <ShieldAlert size={18} />
+              <span>
+                <strong>Draft-only pilot</strong>
+                Copilot can analyze and prepare work. It cannot send, schedule, edit CRM facts, or transfer ownership.
+              </span>
+            </div>
+            <span className={styles.runtimeState}>
+              Runtime {labelize(data.copilot.runtime_status)} · Lead tools {labelize(data.copilot.capability_status)}
+            </span>
+          </section>
+
+          <section className={styles.copilotMetrics} aria-label="Copilot pilot metrics">
+            <div><span>Drafts generated</span><strong>{data.copilot.metrics.generated_count}</strong></div>
+            <div><span>Reviewed</span><strong>{data.copilot.metrics.reviewed_count}</strong></div>
+            <div><span>Accepted or corrected</span><strong>{percent(data.copilot.metrics.acceptance_rate_basis_points)}</strong></div>
+            <div><span>Correction rate</span><strong>{percent(data.copilot.metrics.correction_rate_basis_points)}</strong></div>
+            <div><span>Estimated time saved</span><strong>{data.copilot.metrics.estimated_time_saved_minutes}m</strong></div>
+          </section>
+
+          <div className={styles.copilotWorkbench}>
+            <aside className={styles.copilotQueue}>
+              <div className={styles.sectionHeader}>
+                <div><span>Deterministic ranking</span><h3>Needs attention</h3></div>
+                <Brain size={19} />
+              </div>
+              {data.copilot.work_items.map((item) => (
+                <button
+                  className={selectedCopilotCaseId === item.case_id ? styles.selectedWorkItem : ""}
+                  key={item.case_id}
+                  onClick={() => {
+                    setSelectedCopilotCaseId(item.case_id);
+                    setLocalRecommendation(null);
+                    setEditingRecommendation(false);
+                    setReviewNotes("");
+                  }}
+                  type="button"
+                >
+                  <span className={`${styles.priorityBand} ${styles[item.priority_band]}`}>
+                    {item.priority_score} · {labelize(item.priority_band)}
+                  </span>
+                  <strong>{item.seller_name}</strong>
+                  <small>{item.property_address}</small>
+                  <p>{item.recommended_action}</p>
+                </button>
+              ))}
+              {!data.copilot.work_items.length ? (
+                <p className={styles.empty}>No active Lead Desk work needs review.</p>
+              ) : null}
+            </aside>
+
+            <section className={styles.copilotBrief}>
+              {selectedCopilotItem ? (
+                <>
+                  <header className={styles.briefHeader}>
+                    <div>
+                      <span>Human-reviewed seller brief</span>
+                      <h3>{selectedCopilotItem.seller_name}</h3>
+                      <p>{selectedCopilotItem.property_address}</p>
+                    </div>
+                    <div className={styles.briefActions}>
+                      <Link href={selectedCopilotItem.lead_url}>Open lead <ExternalLink size={14} /></Link>
+                      <button
+                        disabled={saving || recommendation?.status === "draft"}
+                        onClick={() => analyzeCopilotCase(selectedCopilotItem.case_id)}
+                        type="button"
+                      >
+                        <Sparkles size={15} />
+                        {recommendation ? "Refresh brief" : "Generate brief"}
+                      </button>
+                    </div>
+                  </header>
+
+                  <div className={styles.deterministicEvidence}>
+                    <div>
+                      <span>Recommended now</span>
+                      <strong>{selectedCopilotItem.recommended_action}</strong>
+                    </div>
+                    {selectedCopilotItem.alerts.map((alert) => (
+                      <p key={alert}><ShieldAlert size={15} />{alert}</p>
+                    ))}
+                  </div>
+
+                  {copilotOutput && recommendation ? (
+                    <div className={styles.briefBody}>
+                      <div className={styles.briefSummary}>
+                        <div>
+                          <span>Copilot summary</span>
+                          {editingRecommendation ? (
+                            <textarea
+                              onChange={(event) => setEditedSummary(event.target.value)}
+                              rows={5}
+                              value={editedSummary}
+                            />
+                          ) : <p>{copilotOutput.summary}</p>}
+                        </div>
+                        <span className={styles.confidence}>{copilotOutput.confidence}% confidence</span>
+                      </div>
+
+                      <div className={styles.briefColumns}>
+                        <section>
+                          <span>Why this is next</span>
+                          <p>{copilotOutput.priority_explanation}</p>
+                        </section>
+                        <section>
+                          <span>Handoff brief</span>
+                          <p>{copilotOutput.handoff_summary}</p>
+                        </section>
+                        <section>
+                          <span>Qualification gaps</span>
+                          {copilotOutput.qualification_gaps.length ? (
+                            <ul>{copilotOutput.qualification_gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul>
+                          ) : <p>No material gaps identified.</p>}
+                        </section>
+                        <section>
+                          <span>Questions to ask</span>
+                          {copilotOutput.recommended_questions.length ? (
+                            <ul>{copilotOutput.recommended_questions.map((question) => <li key={question}>{question}</li>)}</ul>
+                          ) : <p>No additional questions proposed.</p>}
+                        </section>
+                      </div>
+
+                      <section className={styles.messageDraft}>
+                        <div>
+                          <MessageSquareText size={17} />
+                          <span>{labelize(copilotOutput.message_draft.channel)} draft · Not sent</span>
+                        </div>
+                        {editingRecommendation ? (
+                          <textarea
+                            onChange={(event) => setEditedMessageBody(event.target.value)}
+                            rows={4}
+                            value={editedMessageBody}
+                          />
+                        ) : <p>{copilotOutput.message_draft.body || "No message proposed."}</p>}
+                      </section>
+
+                      <div className={styles.proposalGrid}>
+                        <section>
+                          <span>Task proposal</span>
+                          <strong>{copilotOutput.next_task.title}</strong>
+                          <p>{copilotOutput.next_task.reason}</p>
+                          <small>{copilotOutput.next_task.due_timing}</small>
+                        </section>
+                        <section>
+                          <span>Appointment proposal</span>
+                          <strong>{copilotOutput.appointment_proposal.recommended ? "Recommended" : "Not yet"}</strong>
+                          <p>{copilotOutput.appointment_proposal.reason}</p>
+                        </section>
+                      </div>
+
+                      <details className={styles.supportingEvidence}>
+                        <summary>Evidence and risks</summary>
+                        <div>
+                          <section><span>Evidence</span><ul>{copilotOutput.evidence.map((item) => <li key={item}>{item}</li>)}</ul></section>
+                          <section><span>Risks</span>{copilotOutput.risks.length ? <ul>{copilotOutput.risks.map((item) => <li key={item}>{item}</li>)}</ul> : <p>No material risks listed.</p>}</section>
+                        </div>
+                      </details>
+
+                      {recommendation.status === "draft" ? (
+                        <footer className={styles.reviewBar}>
+                          {editingRecommendation ? (
+                            <label>
+                              <span>Correction note</span>
+                              <input onChange={(event) => setReviewNotes(event.target.value)} placeholder="What did you correct?" value={reviewNotes} />
+                            </label>
+                          ) : null}
+                          <div>
+                            <button className={styles.rejectButton} disabled={saving} onClick={() => reviewCopilotRecommendation("rejected")} type="button"><XCircle size={15} />Reject</button>
+                            <button className={styles.editButton} disabled={saving} onClick={() => {
+                              setEditingRecommendation(true);
+                              setEditedSummary(copilotOutput.summary);
+                              setEditedMessageBody(copilotOutput.message_draft.body);
+                            }} type="button"><Pencil size={15} />Correct</button>
+                            <button disabled={saving} onClick={() => reviewCopilotRecommendation(editingRecommendation ? "edited" : "accepted")} type="button"><CheckCircle2 size={15} />{editingRecommendation ? "Save correction" : "Accept brief"}</button>
+                          </div>
+                        </footer>
+                      ) : (
+                        <p className={styles.reviewedState}><CheckCircle2 size={16} />Reviewed: {labelize(recommendation.status)}. No CRM action was applied.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className={styles.emptyBrief}>
+                      <Brain size={24} />
+                      <strong>Generate a governed seller brief</strong>
+                      <p>The deterministic queue is already active. Generation requires the AI runtime and Lead Manager capability to be enabled.</p>
+                    </div>
+                  )}
+                </>
+              ) : <p className={styles.empty}>Select an active seller case.</p>}
+            </section>
+          </div>
+        </div>
+      ) : null}
 
       {view === "today" ? (
         <div className={styles.queueGrid}>

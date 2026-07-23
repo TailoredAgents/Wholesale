@@ -624,6 +624,46 @@ export type LeadManagerCase = {
   lead_url: string;
 };
 
+export type LeadManagerCopilotOutput = {
+  summary: string;
+  priority_explanation: string;
+  qualification_gaps: string[];
+  recommended_questions: string[];
+  message_draft: {
+    channel: "none" | "sms" | "email";
+    body: string;
+  };
+  next_task: {
+    title: string;
+    reason: string;
+    due_timing: string;
+  };
+  appointment_proposal: {
+    recommended: boolean;
+    reason: string;
+  };
+  handoff_summary: string;
+  risks: string[];
+  evidence: string[];
+  confidence: number;
+};
+
+export type LeadManagerCopilotRecommendation = {
+  id: string;
+  case_id: string;
+  lead_id: string;
+  ai_run_log_id: string | null;
+  status: string;
+  priority_score: number;
+  priority_band: string;
+  model_name: string | null;
+  output_payload: LeadManagerCopilotOutput;
+  evidence_snapshot: Record<string, unknown>;
+  confidence_score: number | null;
+  generated_at: string;
+  reviewed_at: string | null;
+};
+
 export type LeadManagerOverview = {
   current_user_id: string;
   current_user_name: string;
@@ -657,6 +697,43 @@ export type LeadManagerOverview = {
     contracts_created: number;
     follow_up_quality_basis_points: number;
   }>;
+  copilot: {
+    pilot_mode: string;
+    runtime_status: string;
+    capability_status: string;
+    external_actions_blocked: boolean;
+    work_items: Array<{
+      case_id: string;
+      lead_id: string;
+      seller_name: string;
+      property_address: string;
+      assigned_user_name: string;
+      priority_score: number;
+      priority_band: string;
+      recommended_action: string;
+      alerts: string[];
+      qualification_gaps: string[];
+      recommended_questions: string[];
+      evidence: string[];
+      missed_reply: boolean;
+      appointment_today: boolean;
+      lead_url: string;
+    }>;
+    recommendations: LeadManagerCopilotRecommendation[];
+    metrics: {
+      generated_count: number;
+      reviewed_count: number;
+      accepted_count: number;
+      edited_count: number;
+      rejected_count: number;
+      acceptance_rate_basis_points: number;
+      correction_rate_basis_points: number;
+      estimated_time_saved_minutes: number;
+      total_cost_microusd: number;
+      average_response_minutes: number | null;
+      appointments_set: number;
+    };
+  };
 };
 
 export type DispatchCandidate = {

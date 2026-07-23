@@ -575,6 +575,76 @@ class LeadQualificationSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
     completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class LeadManagerCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_manager_copilot_recommendations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_lead_manager_copilot_org_idempotency",
+        ),
+        Index(
+            "ix_lead_manager_copilot_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("lead_management_cases.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL"), index=True
+    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    priority_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    priority_band: Mapped[str] = mapped_column(String(40), nullable=False)
+    model_name: Mapped[str | None] = mapped_column(String(120))
+    output_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    confidence_score: Mapped[int | None] = mapped_column(Integer)
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class LeadManagerCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "lead_manager_copilot_reviews"
+    __table_args__ = (
+        UniqueConstraint(
+            "recommendation_id",
+            name="uq_lead_manager_copilot_review_recommendation",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    recommendation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("lead_manager_copilot_recommendations.id", ondelete="CASCADE"),
+        index=True,
+    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    decision: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    estimated_time_saved_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class Contact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "contacts"
 

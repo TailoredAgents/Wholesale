@@ -88,6 +88,443 @@
   color: var(--danger);
 }
 
+.copilotView {
+  display: grid;
+  gap: 16px;
+}
+
+.copilotGuard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 16px;
+  border: 1px solid var(--amber);
+  background: var(--amber-soft);
+  color: var(--text-soft);
+  font-size: 0.8rem;
+}
+
+.copilotGuard > div,
+.copilotGuard > div span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.copilotGuard svg {
+  flex: 0 0 auto;
+  color: var(--amber);
+}
+
+.copilotGuard strong {
+  color: var(--text);
+}
+
+.runtimeState {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.copilotMetrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-block: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.copilotMetrics > div {
+  padding: 13px 16px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.copilotMetrics > div:last-child {
+  border-right: 0;
+}
+
+.copilotMetrics span,
+.briefHeader span,
+.deterministicEvidence span,
+.briefBody section > span,
+.briefSummary > div > span,
+.reviewBar label span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.copilotMetrics strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.copilotWorkbench {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.72fr) minmax(560px, 1.8fr);
+  min-height: 720px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.copilotQueue {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.copilotQueue > button {
+  display: block;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.copilotQueue > button:hover,
+.copilotQueue .selectedWorkItem {
+  background: var(--surface);
+  box-shadow: inset 3px 0 var(--brand);
+}
+
+.copilotQueue strong,
+.copilotQueue small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copilotQueue strong {
+  margin-top: 8px;
+  font-size: 0.88rem;
+}
+
+.copilotQueue small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.copilotQueue p {
+  margin: 9px 0 0;
+  color: var(--text-soft);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.priorityBand {
+  display: inline-flex;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.priorityBand.urgent {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.priorityBand.high {
+  border-color: var(--amber);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.priorityBand.normal {
+  border-color: var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.copilotBrief {
+  min-width: 0;
+}
+
+.briefHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 88px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.briefHeader h3 {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+}
+
+.briefHeader p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.briefActions,
+.briefActions a,
+.briefActions button,
+.reviewBar > div,
+.reviewBar button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.briefActions a,
+.briefActions button,
+.reviewBar button {
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.briefActions button,
+.reviewBar button:last-child {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+}
+
+.briefActions button:disabled,
+.reviewBar button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.deterministicEvidence {
+  padding: 15px 20px;
+  border-bottom: 1px solid var(--line);
+  background: var(--brand-soft);
+}
+
+.deterministicEvidence strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--brand-strong);
+  font-size: 0.88rem;
+}
+
+.deterministicEvidence p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.briefBody {
+  padding: 20px;
+}
+
+.briefSummary {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.briefSummary > div {
+  flex: 1;
+}
+
+.briefSummary p,
+.briefColumns p,
+.messageDraft p,
+.proposalGrid p,
+.supportingEvidence p {
+  margin: 6px 0 0;
+  color: var(--text-soft);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.confidence {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--brand-strong);
+  font-size: 0.68rem;
+  font-weight: 850;
+}
+
+.briefSummary textarea,
+.messageDraft textarea,
+.reviewBar input {
+  width: 100%;
+  margin-top: 7px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  resize: vertical;
+}
+
+.briefColumns,
+.proposalGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.briefColumns section,
+.proposalGrid section {
+  min-width: 0;
+  padding: 17px 16px 17px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.briefColumns section:nth-child(even),
+.proposalGrid section:nth-child(even) {
+  padding-right: 0;
+  padding-left: 16px;
+  border-left: 1px solid var(--line-soft);
+}
+
+.briefColumns ul,
+.supportingEvidence ul {
+  margin: 7px 0 0;
+  padding-left: 18px;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.messageDraft {
+  padding: 17px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.messageDraft > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--brand);
+}
+
+.messageDraft > div span {
+  color: var(--brand-strong);
+}
+
+.proposalGrid strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 0.84rem;
+}
+
+.proposalGrid small {
+  display: block;
+  margin-top: 6px;
+  color: var(--brand-strong);
+  font-weight: 800;
+}
+
+.supportingEvidence {
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.supportingEvidence summary {
+  padding: 14px 0;
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.supportingEvidence > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding: 0 0 16px;
+}
+
+.reviewBar {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 15px;
+  padding-top: 18px;
+}
+
+.reviewBar label {
+  flex: 1;
+}
+
+.reviewBar .rejectButton {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.reviewBar .editButton {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--text-soft);
+}
+
+.reviewedState {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 18px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--brand);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.emptyBrief {
+  display: grid;
+  justify-items: center;
+  gap: 7px;
+  padding: 90px 24px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.emptyBrief strong {
+  color: var(--text);
+}
+
+.emptyBrief p {
+  max-width: 430px;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 .queueGrid,
 .standardsGrid {
   display: grid;
@@ -455,6 +892,10 @@
   .standardsGrid {
     grid-template-columns: 1fr;
   }
+
+  .copilotWorkbench {
+    grid-template-columns: minmax(230px, 0.7fr) minmax(460px, 1.5fr);
+  }
 }
 
 @media (max-width: 820px) {
@@ -486,6 +927,33 @@
     grid-template-columns: 1fr;
   }
 
+  .copilotGuard,
+  .copilotGuard > div span,
+  .briefHeader,
+  .reviewBar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .copilotMetrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .copilotMetrics > div {
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .copilotWorkbench {
+    grid-template-columns: 1fr;
+  }
+
+  .copilotQueue {
+    max-height: 330px;
+    overflow-y: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
   .questionGrid small {
     min-height: 0;
   }
@@ -507,5 +975,33 @@
 
   .scriptHeader {
     display: grid;
+  }
+
+  .briefActions,
+  .reviewBar > div {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .briefActions a,
+  .briefActions button,
+  .reviewBar button {
+    flex: 1;
+  }
+
+  .briefColumns,
+  .proposalGrid,
+  .supportingEvidence > div {
+    grid-template-columns: 1fr;
+  }
+
+  .briefColumns section:nth-child(even),
+  .proposalGrid section:nth-child(even) {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  .briefSummary {
+    flex-direction: column;
   }
 }

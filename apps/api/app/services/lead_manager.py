@@ -204,6 +204,8 @@ def sync_case_handoff_decision(
 
 
 def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
+    from app.services.lead_manager_copilot import get_copilot_overview
+
     now = datetime.now(UTC)
     user = db.get(User, principal.user_id)
     if user is None:
@@ -281,6 +283,7 @@ def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
         appointments_today=appointments_today,
         neglected_queue=neglected,
         scorecards=build_scorecards(db, principal, cases, now),
+        copilot=get_copilot_overview(db, principal),
     )
 
 

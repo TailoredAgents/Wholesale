@@ -71,6 +71,8 @@ Delivered:
 - AI2 Lead Manager and Call Intelligence golden-case libraries with dual-review gates.
 - AI3 structured production runtime, model routes, field-scoped read tools, redacted traces,
   rate/spend/circuit limits, source-use evidence, regression comparison, and emergency shutdown.
+- AI4 Lead Manager Copilot workspace with deterministic priority, governed seller briefs,
+  evidence, human correction, immutable reviews, and pilot metrics.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -80,7 +82,7 @@ Still required:
 
 - Complete production review of the AI2 datasets and live model replay for the first capability.
 - Configure provider error monitoring and pass the AI3 staging acceptance checklist.
-- Copilot workspace experiences inside each role's existing OS workflow.
+- Copilot workspace experiences for the remaining human roles inside their existing OS workflows.
 - Measured draft-only pilots and capability-specific promotion decisions.
 - Provider integrations required for documents, accounting, advertising, and approved external
   communication.
@@ -189,6 +191,10 @@ Exit criteria:
 - No external send or high-risk action is available to the model.
 
 ## Phase AI4: Lead Manager Copilot
+
+Implementation status: **complete in code. AI2 signoff, production model replay, activation, and
+the four-week draft-only pilot remain operator checkpoints.** See
+`PHASE_AI4_LEAD_MANAGER_COPILOT.md`.
 
 Goal: Give the Lead Manager a daily assistant without transferring responsibility for leads.
 
@@ -480,11 +486,12 @@ adapter rather than inventing a second source of truth.
 
 ## Immediate Next Build
 
-Complete the AI3 production checkpoints, then begin AI4 in draft-only mode. Approve the production
-AI2 Lead Manager dataset, run the intended model and prompt configuration, compare it with the
-accepted baseline, and enable only `lead.next_action` after it passes. Build the role-facing Lead
-Manager Copilot workspace without exposing external sends or transferring lead ownership to AI.
+Complete the AI3 production checkpoints and activate the AI4 draft-only pilot. Approve the
+production AI2 Lead Manager dataset, run the intended model and prompt configuration, compare it
+with the accepted baseline, and enable only `lead.next_action` after it passes. Measure review
+volume, corrections, latency, cost, time saved, and seller outcomes for four weeks before any
+promotion decision.
 
-The first production milestone is a Lead Manager Copilot that reliably organizes work, identifies
-gaps, drafts follow-up, and protects response SLAs while the human Lead Manager remains accountable
-for every seller relationship and decision.
+The next build phase is AI5 Prospecting Copilot and call quality. Its draft and coaching work can
+proceed while AI4 remains in its measured pilot, but recording-dependent behavior stays disabled
+until Twilio disclosure, consent, and retention controls are operationally approved.

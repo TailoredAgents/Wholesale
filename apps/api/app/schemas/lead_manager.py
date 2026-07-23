@@ -98,6 +98,94 @@ class LeadManagerScorecard(BaseModel):
     follow_up_quality_basis_points: int
 
 
+class LeadManagerCopilotWorkItemRead(BaseModel):
+    case_id: UUID
+    lead_id: UUID
+    seller_name: str
+    property_address: str
+    assigned_user_name: str
+    priority_score: int
+    priority_band: str
+    recommended_action: str
+    alerts: list[str]
+    qualification_gaps: list[str]
+    recommended_questions: list[str]
+    evidence: list[str]
+    missed_reply: bool
+    appointment_today: bool
+    lead_url: str
+
+
+class LeadManagerCopilotMessageDraft(BaseModel):
+    channel: Literal["none", "sms", "email"]
+    body: str = Field(max_length=2000)
+
+
+class LeadManagerCopilotTaskProposal(BaseModel):
+    title: str = Field(max_length=255)
+    reason: str = Field(max_length=1000)
+    due_timing: str = Field(max_length=255)
+
+
+class LeadManagerCopilotAppointmentProposal(BaseModel):
+    recommended: bool
+    reason: str = Field(max_length=1000)
+
+
+class LeadManagerCopilotModelOutput(BaseModel):
+    summary: str = Field(max_length=4000)
+    priority_explanation: str = Field(max_length=2000)
+    qualification_gaps: list[str] = Field(max_length=30)
+    recommended_questions: list[str] = Field(max_length=30)
+    message_draft: LeadManagerCopilotMessageDraft
+    next_task: LeadManagerCopilotTaskProposal
+    appointment_proposal: LeadManagerCopilotAppointmentProposal
+    handoff_summary: str = Field(max_length=3000)
+    risks: list[str] = Field(max_length=30)
+    evidence: list[str] = Field(max_length=50)
+    confidence: int = Field(ge=0, le=100)
+
+
+class LeadManagerCopilotRecommendationRead(BaseModel):
+    id: UUID
+    case_id: UUID
+    lead_id: UUID
+    ai_run_log_id: UUID | None
+    status: str
+    priority_score: int
+    priority_band: str
+    model_name: str | None
+    output_payload: dict[str, object]
+    evidence_snapshot: dict[str, object]
+    confidence_score: int | None
+    generated_at: datetime
+    reviewed_at: datetime | None
+
+
+class LeadManagerCopilotMetrics(BaseModel):
+    generated_count: int
+    reviewed_count: int
+    accepted_count: int
+    edited_count: int
+    rejected_count: int
+    acceptance_rate_basis_points: int
+    correction_rate_basis_points: int
+    estimated_time_saved_minutes: int
+    total_cost_microusd: int
+    average_response_minutes: int | None
+    appointments_set: int
+
+
+class LeadManagerCopilotOverview(BaseModel):
+    pilot_mode: str
+    runtime_status: str
+    capability_status: str
+    external_actions_blocked: bool
+    work_items: list[LeadManagerCopilotWorkItemRead]
+    recommendations: list[LeadManagerCopilotRecommendationRead]
+    metrics: LeadManagerCopilotMetrics
+
+
 class LeadManagerOverview(BaseModel):
     current_user_id: UUID
     current_user_name: str
@@ -111,6 +199,7 @@ class LeadManagerOverview(BaseModel):
     appointments_today: list[LeadManagerCaseRead]
     neglected_queue: list[LeadManagerCaseRead]
     scorecards: list[LeadManagerScorecard]
+    copilot: LeadManagerCopilotOverview
 
 
 class LeadManagerAcceptRequest(BaseModel):
@@ -143,3 +232,38 @@ class QualificationSessionRead(BaseModel):
     next_action_type: str
     next_action_due_at: datetime | None
     completed_at: datetime
+
+
+class LeadManagerCopilotAnalyzeRequest(BaseModel):
+    idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class LeadManagerCopilotAnalyzeRead(BaseModel):
+    run_id: UUID
+    run_status: str
+    message: str
+    recommendation: LeadManagerCopilotRecommendationRead | None
+
+
+class LeadManagerCopilotReviewRequest(BaseModel):
+    decision: Literal["accepted", "edited", "rejected"]
+    final_output: dict[str, object] | None = None
+    notes: str | None = Field(default=None, max_length=2000)
+    estimated_time_saved_seconds: int = Field(default=0, ge=0, le=7200)
+
+    @model_validator(mode="after")
+    def require_edited_output(self) -> "LeadManagerCopilotReviewRequest":
+        if self.decision == "edited" and self.final_output is None:
+            raise ValueError("Edited recommendations require the corrected final output.")
+        return self
+
+
+class LeadManagerCopilotReviewRead(BaseModel):
+    id: UUID
+    recommendation_id: UUID
+    reviewed_by_user_id: UUID
+    decision: str
+    final_output: dict[str, object] | None
+    notes: str | None
+    estimated_time_saved_seconds: int
+    reviewed_at: datetime

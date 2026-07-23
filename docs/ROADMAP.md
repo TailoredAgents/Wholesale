@@ -53,7 +53,7 @@ email is implemented. Production acceptance remains pending for:
 | 7. Underwriting and Offer Governance | Complete | Explainable valuation, approved authority, concessions, and price discussions are auditable end to end |
 | 8. Contracts and Transaction Coordination | Complete | Controlled contract packages, private documents, closing parties, deadlines, evidence, and funding gates are operational |
 | 9. Buyers, Dispositions, and Finance | Complete | Provider-neutral buyer placement, disposition, reconciliation, compensation, and accounting export are operational |
-| 10. Integrated AI Agent System | Partial | AI1 governance, AI2 golden cases, and the AI3 runtime are implemented; production signoff and controlled role-copilot pilots remain |
+| 10. Integrated AI Agent System | Partial | AI1-AI4 are implemented in code; production signoff, the Lead Manager pilot, and remaining role copilots remain |
 
 Phase 7 was intentionally advanced before Phases 2-6 were complete because dependable comps and
 offer controls were prioritized for seller conversations. That work is retained. It does not mark
@@ -380,9 +380,9 @@ Remaining:
 - Agent quality, correction, failure, cost, and business-outcome reporting.
 
 The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`. AI1 role
-contracts, AI2 golden-case infrastructure, and the AI3 production runtime are complete in code.
-AI3 production acceptance and approved-dataset replay remain before the first Lead Manager
-Copilot pilot.
+contracts, AI2 golden-case infrastructure, AI3 production runtime, and AI4 Lead Manager Copilot are
+complete in code. AI3 production acceptance and approved-dataset replay remain before activating
+the first Lead Manager Copilot pilot.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
@@ -406,7 +406,7 @@ evidence requirements, compliance controls, or financial approvals.
 3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
 4. Complete the AI3 production acceptance checklist: provider monitoring, staging shutdown test,
    and approved-dataset model replay.
-5. Run the AI4 draft-only Lead Manager Copilot pilot.
+5. Activate and measure the AI4 draft-only Lead Manager Copilot pilot.
 6. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

@@ -93,6 +93,61 @@ OUTPUT_SCHEMA: dict[str, Any] = {
         "knowledge_citations",
     ],
 }
+LEAD_MANAGER_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "priority_explanation": {"type": "string"},
+        "qualification_gaps": {"type": "array", "items": {"type": "string"}},
+        "recommended_questions": {"type": "array", "items": {"type": "string"}},
+        "message_draft": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "channel": {"type": "string", "enum": ["none", "sms", "email"]},
+                "body": {"type": "string"},
+            },
+            "required": ["channel", "body"],
+        },
+        "next_task": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "title": {"type": "string"},
+                "reason": {"type": "string"},
+                "due_timing": {"type": "string"},
+            },
+            "required": ["title", "reason", "due_timing"],
+        },
+        "appointment_proposal": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "recommended": {"type": "boolean"},
+                "reason": {"type": "string"},
+            },
+            "required": ["recommended", "reason"],
+        },
+        "handoff_summary": {"type": "string"},
+        "risks": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "summary",
+        "priority_explanation",
+        "qualification_gaps",
+        "recommended_questions",
+        "message_draft",
+        "next_task",
+        "appointment_proposal",
+        "handoff_summary",
+        "risks",
+        "evidence",
+        "confidence",
+    ],
+}
 KNOWLEDGE_BY_CAPABILITY = {
     "lead": ["operating_model", "lead_manager_qualification"],
     "call": ["operating_model"],
@@ -163,7 +218,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
         db.flush()
 
     existing_capabilities = {
-        item.capability_key
+        item.capability_key: item
         for item in db.scalars(
             select(AiCapabilityRuntimePolicy).where(
                 AiCapabilityRuntimePolicy.organization_id == principal.organization_id
@@ -181,7 +236,13 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
     created_capabilities = 0
     for agent_key, _, _, capability_key, risk_level in PORTFOLIO:
         agent = agents.get(agent_key)
-        if agent is None or capability_key in existing_capabilities:
+        if agent is None:
+            continue
+        existing_capability = existing_capabilities.get(capability_key)
+        if existing_capability is not None:
+            if capability_key == "lead.next_action":
+                existing_capability.output_schema = LEAD_MANAGER_OUTPUT_SCHEMA
+                existing_capability.updated_by_user_id = principal.user_id
             continue
         route = "escalation" if risk_level == "high" else "default"
         knowledge_prefix = capability_key.split(".", 1)[0]
@@ -192,7 +253,11 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 capability_key=capability_key,
                 status="disabled",
                 model_route=route,
-                output_schema=OUTPUT_SCHEMA,
+                output_schema=(
+                    LEAD_MANAGER_OUTPUT_SCHEMA
+                    if capability_key == "lead.next_action"
+                    else OUTPUT_SCHEMA
+                ),
                 allowed_tool_keys=[f"{capability_key}.read"],
                 allowed_knowledge_keys=KNOWLEDGE_BY_CAPABILITY.get(
                     knowledge_prefix, ["operating_model"]
