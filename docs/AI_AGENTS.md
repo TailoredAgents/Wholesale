@@ -14,6 +14,15 @@ memory, evaluation, and autonomy. Delivery order is defined in `AI_AUTOMATION_RO
 The system should remove repetitive coordination and preparation work from every position while
 keeping humans responsible for judgment that can bind the company or materially affect a seller.
 
+Staff interact with eight role-facing copilots: Prospecting, Lead Manager, Acquisitions,
+Transaction, Disposition, Finance, Marketing, and Executive. The backend specialists in this
+document are technical capabilities selected by those copilots, not separate bots that employees
+must manage.
+
+The copilot assists its human role; it does not own that role. In particular, the Lead Manager
+Copilot organizes, summarizes, drafts, recommends, and monitors while the human Lead Manager owns
+qualification, seller communication, appointment quality, and handoff.
+
 The target operating loop is:
 
 1. A business event is stored in PostgreSQL.
@@ -114,13 +123,13 @@ Use the least expensive model that passes the capability's quality, latency, and
 Changing a model or reasoning level creates a new evaluated version. Fine-tuning is considered only
 after prompts, tools, schemas, retrieval, and representative evals have plateaued.
 
-## Agent Portfolio
+## Backend Specialist Portfolio
 
 | Specialist | Primary work | Tools and data | Maximum planned autonomy |
 | --- | --- | --- | --- |
 | Prospecting Intelligence | Rank records, explain priority, flag data gaps | Campaign records, vendor data, suppression evidence, property facts | Internal recommendation |
 | Inbound Lead | Triage seller inquiries, identify urgency, draft first response | CRM, consent, inbox, calendar | Approved external templates after pilot |
-| Lead Management | Find qualification gaps, stale leads, and next actions | CRM, tasks, inbox, calendar, approved scripts | Low-risk internal tasks |
+| Lead Manager Support | Find qualification gaps, stale leads, and next actions for the human Lead Manager | CRM, tasks, inbox, calendar, approved scripts | Low-risk internal tasks |
 | Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Approved structured CRM updates after pilot |
 | Appointment Preparation | Produce seller brief, questions, logistics, and risk flags | CRM, qualification, underwriting, internal calendar, optional routes | Internal brief |
 | Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
@@ -148,12 +157,16 @@ AI-generated cold voice is not an initial Stonegate capability. Federal and stat
 prerecorded/artificial voice, consent, disclosure, and seller-liability requirements require a
 separate legal and operational approval before any pilot.
 
-### Lead Manager
+### Lead Manager Copilot
 
 AI may summarize new inquiries, monitor speed-to-lead and unanswered messages, prepare qualification
 questions, draft follow-up, detect neglected leads, and propose appointments. Early pilots remain
 draft-only; later approved templates may be sent automatically only to appropriately consented
 contacts with escalation and shutdown controls.
+
+The human Lead Manager remains accountable for qualification, seller judgment, communication,
+appointments, and acquisition handoff. The copilot cannot silently qualify a seller, replace a
+confirmed fact, or take ownership of the relationship.
 
 ### Acquisitions Closer
 
@@ -260,5 +273,10 @@ estimates never replace provider billing reconciliation.
 - [OpenAI agent evaluations](https://developers.openai.com/api/docs/guides/agent-evals)
 - [OpenAI tools](https://developers.openai.com/api/docs/guides/tools)
 - [OpenAI speech-to-text and diarization](https://developers.openai.com/api/docs/guides/speech-to-text#speaker-diarization)
+- [OpenAI practical guide to building agents](https://openai.com/business/guides-and-resources/a-practical-guide-to-building-ai-agents/)
+- [NIST AI Risk Management Framework](https://airc.nist.gov/airmf-resources/airmf/5-sec-core/)
+- [HubSpot Sales Hub](https://www.hubspot.com/products/sales)
+- [Salesforce human-representative handoff](https://help.salesforce.com/s/articleView?id=mktg.um_channel_email_human_rep_experience.htm&language=en_US&type=5)
+- [REsimpli real-estate investor CRM feature coverage](https://resimpli.com/)
 - [FTC Telemarketing Sales Rule guidance](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
 - [FTC CAN-SPAM compliance guidance](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business)

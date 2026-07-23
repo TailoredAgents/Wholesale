@@ -208,13 +208,17 @@ The Orchestrator reacts to business events, selects an approved agent and prompt
 only the required records and tools, enforces budget and policy, and records the complete run. It
 does not replace deterministic workflow, permissions, suppression, pricing, or financial rules.
 
-### Agent Portfolio
+### Role Copilots And Specialist Engines
+
+Employees use role copilots inside their existing workspaces. The specialist engines below are
+selected behind the scenes; they do not replace the accountable employee or create separate record
+ownership.
 
 | Agent | Primary contribution | Initial authority |
 | --- | --- | --- |
 | Prospecting Intelligence | Prioritize records, prepare context, assist scripts, detect data and call-quality problems | Recommend |
 | Inbound Lead | Respond to opted-in inquiries, collect basic facts, schedule Lead Manager contact | Draft; controlled sending pilot later |
-| Lead Management | Find qualification gaps, draft follow-up, monitor nurture and neglected leads | Draft and recommend |
+| Lead Manager Copilot | Assist the human Lead Manager with qualification gaps, follow-up drafts, nurture monitoring, appointments, and neglected-lead protection | Draft and recommend |
 | Call Intelligence | Transcribe, separate speakers, extract facts, cite timestamps, score calls | Recommend CRM updates |
 | Appointment Preparation | Produce the Closer's meeting brief and unresolved-question list | Internal execution |
 | Underwriting And Comp | Gather evidence, score comps, explain ranges, calculate scenarios, produce reports | Recommend; no offer approval |
@@ -339,7 +343,8 @@ operating mode is measured and formally activated.
 4. Complete contracts, documents, transaction coordination, and closing evidence.
 5. Complete buyer matching and human-led dispositions.
 6. Complete reconciliation, compensation, accounting, and the 30% margin dashboard.
-7. Productionize Call Intelligence, Lead Management, and Appointment Preparation agents.
+7. Productionize the Lead Manager Copilot, Call Intelligence, and Appointment Preparation
+   capabilities.
 8. Introduce the Disposition Agent in measured human-led, AI-operated, and oversight modes.
 9. Add Transaction, Finance, Marketing, and Executive agents with narrow approvals.
 10. Expand geography only through the market launch standard.

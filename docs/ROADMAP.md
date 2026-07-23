@@ -361,7 +361,7 @@ Delivered:
 - Deterministic safeguards that prevent AI from approving offers or bypassing communication rules.
 - Stonegate Orchestrator with dry-run mode, retries, budgets, trace review, and rollback controls.
 - Versioned evaluation datasets and promotion thresholds for each agent capability.
-- Prospecting Intelligence, Lead Management, Appointment Preparation, Underwriting, Negotiation
+- Prospecting Intelligence, Lead Manager Support, Appointment Preparation, Underwriting, Negotiation
   Coach, Disposition, Buyer Relationship, Transaction, Finance, Marketing, Compliance, and
   Executive agents.
 - Idempotent event intake, a governed 14-agent portfolio, deterministic fixture evaluations,
@@ -380,8 +380,8 @@ Remaining:
 - Agent quality, correction, failure, cost, and business-outcome reporting.
 
 The remaining work proceeds in the ten AI phases defined in `AI_AUTOMATION_ROADMAP.md`, beginning
-with redacted golden cases, runtime/tool hardening, and repeatable evaluation before the first
-Lead Operations pilot.
+with role-copilot contracts, data governance, redacted golden cases, runtime/tool hardening, and
+repeatable evaluation before the first Lead Manager Copilot pilot.
 
 Result: Stonegate's approved agent portfolio assists each role without bypassing human authority,
 evidence requirements, compliance controls, or financial approvals.
@@ -403,9 +403,9 @@ evidence requirements, compliance controls, or financial approvals.
 2. Run one complete Phase 8 manual contract-to-funding simulation with an attorney-approved test
    template and redacted documents.
 3. Run one complete Phase 9 contract-to-buyer-to-reconciliation simulation with redacted evidence.
-4. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`: redacted golden cases, runtime/tool
-   hardening, and the evaluation factory.
-5. Run the AI4 draft-only Lead Operations pilot.
+4. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`: copilot contracts, data governance,
+   golden cases, runtime/tool hardening, and the evaluation factory.
+5. Run the AI4 draft-only Lead Manager Copilot pilot.
 6. Resume provider acceptance work as A2P, Voice, email, and domain dependencies become available.
 
 ## Explicitly Deferred

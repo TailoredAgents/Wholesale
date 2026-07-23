@@ -344,5 +344,5 @@ While A2P approval is pending:
 5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
 6. Complete AI1 through AI3 in `AI_AUTOMATION_ROADMAP.md`, then run the first AI4 draft-only Lead
-   Operations pilot.
+   Manager Copilot pilot.
 7. Resume the parallel integration track after A2P approval without blocking internal development.
