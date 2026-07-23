@@ -111,6 +111,8 @@
   background: transparent;
   color: var(--sg-color-text);
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 3px;
   text-align: left;
   cursor: pointer;
@@ -120,18 +122,42 @@
   color: var(--sg-color-brand-strong);
 }
 
-.upcoming button span,
-.upcoming button small,
+.appointmentDetails {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.appointmentDetails > span,
+.appointmentDetails > small,
 .upcoming > p {
   color: var(--sg-color-text-muted);
   font-size: var(--sg-font-size-xs);
 }
 
-.upcoming button strong {
+.appointmentDetails > strong {
   overflow: hidden;
   font-size: var(--sg-font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.prepareAction {
+  min-height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-sm);
+  color: var(--sg-color-brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-bold);
+}
+
+.upcoming button:hover .prepareAction {
+  border-color: var(--sg-color-brand);
+  background: var(--sg-color-brand-soft);
 }
 
 .upcoming > p {

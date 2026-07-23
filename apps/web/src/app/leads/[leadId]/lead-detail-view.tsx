@@ -233,7 +233,16 @@ function RecentActivityPanel({ lead, limit = 6 }: { lead: LeadDetail; limit?: nu
   );
 }
 
-function OverviewTab({ lead }: { lead: LeadDetail }) {
+function OverviewTab({
+  activeAppointment,
+  lead,
+}: {
+  activeAppointment: LeadDetail["appointments"][number] | undefined;
+  lead: LeadDetail;
+}) {
+  const appointmentWorkspaceHref = activeAppointment
+    ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
+    : `/os/leads/${lead.id}?tab=communications`;
   return (
     <div className={styles.overviewGrid}>
       <div className={styles.mainColumn}>
@@ -254,6 +263,22 @@ function OverviewTab({ lead }: { lead: LeadDetail }) {
           <ActionDisclosure label="Change pipeline stage">
             <StageUpdateForm currentStage={lead.stage_key} leadId={lead.id} />
           </ActionDisclosure>
+          <div className={styles.appointmentPreparation}>
+            <span>{activeAppointment ? "Next seller appointment" : "Appointment preparation"}</span>
+            <strong>
+              {activeAppointment
+                ? formatDate(activeAppointment.scheduled_start_at)
+                : "No active appointment"}
+            </strong>
+            <p>
+              {activeAppointment
+                ? `${labelize(activeAppointment.location_type)} meeting`
+                : "Schedule the seller before preparing the meeting workspace."}
+            </p>
+            <Link href={appointmentWorkspaceHref}>
+              {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
+            </Link>
+          </div>
         </section>
       </aside>
     </div>
@@ -482,6 +507,14 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const email = lead.contact_methods.find((method) => method.method_type === "email")?.value;
   const lastContact = lead.communications[0]?.occurred_at ?? null;
   const tabHref = (tab: LeadTab) => `/os/leads/${lead.id}?tab=${tab}`;
+  const activeAppointment = lead.appointments.find(
+    (appointment) =>
+      ["scheduled", "rescheduled"].includes(appointment.status)
+      && !appointment.outcome,
+  );
+  const appointmentWorkspaceHref = activeAppointment
+    ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
+    : tabHref("communications");
 
   return (
     <div className={styles.page}>
@@ -503,6 +536,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           {email ? <a href={`mailto:${email}`}>Email</a> : null}
           <Link href={tabHref("communications")}>Log contact</Link>
           <Link href={tabHref("underwriting")}>Run comps</Link>
+          <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
+            {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
+          </Link>
           <LeadLifecycleActions archived={Boolean(lead.archived_at)} leadId={lead.id} />
         </div>
       </header>
@@ -536,7 +572,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </nav>
 
           <section className={styles.tabContent}>
-            {activeTab === "overview" ? <OverviewTab lead={lead} /> : null}
+            {activeTab === "overview" ? (
+              <OverviewTab activeAppointment={activeAppointment} lead={lead} />
+            ) : null}
             {activeTab === "communications" ? <CommunicationsTab lead={lead} /> : null}
             {activeTab === "underwriting" ? <UnderwritingTab lead={lead} /> : null}
             {activeTab === "deal" ? <DealTab buyers={buyers} lead={lead} /> : null}

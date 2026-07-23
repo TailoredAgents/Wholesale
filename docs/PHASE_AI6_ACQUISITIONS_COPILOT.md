@@ -9,7 +9,12 @@ measured draft-only pilot remain operator checkpoints.
 
 ## Delivered
 
-- The copilot is embedded in the existing Field Operations seller-meeting workspace.
+- The copilot is embedded in the existing Field Operations seller-meeting workspace rather than
+  separated into another AI destination.
+- An upcoming appointment can be opened directly from its lead record or the operating calendar.
+  Field Operations remains the team-level meeting queue.
+- The readiness panel remains visible before a meeting brief exists and tells the user exactly
+  what must be generated or enabled before AI preparation can run.
 - Appointment preparation uses the current versioned meeting brief, seller qualification,
   underwriting, comp evidence, field inspection, and approved offer authority.
 - Post-meeting coaching requires a human-recorded meeting outcome.

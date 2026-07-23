@@ -57,9 +57,12 @@ export function CalendarWorkspace({ data }: { data: FieldOperationsOverview }) {
               }
               type="button"
             >
-              <span>{formatDateTime(appointment.scheduled_start_at)}</span>
-              <strong>{appointment.seller_name}</strong>
-              <small>{appointment.closer_name}</small>
+              <span className={styles.appointmentDetails}>
+                <span>{formatDateTime(appointment.scheduled_start_at)}</span>
+                <strong>{appointment.seller_name}</strong>
+                <small>{appointment.closer_name}</small>
+              </span>
+              <span className={styles.prepareAction}>Prepare <ArrowRight size={13} /></span>
             </button>
           ))}
           {!nextAppointments.length ? <p>No upcoming seller meetings.</p> : null}

@@ -325,14 +325,14 @@ export function FieldMeetingWorkspace({
                       <section><h4>Likely objections</h4>{asList(brief?.likely_objections).map((item, index) => { const objection = asRecord(item); return <p key={index}><span>{labelize(String(objection.category ?? "other"))}</span>{String(objection.reason ?? "Review with seller")}</p>; })}</section>
                       <section><h4>Meeting sequence</h4>{asList(brief?.meeting_plan).map((item, index) => <p key={index}><strong>{index + 1}</strong>{String(item)}</p>)}</section>
                     </div>
-                    <AcquisitionsCopilotPanel
-                      appointmentId={appointmentId}
-                      run={run}
-                      saving={saving}
-                      workspace={workspace}
-                    />
                   </>
                 ) : <p className={styles.emptyState}>Generate the brief before leaving for the appointment. It freezes the current qualification, underwriting, and approved negotiation evidence into a versioned snapshot.</p>}
+                <AcquisitionsCopilotPanel
+                  appointmentId={appointmentId}
+                  run={run}
+                  saving={saving}
+                  workspace={workspace}
+                />
               </div>
             ) : null}
 
@@ -477,7 +477,8 @@ function AcquisitionsCopilotPanel({
     );
   }
 
-  const canPrepare = workspace.copilot.preparation_capability_status === "enabled";
+  const preparationEnabled = workspace.copilot.preparation_capability_status === "enabled";
+  const canPrepare = preparationEnabled && workspace.brief !== null;
   const canFollowUp = (
     workspace.copilot.follow_up_capability_status === "enabled"
     && workspace.negotiation !== null
@@ -538,8 +539,9 @@ function AcquisitionsCopilotPanel({
         <button disabled={saving || !canFollowUp} onClick={() => void generate("follow_up")} type="button">
           <RefreshCw size={16} />Draft follow-up
         </button>
-        {!canPrepare ? <small>Appointment guidance is currently disabled in AI Controls.</small> : null}
-        {canPrepare && !canFollowUp ? <small>Follow-up becomes available after a meeting outcome is recorded and `negotiation.coach` is enabled.</small> : null}
+        {!workspace.brief ? <small>Generate the meeting brief above before requesting AI preparation.</small> : null}
+        {workspace.brief && !preparationEnabled ? <small>Appointment guidance is currently disabled in AI Controls.</small> : null}
+        {canPrepare && !canFollowUp ? <small>Follow-up becomes available after a meeting outcome is recorded and follow-up guidance is enabled.</small> : null}
       </div>
 
       {workspace.copilot.recommendations.length ? (
