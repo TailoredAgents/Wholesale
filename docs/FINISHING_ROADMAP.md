@@ -59,13 +59,13 @@ sender reputation, or consent assumptions.
 | --- | --- | --- |
 | F1 | Production Safety Closeout | Recoverable, monitored, access-controlled production |
 | F2 | Company Configuration And Role Acceptance | Real staff can execute their jobs correctly |
-| F3 | Resend Operational Email | Two-way email works inside the shared Inbox |
-| F4 | Twilio Communications Acceptance | Dedicated SMS and Voice work end to end |
-| F5 | Compliance And Outreach Readiness | Calling and messaging operate under approved controls |
-| F6 | Documents, Contracts, And Closing | Secure files and e-signature support live transactions |
-| F7 | Buyers And Disposition Delivery | Real buyers can receive, answer, and compete for deals |
-| F8 | Finance And Marketing Connections | Closing economics and attribution reach external ledgers |
-| F9 | Underwriting Calibration And Market Proof | Offer guidance is measured against verified outcomes |
+| F3 | Compliance And Operating Policy | Legal, outreach, recording, and retention rules are approved |
+| F4 | Documents, Contracts, And Closing | Secure files and e-signature support live transactions |
+| F5 | Buyers And Disposition Readiness | Buyer data, packages, offers, and selection are production-ready |
+| F6 | Finance And Marketing Connections | Closing economics and attribution reach external ledgers |
+| F7 | Underwriting Calibration And Market Proof | Offer guidance is measured against verified outcomes |
+| F8 | Resend Operational Email | Two-way email works inside the shared Inbox |
+| F9 | Twilio Communications Acceptance | Dedicated SMS and Voice work end to end |
 | F10 | AI Production Pilots And Controlled Automation | Copilots are proven before narrow automation |
 
 ## Phase F1: Production Safety Closeout
@@ -119,7 +119,120 @@ Exit criteria:
 - Compensation, territory, script, capacity, and assignment policies are approved and active.
 - Each role owner signs off on their daily workspace and manual.
 
-## Phase F3: Resend Operational Email
+## Phase F3: Compliance And Operating Policy
+
+Goal: Make cold calling, seller communication, and recording operationally defensible.
+
+Work:
+
+- Obtain National DNC access or select an approved screening provider.
+- Define recurring DNC refresh and retained evidence procedures.
+- Approve company suppression, opt-out, complaint, and wrong-number procedures.
+- Obtain legal review for Georgia calling, SMS, email, recording, contracts, and disclosures.
+- Approve calling hours, timezone handling, caller identification, and scripts.
+- Approve recording disclosure, retention, access, and deletion policy.
+- Train VAs and managers; retain training and monitoring records.
+- Test that blocked records cannot enter calling batches or external delivery.
+
+Exit criteria:
+
+- A named owner approves every communication policy.
+- DNC evidence is current and repeatable.
+- Recording is enabled only after disclosure and retention approval.
+- Controlled policy-blocked cases fail safely across calls, SMS, and email.
+
+## Phase F4: Documents, Contracts, And Closing
+
+Goal: Run a real contract-to-funding workflow with secure files and provider evidence.
+
+Work:
+
+- Select private S3-compatible object storage.
+- Migrate recordings, photographs, reports, proof-of-funds, and contracts behind authenticated
+  object access.
+- Add malware scanning, retention, checksums, signed downloads, and deletion controls.
+- Select and integrate an e-signature provider.
+- Load attorney-approved Georgia purchase and assignment templates.
+- Reconcile envelopes, recipients, signatures, final documents, and webhook events.
+- Prepare closing-party templates and provider-neutral delivery records; activate delivery in
+  Phase F8.
+- Run a redacted contract-to-funding simulation.
+
+Exit criteria:
+
+- A contract package is approved, sent, signed, reconciled, and retained without manual status
+  fabrication.
+- Every material document and signature event has provider evidence.
+- Funding remains blocked until the existing checklist and evidence gates pass.
+
+## Phase F5: Buyers And Disposition Readiness
+
+Goal: Turn the internal buyer CRM into an operational deal-placement system.
+
+Work:
+
+- Select the first buyer acquisition source or API based on cost and coverage.
+- Import and deduplicate the initial buyer list.
+- Verify criteria, market, capacity, contact permission, and proof of funds.
+- Prepare approved buyer-package audiences and provider-neutral delivery records.
+- Process manually logged inquiries, showing interest, offers, deposit terms, and opt-outs in one
+  case until communication providers activate.
+- Test primary and backup buyer selection.
+- Run a contract-to-buyer-to-reconciliation simulation.
+- Compare human-led and AI-assisted disposition work only after the manual process has volume.
+
+Exit criteria:
+
+- An approved deal package is ready for a controlled buyer audience without bypassing release
+  approval.
+- Manually logged replies and offers attach to the correct disposition case.
+- Proof of funds and selection gates cannot be bypassed.
+- A funded simulation reconciles buyer outcome, revenue, deductions, commissions, and company
+  margin.
+
+## Phase F6: Finance And Marketing Connections
+
+Goal: Move approved business outcomes to the accounting and advertising systems without creating
+another source of truth.
+
+Work:
+
+- Prove the existing funded-deal reconciliation with real or redacted closings.
+- Add payment-state progression.
+- Connect QuickBooks Online through an approval-gated adapter.
+- Reconcile exported and provider-posted accounting entries.
+- Define consent and attribution rules for downstream advertising events.
+- Add Google Ads and Meta conversion delivery with hashing, retries, idempotency, and audit events.
+- Keep budgets, campaigns, payments, compensation, and final accounting human-approved.
+
+Exit criteria:
+
+- One approved funded deal reconciles with QuickBooks without duplicate posting.
+- Qualified lead, appointment, contract, and funded outcomes can be delivered and audited.
+- Provider failures are retryable and do not alter Stonegate's source records.
+
+## Phase F7: Underwriting Calibration And Market Proof
+
+Goal: Measure whether Stonegate's comps, ARV, repairs, and offer guidance are reliable enough for
+real acquisition decisions.
+
+Work:
+
+- Record verified expert reviews, appraisals, resales, and closed outcomes.
+- Compare predicted ARV, range coverage, repairs, seller contract, and disposition results.
+- Review selected and excluded comps with experienced operators.
+- Establish minimum case counts before changing formulas.
+- Determine whether RentCast is adequate by Georgia market.
+- Add MLS/RESO, ATTOM, or another provider only if measured error or operator time justifies it.
+- Finalize investor and seller-report branding and approved language.
+
+Exit criteria:
+
+- Calibration reports contain enough verified cases for the approved review threshold.
+- Material bias and failure patterns are documented.
+- Formula or provider changes require versioned evidence and human approval.
+
+## Phase F8: Resend Operational Email
 
 Goal: Replace the disabled Gmail/OAuth integration with two-way operational email in Stonegate.
 
@@ -146,7 +259,8 @@ Work:
 - Add attachments, reply threading, idempotency, retry, and out-of-order event handling.
 - Migrate existing email-account records without retaining unused Google credentials.
 - Replace Gmail tests, Render variables, UI labels, worker jobs, and runbooks.
-- Test using company-controlled addresses before seller use.
+- Activate the prepared closing-party and buyer-package email workflows.
+- Test using company-controlled addresses before seller or buyer use.
 
 Exit criteria:
 
@@ -155,11 +269,12 @@ Exit criteria:
 - Attachments are available only to authorized users.
 - Delivery, delay, bounce, complaint, failure, and suppression states are visible.
 - Duplicate and out-of-order webhooks do not duplicate or regress communication state.
+- Approved closing-party and buyer-package email attach to the correct business records.
 - No Google OAuth secret or Gmail synchronization job is required.
 
 See `RUNBOOKS/resend-email.md`.
 
-## Phase F4: Twilio Communications Acceptance
+## Phase F9: Twilio Communications Acceptance
 
 Goal: Activate Stonegate's dedicated SMS and Voice resources without sharing another business's
 campaign, number, or webhook.
@@ -172,7 +287,7 @@ Work:
 - Configure the Voice API key, TwiML App, dedicated Voice number, and browser identity.
 - Test browser registration, outbound, inbound, no-answer, missed-call task, and routing.
 - Confirm company ownership and reassignment of numbers when staff changes.
-- Keep recording disabled until Phase F5 approval.
+- Activate only communication workflows approved in Phase F3.
 
 Exit criteria:
 
@@ -180,116 +295,7 @@ Exit criteria:
 - Every communication attaches to the correct conversation.
 - Opt-outs and suppression cannot be bypassed.
 - Provider failure produces a visible and recoverable task or event.
-
-## Phase F5: Compliance And Outreach Readiness
-
-Goal: Make cold calling, seller communication, and recording operationally defensible.
-
-Work:
-
-- Obtain National DNC access or select an approved screening provider.
-- Define recurring DNC refresh and retained evidence procedures.
-- Approve company suppression, opt-out, complaint, and wrong-number procedures.
-- Obtain legal review for Georgia calling, SMS, email, recording, contracts, and disclosures.
-- Approve calling hours, timezone handling, caller identification, and scripts.
-- Approve recording disclosure, retention, access, and deletion policy.
-- Train VAs and managers; retain training and monitoring records.
-- Test that blocked records cannot enter calling batches or external delivery.
-
-Exit criteria:
-
-- A named owner approves every communication policy.
-- DNC evidence is current and repeatable.
-- Recording is enabled only after disclosure and retention approval.
-- Controlled policy-blocked cases fail safely across calls, SMS, and email.
-
-## Phase F6: Documents, Contracts, And Closing
-
-Goal: Run a real contract-to-funding workflow with secure files and provider evidence.
-
-Work:
-
-- Select private S3-compatible object storage.
-- Migrate recordings, photographs, reports, proof-of-funds, and contracts behind authenticated
-  object access.
-- Add malware scanning, retention, checksums, signed downloads, and deletion controls.
-- Select and integrate an e-signature provider.
-- Load attorney-approved Georgia purchase and assignment templates.
-- Reconcile envelopes, recipients, signatures, final documents, and webhook events.
-- Add Resend closing-party drafts and controlled delivery.
-- Run a redacted contract-to-funding simulation.
-
-Exit criteria:
-
-- A contract package is approved, sent, signed, reconciled, and retained without manual status
-  fabrication.
-- Every material document and signature event has provider evidence.
-- Funding remains blocked until the existing checklist and evidence gates pass.
-
-## Phase F7: Buyers And Disposition Delivery
-
-Goal: Turn the internal buyer CRM into an operational deal-placement system.
-
-Work:
-
-- Select the first buyer acquisition source or API based on cost and coverage.
-- Import and deduplicate the initial buyer list.
-- Verify criteria, market, capacity, contact permission, and proof of funds.
-- Activate approved buyer-package delivery through Resend and, where allowed, Twilio.
-- Process replies, inquiries, showing interest, offers, deposit terms, and opt-outs in one case.
-- Test primary and backup buyer selection.
-- Run a contract-to-buyer-to-reconciliation simulation.
-- Compare human-led and AI-assisted disposition work only after the manual process has volume.
-
-Exit criteria:
-
-- An approved deal package reaches a controlled buyer audience.
-- Replies and offers return to the correct disposition case.
-- Proof of funds and selection gates cannot be bypassed.
-- A funded simulation reconciles buyer outcome, revenue, deductions, commissions, and company
-  margin.
-
-## Phase F8: Finance And Marketing Connections
-
-Goal: Move approved business outcomes to the accounting and advertising systems without creating
-another source of truth.
-
-Work:
-
-- Prove the existing funded-deal reconciliation with real or redacted closings.
-- Add payment-state progression.
-- Connect QuickBooks Online through an approval-gated adapter.
-- Reconcile exported and provider-posted accounting entries.
-- Define consent and attribution rules for downstream advertising events.
-- Add Google Ads and Meta conversion delivery with hashing, retries, idempotency, and audit events.
-- Keep budgets, campaigns, payments, compensation, and final accounting human-approved.
-
-Exit criteria:
-
-- One approved funded deal reconciles with QuickBooks without duplicate posting.
-- Qualified lead, appointment, contract, and funded outcomes can be delivered and audited.
-- Provider failures are retryable and do not alter Stonegate's source records.
-
-## Phase F9: Underwriting Calibration And Market Proof
-
-Goal: Measure whether Stonegate's comps, ARV, repairs, and offer guidance are reliable enough for
-real acquisition decisions.
-
-Work:
-
-- Record verified expert reviews, appraisals, resales, and closed outcomes.
-- Compare predicted ARV, range coverage, repairs, seller contract, and disposition results.
-- Review selected and excluded comps with experienced operators.
-- Establish minimum case counts before changing formulas.
-- Determine whether RentCast is adequate by Georgia market.
-- Add MLS/RESO, ATTOM, or another provider only if measured error or operator time justifies it.
-- Finalize investor and seller-report branding and approved language.
-
-Exit criteria:
-
-- Calibration reports contain enough verified cases for the approved review threshold.
-- Material bias and failure patterns are documented.
-- Formula or provider changes require versioned evidence and human approval.
+- Recording remains disabled unless the Phase F3 disclosure and retention policy is approved.
 
 ## Phase F10: AI Production Pilots And Controlled Automation
 
@@ -322,12 +328,13 @@ Exit criteria:
 
 - Complete F1 before broad staff onboarding or live AI pilots.
 - F2 can run while A2P approval and provider accounts are pending.
-- Build F3 while waiting for Twilio approval.
-- F4 and F5 must both pass before production cold outreach or recording.
-- F6 must pass before document-dependent Transaction Copilot automation.
-- F7 must pass before any buyer-outreach automation.
-- F8 requires stable funded-deal reconciliation.
-- F9 begins as soon as verified outcomes exist and continues permanently.
+- Complete F3 policy work before activating any communication provider.
+- F4 must pass before document-dependent Transaction Copilot automation.
+- F5 prepares buyer operations; live email delivery waits for F8 and SMS delivery waits for F9.
+- F6 requires stable funded-deal reconciliation.
+- F7 begins as soon as verified outcomes exist and continues permanently.
+- F8 and F9 intentionally follow the internal operating, compliance, document, buyer, finance, and
+  underwriting work.
 - F10 uses the completed deterministic workflows; it does not replace them.
 
 ## Definition Of Finished

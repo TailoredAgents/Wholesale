@@ -10,7 +10,7 @@ implemented.
 The existing Google Workspace/Gmail OAuth implementation remains disabled and is superseded. Do
 not configure Google OAuth or enable Gmail synchronization.
 
-Implementation is Phase F3 of `../FINISHING_ROADMAP.md`.
+Implementation is Phase F8 of `../FINISHING_ROADMAP.md`.
 
 ## Product Model
 

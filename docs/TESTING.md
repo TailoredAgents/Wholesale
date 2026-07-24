@@ -45,7 +45,7 @@ Also run:
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.
 - Voice intents, routing, statuses, signatures, recordings, retention, and deletion.
 - Call transcription review, evidence, quality telemetry, and approval gates.
-- Current legacy Gmail adapter coverage until Phase F3 replaces it with Resend sending, Receiving,
+- Current legacy Gmail adapter coverage until Phase F8 replaces it with Resend sending, Receiving,
   signed webhooks, aliases, threading, attachments, recovery, and role scope.
 - Underwriting calculations, comp filtering, confidence, report access, and nullable recommendations.
 - Offer-plan staleness, sequential concessions, manager exceptions, hard-ceiling enforcement,
