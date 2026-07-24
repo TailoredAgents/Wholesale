@@ -68,13 +68,13 @@ from app.schemas.ai import (
     AiCapabilityRuntimeUpdate,
     AiEvaluationComparisonCreate,
     AiEvaluationComparisonRead,
+    AiRunRead,
     AiRuntimeExecuteCreate,
     AiRuntimeInstallRead,
     AiRuntimeMetrics,
     AiRuntimeOverview,
     AiRuntimePolicyRead,
     AiRuntimePolicyUpdate,
-    AiRunRead,
 )
 from app.schemas.management_copilots import ManagementCapability
 from app.services.ai import build_lead_context, run_to_read
