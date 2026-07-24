@@ -4,6 +4,12 @@ on:
   schedule:
     - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
+    inputs:
+      simulate_failure:
+        description: "Fail after the smoke test to verify owner notifications"
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: production-readiness
@@ -24,3 +30,8 @@ jobs:
           WEB_BASE_URL: https://www.stonegatehomebuyer.com
         run: bash scripts/smoke-test.sh
 
+      - name: Controlled alert-path failure
+        if: ${{ inputs.simulate_failure }}
+        run: |
+          echo "Controlled failure requested for readiness alert verification."
+          exit 1
