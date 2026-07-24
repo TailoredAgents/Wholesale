@@ -6,8 +6,8 @@ Last updated: July 23, 2026
 
 The provider-independent foundation is complete in code. `finance.reconcile`,
 `marketing.analyze`, and `operations.brief` are enabled in draft-only mode with mandatory human
-review. QuickBooks or controlled accounting delivery, Google Ads and Meta delivery, production
-model replay, redacted evaluation datasets, and measured pilots remain integration or operator
+review. The Stonegate Accounting Ledger, Google Ads and Meta delivery, production model replay,
+redacted evaluation datasets, and measured pilots remain build, integration, or operator
 checkpoints.
 
 ## Shared Controls
@@ -28,17 +28,28 @@ checkpoints.
 
 Delivered:
 
-- Embedded above the existing Finance ledger and exception workflow.
+- Embedded above the existing Finance operational ledger and exception workflow.
 - Reviews period summary, prior-period summary, pending and unlinked revenue, compensation
   calculations, active rules, and deal reconciliation exceptions.
 - Detects negative company net, missing linkage, uncollected revenue, unapproved reconciliations,
   below-target margin, and missing compensation policy evidence.
 - Drafts evidence-backed analysis and internal decision requests only.
 
+F6 extension:
+
+- Suggest account classifications and draft balanced journal entries from approved operational
+  source records.
+- Propose bank-transaction matches, identify duplicates and missing evidence, explain financial
+  statements and variances, and prepare month-end and CPA review checklists.
+- Cite exact journal lines, source records, statement transactions, and supporting documents.
+- Continue through the same AI control plane and immutable review workflow; do not create another
+  Finance agent.
+
 Blocked authority:
 
 - Funded status, reconciliation approval, compensation changes, reserves, distributions, payments,
-  accounting posting, and tax classification.
+  accounting policy, journal posting, period close or reopen, bank reconciliation approval, tax
+  classification, tax filing, and money movement.
 
 ## Marketing Copilot
 
@@ -74,15 +85,16 @@ Blocked authority:
 
 ## Provider Track
 
-1. Keep Stonegate's ledgers and CRM records as the source of truth.
-2. Add controlled QuickBooks Online import/export or synchronization only after account mapping,
-   duplicate protection, reconciliation, and rollback are approved.
+1. Keep Stonegate's CRM and operational finance records as source evidence.
+2. Build the internal Stonegate Accounting Ledger only after account mapping, balanced journal
+   rules, duplicate protection, bank reconciliation, immutable posting, period close, CPA review,
+   and reversal controls are approved.
 3. Add Google Ads and Meta offline-conversion adapters only after account, event, attribution,
    consent, idempotency, and delivery monitoring are approved.
 4. Normalize provider status and errors into Stonegate records; do not let provider objects become
    the copilot's primary data model.
-5. Require a human to approve every accounting, compensation, budget, campaign, conversion, and
-   management action.
+5. Require a human to approve every journal posting, period close, accounting-policy,
+   compensation, budget, campaign, conversion, and management action.
 
 ## Pilot Acceptance
 

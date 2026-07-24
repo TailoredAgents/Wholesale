@@ -38,6 +38,8 @@ name.
 
 ## Pending Deployment Work
 
+- Configure `SENTRY_DSN` on web, API, and worker plus `NEXT_PUBLIC_SENTRY_DSN` on web, then verify
+  controlled errors arrive in the selected Sentry projects.
 - Update Resend webhook and email-domain configuration if API/web custom subdomains are used.
 - Update Twilio callback base URL only if the API host changes.
 - Verify worker health after enabling Resend inbound recovery, transcription, or retention jobs.

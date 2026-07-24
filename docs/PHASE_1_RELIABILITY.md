@@ -1,11 +1,16 @@
 # Phase 1 Reliability Runbook
 
-Last updated: July 21, 2026
+Last updated: July 24, 2026
 
 ## Status
 
-Implementation complete. The first production backup/restore drill and external uptime/alert
-destinations remain operator setup tasks because they require separate infrastructure credentials.
+Implementation complete. Scheduled external readiness monitoring and optional Sentry reporting are
+now included in code. The first production backup/restore drill, failure-alert destination,
+Sentry DSNs, GitHub notification confirmation, and live access-revocation exercise remain operator
+acceptance tasks.
+
+Credential rotation, MFA rollout, and secret-security remediation are excluded from this F1
+execution by owner direction. They remain known risks and are not represented as complete.
 
 ## Verification Record
 
@@ -14,13 +19,20 @@ destinations remain operator setup tasks because they require separate infrastru
 | July 21, 2026 | Live deployment smoke test | Passed | API `/health`, API `/ready`, website, cash-offer form, privacy policy, and terms returned successfully |
 | July 21, 2026 | Live readiness | Passed | Database reported `ready`; worker heartbeat reported `healthy` |
 | July 21, 2026 | Automated access-revocation coverage | Passed previously | The unchanged API test suite covers deactivated local and mapped Clerk users; the live non-owner exercise remains pending |
+| July 24, 2026 | Live branded deployment smoke test | Passed | API `/health` and `/ready`, branded website, cash-offer form, privacy policy, and terms returned successfully |
+| July 24, 2026 | Live Render fallback smoke test | Passed | API `/health` and `/ready` plus all required Render web routes returned successfully |
+| July 24, 2026 | Synthetic isolated restore drill | Passed | PostgreSQL custom backup restored into `stonegate_f1_restore_test`; migration marker, organization query, and lead query succeeded |
+| July 24, 2026 | Monitoring build verification | Passed | Next.js 16.2.11 production build, ESLint, focused Python Ruff checks, shell syntax, YAML parsing, and controlled alert delivery passed |
 
 Operator-pending items:
 
 - Production backup and isolated restore verification require the production database URL and a
   separately provisioned restore target.
 - Failure alert delivery requires an owner-controlled webhook destination on `oakwell-worker`.
-- External uptime monitoring requires an owner-controlled monitoring account pointed at `/ready`.
+- The scheduled GitHub readiness workflow begins after this change reaches `main`; the repository
+  owner must confirm failed-Action notifications are enabled.
+- Sentry reporting requires one web project DSN and one Python project DSN, or one shared project
+  DSN if Stonegate prefers combined server reporting.
 - Live access revocation requires a disposable non-owner Clerk user and an authenticated test
   session.
 
@@ -57,8 +69,29 @@ curl --fail https://oakwell-api.onrender.com/ready
 
 Set `OPERATIONS_ALERT_WEBHOOK_URL` only on `oakwell-worker`. The worker sends a minimal JSON event
 at `OPERATIONS_ALERT_AFTER_FAILURES` and subsequent threshold multiples. Raw exception messages are
-not included. Point an external uptime monitor at `/ready`; `/health` proves only that the web
-process is running.
+not included. Exercise the destination without causing a worker failure:
+
+```bash
+OPERATIONS_ALERT_WEBHOOK_URL='https://owner-controlled-endpoint.example' npm run ops:alert-test
+```
+
+The scheduled `.github/workflows/production-readiness.yml` workflow checks `/ready` and the public
+pages every 15 minutes. GitHub Actions failure notifications must be enabled for the repository
+owner. `/health` proves only that the web process is running.
+
+## Error Monitoring
+
+Sentry is the selected production error-monitoring provider. Reporting is disabled when no DSN is
+configured. The integration covers:
+
+- Next.js browser, server, edge, request, and global-render errors.
+- FastAPI unhandled errors.
+- Worker operation exceptions.
+- Environment, release, and service tags.
+
+Default PII collection, request-body capture, and Python local-variable capture are disabled.
+Configure `SENTRY_DSN` on all three services and `NEXT_PUBLIC_SENTRY_DSN` on `oakwell-web`.
+Use `SENTRY_ENVIRONMENT=production` and start with `SENTRY_TRACES_SAMPLE_RATE=0.05`.
 
 ## Backup
 
@@ -113,9 +146,19 @@ reactivate only if the account remains authorized.
 
 - Migration `0024_operational_reliability` is deployed.
 - `/ready` reports database and worker as ready.
-- Failure alert webhook has been exercised with a controlled test endpoint.
-- External uptime monitoring watches `/ready`.
-- An isolated restore drill has succeeded and been recorded.
+- Failure alert webhook has been exercised with a controlled owner endpoint. **Operator pending.**
+- Scheduled external uptime monitoring watches `/ready`. **Code complete; push and notification
+  confirmation pending.**
+- A synthetic isolated restore drill has succeeded. **Production-backup drill pending.**
 - Deployment smoke test passes.
-- User deactivation has been verified.
+- User deactivation has automated coverage. **Live disposable-user exercise pending.**
 - Local demo seed and simulated SMS/email have been exercised.
+- Sentry receives controlled web, API, and worker test errors. **DSN and provider acceptance
+  pending.**
+
+## Residual Dependency Finding
+
+Next.js was updated from 16.2.10 to the stable 16.2.11 patch release. The production dependency
+audit still reports upstream `postcss` and `sharp` advisories for which npm provides no stable fix.
+Do not force a preview Next.js release into production solely to suppress the report. Recheck the
+audit when the next stable Next.js patch is available.

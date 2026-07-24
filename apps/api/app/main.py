@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
+from app.core.observability import initialize_error_monitoring
 from app.routers import (
     ai,
     approvals,
@@ -32,6 +33,7 @@ from app.routers import (
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    initialize_error_monitoring(settings, service_name="api")
     app = FastAPI(
         title="Real Estate Wholesaling Operating System API",
         version="0.1.0",

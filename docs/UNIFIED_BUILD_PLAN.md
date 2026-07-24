@@ -68,7 +68,7 @@ Required modules:
 | Underwriting and offer governance | Operational | Comp review, versions, negotiation authority, and approvals are built; real-deal calibration continues |
 | Transactions | Controlled manual workflow operational | Redacted simulation, object storage selection, and e-signature adapter remain |
 | Buyers/dispositions | Controlled manual workflow operational | Redacted simulation and provider campaign delivery remain |
-| Finance | Reconciliation and compensation operational | QuickBooks sync, payment lifecycle, and forecasting remain |
+| Finance | Reconciliation and compensation operational | Internal double-entry ledger, bank reconciliation, payment lifecycle, financial statements, CPA acceptance, and forecasting remain |
 | Marketing | Measurement foundation built | Google/Meta outcome delivery, retry, and paid-channel optimization remain |
 | AI control | Governed control plane built | Redacted eval datasets, production model adapters, pilots, and measured capability promotion remain |
 
@@ -143,7 +143,7 @@ Integrate:
 - OpenAI for model and transcription calls.
 - An e-signature provider.
 - S3-compatible object storage.
-- QuickBooks Online or controlled accounting export.
+- Stonegate's internal accounting ledger with controlled CPA and tax-preparation exports.
 - Google Ads and Meta conversion APIs.
 - Error monitoring and uptime monitoring.
 

@@ -137,7 +137,7 @@ after prompts, tools, schemas, retrieval, and representative evals have plateaue
 | Transaction Coordinator | Detect missing documents, deadlines, and closing risks | Transaction records, object storage, e-signature, operational email | Low-risk internal tasks |
 | Disposition | Match buyers and draft approved deal packages and outreach | Buyer CRM, deal facts, documents, approved channels | Draft campaign; human selects buyer |
 | Buyer Relationship | Maintain preferences, reliability, follow-up, and stale POF alerts | Buyer CRM, inbox, proof-of-funds evidence | Low-risk internal tasks |
-| Finance And Commission | Reconcile deal economics and draft payouts and exports | Funded records, plan versions, QuickBooks adapter | Draft reconciliation only |
+| Finance And Accounting | Reconcile deal economics, draft payouts and balanced journals, match bank activity, and explain statements | Funded records, plan versions, Stonegate Accounting Ledger, bank statements, retained evidence | Draft and explain only; no posting, closing, payment, or tax authority |
 | Marketing Intelligence | Analyze source quality, funnel loss, and budget tests | Attribution, costs, Google/Meta events, outcomes | Internal recommendation |
 | Compliance | Preflight consent, suppression, contact, retention, and policy risk | Consent, suppression, provider events, approved policy | Block or escalate; never waive |
 | Executive Operations | Summarize bottlenecks, risk, cash, staffing, and decisions | Aggregated organization metrics | Internal brief only |

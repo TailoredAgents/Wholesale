@@ -46,6 +46,7 @@ plan's company-margin target requires a separate, explicit owner override.
 ## Deferred Adapters
 
 - Buyer email/SMS delivery after provider activation and compliance acceptance testing.
-- QuickBooks Online after the approved CSV workflow is proven on funded deals.
+- The internal Stonegate Accounting Ledger after the approved CSV workflow is proven on funded
+  deals, as specified by `FINISHING_ROADMAP.md` F6.
 - Object storage after evidence volume warrants moving binary files out of PostgreSQL.
 - AI disposition modes only after Phase 10 evaluations demonstrate safe, profitable performance.

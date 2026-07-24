@@ -79,6 +79,17 @@ class Settings(BaseSettings):
         le=100,
         validation_alias="OPERATIONS_ALERT_AFTER_FAILURES",
     )
+    sentry_dsn: str | None = Field(default=None, validation_alias="SENTRY_DSN")
+    sentry_environment: str | None = Field(
+        default=None,
+        validation_alias="SENTRY_ENVIRONMENT",
+    )
+    sentry_traces_sample_rate: float = Field(
+        default=0.05,
+        ge=0,
+        le=1,
+        validation_alias="SENTRY_TRACES_SAMPLE_RATE",
+    )
     ai_enabled: bool = Field(default=True, validation_alias="AI_ENABLED")
     openai_api_key: str | None = Field(default=None, validation_alias="OPENAI_API_KEY")
     openai_base_url: str = Field(

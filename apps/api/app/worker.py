@@ -3,11 +3,13 @@ import threading
 from collections.abc import Callable
 from uuid import UUID
 
+import sentry_sdk
 import structlog
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.core.database import SessionLocal
+from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.call_intelligence import process_next_call_transcript
@@ -76,6 +78,7 @@ def run_worker(stop_event: threading.Event) -> None:
                     )
             except Exception as exc:
                 had_error = True
+                sentry_sdk.capture_exception(exc)
                 logger.exception(
                     "communications_worker_operation_failed",
                     operation=operation_name,
@@ -131,6 +134,7 @@ def run_worker(stop_event: threading.Event) -> None:
 
 
 def main() -> None:
+    initialize_error_monitoring(get_settings(), service_name="worker")
     stop_event = threading.Event()
     install_shutdown_handlers(stop_event)
     run_worker(stop_event)

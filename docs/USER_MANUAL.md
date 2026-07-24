@@ -34,7 +34,7 @@ The following depend on final provider acceptance or later integrations:
 - Call recording until disclosure and retention policy are approved.
 - Resend operational email migration and production acceptance.
 - Live buyer campaign delivery.
-- E-signature, private object storage, and direct accounting synchronization.
+- E-signature, private object storage, and the complete internal Stonegate Accounting Ledger.
 - Autonomous AI external delivery.
 
 When a provider is unavailable, Stonegate records and manual workflows still operate. Do not
@@ -712,7 +712,10 @@ Only funded, reconciled proceeds should create earned commissions. Keep projecte
 approved, payable, paid, reversed, and disputed states distinct.
 
 The Finance Copilot can explain exceptions and propose internal actions. It cannot approve
-commissions, post accounting entries, move money, or change compensation policy.
+commissions, post accounting entries, close accounting periods, move money, make final tax
+classifications, or change compensation policy. When F6 is complete, this same Copilot will also
+draft balanced journals, propose bank matches, explain financial statements, and prepare month-end
+review work without gaining posting or payment authority.
 
 ## 16. Marketing
 

@@ -341,8 +341,9 @@ Remaining:
 
 - Connect approved disposition campaigns to email/SMS only after provider activation and final
   recipient/compliance acceptance testing.
-- Add payment-state progression and QuickBooks Online behind the accounting adapter if funded-deal
-  volume justifies it; the approved CSV is the current controlled handoff.
+- Extend the current deal-finance records into the internal Stonegate Accounting Ledger under
+  `FINISHING_ROADMAP.md` F6; the approved CSV remains the controlled handoff until the ledger and
+  CPA review are complete.
 - Move proof and package files to object storage when volume warrants it.
 - Human-led and AI-assisted disposition performance comparison without retroactive compensation
   changes.
@@ -428,5 +429,6 @@ evidence requirements, compliance controls, or financial approvals.
 
 - Fully autonomous seller negotiation.
 - AI authority to approve offers, contracts, buyers, payments, or compensation.
-- A custom carrier, email-delivery network, e-signature system, or accounting ledger.
+- A custom carrier, email-delivery network, e-signature cryptography platform, banking rail,
+  payroll processor, or tax-filing service.
 - Cold SMS to purchased, scraped, transferred, or non-consented leads.

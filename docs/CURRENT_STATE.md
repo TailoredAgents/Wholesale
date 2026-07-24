@@ -108,6 +108,10 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
 - Append-only activity and audit records for material operations.
 - Worker heartbeat and readiness monitoring with durable, grouped failure records.
 - Threshold-based failure webhook alerts that omit raw exception details.
+- Scheduled GitHub production-readiness monitoring for API, worker heartbeat, and required public
+  pages.
+- Optional Sentry reporting for web, API, and worker errors with default PII, request-body, and
+  Python local-variable capture disabled.
 - Guarded database backup/restore tooling and read-only deployment smoke tests.
 - Deterministic synthetic demo users, leads, appointments, underwriting, transactions, buyers,
   communications, and a simulated shared mailbox.
@@ -317,6 +321,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
 | Resend operational email | Provider selected; migration pending | Replace the disabled Gmail adapter with Resend sending, receiving, signed webhooks, aliases, threading, attachments, and recovery |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
+| Production monitoring | Code complete; provider acceptance pending | Push the scheduled readiness workflow, enable GitHub failed-Action notifications, configure Sentry DSNs, and send controlled test errors |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 
@@ -335,7 +340,10 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   storage, e-signature, and live closing acceptance remain incomplete.
 - External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
   is complete; buyer matching and human approval are operational.
-- QuickBooks/Xero synchronization is not implemented.
+- Stonegate's Finance area records deal economics, revenue, deductions, marketing spend,
+  compensation, payouts, and funded-deal reconciliation. The internal double-entry accounting
+  ledger, chart of accounts, bank reconciliation, period close, complete financial statements,
+  and CPA acceptance are not implemented.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or
@@ -371,28 +379,36 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
 - A production backup has not yet been restored into an isolated verification database; the
-  guarded drill is implemented and remains an operator checkpoint.
+  guarded drill is implemented and remains an operator checkpoint. A synthetic isolated local
+  backup/restore drill passed on July 24, 2026.
+- Next.js is on stable patch 16.2.11. The production npm audit still reports upstream `postcss`
+  and `sharp` advisories with no stable fix; recheck on the next stable Next.js patch.
+- Credential rotation, MFA rollout, and secret-security remediation were explicitly excluded from
+  the current F1 execution by owner direction and remain known risks.
 
 ## Next Checkpoint
 
 While A2P approval is pending:
 
-1. Run the first isolated database restore drill from `docs/PHASE_1_RELIABILITY.md`.
-2. Configure an owner-controlled operations alert webhook and external uptime check for `/ready`.
-3. Record the production access-revocation check and close the Phase 1 exit criteria.
-4. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
-5. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
+1. Push and manually run the scheduled production-readiness workflow, then confirm GitHub failed
+   workflow notifications.
+2. Configure Sentry DSNs and send controlled web, API, and worker test errors.
+3. Run the first production-backup isolated restore drill from `docs/PHASE_1_RELIABILITY.md`.
+4. Configure an owner-controlled operations alert webhook and exercise `npm run ops:alert-test`.
+5. Record the production access-revocation check and close the Phase 1 reliability criteria.
+6. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
+7. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-6. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
+8. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
    activate and separately measure the AI4 and AI5 draft-only pilots using
    `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
-7. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
+9. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
    provider tracks in `PHASE_AI7_TRANSACTION_COPILOT.md` and
    `PHASE_AI8_DISPOSITION_COPILOT.md` while earlier copilots remain supervised.
-8. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
+10. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
    track in `PHASE_AI9_MANAGEMENT_COPILOTS.md`.
-9. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
+11. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
    keep external delivery locked until the corresponding provider, consent, template, evaluation,
    and canary checkpoints pass.
-10. Resume the parallel integration track after A2P approval without blocking internal
+12. Resume the parallel integration track after A2P approval without blocking internal
     development.

@@ -14,6 +14,18 @@ services:
         sync: false
       - key: CLERK_SECRET_KEY
         sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: NEXT_PUBLIC_SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: NEXT_PUBLIC_SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
+      - key: NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
       - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
         value: /sign-in
       - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
@@ -60,6 +72,12 @@ services:
         value: true
       - key: WORKER_STALE_AFTER_SECONDS
         value: 120
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
       - key: AI_ENABLED
         value: true
       - key: OPENAI_API_KEY
@@ -227,6 +245,12 @@ services:
         sync: false
       - key: OPERATIONS_ALERT_AFTER_FAILURES
         value: 3
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.05
       - key: AI_ENABLED
         value: true
       - key: OPENAI_API_KEY

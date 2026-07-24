@@ -426,8 +426,12 @@ Goal: Give management dependable financial, growth, and operating intelligence.
 
 Finance Copilot:
 
-- Draft funded-deal reconciliation, margin, commission, reserve, and accounting entries.
-- Compare closing statements, transaction records, compensation plans, and provider ledger entries.
+- Draft funded-deal reconciliation, margin, commission, reserve, and balanced Stonegate journal
+  entries.
+- Compare closing statements, transaction records, compensation plans, bank statements, journal
+  lines, and retained supporting evidence.
+- Suggest account classifications and transaction matches; explain financial-statement and
+  period-over-period variances.
 - Flag unexplained differences and missing evidence.
 
 Marketing Copilot:
@@ -447,7 +451,8 @@ Executive Copilot:
 APIs required:
 
 - OpenAI.
-- QuickBooks Online or a controlled accounting import/export.
+- Stonegate Accounting Ledger, bank-statement imports or an approved read-only bank-data adapter,
+  and controlled CPA or tax-preparation exports.
 - Google Ads and Meta conversion adapters.
 - Stonegate finance, marketing, and operating records.
 
@@ -456,8 +461,8 @@ Exit criteria:
 - Finance drafts reconcile against funded examples with zero unexplained material difference.
 - Marketing conclusions cite retained costs, attribution, and outcomes.
 - Executive briefs distinguish facts, estimates, and recommendations.
-- Payments, commissions, budgets, accounting finalization, and published ad changes remain
-  human-approved.
+- Payments, commissions, budgets, journal posting, period close, accounting policy, tax
+  classification, and published ad changes remain human-approved.
 
 ## Phase AI10: Controlled External Automation And Optimization
 

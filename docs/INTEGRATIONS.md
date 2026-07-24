@@ -2,7 +2,8 @@
 
 Last updated: July 24, 2026
 
-All providers are adapters. PostgreSQL remains the business source of truth.
+All external providers are adapters. PostgreSQL remains the platform database. The internal
+Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 
 ## Status
 
@@ -20,10 +21,10 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
 | Object storage | Recordings, photos, contracts, and persistent files | Not selected | Required before AI document automation |
 | E-signature | Contract execution and event evidence | Not selected | Required before AI transaction automation |
-| QuickBooks Online | Accounting reconciliation | Not implemented | Planned for finance intelligence; final entries stay human-approved |
+| Stonegate Accounting Ledger | Internal bookkeeping and financial statements | Deal-finance foundation only | Build the double-entry ledger, bank reconciliation, close, reporting, and CPA acceptance in F6 |
 | Google Ads / Meta | Offline conversion delivery | Foundation records only | Consent, hashing, provider adapters, and retries remain |
 | Address and routes | Address quality and field dispatch | Not selected | Optional when operating data justifies the cost |
-| Error monitoring | Errors, traces, and production alerts | Not selected | Select before production AI pilots; Sentry is the current recommendation |
+| Sentry | Web, API, and worker error reporting and traces | Implemented; disabled without DSNs | Create projects, configure Render DSNs, send controlled test errors, and approve alert routing |
 
 ## Shared Controls
 
@@ -36,6 +37,17 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 - Handle retries, stale cursors, rate limits, and provider outages.
 - Provide a disabled or test state before production activation.
 - Write audit events for material provider-backed actions.
+
+## Production Monitoring
+
+Sentry is the selected error-monitoring provider. The web, API, and worker integrations are
+disabled when their DSNs are absent. Default PII, request-body capture, and Python local-variable
+capture are disabled. Start with a 5% trace sample and route production alerts to an
+owner-controlled destination.
+
+The scheduled GitHub Actions production-readiness workflow checks API health, database and worker
+readiness, and required public pages every 15 minutes. It supplements Sentry and worker failure
+alerts; it does not replace either one.
 
 ## DNC Screening
 
@@ -146,11 +158,17 @@ cost.
   public URLs.
 - Add e-signature through an adapter that retains envelope, recipient, document, and webhook-event
   identifiers. Provider completion cannot bypass Stonegate's contract and funding gates.
-- Connect QuickBooks Online through OAuth after internal reconciliation is stable. Stonegate
-  prepares reviewed entries and retains provider IDs; QuickBooks remains the accounting ledger.
+- Extend Stonegate's existing Finance records into the internal Stonegate Accounting Ledger. Add a
+  versioned chart of accounts, balanced and immutable posted journals, accounting periods, bank
+  reconciliation, vendors, supporting evidence, financial statements, and CPA exports.
+- Existing lead, transaction, reconciliation, compensation, payout, and marketing records remain
+  operational source evidence. The ledger references those records and must never duplicate their
+  business workflow.
+- A read-only bank-data provider may be added later behind an adapter. The initial accounting
+  release imports statements and does not move money, run payroll, file taxes, or submit payments.
 - AI may classify files, extract proposed fields, and identify mismatches. It cannot sign, alter
-  approved legal language, release agreements, mark funding complete, or post final accounting
-  changes without human authority.
+  approved legal language, release agreements, mark funding complete, post journals, close
+  periods, move money, or make final tax classifications.
 
 ## Marketing Measurement
 
@@ -180,10 +198,11 @@ mailbox reputation with day-to-day seller and closing mail.
 ## Recommended API Sequence
 
 1. Finish dedicated Twilio SMS, Twilio Voice, recording policy, and the Resend migration.
-2. Select error monitoring and private object storage.
+2. Complete Sentry provider acceptance and select private object storage.
 3. Complete OpenAI evaluation datasets, model routing, and the governed tool gateway.
 4. Add e-signature before transaction-document automation.
-5. Add QuickBooks after funded-deal reconciliation is verified.
+5. Build the internal Stonegate Accounting Ledger after funded-deal reconciliation is verified and
+   have a CPA approve its policies, opening balances, reports, and month-end process.
 6. Add Google and Meta offline conversion delivery after attribution review.
 7. Add a second property-data source, address validation, or live routes only when operating
    evidence shows the current solution is insufficient.
@@ -198,7 +217,10 @@ mailbox reputation with day-to-day seller and closing mail.
 - [Resend sending API](https://resend.com/docs/api-reference/emails/send-email)
 - [Resend Receiving](https://resend.com/docs/dashboard/receiving/introduction)
 - [Resend webhook behavior](https://resend.com/docs/webhooks/introduction)
-- [QuickBooks Online webhooks](https://developer.intuit.com/app/developer/qbo/docs/develop/webhooks)
+- [IRS business recordkeeping](https://www.irs.gov/businesses/small-businesses-self-employed/recordkeeping)
+- [IRS Publication 583](https://www.irs.gov/publications/p583)
+- [Sentry Python SDK](https://getsentry.github.io/sentry-python/)
+- [Sentry Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/)
 - [Docusign Connect webhooks](https://developers.docusign.com/platform/webhooks/connect/)
 - [Google Ads offline conversions](https://developers.google.com/google-ads/api/docs/conversions/upload-offline)
 - [FTC Telemarketing Sales Rule guidance](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)

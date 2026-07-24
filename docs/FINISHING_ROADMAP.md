@@ -9,11 +9,29 @@ system to a production-proven business platform.
 
 The original product phases remain the record of what was built. This roadmap covers what is
 still required: production verification, company configuration, provider activation, real-world
-validation, and controlled AI pilots.
+validation, internal accounting, and controlled AI pilots.
 
 `CURRENT_STATE.md` remains the source of truth for what exists today. Do not mark a finishing phase
 complete merely because code exists. The exit criteria must be demonstrated in production or a
 controlled production-like test.
+
+## Scope Rules
+
+This roadmap extends the Stonegate platform already in production. It does not authorize parallel
+versions of the CRM, Inbox, calendar, buyer database, Finance area, or AI control plane.
+
+- **Acceptance** means proving and configuring existing code for real operations.
+- **Extension** means adding records and workflows to an existing Stonegate module.
+- **Integration** means connecting a provider through an adapter while Stonegate retains its own
+  normalized records, permissions, history, and audit trail.
+- **New subsystem** means a genuinely new internal capability, such as the double-entry accounting
+  ledger in F6. It must reference existing source records instead of copying or replacing them.
+- PostgreSQL remains the platform database. Existing lead, deal, reconciliation, compensation,
+  and marketing records remain the operational evidence; posted journal entries become the
+  accounting authority for financial statements.
+- Every generated or provider-backed record requires source references, organization scope,
+  permissions, audit history, and duplicate protection.
+- The existing governed AI runtime serves every Copilot. No phase creates a second AI system.
 
 ## Current Boundary
 
@@ -32,7 +50,8 @@ Still required:
 - Resend operational email migration.
 - Dedicated Twilio SMS and Voice acceptance.
 - Outreach, recording, and market compliance approval.
-- Object storage, e-signature, buyer delivery, accounting, and advertising integrations.
+- Object storage, e-signature, buyer delivery, the internal accounting ledger, and advertising
+  integrations.
 - Underwriting calibration using verified outcomes.
 - Redacted AI model replay and measured supervised pilots.
 
@@ -55,30 +74,34 @@ sender reputation, or consent assumptions.
 
 ## Phase Summary
 
-| Phase | Name | Main result |
-| --- | --- | --- |
-| F1 | Production Safety Closeout | Recoverable, monitored, access-controlled production |
-| F2 | Company Configuration And Role Acceptance | Real staff can execute their jobs correctly |
-| F3 | Compliance And Operating Policy | Legal, outreach, recording, and retention rules are approved |
-| F4 | Documents, Contracts, And Closing | Secure files and e-signature support live transactions |
-| F5 | Buyers And Disposition Readiness | Buyer data, packages, offers, and selection are production-ready |
-| F6 | Finance And Marketing Connections | Closing economics and attribution reach external ledgers |
-| F7 | Underwriting Calibration And Market Proof | Offer guidance is measured against verified outcomes |
-| F8 | Resend Operational Email | Two-way email works inside the shared Inbox |
-| F9 | Twilio Communications Acceptance | Dedicated SMS and Voice work end to end |
-| F10 | AI Production Pilots And Controlled Automation | Copilots are proven before narrow automation |
+| Phase | Name | Build type | Main result |
+| --- | --- | --- | --- |
+| F1 | Production Safety Closeout | Acceptance and upgrade | Recoverable, monitored, access-controlled production |
+| F2 | Company Configuration And Role Acceptance | Configuration and acceptance | Real staff can execute their jobs correctly |
+| F3 | Compliance And Operating Policy | Policy and enforcement upgrade | Legal, outreach, recording, and retention rules are approved |
+| F4 | Documents, Contracts, And Closing | Existing workflow extension plus integrations | Secure files and e-signature support live transactions |
+| F5 | Buyers And Disposition Readiness | Existing module extension plus buyer-data integration | Buyer data, packages, offers, and selection are production-ready |
+| F6 | Stonegate Accounting And Marketing Measurement | New accounting subsystem plus existing-module extensions | Complete internal books and audited advertising attribution |
+| F7 | Underwriting Calibration And Market Proof | Existing workflow calibration | Offer guidance is measured against verified outcomes |
+| F8 | Resend Operational Email | Existing Inbox provider replacement | Two-way email works inside the shared Inbox |
+| F9 | Twilio Communications Acceptance | Existing communications activation | Dedicated SMS and Voice work end to end |
+| F10 | AI Production Pilots And Controlled Automation | Existing AI-system validation and promotion | Copilots are proven before narrow automation |
 
 ## Phase F1: Production Safety Closeout
 
 Goal: Make production observable, recoverable, and safe before broad employee use.
 
+Owner-directed scope exception:
+
+- Credential rotation, MFA rollout, and secret-security remediation are intentionally excluded
+  from the current F1 execution. They remain known risks and are not implied complete when F1
+  reliability acceptance is complete.
+
 Work:
 
-- Rotate every credential that has been exposed outside its intended secret store.
-- Require MFA for Owner, Administrator, Finance, and other privileged accounts.
-- Configure an external uptime check for `/ready`.
+- Activate the scheduled GitHub production-readiness check for `/ready` and required public pages.
 - Configure an owner-controlled failure alert destination.
-- Select and connect production error monitoring.
+- Connect the implemented Sentry error monitoring for the web, API, and worker.
 - Run and record an isolated database restore drill.
 - Run and record employee access-revocation and record-reassignment checks.
 - Verify worker heartbeat, retries, and failure visibility.
@@ -92,7 +115,7 @@ Exit criteria:
 - A deactivated employee immediately loses access.
 - The branded website, OS, API, worker, database, and Key Value service pass the production
   checklist.
-- No known exposed credential remains active.
+- Web, API, and worker errors reach the approved Sentry projects without default PII collection.
 
 ## Phase F2: Company Configuration And Role Acceptance
 
@@ -190,26 +213,118 @@ Exit criteria:
 - A funded simulation reconciles buyer outcome, revenue, deductions, commissions, and company
   margin.
 
-## Phase F6: Finance And Marketing Connections
+## Phase F6: Stonegate Accounting And Marketing Measurement
 
-Goal: Move approved business outcomes to the accounting and advertising systems without creating
-another source of truth.
+Goal: Extend the existing Finance area into Stonegate's internal bookkeeping system and connect
+approved funnel outcomes to advertising providers without duplicating operational records.
 
-Work:
+Starting point:
 
-- Prove the existing funded-deal reconciliation with real or redacted closings.
-- Add payment-state progression.
-- Connect QuickBooks Online through an approval-gated adapter.
-- Reconcile exported and provider-posted accounting entries.
+- Stonegate already records revenue, deal deductions, marketing spend, compensation rules,
+  compensation calculations, role credits, deal payouts, funded-deal reconciliation, company
+  margin, owner approvals, audit events, and accounting CSV output.
+- The existing Finance records are operational deal economics. They are not yet a complete
+  accounting ledger because there is no chart of accounts, balanced journal, accounting-period
+  close, bank reconciliation, vendor ledger, or complete financial-statement package.
+- The existing Finance Copilot already analyzes finance exceptions in draft-only mode. F6 extends
+  that same Copilot; it does not add another agent framework.
+
+### F6A: Accounting Policy And Account Structure
+
+- Have Stonegate's CPA approve the legal entity, tax year, cash or accrual method, opening-balance
+  date, retention policy, and treatment of assignment fees, double closes, earnest money, closing
+  costs, commissions, contractor labor, software, advertising, owner contributions, and
+  distributions.
+- Add a versioned chart of accounts with asset, liability, equity, revenue, cost, and expense
+  account types.
+- Add organization-scoped accounting permissions for preparation, approval, posting, period close,
+  reporting, and CPA read-only access.
+
+### F6B: Double-Entry Ledger And Posting Controls
+
+- Add journal entries and journal lines that require total debits to equal total credits.
+- Use `draft`, `approved`, `posted`, and `reversed` states. Posted entries are immutable and can
+  only be corrected through linked reversing and replacement entries.
+- Add source type, source ID, posting-rule version, evidence references, preparer, approver,
+  timestamps, and idempotency keys to prevent duplicate posting.
+- Add accounting periods with open, review, closed, and locked states. Reopening a closed period
+  requires explicit Owner or Finance authority and an audit reason.
+- Store money in integer cents and require currency consistency for every journal.
+
+### F6C: Operational Posting Rules
+
+- Prove the existing funded-deal reconciliation with real or redacted closing statements before
+  allowing it to draft accounting entries.
+- Draft balanced entries from approved funded-deal reconciliations without copying the lead,
+  transaction, payout, or compensation record.
+- Draft entries for collected assignment revenue, double-close economics, deal deductions,
+  approved commissions, marketing spend, software, contractor labor, owner activity, and other
+  approved business expenses.
+- Add payment-state progression for receivables, payables, commissions, reimbursements, and
+  distributions.
+- Require human review of every new posting rule and every material exception.
+
+### F6D: Banking, Vendors, And Evidence
+
+- Add bank and credit-card accounts, statement imports, normalized transactions, matching,
+  reconciliation sessions, statement balances, and unexplained-difference tracking.
+- Start with secure CSV/OFX statement import. Add a read-only bank-feed adapter later only if
+  operating volume justifies its cost and support burden.
+- Add vendors and contractors, bills, receipts, closing statements, payment evidence, W-9
+  collection status, and reportable-payment tracking.
+- Store sensitive tax documents in the private object-storage system from F4 with restricted
+  access; do not place tax identifiers in ordinary notes or logs.
+- Do not initiate bank transfers, payroll, tax payments, or card payments in the initial ledger
+  release.
+
+### F6E: Reports, Close, And CPA Handoff
+
+- Add Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, accounts
+  receivable, accounts payable, commission payable, vendor-payment, and deal-profitability reports.
+- Make every report drillable to journal lines, source records, approvals, and supporting
+  documents.
+- Add opening balances, month-end checklist, reconciliation signoff, adjusting entries, period
+  close, year-end lock, and a complete CPA export package.
+- Keep optional generic exports so Stonegate can work with tax preparation or outside accounting
+  tools without making QuickBooks, Xero, or another ledger the source of truth.
+
+### F6F: Finance And Accounting Copilot
+
+- Extend the existing Finance Copilot to suggest account classifications, draft balanced journal
+  entries, propose transaction matches, identify duplicate or missing records, explain variances,
+  and prepare month-end and CPA review checklists.
+- Keep the Copilot embedded in the existing `/os/finance` workspace and powered by the existing AI
+  control plane, model runner, review records, budgets, and shutdown controls.
+- Require citations to the exact source records, journal lines, statements, and evidence used.
+- Measure classification accuracy, reconciliation accuracy, unsupported claims, correction rate,
+  latency, cost, and time saved through the existing AI evaluation and review system.
+- The Copilot cannot approve or post journals, change accounting policy, close or reopen periods,
+  approve compensation, classify taxes finally, move money, file returns, or submit regulatory
+  forms.
+
+### F6G: Marketing Measurement
+
 - Define consent and attribution rules for downstream advertising events.
 - Add Google Ads and Meta conversion delivery with hashing, retries, idempotency, and audit events.
-- Keep budgets, campaigns, payments, compensation, and final accounting human-approved.
+- Keep budgets, campaigns, payments, compensation, accounting finalization, and published
+  advertising changes human-approved.
 
 Exit criteria:
 
-- One approved funded deal reconciles with QuickBooks without duplicate posting.
-- Qualified lead, appointment, contract, and funded outcomes can be delivered and audited.
-- Provider failures are retryable and do not alter Stonegate's source records.
+- The CPA has approved the accounting policy, opening balances, chart of accounts, posting rules,
+  month-end process, and report package.
+- Every posted journal is balanced, source-linked, auditable, and immutable.
+- One approved funded deal produces exactly one reviewed accounting result without duplicate
+  revenue, deduction, commission, or payout posting.
+- One bank statement reconciles to zero unexplained difference, with exceptions visibly retained.
+- Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, and General Ledger agree for the same
+  closed period.
+- The Finance and Accounting Copilot passes its evaluation set and remains unable to post, close,
+  pay, or file.
+- Qualified lead, appointment, contract, and funded outcomes can be delivered to approved
+  advertising providers and audited.
+- Provider failures are retryable and do not alter Stonegate's operational or accounting source
+  records.
 
 ## Phase F7: Underwriting Calibration And Market Proof
 
@@ -331,7 +446,8 @@ Exit criteria:
 - Complete F3 policy work before activating any communication provider.
 - F4 must pass before document-dependent Transaction Copilot automation.
 - F5 prepares buyer operations; live email delivery waits for F8 and SMS delivery waits for F9.
-- F6 requires stable funded-deal reconciliation.
+- F6 requires stable funded-deal reconciliation and F4 private document storage before retaining
+  sensitive accounting evidence. F6A-F6C can begin before live bank or advertising providers.
 - F7 begins as soon as verified outcomes exist and continues permanently.
 - F8 and F9 intentionally follow the internal operating, compliance, document, buyer, finance, and
   underwriting work.
@@ -347,6 +463,7 @@ Stonegate is operationally finished for the first Georgia market when:
 4. Outreach and recording policies are approved and enforced.
 5. Contracts, documents, signatures, buyers, funding, and reconciliation have passed end-to-end
    simulations.
-6. Underwriting performance is measured against verified outcomes.
-7. Copilots have passed supervised pilots before receiving any increased authority.
-8. The Owner has a documented daily, weekly, monthly, and emergency operating process.
+6. Stonegate's internal books have passed a CPA-reviewed month close and bank reconciliation.
+7. Underwriting performance is measured against verified outcomes.
+8. Copilots have passed supervised pilots before receiving any increased authority.
+9. The Owner has a documented daily, weekly, monthly, and emergency operating process.
