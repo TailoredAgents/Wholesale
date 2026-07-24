@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -37,11 +38,14 @@ def test_runtime_lead_context_is_field_scoped_by_capability() -> None:
 
     lead_scope = _scope_lead_context("lead.next_action", source)
     underwriting_scope = _scope_lead_context("underwriting.analyze", source)
+    lead_seller = cast(dict[str, object], lead_scope["seller"])
+    lead_property = cast(dict[str, object], lead_scope["property"])
+    underwriting_property = cast(dict[str, object], underwriting_scope["property"])
 
-    assert "contact_methods" not in lead_scope["seller"]
+    assert "contact_methods" not in lead_seller
     assert "latest_form_submission" not in lead_scope
-    assert "street_address" not in lead_scope["property"]
-    assert underwriting_scope["property"]["street_address"] == "100 Main Street"
+    assert "street_address" not in lead_property
+    assert underwriting_property["street_address"] == "100 Main Street"
 
 
 def seed_owner(db: Session) -> None:
@@ -53,7 +57,7 @@ def seed_owner(db: Session) -> None:
     )
 
 
-def install_ai_foundation(client: TestClient) -> dict[str, object]:
+def install_ai_foundation(client: TestClient) -> dict[str, Any]:
     assert (
         client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code == 201
     )
@@ -68,7 +72,7 @@ def install_ai_foundation(client: TestClient) -> dict[str, object]:
     )
     response = client.post("/api/v1/ai/runtime/install", headers=HEADERS)
     assert response.status_code == 201
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
 def test_runtime_is_disabled_by_default_and_shutdown_is_global(
@@ -189,7 +193,9 @@ def test_production_runtime_is_structured_scoped_redacted_and_idempotent(
         def __init__(self, **_: object) -> None:
             pass
 
-        def create_structured_response(self, **kwargs: object):
+        def create_structured_response(
+            self, **kwargs: object
+        ) -> tuple[dict[str, Any], dict[str, int]]:
             schema = kwargs["json_schema"]
             assert isinstance(schema, dict)
             assert schema["additionalProperties"] is False

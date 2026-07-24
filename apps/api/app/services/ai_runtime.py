@@ -698,7 +698,7 @@ SENSITIVE_PATTERNS = (
 
 def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
     settings = get_settings()
-    runtime = _runtime_policy(db, principal)
+    runtime = _require_runtime_policy(db, principal)
     created_runtime = runtime is None
     if runtime is None:
         default_model = settings.openai_default_model

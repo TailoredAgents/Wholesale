@@ -642,7 +642,9 @@ def test_prospecting_copilot_is_draft_only_and_call_coaching_requires_review(
         def __init__(self, **_: object) -> None:
             pass
 
-        def create_structured_response(self, **kwargs: object):
+        def create_structured_response(
+            self, **kwargs: object
+        ) -> tuple[dict[str, Any], dict[str, int]]:
             schema = cast(dict[str, Any], kwargs["json_schema"])
             output = (
                 quality_output

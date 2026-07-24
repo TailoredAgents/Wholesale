@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 import pytest
@@ -402,7 +403,9 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
             def __init__(self, **_: object) -> None:
                 pass
 
-            def create_structured_response(self, **kwargs: object):
+            def create_structured_response(
+                self, **kwargs: object
+            ) -> tuple[dict[str, Any], dict[str, int]]:
                 prompt = kwargs["user_prompt"]
                 assert isinstance(prompt, str)
                 assert "Disposition Seller" not in prompt

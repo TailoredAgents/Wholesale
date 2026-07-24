@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -169,7 +170,9 @@ def test_copilot_generates_idempotent_draft_and_preserves_human_control(
         def __init__(self, **_: object) -> None:
             pass
 
-        def create_structured_response(self, **kwargs: object):
+        def create_structured_response(
+            self, **kwargs: object
+        ) -> tuple[dict[str, Any], dict[str, int]]:
             schema = kwargs["json_schema"]
             assert isinstance(schema, dict)
             assert schema["properties"]["message_draft"]["additionalProperties"] is False
@@ -237,6 +240,8 @@ def test_copilot_generates_idempotent_draft_and_preserves_human_control(
     stored_review = db_session.scalar(select(LeadManagerCopilotReview))
     assert stored_recommendation is not None and stored_recommendation.status == "edited"
     assert stored_review is not None
+    assert stored_review.original_output is not None
+    assert stored_review.final_output is not None
     assert stored_review.original_output["summary"] != stored_review.final_output["summary"]
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == task_count
     assert (

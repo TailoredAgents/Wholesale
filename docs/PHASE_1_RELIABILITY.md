@@ -4,10 +4,10 @@ Last updated: July 24, 2026
 
 ## Status
 
-Implementation complete. Scheduled external readiness monitoring and optional Sentry reporting are
-now included in code. The first production backup/restore drill, failure-alert destination,
-Sentry DSNs, GitHub notification confirmation, and live access-revocation exercise remain operator
-acceptance tasks.
+Implementation is pushed to `main`. Scheduled external readiness monitoring is active, its
+controlled failure reached the repository owner's GitHub notifications, and optional Sentry
+reporting is included in code. The first production backup/restore drill, worker-specific webhook
+destination, Sentry DSNs, and live access-revocation exercise remain operator acceptance tasks.
 
 Credential rotation, MFA rollout, and secret-security remediation are excluded from this F1
 execution by owner direction. They remain known risks and are not represented as complete.
@@ -23,14 +23,15 @@ execution by owner direction. They remain known risks and are not represented as
 | July 24, 2026 | Live Render fallback smoke test | Passed | API `/health` and `/ready` plus all required Render web routes returned successfully |
 | July 24, 2026 | Synthetic isolated restore drill | Passed | PostgreSQL custom backup restored into `stonegate_f1_restore_test`; migration marker, organization query, and lead query succeeded |
 | July 24, 2026 | Monitoring build verification | Passed | Next.js 16.2.11 production build, ESLint, focused Python Ruff checks, shell syntax, YAML parsing, and controlled alert delivery passed |
+| July 24, 2026 | Scheduled production readiness | Passed | Manual run checked live API readiness, worker heartbeat, and required public pages successfully |
+| July 24, 2026 | Owner readiness-alert path | Passed | A controlled post-smoke failure created an unread `ci_activity` notification for the repository owner |
+| July 24, 2026 | API regression suite | Passed | Strict Ruff and mypy checks passed; all 136 API tests passed |
 
 Operator-pending items:
 
 - Production backup and isolated restore verification require the production database URL and a
   separately provisioned restore target.
 - Failure alert delivery requires an owner-controlled webhook destination on `oakwell-worker`.
-- The scheduled GitHub readiness workflow begins after this change reaches `main`; the repository
-  owner must confirm failed-Action notifications are enabled.
 - Sentry reporting requires one web project DSN and one Python project DSN, or one shared project
   DSN if Stonegate prefers combined server reporting.
 - Live access revocation requires a disposable non-owner Clerk user and an authenticated test
@@ -147,8 +148,8 @@ reactivate only if the account remains authorized.
 - Migration `0024_operational_reliability` is deployed.
 - `/ready` reports database and worker as ready.
 - Failure alert webhook has been exercised with a controlled owner endpoint. **Operator pending.**
-- Scheduled external uptime monitoring watches `/ready`. **Code complete; push and notification
-  confirmation pending.**
+- Scheduled external uptime monitoring watches `/ready`, and its owner notification path has been
+  exercised.
 - A synthetic isolated restore drill has succeeded. **Production-backup drill pending.**
 - Deployment smoke test passes.
 - User deactivation has automated coverage. **Live disposable-user exercise pending.**

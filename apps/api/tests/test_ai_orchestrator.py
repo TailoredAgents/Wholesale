@@ -1,3 +1,5 @@
+from typing import Any, cast
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -17,10 +19,10 @@ def seed_owner(db: Session) -> None:
     )
 
 
-def install(client: TestClient) -> dict[str, object]:
+def install(client: TestClient) -> dict[str, Any]:
     response = client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS)
     assert response.status_code == 201
-    return response.json()
+    return cast(dict[str, Any], response.json())
 
 
 def test_portfolio_install_and_dry_run_are_idempotent(

@@ -321,7 +321,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
 | Resend operational email | Provider selected; migration pending | Replace the disabled Gmail adapter with Resend sending, receiving, signed webhooks, aliases, threading, attachments, and recovery |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
-| Production monitoring | Code complete; provider acceptance pending | Push the scheduled readiness workflow, enable GitHub failed-Action notifications, configure Sentry DSNs, and send controlled test errors |
+| Production monitoring | Scheduled readiness and owner alert verified; Sentry pending | Configure Sentry DSNs and send controlled web, API, and worker test errors |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 
@@ -390,25 +390,23 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 
 While A2P approval is pending:
 
-1. Push and manually run the scheduled production-readiness workflow, then confirm GitHub failed
-   workflow notifications.
-2. Configure Sentry DSNs and send controlled web, API, and worker test errors.
-3. Run the first production-backup isolated restore drill from `docs/PHASE_1_RELIABILITY.md`.
-4. Configure an owner-controlled operations alert webhook and exercise `npm run ops:alert-test`.
-5. Record the production access-revocation check and close the Phase 1 reliability criteria.
-6. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
-7. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
+1. Configure Sentry DSNs and send controlled web, API, and worker test errors.
+2. Run the first production-backup isolated restore drill from `docs/PHASE_1_RELIABILITY.md`.
+3. Configure an owner-controlled operations alert webhook and exercise `npm run ops:alert-test`.
+4. Record the production access-revocation check and close the Phase 1 reliability criteria.
+5. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
+6. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-8. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
+7. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
    activate and separately measure the AI4 and AI5 draft-only pilots using
    `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
-9. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
+8. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
    provider tracks in `PHASE_AI7_TRANSACTION_COPILOT.md` and
    `PHASE_AI8_DISPOSITION_COPILOT.md` while earlier copilots remain supervised.
-10. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
+9. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
    track in `PHASE_AI9_MANAGEMENT_COPILOTS.md`.
-11. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
+10. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
    keep external delivery locked until the corresponding provider, consent, template, evaluation,
    and canary checkpoints pass.
-12. Resume the parallel integration track after A2P approval without blocking internal
+11. Resume the parallel integration track after A2P approval without blocking internal
     development.
