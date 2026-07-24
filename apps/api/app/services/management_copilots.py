@@ -1,5 +1,6 @@
 import json
 from datetime import UTC, datetime, timedelta
+from typing import cast
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -322,7 +323,7 @@ def recommendation_read(
 ) -> ManagementCopilotRecommendationRead:
     return ManagementCopilotRecommendationRead(
         id=item.id,
-        capability_key=item.capability_key,
+        capability_key=cast(ManagementCapability, item.capability_key),
         reporting_period_days=item.reporting_period_days,
         ai_run_log_id=item.ai_run_log_id,
         status=item.status,

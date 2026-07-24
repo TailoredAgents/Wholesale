@@ -70,7 +70,7 @@ def audit(
     action: str,
     entity_type: str,
     entity_id: UUID,
-    new: dict,
+    new: dict[str, object],
     reason: str,
 ) -> None:
     db.add(
@@ -865,7 +865,7 @@ def accounting_csv(db: Session, principal: Principal, case_id: UUID) -> str | No
     for payout in db.scalars(
         select(DealPayout).where(DealPayout.deal_reconciliation_id == reconciliation.id)
     ).all():
-        user_name = users.get(payout.user_id, "")
+        user_name = users.get(payout.user_id, "") if payout.user_id is not None else ""
         writer.writerow(("payout", payout.role_key, user_name, payout.amount_cents, payout.status))
     return output.getvalue()
 

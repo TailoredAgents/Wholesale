@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated
 from uuid import UUID
@@ -261,7 +262,13 @@ async def upload_buyer_proof(
         raise invalid(exc) from exc
 
 
-def _case_action(function, db: Session, principal: Principal, case_id: UUID, *args):
+def _case_action(
+    function: Callable[..., DispositionCaseRead | None],
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    *args: object,
+) -> DispositionCaseRead:
     try:
         result = function(db, principal, case_id, *args)
     except ValueError as exc:

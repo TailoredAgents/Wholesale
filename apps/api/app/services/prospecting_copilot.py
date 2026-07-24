@@ -2,6 +2,7 @@ import hashlib
 import json
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -747,7 +748,7 @@ def quality_read(
     )
 
 
-def _recommendation_statement(principal: Principal):
+def _recommendation_statement(principal: Principal) -> Any:
     statement = select(ProspectingCopilotRecommendation).where(
         ProspectingCopilotRecommendation.organization_id == principal.organization_id
     )
@@ -758,7 +759,7 @@ def _recommendation_statement(principal: Principal):
     return statement
 
 
-def _quality_statement(principal: Principal):
+def _quality_statement(principal: Principal) -> Any:
     statement = select(ProspectingCallQualityReview).where(
         ProspectingCallQualityReview.organization_id == principal.organization_id
     )

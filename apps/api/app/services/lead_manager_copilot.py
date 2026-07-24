@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime, time, timedelta
+from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -309,7 +310,7 @@ def _visible_cases(db: Session, principal: Principal) -> list[LeadManagementCase
     return list(db.scalars(statement).all())
 
 
-def _visible_recommendations_statement(principal: Principal):
+def _visible_recommendations_statement(principal: Principal) -> Any:
     from app.services.lead_manager import can_manage
 
     statement = select(LeadManagerCopilotRecommendation).where(
@@ -388,7 +389,9 @@ def _work_item(
     if case_details.is_next_action_overdue:
         score += 80
         alerts.append("The dated follow-up is overdue.")
-        evidence.append(f"Next action was due {case.next_action_due_at.isoformat()}.")
+        next_action_due_at = case.next_action_due_at
+        if next_action_due_at is not None:
+            evidence.append(f"Next action was due {next_action_due_at.isoformat()}.")
         recommended_action = "Complete or reschedule the overdue follow-up."
     if case.accepted_at is not None and case.qualification_completed_at is None:
         score += 65

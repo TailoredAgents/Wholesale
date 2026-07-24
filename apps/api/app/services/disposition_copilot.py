@@ -416,13 +416,7 @@ def _disposition_facts(
     verified = [
         item
         for item in qualified
-        if item.buyer_id in buyers
-        and buyers[item.buyer_id].proof_of_funds_status == "received"
-        and (
-            buyers[item.buyer_id].proof_of_funds_expires_at is None
-            or _aware(buyers[item.buyer_id].proof_of_funds_expires_at)
-            >= datetime.now(UTC)
-        )
+        if item.buyer_id in buyers and _has_current_proof_of_funds(buyers[item.buyer_id])
     ]
     if qualified and not verified:
         gaps.append("Verify current proof of funds for at least one qualified buyer.")
@@ -543,8 +537,8 @@ def _validate_output(
         buyer = buyers.get(item.buyer_id)
         if buyer is None or item.buyer_name.strip().lower() != buyer.name.strip().lower():
             raise ValueError("The model buyer recommendation did not match the CRM record.")
-    for item in output.offer_comparison:
-        if str(item.offer_id) not in valid_offer_ids:
+    for offer_item in output.offer_comparison:
+        if str(offer_item.offer_id) not in valid_offer_ids:
             raise ValueError("The model compared an offer outside this disposition case.")
 
     external_draft = (
@@ -666,3 +660,10 @@ def _audit(
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _has_current_proof_of_funds(buyer: Buyer) -> bool:
+    expires_at = buyer.proof_of_funds_expires_at
+    return buyer.proof_of_funds_status == "received" and (
+        expires_at is None or _aware(expires_at) >= datetime.now(UTC)
+    )

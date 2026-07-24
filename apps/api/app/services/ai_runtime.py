@@ -3,7 +3,7 @@ import json
 import re
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import func, select, update
@@ -22,6 +22,7 @@ from app.models.foundation import (
     AiKnowledgeUseLog,
     AiPromptVersion,
     AiRunLog,
+    AiRuntimePolicy,
     AiToolCallLog,
     AiToolPermission,
     Appointment,
@@ -73,7 +74,9 @@ from app.schemas.ai import (
     AiRuntimeOverview,
     AiRuntimePolicyRead,
     AiRuntimePolicyUpdate,
+    AiRunRead,
 )
+from app.schemas.management_copilots import ManagementCapability
 from app.services.ai import build_lead_context, run_to_read
 from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
 from app.services.ai_orchestrator import PORTFOLIO
@@ -942,7 +945,7 @@ def execute_runtime(
     db: Session,
     principal: Principal,
     payload: AiRuntimeExecuteCreate,
-):
+) -> AiRunRead:
     existing = db.scalar(
         select(AiRunLog).where(
             AiRunLog.organization_id == principal.organization_id,
@@ -1312,9 +1315,7 @@ def _new_runtime_policy(
     high_volume_model: str,
     default_model: str,
     escalation_model: str,
-):
-    from app.models.foundation import AiRuntimePolicy
-
+) -> AiRuntimePolicy:
     return AiRuntimePolicy(
         organization_id=principal.organization_id,
         provider_status=provider_status,
@@ -1334,15 +1335,13 @@ def _new_runtime_policy(
     )
 
 
-def _runtime_policy(db: Session, principal: Principal):
-    from app.models.foundation import AiRuntimePolicy
-
+def _runtime_policy(db: Session, principal: Principal) -> AiRuntimePolicy | None:
     return db.scalar(
         select(AiRuntimePolicy).where(AiRuntimePolicy.organization_id == principal.organization_id)
     )
 
 
-def _require_runtime_policy(db: Session, principal: Principal):
+def _require_runtime_policy(db: Session, principal: Principal) -> AiRuntimePolicy:
     policy = _runtime_policy(db, principal)
     if policy is None:
         raise ValueError("Install the AI3 runtime before using it.")
@@ -1436,13 +1435,16 @@ def _execute_read_tool(
         "marketing.analyze",
         "operations.brief",
     }:
-        period_days = int(payload.input_payload.get("period_days", 30))
+        raw_period_days = payload.input_payload.get("period_days", 30)
+        if not isinstance(raw_period_days, (int, str)) or isinstance(raw_period_days, bool):
+            raise ValueError("Management analysis period must be a whole number.")
+        period_days = int(raw_period_days)
         if period_days < 7 or period_days > 365:
             raise ValueError("Management analysis period must be between 7 and 365 days.")
         management_facts = build_management_facts(
             db,
             principal,
-            capability.capability_key,
+            cast(ManagementCapability, capability.capability_key),
             period_days,
         )
         context["management"] = management_facts["context"]
@@ -2432,7 +2434,7 @@ def _record_blocked_run(
     prompt: AiPromptVersion,
     capability: AiCapabilityRuntimePolicy,
     reason: str,
-):
+) -> AiRunRead:
     runtime = _runtime_policy(db, principal)
     model_name = _model_for_route(runtime, capability.model_route)
     run = _new_runtime_run(
@@ -2503,7 +2505,7 @@ def _new_runtime_run(
     )
 
 
-def _record_runtime_failure(policy: Any) -> None:
+def _record_runtime_failure(policy: AiRuntimePolicy) -> None:
     policy.consecutive_failure_count += 1
     if policy.consecutive_failure_count >= policy.circuit_failure_threshold:
         policy.circuit_open_until = datetime.now(UTC) + timedelta(
@@ -2511,7 +2513,7 @@ def _record_runtime_failure(policy: Any) -> None:
         )
 
 
-def _model_for_route(policy: Any, route: str) -> str:
+def _model_for_route(policy: AiRuntimePolicy, route: str) -> str:
     if route == "high_volume":
         return policy.high_volume_model
     if route == "escalation":

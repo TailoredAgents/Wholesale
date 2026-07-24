@@ -317,7 +317,7 @@ def decide_external_action_policy(
     item = _policy(db, principal, policy_id)
     if item is None:
         return None
-    previous = {
+    previous: dict[str, object] = {
         "status": item.status,
         "approved_by_user_id": str(item.approved_by_user_id)
         if item.approved_by_user_id
