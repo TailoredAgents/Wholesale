@@ -378,9 +378,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   activate delivery.
 - Local Node and Python dependency reads intermittently stall on this Mac; Render builds and
   targeted syntax/live checks are currently more reliable than broad local checks.
-- A production backup has not yet been restored into an isolated verification database; the
-  guarded drill is implemented and remains an operator checkpoint. A synthetic isolated local
-  backup/restore drill passed on July 24, 2026.
+- A production PostgreSQL backup restored successfully into isolated local database
+  `stonegate_prod_restore_verify_20260724` on July 24, 2026; migration, organization, and lead
+  verification passed.
+- Production access revocation passed on July 24, 2026: a disposable staff session changed from
+  `200` to `401` immediately after Stonegate deactivation, and its Clerk identity was removed.
 - Next.js is on stable patch 16.2.11. The production npm audit still reports upstream `postcss`
   and `sharp` advisories with no stable fix; recheck on the next stable Next.js patch.
 - Credential rotation, MFA rollout, and secret-security remediation were explicitly excluded from
@@ -391,22 +393,20 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 While A2P approval is pending:
 
 1. Configure Sentry DSNs and send controlled web, API, and worker test errors.
-2. Run the first production-backup isolated restore drill from `docs/PHASE_1_RELIABILITY.md`.
-3. Configure an owner-controlled operations alert webhook and exercise `npm run ops:alert-test`.
-4. Record the production access-revocation check and close the Phase 1 reliability criteria.
-5. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
-6. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
+2. Configure an owner-controlled operations alert webhook and exercise `npm run ops:alert-test`.
+3. Run a redacted, end-to-end Phase 8 closing simulation and record operator feedback.
+4. Run a redacted Phase 9 contract-to-buyer-to-reconciliation simulation and record operator
    feedback.
-7. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
+5. Complete AI3 production acceptance, approve and replay the production AI2 datasets, then
    activate and separately measure the AI4 and AI5 draft-only pilots using
    `PHASE_AI4_LEAD_MANAGER_COPILOT.md` and `PHASE_AI5_PROSPECTING_COPILOT.md`.
-8. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
+6. Build the redacted AI7 transaction package and AI8 disposition datasets, then complete their
    provider tracks in `PHASE_AI7_TRANSACTION_COPILOT.md` and
    `PHASE_AI8_DISPOSITION_COPILOT.md` while earlier copilots remain supervised.
-9. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
+7. Build the redacted AI9 finance, marketing, and executive datasets and complete the provider
    track in `PHASE_AI9_MANAGEMENT_COPILOTS.md`.
-10. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
+8. Review and approve the AI10 control contracts in `/os/ai`, record readiness simulations, and
    keep external delivery locked until the corresponding provider, consent, template, evaluation,
    and canary checkpoints pass.
-11. Resume the parallel integration track after A2P approval without blocking internal
+9. Resume the parallel integration track after A2P approval without blocking internal
     development.

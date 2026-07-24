@@ -2435,7 +2435,7 @@ def _record_blocked_run(
     capability: AiCapabilityRuntimePolicy,
     reason: str,
 ) -> AiRunRead:
-    runtime = _runtime_policy(db, principal)
+    runtime = _require_runtime_policy(db, principal)
     model_name = _model_for_route(runtime, capability.model_route)
     run = _new_runtime_run(
         principal,
