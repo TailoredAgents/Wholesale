@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -241,7 +241,7 @@ APIs required:
 
 - OpenAI.
 - Stonegate CRM, inbox, tasks, and internal calendar.
-- Twilio and Google Workspace only when their production activation is complete.
+- Twilio and Resend only when their production activation is complete.
 
 Exit criteria:
 
@@ -370,7 +370,7 @@ APIs required:
 - OpenAI.
 - Private object storage.
 - E-signature provider.
-- Google Workspace.
+- Resend operational email.
 
 Exit criteria:
 
@@ -496,7 +496,7 @@ Always prohibited from autonomous authority:
 APIs required:
 
 - Approved Twilio Messaging and Voice configuration.
-- Google Workspace.
+- Resend operational email.
 - OpenAI Realtime only for a separately approved inbound voice use case.
 
 Exit criteria:
@@ -524,9 +524,9 @@ The required order is:
 10. AI10: Controlled external automation and optimization.
 
 Provider work continues in parallel. Lead Manager Copilot can run with simulated communications
-before Twilio and Google Workspace are live. Recording-dependent work waits for approved disclosure
-and retention policy. Transaction, finance, and advertising automation waits for its provider
-adapter rather than inventing a second source of truth.
+before Twilio and Resend are live. Recording-dependent work waits for approved disclosure and
+retention policy. Transaction, finance, and advertising automation waits for its provider adapter
+rather than inventing a second source of truth.
 
 ## Immediate Next Build
 

@@ -1,6 +1,6 @@
 # Testing
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Required Checks
 
@@ -45,7 +45,8 @@ Also run:
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.
 - Voice intents, routing, statuses, signatures, recordings, retention, and deletion.
 - Call transcription review, evidence, quality telemetry, and approval gates.
-- Gmail OAuth state, encryption, threading, synchronization, attachments, and role scope.
+- Current legacy Gmail adapter coverage until Phase F3 replaces it with Resend sending, Receiving,
+  signed webhooks, aliases, threading, attachments, recovery, and role scope.
 - Underwriting calculations, comp filtering, confidence, report access, and nullable recommendations.
 - Offer-plan staleness, sequential concessions, manager exceptions, hard-ceiling enforcement,
   presented-price agreement matching, superseded authority, and append-only negotiation events.
@@ -62,7 +63,8 @@ Use company-controlled accounts and numbers to test:
 - SMS outbound, delivery, inbound, STOP, START, HELP, failure, and duplicate callbacks.
 - Voice browser registration, outbound, inbound, no-answer, missed-call task, and webhook signature.
 - Recording disclosure, playback permissions, transcript, review, retention, and deletion.
-- Gmail send, reply, thread, sync, signature, template, and attachment.
+- Resend send, delivery states, inbound reply, thread, signature, template, attachment, duplicate
+  webhook, out-of-order webhook, and recovery.
 - Branded-domain Clerk login, CORS, OAuth redirect, and public legal links.
 
 ## Current Local Tooling Issue

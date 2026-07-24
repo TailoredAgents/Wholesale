@@ -1,6 +1,6 @@
 # Custom Domain Cutover
 
-Last updated: July 20, 2026
+Last updated: July 24, 2026
 
 Current status: branded web domain active at `https://www.stonegatehomebuyer.com`; provider
 callback and email-domain work remains.
@@ -28,8 +28,8 @@ reliable. Do not configure DNS until Stonegate owns and controls the domain acco
    - API Render URL,
    - Clerk authorized parties,
    - API CORS origins,
-   - Google OAuth redirect,
-   - email web base URL,
+   - Resend sending and receiving domain records,
+   - Resend webhook base URL,
    - Twilio webhook base URL.
 5. Keep the existing Render URLs active.
 
@@ -68,7 +68,7 @@ https://oakwell-web.onrender.com
 - Authenticated API calls return `200`, not CORS or `401` errors.
 - Public form submission creates one lead.
 - Twilio signature validation succeeds on the final API host.
-- Google OAuth callback succeeds on the exact registered URI.
+- Resend signed delivery and inbound webhooks succeed on the final API host.
 - Old Render URLs continue to resolve or redirect without breaking submitted A2P evidence.
 
 ## Rollback

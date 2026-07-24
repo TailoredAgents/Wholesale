@@ -1,6 +1,6 @@
 # Render Deployment
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Current Deployment
 
@@ -38,9 +38,9 @@ name.
 
 ## Pending Deployment Work
 
-- Update email web origin and OAuth redirect if API/web custom subdomains are used.
+- Update Resend webhook and email-domain configuration if API/web custom subdomains are used.
 - Update Twilio callback base URL only if the API host changes.
-- Verify worker health after enabling Gmail sync, transcription, or retention jobs.
+- Verify worker health after enabling Resend inbound recovery, transcription, or retention jobs.
 - Run the production acceptance checks in `TESTING.md`.
 
 The Blueprint manages the public, apex, and Render fallback origins for `API_CORS_ORIGINS` and

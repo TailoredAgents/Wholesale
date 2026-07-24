@@ -1,6 +1,6 @@
 # Product Requirements
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Product
 
@@ -90,7 +90,7 @@ automation.
 ## Current Release State
 
 The broad product foundation and branded web domain are implemented and deployed. Final dedicated
-SMS, Voice, and Google Workspace activation is pending external/provider setup. See
+SMS and Voice activation and the Resend operational-email migration remain pending. See
 `CURRENT_STATE.md`.
 
 ## Launch Gates
@@ -123,12 +123,12 @@ SMS, Voice, and Google Workspace activation is pending external/provider setup. 
 - AI provider: OpenAI.
 - Current property data: RentCast.
 - SMS and Voice: Twilio, with a dedicated Stonegate Messaging Service and SMS number.
-- Operational email: Google Workspace.
-- Cold email, if approved later: separate outreach infrastructure rather than operational Gmail.
+- Operational email: Resend API and Receiving webhooks, with Stonegate Inbox as the staff mailbox.
+- Cold email, if approved later: separate outreach infrastructure and sending domain.
 
 ## Open Decisions
 
-- Google Workspace mailbox names.
+- Resend operational sender aliases and receiving-domain choice.
 - Recording disclosure and state coverage.
 - Object storage provider.
 - E-signature provider.

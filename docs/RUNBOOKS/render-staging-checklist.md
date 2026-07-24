@@ -80,8 +80,8 @@ DATABASE_URL="<render database url>" uv run python -m app.cli.bootstrap \
 6. Map the Clerk user to the local owner if email auto-linking did not set `external_auth_id`.
 7. Confirm `/health`, `/ready`, public website, public intake, `/os`, and speed-to-lead queue.
 
-Twilio, Voice, recording, and Google Workspace variables are maintained in their dedicated
-runbooks because they are activated independently.
+Twilio, Voice, recording, and Resend variables are maintained in their dedicated runbooks because
+they are activated independently.
 
 ## Clerk Requirements
 

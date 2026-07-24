@@ -40,7 +40,7 @@ uv run python -m app.worker
 ```
 
 The root `npm run worker` command starts the original heartbeat scaffold and does not process
-transcription, recording retention, or Gmail synchronization.
+transcription, recording retention, or provider email recovery.
 
 ## Checks
 

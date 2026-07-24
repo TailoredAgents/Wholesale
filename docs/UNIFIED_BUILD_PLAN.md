@@ -1,6 +1,6 @@
 # Unified Build Plan
 
-Last updated: July 22, 2026
+Last updated: July 24, 2026
 
 ## Objective
 
@@ -136,7 +136,7 @@ Integrate:
 - Clerk for authentication.
 - Render for hosting.
 - Twilio for SMS and Voice.
-- Google Workspace for operational email.
+- Resend for operational email, with Stonegate Inbox as the staff mailbox.
 - Stonegate's internal calendar remains the appointment system of record.
 - Smartlead or a comparable dedicated platform for future cold email.
 - RentCast now, with ATTOM or MLS/RESO as optional property-data enrichment.

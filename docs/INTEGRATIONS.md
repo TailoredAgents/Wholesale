@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 All providers are adapters. PostgreSQL remains the business source of truth.
 
@@ -14,7 +14,7 @@ All providers are adapters. PostgreSQL remains the business source of truth.
 | OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
 | Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
-| Google Workspace | Operational seller email | Implemented | Domain, OAuth project, secrets, and mailbox connections pending |
+| Resend | Operational seller email | Selected; adapter migration pending | Choose receiving domain, verify DNS, build sending/Receiving adapter, register signed webhooks, and run acceptance tests |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
 | FTC National DNC data and screening process | Cold-call eligibility evidence | Evidence intake implemented | Secure registry access, recurring refresh, and legal review still required |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
@@ -104,14 +104,27 @@ are approved.
 Voice setup is paused until Stonegate resumes provider configuration. See
 `RUNBOOKS/twilio-voice-setup.md`.
 
-## Google Workspace
+## Resend
 
-Operational mailboxes connect individually through server-side OAuth. Tokens are encrypted.
-Messages preserve Gmail threads and share the seller conversation timeline with SMS, calls,
-transcripts, and notes.
+Resend is the approved operational email provider. The existing Gmail/OAuth implementation is
+disabled legacy code and will not be activated.
 
-Cold outreach is excluded. Future cold email must use separate domains/mailboxes and a dedicated
-outreach adapter. See `RUNBOOKS/google-workspace-email.md`.
+Stonegate will send from approved company aliases through the Resend API and receive replies
+through Resend Receiving and signed webhooks. The shared Inbox remains the staff mailbox, and
+PostgreSQL remains the communication source of truth. Staff will not connect individual OAuth
+mailboxes.
+
+The adapter must preserve provider IDs and email thread headers, retrieve inbound bodies and
+attachments, deduplicate at-least-once webhook delivery, tolerate out-of-order events, recover
+missed inbound events, and record sent, delivered, delayed, bounced, complained, failed,
+suppressed, and received states.
+
+The preferred receiving design is a dedicated operational subdomain unless Stonegate explicitly
+decides that all root-domain mail should route into the OS. Resend receives mail for every address
+on a configured receiving domain, so MX changes require deliberate approval.
+
+Cold outreach is excluded. Future cold email must use separate domains, sender reputation,
+compliance rules, and a dedicated outreach adapter. See `RUNBOOKS/resend-email.md`.
 
 ## Property Data
 
@@ -155,9 +168,9 @@ Send down-funnel outcomes only after attribution and consent rules are defined:
 
 ## Email And Cold Outreach
 
-Gmail push notifications use Google Cloud Pub/Sub and must be renewed. The worker also needs
-incremental history synchronization and a periodic recovery path because provider notifications
-can be delayed or missed.
+Resend webhooks provide at-least-once delivery and may arrive out of order. Stonegate must verify
+signatures, deduplicate event IDs, order state using provider timestamps, and run a periodic
+received-email recovery job.
 
 Operational seller email and future cold email remain separate. A future outreach platform must
 enforce approved domains, volume ramps, suppression, opt-out handling, sender identity, and
@@ -166,7 +179,7 @@ mailbox reputation with day-to-day seller and closing mail.
 
 ## Recommended API Sequence
 
-1. Finish dedicated Twilio SMS, Twilio Voice, recording policy, and Google Workspace.
+1. Finish dedicated Twilio SMS, Twilio Voice, recording policy, and the Resend migration.
 2. Select error monitoring and private object storage.
 3. Complete OpenAI evaluation datasets, model routing, and the governed tool gateway.
 4. Add e-signature before transaction-document automation.
@@ -182,7 +195,9 @@ mailbox reputation with day-to-day seller and closing mail.
 - [OpenAI agent evaluations](https://developers.openai.com/api/docs/guides/agent-evals)
 - [RentCast property valuation](https://developers.rentcast.io/reference/property-valuation)
 - [Twilio Voice JavaScript SDK](https://www.twilio.com/docs/voice/sdks/javascript)
-- [Gmail push notifications](https://developers.google.com/workspace/gmail/api/guides/push)
+- [Resend sending API](https://resend.com/docs/api-reference/emails/send-email)
+- [Resend Receiving](https://resend.com/docs/dashboard/receiving/introduction)
+- [Resend webhook behavior](https://resend.com/docs/webhooks/introduction)
 - [QuickBooks Online webhooks](https://developer.intuit.com/app/developer/qbo/docs/develop/webhooks)
 - [Docusign Connect webhooks](https://developers.docusign.com/platform/webhooks/connect/)
 - [Google Ads offline conversions](https://developers.google.com/google-ads/api/docs/conversions/upload-offline)

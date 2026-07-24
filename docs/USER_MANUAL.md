@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Purpose
 
@@ -32,7 +32,7 @@ The following depend on final provider acceptance or later integrations:
 - Dedicated Stonegate Twilio SMS cutover and production acceptance.
 - Twilio browser Voice and inbound routing activation.
 - Call recording until disclosure and retention policy are approved.
-- Google Workspace mailbox connection and synchronization.
+- Resend operational email migration and production acceptance.
 - Live buyer campaign delivery.
 - E-signature, private object storage, and direct accounting synchronization.
 - Autonomous AI external delivery.
@@ -999,6 +999,7 @@ history.
 - `WORKFLOWS.md`: concise system workflow sequence.
 - `CURRENT_STATE.md`: delivered functionality and known limits.
 - `ROADMAP.md`: completed phases and remaining production checkpoints.
+- `FINISHING_ROADMAP.md`: canonical sequence for production completion and provider activation.
 - `UNDERWRITING.md` and `UNDERWRITING_COMP_METHOD.md`: valuation and offer methodology.
 - `AI_AGENTS.md`: AI architecture and authority.
 - `AI_AUTOMATION_ROADMAP.md`: AI production acceptance sequence.

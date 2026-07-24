@@ -1,6 +1,6 @@
 # Phase AI7: Transaction Copilot And Document Intelligence
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Status
 
@@ -41,7 +41,8 @@ Before production document intelligence is complete:
 1. Move private file bodies from PostgreSQL to owner-controlled S3-compatible object storage.
 2. Add malware scanning, encryption-key policy, signed download URLs, and retention controls.
 3. Select an e-signature provider and reconcile envelopes, recipients, signatures, and final files.
-4. Connect Google Workspace after the operational mailbox is approved.
+4. Connect Resend after the operational aliases, receiving domain, and webhook controls are
+   approved.
 5. Load attorney-approved Georgia templates and closing playbooks.
 6. Add page-preserving PDF and image extraction that creates proposed, never auto-confirmed, facts.
 7. Require a human to confirm every material extracted fact before it can control a checklist,

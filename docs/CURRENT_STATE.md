@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 ## Product
 
@@ -15,6 +15,7 @@ PostgreSQL is the operational source of truth. Clerk provides authentication, bu
 local roles and permissions remain authoritative for access control.
 
 Operational instructions for staff are maintained in `USER_MANUAL.md`.
+The canonical remaining production sequence is maintained in `FINISHING_ROADMAP.md`.
 
 ## Deployment
 
@@ -220,8 +221,8 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
   missed-call tasks, call status history, and private recording access.
 - Recording disclosure state, audio retention, early deletion audit, OpenAI transcription, speaker
   segments, structured call notes, and required human review.
-- Google Workspace email implementation with per-user OAuth, encrypted refresh tokens, Gmail
-  threading, signatures, shared templates, incremental synchronization, and attachment proxying.
+- A disabled Gmail/OAuth email implementation exists in code but has been superseded. Resend is
+  selected for operational sending and receiving; the provider migration is not yet implemented.
 
 ### Underwriting
 
@@ -314,7 +315,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Twilio SMS | Code complete; final provider cutover pending | Configure the new Messaging Service SID and new SMS sender, then run STOP/START/inbound/delivery tests |
 | Twilio Voice | Code complete; activation paused | Finish API key, TwiML App, Render variables, outbound test, and inbound webhook on the Voice number |
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
-| Google Workspace email | Code complete; provider configuration pending | Configure domain/mailboxes, Google OAuth, Render secrets, and per-user mailbox connections |
+| Resend operational email | Provider selected; migration pending | Replace the disabled Gmail adapter with Resend sending, receiving, signed webhooks, aliases, threading, attachments, and recovery |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:

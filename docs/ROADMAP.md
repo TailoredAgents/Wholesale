@@ -1,6 +1,6 @@
 # Roadmap
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 This is the canonical Stonegate build sequence. It follows the approved ten-phase operating plan
 from reliability through the integrated AI agent system.
@@ -12,6 +12,7 @@ performance, and conversion measurement without replacing the business-workflow 
 `CURRENT_STATE.md` is the source of truth for what exists today. `OPERATING_MODEL.md` defines the
 business roles, handoffs, compensation policy, AI portfolio, and operating standards that these
 phases implement. `USER_MANUAL.md` explains how staff use the completed workflows.
+`FINISHING_ROADMAP.md` is the canonical sequence for all remaining production work.
 
 Phase 10 now has a dedicated implementation sequence in `AI_AUTOMATION_ROADMAP.md`.
 `AI_AGENTS.md` is the technical source of truth for agent architecture and authority.
@@ -25,21 +26,23 @@ Phase 10 now has a dedicated implementation sequence in `AI_AUTOMATION_ROADMAP.m
 
 ## Parallel Integration Track
 
-Status: The branded web domain is live. Dedicated A2P, Voice, and Google Workspace provider
-acceptance remains.
+Status: The branded web domain is live. Dedicated A2P and Voice acceptance and the Resend
+operational-email migration remain.
 
-Twilio and Google Workspace email setup run in parallel with the numbered build
+Twilio activation and the Resend email migration run in parallel with the completed numbered build
 phases. They do not change the business-workflow order and should not leave internal development
 idle.
 
-The application code for SMS, Voice, recording/transcription, AI call review, and Google Workspace
-email is implemented. Production acceptance remains pending for:
+The application code for SMS, Voice, recording/transcription, and AI call review is implemented.
+The existing Gmail email implementation is disabled and will be replaced by Resend. Production
+acceptance remains pending for:
 
 - Approval of Stonegate's dedicated A2P Campaign and attachment of its dedicated SMS number.
 - Final Twilio Messaging Service, sender, Voice API key, and TwiML App configuration.
 - Recording disclosure and retention-policy approval before recording is enabled.
 - Branded and Render fallback origins must remain aligned as provider callback URLs are activated.
-- Google Workspace domain, operational mailboxes, OAuth configuration, and mailbox connections.
+- Resend sending/receiving domains, aliases, provider adapter, signed webhooks, and acceptance
+  tests.
 
 ## Phase Status Snapshot
 

@@ -1,6 +1,6 @@
 # Phase 10 AI Control Plane
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
 Status: AI1-AI10 control planes are implemented in code. Production signoff, provider adapters,
 redacted model replay, measured pilots, and any future action-specific activation remain.
@@ -51,5 +51,5 @@ underwriting cases, transactions, and corrections, then run model replay against
 
 Complete AI3 production monitoring and AI2 role-owner signoff, then measure each active draft-only
 copilot separately. Review AI10 control contracts and blocked readiness simulations while
-dedicated Twilio and Google Workspace setup is completed. Do not activate external delivery based
-on generic datasets or another capability's pilot.
+dedicated Twilio setup and the Resend migration are completed. Do not activate external delivery
+based on generic datasets or another capability's pilot.
