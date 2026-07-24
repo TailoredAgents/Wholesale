@@ -341,6 +341,76 @@ export type OperatingModelOverview = {
       sort_order: number;
     }>;
   }>;
+  company_setup: CompanySetup;
+};
+
+export type OperatingSeat = {
+  id: string;
+  seat_key: string;
+  label: string;
+  role_key: string;
+  status: string;
+  primary_user_id: string | null;
+  primary_user_name: string | null;
+  backup_user_id: string | null;
+  backup_user_name: string | null;
+  notes: string | null;
+};
+
+export type BusinessCounterparty = {
+  id: string;
+  market_id: string | null;
+  market_name: string | null;
+  counterparty_type: string;
+  name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  status: string;
+  verified_by_user_id: string | null;
+  verified_by_name: string | null;
+  verified_at: string | null;
+  notes: string | null;
+};
+
+export type StaffRoleAcceptance = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  role_key: string;
+  manual_key: string;
+  manual_version: string;
+  status: string;
+  assigned_by_user_id: string;
+  assigned_by_name: string;
+  workspace_test_evidence: string | null;
+  employee_notes: string | null;
+  accepted_at: string | null;
+  approved_by_user_id: string | null;
+  approved_by_name: string | null;
+  manager_notes: string | null;
+  approved_at: string | null;
+};
+
+export type CompanySetup = {
+  seats: OperatingSeat[];
+  counterparties: BusinessCounterparty[];
+  role_acceptances: StaffRoleAcceptance[];
+  checks: Array<{
+    key: string;
+    label: string;
+    status: "complete" | "attention" | "not_started";
+    detail: string;
+  }>;
+  completed_check_count: number;
+  total_check_count: number;
+};
+
+export type MyRoleSetup = {
+  user_id: string;
+  user_name: string;
+  role_keys: string[];
+  acceptances: StaffRoleAcceptance[];
 };
 
 export type CampaignManagementOverview = {
@@ -2659,6 +2729,31 @@ export async function getOperatingModelOverview(): Promise<{
   } catch (error) {
     console.error("Stonegate operating model request failed.", error);
     return { operatingModel: null, apiConnected: false };
+  }
+}
+
+export async function getMyRoleSetup(): Promise<{
+  roleSetup: MyRoleSetup | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/operating-model/my-setup`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      roleSetup: (await response.json()) as MyRoleSetup,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate role setup request failed.", error);
+    return { roleSetup: null, apiConnected: false };
   }
 }
 

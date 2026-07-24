@@ -91,7 +91,8 @@
 .error { background: var(--danger-soft); color: var(--danger); }
 
 .twoColumn,
-.launchLayout {
+.launchLayout,
+.setupGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.65fr);
   gap: 16px;
@@ -100,6 +101,10 @@
 
 .launchLayout {
   grid-template-columns: minmax(300px, 0.42fr) minmax(0, 1.58fr);
+}
+
+.setupGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .section {
@@ -291,6 +296,7 @@
 }
 
 .planForm input,
+.planForm select,
 .planForm textarea,
 .stackForm input,
 .stackForm select,
@@ -311,6 +317,132 @@
 .planForm textarea,
 .stackForm textarea { resize: vertical; }
 .planForm button, .stackForm button { justify-self: start; }
+
+.setupChecks {
+  display: grid;
+}
+
+.setupChecks > div {
+  min-height: 58px;
+  padding: 11px 16px;
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.setupChecks > div:last-child { border-bottom: 0; }
+
+.setupChecks > div > span {
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.setupChecks > div > span[data-status="complete"] {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.setupChecks > div > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.setupChecks strong,
+.seatRows strong,
+.acceptanceRow strong { font-size: 12px; }
+
+.setupChecks p,
+.acceptanceRow p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.seatRows {
+  display: grid;
+}
+
+.seatRows form {
+  min-width: 0;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns:
+    minmax(140px, 0.9fr) 105px minmax(120px, 0.8fr)
+    minmax(120px, 0.8fr) minmax(140px, 1fr) auto;
+  gap: 7px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.seatRows form:last-child { border-bottom: 0; }
+
+.seatRows form > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.seatRows form > div span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.seatRows input,
+.seatRows select {
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.seatRows button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.acceptanceRow {
+  min-width: 0;
+  padding: 13px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.acceptanceRow > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.acceptanceRow span {
+  color: var(--muted);
+  font-size: 11px;
+}
 
 .formContext {
   margin: 0;
@@ -381,11 +513,16 @@
 
 @media (max-width: 1180px) {
   .twoColumn,
-  .launchLayout { grid-template-columns: 1fr; }
+  .launchLayout,
+  .setupGrid { grid-template-columns: 1fr; }
   .roleGrid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .roleGrid > div { border-bottom: 1px solid var(--line-soft); }
   .checklistItem { grid-template-columns: minmax(180px, 1fr) 120px 150px; }
   .checklistItem input { grid-column: 1 / 3; }
+  .seatRows form {
+    grid-template-columns: minmax(150px, 1fr) repeat(3, minmax(110px, 0.75fr)) auto;
+  }
+  .seatRows form input { grid-column: 1 / -2; }
 }
 
 @media (max-width: 760px) {
@@ -398,8 +535,11 @@
   .planForm, .stackForm { grid-template-columns: 1fr; }
   .full, .formContext { grid-column: auto; }
   .creditRow, .rowHeading { align-items: flex-start; flex-direction: column; }
+  .acceptanceRow { align-items: flex-start; flex-direction: column; }
   .checklistItem { grid-template-columns: 1fr 1fr; }
   .checklistItem > div, .checklistItem input { grid-column: 1 / -1; }
+  .seatRows form { grid-template-columns: 1fr; }
+  .seatRows form input, .seatRows form button { grid-column: auto; }
 }
 
 @media (max-width: 480px) {

@@ -1,6 +1,6 @@
 # Stonegate Operating Model
 
-Last updated: July 22, 2026
+Last updated: July 24, 2026
 
 ## Purpose
 
@@ -30,6 +30,15 @@ Primary financial policies:
 - Keep role compensation, company profit, and owner distributions separate.
 
 ## Organization
+
+The live accountability record is maintained in **Operating Model > Company setup**. Each
+operating seat records its required role, status, primary owner, optional backup, and coverage
+notes. One person may cover several seats during the early stage, but the responsibilities remain
+separate so they can be reassigned without losing history.
+
+Each employee receives an individual login and a role manual. They submit a workspace test through
+**My Setup**, and an owner approves it only after confirming that normal work is available and
+restricted areas remain unavailable.
 
 ### Owner And CEO Management
 

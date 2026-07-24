@@ -1,8 +1,8 @@
 # Data Model
 
-Last updated: July 23, 2026
+Last updated: July 24, 2026
 
-The schema is managed through Alembic migrations. Migration `0052_ai10_action_controls` is the
+The schema is managed through Alembic migrations. Migration `0053_company_config` is the
 current head.
 
 ## Identity And Access
@@ -161,6 +161,9 @@ original output and immutable human acceptance, correction, or rejection.
 - `role_credits`
 - `market_launch_checklists`
 - `market_launch_checklist_items`
+- `operating_seats`
+- `business_counterparties`
+- `staff_role_acceptances`
 - `buyer_proof_documents`
 - `disposition_cases`
 - `disposition_matches`
@@ -175,6 +178,11 @@ Compensation plans preserve the exact approved economics in effect for a deal. R
 who performed each compensated function and require an auditable approval before later payment.
 Disposition operating modes define human and expected company shares without retroactively changing
 historical plans. Market checklists retain evidence and final approval for every launch version.
+
+Operating seats name the role, primary user, backup user, and coverage state for each business
+responsibility without duplicating user roles. Business counterparties remain pending until an
+authorized manager verifies them. Staff role acceptances preserve the assigned manual version,
+employee workspace-test evidence, manager decision, and audit history.
 
 Disposition cases freeze the governing plan and operating mode, retain the approved package and
 buyer-selection evidence, and connect one contracted transaction to its ranked buyer pool.

@@ -7,8 +7,9 @@ Last updated: July 24, 2026
 Implementation is pushed to `main`. Scheduled external readiness monitoring is active, its
 controlled failure reached the repository owner's GitHub notifications, the production backup was
 restored into an isolated verification database, and live access revocation passed. The
-worker-specific webhook destination and Sentry project/DSN activation remain operator acceptance
-tasks.
+worker-specific webhook destination and Sentry project/DSN activation are intentionally deferred
+by owner direction so F2 can proceed. The implemented integrations remain available for later
+activation.
 
 Credential rotation, MFA rollout, and secret-security remediation are excluded from this F1
 execution by owner direction. They remain known risks and are not represented as complete.
@@ -30,9 +31,10 @@ execution by owner direction. They remain known risks and are not represented as
 | July 24, 2026 | Production backup restore | Passed | Production PostgreSQL 18 custom backup restored into isolated local database `stonegate_prod_restore_verify_20260724`; migration `0052`, organization, and lead checks passed |
 | July 24, 2026 | Live access revocation | Passed | Disposable `prospecting_caller` received `200` from `/api/v1/me`, then the same valid Clerk session received `401` immediately after Stonegate deactivation |
 
-Operator-pending items:
+Owner-deferred items:
 
-- Failure alert delivery requires an owner-controlled webhook destination on `oakwell-worker`.
+- Worker-specific alert delivery requires an owner-controlled webhook destination on
+  `oakwell-worker`.
 - Sentry reporting requires one web project DSN and one Python project DSN, or one shared project
   DSN if Stonegate prefers combined server reporting.
 - Live access revocation requires a disposable non-owner Clerk user and an authenticated test
@@ -148,15 +150,15 @@ reactivate only if the account remains authorized.
 
 - Migration `0024_operational_reliability` is deployed.
 - `/ready` reports database and worker as ready.
-- Failure alert webhook has been exercised with a controlled owner endpoint. **Operator pending.**
+- GitHub readiness alerts are verified; the optional worker-specific webhook is **owner-deferred**.
 - Scheduled external uptime monitoring watches `/ready`, and its owner notification path has been
   exercised.
 - A production backup has restored successfully into an isolated verification database.
 - Deployment smoke test passes.
 - User deactivation has automated coverage and a passing live disposable-user exercise.
 - Local demo seed and simulated SMS/email have been exercised.
-- Sentry receives controlled web, API, and worker test errors. **DSN and provider acceptance
-  pending.**
+- Sentry receives controlled web, API, and worker test errors. **Owner-deferred until a Sentry
+  project and DSNs are supplied.**
 
 ## Residual Dependency Finding
 

@@ -9,10 +9,11 @@ import type { LeadListItem, OperatingModelOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./operating-model.module.css";
 
-type Tab = "active" | "history" | "credits" | "launches";
+type Tab = "setup" | "active" | "history" | "credits" | "launches";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
 const tabs: Array<{ key: Tab; label: string }> = [
+  { key: "setup", label: "Company setup" },
   { key: "active", label: "Active policy" },
   { key: "credits", label: "Pending decisions" },
   { key: "history", label: "Policy history" },
@@ -58,7 +59,7 @@ export function OperatingModelWorkspace({
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("active");
+  const [activeTab, setActiveTab] = useState<Tab>("setup");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [selectedChecklistId, setSelectedChecklistId] = useState(
@@ -200,13 +201,99 @@ export function OperatingModelWorkspace({
     });
   }
 
+  async function installSetup() {
+    await mutate("/api/v1/operating-model/setup/install", "POST", {});
+  }
+
+  async function updateSeat(event: FormEvent<HTMLFormElement>, seatId: string) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    await mutate(`/api/v1/operating-model/setup/seats/${seatId}`, "PATCH", {
+      status: formValue(data, "status"),
+      primary_user_id: formValue(data, "primary_user_id") || null,
+      backup_user_id: formValue(data, "backup_user_id") || null,
+      notes: formValue(data, "notes") || null,
+    });
+  }
+
+  async function submitCounterparty(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const saved = await mutate("/api/v1/operating-model/setup/counterparties", "POST", {
+      market_id: formValue(data, "market_id") || null,
+      counterparty_type: formValue(data, "counterparty_type"),
+      name: formValue(data, "name"),
+      company_name: formValue(data, "company_name") || null,
+      email: formValue(data, "email") || null,
+      phone: formValue(data, "phone") || null,
+      notes: formValue(data, "notes") || null,
+    });
+    if (saved) form.reset();
+  }
+
+  async function decideCounterparty(
+    counterpartyId: string,
+    decision: "verify" | "deactivate",
+  ) {
+    const reason = window.prompt(`Document why this counterparty should be ${decision}d.`);
+    if (!reason) return;
+    await mutate(
+      `/api/v1/operating-model/setup/counterparties/${counterpartyId}/decision`,
+      "POST",
+      { decision, reason },
+    );
+  }
+
+  async function assignAcceptance(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const roleKey = formValue(data, "role_key");
+    const manualByRole: Record<string, string> = {
+      acquisition_manager: "lead_manager",
+      acquisition_rep: "closer",
+      prospecting_caller: "va_caller",
+      disposition_manager: "dispositions",
+      disposition_rep: "dispositions",
+      transaction_coordinator: "transaction_coordinator",
+      finance_accounting: "finance",
+      marketing_manager: "marketing",
+      owner: "owner",
+    };
+    const saved = await mutate(
+      "/api/v1/operating-model/setup/role-acceptances",
+      "POST",
+      {
+        user_id: formValue(data, "user_id"),
+        role_key: roleKey,
+        manual_key: manualByRole[roleKey],
+        manual_version: formValue(data, "manual_version"),
+      },
+    );
+    if (saved) form.reset();
+  }
+
+  async function decideAcceptance(
+    acceptanceId: string,
+    decision: "approve" | "needs_changes" | "revoke",
+  ) {
+    const managerNotes = window.prompt("Document the manager review decision.");
+    if (!managerNotes) return;
+    await mutate(
+      `/api/v1/operating-model/setup/role-acceptances/${acceptanceId}/decision`,
+      "POST",
+      { decision, manager_notes: managerNotes },
+    );
+  }
+
   return (
     <section className={styles.workspace}>
       <div className={styles.metrics}>
         <div><span>Active plan</span><strong>{activePlan ? `v${activePlan.version_number}` : "None"}</strong></div>
         <div><span>Company target</span><strong>{activePlan ? formatPercent(activePlan.target_company_margin_basis_points) : "-"}</strong></div>
         <div><span>Credits awaiting review</span><strong>{proposedCredits.length}</strong></div>
-        <div><span>Markets launch-ready</span><strong>{operatingModel.launch_checklists.filter((item) => ["ready", "approved"].includes(item.status)).length}</strong></div>
+        <div><span>Company setup</span><strong>{operatingModel.company_setup.completed_check_count}/{operatingModel.company_setup.total_check_count}</strong></div>
       </div>
 
       <div className={styles.tabBar} role="tablist" aria-label="Operating model views">
@@ -226,6 +313,114 @@ export function OperatingModelWorkspace({
 
       {status !== "idle" ? (
         <p className={`${styles.feedback} ${styles[status]}`} role="status">{status === "saving" ? "Saving..." : message}</p>
+      ) : null}
+
+      {activeTab === "setup" ? (
+        <div className={styles.setupGrid}>
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>Readiness</span><h3>Company configuration</h3></div>
+              {!operatingModel.company_setup.seats.length ? (
+                <button onClick={installSetup} type="button">Install standard setup</button>
+              ) : (
+                <strong>{operatingModel.company_setup.completed_check_count}/{operatingModel.company_setup.total_check_count}</strong>
+              )}
+            </div>
+            <div className={styles.setupChecks}>
+              {operatingModel.company_setup.checks.map((check) => (
+                <div key={check.key}>
+                  <span data-status={check.status}>{labelize(check.status)}</span>
+                  <div><strong>{check.label}</strong><p>{check.detail}</p></div>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>Accountability</span><h3>Operating seats</h3></div>
+              <strong>{operatingModel.company_setup.seats.filter((seat) => seat.status === "covered").length}</strong>
+            </div>
+            <div className={styles.seatRows}>
+              {operatingModel.company_setup.seats.map((seat) => (
+                <form key={seat.id} onSubmit={(event) => updateSeat(event, seat.id)}>
+                  <div><strong>{seat.label}</strong><span>{labelize(seat.role_key)}</span></div>
+                  <select defaultValue={seat.status} name="status">
+                    <option value="planned">Planned</option>
+                    <option value="hiring">Hiring</option>
+                    <option value="covered">Covered</option>
+                    <option value="paused">Paused</option>
+                  </select>
+                  <select defaultValue={seat.primary_user_id ?? ""} name="primary_user_id">
+                    <option value="">Primary owner</option>
+                    {activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
+                  </select>
+                  <select defaultValue={seat.backup_user_id ?? ""} name="backup_user_id">
+                    <option value="">No backup</option>
+                    {activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}
+                  </select>
+                  <input defaultValue={seat.notes ?? ""} name="notes" placeholder="Coverage notes" />
+                  <button type="submit">Save</button>
+                </form>
+              ))}
+              {!operatingModel.company_setup.seats.length ? <p className={styles.empty}>Install the standard setup to create Stonegate&apos;s operating seats.</p> : null}
+            </div>
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>External partners</span><h3>Verified counterparties</h3></div>
+              <strong>{operatingModel.company_setup.counterparties.filter((item) => item.status === "verified").length}</strong>
+            </div>
+            <div className={styles.rows}>
+              {operatingModel.company_setup.counterparties.map((item) => (
+                <div className={styles.creditRow} key={item.id}>
+                  <div><strong>{item.name}</strong><span>{labelize(item.counterparty_type)} · {item.company_name ?? item.market_name ?? "Company-wide"}</span></div>
+                  <div className={styles.rowActions}>
+                    <span className={styles.badge}>{labelize(item.status)}</span>
+                    {item.status !== "verified" ? <button onClick={() => decideCounterparty(item.id, "verify")} type="button">Verify</button> : null}
+                    {item.status !== "inactive" ? <button className={styles.secondary} onClick={() => decideCounterparty(item.id, "deactivate")} type="button">Deactivate</button> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form className={styles.planForm} onSubmit={submitCounterparty}>
+              <label><span>Type</span><select name="counterparty_type" required><option value="closing_attorney">Closing attorney</option><option value="title_company">Title company</option><option value="funding_partner">Funding partner</option><option value="inspector">Inspector</option><option value="other">Other</option></select></label>
+              <label><span>Market</span><select name="market_id"><option value="">Company-wide</option>{operatingModel.markets.map((market) => <option key={market.id} value={market.id}>{market.name}, {market.state_code}</option>)}</select></label>
+              <label><span>Contact name</span><input name="name" required /></label>
+              <label><span>Company</span><input name="company_name" /></label>
+              <label><span>Email</span><input name="email" type="email" /></label>
+              <label><span>Phone</span><input name="phone" type="tel" /></label>
+              <label className={styles.full}><span>Verification notes</span><textarea name="notes" rows={2} /></label>
+              <button type="submit">Add for verification</button>
+            </form>
+          </section>
+
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div><span>Role readiness</span><h3>Manual and workspace acceptance</h3></div>
+              <strong>{operatingModel.company_setup.role_acceptances.filter((item) => item.status === "approved").length}</strong>
+            </div>
+            <div className={styles.rows}>
+              {operatingModel.company_setup.role_acceptances.map((item) => (
+                <div className={styles.acceptanceRow} key={item.id}>
+                  <div><strong>{item.user_name}</strong><span>{labelize(item.role_key)} · {labelize(item.manual_key)} v{item.manual_version}</span>{item.workspace_test_evidence ? <p>{item.workspace_test_evidence}</p> : null}</div>
+                  <div className={styles.rowActions}>
+                    <span className={styles.badge}>{labelize(item.status)}</span>
+                    {item.status === "submitted" ? <><button className={styles.secondary} onClick={() => decideAcceptance(item.id, "needs_changes")} type="button">Return</button><button onClick={() => decideAcceptance(item.id, "approve")} type="button">Approve</button></> : null}
+                    {item.status === "approved" ? <button className={styles.secondary} onClick={() => decideAcceptance(item.id, "revoke")} type="button">Revoke</button> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <form className={styles.planForm} onSubmit={assignAcceptance}>
+              <label><span>Team member</span><select name="user_id" required><option value="">Select person</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+              <label><span>Assigned role</span><select name="role_key" required><option value="acquisition_manager">Lead manager</option><option value="acquisition_rep">Acquisitions closer</option><option value="prospecting_caller">VA caller</option><option value="disposition_manager">Disposition manager</option><option value="disposition_rep">Disposition representative</option><option value="transaction_coordinator">Transaction coordinator</option><option value="finance_accounting">Finance and accounting</option><option value="marketing_manager">Marketing manager</option><option value="owner">Owner</option></select></label>
+              <label><span>Manual version</span><input defaultValue="2026.07" name="manual_version" required /></label>
+              <button type="submit">Assign role setup</button>
+            </form>
+          </section>
+        </div>
       ) : null}
 
       {activeTab === "active" ? (

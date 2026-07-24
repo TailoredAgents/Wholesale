@@ -1,0 +1,271 @@
+.workspace {
+  display: grid;
+  gap: 16px;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-tight);
+}
+
+.summary > div {
+  min-width: 0;
+  padding: 17px 19px;
+  display: grid;
+  gap: 6px;
+  border-right: 1px solid var(--line-soft);
+}
+
+.summary > div:last-child {
+  border-right: 0;
+}
+
+.summary span,
+.acceptance header span,
+.acceptance label span,
+.acceptance dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.summary strong {
+  font-size: 18px;
+}
+
+.feedback {
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.acceptances {
+  display: grid;
+  gap: 14px;
+}
+
+.acceptance,
+.empty {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.acceptance header {
+  min-height: 82px;
+  padding: 16px 18px;
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.acceptance header > div:nth-child(2) {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.acceptance h2,
+.acceptance p {
+  margin: 0;
+}
+
+.acceptance h2 {
+  font-size: 16px;
+}
+
+.acceptance header p {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.acceptance header > strong {
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.acceptance header > strong[data-status="approved"] {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.icon {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.icon svg {
+  width: 19px;
+}
+
+.instructions {
+  margin: 16px 18px 0;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  border-left: 3px solid var(--info);
+  background: var(--info-soft);
+}
+
+.instructions svg {
+  width: 18px;
+  color: var(--info);
+}
+
+.instructions p {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.standards {
+  margin: 12px 18px 0;
+  display: grid;
+  gap: 7px;
+}
+
+.standards > strong {
+  font-size: 12px;
+}
+
+.standards ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.acceptance form,
+.acceptance dl {
+  margin: 0;
+  padding: 16px 18px 18px;
+  display: grid;
+  gap: 11px;
+}
+
+.acceptance label {
+  display: grid;
+  gap: 6px;
+}
+
+.acceptance textarea {
+  min-height: 72px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  resize: vertical;
+}
+
+.acceptance button {
+  min-height: 38px;
+  width: fit-content;
+  padding: 0 13px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.acceptance button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.acceptance dl div {
+  display: grid;
+  gap: 5px;
+}
+
+.acceptance dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.empty {
+  min-height: 220px;
+  padding: 28px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.empty svg {
+  width: 28px;
+  color: var(--muted);
+}
+
+.empty h2,
+.empty p {
+  margin: 0;
+}
+
+.empty h2 {
+  font-size: 16px;
+}
+
+.empty p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .summary > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+
+  .summary > div:last-child {
+    border-bottom: 0;
+  }
+
+  .acceptance header {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .acceptance header > strong {
+    grid-column: 2;
+    justify-self: start;
+  }
+}

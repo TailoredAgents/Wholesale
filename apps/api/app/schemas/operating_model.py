@@ -197,9 +197,143 @@ class MarketLaunchChecklistApproval(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
 
 
+class OperatingSeatRead(BaseModel):
+    id: UUID
+    seat_key: str
+    label: str
+    role_key: str
+    status: str
+    primary_user_id: UUID | None
+    primary_user_name: str | None
+    backup_user_id: UUID | None
+    backup_user_name: str | None
+    notes: str | None
+
+
+class OperatingSeatUpdate(BaseModel):
+    status: Literal["planned", "hiring", "covered", "paused"]
+    primary_user_id: UUID | None = None
+    backup_user_id: UUID | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def covered_seat_has_an_owner(self) -> "OperatingSeatUpdate":
+        if self.status == "covered" and self.primary_user_id is None:
+            raise ValueError("A covered operating seat requires a primary user.")
+        if (
+            self.primary_user_id is not None
+            and self.backup_user_id is not None
+            and self.primary_user_id == self.backup_user_id
+        ):
+            raise ValueError("Primary and backup coverage must be different users.")
+        return self
+
+
+class BusinessCounterpartyRead(BaseModel):
+    id: UUID
+    market_id: UUID | None
+    market_name: str | None
+    counterparty_type: str
+    name: str
+    company_name: str | None
+    email: str | None
+    phone: str | None
+    status: str
+    verified_by_user_id: UUID | None
+    verified_by_name: str | None
+    verified_at: datetime | None
+    notes: str | None
+
+
+class BusinessCounterpartyCreate(BaseModel):
+    market_id: UUID | None = None
+    counterparty_type: Literal[
+        "closing_attorney",
+        "title_company",
+        "funding_partner",
+        "inspector",
+        "other",
+    ]
+    name: str = Field(min_length=1, max_length=255)
+    company_name: str | None = Field(default=None, max_length=255)
+    email: str | None = Field(default=None, max_length=320)
+    phone: str | None = Field(default=None, max_length=40)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class BusinessCounterpartyDecision(BaseModel):
+    decision: Literal["verify", "deactivate"]
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class StaffRoleAcceptanceRead(BaseModel):
+    id: UUID
+    user_id: UUID
+    user_name: str
+    role_key: str
+    manual_key: str
+    manual_version: str
+    status: str
+    assigned_by_user_id: UUID
+    assigned_by_name: str
+    workspace_test_evidence: str | None
+    employee_notes: str | None
+    accepted_at: datetime | None
+    approved_by_user_id: UUID | None
+    approved_by_name: str | None
+    manager_notes: str | None
+    approved_at: datetime | None
+
+
+class StaffRoleAcceptanceAssign(BaseModel):
+    user_id: UUID
+    role_key: str = Field(min_length=1, max_length=120)
+    manual_key: str = Field(min_length=1, max_length=160)
+    manual_version: str = Field(min_length=1, max_length=40)
+
+
+class StaffRoleAcceptanceSubmit(BaseModel):
+    workspace_test_evidence: str = Field(min_length=10, max_length=2000)
+    employee_notes: str | None = Field(default=None, max_length=2000)
+
+
+class StaffRoleAcceptanceDecision(BaseModel):
+    decision: Literal["approve", "needs_changes", "revoke"]
+    manager_notes: str = Field(min_length=3, max_length=2000)
+
+
+class CompanySetupCheckRead(BaseModel):
+    key: str
+    label: str
+    status: Literal["complete", "attention", "not_started"]
+    detail: str
+
+
+class CompanySetupRead(BaseModel):
+    seats: list[OperatingSeatRead]
+    counterparties: list[BusinessCounterpartyRead]
+    role_acceptances: list[StaffRoleAcceptanceRead]
+    checks: list[CompanySetupCheckRead]
+    completed_check_count: int
+    total_check_count: int
+
+
+class CompanySetupInstallRead(BaseModel):
+    created_seat_count: int
+    setup: CompanySetupRead
+
+
+class MyRoleSetupRead(BaseModel):
+    user_id: UUID
+    user_name: str
+    role_keys: list[str]
+    acceptances: list[StaffRoleAcceptanceRead]
+
+
 class OperatingModelOverview(BaseModel):
     users: list[BusinessUserRead]
     markets: list[BusinessMarketRead]
     compensation_plans: list[CompensationPlanRead]
     role_credits: list[RoleCreditRead]
     launch_checklists: list[MarketLaunchChecklistRead]
+    company_setup: CompanySetupRead

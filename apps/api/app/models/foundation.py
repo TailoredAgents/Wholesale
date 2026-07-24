@@ -2846,6 +2846,77 @@ class MarketLaunchChecklistItem(UuidPrimaryKeyMixin, TimestampMixin, Base):
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
+class OperatingSeat(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "operating_seats"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "seat_key",
+            name="uq_operating_seats_org_key",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    seat_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    primary_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    backup_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class BusinessCounterparty(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "business_counterparties"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    market_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("markets.id"), index=True)
+    counterparty_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class StaffRoleAcceptance(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "staff_role_acceptances"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "user_id",
+            "role_key",
+            "manual_key",
+            "manual_version",
+            name="uq_staff_role_acceptance_assignment",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    role_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    manual_key: Mapped[str] = mapped_column(String(160), nullable=False)
+    manual_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    assigned_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    workspace_test_evidence: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    employee_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    manager_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class CompensationRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "compensation_rules"
 

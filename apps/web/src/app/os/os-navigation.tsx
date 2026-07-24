@@ -1,4 +1,5 @@
 import {
+  BadgeCheck,
   BarChart3,
   Bot,
   BriefcaseBusiness,
@@ -199,6 +200,13 @@ export const osNavGroups: OsNavGroup[] = [
     label: "Control",
     items: [
       {
+        href: "/os/my-setup",
+        label: "My Setup",
+        icon: BadgeCheck,
+        roles: [],
+        anyPermissions: [],
+      },
+      {
         href: "/os/operating-model",
         label: "Operating Model",
         icon: Settings2,
@@ -222,6 +230,7 @@ export function isOwnerProfile(profile: WorkspaceProfile) {
 
 export function canSeeNavItem(profile: WorkspaceProfile, item: OsNavItem) {
   if (isOwnerProfile(profile)) return true;
+  if (item.href === "/os/my-setup") return true;
   const roleRelevant = profile.role_keys.some((role) => item.roles.includes(role));
   const authorized = item.anyPermissions.some((permission) =>
     profile.permissions.includes(permission),

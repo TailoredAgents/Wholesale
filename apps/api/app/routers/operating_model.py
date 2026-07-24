@@ -4,10 +4,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_permission
+from app.core.auth import Principal, get_current_principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.operating_model import (
+    BusinessCounterpartyCreate,
+    BusinessCounterpartyDecision,
+    BusinessCounterpartyRead,
+    CompanySetupInstallRead,
     CompensationPlanActivation,
     CompensationPlanCreate,
     CompensationPlanRead,
@@ -16,10 +20,27 @@ from app.schemas.operating_model import (
     MarketLaunchChecklistItemRead,
     MarketLaunchChecklistItemUpdate,
     MarketLaunchChecklistRead,
+    MyRoleSetupRead,
     OperatingModelOverview,
+    OperatingSeatRead,
+    OperatingSeatUpdate,
     RoleCreditCreate,
     RoleCreditDecision,
     RoleCreditRead,
+    StaffRoleAcceptanceAssign,
+    StaffRoleAcceptanceDecision,
+    StaffRoleAcceptanceRead,
+    StaffRoleAcceptanceSubmit,
+)
+from app.services.company_setup import (
+    assign_role_acceptance,
+    create_counterparty,
+    decide_counterparty,
+    decide_role_acceptance,
+    get_my_role_setup,
+    install_company_setup,
+    submit_role_acceptance,
+    update_operating_seat,
 )
 from app.services.operating_model import (
     activate_compensation_plan,
@@ -36,12 +57,131 @@ router = APIRouter(prefix="/api/v1/operating-model", tags=["operating-model"])
 manage_operating_model_dependency = require_permission(PermissionKeys.MANAGE_OPERATING_MODEL)
 
 
+@router.get("/my-setup")
+def read_my_role_setup(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> MyRoleSetupRead:
+    try:
+        return get_my_role_setup(db, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/my-setup/role-acceptances/{acceptance_id}/submit")
+def submit_my_role_acceptance(
+    acceptance_id: UUID,
+    payload: StaffRoleAcceptanceSubmit,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(get_current_principal)],
+) -> StaffRoleAcceptanceRead:
+    try:
+        acceptance = submit_role_acceptance(db, principal, acceptance_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if acceptance is None:
+        raise HTTPException(status_code=404, detail="Role acceptance not found.")
+    return acceptance
+
+
 @router.get("")
 def read_operating_model(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
 ) -> OperatingModelOverview:
     return get_operating_model_overview(db, principal)
+
+
+@router.post("/setup/install")
+def install_workspace_company_setup(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> CompanySetupInstallRead:
+    return install_company_setup(db, principal)
+
+
+@router.patch("/setup/seats/{seat_id}")
+def update_workspace_operating_seat(
+    seat_id: UUID,
+    payload: OperatingSeatUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> OperatingSeatRead:
+    try:
+        seat = update_operating_seat(db, principal, seat_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if seat is None:
+        raise HTTPException(status_code=404, detail="Operating seat not found.")
+    return seat
+
+
+@router.post("/setup/counterparties", status_code=201)
+def create_workspace_counterparty(
+    payload: BusinessCounterpartyCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> BusinessCounterpartyRead:
+    try:
+        return create_counterparty(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/setup/counterparties/{counterparty_id}/decision")
+def decide_workspace_counterparty(
+    counterparty_id: UUID,
+    payload: BusinessCounterpartyDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> BusinessCounterpartyRead:
+    counterparty = decide_counterparty(db, principal, counterparty_id, payload)
+    if counterparty is None:
+        raise HTTPException(status_code=404, detail="Counterparty not found.")
+    return counterparty
+
+
+@router.post("/setup/role-acceptances", status_code=201)
+def assign_workspace_role_acceptance(
+    payload: StaffRoleAcceptanceAssign,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> StaffRoleAcceptanceRead:
+    try:
+        return assign_role_acceptance(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/setup/role-acceptances/{acceptance_id}/decision")
+def decide_workspace_role_acceptance(
+    acceptance_id: UUID,
+    payload: StaffRoleAcceptanceDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operating_model_dependency)],
+) -> StaffRoleAcceptanceRead:
+    try:
+        acceptance = decide_role_acceptance(db, principal, acceptance_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if acceptance is None:
+        raise HTTPException(status_code=404, detail="Role acceptance not found.")
+    return acceptance
 
 
 @router.post("/compensation-plans", status_code=201)

@@ -39,6 +39,7 @@ from app.schemas.operating_model import (
     RoleCreditDecision,
     RoleCreditRead,
 )
+from app.services.company_setup import get_company_setup
 
 PLAN_ROLE_SPECS = (
     ("lead_manager", "lead_manager_basis_points", None),
@@ -119,6 +120,7 @@ def get_operating_model_overview(db: Session, principal: Principal) -> Operating
         compensation_plans=[compensation_plan_read(db, plan) for plan in plans],
         role_credits=[role_credit_read(db, credit) for credit in credits],
         launch_checklists=[launch_checklist_read(db, checklist) for checklist in checklists],
+        company_setup=get_company_setup(db, principal),
     )
 
 

@@ -123,7 +123,9 @@ The desktop sidebar and mobile navigation drawer use five groups.
 
 ### Control
 
-- **Operating Model:** Compensation policy, role credits, history, and market launches.
+- **My Setup:** Your role manual, workspace test, and manager approval.
+- **Operating Model:** Company setup, compensation policy, role credits, history, and market
+  launches.
 - **AI Control:** Copilots, runtime, automation contracts, evaluations, traces, and governance.
 
 Use the global search for a seller, property, or record. Recent destinations let you return to
@@ -152,6 +154,7 @@ records without searching again. On mobile, use the menu button to open the navi
 | Buyers | `/os/buyers` |
 | Finance | `/os/finance` |
 | Marketing | `/os/marketing` |
+| My Setup | `/os/my-setup` |
 | Operating Model | `/os/operating-model` |
 | AI Control | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
@@ -738,6 +741,7 @@ cannot change budgets, audiences, ads, or campaigns.
 
 The Owner uses **Operating Model**. Tabs are:
 
+- **Company setup**
 - **Active policy**
 - **Pending decisions**
 - **Policy history**
@@ -745,12 +749,15 @@ The Owner uses **Operating Model**. Tabs are:
 
 Use it to:
 
-1. Review the active compensation plan and company-margin target.
-2. Resolve role-credit decisions.
-3. Review historical policy versions.
-4. Configure human-led or AI-assisted disposition modes.
-5. Complete market-specific launch evidence.
-6. Approve a launch only after every required item is supported.
+1. Install and maintain operating seats, coverage, and backups.
+2. Add and verify closing and operating partners.
+3. Assign role manuals and decide employee workspace tests.
+4. Review the active compensation plan and company-margin target.
+5. Resolve role-credit decisions.
+6. Review historical policy versions.
+7. Configure human-led or AI-assisted disposition modes.
+8. Complete market-specific launch evidence.
+9. Approve a launch only after every required item is supported.
 
 Policy changes are effective-dated. They do not rewrite historical deal economics.
 
@@ -989,7 +996,10 @@ Archive the record or correct it through the approved workflow.
 5. Employee completes training using synthetic records.
 6. Manager verifies the employee can perform normal work and cannot open restricted pages.
 7. Manager reviews consent, suppression, recording, privacy, and escalation rules.
-8. Live work is assigned only after role acceptance is documented.
+8. Owner assigns the correct manual in **Operating Model > Company setup**.
+9. Employee opens **My Setup**, reviews the role standards, and submits workspace-test evidence.
+10. Owner approves the submission only after confirming normal access and role restrictions.
+11. Live work is assigned only after role acceptance is approved.
 
 When a person leaves, deactivate the Stonegate user immediately. Reassign owned conversations,
 tasks, appointments, leads, transactions, and disposition cases. Do not delete the user or their
@@ -998,6 +1008,8 @@ history.
 ## 25. Related Documentation
 
 - `LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for the Lead Manager role.
+- `STAFF_ROLE_MANUALS.md`: plain-language standards for every operating role.
+- `PHASE_F2_COMPANY_SETUP.md`: company setup and role-acceptance workflow.
 - `OPERATING_MODEL.md`: roles, handoffs, compensation, and operating policy.
 - `WORKFLOWS.md`: concise system workflow sequence.
 - `CURRENT_STATE.md`: delivered functionality and known limits.

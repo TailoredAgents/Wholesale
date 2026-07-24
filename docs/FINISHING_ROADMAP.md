@@ -121,6 +121,18 @@ Exit criteria:
 
 Goal: Replace demonstration assumptions with Stonegate's real operating data.
 
+Implementation checkpoint, July 24, 2026:
+
+- The existing Operating Model now includes standard operating seats, named primary and backup
+  coverage, partner verification, readiness checks, staff manual assignments, employee workspace
+  test evidence, manager approval, and complete audit events.
+- Every user has a restricted **My Setup** workspace. Owners manage the process from
+  **Operating Model > Company setup**.
+- This is the configuration and acceptance layer for existing users, roles, markets, scripts,
+  compensation, closer capacity, and buyers. It does not duplicate those systems.
+- Operational acceptance remains ongoing as real staff and Georgia counterparties are hired and
+  approved.
+
 Work:
 
 - Create individual users for the Owner, Lead Manager, closers, VAs, dispositions, transaction
