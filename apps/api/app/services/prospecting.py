@@ -16,7 +16,6 @@ from app.models.foundation import (
     AttributionTouch,
     AuditEvent,
     Campaign,
-    ComplianceIncident,
     Contact,
     ContactMethod,
     Lead,
@@ -51,7 +50,6 @@ from app.services.acquisition_operations import (
     operations_user_read,
     upsert_internal_calendar_event,
 )
-from app.services.compliance import prospect_call_blockers
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
 from app.services.property_validation import canonical_address_key
@@ -253,9 +251,8 @@ def start_attempt(
     prospect = db.get(Prospect, entry.prospect_id)
     if prospect is None:
         raise ValueError("The prospect is no longer available.")
-    compliance_blockers = prospect_call_blockers(db, prospect)
-    if compliance_blockers:
-        raise ValueError(" ".join(compliance_blockers))
+    if prospect.call_eligibility != "eligible":
+        raise ValueError("This prospect is not cleared for calling.")
     script = get_active_script(db, principal.organization_id)
     if script is None:
         raise ValueError("An owner must approve a caller script before prospecting begins.")
@@ -382,40 +379,10 @@ def complete_attempt(
         if payload.outcome == "wrong_number":
             prospect.phone_validation_status = "invalid"
             prospect.call_eligibility = "blocked"
-            db.add(
-                ComplianceIncident(
-                    organization_id=principal.organization_id,
-                    prospect_id=prospect.id,
-                    incident_type="wrong_number",
-                    channel="phone",
-                    severity="low",
-                    status="open",
-                    source="prospecting_attempt",
-                    summary="Prospect reported a wrong number.",
-                    details=clean_text(payload.notes),
-                    reported_by_user_id=principal.user_id,
-                    occurred_at=now,
-                )
-            )
         elif payload.outcome == "do_not_call":
             prospect.call_eligibility = "blocked"
             prospect.suppression_status = "suppressed"
             record_dnc_suppression(db, principal, prospect, now)
-            db.add(
-                ComplianceIncident(
-                    organization_id=principal.organization_id,
-                    prospect_id=prospect.id,
-                    incident_type="do_not_contact",
-                    channel="phone",
-                    severity="medium",
-                    status="open",
-                    source="prospecting_attempt",
-                    summary="Prospect requested no further calls.",
-                    details=clean_text(payload.notes),
-                    reported_by_user_id=principal.user_id,
-                    occurred_at=now,
-                )
-            )
 
     add_audit(
         db,

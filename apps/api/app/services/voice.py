@@ -49,7 +49,6 @@ from app.services.communication_compliance import (
     format_e164,
     phone_lookup_values,
 )
-from app.services.compliance import recording_enabled_for_organization
 from app.services.inbox import (
     ensure_primary_conversation,
     get_scoped_conversation,
@@ -175,9 +174,6 @@ def create_voice_session(
     principal: Principal,
 ) -> VoiceSessionRead:
     settings = get_settings()
-    recording_enabled = recording_enabled_for_organization(
-        db, principal.organization_id, settings=settings
-    )
     identity = voice_identity(str(principal.user_id))
     line = select_voice_line(db, principal.organization_id, principal.user_id)
     blockers: list[str] = []
@@ -192,7 +188,7 @@ def create_voice_session(
             token=None,
             expires_at=None,
             line=voice_line_to_read(db, line) if line else None,
-            recording_enabled=recording_enabled,
+            recording_enabled=settings.twilio_voice_recording_configured,
             blockers=blockers,
         )
     assert line is not None
@@ -203,7 +199,7 @@ def create_voice_session(
         token=token,
         expires_at=expires_at,
         line=voice_line_to_read(db, line),
-        recording_enabled=recording_enabled,
+        recording_enabled=settings.twilio_voice_recording_configured,
         blockers=[],
     )
 
@@ -239,14 +235,7 @@ def create_call_intent(
         line = db.get(VoiceLine, existing.voice_line_id)
         if line is None:
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
-        settings = get_settings()
-        return call_intent_to_read(
-            existing,
-            line,
-            recording_enabled_for_organization(
-                db, principal.organization_id, settings=settings
-            ),
-        )
+        return call_intent_to_read(existing, line, get_settings())
 
     contact = db.get(Contact, conversation.contact_id)
     lead = db.get(Lead, conversation.lead_id)
@@ -260,9 +249,6 @@ def create_call_intent(
         raise VoiceConfigurationError("No active Stonegate voice line is available.")
     now = datetime.now(UTC)
     settings = get_settings()
-    recording_enabled = recording_enabled_for_organization(
-        db, principal.organization_id, settings=settings
-    )
     intent = VoiceCallIntent(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
@@ -275,7 +261,7 @@ def create_call_intent(
         status="pending",
         recording_consent_status=(
             "disclosure_configured"
-            if recording_enabled
+            if settings.twilio_voice_recording_configured
             else "not_requested"
         ),
         expires_at=now + timedelta(minutes=5),
@@ -285,7 +271,7 @@ def create_call_intent(
     )
     db.add(intent)
     db.commit()
-    return call_intent_to_read(intent, line, recording_enabled)
+    return call_intent_to_read(intent, line, settings)
 
 
 def process_outbound_voice_request(
@@ -372,15 +358,12 @@ def process_outbound_voice_request(
     intent.consumed_at = datetime.now(UTC)
     intent.provider_call_id = call_sid
     db.commit()
-    recording_enabled = recording_enabled_for_organization(
-        db, intent.organization_id, settings=settings
-    )
     return outbound_call_twiml(
         settings,
         recipient=intent.recipient,
         from_number=line.phone_number,
         intent_id=str(intent.id),
-        recording_enabled=recording_enabled,
+        recording_enabled=settings.twilio_voice_recording_configured,
     )
 
 
@@ -392,9 +375,6 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     line = find_voice_line_by_number(db, recipient)
     if line is None or not settings.twilio_voice_configured:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
-    recording_enabled = recording_enabled_for_organization(
-        db, line.organization_id, settings=settings
-    )
     existing = find_call(db, line.organization_id, provider_call_id=call_sid)
     if existing is not None:
         target_user_id = resolve_inbound_user(db, line, existing.conversation_id)
@@ -404,7 +384,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
             settings,
             identity=voice_identity(str(target_user_id)),
             call_id=str(existing.id),
-            recording_enabled=recording_enabled,
+            recording_enabled=settings.twilio_voice_recording_configured,
         )
     conversation = find_conversation_by_phone(db, line.organization_id, caller)
     if conversation is None:
@@ -426,7 +406,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         to_number=line.phone_number,
         recording_consent_status=(
             "disclosure_configured"
-            if recording_enabled
+            if settings.twilio_voice_recording_configured
             else "not_requested"
         ),
     )
@@ -461,7 +441,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         settings,
         identity=voice_identity(str(target_user_id)),
         call_id=str(call.id),
-        recording_enabled=recording_enabled,
+        recording_enabled=settings.twilio_voice_recording_configured,
     )
 
 
@@ -1248,7 +1228,7 @@ def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
 def call_intent_to_read(
     intent: VoiceCallIntent,
     line: VoiceLine,
-    recording_enabled: bool,
+    settings: Settings,
 ) -> VoiceCallIntentRead:
     return VoiceCallIntentRead(
         id=intent.id,
@@ -1257,7 +1237,7 @@ def call_intent_to_read(
         from_number=line.phone_number,
         status=intent.status,
         expires_at=intent.expires_at,
-        recording_enabled=recording_enabled,
+        recording_enabled=settings.twilio_voice_recording_configured,
     )
 
 

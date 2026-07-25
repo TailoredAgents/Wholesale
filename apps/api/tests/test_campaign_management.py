@@ -61,7 +61,7 @@ def create_campaign(client: TestClient, headers: dict[str, str]) -> dict[str, An
     return cast(dict[str, Any], response.json())
 
 
-def test_phase_three_import_screening_cost_and_calling_batch_workflow(
+def test_import_cost_and_calling_batch_workflow_without_dnc_evidence_gate(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -142,17 +142,16 @@ def test_phase_three_import_screening_cost_and_calling_batch_workflow(
     preview = preview_response.json()
     assert preview["total_rows"] == 6
     assert preview["valid_rows"] == 4
-    assert preview["eligible_rows"] == 1
+    assert preview["eligible_rows"] == 2
     assert preview["invalid_rows"] == 1
     assert preview["duplicate_rows"] == 1
     assert preview["suppressed_rows"] == 2
-    assert preview["review_required_rows"] == 1
+    assert preview["review_required_rows"] == 0
     assert {row["status"] for row in preview["rows"]} == {
         "valid",
         "invalid",
         "duplicate",
         "suppressed",
-        "review_required",
     }
 
     import_response = client.post(
@@ -168,14 +167,10 @@ def test_phase_three_import_screening_cost_and_calling_batch_workflow(
     assert int(db_session.scalar(select(func.count()).select_from(Prospect)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(ProspectImportRow)) or 0) == 6
     assert (
-        int(db_session.scalar(select(func.count()).select_from(ProspectSuppressionCheck)) or 0) == 8
+        int(db_session.scalar(select(func.count()).select_from(ProspectSuppressionCheck)) or 0) == 4
     )
     prospects = db_session.scalars(select(Prospect).order_by(Prospect.legal_name)).all()
-    assert {prospect.call_eligibility for prospect in prospects} == {
-        "eligible",
-        "blocked",
-        "review_required",
-    }
+    assert {prospect.call_eligibility for prospect in prospects} == {"eligible", "blocked"}
 
     repeat_response = client.post(
         "/api/v1/campaign-management/imports",
@@ -226,39 +221,12 @@ def test_phase_three_import_screening_cost_and_calling_batch_workflow(
     assert calling_batch_response.status_code == 201, calling_batch_response.text
     calling_batch = calling_batch_response.json()
     assert calling_batch["status"] == "ready"
-    assert calling_batch["total_entries"] == 1
-    assert calling_batch["entries"][0]["legal_name"] == "Eligible Owner"
-    assert calling_batch["entries"][0]["call_eligibility"] == "eligible"
-
-    review_prospect = next(
-        prospect for prospect in prospects if prospect.call_eligibility == "review_required"
-    )
-    screening_response = client.post(
-        f"/api/v1/campaign-management/prospects/{review_prospect.id}/screening",
-        headers=owner_headers,
-        json={
-            "dnc_status": "clear",
-            "source": "Test DNC Provider",
-            "evidence_reference": "screening-report-2026-07-21.csv",
-            "notes": "Manager reviewed the retained provider export.",
-        },
-    )
-    assert screening_response.status_code == 200, screening_response.text
-    assert screening_response.json()["call_eligibility"] == "eligible"
-    second_batch_response = client.post(
-        "/api/v1/campaign-management/calling-batches",
-        headers=owner_headers,
-        json={
-            "campaign_id": campaign["id"],
-            "import_batch_id": imported["id"],
-            "assigned_user_id": va["id"],
-            "name": "Atlanta Batch 2",
-            "maximum_records": 100,
-        },
-    )
-    assert second_batch_response.status_code == 201, second_batch_response.text
-    assert second_batch_response.json()["total_entries"] == 1
-    assert second_batch_response.json()["entries"][0]["legal_name"] == "Review Owner"
+    assert calling_batch["total_entries"] == 2
+    assert {entry["legal_name"] for entry in calling_batch["entries"]} == {
+        "Eligible Owner",
+        "Review Owner",
+    }
+    assert {entry["call_eligibility"] for entry in calling_batch["entries"]} == {"eligible"}
 
     overview_response = client.get("/api/v1/campaign-management", headers=owner_headers)
     assert overview_response.status_code == 200, overview_response.text
@@ -282,7 +250,6 @@ def test_phase_three_import_screening_cost_and_calling_batch_workflow(
         "campaign_management.prospect_import_complete",
         "campaign_management.cost_create",
         "campaign_management.calling_batch_create",
-        "campaign_management.screening_decision",
     } <= actions
 
 

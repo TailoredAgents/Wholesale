@@ -243,25 +243,6 @@ class CampaignQualityRead(BaseModel):
     calling_batch_completed: int
 
 
-class ProspectScreeningReviewRead(BaseModel):
-    id: UUID
-    campaign_id: UUID
-    campaign_name: str
-    legal_name: str
-    phone: str | None
-    property_address: str | None
-    call_eligibility: str
-    suppression_status: str
-    suppression_checked_at: datetime | None
-
-
-class ProspectScreeningDecision(BaseModel):
-    dnc_status: Literal["clear", "blocked"]
-    source: str = Field(min_length=2, max_length=120)
-    evidence_reference: str = Field(min_length=2, max_length=500)
-    notes: str | None = Field(default=None, max_length=1000)
-
-
 class CampaignManagementOverview(BaseModel):
     users: list[OperationsUserRead]
     campaigns: list[CampaignRead]
@@ -269,5 +250,4 @@ class CampaignManagementOverview(BaseModel):
     import_batches: list[ProspectImportBatchRead]
     costs: list[CampaignCostRead]
     calling_batches: list[ProspectCallingBatchRead]
-    screening_review: list[ProspectScreeningReviewRead]
     quality: list[CampaignQualityRead]

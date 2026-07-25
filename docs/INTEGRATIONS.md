@@ -49,20 +49,14 @@ The scheduled GitHub Actions production-readiness workflow checks API health, da
 readiness, and required public pages every 15 minutes. It supplements Sentry and worker failure
 alerts; it does not replace either one.
 
-## DNC Screening
+## Do-Not-Contact Data
 
-Stonegate can retain DNC results supplied in a vendor list and can record a later manager-reviewed
-result with its provider or report reference. The system separately checks Stonegate's internal
-Voice suppression records. A prospect without clear retained DNC evidence remains review-only and
-cannot enter a calling batch.
+Stonegate can read an optional do-not-call flag supplied in a vendor list and separately checks its
+internal Voice suppression records. Blank or unknown vendor values do not block imports or calling
+batches. Explicit do-not-call values, seller opt-outs, and active company suppression still block
+outbound contact.
 
-No live national DNC provider is currently connected. The FTC registry is accessed through its
-secure telemarketer portal and downloaded data, not the public DNC complaint-report API. Stonegate
-needs an approved access account, subscription/area-code plan, retained screening evidence, and a
-recurring process that keeps data within the required refresh window. A screening vendor may
-perform this work, but its result must write through the existing evidence model and does not
-remove Stonegate's responsibility for company suppression, written procedures, training, or
-monitoring.
+No live national DNC provider is connected.
 
 ## OpenAI
 

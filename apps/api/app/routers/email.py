@@ -26,7 +26,6 @@ from app.schemas.email import (
 )
 from app.services.email import (
     EmailAttachmentError,
-    EmailComplianceError,
     EmailConfigurationError,
     EmailDispatchConflictError,
     complete_google_authorization,
@@ -219,11 +218,6 @@ def send_email_message(
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except EmailAttachmentError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=str(exc),
-        ) from exc
-    except EmailComplianceError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),

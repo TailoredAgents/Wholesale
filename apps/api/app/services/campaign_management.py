@@ -40,15 +40,12 @@ from app.schemas.campaign_management import (
     ProspectImportPreviewRow,
     ProspectImportRequest,
     ProspectImportRowRead,
-    ProspectScreeningDecision,
-    ProspectScreeningReviewRead,
 )
 from app.services.acquisition_operations import (
     list_campaigns,
     list_users,
     normalize_prospect_phone,
 )
-from app.services.compliance import prospect_call_blockers
 from app.services.property_validation import canonical_address_key
 
 MAX_IMPORT_ROWS = 10_000
@@ -63,9 +60,6 @@ DNC_BLOCKED_VALUES = {
     "true",
     "yes",
 }
-DNC_CLEAR_VALUES = {"0", "clear", "false", "no", "not listed", "not_listed"}
-
-
 @dataclass
 class PreparedImportRow:
     row_number: int
@@ -78,7 +72,6 @@ class PreparedImportRow:
     company_suppression_status: str
     company_suppression_evidence: dict[str, object]
     dnc_status: str
-    dnc_evidence: dict[str, object]
 
 
 def get_campaign_management_overview(
@@ -93,7 +86,6 @@ def get_campaign_management_overview(
         import_batches=list_import_batches(db, principal),
         costs=list_campaign_costs(db, principal),
         calling_batches=list_calling_batches(db, principal),
-        screening_review=list_screening_review(db, principal),
         quality=[campaign_quality_read(db, campaign.id) for campaign in campaigns],
     )
 
@@ -268,7 +260,7 @@ def create_prospect_import(
             "suppressed_rows": batch.suppressed_rows,
             "review_required_rows": batch.review_required_rows,
         },
-        reason="Prospect CSV imported with row-level screening evidence",
+        reason="Prospect CSV imported with row-level validation",
     )
     try:
         db.commit()
@@ -507,16 +499,7 @@ def prepare_row(
         "reason": company_record.reason if company_record else None,
     }
     dnc_raw = (values.get("dnc_status") or "").strip().casefold()
-    if dnc_raw in DNC_BLOCKED_VALUES:
-        dnc_status = "blocked"
-    elif dnc_raw in DNC_CLEAR_VALUES:
-        dnc_status = "clear"
-    else:
-        dnc_status = "review_required"
-    dnc_evidence: dict[str, object] = {
-        "raw_value": values.get("dnc_status"),
-        "mapping_source": mapping.source_name,
-    }
+    dnc_status = "blocked" if dnc_raw in DNC_BLOCKED_VALUES else "clear"
 
     if errors:
         status = "invalid"
@@ -534,9 +517,6 @@ def prepare_row(
     elif not normalized_phone:
         status = "review_required"
         reasons.append("No valid phone is available for calling.")
-    elif dnc_status != "clear":
-        status = "review_required"
-        reasons.append("Verified Do Not Call screening evidence was not supplied.")
     else:
         status = "valid"
 
@@ -551,7 +531,6 @@ def prepare_row(
         company_suppression_status=company_status,
         company_suppression_evidence=company_evidence,
         dnc_status=dnc_status,
-        dnc_evidence=dnc_evidence,
     )
 
 
@@ -632,34 +611,20 @@ def add_suppression_checks(
     prepared: PreparedImportRow,
     checked_at: datetime,
 ) -> None:
-    for check_type, status, source, evidence in (
-        (
-            "company_suppression",
-            prepared.company_suppression_status,
-            "stonegate_suppression_records",
-            prepared.company_suppression_evidence,
-        ),
-        (
-            "national_dnc",
-            prepared.dnc_status,
-            "imported_vendor_field",
-            prepared.dnc_evidence,
-        ),
-    ):
-        db.add(
-            ProspectSuppressionCheck(
-                organization_id=principal.organization_id,
-                import_row_id=import_row.id,
-                prospect_id=prospect.id,
-                check_type=check_type,
-                channel="voice",
-                normalized_value=prospect.normalized_phone,
-                status=status,
-                source=source,
-                evidence=evidence,
-                checked_at=checked_at,
-            )
+    db.add(
+        ProspectSuppressionCheck(
+            organization_id=principal.organization_id,
+            import_row_id=import_row.id,
+            prospect_id=prospect.id,
+            check_type="company_suppression",
+            channel="voice",
+            normalized_value=prospect.normalized_phone,
+            status=prepared.company_suppression_status,
+            source="stonegate_suppression_records",
+            evidence=prepared.company_suppression_evidence,
+            checked_at=checked_at,
         )
+    )
 
 
 def import_preview(
@@ -893,14 +858,11 @@ def create_calling_batch(
             Prospect.id.not_in(already_batched),
         )
         .order_by(Prospect.created_at)
+        .limit(payload.maximum_records)
     )
     if import_batch:
         prospect_statement = prospect_statement.where(Prospect.import_batch_id == import_batch.id)
-    prospects = [
-        prospect
-        for prospect in db.scalars(prospect_statement).all()
-        if not prospect_call_blockers(db, prospect)
-    ][: payload.maximum_records]
+    prospects = db.scalars(prospect_statement).all()
     if not prospects:
         raise ValueError("No unbatched, callable prospects match this selection.")
 
@@ -964,127 +926,6 @@ def list_calling_batches(
         .limit(100)
     ).all()
     return [calling_batch_read(db, batch) for batch in batches]
-
-
-def list_screening_review(
-    db: Session,
-    principal: Principal,
-) -> list[ProspectScreeningReviewRead]:
-    prospects = db.scalars(
-        select(Prospect)
-        .where(
-            Prospect.organization_id == principal.organization_id,
-            Prospect.call_eligibility == "review_required",
-            Prospect.converted_lead_id.is_(None),
-        )
-        .order_by(Prospect.created_at)
-        .limit(500)
-    ).all()
-    return [screening_review_read(db, prospect) for prospect in prospects]
-
-
-def screening_review_read(db: Session, prospect: Prospect) -> ProspectScreeningReviewRead:
-    campaign = db.get(Campaign, prospect.campaign_id)
-    data: dict[str, object] = {
-        "street_address": prospect.street_address,
-        "city": prospect.city,
-        "state_code": prospect.state_code,
-        "postal_code": prospect.postal_code,
-    }
-    return ProspectScreeningReviewRead(
-        id=prospect.id,
-        campaign_id=prospect.campaign_id,
-        campaign_name=campaign.name if campaign else "Unknown campaign",
-        legal_name=prospect.legal_name,
-        phone=prospect.phone,
-        property_address=property_address(data),
-        call_eligibility=prospect.call_eligibility,
-        suppression_status=prospect.suppression_status,
-        suppression_checked_at=prospect.suppression_checked_at,
-    )
-
-
-def record_screening_decision(
-    db: Session,
-    principal: Principal,
-    prospect_id: UUID,
-    payload: ProspectScreeningDecision,
-) -> ProspectScreeningReviewRead | None:
-    prospect = db.scalar(
-        select(Prospect).where(
-            Prospect.organization_id == principal.organization_id,
-            Prospect.id == prospect_id,
-        )
-    )
-    if prospect is None:
-        return None
-    if prospect.call_eligibility != "review_required":
-        raise ValueError("Only prospects awaiting screening can receive this decision.")
-    if not prospect.normalized_phone:
-        raise ValueError("A prospect requires a valid phone before DNC review can be cleared.")
-    company_record = active_company_suppressions(db, principal.organization_id).get(
-        prospect.normalized_phone
-    )
-    now = datetime.now(UTC)
-    final_status = "blocked" if company_record or payload.dnc_status == "blocked" else "eligible"
-    previous: dict[str, object] = {
-        "call_eligibility": prospect.call_eligibility,
-        "suppression_status": prospect.suppression_status,
-    }
-    prospect.call_eligibility = final_status
-    prospect.suppression_status = "suppressed" if final_status == "blocked" else "clear"
-    prospect.suppression_checked_at = now
-    company_evidence: dict[str, object] = {
-        "matched": bool(company_record),
-        "suppression_record_id": str(company_record.id) if company_record else None,
-        "reason": company_record.reason if company_record else None,
-    }
-    dnc_evidence: dict[str, object] = {
-        "evidence_reference": payload.evidence_reference.strip(),
-        "notes": clean_text(payload.notes),
-        "reviewed_by_user_id": str(principal.user_id),
-    }
-    for check_type, status_value, source, evidence in (
-        (
-            "company_suppression",
-            "blocked" if company_record else "clear",
-            "stonegate_suppression_records",
-            company_evidence,
-        ),
-        ("national_dnc", payload.dnc_status, payload.source.strip(), dnc_evidence),
-    ):
-        db.add(
-            ProspectSuppressionCheck(
-                organization_id=principal.organization_id,
-                import_row_id=None,
-                prospect_id=prospect.id,
-                check_type=check_type,
-                channel="voice",
-                normalized_value=prospect.normalized_phone,
-                status=status_value,
-                source=source,
-                evidence=evidence,
-                checked_at=now,
-            )
-        )
-    add_audit(
-        db,
-        principal,
-        action="campaign_management.screening_decision",
-        entity_type="prospect",
-        entity_id=prospect.id,
-        previous=previous,
-        new={
-            "call_eligibility": prospect.call_eligibility,
-            "suppression_status": prospect.suppression_status,
-            "dnc_status": payload.dnc_status,
-            "source": payload.source.strip(),
-            "evidence_reference": payload.evidence_reference.strip(),
-        },
-        reason="Prospect DNC screening evidence reviewed",
-    )
-    db.commit()
-    return screening_review_read(db, prospect)
 
 
 def calling_batch_read(db: Session, batch: ProspectCallingBatch) -> ProspectCallingBatchRead:

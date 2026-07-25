@@ -8,7 +8,7 @@ import type { CampaignManagementOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./campaigns.module.css";
 
-type Tab = "performance" | "import" | "screening" | "costs" | "batches" | "history";
+type Tab = "performance" | "import" | "costs" | "batches" | "history";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 type ImportPreview = {
   headers: string[];
@@ -42,7 +42,6 @@ type ImportRequest = {
 const tabs: Array<{ key: Tab; label: string }> = [
   { key: "performance", label: "Performance" },
   { key: "import", label: "Import prospects" },
-  { key: "screening", label: "Screening review" },
   { key: "costs", label: "Costs" },
   { key: "batches", label: "Calling batches" },
   { key: "history", label: "Import history" },
@@ -83,7 +82,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   const [importRequest, setImportRequest] = useState<ImportRequest | null>(null);
   const [selectedImportId, setSelectedImportId] = useState(data.import_batches[0]?.id ?? "");
   const [selectedBatchId, setSelectedBatchId] = useState(data.calling_batches[0]?.id ?? "");
-  const [selectedReviewId, setSelectedReviewId] = useState(data.screening_review[0]?.id ?? "");
   const [costCategory, setCostCategory] = useState("list_purchase");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -99,7 +97,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   );
   const selectedImport = data.import_batches.find((item) => item.id === selectedImportId);
   const selectedBatch = data.calling_batches.find((item) => item.id === selectedBatchId);
-  const selectedReview = data.screening_review.find((item) => item.id === selectedReviewId);
   const totalActualCost = data.quality.reduce((total, campaign) => total + campaign.actual_cost_cents, 0);
   const totalProspects = data.quality.reduce((total, campaign) => total + campaign.imported_prospects, 0);
   const totalCallable = data.quality.reduce((total, campaign) => total + campaign.callable_prospects, 0);
@@ -220,28 +217,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     }
   }
 
-  async function submitScreeningDecision(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedReview) return;
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    const result = await request(
-      `/api/v1/campaign-management/prospects/${selectedReview.id}/screening`,
-      "POST",
-      {
-        dnc_status: value(formData, "dnc_status"),
-        source: value(formData, "source"),
-        evidence_reference: value(formData, "evidence_reference"),
-        notes: value(formData, "notes") || null,
-      },
-    );
-    if (result) {
-      form.reset();
-      setSelectedReviewId("");
-      router.refresh();
-    }
-  }
-
   async function submitCallingBatch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -266,7 +241,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       <div className={styles.metrics}>
         <div><span>Imported prospects</span><strong>{totalProspects.toLocaleString()}</strong></div>
         <div><span>Callable now</span><strong>{totalCallable.toLocaleString()}</strong></div>
-        <div><span>Needs screening</span><strong>{totalReview.toLocaleString()}</strong></div>
+        <div><span>Needs phone data</span><strong>{totalReview.toLocaleString()}</strong></div>
         <div><span>Recorded cost</span><strong>{formatMoney(totalActualCost)}</strong></div>
       </div>
 
@@ -318,7 +293,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
               <label><span>City column</span><input defaultValue="City" name="city" /></label>
               <label><span>State column</span><input defaultValue="State" name="state_code" /></label>
               <label><span>ZIP column</span><input defaultValue="ZIP" name="postal_code" /></label>
-              <label><span>DNC result column</span><input defaultValue="DNC" name="dnc_status" /></label>
+              <label><span>Do-not-call flag column (optional)</span><input defaultValue="DNC" name="dnc_status" /></label>
               <button type="submit">Save mapping</button>
             </form>
           </section>
@@ -368,26 +343,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
         </div>
       ) : null}
 
-      {activeTab === "screening" ? (
-        <div className={styles.twoColumn}>
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>Not callable until reviewed</span><h3>Screening queue</h3></div><strong>{data.screening_review.length}</strong></div>
-            <div className={styles.picker}>{data.screening_review.map((prospect) => <button className={selectedReviewId === prospect.id ? styles.selected : undefined} key={prospect.id} onClick={() => setSelectedReviewId(prospect.id)} type="button"><strong>{prospect.legal_name}</strong><span>{prospect.campaign_name} · {prospect.phone ?? "No phone"}</span></button>)}{!data.screening_review.length ? <p className={styles.empty}>No prospects are awaiting screening.</p> : null}</div>
-          </section>
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>{selectedReview?.campaign_name ?? "Select a prospect"}</span><h3>{selectedReview?.legal_name ?? "Screening evidence"}</h3></div></div>
-            {selectedReview ? <form className={styles.stackForm} onSubmit={submitScreeningDecision}>
-              <p className={styles.formNote}>{selectedReview.property_address ?? selectedReview.phone ?? "No contact details"}</p>
-              <label><span>DNC result</span><select name="dnc_status" required><option value="clear">Clear</option><option value="blocked">Blocked</option></select></label>
-              <label><span>Screening source</span><input name="source" placeholder="Provider or compliance reviewer" required /></label>
-              <label className={styles.full}><span>Evidence reference</span><input name="evidence_reference" placeholder="Report ID, export name, or retained file reference" required /></label>
-              <label className={styles.full}><span>Review notes</span><textarea name="notes" rows={4} /></label>
-              <button type="submit">Record screening decision</button>
-            </form> : <p className={styles.empty}>Select a prospect to record retained screening evidence.</p>}
-          </section>
-        </div>
-      ) : null}
-
       {activeTab === "batches" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
@@ -414,7 +369,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       {activeTab === "history" ? (
         <div className={styles.historyLayout}>
           <section className={styles.section}><div className={styles.sectionHeader}><div><span>Import lineage</span><h3>Committed files</h3></div></div><div className={styles.picker}>{data.import_batches.map((batch) => <button className={selectedImportId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedImportId(batch.id)} type="button"><strong>{batch.file_name}</strong><span>{batch.campaign_name} · {batch.imported_rows}/{batch.total_rows} imported</span></button>)}{!data.import_batches.length ? <p className={styles.empty}>No files imported.</p> : null}</div></section>
-          <section className={styles.section}><div className={styles.sectionHeader}><div><span>{selectedImport?.mapping_name ?? "No import selected"}</span><h3>{selectedImport?.file_name ?? "Row-level results"}</h3></div>{selectedImport ? <strong>{selectedImport.total_rows}</strong> : null}</div><div className={styles.historyRows}>{selectedImport?.rows.map((row) => <div key={row.id}><span>{row.row_number}</span><div><strong>{row.legal_name ?? "Missing owner"}</strong><small>{row.property_address ?? row.phone ?? "No address or phone"}</small></div><span className={`${styles.badge} ${styles[row.status.replace("imported_", "")]}`}>{labelize(row.status)}</span><p>{[...row.validation_errors, ...row.eligibility_reasons].join(" ") || "Imported with clear screening evidence."}</p></div>)}{!selectedImport ? <p className={styles.empty}>Select an import to inspect every row.</p> : null}</div></section>
+          <section className={styles.section}><div className={styles.sectionHeader}><div><span>{selectedImport?.mapping_name ?? "No import selected"}</span><h3>{selectedImport?.file_name ?? "Row-level results"}</h3></div>{selectedImport ? <strong>{selectedImport.total_rows}</strong> : null}</div><div className={styles.historyRows}>{selectedImport?.rows.map((row) => <div key={row.id}><span>{row.row_number}</span><div><strong>{row.legal_name ?? "Missing owner"}</strong><small>{row.property_address ?? row.phone ?? "No address or phone"}</small></div><span className={`${styles.badge} ${styles[row.status.replace("imported_", "")]}`}>{labelize(row.status)}</span><p>{[...row.validation_errors, ...row.eligibility_reasons].join(" ") || "Imported and ready."}</p></div>)}{!selectedImport ? <p className={styles.empty}>Select an import to inspect every row.</p> : null}</div></section>
         </div>
       ) : null}
     </section>

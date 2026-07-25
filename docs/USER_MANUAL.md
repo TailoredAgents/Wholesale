@@ -126,8 +126,6 @@ The desktop sidebar and mobile navigation drawer use five groups.
 - **My Setup:** Your role manual, workspace test, and manager approval.
 - **Operating Model:** Company setup, compensation policy, role credits, history, and market
   launches.
-- **Compliance:** Communication policies, DNC evidence, staff training, incidents, and control
-  runs. Owner access only.
 - **AI Control:** Copilots, runtime, automation contracts, evaluations, traces, and governance.
 
 Use the global search for a seller, property, or record. Recent destinations let you return to
@@ -158,28 +156,8 @@ records without searching again. On mobile, use the menu button to open the navi
 | Marketing | `/os/marketing` |
 | My Setup | `/os/my-setup` |
 | Operating Model | `/os/operating-model` |
-| Compliance | `/os/compliance` |
 | AI Control | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
-
-## Compliance Setup
-
-The Owner completes F3 work in `/os/compliance`.
-
-1. Open **Policies** and install the standard policy set once.
-2. Record external legal-review evidence on each policy, then activate it. Do not enter placeholder
-   reviewer information in production.
-3. Open **DNC**, add the approved source, approve it, and record each refresh evidence reference.
-   The refresh interval cannot exceed 31 days.
-4. Open **Training**, assign the correct module to each employee or contractor.
-5. The employee opens **My Setup**, submits completion evidence and an attestation, and waits for
-   manager approval.
-6. Record complaints, wrong numbers, Do Not Contact requests, recording objections, and policy
-   exceptions under **Incidents**.
-7. Open **Controls** and run the deterministic checks before broad outreach or recording.
-
-An active policy does not manufacture legal approval. It records approval that Stonegate actually
-obtained. The Owner remains responsible for keeping evidence and review dates current.
 
 ## Recommended Daily Routine
 
@@ -269,7 +247,6 @@ Open **Campaigns**. The workspace contains:
 
 - **Performance**
 - **Import prospects**
-- **Screening review**
 - **Costs**
 - **Calling batches**
 - **Import history**
@@ -281,14 +258,13 @@ Open **Campaigns**. The workspace contains:
 3. Go to **Import prospects**.
 4. Upload the CSV and select or create the vendor-column mapping.
 5. Review the preview before saving.
-6. Confirm invalid, duplicate, and suppressed rows are separated from eligible rows.
-7. Resolve review-only screening records in **Screening review** with retained evidence.
-8. Record list and labor costs in **Costs**.
-9. Create a calling batch using only eligible records.
-10. Assign the batch or individual entries to VAs.
+6. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
+7. Record list and labor costs in **Costs**.
+8. Create a calling batch.
+9. Assign the batch or individual entries to VAs.
 
-Never force an unscreened, invalid, company-suppressed, or Do Not Contact record into a calling
-batch.
+Blank DNC data does not require review. Explicit Do Not Contact records and seller opt-outs remain
+blocked.
 
 ## 3. VA Prospecting
 

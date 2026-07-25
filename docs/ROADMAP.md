@@ -50,7 +50,7 @@ acceptance remains pending for:
 | --- | --- | --- |
 | 1. Reliability and Test Foundation | Partial | Implementation complete; production operator checks remain |
 | 2. Operating Model Data Foundation | Complete | Markets, campaigns, versioned economics, role credits, operating modes, and launch controls are auditable |
-| 3. Campaign and List Management | Complete | CSV imports, screening evidence, costs, callable batches, and quality reporting are operational |
+| 3. Campaign and List Management | Complete | CSV imports, optional do-not-call flags, costs, calling batches, and quality reporting are operational |
 | 4. VA Prospecting Workbench | Complete | Guided assigned queue, approved scripts, callbacks, handoff review, and scorecards are operational |
 | 5. Lead Manager Operating System | Complete | SLA-controlled handoff, guided qualification, daily queue, and scorecards are operational |
 | 6. Appointments and Field Acquisitions | Complete | Dispatch, month/week/day calendar, meeting brief, mobile inspection, negotiation, evidence transfer, and scorecards are operational |
@@ -136,12 +136,10 @@ Delivered:
 - CSV import with reusable vendor mappings, preview-before-commit, exact-file replay protection,
   and retained row-level validation, duplicate, suppression, and review outcomes.
 - Prospect telephone and canonical property-address normalization before CRM lead creation.
-- Import-time company suppression and imported vendor DNC screening with durable evidence. Records
-  without clear DNC evidence may be retained for review but cannot enter a calling batch.
-- Audited manager screening review can attach a later provider/reference result and recalculate
-  eligibility without erasing the original import evidence.
+- Import-time company suppression and optional vendor do-not-call flags. Blank vendor values do
+  not block prospects; explicit do-not-call values and company suppression do.
 - Campaign budgets, list-purchase and enrichment costs, exact VA labor attribution, and prospect
-  calling batches that admit only eligible records.
+  calling batches.
 - Campaign progress, spend, remaining budget, bad-data rate, duplicate rate, conversion rate,
   cost-per-prospect, cost-per-callable-record, and batch completion reporting.
 - A dedicated Campaigns workspace for performance, mappings, imports, costs, batches, and file

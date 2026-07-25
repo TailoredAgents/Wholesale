@@ -1,6 +1,6 @@
 # Security And Compliance
 
-Last updated: July 24, 2026
+Last updated: July 22, 2026
 
 ## Highest Risks
 
@@ -51,27 +51,9 @@ Stonegate's dedicated A2P Campaign covers opted-in seller follow-up only. It doe
 SMS or transferred consent. Recording remains disabled until the spoken disclosure and retention
 policy are approved for the operating states.
 
-Cold-call batches require a valid normalized phone, retained clear DNC evidence, and no active
-Stonegate Voice suppression. A blank or unknown imported DNC result is review-only. The current
-system retains vendor or manager-review evidence but is not itself a live national DNC provider.
-
-F3 adds a versioned owner policy and evidence workspace at `/os/compliance`. National DNC evidence
-must be clear and no more than 31 days old when the record enters a batch and again when a caller
-starts it. DNC source records retain provider type, area-code coverage, approval, last refresh,
-next due date, and an external evidence reference.
-
-Seller email requires a recorded `email` consent record and no active `email` or `all` suppression.
-SMS and Voice retain their channel-specific consent, suppression, provider, and contact-hour
-checks. Staff cannot override these gates from the UI.
-
-Recording configuration no longer activates recording by itself. Stonegate also requires an
-active `call_recording_retention` policy with current external legal-review evidence. The reviewed
-policy and employee training are operational prerequisites; they do not replace legal advice or
-provider acceptance.
-
-Compliance incidents, training assignments, employee attestations, manager decisions, and control
-runs retain organization scope and append-only audit events. Detailed external acceptance steps
-and official FTC/Twilio references are in `PHASE_F3_COMPLIANCE_POLICY.md`.
+Cold-call batches do not require imported DNC evidence. A blank or unknown imported DNC value does
+not block a prospect. An explicit do-not-call value, a seller opt-out, or active Stonegate company
+suppression still blocks outbound contact.
 
 The VA workbench queries only batch entries assigned to the current caller. It never exposes raw
 import files, unrelated prospects, underwriting, buyers, contracts, finance, or exports. Only an

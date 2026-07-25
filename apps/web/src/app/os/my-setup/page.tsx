@@ -1,8 +1,4 @@
-import {
-  getMyComplianceTraining,
-  getMyRoleSetup,
-  getWorkspaceProfile,
-} from "../../lib/api";
+import { getMyRoleSetup, getWorkspaceProfile } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { MySetupWorkspace } from "./my-setup-workspace";
@@ -10,10 +6,9 @@ import { MySetupWorkspace } from "./my-setup-workspace";
 export const dynamic = "force-dynamic";
 
 export default async function MySetupPage() {
-  const [profile, { roleSetup, apiConnected }, { training }] = await Promise.all([
+  const [profile, { roleSetup, apiConnected }] = await Promise.all([
     getWorkspaceProfile(),
     getMyRoleSetup(),
-    getMyComplianceTraining(),
   ]);
 
   return (
@@ -29,7 +24,7 @@ export default async function MySetupPage() {
         }
       />
       {profile && roleSetup ? (
-        <MySetupWorkspace roleSetup={roleSetup} training={training} />
+        <MySetupWorkspace roleSetup={roleSetup} />
       ) : (
         <p>Role setup could not be loaded.</p>
       )}

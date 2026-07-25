@@ -1,5 +1,4 @@
 from typing import Annotated
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -18,8 +17,6 @@ from app.schemas.campaign_management import (
     ProspectImportMappingRead,
     ProspectImportPreview,
     ProspectImportRequest,
-    ProspectScreeningDecision,
-    ProspectScreeningReviewRead,
 )
 from app.services.campaign_management import (
     create_calling_batch,
@@ -27,7 +24,6 @@ from app.services.campaign_management import (
     create_import_mapping,
     create_prospect_import,
     get_campaign_management_overview,
-    record_screening_decision,
     validate_prospect_import,
 )
 
@@ -111,21 +107,3 @@ def create_workspace_calling_batch(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
-
-
-@router.post("/prospects/{prospect_id}/screening")
-def decide_workspace_prospect_screening(
-    prospect_id: UUID,
-    payload: ProspectScreeningDecision,
-    db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
-) -> ProspectScreeningReviewRead:
-    try:
-        prospect = record_screening_decision(db, principal, prospect_id, payload)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
-        ) from exc
-    if prospect is None:
-        raise HTTPException(status_code=404, detail="Prospect not found.")
-    return prospect

@@ -17,11 +17,11 @@ This extends Stonegate's existing AI control plane and VA workbench. It is not a
 
 - Deterministic eligibility-first work ranking for corrections, due callbacks, active attempts,
   first attempts, and repeat outreach.
-- Explainable score, priority band, recommended action, screening evidence, and data warnings.
+- Explainable score, priority band, recommended action, contact data, and data warnings.
 - Governed `prospecting.prioritize` output for pre-call context, opening guidance, required
   questions, disposition guidance, compliance reminders, evidence, and confidence.
 - Accept, correct, and reject review with immutable original and final output.
-- Idempotent generation tied to the current prospect, queue entry, screening state, and priority.
+- Idempotent generation tied to the current prospect, queue entry, contact state, and priority.
 - One chronological quality queue for every completed prospecting attempt.
 - Deterministic qualification, data-quality, and handoff scores that remain nullable when evidence
   is unavailable.

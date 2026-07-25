@@ -78,7 +78,7 @@ sender reputation, or consent assumptions.
 | --- | --- | --- | --- |
 | F1 | Production Safety Closeout | Acceptance and upgrade | Recoverable, monitored, access-controlled production |
 | F2 | Company Configuration And Role Acceptance | Configuration and acceptance | Real staff can execute their jobs correctly |
-| F3 | Compliance And Operating Policy | Policy and enforcement upgrade | Legal, outreach, recording, and retention rules are approved |
+| F3 | Compliance And Operating Policy | Deferred external policy | No new application-level communication gates |
 | F4 | Documents, Contracts, And Closing | Existing workflow extension plus integrations | Secure files and e-signature support live transactions |
 | F5 | Buyers And Disposition Readiness | Existing module extension plus buyer-data integration | Buyer data, packages, offers, and selection are production-ready |
 | F6 | Stonegate Accounting And Marketing Measurement | New accounting subsystem plus existing-module extensions | Complete internal books and audited advertising attribution |
@@ -156,41 +156,19 @@ Exit criteria:
 
 ## Phase F3: Compliance And Operating Policy
 
-Goal: Make cold calling, seller communication, and recording operationally defensible.
+Status: Application-level F3 restrictions were removed at the Owner's direction on July 24, 2026.
 
-Implementation checkpoint, July 24, 2026:
+Current product boundary:
 
-- The existing suppression, consent, prospecting, email, Voice, recording, and audit controls now
-  have a versioned owner policy and evidence layer in `/os/compliance`.
-- Policy installation, external legal-review evidence, owner activation, DNC source refresh
-  evidence, staff training, incident tracking, and repeatable control runs are implemented.
-- Callable prospects are rechecked at batch creation and attempt start. Missing, non-clear, or
-  older-than-31-day National DNC evidence fails closed.
-- Seller email now requires recorded email permission and no active email/all suppression.
-- Recording now requires both complete provider configuration and an active, current,
-  legally reviewed recording policy.
-- Code acceptance is complete. External DNC/provider enrollment, actual legal review, real staff
-  training signoff, and controlled production tests remain required before this phase exits.
-- Detailed implementation and acceptance instructions are in
-  `PHASE_F3_COMPLIANCE_POLICY.md`.
+- No DNC evidence, policy approval, training acknowledgment, email permission, or recording-policy
+  approval is required by the application.
+- Blank imported DNC values do not block imports or calling batches.
+- The temporary Compliance workspace and its approval APIs are not part of the product.
+- Existing seller opt-outs, explicit do-not-contact values, company suppression, invalid contact
+  data, provider configuration, and provider delivery failures still behave normally.
 
-Work:
-
-- Obtain National DNC access or select an approved screening provider.
-- Define recurring DNC refresh and retained evidence procedures.
-- Approve company suppression, opt-out, complaint, and wrong-number procedures.
-- Obtain legal review for Georgia calling, SMS, email, recording, contracts, and disclosures.
-- Approve calling hours, timezone handling, caller identification, and scripts.
-- Approve recording disclosure, retention, access, and deletion policy.
-- Train VAs and managers; retain training and monitoring records.
-- Test that blocked records cannot enter calling batches or external delivery.
-
-Exit criteria:
-
-- A named owner approves every communication policy.
-- DNC evidence is current and repeatable.
-- Recording is enabled only after disclosure and retention approval.
-- Controlled policy-blocked cases fail safely across calls, SMS, and email.
+Any future policy tooling must be requested explicitly and should default to advisory reporting
+rather than silently blocking operations.
 
 ## Phase F4: Documents, Contracts, And Closing
 
@@ -430,7 +408,7 @@ Work:
 - Configure the Voice API key, TwiML App, dedicated Voice number, and browser identity.
 - Test browser registration, outbound, inbound, no-answer, missed-call task, and routing.
 - Confirm company ownership and reassignment of numbers when staff changes.
-- Activate only communication workflows approved in Phase F3.
+- Activate the dedicated communication workflows after provider acceptance testing.
 
 Exit criteria:
 
@@ -438,7 +416,7 @@ Exit criteria:
 - Every communication attaches to the correct conversation.
 - Opt-outs and suppression cannot be bypassed.
 - Provider failure produces a visible and recoverable task or event.
-- Recording remains disabled unless the Phase F3 disclosure and retention policy is approved.
+- Recording activation is an explicit Owner and provider-configuration decision.
 
 ## Phase F10: AI Production Pilots And Controlled Automation
 
@@ -471,7 +449,7 @@ Exit criteria:
 
 - Complete F1 before broad staff onboarding or live AI pilots.
 - F2 can run while A2P approval and provider accounts are pending.
-- Complete F3 policy work before activating any communication provider.
+- F3 does not block later provider integrations.
 - F4 must pass before document-dependent Transaction Copilot automation.
 - F5 prepares buyer operations; live email delivery waits for F8 and SMS delivery waits for F9.
 - F6 requires stable funded-deal reconciliation and F4 private document storage before retaining
