@@ -202,6 +202,11 @@ def test_disposition_buyer_selection_and_reconciliation(
         content=b"%PDF verified proof of funds",
     )
     assert proof.status_code == 201, proof.text
+    assert proof.json()["storage_provider"] == "database"
+    assert proof.json()["malware_scan_status"] == "not_configured"
+    proof_content = client.get(proof.json()["content_url"], headers=HEADERS)
+    assert proof_content.status_code == 200
+    assert proof_content.content == b"%PDF verified proof of funds"
     matched = client.post(f"/api/v1/dispositions/cases/{case_id}/matches", headers=HEADERS)
     assert matched.json()["matches"][0]["qualification_status"] == "qualified"
     assert matched.json()["matches"][0]["score_basis_points"] == 9250

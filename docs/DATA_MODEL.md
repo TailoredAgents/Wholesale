@@ -2,7 +2,7 @@
 
 Last updated: July 24, 2026
 
-The schema is managed through Alembic migrations. Migration `0053_company_config` is the
+The schema is managed through Alembic migrations. Migration `0056_f4_documents_esign` is the
 current head.
 
 ## Identity And Access
@@ -52,9 +52,9 @@ Editing an address clears the provider confirmation until validation runs again.
 
 Field meeting briefs are versioned evidence snapshots. Submitted inspections and photographs are
 immutable, and each underwriting transfer links the exact inspection, repair estimate, prior
-underwriting version, and newly created draft version. Photo bytes are privately stored in
-PostgreSQL for controlled launch volume with strict size/count limits; object storage is the planned
-scaling boundary without changing the authorization or evidence metadata contract.
+underwriting version, and newly created draft version. Inspection photographs use the shared
+private-storage adapter with checksums, scan status, and retention metadata without changing the
+authorization or evidence contract.
 
 ## Communications
 
@@ -89,6 +89,9 @@ scaling boundary without changing the authorization or evidence metadata contrac
 - `contract_packages`
 - `transaction_documents`
 - `transaction_document_facts`
+- `esign_envelopes`
+- `esign_recipients`
+- `esign_provider_events`
 - `transaction_parties`
 - `transaction_events`
 - `transaction_copilot_recommendations`
@@ -123,6 +126,12 @@ document, page, excerpt, extraction method, confidence, status, and reviewer. Ra
 are excluded from AI context. `transaction_copilot_recommendations` stores idempotent draft
 coordination guidance and its evidence snapshot; `transaction_copilot_reviews` preserves the
 original output and immutable human acceptance, correction, or rejection.
+
+`contract_templates` and `transaction_documents` retain storage provider, private object key,
+checksum, scan result, and retention metadata. `esign_envelopes` scopes one provider document to
+the exact transaction and approved package version. Recipients retain signing order and state.
+Provider events preserve raw event evidence with organization-scoped idempotency. A completed
+envelope links the provider-retrieved final PDF back to its Stonegate document.
 
 ## Buyers, Finance, And Marketing
 
@@ -191,6 +200,9 @@ trace and evidence snapshot. Reviews preserve the original output and immutable 
 correction, or rejection without changing buyers, campaigns, economics, or selection.
 Reconciliations use collected revenue and deal-specific deductions to produce auditable payout and
 company-profit records. Approval cannot silently allocate an unassigned commission.
+
+`buyer_proof_documents` uses the same private-storage adapter and retains its financial
+verification metadata separately from the file body.
 
 Prospect import batches preserve the source file checksum, reusable mapping, every source row,
 normalization result, duplicate match, and call-eligibility decision. Company suppression checks

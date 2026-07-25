@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 
 class TransactionQueueItem(BaseModel):
@@ -95,6 +95,9 @@ class TransactionDocumentRead(BaseModel):
     file_name: str
     content_type: str
     file_size: int
+    storage_provider: str
+    malware_scan_status: str
+    retention_until: datetime | None
     occurred_at: datetime
     notes: str | None
     download_url: str
@@ -191,8 +194,83 @@ class ContractTemplateRead(BaseModel):
     version_number: int
     status: str
     file_name: str
+    storage_provider: str
+    malware_scan_status: str
+    retention_until: datetime | None
+    esign_provider_template_id: str | None
+    esign_field_mapping: dict[str, str]
     approved_at: datetime | None
     created_at: datetime
+
+
+class ContractTemplateProviderUpdate(BaseModel):
+    esign_provider_template_id: str = Field(min_length=1, max_length=255)
+    esign_field_mapping: dict[str, str] = Field(default_factory=dict)
+
+
+class DocumentDownloadLinkRead(BaseModel):
+    url: str
+    expires_at: datetime
+
+
+class DocumentDeleteRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+
+
+class EsignRecipientCreate(BaseModel):
+    placeholder_name: str = Field(min_length=1, max_length=120)
+    name: str = Field(min_length=1, max_length=255)
+    email: EmailStr
+    signing_order: int = Field(ge=1, le=20)
+
+
+class EsignSendRequest(BaseModel):
+    subject: str = Field(min_length=1, max_length=255)
+    message: str | None = Field(default=None, max_length=2000)
+    recipients: list[EsignRecipientCreate] = Field(min_length=1, max_length=10)
+
+
+class EsignRecipientRead(BaseModel):
+    id: UUID
+    placeholder_name: str
+    name: str
+    email: str
+    signing_order: int
+    status: str
+    viewed_at: datetime | None
+    signed_at: datetime | None
+    declined_at: datetime | None
+
+
+class EsignEnvelopeRead(BaseModel):
+    id: UUID
+    contract_package_id: UUID
+    provider: str
+    provider_document_id: str
+    status: str
+    subject: str
+    message: str | None
+    test_mode: bool
+    completed_document_id: UUID | None
+    sent_at: datetime | None
+    completed_at: datetime | None
+    declined_at: datetime | None
+    expired_at: datetime | None
+    cancelled_at: datetime | None
+    recipients: list[EsignRecipientRead]
+    created_at: datetime
+
+
+class F4IntegrationStatusRead(BaseModel):
+    storage_provider: str
+    storage_configured: bool
+    storage_blockers: list[str]
+    malware_scanner: str
+    malware_scan_required: bool
+    esign_provider: str
+    esign_configured: bool
+    esign_test_mode: bool
+    esign_blockers: list[str]
 
 
 class TransactionDeadlineRisk(BaseModel):
@@ -320,6 +398,7 @@ class TransactionDetail(BaseModel):
     cancelled_at: datetime | None
     notes: str | None
     contract_packages: list[ContractPackageRead]
+    esign_envelopes: list[EsignEnvelopeRead]
     documents: list[TransactionDocumentRead]
     parties: list[TransactionPartyRead]
     checklist: list[TransactionChecklistRead]

@@ -2330,6 +2330,34 @@ export type TransactionDetail = {
     executed_at: string | null;
     created_at: string;
   }>;
+  esign_envelopes: Array<{
+    id: string;
+    contract_package_id: string;
+    provider: string;
+    provider_document_id: string;
+    status: string;
+    subject: string;
+    message: string | null;
+    test_mode: boolean;
+    completed_document_id: string | null;
+    sent_at: string | null;
+    completed_at: string | null;
+    declined_at: string | null;
+    expired_at: string | null;
+    cancelled_at: string | null;
+    recipients: Array<{
+      id: string;
+      placeholder_name: string;
+      name: string;
+      email: string;
+      signing_order: number;
+      status: string;
+      viewed_at: string | null;
+      signed_at: string | null;
+      declined_at: string | null;
+    }>;
+    created_at: string;
+  }>;
   documents: Array<{
     id: string;
     contract_package_id: string | null;
@@ -2339,6 +2367,9 @@ export type TransactionDetail = {
     file_name: string;
     content_type: string;
     file_size: number;
+    storage_provider: string;
+    malware_scan_status: string;
+    retention_until: string | null;
     occurred_at: string;
     notes: string | null;
     download_url: string;
@@ -2394,6 +2425,18 @@ export type TransactionDetail = {
     actor_name: string | null;
     occurred_at: string;
   }>;
+};
+
+export type F4IntegrationStatus = {
+  storage_provider: string;
+  storage_configured: boolean;
+  storage_blockers: string[];
+  malware_scanner: string;
+  malware_scan_required: boolean;
+  esign_provider: string;
+  esign_configured: boolean;
+  esign_test_mode: boolean;
+  esign_blockers: string[];
 };
 
 export type TransactionCopilotRecommendation = {

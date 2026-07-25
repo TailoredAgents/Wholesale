@@ -231,6 +231,8 @@ def test_field_meeting_evidence_and_underwriting_transfer(
         content=b"test-jpeg-evidence",
     )
     assert photo.status_code == 201, photo.text
+    assert photo.json()["storage_provider"] == "database"
+    assert photo.json()["malware_scan_status"] == "not_configured"
     photo_content = client.get(photo.json()["content_url"], headers=headers)
     assert photo_content.status_code == 200
     assert photo_content.content == b"test-jpeg-evidence"

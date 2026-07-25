@@ -2,7 +2,7 @@ import csv
 from datetime import UTC, datetime
 from hashlib import sha256
 from io import BytesIO, StringIO
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -51,6 +51,7 @@ from app.schemas.dispositions import (
     ReconciliationDecision,
     ReconciliationRead,
 )
+from app.services.document_storage import read_content, store_content
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
 
@@ -395,7 +396,17 @@ def upload_proof(
         raise ValueError("Buyer not found.")
     if not content or len(content) > MAX_FILE_BYTES:
         raise ValueError("Proof document must be between 1 byte and 15 MB.")
+    document_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"buyers/{buyer.id}/proof-of-funds",
+        record_id=document_id,
+        file_name=file_name,
+        content_type=content_type,
+        content=content,
+    )
     document = BuyerProofDocument(
+        id=document_id,
         organization_id=principal.organization_id,
         buyer_id=buyer.id,
         uploaded_by_user_id=principal.user_id,
@@ -407,7 +418,12 @@ def upload_proof(
         content_type=content_type,
         file_size=len(content),
         sha256=sha256(content).hexdigest(),
-        file_data=content,
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
         notes=None,
     )
     db.add(document)
@@ -416,6 +432,27 @@ def upload_proof(
     db.commit()
     db.refresh(document)
     return proof_read(document)
+
+
+def get_proof_content(
+    db: Session,
+    principal: Principal,
+    document_id: UUID,
+) -> tuple[BuyerProofDocument, bytes] | None:
+    document = db.scalar(
+        select(BuyerProofDocument).where(
+            BuyerProofDocument.id == document_id,
+            BuyerProofDocument.organization_id == principal.organization_id,
+            BuyerProofDocument.deleted_at.is_(None),
+        )
+    )
+    if document is None:
+        return None
+    return document, read_content(
+        provider=document.storage_provider,
+        key=document.storage_key,
+        database_bytes=document.file_data,
+    )
 
 
 def create_offer(
@@ -1029,6 +1066,12 @@ def proof_read(item: BuyerProofDocument) -> ProofDocumentRead:
         verified_amount_cents=item.verified_amount_cents,
         expires_at=item.expires_at,
         file_name=item.file_name,
+        content_type=item.content_type,
+        file_size=item.file_size,
+        storage_provider=item.storage_provider,
+        malware_scan_status=item.malware_scan_status,
+        retention_until=item.retention_until,
+        content_url=f"/api/v1/dispositions/proof-documents/{item.id}/content",
         created_at=item.created_at,
     )
 

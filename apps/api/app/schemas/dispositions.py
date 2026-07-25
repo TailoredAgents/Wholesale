@@ -22,6 +22,12 @@ class ProofDocumentRead(BaseModel):
     verified_amount_cents: int | None
     expires_at: datetime | None
     file_name: str
+    content_type: str
+    file_size: int
+    storage_provider: str
+    malware_scan_status: str
+    retention_until: datetime | None
+    content_url: str
     created_at: datetime
 
 

@@ -19,8 +19,8 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
 | FTC National DNC data and screening process | Cold-call eligibility evidence | Evidence intake implemented | Secure registry access, recurring refresh, and legal review still required |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
-| Object storage | Recordings, photos, contracts, and persistent files | Not selected | Required before AI document automation |
-| E-signature | Contract execution and event evidence | Not selected | Required before AI transaction automation |
+| Cloudflare R2 | Private uploaded files | Adapter implemented; database fallback active | Create private bucket/token, configure Render, then run upload/download/delete acceptance |
+| SignWell | Contract execution and event evidence | Adapter and test simulation implemented | Configure account/webhook, load attorney templates, then run controlled test-mode acceptance |
 | Stonegate Accounting Ledger | Internal bookkeeping and financial statements | Deal-finance foundation only | Build the double-entry ledger, bank reconciliation, close, reporting, and CPA acceptance in F6 |
 | Google Ads / Meta | Offline conversion delivery | Foundation records only | Consent, hashing, provider adapters, and retries remain |
 | Address and routes | Address quality and field dispatch | Not selected | Optional when operating data justifies the cost |
@@ -147,11 +147,16 @@ cost.
 
 ## Accounting, Documents, And E-Signature
 
-- Use private S3-compatible object storage for recordings, photographs, reports, and contract
-  files. Store metadata and access policy in Stonegate; store provider object keys rather than
-  public URLs.
-- Add e-signature through an adapter that retains envelope, recipient, document, and webhook-event
-  identifiers. Provider completion cannot bypass Stonegate's contract and funding gates.
+- Cloudflare R2 is selected for private persistent uploads. The storage adapter covers photographs,
+  buyer proof of funds, legal templates, transaction evidence, and provider-completed agreements.
+  Existing database files remain readable, and new files switch to R2 after production
+  configuration. Stonegate stores object keys rather than public URLs.
+- Twilio remains the recording-media provider behind Stonegate's authenticated recording
+  endpoint. Valuation PDFs remain generated authenticated responses rather than persistent files.
+- SignWell is selected for e-signature. The adapter retains envelope, recipient, document, test
+  mode, reconciliation, and deduplicated webhook-event identifiers. Provider completion retrieves
+  the final PDF but cannot bypass Stonegate's package approval, checklist, or funding gates.
+- See `PHASE_F4_DOCUMENTS_ESIGN.md` for environment values and production acceptance.
 - Extend Stonegate's existing Finance records into the internal Stonegate Accounting Ledger. Add a
   versioned chart of accounts, balanced and immutable posted journals, accounting periods, bank
   reconciliation, vendors, supporting evidence, financial statements, and CPA exports.

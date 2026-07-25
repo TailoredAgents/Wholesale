@@ -1674,7 +1674,15 @@ class FieldInspectionPhoto(UuidPrimaryKeyMixin, TimestampMixin, Base):
     byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     captured_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    image_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    image_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class FieldNegotiationSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2091,7 +2099,18 @@ class ContractTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    esign_provider_template_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    esign_field_mapping: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(String(1000))
@@ -2152,9 +2171,112 @@ class TransactionDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class EsignEnvelope(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "esign_envelopes"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_document_id",
+            name="uq_esign_envelope_provider_document",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    contract_package_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("contract_packages.id"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    completed_document_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transaction_documents.id"), nullable=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_document_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str | None] = mapped_column(String(2000))
+    test_mode: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    provider_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_provider_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EsignRecipient(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "esign_recipients"
+    __table_args__ = (
+        UniqueConstraint(
+            "esign_envelope_id",
+            "email",
+            name="uq_esign_recipient_envelope_email",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    esign_envelope_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("esign_envelopes.id", ondelete="CASCADE"), index=True
+    )
+    provider_recipient_id: Mapped[str | None] = mapped_column(String(255))
+    placeholder_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    signing_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    viewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    signed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    declined_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EsignProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "esign_provider_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_event_id",
+            name="uq_esign_provider_event",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    esign_envelope_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("esign_envelopes.id", ondelete="SET NULL"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processing_error: Mapped[str | None] = mapped_column(String(2000))
 
 
 class TransactionDocumentFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2330,7 +2452,16 @@ class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
-    file_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     notes: Mapped[str | None] = mapped_column(String(1000))
 
 

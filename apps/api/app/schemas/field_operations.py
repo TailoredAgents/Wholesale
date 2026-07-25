@@ -401,6 +401,9 @@ class FieldInspectionPhotoRead(BaseModel):
     content_type: str
     byte_size: int
     sha256: str
+    storage_provider: str
+    malware_scan_status: str
+    retention_until: datetime | None
     captured_at: datetime | None
     content_url: str
     created_at: datetime

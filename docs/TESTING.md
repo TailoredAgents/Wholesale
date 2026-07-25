@@ -40,6 +40,10 @@ Also run:
   closing readiness and deadlines, transaction-scoped model evidence, raw-file exclusion,
   idempotent drafts, immutable correction review, and zero mutation of transaction records,
   checklist items, deadlines, or timeline events.
+- Private storage fallback and S3 adapter behavior, file validation, scan states, retention,
+  authenticated downloads, inspection photos, buyer proof-of-funds, and deletion.
+- Approved-package e-signature sends, transaction scoping, ordered recipients, webhook
+  idempotency, final-PDF retention, status reconciliation, and existing funding gates.
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.
@@ -66,6 +70,8 @@ Use company-controlled accounts and numbers to test:
 - Resend send, delivery states, inbound reply, thread, signature, template, attachment, duplicate
   webhook, out-of-order webhook, and recovery.
 - Branded-domain Clerk login, CORS, OAuth redirect, and public legal links.
+- R2 upload, authenticated or presigned download, delete, and database-file compatibility.
+- SignWell test-mode send, view, sign, duplicate webhook, reconciliation, and completed PDF.
 
 ## Current Local Tooling Issue
 

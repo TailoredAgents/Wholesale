@@ -1,7 +1,7 @@
 import hashlib
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -45,6 +45,7 @@ from app.schemas.field_operations import (
     FieldRoomObservation,
     FieldUnderwritingTransferRead,
 )
+from app.services.document_storage import delete_content, read_content, store_content
 from app.services.offer_concessions import record_field_agreement, record_field_offer
 
 ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
@@ -482,7 +483,17 @@ def add_photo(
         file_name.strip().replace('"', "'").replace("\r", "").replace("\n", "")[:255]
         or "inspection-photo"
     )
+    photo_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"field-inspections/{inspection.id}",
+        record_id=photo_id,
+        file_name=clean_name,
+        content_type=normalized_type,
+        content=image_data,
+    )
     photo = FieldInspectionPhoto(
+        id=photo_id,
         organization_id=principal.organization_id,
         inspection_id=inspection.id,
         uploaded_by_user_id=principal.user_id,
@@ -493,7 +504,11 @@ def add_photo(
         byte_size=len(image_data),
         sha256=hashlib.sha256(image_data).hexdigest(),
         captured_at=as_utc(captured_at) if captured_at else None,
-        image_data=image_data,
+        image_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
     )
     db.add(photo)
     db.flush()
@@ -522,7 +537,11 @@ def get_photo_content(
     if photo is None:
         return None
     scoped_inspection(db, principal, photo.inspection_id)
-    return photo, bytes(photo.image_data)
+    return photo, read_content(
+        provider=photo.storage_provider,
+        key=photo.storage_key,
+        database_bytes=photo.image_data,
+    )
 
 
 def delete_photo(db: Session, principal: Principal, photo_id: UUID) -> bool:
@@ -540,6 +559,8 @@ def delete_photo(db: Session, principal: Principal, photo_id: UUID) -> bool:
     if inspection.status != "draft":
         raise ValueError("Submitted inspection photos cannot be deleted.")
     snapshot = {"inspection_id": str(inspection.id), "area": photo.area, "sha256": photo.sha256}
+    storage_provider = photo.storage_provider
+    storage_key = photo.storage_key
     db.delete(photo)
     add_audit(
         db,
@@ -551,6 +572,7 @@ def delete_photo(db: Session, principal: Principal, photo_id: UUID) -> bool:
         "Draft inspection photo removed",
     )
     db.commit()
+    delete_content(provider=storage_provider, key=storage_key)
     return True
 
 
@@ -882,6 +904,9 @@ def photo_read(photo: FieldInspectionPhoto) -> FieldInspectionPhotoRead:
         content_type=photo.content_type,
         byte_size=photo.byte_size,
         sha256=photo.sha256,
+        storage_provider=photo.storage_provider,
+        malware_scan_status=photo.malware_scan_status,
+        retention_until=photo.retention_until,
         captured_at=photo.captured_at,
         content_url=f"/api/v1/field-operations/photos/{photo.id}/content",
         created_at=photo.created_at,

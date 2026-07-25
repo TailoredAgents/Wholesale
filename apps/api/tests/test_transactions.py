@@ -1,6 +1,13 @@
+import base64
+import hmac
+from hashlib import sha256
+from uuid import uuid4
+
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.main import app
 from app.services.bootstrap import bootstrap_foundation
 
@@ -214,3 +221,144 @@ def test_transaction_document_facts_preserve_page_evidence_and_reject_duplicates
     )
     assert stored_document["facts"][0]["value_text"] == "August 14, 2026"
     assert stored_document["facts"][0]["reviewed_by_name"] == "Owner"
+
+
+def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ESIGN_PROVIDER", "simulate")
+    monkeypatch.setenv("ESIGN_SIGNWELL_WEBHOOK_ID", "test-signwell-webhook-id")
+    monkeypatch.setenv("ESIGN_TEST_MODE", "true")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+
+    created_template = client.post(
+        "/api/v1/transactions/templates?file_name=ga-purchase.pdf&document_type=purchase_agreement&state_code=GA&name=Georgia%20Purchase%20Agreement",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        content=b"%PDF attorney reviewed e-sign template",
+    )
+    template_id = created_template.json()["id"]
+    configured_template = client.patch(
+        f"/api/v1/transactions/templates/{template_id}/esign",
+        headers=HEADERS,
+        json={
+            "esign_provider_template_id": "signwell-template-ga-purchase",
+            "esign_field_mapping": {
+                "seller_name": "Seller_Name",
+                "purchase_price": "Purchase_Price",
+                "property_address": "Property_Address",
+            },
+        },
+    )
+    assert configured_template.status_code == 200, configured_template.text
+    assert (
+        client.post(
+            f"/api/v1/transactions/templates/{template_id}/approve",
+            headers=HEADERS,
+        ).status_code
+        == 200
+    )
+    package = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages",
+        headers=HEADERS,
+        json={
+            "template_id": template_id,
+            "seller_name": "Jane Seller",
+            "buyer_entity_name": "Stonegate Acquisitions LLC",
+            "purchase_price_cents": 17000000,
+            "earnest_money_cents": 100000,
+            "closing_date": "2026-08-14T21:00:00Z",
+            "inspection_period_days": 7,
+        },
+    )
+    package_id = package.json()["id"]
+    pending = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/request-approval",
+        headers=HEADERS,
+    )
+    client.patch(
+        f"/api/v1/approvals/{pending.json()['approval_request_id']}/decision",
+        headers=HEADERS,
+        json={"status": "approved", "decision_notes": "Terms verified."},
+    )
+    sent = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/esign",
+        headers=HEADERS,
+        json={
+            "subject": "Stonegate purchase agreement",
+            "message": "Please review and sign the approved agreement.",
+            "recipients": [
+                {
+                    "placeholder_name": "Seller",
+                    "name": "Jane Seller",
+                    "email": "jane@example.com",
+                    "signing_order": 1,
+                }
+            ],
+        },
+    )
+    assert sent.status_code == 201, sent.text
+    envelope = sent.json()
+    assert envelope["status"] == "sent"
+    assert envelope["test_mode"] is True
+    wrong_transaction = client.post(
+        f"/api/v1/transactions/{uuid4()}/esign/{envelope['id']}/reconcile",
+        headers=HEADERS,
+    )
+    assert wrong_transaction.status_code == 404
+    completed_pdf = b"%PDF SignWell completed agreement with audit page"
+    event_type = "document_completed"
+    event_time = 1786698000
+    event = {
+        "event": {
+            "hash": hmac.new(
+                b"test-signwell-webhook-id",
+                f"{event_type}@{event_time}".encode(),
+                sha256,
+            ).hexdigest(),
+            "time": event_time,
+            "type": event_type,
+        },
+        "data": {
+            "object": {
+                "id": envelope["provider_document_id"],
+                "status": "completed",
+                "completed_pdf_base64": base64.b64encode(completed_pdf).decode(),
+            }
+        },
+    }
+    completed = client.post(
+        "/api/v1/webhooks/esign/signwell",
+        json=event,
+    )
+    duplicate = client.post(
+        "/api/v1/webhooks/esign/signwell",
+        json=event,
+    )
+    assert completed.status_code == 200, completed.text
+    assert duplicate.status_code == 200
+    detail = client.get(
+        f"/api/v1/transactions/{transaction_id}",
+        headers=HEADERS,
+    ).json()
+    assert detail["contract_packages"][0]["status"] == "executed"
+    assert detail["esign_envelopes"][0]["status"] == "completed"
+    signed_document = next(
+        item
+        for item in detail["documents"]
+        if item["document_type"] == "signed_purchase_agreement"
+    )
+    assert signed_document["storage_provider"] == "database"
+    assert signed_document["malware_scan_status"] == "not_configured"
+    download = client.get(
+        signed_document["download_url"],
+        headers=HEADERS,
+    )
+    assert download.content == completed_pdf
+    assert client.get(f"/api/v1/leads/{lead_id}", headers=HEADERS).json()["stage_key"] == (
+        "under_contract"
+    )
+    get_settings.cache_clear()

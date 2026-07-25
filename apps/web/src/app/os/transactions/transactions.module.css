@@ -32,6 +32,13 @@
 .tabs button { height: 48px; padding: 0 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .tabs button.activeTab { color: var(--brand-strong); border-bottom-color: var(--brand); }
 .sectionGrid { padding: 18px; display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(270px, .8fr); gap: 16px; align-items: start; }
+.contractLayout { padding: 18px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(310px, .8fr); gap: 16px; align-items: start; }
+.contractMain { display: grid; gap: 16px; }
+.integrationStrip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface-soft); }
+.integrationStrip > div { min-height: 64px; padding: 11px 13px; display: grid; align-content: center; gap: 5px; border-right: 1px solid var(--line-soft); }
+.integrationStrip > div:last-child { border-right: 0; }
+.integrationStrip span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.integrationStrip strong { font-size: 12px; }
 .section, .form { border: 1px solid var(--line); background: var(--surface); }
 .rightStack { display: grid; gap: 16px; }
 .sectionTitle { min-height: 58px; padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line-soft); }
@@ -67,6 +74,12 @@
 .inlineActions { display: flex; flex-wrap: wrap; gap: 7px; }
 .inlineActions button, .documentList button { min-height: 31px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
 .actionHint { align-self: center; color: var(--muted); font-size: 10px; font-weight: 700; }
+.envelopeList { display: grid; }
+.envelopeList article { position: relative; padding: 13px 14px; display: grid; gap: 6px; border-bottom: 1px solid var(--line-soft); }
+.envelopeList article > div { display: flex; justify-content: space-between; gap: 12px; }
+.envelopeList article p { margin: 0; color: var(--text-soft); font-size: 11px; }
+.envelopeList article small { color: var(--muted); font-size: 10px; }
+.envelopeList article button { width: fit-content; min-height: 30px; padding: 0 9px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
 .documentList > div, .partyList > div { padding: 12px 14px; display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); }
 .documentList > div > div, .partyList > div > div { display: grid; gap: 3px; }
 .documentList span, .documentList small, .partyList span, .partyList small { color: var(--muted); font-size: 11px; }
@@ -123,6 +136,8 @@
 .timeline small { color: var(--muted); font-size: 10px; }
 .templateList { display: grid; }
 .templateList > div { padding: 9px 14px; display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; border-bottom: 1px solid var(--line-soft); font-size: 10px; }
+.templateList span { display: grid; gap: 3px; }
+.templateList span small { color: var(--muted); font-size: 9px; }
 .templateList strong { color: var(--brand); text-transform: uppercase; }
 .templateList button { min-height: 28px; border: 1px solid var(--line); background: var(--surface); color: var(--brand); font: inherit; font-weight: 800; cursor: pointer; }
 .notice, .success { margin: 12px 18px 0; padding: 10px 12px; border: 1px solid #e7b5aa; background: var(--danger-soft); color: var(--danger); font-size: 12px; font-weight: 700; }
@@ -138,6 +153,7 @@
   .metrics > div { border-bottom: 1px solid var(--line-soft); }
   .body { grid-template-columns: 260px minmax(0, 1fr); }
   .sectionGrid { grid-template-columns: 1fr; }
+  .contractLayout { grid-template-columns: 1fr; }
   .copilotColumns { grid-template-columns: 1fr; }
   .copilotColumns > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
   .copilotColumns > div:last-child { border-bottom: 0; }
@@ -151,6 +167,10 @@
   .tabs { padding: 0 12px; gap: 14px; overflow-x: auto; }
   .dealHeader { align-items: flex-start; }
   .sectionGrid { padding: 12px; }
+  .contractLayout { padding: 12px; }
+  .integrationStrip { grid-template-columns: 1fr; }
+  .integrationStrip > div { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+  .integrationStrip > div:last-child { border-bottom: 0; }
   .transactionCopilot { margin: 12px 12px 0; }
   .transactionCopilot > header, .copilotCommand, .copilotDraftPicker { align-items: flex-start; flex-direction: column; }
   .copilotReadiness, .copilotRiskGrid, .emailDrafts { grid-template-columns: 1fr; }

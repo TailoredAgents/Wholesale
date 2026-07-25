@@ -15,6 +15,7 @@
     "db:migrate": "cd apps/api && uv run alembic upgrade head",
     "db:backup": "bash scripts/db-backup.sh",
     "db:restore-verify": "bash scripts/db-restore-verify.sh",
+    "documents:migrate": "cd apps/api && uv run python -m app.cli.migrate_private_files",
     "ops:alert-test": "bash scripts/operations-alert-test.sh",
     "ops:smoke": "bash scripts/smoke-test.sh",
     "worker": "cd apps/worker && uv run python -m worker.main"

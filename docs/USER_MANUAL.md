@@ -597,10 +597,15 @@ The Transactions workspace has:
 1. Select or create the contract package.
 2. Confirm the approved seller, property, price, dates, terms, and template.
 3. Submit the package for human approval.
-4. Record execution and upload the signed agreement through the controlled manual workflow.
+4. When SignWell is configured, confirm the approved template is mapped to its SignWell template.
+5. Add each signer with the matching SignWell placeholder name and signing order.
+6. Select **Send for signature** only after the exact package version is approved.
+7. Track recipients under **Signature requests**. Use **Refresh status** if a provider update is
+   delayed.
+8. Confirm the completed provider PDF appears in Documents before continuing closing work.
 
-E-signature is not currently integrated. Do not mark a contract executed merely because a draft
-was approved.
+Until production SignWell acceptance is complete, use the controlled manual execution workflow.
+Never mark a contract executed merely because a draft was approved or an email was sent.
 
 ### Closing
 
@@ -614,7 +619,8 @@ was approved.
 ### Documents
 
 Upload the appropriate file, classify it, and confirm extracted facts against the actual source
-page. Raw documents remain private and are not automatically trusted by AI.
+page. The file room shows the storage and malware-scan state for each document. Raw documents
+remain private and are not automatically trusted by AI.
 
 ### Parties And Timeline
 

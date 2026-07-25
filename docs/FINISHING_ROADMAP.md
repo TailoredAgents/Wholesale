@@ -174,13 +174,29 @@ rather than silently blocking operations.
 
 Goal: Run a real contract-to-funding workflow with secure files and provider evidence.
 
+Implementation checkpoint, July 24, 2026:
+
+- The private storage adapter now covers legal templates, transaction documents, completed signed
+  agreements, inspection photographs, and buyer proof-of-funds documents. Existing database files
+  remain readable; Cloudflare R2 is the selected production object store.
+- SignWell is the selected e-signature provider. Envelope, recipient, webhook, reconciliation,
+  completed-PDF, test-mode, and provider evidence are implemented inside the existing transaction
+  workflow.
+- The Transaction workspace supports template mapping, approved-package sending, signature status,
+  provider reconciliation, and storage/scan visibility.
+- Local simulation and automated tests are implemented. R2 credentials, SignWell credentials,
+  attorney-approved templates, and the controlled production acceptance case remain external
+  completion steps.
+- See `PHASE_F4_DOCUMENTS_ESIGN.md` for setup and acceptance.
+
 Work:
 
-- Select private S3-compatible object storage.
-- Migrate recordings, photographs, reports, proof-of-funds, and contracts behind authenticated
-  object access.
-- Add malware scanning, retention, checksums, signed downloads, and deletion controls.
-- Select and integrate an e-signature provider.
+- Select private S3-compatible object storage. **Selected: Cloudflare R2.**
+- Route persistent uploaded photographs, proof-of-funds, legal templates, and contracts behind
+  authenticated object access. Keep provider-hosted recordings and generated reports behind their
+  existing authenticated endpoints.
+- Add malware scanning, retention, checksums, short-lived downloads, and deletion controls.
+- Select and integrate an e-signature provider. **Selected: SignWell.**
 - Load attorney-approved Georgia purchase and assignment templates.
 - Reconcile envelopes, recipients, signatures, final documents, and webhook events.
 - Prepare closing-party templates and provider-neutral delivery records; activate delivery in

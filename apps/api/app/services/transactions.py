@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -29,7 +29,10 @@ from app.schemas.transactions import (
     ChecklistItemUpdate,
     ContractPackageCreate,
     ContractPackageRead,
+    ContractTemplateProviderUpdate,
     ContractTemplateRead,
+    DocumentDeleteRequest,
+    DocumentDownloadLinkRead,
     TransactionChecklistRead,
     TransactionClose,
     TransactionDetail,
@@ -45,6 +48,13 @@ from app.schemas.transactions import (
     TransactionQueueItem,
     TransactionUpdate,
 )
+from app.services.document_storage import (
+    create_download_url,
+    delete_content,
+    read_content,
+    store_content,
+)
+from app.services.esign import list_envelopes
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
 SIGNED_DOCUMENT_TYPES = {"signed_purchase_agreement", "executed_addendum"}
@@ -198,7 +208,10 @@ def get_transaction_detail(
     ).all()
     documents = db.scalars(
         select(TransactionDocument)
-        .where(TransactionDocument.transaction_id == transaction.id)
+        .where(
+            TransactionDocument.transaction_id == transaction.id,
+            TransactionDocument.deleted_at.is_(None),
+        )
         .order_by(TransactionDocument.occurred_at.desc())
     ).all()
     parties = db.scalars(
@@ -268,6 +281,11 @@ def get_transaction_detail(
         cancelled_at=transaction.cancelled_at,
         notes=transaction.notes,
         contract_packages=[package_read(item) for item in packages],
+        esign_envelopes=list_envelopes(
+            db,
+            principal.organization_id,
+            transaction.id,
+        ),
         documents=[
             document_read(item, document_facts.get(item.id, []))
             for item in documents
@@ -587,13 +605,24 @@ def upload_document(
             TransactionDocument.organization_id == principal.organization_id,
             TransactionDocument.transaction_id == transaction.id,
             TransactionDocument.sha256 == checksum,
+            TransactionDocument.deleted_at.is_(None),
         )
     )
     if duplicate is not None:
         raise ValueError(
             f"This file is already stored as '{duplicate.title}'."
         )
+    document_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"transactions/{transaction.id}",
+        record_id=document_id,
+        file_name=file_name,
+        content_type=content_type,
+        content=content,
+    )
     document = TransactionDocument(
+        id=document_id,
         organization_id=principal.organization_id,
         transaction_id=transaction.id,
         contract_package_id=package_id,
@@ -605,7 +634,12 @@ def upload_document(
         content_type=content_type,
         file_size=len(content),
         sha256=checksum,
-        file_data=content,
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
         occurred_at=datetime.now(UTC),
         notes=notes,
     )
@@ -679,8 +713,72 @@ def get_document(
             TransactionDocument.organization_id == principal.organization_id,
             TransactionDocument.transaction_id == transaction_id,
             TransactionDocument.id == document_id,
+            TransactionDocument.deleted_at.is_(None),
         )
     )
+
+
+def get_document_content(document: TransactionDocument) -> bytes:
+    return read_content(
+        provider=document.storage_provider,
+        key=document.storage_key,
+        database_bytes=document.file_data,
+    )
+
+
+def create_document_download_link(
+    document: TransactionDocument,
+) -> DocumentDownloadLinkRead:
+    fallback = (
+        f"/api/v1/transactions/{document.transaction_id}/documents/{document.id}/content"
+    )
+    url, expires_at = create_download_url(
+        provider=document.storage_provider,
+        key=document.storage_key,
+        fallback_url=fallback,
+    )
+    return DocumentDownloadLinkRead(url=url, expires_at=expires_at)
+
+
+def delete_document(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    document_id: UUID,
+    payload: DocumentDeleteRequest,
+) -> bool:
+    transaction = scoped_transaction(db, principal, transaction_id)
+    document = get_document(db, principal, transaction_id, document_id)
+    if transaction is None or document is None:
+        return False
+    delete_content(provider=document.storage_provider, key=document.storage_key)
+    now = datetime.now(UTC)
+    document.deleted_at = now
+    document.status = "deleted"
+    document.file_data = None
+    add_event(
+        db,
+        principal,
+        transaction,
+        "document.deleted",
+        f"Deleted {document.title}.",
+        {"document_id": str(document.id), "reason": payload.reason},
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="transaction.document_delete",
+            entity_type="transaction_document",
+            entity_id=document.id,
+            previous_value={"status": "available", "sha256": document.sha256},
+            new_value={"status": "deleted", "deleted_at": now.isoformat()},
+            reason=payload.reason,
+        )
+    )
+    db.commit()
+    return True
 
 
 def mark_contract_executed(
@@ -845,6 +943,7 @@ def close_transaction(
             select(TransactionDocument.id).where(
                 TransactionDocument.transaction_id == transaction.id,
                 TransactionDocument.document_type == "funding_confirmation",
+                TransactionDocument.deleted_at.is_(None),
             )
         )
         incomplete = db.scalar(
@@ -927,7 +1026,17 @@ def upload_template(
         )
         or 0
     ) + 1
+    template_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace="contract-templates",
+        record_id=template_id,
+        file_name=file_name,
+        content_type=content_type,
+        content=content,
+    )
     template = ContractTemplate(
+        id=template_id,
         organization_id=principal.organization_id,
         created_by_user_id=principal.user_id,
         approved_by_user_id=None,
@@ -940,7 +1049,14 @@ def upload_template(
         content_type=content_type,
         file_size=len(content),
         sha256=sha256(content).hexdigest(),
-        file_data=content,
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
+        esign_provider_template_id=None,
+        esign_field_mapping=None,
         notes=notes,
     )
     db.add(template)
@@ -956,6 +1072,7 @@ def approve_template(
         select(ContractTemplate).where(
             ContractTemplate.id == template_id,
             ContractTemplate.organization_id == principal.organization_id,
+            ContractTemplate.deleted_at.is_(None),
         )
     )
     if template is None:
@@ -963,6 +1080,48 @@ def approve_template(
     template.status = "approved"
     template.approved_by_user_id = principal.user_id
     template.approved_at = datetime.now(UTC)
+    db.commit()
+    db.refresh(template)
+    return template_read(template)
+
+
+def configure_template_provider(
+    db: Session,
+    principal: Principal,
+    template_id: UUID,
+    payload: ContractTemplateProviderUpdate,
+) -> ContractTemplateRead | None:
+    template = db.scalar(
+        select(ContractTemplate).where(
+            ContractTemplate.id == template_id,
+            ContractTemplate.organization_id == principal.organization_id,
+            ContractTemplate.deleted_at.is_(None),
+        )
+    )
+    if template is None:
+        return None
+    template.esign_provider_template_id = payload.esign_provider_template_id.strip()
+    template.esign_field_mapping = {
+        key.strip(): value.strip()
+        for key, value in payload.esign_field_mapping.items()
+        if key.strip() and value.strip()
+    }
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="contract_template.esign_configure",
+            entity_type="contract_template",
+            entity_id=template.id,
+            previous_value=None,
+            new_value={
+                "provider_template_id": template.esign_provider_template_id,
+                "field_keys": sorted(template.esign_field_mapping),
+            },
+            reason="E-signature template mapping configured",
+        )
+    )
     db.commit()
     db.refresh(template)
     return template_read(template)
@@ -1002,6 +1161,9 @@ def document_read(
         file_name=item.file_name,
         content_type=item.content_type,
         file_size=item.file_size,
+        storage_provider=item.storage_provider,
+        malware_scan_status=item.malware_scan_status,
+        retention_until=item.retention_until,
         occurred_at=item.occurred_at,
         notes=item.notes,
         download_url=f"/api/v1/transactions/{item.transaction_id}/documents/{item.id}/content",
@@ -1038,6 +1200,13 @@ def template_read(item: ContractTemplate) -> ContractTemplateRead:
         version_number=item.version_number,
         status=item.status,
         file_name=item.file_name,
+        storage_provider=item.storage_provider,
+        malware_scan_status=item.malware_scan_status,
+        retention_until=item.retention_until,
+        esign_provider_template_id=item.esign_provider_template_id,
+        esign_field_mapping={
+            str(key): str(value) for key, value in (item.esign_field_mapping or {}).items()
+        },
         approved_at=item.approved_at,
         created_at=item.created_at,
     )

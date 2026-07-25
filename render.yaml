@@ -128,6 +128,44 @@ services:
         sync: false
       - key: GOOGLE_OAUTH_REDIRECT_URI
         sync: false
+      - key: DOCUMENT_STORAGE_PROVIDER
+        value: database
+      - key: DOCUMENT_STORAGE_ENDPOINT_URL
+        sync: false
+      - key: DOCUMENT_STORAGE_BUCKET
+        sync: false
+      - key: DOCUMENT_STORAGE_ACCESS_KEY_ID
+        sync: false
+      - key: DOCUMENT_STORAGE_SECRET_ACCESS_KEY
+        sync: false
+      - key: DOCUMENT_STORAGE_REGION
+        value: auto
+      - key: DOCUMENT_STORAGE_DOWNLOAD_TTL_SECONDS
+        value: 300
+      - key: DOCUMENT_RETENTION_DAYS
+        value: 2555
+      - key: DOCUMENT_MALWARE_SCANNER
+        value: disabled
+      - key: DOCUMENT_MALWARE_SCAN_REQUIRED
+        value: false
+      - key: CLAMAV_HOST
+        sync: false
+      - key: CLAMAV_PORT
+        value: 3310
+      - key: CLAMAV_TIMEOUT_SECONDS
+        value: 15
+      - key: ESIGN_PROVIDER
+        value: disabled
+      - key: ESIGN_API_KEY
+        sync: false
+      - key: ESIGN_BASE_URL
+        value: https://www.signwell.com/api/v1
+      - key: ESIGN_SIGNWELL_WEBHOOK_ID
+        sync: false
+      - key: ESIGN_TEST_MODE
+        value: true
+      - key: ESIGN_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
       - key: ATTOM_API_KEY

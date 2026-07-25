@@ -262,6 +262,26 @@ async def upload_buyer_proof(
         raise invalid(exc) from exc
 
 
+@router.get("/proof-documents/{document_id}/content")
+def download_buyer_proof(
+    document_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> Response:
+    result = dispositions.get_proof_content(db, principal, document_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Proof-of-funds document not found.")
+    document, content = result
+    return Response(
+        content=content,
+        media_type=document.content_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f'attachment; filename="{document.file_name}"',
+        },
+    )
+
+
 def _case_action(
     function: Callable[..., DispositionCaseRead | None],
     db: Session,

@@ -284,6 +284,12 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
   attached before execution can move the lead to `under_contract`.
 - Versioned, state-specific legal-template records, private authenticated document storage, closing
   parties, dependency-aware checklist evidence, and an immutable transaction timeline.
+- Cloudflare R2-compatible private storage for contracts, legal templates, completed agreements,
+  inspection photographs, and buyer proof-of-funds, with the existing database fallback,
+  checksums, scan status, retention, short-lived downloads, and deletion controls.
+- SignWell e-signature adapter with approved-template mapping, ordered recipients, provider-event
+  deduplication, missed-event reconciliation, and final-PDF retention. Local simulation is complete;
+  provider and attorney-template acceptance remain.
 - Funded closing is blocked until an executed package, funding confirmation, and all required
   checklist items are present.
 - Dedicated disposition queue with frozen compensation plan/mode, approved deal packages, and
@@ -320,6 +326,8 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Resend operational email | Provider selected; migration pending | Replace the disabled Gmail adapter with Resend sending, receiving, signed webhooks, aliases, threading, attachments, and recovery |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 | Production monitoring | Scheduled readiness and owner alert verified; Sentry deferred | Activate Sentry and the worker webhook later if the owner chooses |
+| Private object storage | Cloudflare R2 adapter complete; database fallback active | Configure the private R2 bucket and run file acceptance |
+| E-signature | SignWell adapter and local simulation complete | Configure SignWell, load attorney-approved templates, and run controlled test-mode acceptance |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 
@@ -334,8 +342,8 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
 - Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
   deferred until operating data demonstrates that route precision is necessary.
-- The controlled manual contract and checklist workflow is operational; provider-backed object
-  storage, e-signature, and live closing acceptance remain incomplete.
+- The contract, private-storage, SignWell, checklist, and funding code is implemented. R2,
+  SignWell, attorney-template, and live closing acceptance remain incomplete.
 - External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
   is complete; buyer matching and human approval are operational.
 - Stonegate's Finance area records deal economics, revenue, deductions, marketing spend,

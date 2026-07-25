@@ -182,6 +182,78 @@ class Settings(BaseSettings):
         default="http://localhost:3000",
         validation_alias="EMAIL_WEB_APP_BASE_URL",
     )
+    document_storage_provider: Literal["database", "s3"] = Field(
+        default="database",
+        validation_alias="DOCUMENT_STORAGE_PROVIDER",
+    )
+    document_storage_endpoint_url: str | None = Field(
+        default=None,
+        validation_alias="DOCUMENT_STORAGE_ENDPOINT_URL",
+    )
+    document_storage_bucket: str | None = Field(
+        default=None,
+        validation_alias="DOCUMENT_STORAGE_BUCKET",
+    )
+    document_storage_access_key_id: str | None = Field(
+        default=None,
+        validation_alias="DOCUMENT_STORAGE_ACCESS_KEY_ID",
+    )
+    document_storage_secret_access_key: str | None = Field(
+        default=None,
+        validation_alias="DOCUMENT_STORAGE_SECRET_ACCESS_KEY",
+    )
+    document_storage_region: str = Field(
+        default="auto",
+        validation_alias="DOCUMENT_STORAGE_REGION",
+    )
+    document_storage_download_ttl_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        validation_alias="DOCUMENT_STORAGE_DOWNLOAD_TTL_SECONDS",
+    )
+    document_retention_days: int = Field(
+        default=2555,
+        ge=1,
+        le=7300,
+        validation_alias="DOCUMENT_RETENTION_DAYS",
+    )
+    document_malware_scanner: Literal["disabled", "clamav"] = Field(
+        default="disabled",
+        validation_alias="DOCUMENT_MALWARE_SCANNER",
+    )
+    document_malware_scan_required: bool = Field(
+        default=False,
+        validation_alias="DOCUMENT_MALWARE_SCAN_REQUIRED",
+    )
+    clamav_host: str | None = Field(default=None, validation_alias="CLAMAV_HOST")
+    clamav_port: int = Field(default=3310, ge=1, le=65535, validation_alias="CLAMAV_PORT")
+    clamav_timeout_seconds: float = Field(
+        default=15,
+        ge=1,
+        le=120,
+        validation_alias="CLAMAV_TIMEOUT_SECONDS",
+    )
+    esign_provider: Literal["disabled", "simulate", "signwell"] = Field(
+        default="disabled",
+        validation_alias="ESIGN_PROVIDER",
+    )
+    esign_api_key: str | None = Field(default=None, validation_alias="ESIGN_API_KEY")
+    esign_base_url: str = Field(
+        default="https://www.signwell.com/api/v1",
+        validation_alias="ESIGN_BASE_URL",
+    )
+    esign_signwell_webhook_id: str | None = Field(
+        default=None,
+        validation_alias="ESIGN_SIGNWELL_WEBHOOK_ID",
+    )
+    esign_test_mode: bool = Field(default=True, validation_alias="ESIGN_TEST_MODE")
+    esign_request_timeout_seconds: float = Field(
+        default=30,
+        ge=5,
+        le=120,
+        validation_alias="ESIGN_REQUEST_TIMEOUT_SECONDS",
+    )
     google_oauth_client_id: str | None = Field(
         default=None,
         validation_alias="GOOGLE_OAUTH_CLIENT_ID",
@@ -361,6 +433,8 @@ class Settings(BaseSettings):
     def reject_production_simulation(self) -> "Settings":
         if self.app_env.lower() == "production" and self.communication_provider_mode == "simulate":
             raise ValueError("COMMUNICATION_PROVIDER_MODE=simulate is forbidden in production.")
+        if self.app_env.lower() == "production" and self.esign_provider == "simulate":
+            raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
         return self
 
     @property
@@ -392,6 +466,34 @@ class Settings(BaseSettings):
             blockers.append("EMAIL_TOKEN_ENCRYPTION_KEY")
         if not self.email_oauth_state_secret:
             blockers.append("EMAIL_OAUTH_STATE_SECRET")
+        return tuple(blockers)
+
+    @property
+    def document_storage_configuration_blockers(self) -> tuple[str, ...]:
+        if self.document_storage_provider == "database":
+            return ()
+        blockers: list[str] = []
+        if not self.document_storage_endpoint_url:
+            blockers.append("DOCUMENT_STORAGE_ENDPOINT_URL")
+        if not self.document_storage_bucket:
+            blockers.append("DOCUMENT_STORAGE_BUCKET")
+        if not self.document_storage_access_key_id:
+            blockers.append("DOCUMENT_STORAGE_ACCESS_KEY_ID")
+        if not self.document_storage_secret_access_key:
+            blockers.append("DOCUMENT_STORAGE_SECRET_ACCESS_KEY")
+        return tuple(blockers)
+
+    @property
+    def esign_configuration_blockers(self) -> tuple[str, ...]:
+        if self.esign_provider == "simulate":
+            return ()
+        blockers: list[str] = []
+        if self.esign_provider != "signwell":
+            blockers.append("ESIGN_PROVIDER=signwell")
+        if not self.esign_api_key:
+            blockers.append("ESIGN_API_KEY")
+        if not self.esign_signwell_webhook_id:
+            blockers.append("ESIGN_SIGNWELL_WEBHOOK_ID")
         return tuple(blockers)
 
     @property

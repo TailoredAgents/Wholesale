@@ -11,7 +11,13 @@ from app.schemas.transactions import (
     ChecklistItemUpdate,
     ContractPackageCreate,
     ContractPackageRead,
+    ContractTemplateProviderUpdate,
     ContractTemplateRead,
+    DocumentDeleteRequest,
+    DocumentDownloadLinkRead,
+    EsignEnvelopeRead,
+    EsignSendRequest,
+    F4IntegrationStatusRead,
     TransactionClose,
     TransactionCopilotAnalyzeRead,
     TransactionCopilotAnalyzeRequest,
@@ -29,6 +35,11 @@ from app.schemas.transactions import (
     TransactionPartyRead,
     TransactionUpdate,
 )
+from app.services.esign import (
+    integration_status,
+    reconcile_envelope,
+    send_contract_for_signature,
+)
 from app.services.transaction_copilot import (
     analyze_transaction,
     get_transaction_copilot_overview,
@@ -39,8 +50,12 @@ from app.services.transactions import (
     add_party,
     approve_template,
     close_transaction,
+    configure_template_provider,
     create_contract_package,
+    create_document_download_link,
+    delete_document,
     get_document,
+    get_document_content,
     get_transaction_detail,
     list_templates,
     list_transactions,
@@ -75,6 +90,14 @@ def read_transactions(
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> TransactionOverview:
     return list_transactions(db, principal)
+
+
+@router.get("/integrations/f4")
+def read_f4_integration_status(
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> F4IntegrationStatusRead:
+    del principal
+    return integration_status()
 
 
 @router.get("/templates")
@@ -120,6 +143,19 @@ def approve_contract_template(
     principal: Annotated[Principal, Depends(template_dependency)],
 ) -> ContractTemplateRead:
     result = approve_template(db, principal, template_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Contract template not found.")
+    return result
+
+
+@router.patch("/templates/{template_id}/esign")
+def configure_contract_template_esign(
+    template_id: UUID,
+    payload: ContractTemplateProviderUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(template_dependency)],
+) -> ContractTemplateRead:
+    result = configure_template_provider(db, principal, template_id, payload)
     if result is None:
         raise HTTPException(status_code=404, detail="Contract template not found.")
     return result
@@ -256,6 +292,48 @@ def record_contract_sent(
     return result
 
 
+@router.post(
+    "/{transaction_id}/contract-packages/{package_id}/esign",
+    status_code=201,
+)
+def send_contract_package_for_signature(
+    transaction_id: UUID,
+    package_id: UUID,
+    payload: EsignSendRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = send_contract_for_signature(
+            db,
+            principal,
+            transaction_id,
+            package_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise not_found()
+    return result
+
+
+@router.post("/{transaction_id}/esign/{envelope_id}/reconcile")
+def reconcile_contract_signature(
+    transaction_id: UUID,
+    envelope_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = reconcile_envelope(db, principal, transaction_id, envelope_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Signature request not found.")
+    return result
+
+
 @router.post("/{transaction_id}/contract-packages/{package_id}/mark-executed")
 def record_contract_executed(
     transaction_id: UUID,
@@ -318,14 +396,52 @@ def download_transaction_document(
     document = get_document(db, principal, transaction_id, document_id)
     if document is None:
         raise HTTPException(status_code=404, detail="Document not found.")
+    try:
+        content = get_document_content(document)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(
-        content=document.file_data,
+        content=content,
         media_type=document.content_type,
         headers={
             "Content-Disposition": f'attachment; filename="{document.file_name}"',
             "Cache-Control": "private, no-store",
         },
     )
+
+
+@router.get(
+    "/{transaction_id}/documents/{document_id}/download-link",
+)
+def create_transaction_document_download_link(
+    transaction_id: UUID,
+    document_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_dependency)],
+) -> DocumentDownloadLinkRead:
+    document = get_document(db, principal, transaction_id, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    try:
+        return create_document_download_link(document)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/{transaction_id}/documents/{document_id}",
+    status_code=204,
+)
+def remove_transaction_document(
+    transaction_id: UUID,
+    document_id: UUID,
+    payload: DocumentDeleteRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(contract_dependency)],
+) -> Response:
+    if not delete_document(db, principal, transaction_id, document_id, payload):
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return Response(status_code=204)
 
 
 @router.post(
