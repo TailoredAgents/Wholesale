@@ -3015,7 +3015,9 @@ class ComplianceIncident(UuidPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
-    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("contacts.id"), index=True
+    )
     lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     prospect_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("prospects.id"), index=True

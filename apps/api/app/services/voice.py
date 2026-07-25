@@ -43,13 +43,13 @@ from app.schemas.voice import (
     VoiceRecordingRead,
     VoiceSessionRead,
 )
-from app.services.compliance import recording_enabled_for_organization
 from app.services.call_intelligence import enqueue_call_transcript
 from app.services.communication_compliance import (
     evaluate_voice_eligibility,
     format_e164,
     phone_lookup_values,
 )
+from app.services.compliance import recording_enabled_for_organization
 from app.services.inbox import (
     ensure_primary_conversation,
     get_scoped_conversation,
