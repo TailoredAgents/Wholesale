@@ -48,6 +48,7 @@ from app.services.acquisition_operations import (
     list_users,
     normalize_prospect_phone,
 )
+from app.services.compliance import prospect_call_blockers
 from app.services.property_validation import canonical_address_key
 
 MAX_IMPORT_ROWS = 10_000
@@ -892,11 +893,14 @@ def create_calling_batch(
             Prospect.id.not_in(already_batched),
         )
         .order_by(Prospect.created_at)
-        .limit(payload.maximum_records)
     )
     if import_batch:
         prospect_statement = prospect_statement.where(Prospect.import_batch_id == import_batch.id)
-    prospects = db.scalars(prospect_statement).all()
+    prospects = [
+        prospect
+        for prospect in db.scalars(prospect_statement).all()
+        if not prospect_call_blockers(db, prospect)
+    ][: payload.maximum_records]
     if not prospects:
         raise ValueError("No unbatched, callable prospects match this selection.")
 

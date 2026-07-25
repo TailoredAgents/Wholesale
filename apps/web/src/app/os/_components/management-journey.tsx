@@ -8,6 +8,7 @@ const routeByKey = {
   finance: "/os/finance",
   marketing: "/os/marketing",
   "operating-model": "/os/operating-model",
+  compliance: "/os/compliance",
   ai: "/os/ai",
 } as const;
 

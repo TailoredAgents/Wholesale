@@ -12,6 +12,7 @@ from app.models.foundation import (
     ContactMethod,
     SuppressionRecord,
 )
+from app.services.compliance import approved_contact_hours
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,15 @@ class VoiceEligibility:
     is_suppressed: bool
     provider_configured: bool
     within_allowed_hours: bool
+    blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EmailEligibility:
+    can_send: bool
+    recipient: str | None
+    consent_status: str
+    is_suppressed: bool
     blockers: tuple[str, ...]
 
 
@@ -76,7 +86,15 @@ def evaluate_sms_eligibility(
         if recipient
         else None
     )
-    within_allowed_hours = is_within_sms_allowed_hours(settings, now=now)
+    timezone, start_hour, end_hour = approved_contact_hours(
+        db, contact.organization_id, "sms", settings=settings
+    )
+    within_allowed_hours = is_within_contact_hours(
+        timezone=timezone,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        now=now,
+    )
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller mobile number is required.")
@@ -111,6 +129,62 @@ def format_e164(value: str | None) -> str | None:
     if 11 <= len(digits) <= 15:
         return f"+{digits}"
     return None
+
+
+def evaluate_email_eligibility(
+    db: Session,
+    contact: Contact,
+) -> EmailEligibility:
+    email_method = db.scalar(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == contact.organization_id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == "email",
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    )
+    recipient = (
+        (email_method.normalized_value or email_method.value).strip().lower()
+        if email_method
+        else None
+    )
+    latest_consent = db.scalar(
+        select(ConsentRecord)
+        .where(
+            ConsentRecord.organization_id == contact.organization_id,
+            ConsentRecord.contact_id == contact.id,
+            ConsentRecord.channel == "email",
+        )
+        .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
+    )
+    consent_status = latest_consent.status if latest_consent else "missing"
+    suppression = (
+        db.scalar(
+            select(SuppressionRecord).where(
+                SuppressionRecord.organization_id == contact.organization_id,
+                SuppressionRecord.channel.in_(("email", "all")),
+                SuppressionRecord.normalized_address == recipient,
+                SuppressionRecord.status == "active",
+            )
+        )
+        if recipient
+        else None
+    )
+    blockers: list[str] = []
+    if recipient is None:
+        blockers.append("A valid seller email address is required.")
+    if consent_status != "granted":
+        blockers.append("Recorded email contact permission is required.")
+    if suppression is not None:
+        blockers.append("This email address is suppressed from outreach.")
+    return EmailEligibility(
+        can_send=not blockers,
+        recipient=recipient,
+        consent_status=consent_status,
+        is_suppressed=suppression is not None,
+        blockers=tuple(blockers),
+    )
 
 
 def evaluate_voice_eligibility(
@@ -153,7 +227,15 @@ def evaluate_voice_eligibility(
         if recipient
         else None
     )
-    within_allowed_hours = is_within_voice_allowed_hours(settings, now=now)
+    timezone, start_hour, end_hour = approved_contact_hours(
+        db, contact.organization_id, "voice", settings=settings
+    )
+    within_allowed_hours = is_within_contact_hours(
+        timezone=timezone,
+        start_hour=start_hour,
+        end_hour=end_hour,
+        now=now,
+    )
     blockers: list[str] = []
     if recipient is None:
         blockers.append("A valid seller phone number is required.")

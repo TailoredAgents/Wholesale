@@ -2917,6 +2917,140 @@ class StaffRoleAcceptance(UuidPrimaryKeyMixin, TimestampMixin, Base):
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
+class CompliancePolicyVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compliance_policy_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "policy_key",
+            "version_number",
+            name="uq_compliance_policy_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    policy_key: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    scope_state_code: Mapped[str] = mapped_column(String(2), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    policy_config: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    legal_review_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    legal_reviewer_name: Mapped[str | None] = mapped_column(String(255))
+    legal_reviewer_company: Mapped[str | None] = mapped_column(String(255))
+    legal_evidence_reference: Mapped[str | None] = mapped_column(String(1000))
+    legal_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class DncScreeningSource(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "dnc_screening_sources"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "name",
+            name="uq_dnc_screening_sources_org_name",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    account_reference: Mapped[str | None] = mapped_column(String(255))
+    coverage_area_codes: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    refresh_interval_days: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_refreshed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    next_refresh_due_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
+    latest_evidence_reference: Mapped[str | None] = mapped_column(String(1000))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class ComplianceTrainingRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compliance_training_records"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "user_id",
+            "training_key",
+            "training_version",
+            name="uq_compliance_training_assignment",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    training_key: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    training_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    assigned_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    score_basis_points: Mapped[int | None] = mapped_column(Integer)
+    completion_evidence: Mapped[str | None] = mapped_column(String(2000))
+    employee_attestation: Mapped[str | None] = mapped_column(String(2000))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    manager_notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class ComplianceIncident(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compliance_incidents"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    prospect_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospects.id"), index=True
+    )
+    call_record_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("call_records.id"), index=True
+    )
+    incident_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    channel: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    severity: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    details: Mapped[str | None] = mapped_column(String(4000))
+    reported_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    assigned_to_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    resolved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution: Mapped[str | None] = mapped_column(String(2000))
+
+
+class ComplianceControlRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "compliance_control_runs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    run_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    results: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CompensationRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "compensation_rules"
 

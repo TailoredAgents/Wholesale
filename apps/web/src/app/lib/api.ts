@@ -413,6 +413,107 @@ export type MyRoleSetup = {
   acceptances: StaffRoleAcceptance[];
 };
 
+export type ComplianceTraining = {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  training_key: string;
+  training_version: string;
+  status: string;
+  assigned_by_user_id: string;
+  assigned_by_name: string;
+  completed_at: string | null;
+  score_basis_points: number | null;
+  completion_evidence: string | null;
+  employee_attestation: string | null;
+  approved_by_user_id: string | null;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  manager_notes: string | null;
+};
+
+export type ComplianceOverview = {
+  users: Array<{
+    id: string;
+    display_name: string;
+    email: string;
+    is_active: boolean;
+  }>;
+  policies: Array<{
+    id: string;
+    policy_key: string;
+    name: string;
+    scope_state_code: string;
+    version_number: number;
+    status: string;
+    policy_config: Record<string, unknown>;
+    legal_review_status: string;
+    legal_reviewer_name: string | null;
+    legal_reviewer_company: string | null;
+    legal_evidence_reference: string | null;
+    legal_reviewed_at: string | null;
+    approved_by_user_id: string | null;
+    approved_by_name: string | null;
+    approved_at: string | null;
+    effective_at: string | null;
+    review_due_at: string | null;
+    superseded_at: string | null;
+    notes: string | null;
+  }>;
+  dnc_sources: Array<{
+    id: string;
+    name: string;
+    provider_type: string;
+    status: string;
+    account_reference: string | null;
+    coverage_area_codes: string[];
+    refresh_interval_days: number;
+    last_refreshed_at: string | null;
+    next_refresh_due_at: string | null;
+    latest_evidence_reference: string | null;
+    approved_by_user_id: string | null;
+    approved_by_name: string | null;
+    approved_at: string | null;
+    notes: string | null;
+    is_current: boolean;
+  }>;
+  training_records: ComplianceTraining[];
+  incidents: Array<{
+    id: string;
+    incident_type: string;
+    channel: string;
+    severity: string;
+    status: string;
+    source: string;
+    summary: string;
+    details: string | null;
+    reported_by_name: string | null;
+    assigned_to_name: string | null;
+    occurred_at: string;
+    resolved_by_name: string | null;
+    resolved_at: string | null;
+    resolution: string | null;
+  }>;
+  control_runs: Array<{
+    id: string;
+    status: string;
+    results: Array<{
+      key: string;
+      label: string;
+      status: "pass" | "attention" | "fail";
+      detail: string;
+      affected_count: number;
+    }>;
+    run_by_user_id: string;
+    run_by_name: string;
+    started_at: string;
+    completed_at: string;
+  }>;
+  ready_check_count: number;
+  total_check_count: number;
+};
+
 export type CampaignManagementOverview = {
   users: OperationsUser[];
   campaigns: AcquisitionOperations["campaigns"];
@@ -2754,6 +2855,50 @@ export async function getMyRoleSetup(): Promise<{
   } catch (error) {
     console.error("Stonegate role setup request failed.", error);
     return { roleSetup: null, apiConnected: false };
+  }
+}
+
+export async function getComplianceOverview(): Promise<{
+  compliance: ComplianceOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/compliance`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      compliance: (await response.json()) as ComplianceOverview,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate compliance request failed.", error);
+    return { compliance: null, apiConnected: false };
+  }
+}
+
+export async function getMyComplianceTraining(): Promise<{
+  training: ComplianceTraining[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/compliance/my-training`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      training: (await response.json()) as ComplianceTraining[],
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate compliance training request failed.", error);
+    return { training: [], apiConnected: false };
   }
 }
 

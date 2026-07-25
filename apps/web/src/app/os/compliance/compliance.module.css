@@ -1,0 +1,366 @@
+.workspace {
+  display: grid;
+  gap: 14px;
+}
+
+.tabs {
+  min-height: 44px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  min-height: 43px;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tabs button[aria-current="page"] {
+  border-bottom-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.feedback {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+.panelHeader {
+  min-height: 70px;
+  padding: 15px 18px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-soft);
+}
+
+.panelHeader div {
+  display: grid;
+  gap: 4px;
+}
+
+.panelHeader span,
+.card header span,
+.row span,
+.entryForm label span,
+.card label span,
+.card dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.panelHeader h2,
+.card h3,
+.row h3,
+.control h3 {
+  margin: 0;
+}
+
+.panelHeader h2 {
+  font-size: 17px;
+}
+
+.panel button,
+.entryForm button,
+.card button {
+  min-height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.panel button svg,
+.entryForm button svg,
+.card button svg {
+  width: 15px;
+}
+
+.panel button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.grid {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.card {
+  min-width: 0;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.card > header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card > header > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.card h3,
+.row h3,
+.control h3 {
+  font-size: 13px;
+}
+
+.card strong[data-status],
+.row strong[data-status],
+.control strong[data-status] {
+  height: fit-content;
+  padding: 4px 7px;
+  border-radius: 5px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.card strong[data-status="active"],
+.card strong[data-status="approved"],
+.row strong[data-status="approved"],
+.control strong[data-status="pass"] {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.card dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.card dl div {
+  padding: 9px;
+  display: grid;
+  gap: 4px;
+  background: var(--surface-soft);
+}
+
+.card dd {
+  margin: 0;
+  font-size: 11px;
+}
+
+.card form,
+.entryForm {
+  display: grid;
+  gap: 10px;
+}
+
+.entryForm {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.twoColumns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.card label,
+.entryForm label {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.card input,
+.entryForm input,
+.entryForm select,
+.inlineForm input {
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.entryForm > button {
+  width: fit-content;
+}
+
+.current {
+  margin: 0;
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.current svg {
+  width: 16px;
+}
+
+.stack {
+  display: grid;
+}
+
+.row,
+.control {
+  min-width: 0;
+  padding: 13px 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 13px;
+  align-items: center;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.row:last-child,
+.control:last-child {
+  border-bottom: 0;
+}
+
+.row > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.row p,
+.control p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.inlineForm {
+  display: flex;
+  gap: 7px;
+}
+
+.inlineForm input {
+  width: 230px;
+}
+
+.control {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+}
+
+.control > svg {
+  width: 18px;
+  color: var(--warning);
+}
+
+.control:has(strong[data-status="pass"]) > svg {
+  color: var(--brand);
+}
+
+.emptyState {
+  margin: 0;
+  padding: 24px 18px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .grid,
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .tabs {
+    overflow-x: auto;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .row button,
+  .row .inlineForm {
+    grid-column: 1 / -1;
+  }
+
+  .inlineForm input {
+    width: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .panelHeader,
+  .row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panelHeader {
+    display: flex;
+  }
+
+  .twoColumns {
+    grid-template-columns: 1fr;
+  }
+
+  .row,
+  .control {
+    grid-template-columns: 1fr;
+  }
+
+  .inlineForm {
+    flex-direction: column;
+  }
+}

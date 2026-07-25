@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 from urllib.parse import urlencode
 from uuid import UUID
@@ -21,6 +21,7 @@ from app.models.foundation import (
     CallRecording,
     CallTranscript,
     CommunicationProviderEvent,
+    CompliancePolicyVersion,
     Contact,
     Conversation,
     Lead,
@@ -295,6 +296,31 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     get_settings.cache_clear()
     client = TestClient(app)
     conversation = seed_voice_lead(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    now = datetime.now(UTC)
+    db_session.add(
+        CompliancePolicyVersion(
+            organization_id=conversation.organization_id,
+            policy_key="call_recording_retention",
+            name="Test recording policy",
+            scope_state_code="GA",
+            version_number=1,
+            status="active",
+            policy_config={"disclosure_before_recording": True},
+            legal_review_status="approved",
+            legal_reviewer_name="Test Counsel",
+            legal_reviewer_company="Test Legal",
+            legal_evidence_reference="test://recording-review",
+            legal_reviewed_at=now,
+            created_by_user_id=owner.id,
+            approved_by_user_id=owner.id,
+            approved_at=now,
+            effective_at=now,
+            review_due_at=now + timedelta(days=365),
+        )
+    )
+    db_session.commit()
     intent = create_intent(client, conversation)
     session = client.get(
         "/api/v1/voice/session",

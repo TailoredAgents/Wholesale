@@ -22,6 +22,7 @@ from app.models.foundation import (
     CommunicationDispatch,
     CommunicationProviderEvent,
     CommunicationRecord,
+    ComplianceIncident,
     ConsentRecord,
     Contact,
     ContactMethod,
@@ -500,6 +501,21 @@ def apply_sms_preference(
             updated_at=now,
         )
     )
+    if preference == "STOP":
+        db.add(
+            ComplianceIncident(
+                organization_id=organization_id,
+                contact_id=contact.id,
+                incident_type="do_not_contact",
+                channel="sms",
+                severity="medium",
+                status="open",
+                source="twilio_advanced_opt_out",
+                summary="Seller opted out by SMS.",
+                details=f"Provider message reference: {message_sid}",
+                occurred_at=now,
+            )
+        )
     db.add(
         AuditEvent(
             organization_id=organization_id,

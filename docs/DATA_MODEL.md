@@ -208,6 +208,24 @@ reviews remain tied to the human attempt and optionally to a disclosed recording
 transcript, and governed AI run. Missing evidence produces nullable scores rather than invented
 certainty. Compliance flags and escalation state do not depend on transcript or model availability.
 
+## Compliance Policy And Evidence
+
+- `compliance_policy_versions`: immutable policy identity/version, operating status, structured
+  configuration, external legal-review evidence, owner approval, effective date, review due date,
+  and supersession history.
+- `dnc_screening_sources`: approved source/provider, area-code coverage, refresh interval,
+  current evidence reference, last refresh, and next due date.
+- `compliance_training_records`: user, training type/version, employee evidence and attestation,
+  manager decision, optional score, and approval history.
+- `compliance_incidents`: channel, severity, source, linked seller/prospect/call records, ownership,
+  status, and resolution.
+- `compliance_control_runs`: time-bounded snapshots of deterministic policy, DNC, batch, recording,
+  and incident checks.
+
+These records extend existing `consent_records`, `suppression_records`,
+`prospect_suppression_checks`, `communication_dispatches`, `call_records`, and audit events. They
+do not duplicate seller, prospect, conversation, or provider records.
+
 ## AI Control
 
 - `ai_agent_definitions`

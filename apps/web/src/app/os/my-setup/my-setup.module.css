@@ -54,6 +54,36 @@
   gap: 14px;
 }
 
+.sectionHeading {
+  margin-top: 8px;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: end;
+}
+
+.sectionHeading div {
+  display: grid;
+  gap: 4px;
+}
+
+.sectionHeading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.sectionHeading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.sectionHeading > strong {
+  color: var(--text-soft);
+  font-size: 12px;
+}
+
 .acceptance,
 .empty {
   border: 1px solid var(--line);

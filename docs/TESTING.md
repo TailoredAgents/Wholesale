@@ -43,6 +43,9 @@ Also run:
 - Lead, task, appointment, underwriting, transaction, buyer, finance, and approval writes.
 - Shared inbox assignment, watchers, VA handoff, and unread state.
 - SMS consent, suppression, STOP/START, signatures, and provider idempotency.
+- F3 policy installation, legal-review and owner-approval gates, DNC source refresh evidence,
+  training submission/approval, incident resolution, repeatable control runs, 31-day prospect
+  rechecks, email consent/suppression, and recording-policy activation.
 - Voice intents, routing, statuses, signatures, recordings, retention, and deletion.
 - Call transcription review, evidence, quality telemetry, and approval gates.
 - Current legacy Gmail adapter coverage until Phase F8 replaces it with Resend sending, Receiving,

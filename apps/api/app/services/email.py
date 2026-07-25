@@ -53,6 +53,7 @@ from app.schemas.email import (
     EmailTemplateRead,
     EmailTemplateUpdate,
 )
+from app.services.communication_compliance import evaluate_email_eligibility
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
 
 
@@ -65,6 +66,10 @@ class EmailDispatchConflictError(RuntimeError):
 
 
 class EmailAttachmentError(RuntimeError):
+    pass
+
+
+class EmailComplianceError(RuntimeError):
     pass
 
 
@@ -429,18 +434,10 @@ def send_conversation_email(
     lead = db.get(Lead, conversation.lead_id)
     if contact is None or lead is None:
         return None
-    recipient_method = db.scalar(
-        select(ContactMethod)
-        .where(
-            ContactMethod.organization_id == principal.organization_id,
-            ContactMethod.contact_id == contact.id,
-            ContactMethod.method_type == "email",
-        )
-        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
-    )
-    if recipient_method is None:
-        raise EmailConfigurationError("This seller does not have an email address.")
-    recipient = recipient_method.value.strip().lower()
+    eligibility = evaluate_email_eligibility(db, contact)
+    if not eligibility.can_send or eligibility.recipient is None:
+        raise EmailComplianceError(" ".join(eligibility.blockers))
+    recipient = eligibility.recipient
     subject = payload.subject.strip()
     body = payload.body.strip()
     decoded_attachments = decode_outbound_attachments(payload, settings)

@@ -126,6 +126,11 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
   duplicate review, saved views, and follow-up plans.
 - Owner-managed individual users and operational teams for acquisitions, prospecting,
   dispositions, and coordination.
+- Owner Compliance workspace with versioned communication policies, external legal-review
+  evidence, policy activation, 31-day DNC source evidence, staff training, incidents, and
+  repeatable control runs.
+- Prospect call eligibility is rechecked when a calling batch is created and when an attempt
+  starts. Missing, stale, suppressed, or non-clear records fail closed.
 - Management-only market, territory, outreach-campaign, and pre-lead prospect records with
   organization scoping and append-only audit events.
 - Prospect normalization, source-row deduplication, campaign attribution, and suppression-pending
@@ -319,6 +324,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Twilio SMS | Code complete; final provider cutover pending | Configure the new Messaging Service SID and new SMS sender, then run STOP/START/inbound/delivery tests |
 | Twilio Voice | Code complete; activation paused | Finish API key, TwiML App, Render variables, outbound test, and inbound webhook on the Voice number |
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
+| F3 policy acceptance | Code and workspaces implemented | Record real DNC source evidence, external legal review, staff training, and controlled blocked-case tests |
 | Resend operational email | Provider selected; migration pending | Replace the disabled Gmail adapter with Resend sending, receiving, signed webhooks, aliases, threading, attachments, and recovery |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 | Production monitoring | Scheduled readiness and owner alert verified; Sentry deferred | Activate Sentry and the worker webhook later if the owner chooses |
@@ -388,7 +394,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   checks, staff manual assignments, employee workspace-test evidence, manager approval, and audit
   records are available. Owners work in **Operating Model > Company setup** and every active user
   has a role-scoped **My Setup** page. Real staff, Georgia partners, and role signoffs are added as
-  they become available.
+  they are hired.
+- F3 compliance governance is implemented as an extension of existing consent, suppression,
+  campaign, email, Voice, recording, and audit records. Owners work in **Compliance** and staff
+  complete assigned training in **My Setup**. External DNC access, qualified legal review, actual
+  policy approval, staff signoff, and production acceptance remain incomplete.
 - Next.js is on stable patch 16.2.11. The production npm audit still reports upstream `postcss`
   and `sharp` advisories with no stable fix; recheck on the next stable Next.js patch.
 - Credential rotation, MFA rollout, and secret-security remediation were explicitly excluded from

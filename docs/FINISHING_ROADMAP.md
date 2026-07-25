@@ -158,6 +158,22 @@ Exit criteria:
 
 Goal: Make cold calling, seller communication, and recording operationally defensible.
 
+Implementation checkpoint, July 24, 2026:
+
+- The existing suppression, consent, prospecting, email, Voice, recording, and audit controls now
+  have a versioned owner policy and evidence layer in `/os/compliance`.
+- Policy installation, external legal-review evidence, owner activation, DNC source refresh
+  evidence, staff training, incident tracking, and repeatable control runs are implemented.
+- Callable prospects are rechecked at batch creation and attempt start. Missing, non-clear, or
+  older-than-31-day National DNC evidence fails closed.
+- Seller email now requires recorded email permission and no active email/all suppression.
+- Recording now requires both complete provider configuration and an active, current,
+  legally reviewed recording policy.
+- Code acceptance is complete. External DNC/provider enrollment, actual legal review, real staff
+  training signoff, and controlled production tests remain required before this phase exits.
+- Detailed implementation and acceptance instructions are in
+  `PHASE_F3_COMPLIANCE_POLICY.md`.
+
 Work:
 
 - Obtain National DNC access or select an approved screening provider.
