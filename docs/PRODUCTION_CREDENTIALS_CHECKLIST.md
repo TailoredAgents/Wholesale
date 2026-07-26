@@ -38,7 +38,7 @@ appropriate Render service environment.
 | F4 | Cloudflare R2 | Private uploaded-file storage | Built, activation pending | API |
 | F4 | SignWell | Electronic signatures and completed contract PDFs | Built, activation pending | API |
 | F4 | ClamAV | Uploaded-file malware scanning | Optional / deferred | API/private service |
-| F5 | Buyer-data provider | Buyer discovery and enrichment | Provider selection pending | API and possibly worker |
+| F5 | DealMachine | Buyer discovery and enrichment | Built, activation pending | API |
 | F8 | Resend | Operational outbound and inbound email | Selected, build pending | API and worker |
 | F9 | Twilio Messaging | Seller and buyer SMS | Built, activation pending | API |
 | F9 | Twilio Voice | Browser calling, inbound calls, and recordings | Built, activation pending | API and worker |
@@ -147,15 +147,16 @@ Acceptance:
 | `ESIGN_PROVIDER` | No | `oakwell-api` | Change from `disabled` to `signwell` |
 | `ESIGN_API_KEY` | Yes | `oakwell-api` | SignWell API settings |
 | `ESIGN_BASE_URL` | No | `oakwell-api` | `https://www.signwell.com/api/v1` |
-| `ESIGN_SIGNWELL_WEBHOOK_ID` | Sensitive identifier | `oakwell-api` | ID returned when the webhook is created |
+| `ESIGN_WEBHOOK_CALLBACK_URL` | No | `oakwell-api` | `https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell` |
+| `ESIGN_SIGNWELL_WEBHOOK_ID` | Legacy fallback | `oakwell-api` | Leave blank when using Stonegate's connection action |
 | `ESIGN_TEST_MODE` | No | `oakwell-api` | `true` until controlled acceptance passes |
 
 Non-environment requirements:
 
 - Attorney-approved Georgia purchase and assignment templates.
 - SignWell templates with stable recipient placeholder names and field API IDs.
-- Webhook registered at
-  `https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell`.
+- Owner selects **Connect SignWell** after deployment; Stonegate registers or reuses the webhook
+  and stores its verification ID.
 
 Acceptance:
 
@@ -164,7 +165,7 @@ Acceptance:
   and completed-PDF retention.
 - Set `ESIGN_TEST_MODE=false` only after legal-template and provider acceptance.
 
-Detailed procedure: `PHASE_F4_DOCUMENTS_ESIGN.md`.
+Detailed procedure: `SIGNWELL_LAUNCH_RUNBOOK.md`.
 
 ### ClamAV
 
@@ -179,16 +180,36 @@ ClamAV is optional. Do not require scanning until a private scanner is reachable
 
 ## F5 Buyer Data
 
-The provider will be selected during F5. Do not invent or add buyer-data environment variables
-before the adapter contract is approved.
+DealMachine is the selected startup provider. Stonegate stores the discovery run, scored candidate
+evidence, selected imports, deduplication result, and later internal outcomes. DealMachine does not
+replace the Stonegate buyer CRM or the Dispositions Copilot.
 
-The eventual checklist must record:
+| Variable | Secret | Render service | Source or value |
+| --- | --- | --- | --- |
+| `BUYER_DATA_PROVIDER` | No | `oakwell-api` | `dealmachine` after the acceptance search |
+| `DEALMACHINE_API_KEY` | Yes | `oakwell-api` | DealMachine Settings > Developer |
+| `DEALMACHINE_BASE_URL` | No | `oakwell-api` | `https://api.v2.dealmachine.com/v1` |
+| `DEALMACHINE_REQUEST_TIMEOUT_SECONDS` | No | `oakwell-api` | `30` |
+| `BUYER_DISCOVERY_MAX_RESULTS` | No | `oakwell-api` | `100` initially |
 
-- Provider account and API credential names.
-- Search, detail, export, and rate-limit entitlements.
-- Permitted data use and retention terms.
-- API and worker placement.
-- A controlled Georgia buyer-search acceptance case.
+Entitlements to confirm in the owner-controlled DealMachine account:
+
+- Property search, owner contacts, selected record use, and API access are active.
+- The plan credit allowance and current billing-cycle usage are visible.
+- Default API limits are sufficient for Stonegate's capped, user-triggered searches.
+- Stonegate's intended internal storage and retention comply with the current provider terms.
+
+Acceptance:
+
+1. Keep `BUYER_DATA_PROVIDER=disabled` during pre-revenue development. Subscribe when a seller
+   opportunity is likely to become a signed contract within one to two weeks.
+2. Change it to `dealmachine`, deploy the API, and open an approved Georgia disposition case.
+3. In Dispositions > Buyers, run **Find investors** and confirm candidate names, purchase
+   evidence, contact details, credit usage, and ranking are plausible.
+4. Import two test candidates and repeat the same search. Confirm Stonegate links duplicates
+   instead of creating second buyer records.
+5. Confirm imported records remain unverified for buying criteria and proof of funds.
+6. Confirm no messages, campaigns, or buyer selections occur from discovery or import.
 
 Twilio and Resend remain the later communication providers for buyer outreach. A buyer-data API
 does not replace the Stonegate buyer CRM.

@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -6,7 +7,16 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
-from app.schemas.buyers import BuyerCreate, BuyerListResponse, BuyerRead
+from app.schemas.buyers import (
+    BuyerCreate,
+    BuyerDataProviderRead,
+    BuyerDiscoveryCreate,
+    BuyerDiscoveryImport,
+    BuyerDiscoveryRunRead,
+    BuyerListResponse,
+    BuyerRead,
+)
+from app.services import buyer_discovery
 from app.services.buyers import create_buyer, list_buyers
 
 router = APIRouter(prefix="/api/v1/buyers", tags=["buyers"])
@@ -32,6 +42,57 @@ def create_buyer_record(
         return create_buyer(db, principal, payload)
     except ValueError as exc:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/provider")
+def read_buyer_data_provider(
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
+) -> BuyerDataProviderRead:
+    del principal
+    return buyer_discovery.provider_status()
+
+
+@router.get("/discovery-runs/latest")
+def read_latest_buyer_discovery(
+    case_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
+) -> BuyerDiscoveryRunRead | None:
+    return buyer_discovery.latest_discovery_run(db, principal, case_id)
+
+
+@router.post("/discovery-runs", status_code=201)
+def create_buyer_discovery(
+    payload: BuyerDiscoveryCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerDiscoveryRunRead:
+    try:
+        return buyer_discovery.discover_buyers(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/discovery-runs/{run_id}/import")
+def import_buyer_candidates(
+    run_id: UUID,
+    payload: BuyerDiscoveryImport,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerDiscoveryRunRead:
+    try:
+        result = buyer_discovery.import_candidates(db, principal, run_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Buyer discovery run not found.")
+    return result

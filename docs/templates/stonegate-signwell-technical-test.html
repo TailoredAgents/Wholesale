@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Stonegate SignWell Technical Test</title>
+  <style>
+    @page { size: letter; margin: 0.65in; }
+    body {
+      color: #17221c;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.5;
+      margin: 0 auto;
+      max-width: 7.2in;
+    }
+    header { border-bottom: 3px solid #236343; margin-bottom: 28px; padding-bottom: 18px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 26px 0 10px; }
+    .warning {
+      border: 2px solid #a82929;
+      color: #8c1f1f;
+      font-size: 14px;
+      font-weight: 700;
+      margin: 20px 0;
+      padding: 14px;
+      text-align: center;
+    }
+    .field {
+      border-bottom: 1px solid #8c9991;
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      min-height: 34px;
+      padding: 7px 0;
+    }
+    .field strong { color: #405048; }
+    .signature-grid {
+      display: grid;
+      gap: 22px;
+      grid-template-columns: 1fr 180px;
+      margin-top: 34px;
+    }
+    .signature-box { border-bottom: 1px solid #17221c; min-height: 54px; }
+    small { color: #5c6a62; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Stonegate Home Buyers</h1>
+    <div>SignWell integration acceptance record</div>
+  </header>
+
+  <div class="warning">
+    NON-BINDING TECHNICAL TEST. THIS IS NOT A REAL ESTATE CONTRACT.
+  </div>
+
+  <p>
+    This document exists only to verify template fields, recipient delivery, electronic signing,
+    webhook events, audit history, and completed-PDF storage. It creates no purchase, sale,
+    assignment, option, brokerage, agency, or other legal obligation.
+  </p>
+
+  <h2>Test Data</h2>
+  <div class="field"><strong>Seller name</strong><span>TEST SELLER</span></div>
+  <div class="field"><strong>Property address</strong><span>123 TEST STREET, ATLANTA, GA 30303</span></div>
+  <div class="field"><strong>Buyer entity</strong><span>STONEGATE TEST ENTITY</span></div>
+  <div class="field"><strong>Purchase price</strong><span>$1.00 TEST VALUE</span></div>
+  <div class="field"><strong>Closing date</strong><span>JANUARY 1, 2099</span></div>
+
+  <h2>Recipient Confirmation</h2>
+  <p>
+    By signing below, the test recipient confirms only that Stonegate's electronic-signature
+    workflow delivered and displayed this non-binding test document.
+  </p>
+  <div class="signature-grid">
+    <div>
+      <div class="signature-box"></div>
+      <small>Test recipient signature</small>
+    </div>
+    <div>
+      <div class="signature-box"></div>
+      <small>Date</small>
+    </div>
+  </div>
+</body>
+</html>

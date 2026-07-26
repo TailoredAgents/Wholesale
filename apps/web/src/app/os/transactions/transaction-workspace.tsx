@@ -42,6 +42,12 @@ type ContractTemplate = {
   storage_provider: string; malware_scan_status: string; retention_until: string | null;
   esign_provider_template_id: string | null; esign_field_mapping: Record<string, string>;
 };
+type SignWellConnection = {
+  account_connected: boolean; account_email: string | null; account_name: string | null;
+  webhook_connected: boolean; webhook_callback_url: string; webhook_created: boolean;
+  last_verified_at: string; linked_template_count: number; ready_template_count: number;
+  template_errors: string[];
+};
 
 function money(cents: number | null) {
   return cents == null ? "Not set" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
@@ -170,9 +176,20 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const template = templates.find((item) => item.id === String(data.get("template_id")));
+    const defaultKeys = template?.document_type === "assignment_contract"
+      ? ["property_address", "assignor_name", "assignee_name", "assignment_fee", "end_buyer_price", "closing_date", "special_terms"]
+      : ["seller_name", "property_address", "buyer_entity_name", "purchase_price", "earnest_money", "closing_date", "inspection_period_days", "special_terms"];
     const mapping = Object.fromEntries(
-      ["seller_name", "property_address", "buyer_entity_name", "purchase_price", "earnest_money", "closing_date"]
-        .map((key) => [key, String(data.get(key) ?? "").trim()])
+      [
+        "seller_name", "property_address", "buyer_entity_name", "purchase_price",
+        "earnest_money", "closing_date", "inspection_period_days", "special_terms",
+        "assignor_name", "assignee_name", "assignment_fee", "end_buyer_price",
+      ]
+        .map((key) => [
+          key,
+          String(data.get(key) ?? "").trim() || (defaultKeys.includes(key) ? key : ""),
+        ])
         .filter(([, value]) => Boolean(value)),
     );
     await action(() => request(
@@ -188,25 +205,43 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
     form.reset();
   }
 
+  async function connectSignWell() {
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await request<SignWellConnection>(
+        "/api/v1/transactions/integrations/signwell/connect",
+        { method: "POST" },
+      );
+      await reload();
+      setMessage(
+        result.template_errors.length
+          ? `SignWell connected. ${result.template_errors.join(" ")}`
+          : `SignWell connected. ${result.ready_template_count} template${result.ready_template_count === 1 ? "" : "s"} ready.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to connect SignWell.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendForSignature(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
     const packageId = String(data.get("package_id"));
-    const recipients = [{
-      placeholder_name: data.get("placeholder_name"),
-      name: data.get("signer_name"),
-      email: data.get("signer_email"),
-      signing_order: 1,
-    }];
-    if (String(data.get("signer_email_2") ?? "").trim()) {
-      recipients.push({
-        placeholder_name: data.get("placeholder_name_2"),
-        name: data.get("signer_name_2"),
-        email: data.get("signer_email_2"),
-        signing_order: 2,
-      });
-    }
+    const recipients = [1, 2, 3, 4].flatMap((order) => {
+      const suffix = order === 1 ? "" : `_${order}`;
+      const email = String(data.get(`signer_email${suffix}`) ?? "").trim();
+      if (!email) return [];
+      return [{
+        placeholder_name: data.get(`placeholder_name${suffix}`),
+        name: data.get(`signer_name${suffix}`),
+        email,
+        signing_order: order,
+      }];
+    });
     await action(() => request(
       `/api/v1/transactions/${selectedId}/contract-packages/${packageId}/esign`,
       {
@@ -335,7 +370,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
               />
             </div>
             <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
-            {message ? <div className={message === "Saved." ? styles.success : styles.notice}>{message}</div> : null}
+            {message ? <div className={message === "Saved." || message.startsWith("SignWell connected") ? styles.success : styles.notice}>{message}</div> : null}
 
             {tab === "closing" ? <>
               {copilot ? (
@@ -367,7 +402,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Version control</span><h4>Contract packages</h4></div></div>
                   <div className={styles.packageList}>{detail.contract_packages.map((pkg) => {
-                    const signedDocument = detail.documents.find((document) => document.contract_package_id === pkg.id && document.document_type === "signed_purchase_agreement");
+                    const signedDocument = detail.documents.find((document) => document.contract_package_id === pkg.id && ["signed_purchase_agreement", "assignment_contract", "executed_addendum", "executed_contract"].includes(document.document_type));
                     return <article key={pkg.id}><div><strong>Version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-executed?document_id=${signedDocument.id}`, { method: "POST" }))} type="button">Record executed</button> : null}</div></article>;
                   })}</div>
                 </section>
@@ -377,10 +412,20 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
                 </section>
               </div>
               <div className={styles.rightStack}>
-                <form className={styles.form} onSubmit={(event) => void sendForSignature(event)}><div className={styles.sectionTitle}><div><span>Provider delivery</span><h4>Send for signature</h4></div><PenLine size={18} /></div><label><span>Approved package</span><select name="package_id" required><option value="">Select package</option>{detail.contract_packages.filter((item) => item.status === "approved" && templates.find((template) => template.id === item.template_id)?.esign_provider_template_id).map((item) => <option key={item.id} value={item.id}>Version {item.version_number} · {item.seller_name}</option>)}</select></label><label><span>Primary signer</span><input defaultValue={sellerParty?.name ?? detail.seller_name} name="signer_name" required /></label><label><span>Primary signer email</span><input defaultValue={sellerParty?.email ?? ""} name="signer_email" required type="email" /></label><label><span>Primary template role</span><input defaultValue="Seller" name="placeholder_name" required /></label><label><span>Second signer</span><input name="signer_name_2" placeholder="Optional" /></label><label><span>Second signer email</span><input name="signer_email_2" placeholder="Optional" type="email" /></label><label><span>Second template role</span><input defaultValue="Seller 2" name="placeholder_name_2" /></label><label><span>Email subject</span><input defaultValue={`Stonegate purchase agreement for ${detail.property_address}`} name="subject" required /></label><label><span>Message</span><textarea defaultValue="Please review and sign the purchase agreement." name="message" rows={3} /></label><button disabled={busy || !f4Status?.esign_configured} type="submit"><PenLine size={16} />Send through SignWell</button></form>
+                <section className={styles.form}>
+                  <div className={styles.sectionTitle}><div><span>Provider connection</span><h4>SignWell</h4></div><FileCheck2 size={18} /></div>
+                  <dl className={styles.facts}>
+                    <div><dt>Account</dt><dd>{f4Status?.esign_account_connected ? f4Status.esign_account_email ?? "Connected" : "Not connected"}</dd></div>
+                    <div><dt>Webhook</dt><dd>{f4Status?.esign_webhook_connected ? "Connected" : "Not connected"}</dd></div>
+                    <div><dt>Templates</dt><dd>{f4Status ? `${f4Status.esign_ready_template_count}/${f4Status.esign_linked_template_count} ready` : "Loading"}</dd></div>
+                    <div><dt>Mode</dt><dd>{f4Status?.esign_test_mode ? "Test" : "Live"}</dd></div>
+                  </dl>
+                  <button disabled={busy || f4Status?.esign_provider !== "signwell"} onClick={() => void connectSignWell()} type="button"><RefreshCw size={16} />{f4Status?.esign_account_connected ? "Verify connection" : "Connect SignWell"}</button>
+                </section>
+                <form className={styles.form} onSubmit={(event) => void sendForSignature(event)}><div className={styles.sectionTitle}><div><span>Provider delivery</span><h4>Send for signature</h4></div><PenLine size={18} /></div><label><span>Approved package</span><select name="package_id" required><option value="">Select package</option>{detail.contract_packages.filter((item) => item.status === "approved" && templates.find((template) => template.id === item.template_id)?.esign_provider_template_id).map((item) => <option key={item.id} value={item.id}>Version {item.version_number} · {item.seller_name}</option>)}</select></label><label><span>Primary signer</span><input defaultValue={sellerParty?.name ?? detail.seller_name} name="signer_name" required /></label><label><span>Primary signer email</span><input defaultValue={sellerParty?.email ?? ""} name="signer_email" required type="email" /></label><label><span>Primary template role</span><input defaultValue="Seller" name="placeholder_name" required /></label><label><span>Second signer</span><input name="signer_name_2" placeholder="Optional" /></label><label><span>Second signer email</span><input name="signer_email_2" placeholder="Optional" type="email" /></label><label><span>Second template role</span><input defaultValue="Seller 2" name="placeholder_name_2" /></label><label><span>Third signer</span><input name="signer_name_3" placeholder="Optional" /></label><label><span>Third signer email</span><input name="signer_email_3" placeholder="Optional" type="email" /></label><label><span>Third template role</span><input defaultValue="Stonegate" name="placeholder_name_3" /></label><label><span>Fourth signer</span><input name="signer_name_4" placeholder="Optional" /></label><label><span>Fourth signer email</span><input name="signer_email_4" placeholder="Optional" type="email" /></label><label><span>Fourth template role</span><input name="placeholder_name_4" placeholder="Signer role" /></label><label><span>Email subject</span><input defaultValue={`Stonegate agreement for ${detail.property_address}`} name="subject" required /></label><label><span>Message</span><textarea defaultValue="Please review and sign the attached agreement." name="message" rows={3} /></label><button disabled={busy || !f4Status?.esign_configured} type="submit"><PenLine size={16} />Send through SignWell</button></form>
                 <form className={styles.form} onSubmit={(event) => void draftContract(event)}><div className={styles.sectionTitle}><div><span>New version</span><h4>Draft terms snapshot</h4></div></div><label><span>Approved template</span><select name="template_id"><option value="">Terms snapshot only</option>{templates.filter((item) => item.status === "approved").map((item) => <option key={item.id} value={item.id}>{item.name} · v{item.version_number}</option>)}</select></label><label><span>Seller</span><input defaultValue={detail.seller_name} name="seller_name" required /></label><label><span>Buyer entity</span><input name="buyer_entity_name" placeholder="Stonegate purchasing entity" required /></label><div className={styles.twoFields}><label><span>Purchase price</span><input defaultValue={detail.purchase_price_cents / 100} min="1" name="purchase_price" required type="number" /></label><label><span>Earnest money</span><input defaultValue={(detail.earnest_money_cents ?? 0) / 100} min="0" name="earnest_money" type="number" /></label></div><div className={styles.twoFields}><label><span>Closing date</span><input defaultValue={detail.closing_date?.slice(0, 10)} name="closing_date" type="date" /></label><label><span>Inspection days</span><input defaultValue={detail.inspection_period_days ?? ""} min="0" name="inspection_period_days" type="number" /></label></div><label><span>Special terms</span><textarea name="special_terms" rows={3} /></label><button disabled={busy} type="submit"><Plus size={16} />Create version</button></form>
                 <form className={styles.form} onSubmit={(event) => void uploadTemplate(event)}><div className={styles.sectionTitle}><div><span>Controlled library</span><h4>Legal template</h4></div><FileCheck2 size={18} /></div><div className={styles.templateList}>{templates.map((item) => <div key={item.id}><span>{item.name} · {item.state_code} v{item.version_number}<small>{item.esign_provider_template_id ? "SignWell linked" : "Not linked"}</small></span><strong>{labelize(item.status)}</strong>{item.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/templates/${item.id}/approve`, { method: "POST" }))} type="button">Approve</button> : null}</div>)}</div><label><span>Attorney-reviewed file</span><input name="file" required type="file" /></label><label><span>Template name</span><input name="name" required /></label><div className={styles.twoFields}><label><span>Type</span><select name="document_type"><option value="purchase_agreement">Purchase agreement</option><option value="addendum">Addendum</option><option value="assignment_contract">Assignment contract</option></select></label><label><span>State</span><input defaultValue="GA" maxLength={2} name="state_code" required /></label></div><button disabled={busy} type="submit"><Upload size={16} />Add draft template</button></form>
-                <form className={styles.form} onSubmit={(event) => void configureEsignTemplate(event)}><div className={styles.sectionTitle}><div><span>SignWell mapping</span><h4>Connect template</h4></div></div><label><span>Stonegate template</span><select name="template_id" required><option value="">Select template</option>{templates.map((item) => <option key={item.id} value={item.id}>{item.name} · v{item.version_number}</option>)}</select></label><label><span>SignWell template ID</span><input name="provider_template_id" required /></label><label><span>Seller name field ID</span><input name="seller_name" /></label><label><span>Property address field ID</span><input name="property_address" /></label><label><span>Buyer entity field ID</span><input name="buyer_entity_name" /></label><label><span>Purchase price field ID</span><input name="purchase_price" /></label><label><span>Earnest money field ID</span><input name="earnest_money" /></label><label><span>Closing date field ID</span><input name="closing_date" /></label><button disabled={busy} type="submit"><Check size={16} />Save mapping</button></form>
+                <form className={styles.form} onSubmit={(event) => void configureEsignTemplate(event)}><div className={styles.sectionTitle}><div><span>SignWell mapping</span><h4>Connect template</h4></div></div><label><span>Stonegate template</span><select name="template_id" required><option value="">Select template</option>{templates.map((item) => <option key={item.id} value={item.id}>{item.name} · v{item.version_number}</option>)}</select></label><label><span>SignWell template ID</span><input name="provider_template_id" required /></label><label><span>Seller name field ID</span><input name="seller_name" placeholder="seller_name" /></label><label><span>Property address field ID</span><input name="property_address" placeholder="property_address" /></label><label><span>Buyer entity field ID</span><input name="buyer_entity_name" placeholder="buyer_entity_name" /></label><label><span>Purchase price field ID</span><input name="purchase_price" placeholder="purchase_price" /></label><label><span>Earnest money field ID</span><input name="earnest_money" placeholder="earnest_money" /></label><label><span>Closing date field ID</span><input name="closing_date" placeholder="closing_date" /></label><label><span>Inspection period field ID</span><input name="inspection_period_days" placeholder="inspection_period_days" /></label><label><span>Special terms field ID</span><input name="special_terms" placeholder="special_terms" /></label><label><span>Assignor field ID</span><input name="assignor_name" placeholder="assignor_name" /></label><label><span>Assignee field ID</span><input name="assignee_name" placeholder="assignee_name" /></label><label><span>Assignment fee field ID</span><input name="assignment_fee" placeholder="assignment_fee" /></label><label><span>End buyer price field ID</span><input name="end_buyer_price" placeholder="end_buyer_price" /></label><button disabled={busy} type="submit"><Check size={16} />Save mapping</button></form>
               </div>
             </div> : null}
 

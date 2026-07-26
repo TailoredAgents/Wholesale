@@ -1331,6 +1331,50 @@ export type BuyerListItem = {
   created_at: string;
 };
 
+export type BuyerDataProvider = {
+  provider: string;
+  configured: boolean;
+  live_search_enabled: boolean;
+  message: string;
+};
+
+export type BuyerDiscoveryCandidate = {
+  id: string;
+  buyer_id: string | null;
+  provider: string;
+  name: string;
+  company_name: string | null;
+  email: string | null;
+  phone: string | null;
+  market: string;
+  state: string;
+  property_types: string[];
+  observed_purchase_count: number;
+  no_mortgage_count: number;
+  last_purchase_date: string | null;
+  min_purchase_price_cents: number | null;
+  max_purchase_price_cents: number | null;
+  score_basis_points: number;
+  score_components: Record<string, number>;
+  evidence_snapshot: Record<string, unknown>;
+  status: string;
+};
+
+export type BuyerDiscoveryRun = {
+  id: string;
+  disposition_case_id: string;
+  provider: string;
+  status: string;
+  search_snapshot: Record<string, unknown>;
+  result_count: number;
+  imported_count: number;
+  credit_summary: Record<string, unknown> | null;
+  error_message: string | null;
+  completed_at: string | null;
+  candidates: BuyerDiscoveryCandidate[];
+  created_at: string;
+};
+
 export type DispositionMatch = {
   id: string;
   buyer_id: string;
@@ -2437,6 +2481,13 @@ export type F4IntegrationStatus = {
   esign_configured: boolean;
   esign_test_mode: boolean;
   esign_blockers: string[];
+  esign_account_connected: boolean;
+  esign_account_email: string | null;
+  esign_webhook_connected: boolean;
+  esign_webhook_callback_url: string;
+  esign_last_verified_at: string | null;
+  esign_linked_template_count: number;
+  esign_ready_template_count: number;
 };
 
 export type TransactionCopilotRecommendation = {

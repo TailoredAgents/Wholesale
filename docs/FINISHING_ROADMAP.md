@@ -184,12 +184,14 @@ Implementation checkpoint, July 24, 2026:
 - SignWell is the selected e-signature provider. Envelope, recipient, webhook, reconciliation,
   completed-PDF, test-mode, and provider evidence are implemented inside the existing transaction
   workflow.
-- The Transaction workspace supports template mapping, approved-package sending, signature status,
-  provider reconciliation, and storage/scan visibility.
-- Local simulation and automated tests are implemented. R2 credentials, SignWell credentials,
-  attorney-approved templates, and the controlled production acceptance case remain external
-  completion steps.
-- See `PHASE_F4_DOCUMENTS_ESIGN.md` for setup and acceptance.
+- The Transaction workspace supports owner-driven account verification and webhook registration,
+  purchase and assignment template mapping, up to four ordered signers, approved-package sending,
+  signature status, provider reconciliation, and storage/scan visibility.
+- Local simulation and automated provider-connection, webhook, purchase, and assignment tests are
+  implemented. R2 credentials, the SignWell API key, attorney-approved templates, and controlled
+  production acceptance remain external completion steps.
+- See `SIGNWELL_LAUNCH_RUNBOOK.md` for setup and acceptance and
+  `SIGNWELL_COUNSEL_BRIEF.md` for the production document specification.
 
 Work:
 
@@ -215,6 +217,16 @@ Exit criteria:
 ## Phase F5: Buyers And Disposition Readiness
 
 Goal: Turn the internal buyer CRM into an operational deal-placement system.
+
+Status as of July 26, 2026:
+
+- DealMachine is selected and the provider adapter, deal-specific search, scored candidate
+  evidence, selective import, contact extraction, cross-run deduplication, and audit history are
+  implemented.
+- Imported candidates flow into the existing buyer CRM, deterministic match ranking, and
+  Dispositions Copilot. No parallel buyer database or second AI system was created.
+- Live Georgia API acceptance, initial buyer verification, controlled audience simulation, and a
+  funded reconciliation simulation remain before F5 is operationally complete.
 
 Work:
 

@@ -21,7 +21,7 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | National DNC API | None planned | Not used | Application-level DNC evidence integration was removed at Owner direction |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
 | Cloudflare R2 | Private uploaded files | Adapter implemented; database fallback active | Create private bucket/token, configure Render, then run upload/download/delete acceptance |
-| SignWell | Contract execution and event evidence | Adapter and test simulation implemented | Configure account/webhook, load attorney templates, then run controlled test-mode acceptance |
+| SignWell | Contract execution and event evidence | Adapter, owner connection, webhook registration, and test simulation implemented | Add API key, connect in Transactions, load attorney templates, then run controlled test-mode acceptance |
 | Stonegate Accounting Ledger | Internal bookkeeping and financial statements | Deal-finance foundation only | Build the double-entry ledger, bank reconciliation, close, reporting, and CPA acceptance in F6 |
 | Google Ads / Meta | Offline conversion delivery | Foundation records only | Consent, hashing, provider adapters, and retries remain |
 | Address and routes | Address quality and field dispatch | Not selected | Optional when operating data justifies the cost |

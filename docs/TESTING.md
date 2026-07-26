@@ -71,7 +71,8 @@ Use company-controlled accounts and numbers to test:
   webhook, out-of-order webhook, and recovery.
 - Branded-domain Clerk login, CORS, OAuth redirect, and public legal links.
 - R2 upload, authenticated or presigned download, delete, and database-file compatibility.
-- SignWell test-mode send, view, sign, duplicate webhook, reconciliation, and completed PDF.
+- SignWell account verification, automatic webhook registration, test-mode send, purchase and
+  assignment classification, duplicate webhook handling, reconciliation, and completed PDF.
 
 ## Current Local Tooling Issue
 

@@ -1,13 +1,13 @@
 # Phase AI8: Disposition Copilot And Buyer Intelligence
 
-Last updated: July 23, 2026
+Last updated: July 26, 2026
 
 ## Status
 
 The provider-independent foundation is complete in code and `disposition.match` is enabled in
-draft-only mode with mandatory human review. Buyer-data provider evaluation, approved campaign
-delivery, production model replay, and a measured pilot remain integration or operator
-checkpoints.
+draft-only mode with mandatory human review. DealMachine is selected and its discovery/import
+adapter is built. Live Georgia provider acceptance, approved campaign delivery, production model
+replay, and a measured pilot remain operator checkpoints.
 
 ## Delivered
 
@@ -31,6 +31,12 @@ checkpoints.
   are retained.
 - Copilot execution cannot alter buyer records, select an offer, change economics, release a
   campaign, post to a marketplace, or contact a buyer.
+- Deal-specific DealMachine searches retain provider request, credit summary, scored candidates,
+  sampled purchase evidence, and the user who initiated the search.
+- Staff select which candidates enter the Stonegate buyer CRM. Repeated provider searches link
+  prior imports by source identity or normalized buyer identity instead of creating duplicates.
+- Imported criteria are explicitly inferred and proof of funds remains unknown until Stonegate
+  verifies both.
 
 ## Provider Track
 
@@ -39,8 +45,7 @@ distribute approved records through adapters rather than becoming a second opera
 
 1. Begin with organic buyer records, proof-of-funds evidence, offers, outcomes, and relationship
    history already stored in Stonegate.
-2. Evaluate DealMachine first for API-driven active-buyer discovery and enrichment at startup
-   scale.
+2. Use DealMachine first for API-driven active-buyer discovery and enrichment at startup scale.
 3. Reassess PropertyRadar when hyperlocal county coverage justifies another provider.
 4. Add InvestorLift only when broad marketplace distribution is operationally and financially
    justified.

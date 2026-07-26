@@ -87,6 +87,26 @@
 .tabs { min-height: 48px; padding: 0 20px; display: flex; align-items: end; gap: 20px; border-bottom: 1px solid var(--line); }
 .tabs button { height: 48px; padding: 0 2px; border: 0; border-bottom: 3px solid transparent; background: transparent; color: var(--muted); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .tabs button.activeTab { color: var(--brand-strong); border-bottom-color: var(--brand); }
+.buyerTab { display: grid; }
+.discoveryPanel { margin: 18px 18px 0; border: 1px solid var(--line); background: var(--surface); }
+.discoveryPanel > header { min-height: 76px; padding: 13px 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line-soft); }
+.discoveryPanel > header > div:first-child { display: grid; gap: 4px; }
+.discoveryPanel > header span { display: flex; align-items: center; gap: 6px; color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.discoveryPanel > header h4 { margin: 0; font-size: 15px; }
+.discoveryPanel > header p { margin: 0; color: var(--muted); font-size: 10px; }
+.discoveryActions { display: flex; gap: 8px; }
+.discoveryActions button { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
+.discoveryActions button:first-child { border-color: var(--brand); background: var(--brand); color: #fff; }
+.discoveryActions button:disabled { opacity: .45; cursor: not-allowed; }
+.candidateList { display: grid; }
+.candidate, .importedCandidate { min-height: 62px; padding: 9px 14px; display: grid; grid-template-columns: 18px 26px minmax(180px, 1.4fr) minmax(180px, 1fr) minmax(150px, .9fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+.importedCandidate { background: var(--surface-soft); cursor: default; }
+.candidate input, .importedCandidate input { width: 15px; height: 15px; accent-color: var(--brand); }
+.candidate > span:not(.rank), .importedCandidate > span:not(.rank) { min-width: 0; display: grid; gap: 3px; }
+.candidate strong, .importedCandidate strong { overflow-wrap: anywhere; font-size: 11px; }
+.candidate small, .importedCandidate small { color: var(--muted); font-size: 9px; line-height: 1.4; }
+.discoveryPanel > footer { min-height: 38px; padding: 0 14px; display: flex; align-items: center; gap: 18px; background: var(--surface-soft); }
+.discoveryPanel > footer span { color: var(--muted); font-size: 9px; font-weight: 800; text-transform: uppercase; }
 .sectionGrid { padding: 18px; display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(280px, .8fr); gap: 16px; align-items: start; }
 .section, .form, .actionPanel { border: 1px solid var(--line); background: var(--surface); }
 .rightStack { display: grid; gap: 16px; }
@@ -148,6 +168,11 @@
   .tabs { padding: 0 12px; gap: 14px; overflow-x: auto; }
   .dealHeader { align-items: flex-start; }
   .sectionGrid { padding: 12px; }
+  .discoveryPanel { margin: 12px 12px 0; }
+  .discoveryPanel > header { align-items: flex-start; flex-direction: column; }
+  .discoveryActions { width: 100%; flex-wrap: wrap; }
+  .candidate, .importedCandidate { grid-template-columns: 18px 26px 1fr; }
+  .candidate > span:nth-last-child(-n + 2), .importedCandidate > span:nth-last-child(-n + 2) { grid-column: 3; }
   .dispositionCopilot { margin: 12px; }
   .dispositionCopilot > header, .copilotCommand, .copilotDraftPicker { align-items: flex-start; flex-direction: column; }
   .copilotReadiness, .copilotRiskGrid, .copilotColumns { grid-template-columns: 1fr; }

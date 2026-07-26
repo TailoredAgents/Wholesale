@@ -17,6 +17,7 @@ from app.models.foundation import (
     ContractTemplate,
     Deal,
     EsignEnvelope,
+    EsignProviderConfiguration,
     EsignProviderEvent,
     EsignRecipient,
     Lead,
@@ -30,6 +31,7 @@ from app.schemas.transactions import (
     EsignRecipientRead,
     EsignSendRequest,
     F4IntegrationStatusRead,
+    SignWellConnectionRead,
 )
 from app.services.document_storage import store_content
 
@@ -63,6 +65,51 @@ class SignWellClient:
         self._raise(response, "SignWell could not create the signature request")
         return dict(response.json())
 
+    def get_account(self) -> dict[str, Any]:
+        response = httpx.get(
+            f"{self.settings.esign_base_url.rstrip('/')}/me",
+            headers=self.headers,
+            timeout=self.settings.esign_request_timeout_seconds,
+        )
+        self._raise(response, "SignWell account verification failed")
+        return dict(response.json())
+
+    def list_webhooks(self) -> list[dict[str, Any]]:
+        response = httpx.get(
+            f"{self.settings.esign_base_url.rstrip('/')}/hooks",
+            headers=self.headers,
+            timeout=self.settings.esign_request_timeout_seconds,
+        )
+        self._raise(response, "SignWell webhook lookup failed")
+        payload = response.json()
+        if isinstance(payload, list):
+            return [dict(item) for item in payload if isinstance(item, dict)]
+        if isinstance(payload, dict):
+            for key in ("hooks", "webhooks", "data"):
+                items = payload.get(key)
+                if isinstance(items, list):
+                    return [dict(item) for item in items if isinstance(item, dict)]
+        return []
+
+    def create_webhook(self, callback_url: str) -> dict[str, Any]:
+        response = httpx.post(
+            f"{self.settings.esign_base_url.rstrip('/')}/hooks",
+            headers=self.headers,
+            json={"callback_url": callback_url},
+            timeout=self.settings.esign_request_timeout_seconds,
+        )
+        self._raise(response, "SignWell webhook registration failed")
+        return dict(response.json())
+
+    def get_template(self, template_id: str) -> dict[str, Any]:
+        response = httpx.get(
+            f"{self.settings.esign_base_url.rstrip('/')}/document_templates/{template_id}",
+            headers=self.headers,
+            timeout=self.settings.esign_request_timeout_seconds,
+        )
+        self._raise(response, "SignWell template verification failed")
+        return dict(response.json())
+
     def get_document(self, document_id: str) -> dict[str, Any]:
         response = httpx.get(
             f"{self.settings.esign_base_url.rstrip('/')}/documents/{document_id}",
@@ -82,6 +129,10 @@ class SignWellClient:
         self._raise(response, "SignWell completed PDF is not available")
         return response.content
 
+    @property
+    def headers(self) -> dict[str, str]:
+        return {"X-Api-Key": self.settings.esign_api_key or ""}
+
     @staticmethod
     def _raise(response: httpx.Response, prefix: str) -> None:
         if response.is_success:
@@ -90,10 +141,44 @@ class SignWellClient:
         raise ValueError(f"{prefix}: HTTP {response.status_code}. {detail}")
 
 
-def integration_status(settings: Settings | None = None) -> F4IntegrationStatusRead:
+def integration_status(
+    db: Session | None = None,
+    principal: Principal | None = None,
+    settings: Settings | None = None,
+) -> F4IntegrationStatusRead:
     active = settings or get_settings()
     storage_blockers = list(active.document_storage_configuration_blockers)
     esign_blockers = list(active.esign_configuration_blockers)
+    configuration = (
+        db.scalar(
+            select(EsignProviderConfiguration).where(
+                EsignProviderConfiguration.organization_id == principal.organization_id,
+                EsignProviderConfiguration.provider == "signwell",
+            )
+        )
+        if db is not None and principal is not None
+        else None
+    )
+    templates = (
+        db.scalars(
+            select(ContractTemplate).where(
+                ContractTemplate.organization_id == principal.organization_id,
+                ContractTemplate.deleted_at.is_(None),
+                ContractTemplate.esign_provider_template_id.is_not(None),
+            )
+        ).all()
+        if db is not None and principal is not None
+        else []
+    )
+    simulated = active.esign_provider == "simulate"
+    webhook_connected = simulated or configuration is not None or bool(
+        active.esign_signwell_webhook_id
+    )
+    account_connected = simulated or configuration is not None or bool(
+        active.esign_signwell_webhook_id
+    )
+    if not webhook_connected and not simulated and not esign_blockers:
+        esign_blockers.append("Connect SignWell in Transactions")
     return F4IntegrationStatusRead(
         storage_provider=active.document_storage_provider,
         storage_configured=not storage_blockers,
@@ -101,10 +186,165 @@ def integration_status(settings: Settings | None = None) -> F4IntegrationStatusR
         malware_scanner=active.document_malware_scanner,
         malware_scan_required=active.document_malware_scan_required,
         esign_provider=active.esign_provider,
-        esign_configured=not esign_blockers,
+        esign_configured=not esign_blockers and webhook_connected,
         esign_test_mode=active.esign_test_mode,
         esign_blockers=esign_blockers,
+        esign_account_connected=account_connected,
+        esign_account_email=configuration.account_email if configuration else None,
+        esign_webhook_connected=webhook_connected,
+        esign_webhook_callback_url=active.esign_webhook_callback_url,
+        esign_last_verified_at=configuration.last_verified_at if configuration else None,
+        esign_linked_template_count=len(templates),
+        esign_ready_template_count=len(templates),
     )
+
+
+def connect_signwell(
+    db: Session,
+    principal: Principal,
+    settings: Settings | None = None,
+) -> SignWellConnectionRead:
+    active = settings or get_settings()
+    blockers = active.esign_configuration_blockers
+    if blockers:
+        raise ValueError(f"SignWell is missing: {', '.join(blockers)}.")
+    if active.esign_provider != "signwell":
+        raise ValueError("Set ESIGN_PROVIDER=signwell before connecting SignWell.")
+
+    client = SignWellClient(active)
+    account = client.get_account()
+    callback_url = active.esign_webhook_callback_url.rstrip("/")
+    hooks = client.list_webhooks()
+    hook = next(
+        (
+            item
+            for item in hooks
+            if str(item.get("callback_url") or "").rstrip("/") == callback_url
+        ),
+        None,
+    )
+    webhook_created = hook is None
+    if hook is None:
+        hook = client.create_webhook(callback_url)
+    webhook_id = str(hook.get("id") or "").strip()
+    if not webhook_id:
+        raise ValueError("SignWell did not return a webhook ID.")
+
+    linked_templates = db.scalars(
+        select(ContractTemplate).where(
+            ContractTemplate.organization_id == principal.organization_id,
+            ContractTemplate.deleted_at.is_(None),
+            ContractTemplate.esign_provider_template_id.is_not(None),
+        )
+    ).all()
+    ready_count = 0
+    template_errors: list[str] = []
+    for template in linked_templates:
+        try:
+            provider_template = client.get_template(template.esign_provider_template_id or "")
+            available = str(provider_template.get("status") or "").lower()
+            if available in {"draft", "unavailable"}:
+                template_errors.append(f"{template.name}: SignWell template is {available}.")
+            else:
+                missing_fields = missing_mapped_field_ids(
+                    provider_template,
+                    template.esign_field_mapping or {},
+                )
+                if missing_fields:
+                    template_errors.append(
+                        f"{template.name}: missing SignWell field IDs "
+                        f"{', '.join(sorted(missing_fields))}."
+                    )
+                else:
+                    ready_count += 1
+        except ValueError as exc:
+            template_errors.append(f"{template.name}: {exc}")
+
+    account_email = first_string(account, "user.email", "contact.email", "email")
+    account_name = first_string(account, "account.name", "workspace.name", "name", "user.name")
+    now = datetime.now(UTC)
+    configuration = db.scalar(
+        select(EsignProviderConfiguration).where(
+            EsignProviderConfiguration.organization_id == principal.organization_id,
+            EsignProviderConfiguration.provider == "signwell",
+        )
+    )
+    if configuration is None:
+        configuration = EsignProviderConfiguration(
+            organization_id=principal.organization_id,
+            configured_by_user_id=principal.user_id,
+            provider="signwell",
+            webhook_id=webhook_id,
+            callback_url=callback_url,
+            account_email=account_email,
+            account_name=account_name,
+            last_verified_at=now,
+            provider_details={},
+        )
+        db.add(configuration)
+    else:
+        configuration.configured_by_user_id = principal.user_id
+        configuration.webhook_id = webhook_id
+        configuration.callback_url = callback_url
+        configuration.account_email = account_email
+        configuration.account_name = account_name
+        configuration.last_verified_at = now
+    configuration.provider_details = {
+        "account_id": first_string(account, "account.id", "workspace.id", "id"),
+        "webhook_created_by_stonegate": webhook_created,
+    }
+    db.commit()
+    return SignWellConnectionRead(
+        account_connected=True,
+        account_email=account_email,
+        account_name=account_name,
+        webhook_connected=True,
+        webhook_callback_url=callback_url,
+        webhook_created=webhook_created,
+        last_verified_at=now,
+        linked_template_count=len(linked_templates),
+        ready_template_count=ready_count,
+        template_errors=template_errors,
+    )
+
+
+def first_string(payload: dict[str, Any], *paths: str) -> str | None:
+    for path in paths:
+        value: Any = payload
+        for key in path.split("."):
+            value = value.get(key) if isinstance(value, dict) else None
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def collect_api_ids(payload: object) -> set[str]:
+    if isinstance(payload, dict):
+        values = {
+            str(value).strip()
+            for key, value in payload.items()
+            if key == "api_id" and value is not None and str(value).strip()
+        }
+        for value in payload.values():
+            values.update(collect_api_ids(value))
+        return values
+    if isinstance(payload, list):
+        list_values: set[str] = set()
+        for value in payload:
+            list_values.update(collect_api_ids(value))
+        return list_values
+    return set()
+
+
+def missing_mapped_field_ids(
+    provider_template: dict[str, Any],
+    mapping: dict[str, Any],
+) -> set[str]:
+    expected = {str(value).strip() for value in mapping.values() if str(value).strip()}
+    if not expected:
+        return set()
+    available = collect_api_ids(provider_template)
+    return expected - available if available else set()
 
 
 def send_contract_for_signature(
@@ -119,6 +359,15 @@ def send_contract_for_signature(
     blockers = active.esign_configuration_blockers
     if blockers:
         raise ValueError(f"E-signature is missing: {', '.join(blockers)}.")
+    if active.esign_provider == "signwell":
+        configuration = db.scalar(
+            select(EsignProviderConfiguration).where(
+                EsignProviderConfiguration.organization_id == principal.organization_id,
+                EsignProviderConfiguration.provider == "signwell",
+            )
+        )
+        if configuration is None and not active.esign_signwell_webhook_id:
+            raise ValueError("Connect SignWell in Transactions before sending a signature request.")
     transaction = db.scalar(
         select(Transaction).where(
             Transaction.id == transaction_id,
@@ -262,10 +511,38 @@ def build_signwell_payload(
     request: EsignSendRequest,
     settings: Settings,
 ) -> dict[str, object]:
+    assignee = next(
+        (
+            item
+            for item in request.recipients
+            if any(
+                label in item.placeholder_name.lower()
+                for label in ("assignee", "end buyer", "buyer")
+            )
+        ),
+        None,
+    )
+    document_label = {
+        "assignment_contract": "Assignment agreement",
+        "addendum": "Contract addendum",
+        "purchase_agreement": "Purchase agreement",
+    }.get(template.document_type, "Agreement")
     values = {
         "seller_name": package.seller_name,
         "buyer_entity_name": package.buyer_entity_name,
+        "assignor_name": package.buyer_entity_name,
+        "assignee_name": assignee.name if assignee else "",
         "purchase_price": f"{package.purchase_price_cents / 100:.2f}",
+        "assignment_fee": (
+            f"{transaction.assignment_fee_cents / 100:.2f}"
+            if transaction.assignment_fee_cents is not None
+            else ""
+        ),
+        "end_buyer_price": (
+            f"{(package.purchase_price_cents + transaction.assignment_fee_cents) / 100:.2f}"
+            if transaction.assignment_fee_cents is not None
+            else ""
+        ),
         "earnest_money": (
             f"{package.earnest_money_cents / 100:.2f}"
             if package.earnest_money_cents is not None
@@ -306,7 +583,7 @@ def build_signwell_payload(
     return {
         "test_mode": settings.esign_test_mode,
         "template_id": template.esign_provider_template_id or "",
-        "name": f"Purchase agreement - {package.seller_name}",
+        "name": f"{document_label} - {package.seller_name}",
         "subject": request.subject,
         "message": request.message or "",
         "recipients": recipients,
@@ -379,24 +656,48 @@ def envelope_read(db: Session, envelope: EsignEnvelope) -> EsignEnvelopeRead:
 
 def verify_signwell_event(
     payload: dict[str, Any],
+    db: Session | None = None,
     settings: Settings | None = None,
 ) -> None:
     active = settings or get_settings()
     event_data = payload.get("event")
     if not isinstance(event_data, dict):
         raise ValueError("Invalid SignWell event payload.")
-    webhook_id = active.esign_signwell_webhook_id
     event_type = str(event_data.get("type") or "").strip()
     event_time = str(event_data.get("time") or "").strip()
     provided = str(event_data.get("hash") or "").strip()
-    if not webhook_id or not event_type or not event_time or not provided:
+    webhook_ids = {
+        item
+        for item in (
+            [active.esign_signwell_webhook_id]
+            + (
+                list(
+                    db.scalars(
+                        select(EsignProviderConfiguration.webhook_id).where(
+                            EsignProviderConfiguration.provider == "signwell"
+                        )
+                    ).all()
+                )
+                if db is not None
+                else []
+            )
+        )
+        if item
+    }
+    if not webhook_ids or not event_type or not event_time or not provided:
         raise ValueError("Invalid SignWell event signature.")
-    expected = hmac.new(
-        webhook_id.encode(),
-        f"{event_type}@{event_time}".encode(),
-        sha256,
-    ).hexdigest()
-    if not secrets.compare_digest(provided, expected):
+    verified = any(
+        secrets.compare_digest(
+            provided,
+            hmac.new(
+                webhook_id.encode(),
+                f"{event_type}@{event_time}".encode(),
+                sha256,
+            ).hexdigest(),
+        )
+        for webhook_id in webhook_ids
+    )
+    if not verified:
         raise ValueError("Invalid SignWell event signature.")
 
 
@@ -540,8 +841,26 @@ def complete_envelope(
     package = db.get(ContractPackage, envelope.contract_package_id)
     if transaction is None or package is None:
         raise ValueError("The completed envelope no longer matches a Stonegate transaction.")
+    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
+    template_type = template.document_type if template else "purchase_agreement"
+    document_type, file_stem, document_label = {
+        "assignment_contract": (
+            "assignment_contract",
+            "executed-assignment-agreement",
+            "assignment agreement",
+        ),
+        "addendum": ("executed_addendum", "executed-addendum", "contract addendum"),
+        "purchase_agreement": (
+            "signed_purchase_agreement",
+            "signed-purchase-agreement",
+            "purchase agreement",
+        ),
+    }.get(
+        template_type,
+        ("executed_contract", "executed-contract", "contract"),
+    )
     document_id = uuid4()
-    file_name = f"signed-purchase-agreement-v{package.version_number}.pdf"
+    file_name = f"{file_stem}-v{package.version_number}.pdf"
     stored = store_content(
         organization_id=envelope.organization_id,
         namespace=f"transactions/{transaction.id}",
@@ -557,8 +876,8 @@ def complete_envelope(
         transaction_id=transaction.id,
         contract_package_id=package.id,
         uploaded_by_user_id=envelope.created_by_user_id,
-        document_type="signed_purchase_agreement",
-        title=f"SignWell completed purchase agreement v{package.version_number}",
+        document_type=document_type,
+        title=f"SignWell completed {document_label} v{package.version_number}",
         status="final",
         file_name=file_name,
         content_type="application/pdf",
@@ -579,13 +898,14 @@ def complete_envelope(
     package.status = "executed"
     package.executed_at = envelope.completed_at or datetime.now(UTC)
     transaction.status = "executed"
-    transaction.contract_executed_at = package.executed_at
-    lead = db.get(Lead, transaction.lead_id)
-    deal = db.get(Deal, transaction.deal_id)
-    if lead:
-        lead.stage_key = "under_contract"
-    if deal:
-        deal.stage_key = "under_contract"
+    if template_type == "purchase_agreement":
+        transaction.contract_executed_at = package.executed_at
+        lead = db.get(Lead, transaction.lead_id)
+        deal = db.get(Deal, transaction.deal_id)
+        if lead:
+            lead.stage_key = "under_contract"
+        if deal:
+            deal.stage_key = "under_contract"
     db.add(
         TransactionEvent(
             organization_id=envelope.organization_id,
@@ -593,7 +913,7 @@ def complete_envelope(
             lead_id=transaction.lead_id,
             actor_user_id=None,
             event_type="esign.completed",
-            summary=f"SignWell completed contract package v{package.version_number}.",
+            summary=f"SignWell completed {document_label} package v{package.version_number}.",
             details={
                 "envelope_id": str(envelope.id),
                 "provider_document_id": envelope.provider_document_id,

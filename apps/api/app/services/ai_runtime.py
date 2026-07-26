@@ -2,7 +2,7 @@ import hashlib
 import json
 import re
 import time
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -30,6 +30,7 @@ from app.models.foundation import (
     AuditEvent,
     Buyer,
     BuyerCriteria,
+    BuyerDiscoveryCandidate,
     BuyerEngagement,
     BuyerOffer,
     CallRecord,
@@ -1540,8 +1541,9 @@ def _disposition_context(
         ).all()
     } if buyer_ids else {}
     criteria_by_buyer: dict[UUID, BuyerCriteria] = {}
+    source_by_buyer: dict[UUID, BuyerDiscoveryCandidate] = {}
     if buyer_ids:
-        for item in db.scalars(
+        for criteria_record in db.scalars(
             select(BuyerCriteria)
             .where(
                 BuyerCriteria.organization_id == principal.organization_id,
@@ -1549,7 +1551,24 @@ def _disposition_context(
             )
             .order_by(BuyerCriteria.created_at.desc())
         ).all():
-            criteria_by_buyer.setdefault(item.buyer_id, item)
+            criteria_by_buyer.setdefault(
+                criteria_record.buyer_id,
+                criteria_record,
+            )
+        for source_record in db.scalars(
+            select(BuyerDiscoveryCandidate)
+            .where(
+                BuyerDiscoveryCandidate.organization_id
+                == principal.organization_id,
+                BuyerDiscoveryCandidate.buyer_id.in_(buyer_ids),
+            )
+            .order_by(BuyerDiscoveryCandidate.created_at.desc())
+        ).all():
+            if source_record.buyer_id is not None:
+                source_by_buyer.setdefault(
+                    source_record.buyer_id,
+                    source_record,
+                )
     offers = list(
         db.scalars(
             select(BuyerOffer)
@@ -1600,6 +1619,26 @@ def _disposition_context(
                 ].reliability_score_basis_points,
                 "completed_deals": buyers[match.buyer_id].completed_deals,
                 "failed_deals": buyers[match.buyer_id].failed_deals,
+                "discovery_evidence": {
+                    "provider": source_by_buyer[match.buyer_id].provider,
+                    "provider_score_basis_points": source_by_buyer[
+                        match.buyer_id
+                    ].score_basis_points,
+                    "observed_purchase_count": source_by_buyer[
+                        match.buyer_id
+                    ].observed_purchase_count,
+                    "no_mortgage_count": source_by_buyer[
+                        match.buyer_id
+                    ].no_mortgage_count,
+                    "last_purchase_date": _date_iso(
+                        source_by_buyer[match.buyer_id].last_purchase_date
+                    ),
+                    "basis": source_by_buyer[
+                        match.buyer_id
+                    ].evidence_snapshot.get("basis"),
+                }
+                if match.buyer_id in source_by_buyer
+                else None,
                 "criteria": {
                     "markets": criteria_by_buyer[match.buyer_id].markets,
                     "property_types": criteria_by_buyer[
@@ -1854,6 +1893,10 @@ def _transaction_context(
 
 
 def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+def _date_iso(value: date | None) -> str | None:
     return value.isoformat() if value else None
 
 

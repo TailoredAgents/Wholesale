@@ -271,6 +271,26 @@ class F4IntegrationStatusRead(BaseModel):
     esign_configured: bool
     esign_test_mode: bool
     esign_blockers: list[str]
+    esign_account_connected: bool
+    esign_account_email: str | None
+    esign_webhook_connected: bool
+    esign_webhook_callback_url: str
+    esign_last_verified_at: datetime | None
+    esign_linked_template_count: int
+    esign_ready_template_count: int
+
+
+class SignWellConnectionRead(BaseModel):
+    account_connected: bool
+    account_email: str | None
+    account_name: str | None
+    webhook_connected: bool
+    webhook_callback_url: str
+    webhook_created: bool
+    last_verified_at: datetime
+    linked_template_count: int
+    ready_template_count: int
+    template_errors: list[str]
 
 
 class TransactionDeadlineRisk(BaseModel):

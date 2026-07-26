@@ -103,26 +103,24 @@ Do not set scanning to required until the scanner is reachable from the API serv
 ESIGN_PROVIDER=signwell
 ESIGN_API_KEY=<signwell-api-key>
 ESIGN_BASE_URL=https://www.signwell.com/api/v1
-ESIGN_SIGNWELL_WEBHOOK_ID=<webhook-id-returned-by-signwell>
+ESIGN_WEBHOOK_CALLBACK_URL=https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
 ESIGN_TEST_MODE=true
 ESIGN_REQUEST_TIMEOUT_SECONDS=30
 ```
 
-5. Register this SignWell webhook URL:
-
-```text
-https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
-```
-
-6. Copy the webhook ID returned by SignWell into `ESIGN_SIGNWELL_WEBHOOK_ID`. Stonegate uses that
-   ID to verify SignWell's documented HMAC-SHA256 event hash.
-7. In **Transactions > Contract > Legal template library**, connect the Stonegate template to the
+5. Deploy, then select **Connect SignWell** in **Transactions > Contract**. Stonegate verifies the
+   account, registers or reuses the callback URL, and retains the webhook ID used for SignWell's
+   documented HMAC-SHA256 event verification. `ESIGN_SIGNWELL_WEBHOOK_ID` remains available only
+   as a legacy environment fallback.
+6. In **Transactions > Contract > Legal template library**, connect the Stonegate template to the
    SignWell template ID and map Stonegate field names to SignWell API IDs.
-8. Run the acceptance case in test mode with company-controlled email addresses.
-9. Set `ESIGN_TEST_MODE=false` only after the attorney template, recipient order, field mapping,
+7. Run the acceptance case in test mode with company-controlled email addresses.
+8. Set `ESIGN_TEST_MODE=false` only after the attorney template, recipient order, field mapping,
    final PDF, webhook, and reconciliation results have been approved.
 
 `ESIGN_PROVIDER=simulate` is limited to local and automated testing and is rejected in production.
+The complete owner procedure is in `SIGNWELL_LAUNCH_RUNBOOK.md`; the legal-template specification
+is in `SIGNWELL_COUNSEL_BRIEF.md`.
 
 ## Acceptance Case
 

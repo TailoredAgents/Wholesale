@@ -15,7 +15,7 @@ def receive_signwell_event(
     db: Annotated[Session, Depends(get_db)],
 ) -> dict[str, bool]:
     try:
-        verify_signwell_event(payload)
+        verify_signwell_event(payload, db)
         matched = process_signwell_event(db, payload)
     except ValueError as exc:
         raise HTTPException(

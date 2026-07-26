@@ -162,6 +162,8 @@ services:
         value: https://www.signwell.com/api/v1
       - key: ESIGN_SIGNWELL_WEBHOOK_ID
         sync: false
+      - key: ESIGN_WEBHOOK_CALLBACK_URL
+        value: https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
       - key: ESIGN_TEST_MODE
         value: true
       - key: ESIGN_REQUEST_TIMEOUT_SECONDS
@@ -174,6 +176,16 @@ services:
         sync: false
       - key: RENTCAST_BASE_URL
         value: https://api.rentcast.io/v1
+      - key: BUYER_DATA_PROVIDER
+        sync: false
+      - key: DEALMACHINE_API_KEY
+        sync: false
+      - key: DEALMACHINE_BASE_URL
+        value: https://api.v2.dealmachine.com/v1
+      - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
+        value: 30
+      - key: BUYER_DISCOVERY_MAX_RESULTS
+        value: 100
       - key: BRIDGE_API_BASE_URL
         sync: false
       - key: BRIDGE_API_KEY

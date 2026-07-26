@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -56,3 +56,56 @@ class BuyerRead(BaseModel):
 
 class BuyerListResponse(BaseModel):
     items: list[BuyerRead]
+
+
+class BuyerDataProviderRead(BaseModel):
+    provider: str
+    configured: bool
+    live_search_enabled: bool
+    message: str
+
+
+class BuyerDiscoveryCreate(BaseModel):
+    disposition_case_id: UUID
+    max_candidates: int = Field(default=25, ge=5, le=100)
+
+
+class BuyerDiscoveryCandidateRead(BaseModel):
+    id: UUID
+    buyer_id: UUID | None
+    provider: str
+    name: str
+    company_name: str | None
+    email: str | None
+    phone: str | None
+    market: str
+    state: str
+    property_types: list[str]
+    observed_purchase_count: int
+    no_mortgage_count: int
+    last_purchase_date: date | None
+    min_purchase_price_cents: int | None
+    max_purchase_price_cents: int | None
+    score_basis_points: int
+    score_components: dict[str, int]
+    evidence_snapshot: dict[str, object]
+    status: str
+
+
+class BuyerDiscoveryRunRead(BaseModel):
+    id: UUID
+    disposition_case_id: UUID
+    provider: str
+    status: str
+    search_snapshot: dict[str, object]
+    result_count: int
+    imported_count: int
+    credit_summary: dict[str, object] | None
+    error_message: str | None
+    completed_at: datetime | None
+    candidates: list[BuyerDiscoveryCandidateRead]
+    created_at: datetime
+
+
+class BuyerDiscoveryImport(BaseModel):
+    candidate_ids: list[UUID] = Field(min_length=1, max_length=100)

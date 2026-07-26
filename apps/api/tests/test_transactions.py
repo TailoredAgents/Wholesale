@@ -3,6 +3,7 @@ import hmac
 from hashlib import sha256
 from uuid import uuid4
 
+import httpx
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy.orm import Session
@@ -162,6 +163,91 @@ def test_contract_template_requires_explicit_approval(
     )
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
+
+
+def test_signwell_connection_registers_and_persists_verified_webhook(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ESIGN_PROVIDER", "signwell")
+    monkeypatch.setenv("ESIGN_API_KEY", "test-signwell-api-key")
+    monkeypatch.setenv(
+        "ESIGN_WEBHOOK_CALLBACK_URL",
+        "https://api.example.com/api/v1/webhooks/esign/signwell",
+    )
+    monkeypatch.delenv("ESIGN_SIGNWELL_WEBHOOK_ID", raising=False)
+    get_settings.cache_clear()
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+
+    def fake_get(url: str, **kwargs: object) -> httpx.Response:
+        del kwargs
+        request = httpx.Request("GET", url)
+        if url.endswith("/me"):
+            return httpx.Response(
+                200,
+                request=request,
+                json={"id": "account-1", "name": "Stonegate", "email": OWNER_EMAIL},
+            )
+        if url.endswith("/hooks"):
+            return httpx.Response(200, request=request, json=[])
+        raise AssertionError(f"Unexpected SignWell GET {url}")
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        assert url.endswith("/hooks")
+        assert kwargs["json"] == {
+            "callback_url": "https://api.example.com/api/v1/webhooks/esign/signwell"
+        }
+        return httpx.Response(
+            201,
+            request=httpx.Request("POST", url),
+            json={
+                "id": "stonegate-webhook-id",
+                "callback_url": "https://api.example.com/api/v1/webhooks/esign/signwell",
+            },
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    monkeypatch.setattr(httpx, "post", fake_post)
+    client = TestClient(app)
+    connected = client.post(
+        "/api/v1/transactions/integrations/signwell/connect",
+        headers=HEADERS,
+    )
+    assert connected.status_code == 200, connected.text
+    assert connected.json()["account_email"] == OWNER_EMAIL
+    assert connected.json()["webhook_created"] is True
+
+    status_response = client.get("/api/v1/transactions/integrations/f4", headers=HEADERS)
+    assert status_response.status_code == 200
+    status_payload = status_response.json()
+    assert status_payload["esign_configured"] is True
+    assert status_payload["esign_webhook_connected"] is True
+    assert status_payload["esign_account_email"] == OWNER_EMAIL
+
+    event_type = "document_sent"
+    event_time = 1786698000
+    event = {
+        "event": {
+            "hash": hmac.new(
+                b"stonegate-webhook-id",
+                f"{event_type}@{event_time}".encode(),
+                sha256,
+            ).hexdigest(),
+            "time": event_time,
+            "type": event_type,
+        },
+        "data": {"object": {"id": str(uuid4()), "status": "sent"}},
+    }
+    webhook = client.post("/api/v1/webhooks/esign/signwell", json=event)
+    assert webhook.status_code == 200, webhook.text
+    assert webhook.json() == {"received": True, "matched": False}
+    get_settings.cache_clear()
 
 
 def test_transaction_document_facts_preserve_page_evidence_and_reject_duplicates(
@@ -361,4 +447,103 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     assert client.get(f"/api/v1/leads/{lead_id}", headers=HEADERS).json()["stage_key"] == (
         "under_contract"
     )
+
+    assignment_template = client.post(
+        "/api/v1/transactions/templates?file_name=ga-assignment.pdf&document_type=assignment_contract&state_code=GA&name=Georgia%20Assignment%20Agreement",
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        content=b"%PDF attorney reviewed assignment template",
+    )
+    assignment_template_id = assignment_template.json()["id"]
+    client.patch(
+        f"/api/v1/transactions/templates/{assignment_template_id}/esign",
+        headers=HEADERS,
+        json={
+            "esign_provider_template_id": "signwell-template-ga-assignment",
+            "esign_field_mapping": {
+                "property_address": "property_address",
+                "assignor_name": "assignor_name",
+                "assignee_name": "assignee_name",
+                "assignment_fee": "assignment_fee",
+            },
+        },
+    )
+    client.post(
+        f"/api/v1/transactions/templates/{assignment_template_id}/approve",
+        headers=HEADERS,
+    )
+    assignment_package = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages",
+        headers=HEADERS,
+        json={
+            "template_id": assignment_template_id,
+            "seller_name": "Jane Seller",
+            "buyer_entity_name": "Stonegate Acquisitions LLC",
+            "purchase_price_cents": 17000000,
+            "earnest_money_cents": 100000,
+            "closing_date": "2026-08-14T21:00:00Z",
+            "inspection_period_days": 7,
+        },
+    )
+    assignment_package_id = assignment_package.json()["id"]
+    assignment_pending = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{assignment_package_id}/request-approval",
+        headers=HEADERS,
+    )
+    client.patch(
+        f"/api/v1/approvals/{assignment_pending.json()['approval_request_id']}/decision",
+        headers=HEADERS,
+        json={"status": "approved", "decision_notes": "Assignment terms verified."},
+    )
+    assignment_sent = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{assignment_package_id}/esign",
+        headers=HEADERS,
+        json={
+            "subject": "Stonegate assignment agreement",
+            "recipients": [
+                {
+                    "placeholder_name": "Assignee",
+                    "name": "Ready Cash Buyer LLC",
+                    "email": "buyer@example.com",
+                    "signing_order": 1,
+                }
+            ],
+        },
+    )
+    assert assignment_sent.status_code == 201, assignment_sent.text
+    assignment_event_time = event_time + 1
+    assignment_event = {
+        "event": {
+            "hash": hmac.new(
+                b"test-signwell-webhook-id",
+                f"{event_type}@{assignment_event_time}".encode(),
+                sha256,
+            ).hexdigest(),
+            "time": assignment_event_time,
+            "type": event_type,
+        },
+        "data": {
+            "object": {
+                "id": assignment_sent.json()["provider_document_id"],
+                "status": "completed",
+                "completed_pdf_base64": base64.b64encode(
+                    b"%PDF SignWell completed assignment agreement"
+                ).decode(),
+            }
+        },
+    }
+    assert (
+        client.post("/api/v1/webhooks/esign/signwell", json=assignment_event).status_code
+        == 200
+    )
+    assignment_detail = client.get(
+        f"/api/v1/transactions/{transaction_id}",
+        headers=HEADERS,
+    ).json()
+    stored_assignment = next(
+        item
+        for item in assignment_detail["documents"]
+        if item["contract_package_id"] == assignment_package_id
+    )
+    assert stored_assignment["document_type"] == "assignment_contract"
+    assert "assignment agreement" in stored_assignment["title"].lower()
     get_settings.cache_clear()

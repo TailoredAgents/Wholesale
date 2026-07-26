@@ -18,6 +18,7 @@ from app.schemas.transactions import (
     EsignEnvelopeRead,
     EsignSendRequest,
     F4IntegrationStatusRead,
+    SignWellConnectionRead,
     TransactionClose,
     TransactionCopilotAnalyzeRead,
     TransactionCopilotAnalyzeRequest,
@@ -36,6 +37,7 @@ from app.schemas.transactions import (
     TransactionUpdate,
 )
 from app.services.esign import (
+    connect_signwell,
     integration_status,
     reconcile_envelope,
     send_contract_for_signature,
@@ -94,10 +96,21 @@ def read_transactions(
 
 @router.get("/integrations/f4")
 def read_f4_integration_status(
+    db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_dependency)],
 ) -> F4IntegrationStatusRead:
-    del principal
-    return integration_status()
+    return integration_status(db, principal)
+
+
+@router.post("/integrations/signwell/connect")
+def connect_signwell_account(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(template_dependency)],
+) -> SignWellConnectionRead:
+    try:
+        return connect_signwell(db, principal)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/templates")

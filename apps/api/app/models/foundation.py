@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -2279,6 +2280,29 @@ class EsignProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     processing_error: Mapped[str | None] = mapped_column(String(2000))
 
 
+class EsignProviderConfiguration(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "esign_provider_configurations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            name="uq_esign_provider_configuration",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    configured_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    webhook_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    callback_url: Mapped[str] = mapped_column(String(1000), nullable=False)
+    account_email: Mapped[str | None] = mapped_column(String(320))
+    account_name: Mapped[str | None] = mapped_column(String(255))
+    last_verified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    provider_details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class TransactionDocumentFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "transaction_document_facts"
     __table_args__ = (
@@ -2436,6 +2460,72 @@ class Buyer(UuidPrimaryKeyMixin, TimestampMixin, Base):
     failed_deals: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     proof_of_funds_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class BuyerDiscoveryRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_discovery_runs"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    disposition_case_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), index=True
+    )
+    requested_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    search_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    provider_request: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    result_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    imported_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    credit_summary: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    error_message: Mapped[str | None] = mapped_column(String(2000))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BuyerDiscoveryCandidate(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "buyer_discovery_candidates"
+    __table_args__ = (
+        UniqueConstraint(
+            "discovery_run_id",
+            "external_key",
+            name="uq_buyer_discovery_run_external_key",
+        ),
+        Index(
+            "ix_buyer_discovery_candidate_provider_key",
+            "organization_id",
+            "provider",
+            "external_key",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    discovery_run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("buyer_discovery_runs.id", ondelete="CASCADE"), index=True
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("buyers.id"))
+    provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    external_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(320))
+    phone: Mapped[str | None] = mapped_column(String(80))
+    market: Mapped[str] = mapped_column(String(255), nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False)
+    property_types: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    observed_purchase_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    no_mortgage_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    last_purchase_date: Mapped[date | None] = mapped_column(Date)
+    min_purchase_price_cents: Mapped[int | None] = mapped_column(BigInteger)
+    max_purchase_price_cents: Mapped[int | None] = mapped_column(BigInteger)
+    score_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    score_components: Mapped[dict[str, int]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    provider_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    imported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class BuyerProofDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):

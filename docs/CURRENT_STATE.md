@@ -329,7 +329,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 | Production monitoring | Scheduled readiness and owner alert verified; Sentry deferred | Activate Sentry and the worker webhook later if the owner chooses |
 | Private object storage | Cloudflare R2 adapter complete; database fallback active | Configure the private R2 bucket and run file acceptance |
-| E-signature | SignWell adapter and local simulation complete | Configure SignWell, load attorney-approved templates, and run controlled test-mode acceptance |
+| E-signature | SignWell lifecycle and owner connection workflow complete | Add the API key, connect the account, load attorney-approved templates, and run controlled test-mode acceptance |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 
@@ -344,8 +344,10 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Automatic SMS enrollment confirmation must be activated with the approved Messaging Service.
 - Field acquisitions uses static travel buffers; live route-duration estimates are intentionally
   deferred until operating data demonstrates that route precision is necessary.
-- The contract, private-storage, SignWell, checklist, and funding code is implemented. R2,
-  SignWell, attorney-template, and live closing acceptance remain incomplete.
+- The contract, private-storage, SignWell, checklist, and funding code is implemented. SignWell now
+  verifies the account and automatically registers or reuses its webhook from the Transaction
+  workspace. R2 activation, attorney-approved templates, provider acceptance, and live closing
+  acceptance remain incomplete.
 - External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
   is complete; buyer matching and human approval are operational.
 - Stonegate's Finance area records deal economics, revenue, deductions, marketing spend,

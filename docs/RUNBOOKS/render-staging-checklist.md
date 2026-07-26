@@ -46,6 +46,11 @@ The cross-phase provider and credential source of truth is
 - `PROPERTY_DATA_PROVIDER`: `rentcast`.
 - `RENTCAST_API_KEY`: RentCast API key for value estimates and sale comps.
 - `RENTCAST_BASE_URL`: `https://api.rentcast.io/v1`.
+- `BUYER_DATA_PROVIDER`: `dealmachine` after F5 acceptance; otherwise `disabled`.
+- `DEALMACHINE_API_KEY`: DealMachine API key created in Settings > Developer.
+- `DEALMACHINE_BASE_URL`: `https://api.v2.dealmachine.com/v1`.
+- `DEALMACHINE_REQUEST_TIMEOUT_SECONDS`: `30`.
+- `BUYER_DISCOVERY_MAX_RESULTS`: `100` to cap provider records used by one search.
 - `ATTOM_API_KEY`: optional later upgrade for deeper property/deed/tax datasets.
 - `BRIDGE_API_BASE_URL`: optional MLS/RESO feed base URL.
 - `BRIDGE_API_KEY`: optional MLS/RESO feed API key.

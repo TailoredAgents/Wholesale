@@ -5,18 +5,23 @@ import {
   BadgeDollarSign,
   Check,
   CircleDollarSign,
+  DatabaseZap,
   Download,
   FileCheck2,
   LoaderCircle,
   Megaphone,
   Plus,
+  SearchCheck,
   ShieldCheck,
   Upload,
+  UserPlus,
   UsersRound,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type {
+  BuyerDataProvider,
+  BuyerDiscoveryRun,
   DispositionCase,
   DispositionCopilotOverview,
   DispositionCopilotRecommendation,
@@ -54,6 +59,9 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
   const [tab, setTab] = useState<Tab>("package");
   const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
   const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
+  const [buyerProvider, setBuyerProvider] = useState<BuyerDataProvider | null>(null);
+  const [discovery, setDiscovery] = useState<BuyerDiscoveryRun | null>(null);
+  const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const apiBase = useMemo(
@@ -84,6 +92,28 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
         if (active) {
           setCopilot(null);
           setCopilotCaseId(selectedId);
+        }
+      });
+    void request<BuyerDataProvider>("/api/v1/buyers/provider")
+      .then((result) => {
+        if (active) setBuyerProvider(result);
+      })
+      .catch(() => {
+        if (active) setBuyerProvider(null);
+      });
+    void request<BuyerDiscoveryRun | null>(
+      `/api/v1/buyers/discovery-runs/latest?case_id=${selectedId}`,
+    )
+      .then((result) => {
+        if (active) {
+          setDiscovery(result);
+          setSelectedCandidates([]);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setDiscovery(null);
+          setSelectedCandidates([]);
         }
       });
     return () => {
@@ -251,6 +281,74 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
     );
   }
 
+  async function discoverExternalBuyers() {
+    if (!selected) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await request<BuyerDiscoveryRun>("/api/v1/buyers/discovery-runs", {
+        method: "POST",
+        body: JSON.stringify({
+          disposition_case_id: selected.id,
+          max_candidates: 25,
+        }),
+      });
+      setDiscovery(result);
+      setSelectedCandidates(
+        result.candidates
+          .filter((item) => item.status === "review")
+          .slice(0, 10)
+          .map((item) => item.id),
+      );
+      setMessage(
+        `${result.result_count} provider candidates ranked. Review the preselected top ten before importing.`,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Buyer discovery failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importExternalBuyers() {
+    if (!selected || !discovery || !selectedCandidates.length) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await request<BuyerDiscoveryRun>(
+        `/api/v1/buyers/discovery-runs/${discovery.id}/import`,
+        {
+          method: "POST",
+          body: JSON.stringify({ candidate_ids: selectedCandidates }),
+        },
+      );
+      setDiscovery(result);
+      setSelectedCandidates([]);
+      if (selected.package_status === "approved") {
+        await request(`/api/v1/dispositions/cases/${selected.id}/matches`, {
+          method: "POST",
+          body: "{}",
+        });
+      }
+      await reload(selected.id);
+      setMessage(
+        "Selected investors were added to Stonegate. Contact details, buy box, and proof of funds still require verification.",
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Buyer import failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function toggleCandidate(candidateId: string) {
+    setSelectedCandidates((current) =>
+      current.includes(candidateId)
+        ? current.filter((item) => item !== candidateId)
+        : [...current, candidateId],
+    );
+  }
+
   async function reviewCopilot(
     recommendation: DispositionCopilotRecommendation,
     decision: "accepted" | "edited" | "rejected",
@@ -389,9 +487,33 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
                 </section>
               </div> : null}
 
-              {tab === "buyers" ? <div className={styles.sectionGrid}>
-                <section className={styles.section}><div className={styles.sectionTitle}><div><span>Evidence-backed ranking</span><h4>Buyer match list</h4></div><strong>{selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified</strong></div><div className={styles.matchList}>{selected.matches.length ? selected.matches.map((match) => <article key={match.id}><div className={styles.matchTop}><span className={styles.rank}>{match.rank}</span><div><strong>{match.buyer_name}</strong><small>{labelize(match.qualification_status)} · POF {labelize(match.proof_status)}</small></div><b>{(match.score_basis_points / 100).toFixed(0)}%</b></div>{!match.latest_proof_document_id ? <form className={styles.proofForm} onSubmit={(event) => uploadProof(event, match.buyer_id)}><input aria-label="Institution" name="institution" placeholder="Bank or lender" required /><input aria-label="Verified amount" name="verified_amount" inputMode="decimal" placeholder="Verified funds" required /><input aria-label="Expires" name="expires_at" type="date" required /><input aria-label="Proof document" name="file" type="file" required /><button disabled={busy} title="Verify proof of funds" type="submit"><Upload size={14} />Verify POF</button></form> : <p className={styles.verified}><ShieldCheck size={14} />Verified evidence attached{match.proof_expires_at ? ` · expires ${new Date(match.proof_expires_at).toLocaleDateString()}` : ""}</p>}</article>) : <p className={styles.emptyRow}>Approve the package, then generate buyer matches.</p>}</div></section>
-                <form className={styles.form} onSubmit={engagement}><div className={styles.sectionTitle}><div><span>Buyer activity</span><h4>Log inquiry or showing</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><label><span>Activity</span><select name="engagement_type"><option value="inquiry">Inquiry</option><option value="showing">Showing</option><option value="follow_up">Follow-up</option><option value="deposit">Deposit</option></select></label><label><span>Notes</span><textarea name="notes" required rows={4} /></label><button disabled={busy || !selected.matches.length} type="submit">Log buyer activity</button><div className={styles.activityList}>{selected.engagements.slice(0, 5).map((item) => <p key={item.id}><strong>{item.buyer_name}</strong><span>{labelize(item.engagement_type)} · {item.notes}</span></p>)}</div></form>
+              {tab === "buyers" ? <div className={styles.buyerTab}>
+                <section className={styles.discoveryPanel}>
+                  <header>
+                    <div><span><DatabaseZap size={14} />External buyer intelligence</span><h4>DealMachine candidate search</h4><p>{buyerProvider?.message ?? "Checking buyer-data connection."}</p></div>
+                    <div className={styles.discoveryActions}>
+                      <button disabled={busy || !buyerProvider?.live_search_enabled} onClick={discoverExternalBuyers} type="button"><SearchCheck size={15} />Find investors</button>
+                      <button disabled={busy || !selectedCandidates.length} onClick={importExternalBuyers} type="button"><UserPlus size={15} />Import selected ({selectedCandidates.length})</button>
+                    </div>
+                  </header>
+                  {discovery?.candidates.length ? <div className={styles.candidateList}>
+                    {discovery.candidates.map((candidate, index) => {
+                      const selectable = candidate.status === "review";
+                      return <label className={selectable ? styles.candidate : styles.importedCandidate} key={candidate.id}>
+                        <input checked={selectedCandidates.includes(candidate.id)} disabled={!selectable || busy} onChange={() => toggleCandidate(candidate.id)} type="checkbox" />
+                        <span className={styles.rank}>{index + 1}</span>
+                        <span><strong>{candidate.name}</strong><small>{candidate.market} · {candidate.property_types.join(", ")}</small></span>
+                        <span><strong>{(candidate.score_basis_points / 100).toFixed(0)}%</strong><small>{candidate.observed_purchase_count} observed purchase{candidate.observed_purchase_count === 1 ? "" : "s"} · {candidate.no_mortgage_count} no-mortgage signal{candidate.no_mortgage_count === 1 ? "" : "s"}</small></span>
+                        <span><strong>{candidate.last_purchase_date ? new Date(`${candidate.last_purchase_date}T12:00:00`).toLocaleDateString() : "Date unavailable"}</strong><small>{candidate.email || candidate.phone ? "Contact available" : "Contact needs enrichment"} · {labelize(candidate.status)}</small></span>
+                      </label>;
+                    })}
+                  </div> : <p className={styles.emptyRow}>Run a deal-specific search to find recent local purchasers. Only candidates you approve are added to Stonegate.</p>}
+                  {discovery ? <footer><span>{discovery.result_count} ranked candidates</span><span>{discovery.imported_count} imported</span><span>No outreach sent</span></footer> : null}
+                </section>
+                <div className={styles.sectionGrid}>
+                  <section className={styles.section}><div className={styles.sectionTitle}><div><span>Evidence-backed ranking</span><h4>Buyer match list</h4></div><strong>{selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified</strong></div><div className={styles.matchList}>{selected.matches.length ? selected.matches.map((match) => <article key={match.id}><div className={styles.matchTop}><span className={styles.rank}>{match.rank}</span><div><strong>{match.buyer_name}</strong><small>{labelize(match.qualification_status)} · POF {labelize(match.proof_status)}</small></div><b>{(match.score_basis_points / 100).toFixed(0)}%</b></div>{!match.latest_proof_document_id ? <form className={styles.proofForm} onSubmit={(event) => uploadProof(event, match.buyer_id)}><input aria-label="Institution" name="institution" placeholder="Bank or lender" required /><input aria-label="Verified amount" name="verified_amount" inputMode="decimal" placeholder="Verified funds" required /><input aria-label="Expires" name="expires_at" type="date" required /><input aria-label="Proof document" name="file" type="file" required /><button disabled={busy} title="Verify proof of funds" type="submit"><Upload size={14} />Verify POF</button></form> : <p className={styles.verified}><ShieldCheck size={14} />Verified evidence attached{match.proof_expires_at ? ` · expires ${new Date(match.proof_expires_at).toLocaleDateString()}` : ""}</p>}</article>) : <p className={styles.emptyRow}>Approve the package, then generate buyer matches.</p>}</div></section>
+                  <form className={styles.form} onSubmit={engagement}><div className={styles.sectionTitle}><div><span>Buyer activity</span><h4>Log inquiry or showing</h4></div></div><label><span>Buyer</span><select name="buyer_id" required>{selected.matches.map((item) => <option key={item.id} value={item.buyer_id}>{item.buyer_name}</option>)}</select></label><label><span>Activity</span><select name="engagement_type"><option value="inquiry">Inquiry</option><option value="showing">Showing</option><option value="follow_up">Follow-up</option><option value="deposit">Deposit</option></select></label><label><span>Notes</span><textarea name="notes" required rows={4} /></label><button disabled={busy || !selected.matches.length} type="submit">Log buyer activity</button><div className={styles.activityList}>{selected.engagements.slice(0, 5).map((item) => <p key={item.id}><strong>{item.buyer_name}</strong><span>{labelize(item.engagement_type)} · {item.notes}</span></p>)}</div></form>
+                </div>
               </div> : null}
 
               {tab === "offers" ? <div className={styles.sectionGrid}>

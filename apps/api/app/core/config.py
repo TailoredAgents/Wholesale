@@ -247,6 +247,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="ESIGN_SIGNWELL_WEBHOOK_ID",
     )
+    esign_webhook_callback_url: str = Field(
+        default="https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell",
+        validation_alias="ESIGN_WEBHOOK_CALLBACK_URL",
+    )
     esign_test_mode: bool = Field(default=True, validation_alias="ESIGN_TEST_MODE")
     esign_request_timeout_seconds: float = Field(
         default=30,
@@ -269,6 +273,30 @@ class Settings(BaseSettings):
     property_data_provider: str = Field(
         default="rentcast",
         validation_alias="PROPERTY_DATA_PROVIDER",
+    )
+    buyer_data_provider: Literal["disabled", "dealmachine"] = Field(
+        default="disabled",
+        validation_alias="BUYER_DATA_PROVIDER",
+    )
+    dealmachine_api_key: str | None = Field(
+        default=None,
+        validation_alias="DEALMACHINE_API_KEY",
+    )
+    dealmachine_base_url: str = Field(
+        default="https://api.v2.dealmachine.com/v1",
+        validation_alias="DEALMACHINE_BASE_URL",
+    )
+    dealmachine_request_timeout_seconds: float = Field(
+        default=30,
+        ge=5,
+        le=120,
+        validation_alias="DEALMACHINE_REQUEST_TIMEOUT_SECONDS",
+    )
+    buyer_discovery_max_results: int = Field(
+        default=100,
+        ge=10,
+        le=250,
+        validation_alias="BUYER_DISCOVERY_MAX_RESULTS",
     )
     attom_api_key: str | None = Field(default=None, validation_alias="ATTOM_API_KEY")
     rentcast_api_key: str | None = Field(default=None, validation_alias="RENTCAST_API_KEY")
@@ -492,8 +520,6 @@ class Settings(BaseSettings):
             blockers.append("ESIGN_PROVIDER=signwell")
         if not self.esign_api_key:
             blockers.append("ESIGN_API_KEY")
-        if not self.esign_signwell_webhook_id:
-            blockers.append("ESIGN_SIGNWELL_WEBHOOK_ID")
         return tuple(blockers)
 
     @property

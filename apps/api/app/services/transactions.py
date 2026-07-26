@@ -57,7 +57,12 @@ from app.services.document_storage import (
 from app.services.esign import list_envelopes
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
-SIGNED_DOCUMENT_TYPES = {"signed_purchase_agreement", "executed_addendum"}
+SIGNED_DOCUMENT_TYPES = {
+    "signed_purchase_agreement",
+    "assignment_contract",
+    "executed_addendum",
+    "executed_contract",
+}
 MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
 
 
@@ -802,20 +807,20 @@ def mark_contract_executed(
         or document.contract_package_id != package.id
         or document.document_type not in SIGNED_DOCUMENT_TYPES
     ):
-        raise ValueError(
-            "Upload the signed purchase agreement to this package before marking it executed."
-        )
+        raise ValueError("Upload the executed agreement to this package first.")
     now = datetime.now(UTC)
     package.status = "executed"
     package.executed_at = now
     transaction.status = "executed"
-    transaction.contract_executed_at = now
-    lead = db.get(Lead, transaction.lead_id)
-    deal = db.get(Deal, transaction.deal_id)
-    if lead:
-        lead.stage_key = "under_contract"
-    if deal:
-        deal.stage_key = "under_contract"
+    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
+    if template is None or template.document_type == "purchase_agreement":
+        transaction.contract_executed_at = now
+        lead = db.get(Lead, transaction.lead_id)
+        deal = db.get(Deal, transaction.deal_id)
+        if lead:
+            lead.stage_key = "under_contract"
+        if deal:
+            deal.stage_key = "under_contract"
     add_event(
         db,
         principal,
