@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 ## Purpose
 
@@ -32,6 +32,8 @@ versions of the CRM, Inbox, calendar, buyer database, Finance area, or AI contro
 - Every generated or provider-backed record requires source references, organization scope,
   permissions, audit history, and duplicate protection.
 - The existing governed AI runtime serves every Copilot. No phase creates a second AI system.
+- Every provider decision and runtime credential name must be reflected in
+  `PRODUCTION_CREDENTIALS_CHECKLIST.md`. Actual secret values never belong in git.
 
 ## Current Boundary
 

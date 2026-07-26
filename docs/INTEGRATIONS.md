@@ -1,9 +1,10 @@
 # Integrations
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 All external providers are adapters. PostgreSQL remains the platform database. The internal
 Stonegate Accounting Ledger is a native subsystem, not a provider integration.
+`PRODUCTION_CREDENTIALS_CHECKLIST.md` is the canonical account and environment-variable inventory.
 
 ## Status
 
@@ -17,7 +18,7 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
 | Resend | Operational seller email | Selected; adapter migration pending | Choose receiving domain, verify DNS, build sending/Receiving adapter, register signed webhooks, and run acceptance tests |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
-| FTC National DNC data and screening process | Cold-call eligibility evidence | Evidence intake implemented | Secure registry access, recurring refresh, and legal review still required |
+| National DNC API | None planned | Not used | Application-level DNC evidence integration was removed at Owner direction |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
 | Cloudflare R2 | Private uploaded files | Adapter implemented; database fallback active | Create private bucket/token, configure Render, then run upload/download/delete acceptance |
 | SignWell | Contract execution and event evidence | Adapter and test simulation implemented | Configure account/webhook, load attorney templates, then run controlled test-mode acceptance |

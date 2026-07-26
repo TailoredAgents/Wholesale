@@ -4,6 +4,8 @@ Status: the initial Render environment exists.
 
 Use this file as an environment inventory when reviewing the existing `oakwell-*` resources. Do
 not create a second set of resources. Current deployment status is in `../RENDER_DEPLOYMENT.md`.
+The cross-phase provider and credential source of truth is
+`../PRODUCTION_CREDENTIALS_CHECKLIST.md`; this runbook only covers the core Render environment.
 
 ## Required Inputs
 

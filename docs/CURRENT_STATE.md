@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 ## Product
 
@@ -16,6 +16,8 @@ local roles and permissions remain authoritative for access control.
 
 Operational instructions for staff are maintained in `USER_MANUAL.md`.
 The canonical remaining production sequence is maintained in `FINISHING_ROADMAP.md`.
+Provider accounts and required Render variables are maintained in
+`PRODUCTION_CREDENTIALS_CHECKLIST.md`; it never stores actual secret values.
 
 ## Deployment
 

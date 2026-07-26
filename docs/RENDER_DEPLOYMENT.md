@@ -1,6 +1,6 @@
 # Render Deployment
 
-Last updated: July 24, 2026
+Last updated: July 26, 2026
 
 ## Current Deployment
 
@@ -27,6 +27,9 @@ name.
 - `sync: false` variables are managed in the Render dashboard.
 - Secrets must not be placed in `render.yaml`.
 - A push to `main` can trigger Blueprint service deployments.
+
+Use `PRODUCTION_CREDENTIALS_CHECKLIST.md` as the canonical inventory for provider accounts,
+variable names, service placement, activation status, and acceptance checks.
 
 ## Current URLs
 

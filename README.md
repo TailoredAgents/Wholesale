@@ -5,7 +5,7 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 52 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 56 migrations.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker.
 - `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
@@ -24,6 +24,8 @@ Start with:
 - `docs/FINISHING_ROADMAP.md`: canonical remaining sequence from production safety through AI pilots.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
+- `docs/PRODUCTION_CREDENTIALS_CHECKLIST.md`: canonical provider-account and Render-variable
+  inventory without secret values.
 - `docs/ROADMAP.md`: ordered development phases after provider setup.
 - `docs/EXPERIENCE_UPGRADE_ROADMAP.md`: ordered OS organization, aesthetics, and public conversion upgrade phases.
 - `docs/UX1_INFORMATION_ARCHITECTURE_AUDIT.md`: approved OS routes, labels, role visibility, and handoffs.
