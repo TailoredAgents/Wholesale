@@ -351,9 +351,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - External buyer campaign delivery is intentionally simulated until email/SMS provider acceptance
   is complete; buyer matching and human approval are operational.
 - Stonegate's Finance area records deal economics, revenue, deductions, marketing spend,
-  compensation, payouts, and funded-deal reconciliation. The internal double-entry accounting
-  ledger, chart of accounts, bank reconciliation, period close, complete financial statements,
-  and CPA acceptance are not implemented.
+  compensation, payouts, and funded-deal reconciliation. F6A now adds an organization-scoped
+  accounting profile, a versioned wholesaling chart of accounts, accounting-readiness decisions,
+  and an embedded draft-only Tax and Deductions capability. The internal double-entry journal,
+  bank reconciliation, period close, complete financial statements, source-document workflow,
+  and CPA acceptance remain to be implemented in F6B-F6E.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or
@@ -380,8 +382,10 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   integrations, production replay, and measured pilots remain checkpoints. AI9 adds aggregate,
   period-bounded Finance, Marketing, and Executive copilots with deterministic management health,
   governed analysis, immutable review, prompt minimization, and no accounting, compensation,
-  payment, budget, campaign, staffing, permission, or external authority. All ten AI4-AI9 copilot
-  capabilities are enabled for on-demand drafts with mandatory human review and read-only tools;
+  payment, budget, campaign, staffing, permission, or external authority. F6A extends the existing
+  Finance Copilot with an eleventh on-demand capability for evidence-linked tax and deduction
+  review; it does not create a second AI system. All eleven AI4-AI9/F6A copilot capabilities are
+  enabled for on-demand drafts with mandatory human review and read-only tools;
   global external actions remain disabled. AI10 adds four versioned external-action control
   contracts, owner approval, provider and evaluation readiness gates, canary bounds, deterministic
   simulation evidence, per-policy pause/resume, and a global emergency stop. This release cannot

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -124,3 +124,71 @@ class FinanceOverview(BaseModel):
     compensation_rules: list[CompensationRuleRead]
     compensation_calculations: list[CompensationCalculationRead]
     marketing_spend: list[MarketingSpendRead]
+
+
+class AccountingProfileUpdate(BaseModel):
+    legal_entity_name: str = Field(min_length=1, max_length=255)
+    entity_type: str = Field(max_length=80)
+    federal_tax_classification: str = Field(max_length=80)
+    accounting_method: str = Field(max_length=40)
+    tax_year_end_month: int = Field(default=12, ge=1, le=12)
+    tax_year_end_day: int = Field(default=31, ge=1, le=31)
+    books_start_date: date | None = None
+    home_state: str = Field(default="GA", min_length=2, max_length=2)
+    owner_compensation_treatment: str = Field(max_length=80)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class AccountingProfileRead(BaseModel):
+    id: UUID
+    legal_entity_name: str
+    entity_type: str
+    federal_tax_classification: str
+    accounting_method: str
+    tax_year_end_month: int
+    tax_year_end_day: int
+    books_start_date: date | None
+    home_state: str
+    currency: str
+    owner_compensation_treatment: str
+    status: str
+    policy_version: int
+    tax_rule_year: int
+    notes: str | None
+    updated_at: datetime
+
+
+class AccountingAccountRead(BaseModel):
+    id: UUID
+    policy_version: int
+    code: str
+    system_key: str
+    name: str
+    account_type: str
+    subtype: str
+    normal_balance: str
+    tax_category: str
+    deal_tracking: bool
+    is_active: bool
+    description: str
+
+
+class TaxReadinessRead(BaseModel):
+    capability_key: str
+    mode: str
+    status: str
+    readiness_score: int
+    readiness_gaps: list[str]
+    review_scope: list[str]
+    prohibited_actions: list[str]
+    source_records: int
+    records_missing_notes: int
+
+
+class AccountingSetupRead(BaseModel):
+    profile: AccountingProfileRead
+    accounts: list[AccountingAccountRead]
+    readiness_score: int
+    readiness_gaps: list[str]
+    policy_notes: list[str]
+    tax_copilot: TaxReadinessRead

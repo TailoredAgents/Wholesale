@@ -43,11 +43,106 @@ def build_management_facts(
 ) -> ManagementFacts:
     if capability_key == "finance.reconcile":
         return _finance_facts(db, principal, period_days)
+    if capability_key == "finance.tax_review":
+        return _tax_facts(db, principal, period_days)
     if capability_key == "marketing.analyze":
         return _marketing_facts(db, principal, period_days)
     if capability_key == "operations.brief":
         return _operations_facts(db, principal, period_days)
     raise ValueError("Unsupported management capability.")
+
+
+def _tax_facts(
+    db: Session,
+    principal: Principal,
+    period_days: int,
+) -> ManagementFacts:
+    from app.services.finance import get_accounting_setup, get_finance_overview
+
+    setup = get_accounting_setup(db, principal)
+    overview = get_finance_overview(db, principal, period_days)
+    source_records = [*overview.deductions, *overview.marketing_spend]
+    missing_notes = [item for item in source_records if not item.notes]
+    score = setup.tax_copilot.readiness_score
+    risks: list[ManagementRiskAlert] = []
+    if setup.readiness_gaps:
+        risks.append(
+            ManagementRiskAlert(
+                severity="warning",
+                item="Accounting profile",
+                reason="Tax treatment depends on unresolved company-profile decisions.",
+                evidence=["Finance accounting profile"],
+            )
+        )
+    if missing_notes:
+        risks.append(
+            ManagementRiskAlert(
+                severity="warning",
+                item="Business purpose",
+                reason=f"{len(missing_notes)} records lack a business-purpose note.",
+                evidence=["Finance source records"],
+            )
+        )
+    context = {
+        "accounting_profile": setup.profile.model_dump(mode="json"),
+        "chart_of_accounts": [
+            {
+                "code": item.code,
+                "name": item.name,
+                "account_type": item.account_type,
+                "tax_category": item.tax_category,
+                "deal_tracking": item.deal_tracking,
+            }
+            for item in setup.accounts
+        ],
+        "policy_notes": setup.policy_notes,
+        "deductions": [item.model_dump(mode="json") for item in overview.deductions],
+        "marketing_spend": [
+            item.model_dump(mode="json") for item in overview.marketing_spend
+        ],
+        "authority": {
+            "mode": "draft_only",
+            "human_review_required": True,
+            "prohibited_actions": setup.tax_copilot.prohibited_actions,
+        },
+    }
+    encoded = json.dumps(context, sort_keys=True, default=str)
+    return {
+        "health_score": score,
+        "health_band": (
+            "healthy" if score >= 80 else "needs_review" if score >= 50 else "critical"
+        ),
+        "readiness_gaps": setup.tax_copilot.readiness_gaps,
+        "risk_alerts": risks,
+        "metric_cards": [
+            ManagementMetricCard(
+                label="Source records",
+                value=str(len(source_records)),
+                detail=f"Last {period_days} days",
+                tone="info",
+            ),
+            ManagementMetricCard(
+                label="Missing purpose",
+                value=str(len(missing_notes)),
+                detail="Needs owner evidence",
+                tone="warning" if missing_notes else "success",
+            ),
+            ManagementMetricCard(
+                label="Account structure",
+                value=str(len(setup.accounts)),
+                detail=f"Policy version {setup.profile.policy_version}",
+                tone="success",
+            ),
+            ManagementMetricCard(
+                label="Review mode",
+                value="Draft only",
+                detail="No filing or ledger posting",
+                tone="neutral",
+            ),
+        ],
+        "context": context,
+        "fingerprint": hashlib.sha256(encoded.encode()).hexdigest(),
+    }
 
 
 def _finance_facts(

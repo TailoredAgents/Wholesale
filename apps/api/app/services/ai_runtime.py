@@ -94,6 +94,7 @@ DRAFT_ONLY_ENABLED_CAPABILITIES = {
     "transaction.coordinate",
     "disposition.match",
     "finance.reconcile",
+    "finance.tax_review",
     "marketing.analyze",
     "operations.brief",
 }
@@ -748,6 +749,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                 "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
                 "finance.reconcile": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                "finance.tax_review": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                 "marketing.analyze": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                 "operations.brief": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
             }.get(capability_key)
@@ -776,6 +778,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                     "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
                     "finance.reconcile": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
+                    "finance.tax_review": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                     "marketing.analyze": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                     "operations.brief": MANAGEMENT_COPILOT_OUTPUT_SCHEMA,
                 }.get(capability_key, OUTPUT_SCHEMA),
@@ -1433,6 +1436,7 @@ def _execute_read_tool(
         context["disposition"] = disposition_context
     elif capability.capability_key in {
         "finance.reconcile",
+        "finance.tax_review",
         "marketing.analyze",
         "operations.brief",
     }:

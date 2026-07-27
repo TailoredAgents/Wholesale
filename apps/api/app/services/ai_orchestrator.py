@@ -140,6 +140,13 @@ PORTFOLIO = (
         "high",
     ),
     (
+        "tax_deductions",
+        "Tax and Deductions",
+        "Review accounting evidence and draft tax-classification questions.",
+        "finance.tax_review",
+        "high",
+    ),
+    (
         "marketing_intelligence",
         "Marketing Intelligence",
         "Compare source performance and recommend budget experiments.",

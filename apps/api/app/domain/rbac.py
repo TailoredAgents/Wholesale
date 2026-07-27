@@ -32,6 +32,7 @@ class PermissionKeys:
     SCHEDULE_ASSIGNED_APPOINTMENTS = "appointments:schedule_assigned"
     CHANGE_AI_PROMPTS = "ai:change_prompts"
     CHANGE_COMPENSATION_RULES = "compensation:change_rules"
+    MANAGE_ACCOUNTING_POLICY = "accounting:manage_policy"
     DELETE_OR_ARCHIVE_RECORDS = "records:delete_or_archive"
     MANAGE_USERS = "users:manage"
     VIEW_AUDIT_LOGS = "audit:view"
@@ -188,6 +189,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Manage effective-dated compensation rules.",
     ),
     PermissionDefinition(
+        PermissionKeys.MANAGE_ACCOUNTING_POLICY,
+        "Manage accounting policy",
+        "Manage the accounting profile and versioned chart of accounts.",
+    ),
+    PermissionDefinition(
         PermissionKeys.DELETE_OR_ARCHIVE_RECORDS,
         "Delete or archive records",
         "Archive or delete records where allowed.",
@@ -328,6 +334,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.VIEW_FINANCIALS,
             PermissionKeys.VIEW_COMPENSATION,
             PermissionKeys.CHANGE_COMPENSATION_RULES,
+            PermissionKeys.MANAGE_ACCOUNTING_POLICY,
         ),
     ),
     RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),

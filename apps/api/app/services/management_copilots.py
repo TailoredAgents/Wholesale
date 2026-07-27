@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.models.foundation import (
     AiAgentDefinition,
+    AiCapabilityRuntimePolicy,
     AuditEvent,
     ManagementCopilotRecommendation,
     ManagementCopilotReview,
@@ -40,6 +41,17 @@ CAPABILITY_CONFIG: dict[ManagementCapability, dict[str, object]] = {
             "Distinguish recorded amounts from missing or conflicting evidence.",
         ],
     },
+    "finance.tax_review": {
+        "agent_key": "tax_deductions",
+        "copilot_name": "Tax and Deductions Copilot",
+        "restrictions": [
+            "Do not file a return, submit an election, or represent tax-professional approval.",
+            "Do not promise deductibility or final tax treatment.",
+            "Do not post, delete, or alter accounting entries.",
+            "Do not move money or approve owner compensation.",
+            "Separate recorded facts, missing evidence, proposed classification, and professional decisions.",
+        ],
+    },
     "marketing.analyze": {
         "agent_key": "marketing_intelligence",
         "copilot_name": "Marketing Copilot",
@@ -63,12 +75,35 @@ CAPABILITY_CONFIG: dict[ManagementCapability, dict[str, object]] = {
 }
 
 
+def ensure_management_capability(
+    db: Session,
+    principal: Principal,
+    capability_key: ManagementCapability,
+) -> None:
+    if capability_key != "finance.tax_review":
+        return
+    installed = db.scalar(
+        select(AiCapabilityRuntimePolicy.id).where(
+            AiCapabilityRuntimePolicy.organization_id == principal.organization_id,
+            AiCapabilityRuntimePolicy.capability_key == capability_key,
+        )
+    )
+    if installed is not None:
+        return
+    from app.services.ai_copilots import install_copilot_foundation
+    from app.services.ai_runtime import install_runtime
+
+    install_copilot_foundation(db, principal)
+    install_runtime(db, principal)
+
+
 def get_management_copilot_overview(
     db: Session,
     principal: Principal,
     capability_key: ManagementCapability,
     period_days: int,
 ) -> ManagementCopilotOverview:
+    ensure_management_capability(db, principal, capability_key)
     facts = build_management_facts(db, principal, capability_key, period_days)
     runtime = get_runtime_overview(db, principal)
     statuses = {item.capability_key: item.status for item in runtime.capabilities}
@@ -114,6 +149,7 @@ def analyze_management(
     capability_key: ManagementCapability,
     payload: ManagementCopilotAnalyzeRequest,
 ) -> ManagementCopilotAnalyzeRead:
+    ensure_management_capability(db, principal, capability_key)
     facts = build_management_facts(
         db,
         principal,

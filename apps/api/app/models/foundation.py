@@ -3331,6 +3331,77 @@ class MarketingSpend(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
+class AccountingProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "accounting_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            name="uq_accounting_profiles_organization",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    legal_entity_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    federal_tax_classification: Mapped[str] = mapped_column(String(80), nullable=False)
+    accounting_method: Mapped[str] = mapped_column(String(40), nullable=False)
+    tax_year_end_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    tax_year_end_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    books_start_date: Mapped[date | None] = mapped_column(Date)
+    home_state: Mapped[str] = mapped_column(String(2), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    owner_compensation_treatment: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    tax_rule_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+
+
+class AccountingAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "accounting_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "policy_version",
+            "code",
+            name="uq_accounting_accounts_org_version_code",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "policy_version",
+            "system_key",
+            name="uq_accounting_accounts_org_version_key",
+        ),
+        Index(
+            "ix_accounting_accounts_org_type",
+            "organization_id",
+            "account_type",
+            "is_active",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    accounting_profile_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("accounting_profiles.id", ondelete="CASCADE"), index=True
+    )
+    policy_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
+    system_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    account_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    subtype: Mapped[str] = mapped_column(String(80), nullable=False)
+    normal_balance: Mapped[str] = mapped_column(String(10), nullable=False)
+    tax_category: Mapped[str] = mapped_column(String(120), nullable=False)
+    deal_tracking: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+
 class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "offline_conversion_exports"
     __table_args__ = (

@@ -4,8 +4,10 @@ import Link from "next/link";
 import {
   getDashboardData,
   getDispositionOverview,
+  getAccountingSetup,
   getFinanceCopilotOverview,
   getFinanceOverview,
+  getTaxCopilotOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
@@ -16,6 +18,7 @@ import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporti
 import { StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { FinanceForms } from "./finance-forms";
+import { AccountingSetupPanel } from "./accounting-setup";
 import styles from "../_components/management-workspaces.module.css";
 
 export const dynamic = "force-dynamic";
@@ -45,13 +48,24 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
   const periodDays = period === "all" ? undefined : Number(period);
   const copilotPeriodDays = periodDays ?? 365;
-  const [dashboard, financeData, dispositionData, profile, financeCopilot] = await Promise.all([
+  const [
+    dashboard,
+    financeData,
+    dispositionData,
+    profile,
+    financeCopilot,
+    accountingSetup,
+  ] = await Promise.all([
     getDashboardData(),
     getFinanceOverview(periodDays),
     getDispositionOverview(),
     getWorkspaceProfile(),
     getFinanceCopilotOverview(copilotPeriodDays),
+    getAccountingSetup(),
   ]);
+  const taxCopilot = accountingSetup
+    ? await getTaxCopilotOverview(copilotPeriodDays)
+    : null;
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
   const margin = finance.summary.collected_revenue_cents
@@ -62,6 +76,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   ) ?? [];
   const pendingRevenue = finance.revenue_records.filter((item) => item.status === "pending");
   const canChangeComp = Boolean(profile?.permissions.includes("compensation:change_rules"));
+  const canManageAccounting = Boolean(
+    profile?.permissions.includes("accounting:manage_policy"),
+  );
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
   const primaryException = reconciliationExceptions[0] ?? null;
 
@@ -85,6 +102,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
       <ManagementCopilotPanel
         endpointBase="/api/v1/finance/copilot"
         initialData={financeCopilot}
+      />
+    ) : null}
+    {accountingSetup ? (
+      <AccountingSetupPanel setup={accountingSetup} canEdit={canManageAccounting} />
+    ) : null}
+    {taxCopilot ? (
+      <ManagementCopilotPanel
+        endpointBase="/api/v1/finance/tax-copilot"
+        initialData={taxCopilot}
       />
     ) : null}
 

@@ -153,10 +153,16 @@ COPILOTS: tuple[dict[str, Any], ...] = (
         "owner_title": "Owner and approved finance staff",
         "authority": (
             "Humans approve funded status, reconciliation, commissions, payments, accounting "
-            "entries, reserves, and distributions."
+            "entries, tax treatment, filings, reserves, and distributions."
         ),
         "phase_key": "AI9",
-        "agents": (("finance_commission", "Draft reconciliation and commission calculations."),),
+        "agents": (
+            ("finance_commission", "Draft reconciliation and commission calculations."),
+            (
+                "tax_deductions",
+                "Review evidence and draft tax-classification questions for human approval.",
+            ),
+        ),
     },
     {
         "key": "marketing_copilot",
@@ -410,6 +416,40 @@ CAPABILITY_CONTRACTS = (
         ["funding evidence", "statement pages", "plan version", "role-credit approvals"],
         ["mark funded", "approve commission", "post accounting", "move money"],
         ["material difference", "missing funding evidence", "unapproved role credit"],
+    ),
+    capability(
+        "finance_copilot",
+        "finance.tax_review",
+        "Prepare evidence-linked tax and deduction review",
+        ["expense.recorded", "month.close_requested", "tax.review_requested"],
+        [
+            "accounting profile",
+            "chart of accounts",
+            "expense and deal-cost records",
+            "business purpose",
+            "supporting evidence",
+        ],
+        [
+            "proposed classification",
+            "missing evidence",
+            "capitalization flags",
+            "owner questions",
+            "tax-professional review package",
+        ],
+        ["finance.read", "documents.read", "accounting_policy.read_approved"],
+        [
+            "source record",
+            "business-purpose note",
+            "receipt or statement reference",
+            "current policy version",
+        ],
+        ["post accounting", "alter source record", "file return", "submit election", "move money"],
+        [
+            "entity classification is unresolved",
+            "business purpose is missing",
+            "personal use may be present",
+            "expense versus inventory treatment is uncertain",
+        ],
     ),
     capability(
         "marketing_copilot",

@@ -166,6 +166,12 @@ Ordinary software, administration, insurance, accounting, and general overhead a
 company share. The $2,500 reserve is reviewed against trailing funded-deal data and changed only by
 an effective-dated policy decision.
 
+The acquisition and outreach reserve is a management calculation, not a fabricated accounting
+expense. Stonegate's books record the actual advertising, data, outreach labor, and other costs
+that occurred. Assignment revenue and double-close property resale are accounted for separately;
+earnest money, inventory, owner activity, and funded commissions retain their own account
+treatment.
+
 ### Full Human Disposition
 
 | Role | Adjusted Deal Margin |

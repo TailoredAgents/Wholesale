@@ -1567,7 +1567,7 @@ export type ManagementCopilotRecommendation = {
 };
 
 export type ManagementCopilotOverview = {
-  capability_key: "finance.reconcile" | "marketing.analyze" | "operations.brief";
+  capability_key: "finance.reconcile" | "finance.tax_review" | "marketing.analyze" | "operations.brief";
   copilot_name: string;
   pilot_mode: "draft_only";
   runtime_status: string;
@@ -1673,6 +1673,55 @@ export type FinanceOverview = {
     notes: string | null;
     created_at: string;
   }>;
+};
+
+export type AccountingSetup = {
+  profile: {
+    id: string;
+    legal_entity_name: string;
+    entity_type: string;
+    federal_tax_classification: string;
+    accounting_method: string;
+    tax_year_end_month: number;
+    tax_year_end_day: number;
+    books_start_date: string | null;
+    home_state: string;
+    currency: string;
+    owner_compensation_treatment: string;
+    status: string;
+    policy_version: number;
+    tax_rule_year: number;
+    notes: string | null;
+    updated_at: string;
+  };
+  accounts: Array<{
+    id: string;
+    policy_version: number;
+    code: string;
+    system_key: string;
+    name: string;
+    account_type: string;
+    subtype: string;
+    normal_balance: string;
+    tax_category: string;
+    deal_tracking: boolean;
+    is_active: boolean;
+    description: string;
+  }>;
+  readiness_score: number;
+  readiness_gaps: string[];
+  policy_notes: string[];
+  tax_copilot: {
+    capability_key: string;
+    mode: string;
+    status: string;
+    readiness_score: number;
+    readiness_gaps: string[];
+    review_scope: string[];
+    prohibited_actions: string[];
+    source_records: number;
+    records_missing_notes: number;
+  };
 };
 
 export type MarketingSummary = {
@@ -3009,6 +3058,21 @@ export async function getFinanceOverview(periodDays?: number): Promise<{
   }
 }
 
+export async function getAccountingSetup(): Promise<AccountingSetup | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance/accounting/setup`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as AccountingSetup;
+  } catch {
+    return null;
+  }
+}
+
 async function getManagementCopilot(
   path: string,
   periodDays: number,
@@ -3029,6 +3093,10 @@ async function getManagementCopilot(
 
 export function getFinanceCopilotOverview(periodDays: number) {
   return getManagementCopilot("/api/v1/finance/copilot", periodDays);
+}
+
+export function getTaxCopilotOverview(periodDays: number) {
+  return getManagementCopilot("/api/v1/finance/tax-copilot", periodDays);
 }
 
 export function getMarketingCopilotOverview(periodDays: number) {

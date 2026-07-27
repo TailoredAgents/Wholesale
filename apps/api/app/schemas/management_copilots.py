@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 ManagementCapability = Literal[
     "finance.reconcile",
+    "finance.tax_review",
     "marketing.analyze",
     "operations.brief",
 ]

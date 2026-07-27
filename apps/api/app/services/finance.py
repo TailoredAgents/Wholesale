@@ -7,6 +7,8 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
 from app.models.foundation import (
+    AccountingAccount,
+    AccountingProfile,
     ActivityEvent,
     AuditEvent,
     CompensationCalculation,
@@ -21,6 +23,10 @@ from app.models.foundation import (
     Transaction,
 )
 from app.schemas.finance import (
+    AccountingAccountRead,
+    AccountingProfileRead,
+    AccountingProfileUpdate,
+    AccountingSetupRead,
     CompensationCalculationRead,
     CompensationRuleCreate,
     CompensationRuleRead,
@@ -32,12 +38,381 @@ from app.schemas.finance import (
     MarketingSpendRead,
     RevenueCreate,
     RevenueRead,
+    TaxReadinessRead,
 )
 
 REVENUE_STATUSES = {"pending", "collected", "void"}
 REVENUE_SOURCES = {"assignment_fee", "double_close", "consulting_fee", "other"}
 DEDUCTION_CATEGORIES = {"title", "attorney", "transaction", "marketing", "seller_credit", "other"}
 COMPENSATION_APPLIES_TO = {"gross_revenue", "net_revenue"}
+ENTITY_TYPES = {
+    "undecided",
+    "sole_proprietor",
+    "single_member_llc",
+    "multi_member_llc",
+    "corporation",
+}
+FEDERAL_TAX_CLASSIFICATIONS = {
+    "undecided",
+    "disregarded_entity",
+    "partnership",
+    "s_corporation",
+    "c_corporation",
+}
+ACCOUNTING_METHODS = {"undecided", "cash", "accrual"}
+OWNER_COMPENSATION_TREATMENTS = {
+    "pending",
+    "owner_draw",
+    "payroll",
+    "guaranteed_payment",
+}
+
+# The operating-model acquisition reserve is intentionally absent. It is a
+# profitability target, not an accounting expense without an underlying cost.
+DEFAULT_WHOLESALE_ACCOUNTS = (
+    ("1000", "operating_cash", "Operating Cash", "asset", "cash", "debit", "cash", False, "Primary operating bank balance."),
+    ("1010", "tax_reserve_cash", "Tax Reserve Cash", "asset", "cash", "debit", "cash", False, "Cash reserved by management for expected tax payments."),
+    ("1100", "settlement_receivable", "Settlement Receivable", "asset", "receivable", "debit", "receivable", True, "Funded closing proceeds due to Stonegate but not yet received."),
+    ("1200", "earnest_money_deposits", "Earnest Money Deposits", "asset", "deposit", "debit", "deposit", True, "Stonegate earnest money held by a closing attorney or title company."),
+    ("1300", "real_estate_inventory", "Real Estate Inventory", "asset", "inventory", "debit", "inventory", True, "Property cost held for resale in a double-close transaction."),
+    ("1310", "capitalized_deal_costs", "Capitalized Acquisition and Closing Costs", "asset", "inventory_cost", "debit", "inventory", True, "Deal costs capitalized into property inventory when required."),
+    ("1400", "prepaid_expenses", "Prepaid Expenses", "asset", "prepaid", "debit", "prepaid_expense", False, "Payments that benefit a future accounting period."),
+    ("2000", "accounts_payable", "Accounts Payable", "liability", "payable", "credit", "accounts_payable", False, "Approved vendor obligations not yet paid."),
+    ("2100", "commission_payable", "Commission Payable", "liability", "payable", "credit", "compensation", True, "Approved deal commissions payable after cleared proceeds."),
+    ("2200", "contractor_payable", "Contractor Payable", "liability", "payable", "credit", "contract_labor", False, "Approved contractor obligations not yet paid."),
+    ("2300", "transactional_funding_payable", "Transactional Funding Payable", "liability", "financing", "credit", "deal_financing", True, "Short-term transactional funding owed on a double close."),
+    ("2400", "credit_cards", "Credit Cards", "liability", "credit_card", "credit", "credit_card", False, "Company credit-card balances."),
+    ("3000", "owner_contributions", "Owner Contributions", "equity", "contribution", "credit", "equity", False, "Owner capital contributed to the company."),
+    ("3100", "owner_distributions", "Owner Distributions", "equity", "distribution", "debit", "owner_distribution", False, "Owner withdrawals that are not operating expenses."),
+    ("3200", "retained_earnings", "Retained Earnings", "equity", "retained_earnings", "credit", "equity", False, "Accumulated company earnings."),
+    ("4000", "assignment_fee_revenue", "Assignment Fee Revenue", "revenue", "assignment", "credit", "gross_receipts", True, "Revenue earned from assigning a purchase contract."),
+    ("4100", "wholesale_property_sale_revenue", "Wholesale Property Sale Revenue", "revenue", "property_sale", "credit", "gross_receipts", True, "Gross resale proceeds from a double-close transaction."),
+    ("4200", "jv_revenue", "Joint Venture Revenue", "revenue", "joint_venture", "credit", "gross_receipts", True, "Stonegate revenue from a documented joint-venture transaction."),
+    ("4900", "other_operating_revenue", "Other Operating Revenue", "revenue", "other", "credit", "other_income", False, "Operating revenue outside normal assignment, resale, or JV activity."),
+    ("5000", "property_acquisition_cost", "Property Acquisition Cost", "cost_of_revenue", "inventory_cost", "debit", "cost_of_goods_sold", True, "Acquisition basis released from inventory when a double-close property is sold."),
+    ("5100", "deal_closing_costs", "Deal Closing Costs", "cost_of_revenue", "closing_cost", "debit", "cost_of_goods_sold", True, "Closing costs directly attributable to a completed deal."),
+    ("5200", "transactional_funding_fees", "Transactional Funding Fees", "cost_of_revenue", "financing_cost", "debit", "cost_of_goods_sold", True, "Direct transactional funding charges for a double close."),
+    ("5300", "jv_partner_payments", "Joint Venture Partner Payments", "cost_of_revenue", "partner_payment", "debit", "cost_of_goods_sold", True, "Documented partner share attributable to a joint-venture deal."),
+    ("5400", "buyer_credits_refunds", "Buyer Credits and Refunds", "cost_of_revenue", "contra_revenue", "debit", "returns_allowances", True, "Approved deal-specific buyer credits or revenue refunds."),
+    ("5500", "deal_commissions", "Deal Commissions", "cost_of_revenue", "commission", "debit", "compensation", True, "Approved commissions attributable to funded deal revenue."),
+    ("6000", "advertising", "Advertising", "expense", "marketing", "debit", "advertising", False, "Paid media, direct mail, and other advertising."),
+    ("6010", "lead_lists_data", "Lead Lists and Data", "expense", "marketing_data", "debit", "advertising", False, "Prospect lists, property data, skip tracing, and campaign data."),
+    ("6020", "prospecting_labor", "VA and Prospecting Labor", "expense", "contract_labor", "debit", "contract_labor", False, "Cold-calling and outreach labor not tied to a funded-deal commission."),
+    ("6100", "software_subscriptions", "Software and Subscriptions", "expense", "software", "debit", "office_expense", False, "Business software, hosting, data tools, and subscriptions."),
+    ("6200", "professional_services", "Legal and Accounting", "expense", "professional_services", "debit", "legal_professional", False, "Attorneys, tax professionals, bookkeeping, and accounting services."),
+    ("6300", "insurance", "Insurance", "expense", "insurance", "debit", "insurance", False, "Business insurance premiums."),
+    ("6400", "office_expense", "Office Expense", "expense", "office", "debit", "office_expense", False, "Ordinary office supplies and operating costs."),
+    ("6500", "communications", "Telephone and Communications", "expense", "communications", "debit", "utilities", False, "Business phone, SMS, email, and internet communication costs."),
+    ("6600", "travel_mileage", "Travel and Mileage", "expense", "travel", "debit", "travel", False, "Documented business travel and vehicle mileage."),
+    ("6700", "bank_merchant_fees", "Bank and Merchant Fees", "expense", "bank_fee", "debit", "bank_fees", False, "Banking and payment-processing fees."),
+    ("6800", "payroll_contract_labor", "Payroll and Contract Labor", "expense", "labor", "debit", "wages_contract_labor", False, "Non-deal payroll and contractor labor."),
+    ("6900", "other_operating_expense", "Other Operating Expense", "expense", "other", "debit", "other_deduction", False, "Reviewed operating costs without a more specific account."),
+)
+
+
+def get_accounting_setup(
+    db: Session,
+    principal: Principal,
+) -> AccountingSetupRead:
+    profile = ensure_accounting_foundation(db, principal)
+    accounts = list(
+        db.scalars(
+            select(AccountingAccount)
+            .where(
+                AccountingAccount.organization_id == principal.organization_id,
+                AccountingAccount.policy_version == profile.policy_version,
+            )
+            .order_by(AccountingAccount.code)
+        ).all()
+    )
+    readiness_gaps = accounting_readiness_gaps(profile)
+    deduction_records = list(
+        db.scalars(
+            select(DealDeduction).where(
+                DealDeduction.organization_id == principal.organization_id
+            )
+        ).all()
+    )
+    spend_records = list(
+        db.scalars(
+            select(MarketingSpend).where(
+                MarketingSpend.organization_id == principal.organization_id
+            )
+        ).all()
+    )
+    source_records = len(deduction_records) + len(spend_records)
+    missing_notes = sum(
+        1
+        for item in [*deduction_records, *spend_records]
+        if not item.notes or not item.notes.strip()
+    )
+    tax_gaps = list(readiness_gaps)
+    if not source_records:
+        tax_gaps.append("No expense or deal-deduction records are available for review.")
+    elif missing_notes:
+        tax_gaps.append(
+            f"{missing_notes} source records do not include a business-purpose note."
+        )
+    readiness_score = max(0, 100 - (20 * len(readiness_gaps)))
+    tax_score = max(0, 100 - (15 * len(tax_gaps)))
+    return AccountingSetupRead(
+        profile=accounting_profile_to_read(profile),
+        accounts=[accounting_account_to_read(account) for account in accounts],
+        readiness_score=readiness_score,
+        readiness_gaps=readiness_gaps,
+        policy_notes=[
+            "Assignment fees are revenue; double-close resale proceeds and property basis are tracked separately.",
+            "Earnest money remains an asset until applied, returned, or forfeited.",
+            "Commissions become payable only after funded proceeds and approved reconciliation.",
+            "The acquisition reserve is a management target, not a ledger expense without a real underlying cost.",
+        ],
+        tax_copilot=TaxReadinessRead(
+            capability_key="finance.tax_review",
+            mode="draft_only",
+            status="enabled",
+            readiness_score=tax_score,
+            readiness_gaps=tax_gaps,
+            review_scope=[
+                "Classify recorded costs against the approved chart of accounts.",
+                "Identify missing business purpose, receipt, or deal linkage.",
+                "Separate current expenses, capitalized deal costs, inventory, and owner activity.",
+                "Prepare an evidence-linked review package for the owner and tax professional.",
+            ],
+            prohibited_actions=[
+                "File a tax return or submit a tax election.",
+                "Promise that an item is deductible.",
+                "Post, delete, or alter accounting entries.",
+                "Move money or approve owner compensation.",
+            ],
+            source_records=source_records,
+            records_missing_notes=missing_notes,
+        ),
+    )
+
+
+def update_accounting_profile(
+    db: Session,
+    principal: Principal,
+    payload: AccountingProfileUpdate,
+) -> AccountingSetupRead:
+    validate_accounting_profile(payload)
+    profile = ensure_accounting_foundation(db, principal)
+    previous = accounting_profile_snapshot(profile)
+    profile.legal_entity_name = payload.legal_entity_name.strip()
+    profile.entity_type = payload.entity_type
+    profile.federal_tax_classification = payload.federal_tax_classification
+    profile.accounting_method = payload.accounting_method
+    profile.tax_year_end_month = payload.tax_year_end_month
+    profile.tax_year_end_day = payload.tax_year_end_day
+    profile.books_start_date = payload.books_start_date
+    profile.home_state = payload.home_state.upper()
+    profile.owner_compensation_treatment = payload.owner_compensation_treatment
+    profile.notes = payload.notes
+    profile.updated_by_user_id = principal.user_id
+    profile.status = (
+        "ready" if not accounting_readiness_gaps(profile) else "needs_setup"
+    )
+    db.flush()
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="finance.accounting_profile_update",
+            entity_type="accounting_profile",
+            entity_id=profile.id,
+            previous_value=previous,
+            new_value=accounting_profile_snapshot(profile),
+            reason="Accounting policy setup",
+        )
+    )
+    db.commit()
+    return get_accounting_setup(db, principal)
+
+
+def ensure_accounting_foundation(
+    db: Session,
+    principal: Principal,
+) -> AccountingProfile:
+    profile = db.scalar(
+        select(AccountingProfile).where(
+            AccountingProfile.organization_id == principal.organization_id
+        )
+    )
+    created = False
+    if profile is None:
+        profile = AccountingProfile(
+            organization_id=principal.organization_id,
+            legal_entity_name="Stonegate Home Buyers",
+            entity_type="undecided",
+            federal_tax_classification="undecided",
+            accounting_method="cash",
+            tax_year_end_month=12,
+            tax_year_end_day=31,
+            books_start_date=None,
+            home_state="GA",
+            currency="USD",
+            owner_compensation_treatment="pending",
+            status="needs_setup",
+            policy_version=1,
+            tax_rule_year=datetime.now(UTC).year,
+            notes=None,
+            updated_by_user_id=principal.user_id,
+        )
+        db.add(profile)
+        db.flush()
+        created = True
+
+    existing_keys = set(
+        db.scalars(
+            select(AccountingAccount.system_key).where(
+                AccountingAccount.organization_id == principal.organization_id,
+                AccountingAccount.policy_version == profile.policy_version,
+            )
+        ).all()
+    )
+    for (
+        code,
+        system_key,
+        name,
+        account_type,
+        subtype,
+        normal_balance,
+        tax_category,
+        deal_tracking,
+        description,
+    ) in DEFAULT_WHOLESALE_ACCOUNTS:
+        if system_key in existing_keys:
+            continue
+        db.add(
+            AccountingAccount(
+                organization_id=principal.organization_id,
+                accounting_profile_id=profile.id,
+                policy_version=profile.policy_version,
+                code=code,
+                system_key=system_key,
+                name=name,
+                account_type=account_type,
+                subtype=subtype,
+                normal_balance=normal_balance,
+                tax_category=tax_category,
+                deal_tracking=deal_tracking,
+                is_active=True,
+                description=description,
+            )
+        )
+        existing_keys.add(system_key)
+        created = True
+    if created:
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="system",
+                action="finance.accounting_foundation_install",
+                entity_type="accounting_profile",
+                entity_id=profile.id,
+                previous_value=None,
+                new_value={
+                    "policy_version": profile.policy_version,
+                    "account_count": len(existing_keys),
+                },
+                reason="F6 wholesaling accounting foundation",
+            )
+        )
+        db.commit()
+        db.refresh(profile)
+    return profile
+
+
+def validate_accounting_profile(payload: AccountingProfileUpdate) -> None:
+    if payload.entity_type not in ENTITY_TYPES:
+        raise ValueError("Unsupported legal entity type.")
+    if payload.federal_tax_classification not in FEDERAL_TAX_CLASSIFICATIONS:
+        raise ValueError("Unsupported federal tax classification.")
+    if payload.accounting_method not in ACCOUNTING_METHODS:
+        raise ValueError("Unsupported accounting method.")
+    if payload.owner_compensation_treatment not in OWNER_COMPENSATION_TREATMENTS:
+        raise ValueError("Unsupported owner compensation treatment.")
+    try:
+        datetime(
+            2024,
+            payload.tax_year_end_month,
+            payload.tax_year_end_day,
+            tzinfo=UTC,
+        )
+    except ValueError as exc:
+        raise ValueError("Tax year end is not a valid calendar date.") from exc
+
+
+def accounting_readiness_gaps(profile: AccountingProfile) -> list[str]:
+    gaps: list[str] = []
+    if profile.entity_type == "undecided":
+        gaps.append("Confirm the legal entity type.")
+    if profile.federal_tax_classification == "undecided":
+        gaps.append("Confirm the federal tax classification with the tax professional.")
+    if profile.accounting_method == "undecided":
+        gaps.append("Confirm the accounting method.")
+    if profile.books_start_date is None:
+        gaps.append("Set the date Stonegate's internal books begin.")
+    if profile.owner_compensation_treatment == "pending":
+        gaps.append("Confirm owner compensation treatment for the selected tax classification.")
+    return gaps
+
+
+def accounting_profile_snapshot(profile: AccountingProfile) -> dict[str, object]:
+    return {
+        "legal_entity_name": profile.legal_entity_name,
+        "entity_type": profile.entity_type,
+        "federal_tax_classification": profile.federal_tax_classification,
+        "accounting_method": profile.accounting_method,
+        "tax_year_end_month": profile.tax_year_end_month,
+        "tax_year_end_day": profile.tax_year_end_day,
+        "books_start_date": (
+            profile.books_start_date.isoformat() if profile.books_start_date else None
+        ),
+        "home_state": profile.home_state,
+        "owner_compensation_treatment": profile.owner_compensation_treatment,
+        "status": profile.status,
+    }
+
+
+def accounting_profile_to_read(profile: AccountingProfile) -> AccountingProfileRead:
+    return AccountingProfileRead(
+        id=profile.id,
+        legal_entity_name=profile.legal_entity_name,
+        entity_type=profile.entity_type,
+        federal_tax_classification=profile.federal_tax_classification,
+        accounting_method=profile.accounting_method,
+        tax_year_end_month=profile.tax_year_end_month,
+        tax_year_end_day=profile.tax_year_end_day,
+        books_start_date=profile.books_start_date,
+        home_state=profile.home_state,
+        currency=profile.currency,
+        owner_compensation_treatment=profile.owner_compensation_treatment,
+        status=profile.status,
+        policy_version=profile.policy_version,
+        tax_rule_year=profile.tax_rule_year,
+        notes=profile.notes,
+        updated_at=profile.updated_at,
+    )
+
+
+def accounting_account_to_read(account: AccountingAccount) -> AccountingAccountRead:
+    return AccountingAccountRead(
+        id=account.id,
+        policy_version=account.policy_version,
+        code=account.code,
+        system_key=account.system_key,
+        name=account.name,
+        account_type=account.account_type,
+        subtype=account.subtype,
+        normal_balance=account.normal_balance,
+        tax_category=account.tax_category,
+        deal_tracking=account.deal_tracking,
+        is_active=account.is_active,
+        description=account.description,
+    )
 
 
 def get_finance_overview(

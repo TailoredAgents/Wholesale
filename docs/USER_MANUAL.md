@@ -713,22 +713,29 @@ Use 30-day, 90-day, or all-time reporting periods.
 Review:
 
 - Collected and pending revenue.
-- Deal deductions and acquisition reserve.
+- Deal deductions and acquisition reserve. The reserve is operating-margin math, not a ledger
+  expense unless Stonegate incurred a real cost.
 - Adjusted Deal Margin.
 - Compensation calculations and payment state.
 - Company net and margin.
 - Reconciliation exceptions.
 - Accounting export readiness.
 - Finance Copilot analysis.
+- Books and Tax Setup, including legal entity, federal tax classification, accounting method,
+  books start date, owner-compensation treatment, and the active chart of accounts.
+- Tax and Deductions Copilot drafts, missing business-purpose notes, and unresolved evidence.
 
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
 
-The Finance Copilot can explain exceptions and propose internal actions. It cannot approve
-commissions, post accounting entries, close accounting periods, move money, make final tax
-classifications, or change compensation policy. When F6 is complete, this same Copilot will also
-draft balanced journals, propose bank matches, explain financial statements, and prepare month-end
-review work without gaining posting or payment authority.
+The Finance Copilot has two financial review capabilities. Reconciliation reviews funded-deal
+economics and commissions. Tax and Deductions reviews recorded costs, proposes classifications,
+and identifies missing evidence for the owner or tax professional. Neither capability can approve
+commissions, alter records, promise that an item is deductible, post accounting entries, close
+periods, move money, file returns, make final tax classifications, or change compensation policy.
+Later F6 phases will let this same Copilot draft balanced journals, propose bank matches, explain
+financial statements, and prepare month-end review work without gaining posting or payment
+authority.
 
 ## 16. Marketing
 

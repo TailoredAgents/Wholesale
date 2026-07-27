@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models.foundation import (
+    AccountingAccount,
+    AccountingProfile,
+    AiCapabilityRuntimePolicy,
     AuditEvent,
     CompensationCalculation,
     CompensationRule,
@@ -208,3 +211,84 @@ def test_finance_rejects_invalid_revenue_status(
     )
 
     assert response.status_code == 422
+
+
+def test_accounting_foundation_is_wholesale_specific_and_idempotent(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    first = client.get("/api/v1/finance/accounting/setup", headers=headers)
+    second = client.get("/api/v1/finance/accounting/setup", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    setup = first.json()
+    assert setup["profile"]["status"] == "needs_setup"
+    assert setup["profile"]["accounting_method"] == "cash"
+    assert setup["tax_copilot"]["mode"] == "draft_only"
+    account_keys = {item["system_key"] for item in setup["accounts"]}
+    assert {
+        "assignment_fee_revenue",
+        "wholesale_property_sale_revenue",
+        "real_estate_inventory",
+        "earnest_money_deposits",
+        "owner_distributions",
+    }.issubset(account_keys)
+    assert "acquisition_reserve" not in account_keys
+    assert (
+        db_session.scalar(select(func.count()).select_from(AccountingProfile)) == 1
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AccountingAccount))
+        == len(setup["accounts"])
+    )
+
+
+def test_accounting_profile_and_tax_copilot_require_human_review(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    updated = client.put(
+        "/api/v1/finance/accounting/profile",
+        headers=headers,
+        json={
+            "legal_entity_name": "Stonegate Home Buyers LLC",
+            "entity_type": "single_member_llc",
+            "federal_tax_classification": "disregarded_entity",
+            "accounting_method": "cash",
+            "tax_year_end_month": 12,
+            "tax_year_end_day": 31,
+            "books_start_date": "2026-01-01",
+            "home_state": "GA",
+            "owner_compensation_treatment": "owner_draw",
+            "notes": "Classification to be confirmed by Stonegate's tax professional.",
+        },
+    )
+    copilot = client.get(
+        "/api/v1/finance/tax-copilot?period_days=30",
+        headers=headers,
+    )
+
+    assert updated.status_code == 200
+    assert updated.json()["profile"]["status"] == "ready"
+    assert updated.json()["readiness_gaps"] == []
+    assert copilot.status_code == 200
+    assert copilot.json()["capability_key"] == "finance.tax_review"
+    assert copilot.json()["pilot_mode"] == "draft_only"
+    assert copilot.json()["external_actions_blocked"] is True
+    policy = db_session.scalar(
+        select(AiCapabilityRuntimePolicy).where(
+            AiCapabilityRuntimePolicy.capability_key == "finance.tax_review"
+        )
+    )
+    assert policy is not None
+    assert policy.status == "enabled"
+    assert policy.requires_human_review is True

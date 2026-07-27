@@ -267,6 +267,10 @@ Starting point:
 
 ### F6A: Accounting Policy And Account Structure
 
+- **Implementation status:** Core product work is complete. `/os/finance` now installs one
+  organization-scoped accounting profile and versioned wholesaling chart of accounts, exposes the
+  unresolved entity and owner-compensation decisions, and preserves an audit history. CPA
+  confirmation remains an external acceptance step.
 - Have Stonegate's CPA approve the legal entity, tax year, cash or accrual method, opening-balance
   date, retention policy, and treatment of assignment fees, double closes, earnest money, closing
   costs, commissions, contractor labor, software, advertising, owner contributions, and
@@ -337,6 +341,11 @@ Starting point:
 - The Copilot cannot approve or post journals, change accounting policy, close or reopen periods,
   approve compensation, classify taxes finally, move money, file returns, or submit regulatory
   forms.
+- Keep Tax and Deductions as a specialist capability inside the existing Finance Copilot. It may
+  review source records, propose expense, inventory, capitalized-cost, and owner-activity
+  classifications, identify missing business purpose or evidence, and prepare a professional
+  review package. It remains draft-only and cannot promise deductibility, file returns, submit
+  elections, alter source records, or post ledger entries.
 
 ### F6G: Marketing Measurement
 
