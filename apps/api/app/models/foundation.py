@@ -3685,6 +3685,190 @@ class FinancialObligation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000))
 
 
+class VendorProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vendor_profiles"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "counterparty_id",
+            name="uq_vendor_profiles_org_counterparty",
+        ),
+        Index(
+            "ix_vendor_profiles_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    counterparty_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("business_counterparties.id"), index=True
+    )
+    vendor_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    default_expense_account_key: Mapped[str | None] = mapped_column(String(120))
+    payment_terms_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    tax_reportable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    w9_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    w9_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    w9_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    w9_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    w9_verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    remittance_address: Mapped[str | None] = mapped_column(String(1000))
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class VendorBill(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vendor_bills"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "vendor_profile_id",
+            "bill_number",
+            name="uq_vendor_bills_org_vendor_number",
+        ),
+        CheckConstraint(
+            "amount_cents > 0",
+            name="ck_vendor_bills_positive_amount",
+        ),
+        Index(
+            "ix_vendor_bills_org_status_due",
+            "organization_id",
+            "status",
+            "due_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    vendor_profile_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vendor_profiles.id"), index=True
+    )
+    financial_obligation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("financial_obligations.id"), index=True
+    )
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("deals.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    bill_number: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    issue_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_reference: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class VendorBillLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "vendor_bill_lines"
+    __table_args__ = (
+        UniqueConstraint(
+            "vendor_bill_id",
+            "line_number",
+            name="uq_vendor_bill_lines_bill_number",
+        ),
+        CheckConstraint(
+            "amount_cents > 0",
+            name="ck_vendor_bill_lines_positive_amount",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    vendor_bill_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("vendor_bills.id", ondelete="CASCADE"), index=True
+    )
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    expense_account_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("deals.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+
+
+class FinanceDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "finance_documents"
+    __table_args__ = (
+        Index(
+            "ix_finance_documents_org_type",
+            "organization_id",
+            "document_type",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    vendor_profile_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("vendor_profiles.id"), index=True
+    )
+    vendor_bill_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("vendor_bills.id"), index=True
+    )
+    financial_obligation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("financial_obligations.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    document_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    is_sensitive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    content_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000))
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
 class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "offline_conversion_exports"
     __table_args__ = (

@@ -37,6 +37,8 @@ class PermissionKeys:
     APPROVE_JOURNALS = "accounting:approve_journals"
     POST_JOURNALS = "accounting:post_journals"
     MANAGE_ACCOUNTING_PERIODS = "accounting:manage_periods"
+    MANAGE_VENDORS = "accounting:manage_vendors"
+    MANAGE_FINANCE_EVIDENCE = "accounting:manage_evidence"
     DELETE_OR_ARCHIVE_RECORDS = "records:delete_or_archive"
     MANAGE_USERS = "users:manage"
     VIEW_AUDIT_LOGS = "audit:view"
@@ -218,6 +220,16 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Open, review, close, lock, and reopen accounting periods.",
     ),
     PermissionDefinition(
+        PermissionKeys.MANAGE_VENDORS,
+        "Manage vendors and bills",
+        "Manage vendor profiles, bills, bill approvals, and payment-state records.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_FINANCE_EVIDENCE,
+        "Manage finance evidence",
+        "Upload, access, and retire private accounting evidence including W-9 documents.",
+    ),
+    PermissionDefinition(
         PermissionKeys.DELETE_OR_ARCHIVE_RECORDS,
         "Delete or archive records",
         "Archive or delete records where allowed.",
@@ -363,6 +375,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.APPROVE_JOURNALS,
             PermissionKeys.POST_JOURNALS,
             PermissionKeys.MANAGE_ACCOUNTING_PERIODS,
+            PermissionKeys.MANAGE_VENDORS,
+            PermissionKeys.MANAGE_FINANCE_EVIDENCE,
         ),
     ),
     RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),

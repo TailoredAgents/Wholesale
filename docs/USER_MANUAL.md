@@ -728,6 +728,8 @@ Review:
   journals, reversals, and exact source evidence.
 - Posting and Payment Control, including versioned rules, source readiness, evidence exceptions,
   payables, reimbursements, distributions, and source-linked journal drafts.
+- Vendors, Bills, and Private Evidence, including contractor W-9 status, itemized invoices,
+  approved payables, receipts, and year-to-date vendor payments.
 
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
@@ -798,6 +800,29 @@ twice. Owner distributions use the equity account and are never treated as ordin
 
 If an amount, status, or evidence set changes after a draft is prepared, Stonegate shows an
 exception. Review and correct the linked journal rather than creating an unrelated duplicate.
+
+### Vendors, Bills, And Private Evidence
+
+Use this workspace when Stonegate receives an invoice or needs to keep a contractor, receipt,
+W-9, or proof of payment.
+
+1. Expand **Add vendor** and record the contractor or service provider. Select
+   **Tax-reportable contractor or vendor** when W-9 tracking is needed.
+2. Expand **Upload private evidence**, select the vendor, choose **W-9**, and upload the file.
+   The vendor changes to **W-9 received**. After a permitted person reviews it, select
+   **Verify W-9**.
+3. Expand **Enter bill**. Add one line for each real cost category rather than combining unlike
+   expenses. For example, contractor labor and calling software should use separate lines.
+4. Upload the invoice and link it to the draft bill.
+5. Review the vendor, dates, line coding, amount, and evidence. Select **Approve** only when they
+   agree. Stonegate creates one payable in Posting and Payment Control.
+6. Prepare and review the itemized accrual journal through the normal posting workflow.
+7. Pay the vendor outside Stonegate. Upload the receipt or payment confirmation, then record the
+   payment reference through Posting and Payment Control.
+
+Stonegate records and audits the payable; it does not send money. Never place a Social Security
+number, employer identification number, bank number, or other tax identifier in vendor notes.
+Keep that information only in the restricted W-9 document.
 
 ## 16. Marketing
 

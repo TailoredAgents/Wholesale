@@ -10,6 +10,7 @@ import {
   getFinanceCopilotOverview,
   getFinanceOverview,
   getTaxCopilotOverview,
+  getVendorAccounting,
   getWorkspaceProfile,
 } from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
@@ -23,6 +24,7 @@ import { FinanceForms } from "./finance-forms";
 import { AccountingSetupPanel } from "./accounting-setup";
 import { AccountingLedgerPanel } from "./accounting-ledger";
 import { AccountingOperationsPanel } from "./accounting-operations";
+import { VendorAccountingPanel } from "./vendor-accounting";
 import styles from "../_components/management-workspaces.module.css";
 
 export const dynamic = "force-dynamic";
@@ -67,13 +69,14 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     getFinanceCopilotOverview(copilotPeriodDays),
     getAccountingSetup(),
   ]);
-  const [taxCopilot, accountingLedger, accountingOperations] = accountingSetup
+  const [taxCopilot, accountingLedger, accountingOperations, vendorAccounting] = accountingSetup
     ? await Promise.all([
         getTaxCopilotOverview(copilotPeriodDays),
         getAccountingLedger(),
         getAccountingOperations(),
+        getVendorAccounting(),
       ])
-    : [null, null, null];
+    : [null, null, null, null];
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
   const margin = finance.summary.collected_revenue_cents
@@ -97,6 +100,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     manageRules: canManageAccounting,
     prepare: accountingPermissions.prepare,
     approvePayments: accountingPermissions.approve,
+  };
+  const vendorAccountingPermissions = {
+    manageVendors: Boolean(
+      profile?.permissions.includes("accounting:manage_vendors"),
+    ),
+    manageEvidence: Boolean(
+      profile?.permissions.includes("accounting:manage_evidence"),
+    ),
+    approveBills: accountingPermissions.approve,
   };
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
   const primaryException = reconciliationExceptions[0] ?? null;
@@ -126,11 +138,11 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     {accountingSetup ? (
       <AccountingSetupPanel setup={accountingSetup} canEdit={canManageAccounting} />
     ) : null}
-    {accountingSetup && accountingLedger ? (
-      <AccountingLedgerPanel
-        ledger={accountingLedger}
-        permissions={accountingPermissions}
+    {accountingSetup && vendorAccounting ? (
+      <VendorAccountingPanel
+        permissions={vendorAccountingPermissions}
         setup={accountingSetup}
+        workspace={vendorAccounting}
       />
     ) : null}
     {accountingSetup && accountingOperations ? (
@@ -138,6 +150,13 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         permissions={accountingOperationsPermissions}
         setup={accountingSetup}
         workspace={accountingOperations}
+      />
+    ) : null}
+    {accountingSetup && accountingLedger ? (
+      <AccountingLedgerPanel
+        ledger={accountingLedger}
+        permissions={accountingPermissions}
+        setup={accountingSetup}
       />
     ) : null}
     {taxCopilot ? (

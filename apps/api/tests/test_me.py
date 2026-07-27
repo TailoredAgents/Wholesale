@@ -193,8 +193,10 @@ def test_workspace_profile_is_available_to_non_acquisition_roles(
         "role_keys": ["finance_accounting"],
         "permissions": [
             "accounting:approve_journals",
+            "accounting:manage_evidence",
             "accounting:manage_periods",
             "accounting:manage_policy",
+            "accounting:manage_vendors",
             "accounting:post_journals",
             "accounting:prepare_journals",
             "compensation:change_rules",

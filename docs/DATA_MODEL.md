@@ -151,6 +151,10 @@ envelope links the provider-retrieved final PDF back to its Stonegate document.
 - `accounting_posting_rules`
 - `accounting_source_links`
 - `financial_obligations`
+- `vendor_profiles`
+- `vendor_bills`
+- `vendor_bill_lines`
+- `finance_documents`
 - `offline_conversion_exports`
 
 `accounting_posting_rules` stores the owner-approved, effective version of each deterministic
@@ -159,6 +163,15 @@ purpose to one journal, stores a source fingerprint, and surfaces changed source
 duplicating the operational record. `financial_obligations` tracks vendor and contractor
 payables, reimbursements, and owner distributions through explicit approval and payment states;
 it records evidence and payment references but never initiates funds movement.
+
+`vendor_profiles` extends a shared `business_counterparties` identity with payment terms,
+tax-reportable state, W-9 lifecycle, default account coding, and remittance details.
+`vendor_bills` and `vendor_bill_lines` preserve the supplier invoice and itemized expense coding.
+Approval links one bill to one existing `financial_obligation`, allowing F6C to prepare itemized
+accrual and settlement journals without a second payable record. `finance_documents` stores
+private invoices, receipts, W-9s, payment evidence, closing statements, and related files using
+the private object-storage contract; sensitive contents and tax identifiers do not belong in
+ordinary notes or logs.
 
 ## Operating Model
 

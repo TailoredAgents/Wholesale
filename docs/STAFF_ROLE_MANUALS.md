@@ -78,6 +78,10 @@ prepare source-linked drafts, and track payables or commissions. Use **Accountin
 review, approve, post, or reverse the resulting balanced journals. Recording a payment in
 Stonegate documents a payment that occurred elsewhere; it does not move money.
 
+- Use **Vendors, Bills, and Private Evidence** to maintain contractors, W-9 status, itemized bills,
+  invoices, receipts, and proof of payment.
+- Code unlike costs on separate bill lines and verify the invoice total before approval.
+- Keep tax identifiers inside the restricted W-9 file, never in notes or messages.
 - Record source-linked revenue, deductions, marketing costs, compensation, and payouts.
 - Reconcile funded deals before commissions are marked payable.
 - Keep company margin, role compensation, and owner distributions separate.

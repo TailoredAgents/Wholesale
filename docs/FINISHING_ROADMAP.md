@@ -331,6 +331,13 @@ Implemented posting coverage:
 
 ### F6D: Banking, Vendors, And Evidence
 
+- **Implementation status:** F6D1 vendor accounting is complete. Finance now uses the shared
+  business-counterparty identity for organization-scoped vendor profiles, itemized bills,
+  tax-reportable and W-9 lifecycle status, private source documents, year-to-date vendor payments,
+  and bill approval. An approved bill creates the existing financial obligation and flows through
+  F6C posting and payment control; it does not create a parallel payable ledger. W-9 files are
+  sensitive private documents with audited access, and tax identifiers are never copied into
+  ordinary fields. F6D2 bank and credit-card import and reconciliation remains planned.
 - Add bank and credit-card accounts, statement imports, normalized transactions, matching,
   reconciliation sessions, statement balances, and unexplained-difference tracking.
 - Start with secure CSV/OFX statement import. Add a read-only bank-feed adapter later only if
@@ -341,6 +348,19 @@ Implemented posting coverage:
   access; do not place tax identifiers in ordinary notes or logs.
 - Do not initiate bank transfers, payroll, tax payments, or card payments in the initial ledger
   release.
+
+F6D1 implemented workflow:
+
+- Add a vendor, contractor, closing service, funding partner, or other service provider without
+  duplicating an existing business counterparty.
+- Track payment terms, default account coding, tax-reportable status, and requested, received,
+  verified, or not-required W-9 state.
+- Upload invoices, receipts, W-9s, payment evidence, closing statements, contracts, and related
+  private evidence with checksum, malware-scan state, retention, and access auditing.
+- Enter one or more coded bill lines. Approval creates one source-linked payable; settlement is
+  recorded only after payment occurs outside Stonegate.
+- Draft itemized accrual journals from bill lines and preserve document evidence through accrual
+  and settlement.
 
 ### F6E: Reports, Close, And CPA Handoff
 

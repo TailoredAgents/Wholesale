@@ -308,6 +308,10 @@ are selected:
 - Separate cold-email platform and sending domains.
 - Optional bank-data feed after the internal accounting ledger is proven.
 
+F6D1 vendor profiles, bills, W-9 status, and evidence require no new provider credential. Files
+use the existing private object-storage configuration. A future read-only bank feed remains
+optional; F6D2 starts with authenticated CSV/OFX import so Stonegate is not blocked by a provider.
+
 Optional secondary property-data variables already reserved:
 
 - `ATTOM_API_KEY`

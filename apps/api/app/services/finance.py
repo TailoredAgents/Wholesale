@@ -32,6 +32,8 @@ from app.models.foundation import (
     RevenueRecord,
     Transaction,
     TransactionDocument,
+    VendorBill,
+    VendorBillLine,
 )
 from app.schemas.finance import (
     AccountingAccountRead,
@@ -1931,19 +1933,32 @@ def prepare_operational_source_journal(
         raise ValueError("The approved posting rule is unavailable.")
     profile = ensure_accounting_foundation(db, principal)
     debit_key, credit_key = posting_account_keys(db, principal, item, rule)
+    vendor_bill_lines = operational_vendor_bill_lines(db, principal, item)
+    required_account_keys = {
+        debit_key,
+        credit_key,
+        *(line.expense_account_key for line in vendor_bill_lines),
+    }
     accounts = {
         account.system_key: account
         for account in db.scalars(
             select(AccountingAccount).where(
                 AccountingAccount.organization_id == principal.organization_id,
                 AccountingAccount.policy_version == profile.policy_version,
-                AccountingAccount.system_key.in_({debit_key, credit_key}),
+                AccountingAccount.system_key.in_(required_account_keys),
                 AccountingAccount.is_active.is_(True),
             )
         ).all()
     }
-    if debit_key not in accounts or credit_key not in accounts:
+    if set(accounts) != required_account_keys:
         raise ValueError("The posting rule references an unavailable accounting account.")
+    journal_lines = operational_journal_lines(
+        item,
+        accounts,
+        debit_key,
+        credit_key,
+        vendor_bill_lines,
+    )
     fingerprint = source_fingerprint(
         item.source_type,
         item.source_id,
@@ -1967,24 +1982,7 @@ def prepare_operational_source_journal(
                 f"{item.posting_purpose}:v{rule.version_number}"
             ),
             currency=profile.currency,
-            lines=[
-                JournalLineCreate(
-                    accounting_account_id=accounts[debit_key].id,
-                    debit_cents=item.amount_cents,
-                    credit_cents=0,
-                    memo=item.label,
-                    deal_id=item.deal_id,
-                    transaction_id=item.transaction_id,
-                ),
-                JournalLineCreate(
-                    accounting_account_id=accounts[credit_key].id,
-                    debit_cents=0,
-                    credit_cents=item.amount_cents,
-                    memo=item.label,
-                    deal_id=item.deal_id,
-                    transaction_id=item.transaction_id,
-                ),
-            ],
+            lines=journal_lines,
         ),
         commit=False,
     )
@@ -2096,10 +2094,13 @@ def update_financial_obligation_status(
         raise ValueError(
             f"Financial obligation cannot move from {obligation.status} to {payload.status}."
         )
-    evidence = (
-        payload.evidence_references
-        if payload.evidence_references is not None
-        else obligation.evidence_references
+    evidence = list(
+        dict.fromkeys(
+            [
+                *obligation.evidence_references,
+                *(payload.evidence_references or []),
+            ]
+        )
     )
     reference = payload.payment_reference or obligation.payment_reference
     if payload.status == "paid" and (not reference or not evidence):
@@ -2116,6 +2117,18 @@ def update_financial_obligation_status(
         obligation.approved_at = now
     if payload.status == "paid":
         obligation.paid_at = now
+    if obligation.source_type == "vendor_bill" and obligation.source_id:
+        bill = db.scalar(
+            select(VendorBill).where(
+                VendorBill.organization_id == principal.organization_id,
+                VendorBill.id == UUID(obligation.source_id),
+            )
+        )
+        if bill is not None:
+            bill.status = payload.status
+            bill.payment_reference = reference
+            if payload.status == "paid":
+                bill.paid_at = now
     db.add(
         AuditEvent(
             organization_id=principal.organization_id,
@@ -2160,10 +2173,13 @@ def update_deal_payout_status(
             raise ValueError(
                 f"Commission payout cannot move from {payout.status} to {payload.status}."
             )
-    evidence = (
-        payload.evidence_references
-        if payload.evidence_references is not None
-        else payout.evidence_references
+    evidence = list(
+        dict.fromkeys(
+            [
+                *payout.evidence_references,
+                *(payload.evidence_references or []),
+            ]
+        )
     )
     reference = payload.payment_reference or payout.payment_reference
     if payload.status == "paid" and (not reference or not evidence):
@@ -2278,6 +2294,98 @@ def posting_account_keys(
             else "accounts_payable"
         )
     return debit_key, credit_key
+
+
+def operational_vendor_bill_lines(
+    db: Session,
+    principal: Principal,
+    item: AccountingSourceItemRead,
+) -> list[VendorBillLine]:
+    if item.source_type != "financial_obligation" or item.posting_purpose != "accrued":
+        return []
+    obligation = db.scalar(
+        select(FinancialObligation).where(
+            FinancialObligation.organization_id == principal.organization_id,
+            FinancialObligation.id == UUID(item.source_id),
+        )
+    )
+    if (
+        obligation is None
+        or obligation.source_type != "vendor_bill"
+        or not obligation.source_id
+    ):
+        return []
+    bill = db.scalar(
+        select(VendorBill).where(
+            VendorBill.organization_id == principal.organization_id,
+            VendorBill.id == UUID(obligation.source_id),
+            VendorBill.financial_obligation_id == obligation.id,
+        )
+    )
+    if bill is None:
+        raise ValueError("The linked vendor bill is unavailable.")
+    lines = list(
+        db.scalars(
+            select(VendorBillLine)
+            .where(
+                VendorBillLine.organization_id == principal.organization_id,
+                VendorBillLine.vendor_bill_id == bill.id,
+            )
+            .order_by(VendorBillLine.line_number)
+        ).all()
+    )
+    if not lines or sum(line.amount_cents for line in lines) != item.amount_cents:
+        raise ValueError("The vendor bill lines do not match the approved obligation.")
+    return lines
+
+
+def operational_journal_lines(
+    item: AccountingSourceItemRead,
+    accounts: dict[str, AccountingAccount],
+    debit_key: str,
+    credit_key: str,
+    vendor_bill_lines: list[VendorBillLine],
+) -> list[JournalLineCreate]:
+    if vendor_bill_lines:
+        return [
+            *[
+                JournalLineCreate(
+                    accounting_account_id=accounts[line.expense_account_key].id,
+                    debit_cents=line.amount_cents,
+                    credit_cents=0,
+                    memo=line.description,
+                    deal_id=line.deal_id,
+                    transaction_id=line.transaction_id,
+                )
+                for line in vendor_bill_lines
+            ],
+            JournalLineCreate(
+                accounting_account_id=accounts[credit_key].id,
+                debit_cents=0,
+                credit_cents=item.amount_cents,
+                memo=item.label,
+                deal_id=item.deal_id,
+                transaction_id=item.transaction_id,
+            ),
+        ]
+    return [
+        JournalLineCreate(
+            accounting_account_id=accounts[debit_key].id,
+            debit_cents=item.amount_cents,
+            credit_cents=0,
+            memo=item.label,
+            deal_id=item.deal_id,
+            transaction_id=item.transaction_id,
+        ),
+        JournalLineCreate(
+            accounting_account_id=accounts[credit_key].id,
+            debit_cents=0,
+            credit_cents=item.amount_cents,
+            memo=item.label,
+            deal_id=item.deal_id,
+            transaction_id=item.transaction_id,
+        ),
+    ]
 
 
 def funded_deal_evidence(

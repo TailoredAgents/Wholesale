@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_permission
@@ -42,6 +42,17 @@ from app.schemas.management_copilots import (
     ManagementCopilotReviewRead,
     ManagementCopilotReviewRequest,
 )
+from app.schemas.vendor_accounting import (
+    FinanceDocumentDelete,
+    FinanceDocumentRead,
+    VendorAccountingWorkspaceRead,
+    VendorBillCreate,
+    VendorBillRead,
+    VendorProfileCreate,
+    VendorProfileRead,
+    VendorProfileUpdate,
+    VendorW9StatusUpdate,
+)
 from app.services.finance import (
     approve_journal_entry,
     approve_operational_posting_rule,
@@ -69,6 +80,18 @@ from app.services.management_copilots import (
     get_management_copilot_overview,
     review_management_recommendation,
 )
+from app.services.vendor_accounting import (
+    approve_vendor_bill,
+    create_vendor_bill,
+    create_vendor_profile,
+    delete_finance_document,
+    get_finance_document,
+    get_finance_document_content,
+    get_vendor_accounting_workspace,
+    update_vendor_profile,
+    update_vendor_w9_status,
+    upload_finance_document,
+)
 
 router = APIRouter(prefix="/api/v1/finance", tags=["finance"])
 view_financials_dependency = require_permission(PermissionKeys.VIEW_FINANCIALS)
@@ -78,6 +101,10 @@ prepare_journal_dependency = require_permission(PermissionKeys.PREPARE_JOURNALS)
 approve_journal_dependency = require_permission(PermissionKeys.APPROVE_JOURNALS)
 post_journal_dependency = require_permission(PermissionKeys.POST_JOURNALS)
 manage_period_dependency = require_permission(PermissionKeys.MANAGE_ACCOUNTING_PERIODS)
+manage_vendors_dependency = require_permission(PermissionKeys.MANAGE_VENDORS)
+manage_finance_evidence_dependency = require_permission(
+    PermissionKeys.MANAGE_FINANCE_EVIDENCE
+)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -296,6 +323,152 @@ def change_commission_payout_status(
     if result is None:
         raise HTTPException(status_code=404, detail="Commission payout not found.")
     return result
+
+
+@router.get("/vendor-accounting")
+def read_vendor_accounting_workspace(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+) -> VendorAccountingWorkspaceRead:
+    return get_vendor_accounting_workspace(db, principal)
+
+
+@router.post("/vendors", status_code=201)
+def record_finance_vendor(
+    payload: VendorProfileCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_vendors_dependency)],
+) -> VendorProfileRead:
+    try:
+        return create_vendor_profile(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.put("/vendors/{vendor_id}")
+def change_finance_vendor(
+    vendor_id: UUID,
+    payload: VendorProfileUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_vendors_dependency)],
+) -> VendorProfileRead:
+    try:
+        result = update_vendor_profile(db, principal, vendor_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Finance vendor not found.")
+    return result
+
+
+@router.post("/vendors/{vendor_id}/w9-status")
+def change_finance_vendor_w9_status(
+    vendor_id: UUID,
+    payload: VendorW9StatusUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_finance_evidence_dependency)],
+) -> VendorProfileRead:
+    try:
+        result = update_vendor_w9_status(db, principal, vendor_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Finance vendor not found.")
+    return result
+
+
+@router.post("/vendor-bills", status_code=201)
+def record_vendor_bill(
+    payload: VendorBillCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_vendors_dependency)],
+) -> VendorBillRead:
+    try:
+        return create_vendor_bill(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/vendor-bills/{bill_id}/approve")
+def approve_finance_vendor_bill(
+    bill_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(approve_journal_dependency)],
+) -> VendorBillRead:
+    try:
+        result = approve_vendor_bill(db, principal, bill_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Vendor bill not found.")
+    return result
+
+
+@router.post("/documents", status_code=201)
+def create_finance_document(
+    content: Annotated[bytes, Body(media_type="application/octet-stream")],
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_finance_evidence_dependency)],
+    file_name: str = Query(min_length=1, max_length=255),
+    document_type: str = Query(min_length=1, max_length=80),
+    title: str = Query(min_length=1, max_length=255),
+    vendor_profile_id: Annotated[UUID | None, Query()] = None,
+    vendor_bill_id: Annotated[UUID | None, Query()] = None,
+    transaction_id: Annotated[UUID | None, Query()] = None,
+    notes: str | None = Query(default=None, max_length=1000),
+    content_type: Annotated[str, Header(alias="Content-Type")] = "application/octet-stream",
+) -> FinanceDocumentRead:
+    try:
+        return upload_finance_document(
+            db,
+            principal,
+            content=content,
+            file_name=file_name,
+            content_type=content_type,
+            document_type=document_type,
+            title=title,
+            vendor_profile_id=vendor_profile_id,
+            vendor_bill_id=vendor_bill_id,
+            transaction_id=transaction_id,
+            notes=notes,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.get("/documents/{document_id}/content")
+def download_finance_document(
+    document_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_finance_evidence_dependency)],
+) -> Response:
+    document = get_finance_document(db, principal, document_id)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Finance document not found.")
+    try:
+        content = get_finance_document_content(db, principal, document)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    return Response(
+        content=content,
+        media_type=document.content_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{document.file_name}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+def remove_finance_document(
+    document_id: UUID,
+    payload: FinanceDocumentDelete,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_finance_evidence_dependency)],
+) -> Response:
+    if not delete_finance_document(db, principal, document_id, payload.reason):
+        raise HTTPException(status_code=404, detail="Finance document not found.")
+    return Response(status_code=204)
 
 
 @router.get("/copilot")

@@ -1851,6 +1851,92 @@ export type AccountingOperations = {
   exception_count: number;
 };
 
+export type VendorAccounting = {
+  summary: {
+    active_vendors: number;
+    contractors: number;
+    w9_action_required: number;
+    draft_bills: number;
+    open_payables: number;
+    overdue_bills: number;
+    open_payable_cents: number;
+    paid_year_to_date_cents: number;
+    private_documents: number;
+  };
+  vendors: Array<{
+    id: string;
+    counterparty_id: string;
+    vendor_type: string;
+    status: string;
+    name: string;
+    company_name: string | null;
+    email: string | null;
+    phone: string | null;
+    default_expense_account_key: string | null;
+    payment_terms_days: number;
+    tax_reportable: boolean;
+    w9_status: string;
+    w9_requested_at: string | null;
+    w9_received_at: string | null;
+    w9_verified_at: string | null;
+    remittance_address: string | null;
+    notes: string | null;
+    paid_year_to_date_cents: number;
+    open_bill_count: number;
+    document_count: number;
+    created_at: string;
+  }>;
+  bills: Array<{
+    id: string;
+    vendor_profile_id: string;
+    vendor_name: string;
+    financial_obligation_id: string | null;
+    bill_number: string;
+    status: string;
+    issue_at: string;
+    due_at: string | null;
+    amount_cents: number;
+    currency: string;
+    description: string;
+    approved_at: string | null;
+    paid_at: string | null;
+    payment_reference: string | null;
+    notes: string | null;
+    evidence_count: number;
+    evidence_references: string[];
+    lines: Array<{
+      id: string;
+      line_number: number;
+      description: string;
+      amount_cents: number;
+      expense_account_key: string;
+      deal_id: string | null;
+      transaction_id: string | null;
+    }>;
+    created_at: string;
+  }>;
+  documents: Array<{
+    id: string;
+    vendor_profile_id: string | null;
+    vendor_bill_id: string | null;
+    financial_obligation_id: string | null;
+    transaction_id: string | null;
+    document_type: string;
+    title: string;
+    status: string;
+    is_sensitive: boolean;
+    file_name: string;
+    content_type: string;
+    file_size: number;
+    storage_provider: string;
+    malware_scan_status: string;
+    retention_until: string | null;
+    occurred_at: string;
+    notes: string | null;
+    content_path: string;
+  }>;
+};
+
 export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
@@ -3225,6 +3311,21 @@ export async function getAccountingOperations(): Promise<AccountingOperations | 
     );
     if (!response.ok) return null;
     return (await response.json()) as AccountingOperations;
+  } catch {
+    return null;
+  }
+}
+
+export async function getVendorAccounting(): Promise<VendorAccounting | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance/vendor-accounting`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as VendorAccounting;
   } catch {
     return null;
   }
