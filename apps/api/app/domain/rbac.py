@@ -39,6 +39,7 @@ class PermissionKeys:
     MANAGE_ACCOUNTING_PERIODS = "accounting:manage_periods"
     MANAGE_VENDORS = "accounting:manage_vendors"
     MANAGE_FINANCE_EVIDENCE = "accounting:manage_evidence"
+    MANAGE_BANKING = "accounting:manage_banking"
     DELETE_OR_ARCHIVE_RECORDS = "records:delete_or_archive"
     MANAGE_USERS = "users:manage"
     VIEW_AUDIT_LOGS = "audit:view"
@@ -230,6 +231,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Upload, access, and retire private accounting evidence including W-9 documents.",
     ),
     PermissionDefinition(
+        PermissionKeys.MANAGE_BANKING,
+        "Manage bank reconciliation",
+        "Import statements, match bank transactions, and prepare reconciliations.",
+    ),
+    PermissionDefinition(
         PermissionKeys.DELETE_OR_ARCHIVE_RECORDS,
         "Delete or archive records",
         "Archive or delete records where allowed.",
@@ -377,6 +383,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.MANAGE_ACCOUNTING_PERIODS,
             PermissionKeys.MANAGE_VENDORS,
             PermissionKeys.MANAGE_FINANCE_EVIDENCE,
+            PermissionKeys.MANAGE_BANKING,
         ),
     ),
     RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),

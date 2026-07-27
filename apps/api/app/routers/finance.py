@@ -53,6 +53,29 @@ from app.schemas.vendor_accounting import (
     VendorProfileUpdate,
     VendorW9StatusUpdate,
 )
+from app.schemas.banking import (
+    BankAccountCreate,
+    BankAccountRead,
+    BankingWorkspaceRead,
+    BankImportPreview,
+    BankImportRequest,
+    BankReconciliationCreate,
+    BankReconciliationRead,
+    BankStatementImportRead,
+    BankTransactionMatchCreate,
+    BankTransactionRead,
+    BankTransactionStatusUpdate,
+)
+from app.services.banking import (
+    approve_reconciliation,
+    create_bank_account,
+    create_bank_import,
+    create_reconciliation,
+    get_banking_workspace,
+    match_bank_transaction,
+    preview_bank_import,
+    update_bank_transaction_status,
+)
 from app.services.finance import (
     approve_journal_entry,
     approve_operational_posting_rule,
@@ -105,6 +128,7 @@ manage_vendors_dependency = require_permission(PermissionKeys.MANAGE_VENDORS)
 manage_finance_evidence_dependency = require_permission(
     PermissionKeys.MANAGE_FINANCE_EVIDENCE
 )
+manage_banking_dependency = require_permission(PermissionKeys.MANAGE_BANKING)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -331,6 +355,109 @@ def read_vendor_accounting_workspace(
     principal: Annotated[Principal, Depends(view_financials_dependency)],
 ) -> VendorAccountingWorkspaceRead:
     return get_vendor_accounting_workspace(db, principal)
+
+
+@router.get("/banking")
+def read_banking_workspace(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+) -> BankingWorkspaceRead:
+    return get_banking_workspace(db, principal)
+
+
+@router.post("/banking/accounts", status_code=201)
+def create_finance_bank_account(
+    payload: BankAccountCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankAccountRead:
+    try:
+        return create_bank_account(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/banking/imports/preview")
+def preview_finance_bank_import(
+    payload: BankImportRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankImportPreview:
+    try:
+        return preview_bank_import(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/banking/imports", status_code=201)
+def create_finance_bank_import(
+    payload: BankImportRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankStatementImportRead:
+    try:
+        return create_bank_import(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/banking/transactions/{transaction_id}/match")
+def match_finance_bank_transaction(
+    transaction_id: UUID,
+    payload: BankTransactionMatchCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankTransactionRead:
+    try:
+        result = match_bank_transaction(db, principal, transaction_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bank transaction not found.")
+    return result
+
+
+@router.post("/banking/transactions/{transaction_id}/status")
+def change_finance_bank_transaction_status(
+    transaction_id: UUID,
+    payload: BankTransactionStatusUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankTransactionRead:
+    try:
+        result = update_bank_transaction_status(db, principal, transaction_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bank transaction not found.")
+    return result
+
+
+@router.post("/banking/reconciliations", status_code=201)
+def create_finance_bank_reconciliation(
+    payload: BankReconciliationCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankReconciliationRead:
+    try:
+        return create_reconciliation(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/banking/reconciliations/{reconciliation_id}/approve")
+def approve_finance_bank_reconciliation(
+    reconciliation_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_banking_dependency)],
+) -> BankReconciliationRead:
+    try:
+        result = approve_reconciliation(db, principal, reconciliation_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bank reconciliation not found.")
+    return result
 
 
 @router.post("/vendors", status_code=201)

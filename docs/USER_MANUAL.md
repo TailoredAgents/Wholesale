@@ -824,6 +824,21 @@ Stonegate records and audits the payable; it does not send money. Never place a 
 number, employer identification number, bank number, or other tax identifier in vendor notes.
 Keep that information only in the restricted W-9 document.
 
+### Bank Statements And Reconciliation
+
+1. Add the company checking account or card using its label and last four digits. Do not enter
+   credentials or a full account number.
+2. Export a CSV statement from the bank. In **Preview CSV statement**, map the exact date,
+   description, and signed amount headers. Balance and transaction-ID columns are optional.
+3. Review the preview. Stonegate shows valid, duplicate, and invalid rows before it stores the
+   private statement.
+4. For each cleared operating line, select the posted journal with the exact same operating-cash
+   movement. Use **Ignore** only for a non-operating line and provide a clear reason.
+5. Prepare the reconciliation with the statement dates and opening/closing balances. Approval is
+   available only when the difference is zero and every included line is resolved.
+
+Stonegate does not connect to the bank, initiate payments, or decide matches automatically.
+
 ## 16. Marketing
 
 Use 30-day, 90-day, or all-time reporting periods.

@@ -7,6 +7,7 @@ import {
   getAccountingLedger,
   getAccountingOperations,
   getAccountingSetup,
+  getBankingWorkspace,
   getFinanceCopilotOverview,
   getFinanceOverview,
   getTaxCopilotOverview,
@@ -25,6 +26,7 @@ import { AccountingSetupPanel } from "./accounting-setup";
 import { AccountingLedgerPanel } from "./accounting-ledger";
 import { AccountingOperationsPanel } from "./accounting-operations";
 import { VendorAccountingPanel } from "./vendor-accounting";
+import { BankingWorkspacePanel } from "./banking-workspace";
 import styles from "../_components/management-workspaces.module.css";
 
 export const dynamic = "force-dynamic";
@@ -69,14 +71,15 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     getFinanceCopilotOverview(copilotPeriodDays),
     getAccountingSetup(),
   ]);
-  const [taxCopilot, accountingLedger, accountingOperations, vendorAccounting] = accountingSetup
+  const [taxCopilot, accountingLedger, accountingOperations, vendorAccounting, bankingWorkspace] = accountingSetup
     ? await Promise.all([
         getTaxCopilotOverview(copilotPeriodDays),
         getAccountingLedger(),
         getAccountingOperations(),
         getVendorAccounting(),
+        getBankingWorkspace(),
       ])
-    : [null, null, null, null];
+    : [null, null, null, null, null];
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
   const margin = finance.summary.collected_revenue_cents
@@ -110,6 +113,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     ),
     approveBills: accountingPermissions.approve,
   };
+  const canManageBanking = Boolean(
+    profile?.permissions.includes("accounting:manage_banking"),
+  );
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
   const primaryException = reconciliationExceptions[0] ?? null;
 
@@ -143,6 +149,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         permissions={vendorAccountingPermissions}
         setup={accountingSetup}
         workspace={vendorAccounting}
+      />
+    ) : null}
+    {bankingWorkspace ? (
+      <BankingWorkspacePanel
+        canManage={canManageBanking}
+        workspace={bankingWorkspace}
       />
     ) : null}
     {accountingSetup && accountingOperations ? (

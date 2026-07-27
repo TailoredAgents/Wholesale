@@ -21,6 +21,7 @@ ALLOWED_CONTENT_TYPES = {
     "image/png",
     "image/tiff",
     "image/webp",
+    "text/csv",
 }
 
 
@@ -36,7 +37,7 @@ class StoredContent:
 def validate_document_content(content: bytes, content_type: str) -> None:
     normalized_type = content_type.split(";", 1)[0].strip().lower()
     if normalized_type not in ALLOWED_CONTENT_TYPES:
-        raise ValueError("Use a PDF, Word document, JPEG, PNG, WebP, HEIC, or TIFF file.")
+        raise ValueError("Use a PDF, Word document, image file, or CSV statement.")
     if content.startswith(b"MZ"):
         raise ValueError("Executable files cannot be stored.")
     if normalized_type == "application/pdf" and not content.startswith(b"%PDF"):

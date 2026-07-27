@@ -155,6 +155,11 @@ envelope links the provider-retrieved final PDF back to its Stonegate document.
 - `vendor_bills`
 - `vendor_bill_lines`
 - `finance_documents`
+- `bank_accounts`
+- `bank_statement_imports`
+- `bank_transactions`
+- `bank_transaction_matches`
+- `bank_reconciliations`
 - `offline_conversion_exports`
 
 `accounting_posting_rules` stores the owner-approved, effective version of each deterministic
@@ -172,6 +177,12 @@ accrual and settlement journals without a second payable record. `finance_docume
 private invoices, receipts, W-9s, payment evidence, closing statements, and related files using
 the private object-storage contract; sensitive contents and tax identifiers do not belong in
 ordinary notes or logs.
+
+`bank_accounts` stores only an internal label, optional institution and last four digits, never
+credentials or full account numbers. Statement CSVs remain private in `bank_statement_imports`.
+`bank_transactions` keeps normalized imported lines and `bank_transaction_matches` ties a cleared
+line to one posted operating-cash journal. `bank_reconciliations` records the statement balance,
+computed balance, unresolved-line count, and approval evidence without moving money.
 
 ## Operating Model
 

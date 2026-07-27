@@ -3869,6 +3869,160 @@ class FinanceDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(1000))
 
 
+class BankAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "bank_accounts"
+    __table_args__ = (
+        UniqueConstraint("organization_id", "name", name="uq_bank_accounts_org_name"),
+        Index("ix_bank_accounts_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    institution_name: Mapped[str | None] = mapped_column(String(160))
+    account_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    last_four: Mapped[str | None] = mapped_column(String(4))
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class BankStatementImport(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "bank_statement_imports"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "bank_account_id",
+            "file_sha256",
+            name="uq_bank_statement_imports_account_file",
+        ),
+        Index("ix_bank_statement_imports_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bank_accounts.id"), index=True
+    )
+    imported_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_format: Mapped[str] = mapped_column(String(40), nullable=False)
+    field_mapping: Mapped[dict[str, str]] = mapped_column(JSON, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    total_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    imported_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    duplicate_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    statement_start_on: Mapped[date | None] = mapped_column(Date)
+    statement_end_on: Mapped[date | None] = mapped_column(Date)
+    opening_balance_cents: Mapped[int | None] = mapped_column(BigInteger)
+    closing_balance_cents: Mapped[int | None] = mapped_column(BigInteger)
+    file_data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    storage_provider: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="database"
+    )
+    storage_key: Mapped[str | None] = mapped_column(String(1000))
+    malware_scan_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="not_configured"
+    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class BankTransaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "bank_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "bank_account_id",
+            "fingerprint",
+            name="uq_bank_transactions_account_fingerprint",
+        ),
+        CheckConstraint("amount_cents <> 0", name="ck_bank_transactions_nonzero_amount"),
+        Index("ix_bank_transactions_org_status", "organization_id", "status"),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bank_accounts.id"), index=True
+    )
+    statement_import_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bank_statement_imports.id"), index=True
+    )
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    occurred_on: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    posted_on: Mapped[date | None] = mapped_column(Date)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    balance_cents: Mapped[int | None] = mapped_column(BigInteger)
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
+class BankTransactionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "bank_transaction_matches"
+    __table_args__ = (
+        UniqueConstraint(
+            "bank_transaction_id", name="uq_bank_transaction_matches_transaction"
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    bank_transaction_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bank_transactions.id", ondelete="CASCADE"), index=True
+    )
+    journal_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("journal_entries.id"), index=True
+    )
+    match_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    matched_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    notes: Mapped[str | None] = mapped_column(String(1000))
+    matched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class BankReconciliation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "bank_reconciliations"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "bank_account_id",
+            "statement_end_on",
+            name="uq_bank_reconciliations_account_end",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    bank_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("bank_accounts.id"), index=True
+    )
+    statement_import_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("bank_statement_imports.id"), index=True
+    )
+    statement_start_on: Mapped[date] = mapped_column(Date, nullable=False)
+    statement_end_on: Mapped[date] = mapped_column(Date, nullable=False)
+    opening_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    closing_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    calculated_closing_balance_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    difference_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    prepared_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(String(1000))
+
+
 class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "offline_conversion_exports"
     __table_args__ = (

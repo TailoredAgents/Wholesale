@@ -362,6 +362,18 @@ F6D1 implemented workflow:
 - Draft itemized accrual journals from bill lines and preserve document evidence through accrual
   and settlement.
 
+F6D2 implemented workflow:
+
+- Add company bank and credit-card accounts using a label and optional last four digits only.
+- Preview a CSV statement with explicit date, description, amount, balance, and transaction-ID
+  column mappings before importing it. The original CSV is retained as private evidence.
+- Block an exact duplicate statement file and row-level duplicate transactions.
+- Match cleared bank lines manually to exactly one existing posted operating-cash journal, or mark a
+  non-operating line ignored with an audit reason.
+- Prepare and approve a reconciliation only after every included line is resolved and the statement
+  closing balance equals opening balance plus imported activity. No provider credentials, bank
+  login, payment initiation, or automatic match decisions are included.
+
 ### F6E: Reports, Close, And CPA Handoff
 
 - Add Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, accounts

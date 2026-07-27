@@ -1937,6 +1937,35 @@ export type VendorAccounting = {
   }>;
 };
 
+export type BankingWorkspace = {
+  accounts: Array<{
+    id: string; name: string; institution_name: string | null; account_type: string;
+    last_four: string | null; currency: string; status: string; notes: string | null;
+    unmatched_transaction_count: number; created_at: string;
+  }>;
+  imports: Array<{
+    id: string; bank_account_id: string; file_name: string; status: string; total_rows: number;
+    imported_rows: number; invalid_rows: number; duplicate_rows: number;
+    statement_start_on: string | null; statement_end_on: string | null;
+    opening_balance_cents: number | null; closing_balance_cents: number | null;
+    malware_scan_status: string; completed_at: string | null; created_at: string;
+  }>;
+  transactions: Array<{
+    id: string; bank_account_id: string; statement_import_id: string; occurred_on: string;
+    posted_on: string | null; description: string; amount_cents: number; balance_cents: number | null;
+    status: string; journal_entry_id: string | null; journal_entry_number: string | null; notes: string | null;
+  }>;
+  reconciliations: Array<{
+    id: string; bank_account_id: string; statement_import_id: string | null;
+    statement_start_on: string; statement_end_on: string; opening_balance_cents: number;
+    closing_balance_cents: number; calculated_closing_balance_cents: number; difference_cents: number;
+    status: string; matched_transaction_count: number; unresolved_transaction_count: number;
+    approved_at: string | null; notes: string | null;
+  }>;
+  posted_journals: Array<{ id: string; entry_number: string; memo: string; cash_delta_cents: number }>;
+  summary: { active_accounts: number; unmatched_transactions: number; unreconciled_imports: number; open_reconciliations: number };
+};
+
 export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
@@ -3326,6 +3355,18 @@ export async function getVendorAccounting(): Promise<VendorAccounting | null> {
     });
     if (!response.ok) return null;
     return (await response.json()) as VendorAccounting;
+  } catch {
+    return null;
+  }
+}
+
+export async function getBankingWorkspace(): Promise<BankingWorkspace | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance/banking`, { headers, cache: "no-store" });
+    if (!response.ok) return null;
+    return (await response.json()) as BankingWorkspace;
   } catch {
     return null;
   }
