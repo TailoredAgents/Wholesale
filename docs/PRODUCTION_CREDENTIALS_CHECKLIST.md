@@ -154,7 +154,7 @@ Acceptance:
 Non-environment requirements:
 
 - Attorney-approved Georgia purchase and assignment templates.
-- SignWell templates with stable recipient placeholder names and field API IDs.
+- Controlled test recipients for purchase and assignment signing acceptance.
 - Owner selects **Connect SignWell** after deployment; Stonegate registers or reuses the webhook
   and stores its verification ID.
 
@@ -163,7 +163,7 @@ Acceptance:
 - Send a test-mode package to controlled addresses.
 - Verify ordered recipients, HMAC event verification, duplicate-event handling, reconciliation,
   and completed-PDF retention.
-- Set `ESIGN_TEST_MODE=false` only after legal-template and provider acceptance.
+- Set `ESIGN_TEST_MODE=false` only after internal-document and provider acceptance.
 
 Detailed procedure: `SIGNWELL_LAUNCH_RUNBOOK.md`.
 

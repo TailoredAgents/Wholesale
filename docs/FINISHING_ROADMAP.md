@@ -185,7 +185,7 @@ Implementation checkpoint, July 24, 2026:
   completed-PDF, test-mode, and provider evidence are implemented inside the existing transaction
   workflow.
 - The Transaction workspace supports owner-driven account verification and webhook registration,
-  purchase and assignment template mapping, up to four ordered signers, approved-package sending,
+  internal purchase, assignment, and addendum generation, ordered signers, approved-package sending,
   signature status, provider reconciliation, and storage/scan visibility.
 - Local simulation and automated provider-connection, webhook, purchase, and assignment tests are
   implemented. R2 credentials, the SignWell API key, attorney-approved templates, and controlled

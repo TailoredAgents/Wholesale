@@ -23,8 +23,8 @@ Implemented:
 - Provider reconciliation can recover a missed webhook.
 - Completed contracts advance the existing transaction, lead, and deal; they do not bypass the
   existing checklist or funding gates.
-- The Transaction workspace shows storage readiness, e-signature readiness, template mapping,
-  signature requests, recipient status, reconciliation, and document scan state.
+- The Transaction workspace shows storage readiness, e-signature readiness, internally generated
+  packages, signature requests, recipient status, reconciliation, and document scan state.
 
 Call recordings remain in Twilio and are accessed through Stonegate's authenticated recording
 endpoint. Valuation PDFs are generated on demand and are not persistent uploads. Both retain their
@@ -33,14 +33,14 @@ existing permission boundaries.
 ## Provider Decisions
 
 Cloudflare R2 was selected because it provides a private S3-compatible API, presigned downloads,
-and no egress charge. SignWell was selected for its template API, webhooks, completed-PDF retrieval,
+and no egress charge. SignWell was selected for its direct document API, webhooks, completed-PDF retrieval,
 test mode, and low-volume API pricing.
 
 - [Cloudflare R2 S3 and presigned URLs](https://developers.cloudflare.com/r2/api/s3/presigned-urls/)
 - [Cloudflare R2 pricing](https://developers.cloudflare.com/r2/pricing/)
 - [SignWell API](https://www.signwell.com/api/)
 - [SignWell API pricing](https://www.signwell.com/api-pricing/)
-- [SignWell template document API](https://developers.signwell.com/reference/createdocumentfromtemplate)
+- [SignWell create document API](https://developers.signwell.com/reference/createdocument)
 - [SignWell webhook events](https://developers.signwell.com/reference/events)
 - [SignWell event hash verification](https://developers.signwell.com/reference/event-hash-verification)
 
@@ -95,9 +95,7 @@ Do not set scanning to required until the scanner is reachable from the API serv
 ### SignWell
 
 1. Create the SignWell API account and API key.
-2. Upload the attorney-approved Georgia purchase agreement as a SignWell template.
-3. Give each signer placeholder a stable name and each prefilled field an API ID.
-4. Set:
+2. Set:
 
 ```text
 ESIGN_PROVIDER=signwell
@@ -108,15 +106,13 @@ ESIGN_TEST_MODE=true
 ESIGN_REQUEST_TIMEOUT_SECONDS=30
 ```
 
-5. Deploy, then select **Connect SignWell** in **Transactions > Contract**. Stonegate verifies the
+3. Deploy, then select **Connect SignWell** in **Transactions > Contract**. Stonegate verifies the
    account, registers or reuses the callback URL, and retains the webhook ID used for SignWell's
    documented HMAC-SHA256 event verification. `ESIGN_SIGNWELL_WEBHOOK_ID` remains available only
    as a legacy environment fallback.
-6. In **Transactions > Contract > Legal template library**, connect the Stonegate template to the
-   SignWell template ID and map Stonegate field names to SignWell API IDs.
-7. Run the acceptance case in test mode with company-controlled email addresses.
-8. Set `ESIGN_TEST_MODE=false` only after the attorney template, recipient order, field mapping,
-   final PDF, webhook, and reconciliation results have been approved.
+4. Run the acceptance case in test mode with company-controlled email addresses.
+5. Set `ESIGN_TEST_MODE=false` only after the internal source, populated values, recipient order,
+   signature placement, final PDF, webhook, and reconciliation results have been approved.
 
 `ESIGN_PROVIDER=simulate` is limited to local and automated testing and is rejected in production.
 The complete owner procedure is in `SIGNWELL_LAUNCH_RUNBOOK.md`; the legal-template specification
@@ -124,7 +120,7 @@ is in `SIGNWELL_COUNSEL_BRIEF.md`.
 
 ## Acceptance Case
 
-1. Upload and approve an attorney-reviewed template.
+1. Confirm the Stonegate agreement source and expected signer roles.
 2. Create a contract package from an approved underwriting and offer decision.
 3. Submit and approve the exact package version.
 4. Send it to controlled seller and company test addresses.
@@ -140,6 +136,6 @@ is in `SIGNWELL_COUNSEL_BRIEF.md`.
 The F4 application implementation is complete. Production acceptance remains open until:
 
 - R2 is configured and a file is uploaded, downloaded, and deleted successfully.
-- The attorney-approved Georgia purchase and assignment templates are loaded.
+- The Georgia purchase and assignment PDFs pass controlled generation and signing tests.
 - SignWell completes the controlled test above and the final provider PDF is retained.
 - A redacted contract-to-funding simulation passes the existing closing and funding gates.

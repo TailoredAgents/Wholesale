@@ -413,6 +413,9 @@ def create_contract_package(
         )
         if template is None:
             raise ValueError("Select an approved contract template.")
+        document_type = template.document_type
+    else:
+        document_type = payload.document_type
     version = (
         db.scalar(
             select(func.max(ContractPackage.version_number)).where(
@@ -437,7 +440,10 @@ def create_contract_package(
         earnest_money_cents=payload.earnest_money_cents,
         closing_date=payload.closing_date,
         inspection_period_days=payload.inspection_period_days,
-        terms_snapshot={"special_terms": payload.special_terms},
+        terms_snapshot={
+            "document_type": document_type,
+            "special_terms": payload.special_terms,
+        },
         notes=payload.notes,
     )
     db.add(package)
@@ -1137,6 +1143,9 @@ def package_read(item: ContractPackage) -> ContractPackageRead:
         id=item.id,
         version_number=item.version_number,
         template_id=item.template_id,
+        document_type=str(
+            item.terms_snapshot.get("document_type") or "purchase_agreement"
+        ),
         status=item.status,
         seller_name=item.seller_name,
         buyer_entity_name=item.buyer_entity_name,

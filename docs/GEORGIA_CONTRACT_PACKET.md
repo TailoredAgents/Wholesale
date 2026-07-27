@@ -1,12 +1,12 @@
 # Georgia Contract Packet
 
-Status: Operational version 1 prepared for SignWell setup.
+Status: Operational version 1 used by Stonegate's internal document generator.
 
 ## What This Packet Is
 
-This is an original Stonegate contract packet for initial Georgia wholesale transactions. It gives the
-company usable documents and stable SignWell fields now, without copying licensed Georgia
-Association of Realtors forms.
+This is an original Stonegate contract packet for initial Georgia wholesale transactions. It gives
+the company usable internal document sources without copying licensed Georgia Association of
+Realtors forms.
 
 These documents are not a substitute for transaction-specific legal advice. Replace them with a
 Georgia real-estate attorney's approved versions before Stonegate treats the packet as final
@@ -45,55 +45,26 @@ Confirm these operating facts once and use the same values consistently:
 Do not send a contract with an entity nickname, missing owner, incomplete legal description,
 unresolved blank, or unapproved special term.
 
-## SignWell Setup
+## Internal Document Generation
 
-Create a separate SignWell template for each document that will be signed. Keep Exhibit A and the
-federal lead disclosure as attachments when applicable.
+Stonegate currently generates the Purchase Agreement, Assignment Agreement, and Contract Addendum
+from the matching HTML source. It fills approved package terms, creates a locked PDF signing copy,
+adds the ordered signature and date fields, and sends the PDF through SignWell. No agreement
+template is maintained in SignWell.
 
-### Purchase Agreement
-
-- Template name: `Stonegate GA Purchase Agreement v1`
-- Required placeholders: `Seller`, `Stonegate`
-- Optional placeholders: `Seller 2`, `Seller 3`
-- Fields: `seller_name`, `property_address`, `buyer_entity_name`, `purchase_price`,
-  `earnest_money`, `closing_date`, `inspection_period_days`, `special_terms`
-- Add signature and signed-date fields for every required signer.
-
-### Assignment Agreement
-
-- Template name: `Stonegate GA Assignment Agreement v1`
-- Required placeholders: `Assignee`, `Stonegate`
-- Optional placeholder: `Assignee 2`
-- Fields: `property_address`, `assignor_name`, `assignee_name`, `assignment_fee`,
-  `end_buyer_price`, `closing_date`, `special_terms`
-- Add signature and signed-date fields for every required signer.
-
-### Addendum and Mutual Release
-
-- Use the same seller and Stonegate placeholders as the original purchase agreement.
-- Place only fields that appear in the document.
-- Every party whose rights are changed or released should be included as a signer.
-
-### Buyer Termination Notice
-
-- Stonegate is the only signer.
-- Delivery evidence matters. Send the completed notice to every notice address required by the
-  purchase agreement and retain proof of delivery in the transaction.
-- A notice does not itself authorize an escrow holder to release disputed earnest money.
+Exhibit A, federal lead disclosures, termination notices, and other supporting documents remain
+separate files and should be attached or delivered when applicable.
 
 ## Stonegate Installation
 
-1. Finish each SignWell template and copy its template ID.
-2. In **OS > Transactions > Contract > Legal template**, upload the matching Word file.
-3. Select the matching document type and `GA`.
-4. Include the version number in the Stonegate template name.
-5. Connect the Stonegate template to its SignWell template ID.
-6. Keep `ESIGN_TEST_MODE=true` and complete the acceptance steps in
+1. Confirm the HTML source contains the intended agreement language.
+2. Create each document type from a controlled Stonegate transaction.
+3. Inspect the generated PDF, populated data, signer names, and signature locations.
+4. Keep `ESIGN_TEST_MODE=true` and complete the acceptance steps in
    `docs/SIGNWELL_LAUNCH_RUNBOOK.md`.
-7. Record the exact version used on every transaction.
+5. Record the exact contract package version used on every transaction.
 
-Do not mix fields or SignWell IDs between versions. Never edit a template after it has been used for
-signing; create a new version.
+Never rewrite a package after approval or signing. Create a new package version.
 
 ## Transaction Controls
 
@@ -123,7 +94,7 @@ Send `docs/SIGNWELL_COUNSEL_BRIEF.md` and this full packet to Georgia real-estat
 approved replacement:
 
 1. Retain the counsel name, firm, approval date, state, and intended use.
-2. Create a new SignWell template and new Stonegate template version.
+2. Create a reviewed Stonegate source revision.
 3. Run a test-mode signature packet and verify the completed PDF and audit page.
 4. Retire version 1 from future use without deleting historical signed records.
 5. Mark the reviewed replacement as the active version.

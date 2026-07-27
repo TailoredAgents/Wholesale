@@ -1,5 +1,7 @@
 import base64
 import hmac
+import re
+import zlib
 from hashlib import sha256
 from uuid import uuid4
 
@@ -14,6 +16,20 @@ from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
 HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
+
+
+def pdf_page_streams(content: bytes) -> bytes:
+    decoded = []
+    for encoded in re.findall(rb"stream\r?\n(.*?)endstream", content, re.DOTALL):
+        try:
+            compressed = base64.a85decode(
+                b"<~" + encoded.strip(),
+                adobe=True,
+            )
+            decoded.append(zlib.decompress(compressed))
+        except (ValueError, zlib.error):
+            continue
+    return b"\n".join(decoded)
 
 
 def setup_transaction(db: Session, client: TestClient) -> tuple[str, str]:
@@ -321,37 +337,11 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     client = TestClient(app)
     lead_id, transaction_id = setup_transaction(db_session, client)
 
-    created_template = client.post(
-        "/api/v1/transactions/templates?file_name=ga-purchase.pdf&document_type=purchase_agreement&state_code=GA&name=Georgia%20Purchase%20Agreement",
-        headers={**HEADERS, "Content-Type": "application/pdf"},
-        content=b"%PDF attorney reviewed e-sign template",
-    )
-    template_id = created_template.json()["id"]
-    configured_template = client.patch(
-        f"/api/v1/transactions/templates/{template_id}/esign",
-        headers=HEADERS,
-        json={
-            "esign_provider_template_id": "signwell-template-ga-purchase",
-            "esign_field_mapping": {
-                "seller_name": "Seller_Name",
-                "purchase_price": "Purchase_Price",
-                "property_address": "Property_Address",
-            },
-        },
-    )
-    assert configured_template.status_code == 200, configured_template.text
-    assert (
-        client.post(
-            f"/api/v1/transactions/templates/{template_id}/approve",
-            headers=HEADERS,
-        ).status_code
-        == 200
-    )
     package = client.post(
         f"/api/v1/transactions/{transaction_id}/contract-packages",
         headers=HEADERS,
         json={
-            "template_id": template_id,
+            "document_type": "purchase_agreement",
             "seller_name": "Jane Seller",
             "buyer_entity_name": "Stonegate Acquisitions LLC",
             "purchase_price_cents": 17000000,
@@ -361,6 +351,13 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
         },
     )
     package_id = package.json()["id"]
+    preview = client.get(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/preview",
+        headers=HEADERS,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.headers["content-type"] == "application/pdf"
+    assert b"{{signature:1:y::::180:35}}" in pdf_page_streams(preview.content)
     pending = client.post(
         f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/request-approval",
         headers=HEADERS,
@@ -390,6 +387,21 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     envelope = sent.json()
     assert envelope["status"] == "sent"
     assert envelope["test_mode"] is True
+    generated_detail = client.get(
+        f"/api/v1/transactions/{transaction_id}",
+        headers=HEADERS,
+    ).json()
+    signing_copy = next(
+        item
+        for item in generated_detail["documents"]
+        if item["document_type"] == "purchase_agreement_for_signature"
+    )
+    signing_pdf = client.get(signing_copy["download_url"], headers=HEADERS)
+    assert signing_pdf.content.startswith(b"%PDF")
+    signing_text = pdf_page_streams(signing_pdf.content)
+    assert b"{{signature:1:y::::180:35}}" in signing_text
+    assert b"{{signature:2:y::::180:35}}" in signing_text
+    assert b"{{autofill_date_signed:1:y::::90:30}}" in signing_text
     wrong_transaction = client.post(
         f"/api/v1/transactions/{uuid4()}/esign/{envelope['id']}/reconcile",
         headers=HEADERS,
@@ -448,34 +460,11 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
         "under_contract"
     )
 
-    assignment_template = client.post(
-        "/api/v1/transactions/templates?file_name=ga-assignment.pdf&document_type=assignment_contract&state_code=GA&name=Georgia%20Assignment%20Agreement",
-        headers={**HEADERS, "Content-Type": "application/pdf"},
-        content=b"%PDF attorney reviewed assignment template",
-    )
-    assignment_template_id = assignment_template.json()["id"]
-    client.patch(
-        f"/api/v1/transactions/templates/{assignment_template_id}/esign",
-        headers=HEADERS,
-        json={
-            "esign_provider_template_id": "signwell-template-ga-assignment",
-            "esign_field_mapping": {
-                "property_address": "property_address",
-                "assignor_name": "assignor_name",
-                "assignee_name": "assignee_name",
-                "assignment_fee": "assignment_fee",
-            },
-        },
-    )
-    client.post(
-        f"/api/v1/transactions/templates/{assignment_template_id}/approve",
-        headers=HEADERS,
-    )
     assignment_package = client.post(
         f"/api/v1/transactions/{transaction_id}/contract-packages",
         headers=HEADERS,
         json={
-            "template_id": assignment_template_id,
+            "document_type": "assignment_contract",
             "seller_name": "Jane Seller",
             "buyer_entity_name": "Stonegate Acquisitions LLC",
             "purchase_price_cents": 17000000,

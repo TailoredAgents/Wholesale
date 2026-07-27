@@ -595,17 +595,19 @@ The Transactions workspace has:
 ### Contract
 
 1. Select or create the contract package.
-2. Confirm the approved seller, property, price, dates, terms, and template.
-3. Submit the package for human approval.
-4. Confirm SignWell shows Account and Webhook as connected. Owners can select **Connect SignWell**
+2. Select Purchase Agreement, Assignment Agreement, or Contract Addendum and confirm the seller,
+   property, price, dates, and terms.
+3. Select **Preview PDF** and review the exact agreement before approval.
+4. Submit the package for human approval.
+5. Confirm SignWell shows Account and Webhook as connected. Owners can select **Connect SignWell**
    or **Verify connection** in this area.
-5. Confirm the approved Stonegate template is mapped to its matching SignWell template.
-6. Add each signer with the matching SignWell placeholder name and signing order. Stonegate
-   supports up to four ordered recipients.
-7. Select **Send for signature** only after the exact package version is approved.
-8. Track recipients under **Signature requests**. Use **Refresh status** if a provider update is
+6. Confirm SignWell is connected. Stonegate generates the signing PDF internally.
+7. Enter the seller or assignee name and email. Add a second seller when needed. Stonegate adds the
+   signed-in company user automatically.
+8. Select **Send for signature** only after the exact package version is approved.
+9. Track recipients under **Signature requests**. Use **Refresh status** if a provider update is
    delayed.
-9. Confirm the completed provider PDF appears in Documents before continuing closing work.
+10. Confirm the completed provider PDF appears in Documents before continuing closing work.
 
 Until production SignWell acceptance is complete, use the controlled manual execution workflow.
 Never mark a contract executed merely because a draft was approved or an email was sent.

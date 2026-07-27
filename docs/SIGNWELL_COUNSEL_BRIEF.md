@@ -3,8 +3,8 @@
 Status: Ready to send to Georgia real-estate counsel.
 
 This brief keeps legal drafting separate from software configuration. Counsel supplies or approves
-the legal language; Stonegate then uses the stable signer roles and field IDs below without another
-engineering pass.
+the legal language; Stonegate incorporates it into the internal document source and sends the
+resulting PDF through SignWell.
 
 ## Business Context
 
@@ -49,7 +49,7 @@ Georgia's Attorney General states that certain unsolicited written real-estate i
 require conspicuous notices, including fair-market-value language when a monetary offer is included.
 Counsel must decide where those rules apply in Stonegate's acquisition process.
 
-## SignWell Template Standard
+## Stonegate Document Standard
 
 Use these exact recipient placeholder names:
 
@@ -60,12 +60,11 @@ Use these exact recipient placeholder names:
 | Addendum | Match the original agreement | Additional titled owner if needed |
 | Termination and release | Match the original agreement | Additional titled owner if needed |
 
-Do not rename placeholders after production use begins. Stonegate matches recipients by exact
-placeholder name and preserves signing order.
+Stonegate preserves the signer role and signing order in its own package and provider records.
 
-Use these exact SignWell field API IDs when the field exists in the legal document:
+Stonegate fills these internal data fields when they exist in the legal document:
 
-| API ID | Stonegate value |
+| Field | Stonegate value |
 | --- | --- |
 | `seller_name` | Seller name on the approved package |
 | `property_address` | Subject property address |
@@ -80,9 +79,8 @@ Use these exact SignWell field API IDs when the field exists in the legal docume
 | `assignment_fee` | Approved assignment fee |
 | `end_buyer_price` | Original purchase price plus assignment fee |
 
-Only fields actually present in a given document should be placed on that template. Signature,
-initial, and signed-date fields should be assigned to the correct recipient placeholder in
-SignWell.
+Only fields actually present in a given document should be included. Stonegate adds signature and
+signed-date fields programmatically to the generated PDF.
 
 ## Approval Package
 
@@ -91,9 +89,9 @@ For each final template, Stonegate should retain:
 - Counsel name, firm, and approval date.
 - State and intended transaction use.
 - Editable source and final PDF.
-- SignWell template ID and exact recipient placeholders.
-- SignWell field API IDs.
-- Stonegate template version and approval record.
+- Stonegate source revision and signer roles.
+- Stonegate package version and approval record.
 - One completed test-mode signature packet with the audit page.
 
-Any legal-language change creates a new Stonegate template version and requires approval before use.
+Any legal-language change creates a reviewed Stonegate source revision and requires PDF acceptance
+before use.

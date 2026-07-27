@@ -289,7 +289,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 - Cloudflare R2-compatible private storage for contracts, legal templates, completed agreements,
   inspection photographs, and buyer proof-of-funds, with the existing database fallback,
   checksums, scan status, retention, short-lived downloads, and deletion controls.
-- SignWell e-signature adapter with approved-template mapping, ordered recipients, provider-event
+- SignWell e-signature adapter with internal contract PDF generation, ordered recipients, provider-event
   deduplication, missed-event reconciliation, and final-PDF retention. Local simulation is complete;
   provider and attorney-template acceptance remain.
 - Funded closing is blocked until an executed package, funding confirmation, and all required

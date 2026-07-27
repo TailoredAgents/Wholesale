@@ -8,8 +8,10 @@ Stonegate's SignWell integration is implemented for:
 - Automatic webhook registration or reuse.
 - HMAC-SHA256 event verification.
 - Duplicate-event handling.
+- Internal Stonegate generation of purchase, assignment, and addendum PDFs.
+- Automatic signature and signed-date placement using SignWell text tags.
 - Purchase, assignment, addendum, and generic executed-document classification.
-- Up to four ordered signers.
+- Ordered seller, end-buyer, and company signers.
 - Reconciliation when a provider event is delayed.
 - Completed PDF and SignWell audit-page retrieval.
 - Private transaction-document retention and download.
@@ -19,20 +21,11 @@ Stonegate's original Georgia version 1 contracts and their operating instruction
 `docs/GEORGIA_CONTRACT_PACKET.md`. Later legal revisions should be installed through the versioning
 process in that guide.
 
-## Finish SignWell Account Onboarding Now
+## Finish SignWell Account Onboarding
 
-On SignWell's **Upload A Template** screen:
-
-1. Upload `docs/templates/stonegate-signwell-technical-test.docx`.
-2. Name it `Stonegate - NON-BINDING Technical Test`.
-3. Add one placeholder named exactly `Seller`.
-4. Place one signature field and one signed-date field for `Seller`.
-5. Finish the template.
-
-This template completes provider onboarding and can be used only for non-binding test-mode checks.
-It must not be represented as a purchase or assignment agreement.
-
-Then open **Settings > API** in SignWell and create an API key.
+Open **Settings > API** in SignWell and create an API key. Stonegate uses SignWell's direct document
+API, so no SignWell template, placeholder, field-ID mapping, or provider template maintenance is
+required.
 
 ## Render Configuration
 
@@ -61,35 +54,32 @@ Deploy the API after saving the variables.
 
 The same action becomes **Verify connection** after setup and can be used after provider changes.
 
-## Install Production Templates
+## Document Source
 
-For each attorney-approved document:
+Stonegate owns the production document source in `docs/templates/ga-contracts/`. The transaction
+workspace selects Purchase Agreement, Assignment Agreement, or Contract Addendum and creates the
+completed PDF from the approved package data. SignWell receives that PDF plus programmatic signature
+fields and returns the completed PDF and audit page.
 
-1. Upload the final file to SignWell and create the signer placeholders from
-   `SIGNWELL_COUNSEL_BRIEF.md`.
-2. Add only the applicable fields and use the exact API IDs in the counsel brief.
-3. Finish the SignWell template and copy its template ID from its SignWell URL.
-4. In **OS > Transactions > Contract > Legal template**, upload the same approved file.
-5. Select the correct document type and `GA`, then add it as a draft.
-6. Approve the Stonegate template only after confirming it is the attorney-approved final.
-7. Under **Connect template**, select it and enter the SignWell template ID. Stonegate applies the
-   standard field IDs automatically; use override inputs only if counsel's template differs.
-8. Select **Verify connection** and confirm the template count shows ready.
+When document language changes, update the matching Stonegate source as a reviewed software change,
+run the contract-generation tests, inspect all affected PDFs, and deploy a new application version.
+Do not recreate the agreement in SignWell.
 
 ## Controlled Acceptance
 
 Keep `ESIGN_TEST_MODE=true` and use controlled email addresses.
 
-1. Create a contract package from the approved purchase template.
-2. Request and approve the exact package version.
-3. Send it to the test signer with placeholder `Seller`.
-4. Open and sign it.
-5. Confirm Stonegate shows sent, viewed/in progress, and completed.
-6. Confirm the completed PDF downloads from transaction Documents and contains SignWell's audit
+1. Create a purchase-agreement package in Stonegate.
+2. Select **Preview PDF** and inspect every populated term and signature line.
+3. Request and approve the exact package version.
+4. Send it to a controlled seller address. Stonegate adds the company signer automatically.
+5. Open and sign it.
+6. Confirm Stonegate shows sent, viewed/in progress, and completed.
+7. Confirm the completed PDF downloads from transaction Documents and contains SignWell's audit
    page.
-7. Repeat with the assignment template using `Assignee` and `Stonegate` placeholders.
-8. Send one additional test and use **Reconcile** to confirm recovery works.
-9. Confirm a repeated provider event does not create a duplicate file or timeline event.
+8. Repeat with an assignment package and a controlled assignee address.
+9. Send one additional test and use **Reconcile** to confirm recovery works.
+10. Confirm a repeated provider event does not create a duplicate file or timeline event.
 
 After counsel approval and both controlled tests pass, set:
 
@@ -102,6 +92,6 @@ SignWell test documents.
 
 ## Operating Rule
 
-Never edit a production legal template in place. Create a new version in SignWell and Stonegate,
-test it, approve it, and retire the prior version from future use. Existing signed packets and their
-audit history remain attached to the transaction.
+Never change production agreement language without version review and PDF acceptance testing.
+Existing packages, signing copies, completed PDFs, and audit history remain attached to their
+transactions.

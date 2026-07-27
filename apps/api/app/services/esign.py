@@ -25,14 +25,17 @@ from app.models.foundation import (
     Transaction,
     TransactionDocument,
     TransactionEvent,
+    User,
 )
 from app.schemas.transactions import (
     EsignEnvelopeRead,
+    EsignRecipientCreate,
     EsignRecipientRead,
     EsignSendRequest,
     F4IntegrationStatusRead,
     SignWellConnectionRead,
 )
+from app.services.contract_documents import GeneratedContract, generate_contract_pdf
 from app.services.document_storage import store_content
 
 TERMINAL_ENVELOPE_STATUSES = {"completed", "declined", "expired", "cancelled", "error"}
@@ -55,10 +58,10 @@ class SignWellClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def create_from_template(self, payload: dict[str, object]) -> dict[str, Any]:
+    def create_document(self, payload: dict[str, object]) -> dict[str, Any]:
         response = httpx.post(
-            f"{self.settings.esign_base_url.rstrip('/')}/document_templates/documents",
-            headers={"X-Api-Key": self.settings.esign_api_key or ""},
+            f"{self.settings.esign_base_url.rstrip('/')}/documents",
+            headers=self.headers,
             json=payload,
             timeout=self.settings.esign_request_timeout_seconds,
         )
@@ -99,15 +102,6 @@ class SignWellClient:
             timeout=self.settings.esign_request_timeout_seconds,
         )
         self._raise(response, "SignWell webhook registration failed")
-        return dict(response.json())
-
-    def get_template(self, template_id: str) -> dict[str, Any]:
-        response = httpx.get(
-            f"{self.settings.esign_base_url.rstrip('/')}/document_templates/{template_id}",
-            headers=self.headers,
-            timeout=self.settings.esign_request_timeout_seconds,
-        )
-        self._raise(response, "SignWell template verification failed")
         return dict(response.json())
 
     def get_document(self, document_id: str) -> dict[str, Any]:
@@ -159,17 +153,6 @@ def integration_status(
         if db is not None and principal is not None
         else None
     )
-    templates = (
-        db.scalars(
-            select(ContractTemplate).where(
-                ContractTemplate.organization_id == principal.organization_id,
-                ContractTemplate.deleted_at.is_(None),
-                ContractTemplate.esign_provider_template_id.is_not(None),
-            )
-        ).all()
-        if db is not None and principal is not None
-        else []
-    )
     simulated = active.esign_provider == "simulate"
     webhook_connected = simulated or configuration is not None or bool(
         active.esign_signwell_webhook_id
@@ -194,8 +177,8 @@ def integration_status(
         esign_webhook_connected=webhook_connected,
         esign_webhook_callback_url=active.esign_webhook_callback_url,
         esign_last_verified_at=configuration.last_verified_at if configuration else None,
-        esign_linked_template_count=len(templates),
-        esign_ready_template_count=len(templates),
+        esign_linked_template_count=0,
+        esign_ready_template_count=3,
     )
 
 
@@ -229,36 +212,6 @@ def connect_signwell(
     webhook_id = str(hook.get("id") or "").strip()
     if not webhook_id:
         raise ValueError("SignWell did not return a webhook ID.")
-
-    linked_templates = db.scalars(
-        select(ContractTemplate).where(
-            ContractTemplate.organization_id == principal.organization_id,
-            ContractTemplate.deleted_at.is_(None),
-            ContractTemplate.esign_provider_template_id.is_not(None),
-        )
-    ).all()
-    ready_count = 0
-    template_errors: list[str] = []
-    for template in linked_templates:
-        try:
-            provider_template = client.get_template(template.esign_provider_template_id or "")
-            available = str(provider_template.get("status") or "").lower()
-            if available in {"draft", "unavailable"}:
-                template_errors.append(f"{template.name}: SignWell template is {available}.")
-            else:
-                missing_fields = missing_mapped_field_ids(
-                    provider_template,
-                    template.esign_field_mapping or {},
-                )
-                if missing_fields:
-                    template_errors.append(
-                        f"{template.name}: missing SignWell field IDs "
-                        f"{', '.join(sorted(missing_fields))}."
-                    )
-                else:
-                    ready_count += 1
-        except ValueError as exc:
-            template_errors.append(f"{template.name}: {exc}")
 
     account_email = first_string(account, "user.email", "contact.email", "email")
     account_name = first_string(account, "account.name", "workspace.name", "name", "user.name")
@@ -302,9 +255,9 @@ def connect_signwell(
         webhook_callback_url=callback_url,
         webhook_created=webhook_created,
         last_verified_at=now,
-        linked_template_count=len(linked_templates),
-        ready_template_count=ready_count,
-        template_errors=template_errors,
+        linked_template_count=0,
+        ready_template_count=3,
+        template_errors=[],
     )
 
 
@@ -316,35 +269,6 @@ def first_string(payload: dict[str, Any], *paths: str) -> str | None:
         if value is not None and str(value).strip():
             return str(value).strip()
     return None
-
-
-def collect_api_ids(payload: object) -> set[str]:
-    if isinstance(payload, dict):
-        values = {
-            str(value).strip()
-            for key, value in payload.items()
-            if key == "api_id" and value is not None and str(value).strip()
-        }
-        for value in payload.values():
-            values.update(collect_api_ids(value))
-        return values
-    if isinstance(payload, list):
-        list_values: set[str] = set()
-        for value in payload:
-            list_values.update(collect_api_ids(value))
-        return list_values
-    return set()
-
-
-def missing_mapped_field_ids(
-    provider_template: dict[str, Any],
-    mapping: dict[str, Any],
-) -> set[str]:
-    expected = {str(value).strip() for value in mapping.values() if str(value).strip()}
-    if not expected:
-        return set()
-    available = collect_api_ids(provider_template)
-    return expected - available if available else set()
 
 
 def send_contract_for_signature(
@@ -385,16 +309,11 @@ def send_contract_for_signature(
         return None
     if package.status != "approved":
         raise ValueError("Approve this exact contract package before sending it for signature.")
-    template = (
-        db.get(ContractTemplate, package.template_id) if package.template_id else None
-    )
-    if (
-        template is None
-        or template.deleted_at is not None
-        or template.status != "approved"
-        or not template.esign_provider_template_id
+    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
+    if template is not None and (
+        template.deleted_at is not None or template.status != "approved"
     ):
-        raise ValueError("Connect the approved contract template to a SignWell template first.")
+        raise ValueError("The selected internal contract template is not approved.")
     existing = db.scalar(
         select(EsignEnvelope).where(
             EsignEnvelope.contract_package_id == package.id,
@@ -403,19 +322,44 @@ def send_contract_for_signature(
     )
     if existing is not None:
         raise ValueError("This package already has an active signature request.")
-    recipient_emails = [str(item.email).strip().lower() for item in payload.recipients]
+    document_type = str(
+        package.terms_snapshot.get("document_type")
+        or (template.document_type if template else "purchase_agreement")
+    )
+    recipients = normalize_contract_recipients(
+        db,
+        principal,
+        payload.recipients,
+        document_type,
+    )
+    recipient_emails = [str(item.email).strip().lower() for item in recipients]
     if len(recipient_emails) != len(set(recipient_emails)):
         raise ValueError("Each signer must use a unique email address.")
-    signing_orders = [item.signing_order for item in payload.recipients]
+    signing_orders = [item.signing_order for item in recipients]
     if len(signing_orders) != len(set(signing_orders)):
         raise ValueError("Each signer must use a unique signing order.")
     property_record = db.get(Property, transaction.property_id)
-    provider_payload = build_signwell_payload(
+    generated = generate_contract_pdf(
         transaction,
         package,
-        template,
         property_record,
+        template,
+        recipients,
+    )
+    source_document = store_generated_contract(
+        db,
+        principal,
+        transaction,
+        package,
+        generated,
+        active,
+    )
+    provider_payload = build_signwell_document_payload(
+        transaction,
+        package,
+        generated,
         payload,
+        recipients,
         active,
     )
     if active.esign_provider == "simulate":
@@ -424,11 +368,11 @@ def send_contract_for_signature(
             "status": "sent",
             "recipients": [
                 {"id": str(index), "email": str(item.email)}
-                for index, item in enumerate(payload.recipients, start=1)
+                for index, item in enumerate(recipients, start=1)
             ],
         }
     else:
-        provider_response = SignWellClient(active).create_from_template(provider_payload)
+        provider_response = SignWellClient(active).create_document(provider_payload)
     provider_document_id = str(provider_response.get("id") or "").strip()
     if not provider_document_id:
         raise ValueError("The e-signature provider did not return a document ID.")
@@ -460,7 +404,7 @@ def send_contract_for_signature(
         for item in provider_response.get("recipients", [])
         if isinstance(item, dict)
     }
-    for item in payload.recipients:
+    for item in recipients:
         provider_item = provider_recipients.get(str(item.email).strip().lower(), {})
         db.add(
             EsignRecipient(
@@ -494,6 +438,7 @@ def send_contract_for_signature(
             details={
                 "envelope_id": str(envelope.id),
                 "provider_document_id": provider_document_id,
+                "source_document_id": str(source_document.id),
                 "test_mode": envelope.test_mode,
             },
             occurred_at=now,
@@ -503,98 +448,186 @@ def send_contract_for_signature(
     return envelope_read(db, envelope)
 
 
-def build_signwell_payload(
+def preview_contract_for_signature(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    package_id: UUID,
+) -> GeneratedContract | None:
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
+    package = db.scalar(
+        select(ContractPackage).where(
+            ContractPackage.id == package_id,
+            ContractPackage.transaction_id == transaction_id,
+            ContractPackage.organization_id == principal.organization_id,
+        )
+    )
+    if transaction is None or package is None:
+        return None
+    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
+    document_type = str(
+        package.terms_snapshot.get("document_type")
+        or (template.document_type if template else "purchase_agreement")
+    )
+    recipients = normalize_contract_recipients(
+        db,
+        principal,
+        [
+            EsignRecipientCreate(
+                placeholder_name=(
+                    "Assignee" if document_type == "assignment_contract" else "Seller"
+                ),
+                name=(
+                    "Prospective Assignee"
+                    if document_type == "assignment_contract"
+                    else package.seller_name
+                ),
+                email="contract-preview@stonegatehomebuyer.com",
+                signing_order=1,
+            )
+        ],
+        document_type,
+    )
+    return generate_contract_pdf(
+        transaction,
+        package,
+        db.get(Property, transaction.property_id),
+        template,
+        recipients,
+    )
+
+
+def build_signwell_document_payload(
     transaction: Transaction,
     package: ContractPackage,
-    template: ContractTemplate,
-    property_record: Property | None,
+    generated: GeneratedContract,
     request: EsignSendRequest,
+    recipients: list[EsignRecipientCreate],
     settings: Settings,
 ) -> dict[str, object]:
-    assignee = next(
-        (
-            item
-            for item in request.recipients
-            if any(
-                label in item.placeholder_name.lower()
-                for label in ("assignee", "end buyer", "buyer")
-            )
-        ),
-        None,
-    )
-    document_label = {
-        "assignment_contract": "Assignment agreement",
-        "addendum": "Contract addendum",
-        "purchase_agreement": "Purchase agreement",
-    }.get(template.document_type, "Agreement")
-    values = {
-        "seller_name": package.seller_name,
-        "buyer_entity_name": package.buyer_entity_name,
-        "assignor_name": package.buyer_entity_name,
-        "assignee_name": assignee.name if assignee else "",
-        "purchase_price": f"{package.purchase_price_cents / 100:.2f}",
-        "assignment_fee": (
-            f"{transaction.assignment_fee_cents / 100:.2f}"
-            if transaction.assignment_fee_cents is not None
-            else ""
-        ),
-        "end_buyer_price": (
-            f"{(package.purchase_price_cents + transaction.assignment_fee_cents) / 100:.2f}"
-            if transaction.assignment_fee_cents is not None
-            else ""
-        ),
-        "earnest_money": (
-            f"{package.earnest_money_cents / 100:.2f}"
-            if package.earnest_money_cents is not None
-            else ""
-        ),
-        "closing_date": package.closing_date.date().isoformat() if package.closing_date else "",
-        "inspection_period_days": (
-            str(package.inspection_period_days)
-            if package.inspection_period_days is not None
-            else ""
-        ),
-        "special_terms": str(package.terms_snapshot.get("special_terms") or ""),
-        "property_address": (
-            f"{property_record.street_address}, {property_record.city}, "
-            f"{property_record.state} {property_record.postal_code}"
-            if property_record
-            else ""
-        ),
-    }
-    mapping = template.esign_field_mapping or {}
-    template_fields = [
-        {"api_id": str(api_id), "value": values[key]}
-        for key, api_id in mapping.items()
-        if key in values and str(api_id).strip()
-    ]
-    recipients = [
+    provider_recipients = [
         {
             "id": str(index),
-            "placeholder_name": item.placeholder_name,
             "name": item.name,
             "email": str(item.email),
         }
         for index, item in enumerate(
-            sorted(request.recipients, key=lambda item: item.signing_order),
+            sorted(recipients, key=lambda item: item.signing_order),
             start=1,
         )
     ]
     return {
         "test_mode": settings.esign_test_mode,
-        "template_id": template.esign_provider_template_id or "",
-        "name": f"{document_label} - {package.seller_name}",
+        "name": f"{generated.title} - {package.seller_name}",
         "subject": request.subject,
         "message": request.message or "",
-        "recipients": recipients,
+        "recipients": provider_recipients,
+        "files": [
+            {
+                "name": generated.file_name,
+                "file_base64": base64.b64encode(generated.content).decode(),
+            }
+        ],
+        "text_tags": True,
+        "draft": False,
         "apply_signing_order": True,
         "reminders": True,
+        "allow_reassign": False,
         "metadata": {
             "stonegate_transaction_id": str(transaction.id),
             "stonegate_contract_package_id": str(package.id),
         },
-        "template_fields": template_fields,
     }
+
+
+def normalize_contract_recipients(
+    db: Session,
+    principal: Principal,
+    requested: list[EsignRecipientCreate],
+    document_type: str,
+) -> list[EsignRecipientCreate]:
+    recipients = sorted(requested, key=lambda item: item.signing_order)
+    stonegate_roles = {"stonegate", "buyer", "assignor"}
+    has_stonegate = any(
+        item.placeholder_name.strip().lower() in stonegate_roles for item in recipients
+    )
+    if not has_stonegate:
+        user = db.get(User, principal.user_id)
+        recipients.append(
+            EsignRecipientCreate(
+                placeholder_name=(
+                    "Assignor" if document_type == "assignment_contract" else "Stonegate"
+                ),
+                name=user.display_name if user else "Stonegate Home Buyers",
+                email=principal.email,
+                signing_order=max((item.signing_order for item in recipients), default=0) + 1,
+            )
+        )
+    if len(recipients) > 10:
+        raise ValueError("A contract package cannot have more than ten signers.")
+    return recipients
+
+
+def store_generated_contract(
+    db: Session,
+    principal: Principal,
+    transaction: Transaction,
+    package: ContractPackage,
+    generated: GeneratedContract,
+    settings: Settings,
+) -> TransactionDocument:
+    checksum = sha256(generated.content).hexdigest()
+    existing = db.scalar(
+        select(TransactionDocument).where(
+            TransactionDocument.organization_id == principal.organization_id,
+            TransactionDocument.transaction_id == transaction.id,
+            TransactionDocument.contract_package_id == package.id,
+            TransactionDocument.sha256 == checksum,
+            TransactionDocument.deleted_at.is_(None),
+        )
+    )
+    if existing is not None:
+        return existing
+    document_id = uuid4()
+    stored = store_content(
+        organization_id=principal.organization_id,
+        namespace=f"transactions/{transaction.id}",
+        record_id=document_id,
+        file_name=generated.file_name,
+        content_type="application/pdf",
+        content=generated.content,
+        settings=settings,
+    )
+    document = TransactionDocument(
+        id=document_id,
+        organization_id=principal.organization_id,
+        transaction_id=transaction.id,
+        contract_package_id=package.id,
+        uploaded_by_user_id=principal.user_id,
+        document_type=f"{generated.document_type}_for_signature",
+        title=f"{generated.title} — approved signing copy",
+        status="approved",
+        file_name=generated.file_name,
+        content_type="application/pdf",
+        file_size=len(generated.content),
+        sha256=checksum,
+        file_data=stored.database_bytes,
+        storage_provider=stored.provider,
+        storage_key=stored.key,
+        malware_scan_status=stored.malware_scan_status,
+        retention_until=stored.retention_until,
+        deleted_at=None,
+        occurred_at=datetime.now(UTC),
+        notes="Generated internally by Stonegate from the approved contract package.",
+    )
+    db.add(document)
+    db.flush()
+    return document
 
 
 def list_envelopes(
@@ -842,7 +875,10 @@ def complete_envelope(
     if transaction is None or package is None:
         raise ValueError("The completed envelope no longer matches a Stonegate transaction.")
     template = db.get(ContractTemplate, package.template_id) if package.template_id else None
-    template_type = template.document_type if template else "purchase_agreement"
+    template_type = str(
+        package.terms_snapshot.get("document_type")
+        or (template.document_type if template else "purchase_agreement")
+    )
     document_type, file_stem, document_label = {
         "assignment_contract": (
             "assignment_contract",

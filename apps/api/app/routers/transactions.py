@@ -39,6 +39,7 @@ from app.schemas.transactions import (
 from app.services.esign import (
     connect_signwell,
     integration_status,
+    preview_contract_for_signature,
     reconcile_envelope,
     send_contract_for_signature,
 )
@@ -329,6 +330,34 @@ def send_contract_package_for_signature(
     if result is None:
         raise not_found()
     return result
+
+
+@router.get("/{transaction_id}/contract-packages/{package_id}/preview")
+def preview_contract_package(
+    transaction_id: UUID,
+    package_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(contract_dependency)],
+) -> Response:
+    try:
+        result = preview_contract_for_signature(
+            db,
+            principal,
+            transaction_id,
+            package_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise not_found()
+    return Response(
+        content=result.content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{result.file_name}"',
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.post("/{transaction_id}/esign/{envelope_id}/reconcile")

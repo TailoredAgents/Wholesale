@@ -35,6 +35,9 @@ class TransactionOverview(BaseModel):
 
 class ContractPackageCreate(BaseModel):
     template_id: UUID | None = None
+    document_type: Literal[
+        "purchase_agreement", "assignment_contract", "addendum"
+    ] = "purchase_agreement"
     seller_name: str = Field(min_length=1, max_length=255)
     buyer_entity_name: str = Field(min_length=1, max_length=255)
     purchase_price_cents: int = Field(ge=1)
@@ -49,6 +52,7 @@ class ContractPackageRead(BaseModel):
     id: UUID
     version_number: int
     template_id: UUID | None
+    document_type: str
     status: str
     seller_name: str
     buyer_entity_name: str

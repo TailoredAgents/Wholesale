@@ -2360,6 +2360,7 @@ export type TransactionDetail = {
     id: string;
     version_number: number;
     template_id: string | null;
+    document_type: string;
     status: string;
     seller_name: string;
     buyer_entity_name: string;
