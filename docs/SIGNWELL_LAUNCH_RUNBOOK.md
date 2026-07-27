@@ -15,10 +15,9 @@ Stonegate's SignWell integration is implemented for:
 - Private transaction-document retention and download.
 - Test mode before binding use.
 
-The production launch dependency that software cannot create is attorney-approved contract
-language. Stonegate's original Georgia version 1 contracts and their operating instructions are in
-`docs/GEORGIA_CONTRACT_PACKET.md`; they remain visibly marked as unreviewed until replaced through
-the versioning process in that guide.
+Stonegate's original Georgia version 1 contracts and their operating instructions are in
+`docs/GEORGIA_CONTRACT_PACKET.md`. Later legal revisions should be installed through the versioning
+process in that guide.
 
 ## Finish SignWell Account Onboarding Now
 

@@ -1,6 +1,6 @@
 # Georgia Contract Packet
 
-Status: Operational version 1 prepared for SignWell setup. Attorney review is planned.
+Status: Operational version 1 prepared for SignWell setup.
 
 ## What This Packet Is
 
