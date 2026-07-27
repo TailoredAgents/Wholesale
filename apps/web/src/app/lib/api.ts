@@ -2122,6 +2122,18 @@ export type MarketingOverview = {
     p75_value: number;
     good_rate_basis_points: number;
   }>;
+  measurement: {
+    mode: string;
+    attribution_model: string;
+    attribution_window_days: number;
+    policy_version: string;
+    providers: Array<{
+      platform: string;
+      configured: boolean;
+      blockers: string[];
+    }>;
+    event_counts: Record<string, number>;
+  };
   campaigns: Array<{
     source: string;
     medium: string;
@@ -2145,14 +2157,24 @@ export type MarketingOverview = {
     conversion_event_id: string | null;
     lead_id: string | null;
     revenue_record_id: string | null;
+    event_key: string;
+    source_record_type: string;
+    source_record_id: string;
     event_name: string;
-    click_id: string;
+    occurred_at: string;
+    attribution_model: string;
+    consent_basis: string;
+    masked_click_id: string;
     click_id_type: string;
     value_cents: number | null;
     currency: string;
+    delivery_mode: string;
     status: string;
     attempt_count: number;
+    last_attempt_at: string | null;
+    next_attempt_at: string | null;
     exported_at: string | null;
+    provider_request_id: string | null;
     last_error: string | null;
     created_at: string;
   }>;
@@ -3577,6 +3599,14 @@ const emptyMarketingOverview: MarketingOverview = {
     start_to_submit_rate_basis_points: null,
   },
   web_vitals: [],
+  measurement: {
+    mode: "disabled",
+    attribution_model: "last_eligible_platform_click",
+    attribution_window_days: 90,
+    policy_version: "stonegate-marketing-measurement-v1",
+    providers: [],
+    event_counts: {},
+  },
   campaigns: [],
   offline_exports: [],
 };

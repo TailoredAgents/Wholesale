@@ -186,6 +186,36 @@ services:
         value: 30
       - key: BUYER_DISCOVERY_MAX_RESULTS
         value: 100
+      - key: MARKETING_CONVERSION_MODE
+        value: disabled
+      - key: MARKETING_CONVERSION_WINDOW_DAYS
+        value: 90
+      - key: MARKETING_CONVERSION_MAX_ATTEMPTS
+        value: 5
+      - key: MARKETING_CONVERSION_RETRY_BASE_SECONDS
+        value: 60
+      - key: MARKETING_WEBSITE_BASE_URL
+        value: https://www.stonegatehomebuyer.com
+      - key: GOOGLE_DATA_MANAGER_CLIENT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_LOGIN_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_OPERATING_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_CONVERSION_ACTIONS_JSON
+        sync: false
+      - key: META_CONVERSIONS_ACCESS_TOKEN
+        sync: false
+      - key: META_PIXEL_ID
+        sync: false
+      - key: META_CONVERSIONS_API_VERSION
+        value: v25.0
+      - key: META_TEST_EVENT_CODE
+        sync: false
       - key: BRIDGE_API_BASE_URL
         sync: false
       - key: BRIDGE_API_KEY
@@ -348,6 +378,36 @@ services:
       - key: GOOGLE_OAUTH_CLIENT_SECRET
         sync: false
       - key: GOOGLE_OAUTH_REDIRECT_URI
+        sync: false
+      - key: MARKETING_CONVERSION_MODE
+        value: disabled
+      - key: MARKETING_CONVERSION_WINDOW_DAYS
+        value: 90
+      - key: MARKETING_CONVERSION_MAX_ATTEMPTS
+        value: 5
+      - key: MARKETING_CONVERSION_RETRY_BASE_SECONDS
+        value: 60
+      - key: MARKETING_WEBSITE_BASE_URL
+        value: https://www.stonegatehomebuyer.com
+      - key: GOOGLE_DATA_MANAGER_CLIENT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_REFRESH_TOKEN
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_LOGIN_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_OPERATING_ACCOUNT_ID
+        sync: false
+      - key: GOOGLE_DATA_MANAGER_CONVERSION_ACTIONS_JSON
+        sync: false
+      - key: META_CONVERSIONS_ACCESS_TOKEN
+        sync: false
+      - key: META_PIXEL_ID
+        sync: false
+      - key: META_CONVERSIONS_API_VERSION
+        value: v25.0
+      - key: META_TEST_EVENT_CODE
         sync: false
       - key: TWILIO_ACCOUNT_SID
         sync: false

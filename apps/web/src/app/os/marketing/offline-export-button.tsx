@@ -8,11 +8,12 @@ import styles from "../page.module.css";
 
 type Status = "idle" | "saving" | "saved" | "error";
 
-export function OfflineExportButton() {
+export function OfflineExportButton({ deliveryEnabled }: { deliveryEnabled: boolean }) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
   const [created, setCreated] = useState<number | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -36,6 +37,7 @@ export function OfflineExportButton() {
   async function handleClick() {
     setStatus("saving");
     setCreated(null);
+    setMessage(null);
     try {
       const response = await fetch(
         `${apiBaseUrl}/api/v1/marketing/offline-conversions/generate`,
@@ -49,6 +51,37 @@ export function OfflineExportButton() {
       }
       const payload = (await response.json()) as { created: number };
       setCreated(payload.created);
+      setMessage(`${payload.created} new conversion events prepared`);
+      setStatus("saved");
+      router.refresh();
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  async function handleProcess() {
+    setStatus("saving");
+    setMessage(null);
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/marketing/offline-conversions/process-next`,
+        {
+          method: "POST",
+          headers: await getHeaders(),
+        },
+      );
+      if (!response.ok) {
+        throw new Error("Unable to process the next event.");
+      }
+      const payload = (await response.json()) as {
+        processed_id: string | null;
+        status: string | null;
+      };
+      setMessage(
+        payload.processed_id
+          ? `Next event processed: ${payload.status ?? "complete"}`
+          : "No conversion event is currently due",
+      );
       setStatus("saved");
       router.refresh();
     } catch {
@@ -59,9 +92,14 @@ export function OfflineExportButton() {
   return (
     <div className={styles.actionPanel}>
       <button disabled={status === "saving"} onClick={handleClick} type="button">
-        Generate offline exports
+        Prepare conversion events
       </button>
-      {status === "saved" ? <p className={styles.saved}>{created ?? 0} created</p> : null}
+      {deliveryEnabled ? (
+        <button disabled={status === "saving"} onClick={handleProcess} type="button">
+          Process next event
+        </button>
+      ) : null}
+      {status === "saved" ? <p className={styles.saved}>{message ?? `${created ?? 0} created`}</p> : null}
       {status === "error" ? <p className={styles.error}>error</p> : null}
       {status === "saving" ? <p className={styles.saving}>saving</p> : null}
     </div>

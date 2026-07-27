@@ -28,14 +28,24 @@ class OfflineConversionExportRead(BaseModel):
     conversion_event_id: UUID | None
     lead_id: UUID | None
     revenue_record_id: UUID | None
+    event_key: str
+    source_record_type: str
+    source_record_id: UUID
     event_name: str
-    click_id: str
+    occurred_at: datetime
+    attribution_model: str
+    consent_basis: str
+    masked_click_id: str
     click_id_type: str
     value_cents: int | None
     currency: str
+    delivery_mode: str
     status: str
     attempt_count: int
+    last_attempt_at: datetime | None
+    next_attempt_at: datetime | None
     exported_at: datetime | None
+    provider_request_id: str | None
     last_error: str | None
     created_at: datetime
 
@@ -71,6 +81,21 @@ class WebVitalSummary(BaseModel):
     good_rate_basis_points: int
 
 
+class MarketingProviderReadiness(BaseModel):
+    platform: str
+    configured: bool
+    blockers: list[str]
+
+
+class MarketingMeasurementSummary(BaseModel):
+    mode: str
+    attribution_model: str
+    attribution_window_days: int
+    policy_version: str
+    providers: list[MarketingProviderReadiness]
+    event_counts: dict[str, int]
+
+
 class MarketingOverview(BaseModel):
     period_days: int | None
     period_start_at: datetime | None
@@ -79,9 +104,15 @@ class MarketingOverview(BaseModel):
     summary: MarketingSummary
     public_funnel: PublicFunnelSummary
     web_vitals: list[WebVitalSummary]
+    measurement: MarketingMeasurementSummary
     campaigns: list[MarketingCampaignPerformance]
     offline_exports: list[OfflineConversionExportRead]
 
 
 class OfflineConversionGenerateResponse(BaseModel):
     created: int
+
+
+class OfflineConversionProcessResponse(BaseModel):
+    processed_id: UUID | None
+    status: str | None

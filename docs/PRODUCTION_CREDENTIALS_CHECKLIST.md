@@ -1,6 +1,6 @@
 # Production Credentials Checklist
 
-Last updated: July 26, 2026
+Last updated: July 27, 2026
 
 ## Purpose
 
@@ -296,14 +296,53 @@ projects without raw request bodies or default PII collection.
 This can target an owner-controlled alert channel. It is not required for normal business
 workflow execution.
 
+## Advertising Conversion Delivery
+
+The Google Data Manager and Meta Conversions API adapters are implemented. Keep
+`MARKETING_CONVERSION_MODE=disabled` until controlled provider acceptance is complete.
+
+| Variable | Secret | Render service |
+| --- | --- | --- |
+| `MARKETING_CONVERSION_MODE` | No | API and worker |
+| `MARKETING_CONVERSION_WINDOW_DAYS` | No | API and worker |
+| `MARKETING_CONVERSION_MAX_ATTEMPTS` | No | API and worker |
+| `MARKETING_CONVERSION_RETRY_BASE_SECONDS` | No | API and worker |
+| `MARKETING_WEBSITE_BASE_URL` | No | API and worker |
+| `GOOGLE_DATA_MANAGER_CLIENT_ID` | No | API and worker |
+| `GOOGLE_DATA_MANAGER_CLIENT_SECRET` | Yes | API and worker |
+| `GOOGLE_DATA_MANAGER_REFRESH_TOKEN` | Yes | API and worker |
+| `GOOGLE_DATA_MANAGER_LOGIN_ACCOUNT_ID` | No | API and worker |
+| `GOOGLE_DATA_MANAGER_OPERATING_ACCOUNT_ID` | No | API and worker |
+| `GOOGLE_DATA_MANAGER_CONVERSION_ACTIONS_JSON` | No | API and worker |
+| `META_CONVERSIONS_ACCESS_TOKEN` | Yes | API and worker |
+| `META_PIXEL_ID` | No | API and worker |
+| `META_CONVERSIONS_API_VERSION` | No | API and worker |
+| `META_TEST_EVENT_CODE` | No | API and worker; remove after acceptance |
+
+The Google conversion-action value is a JSON object with all four outcome keys, for example:
+
+```json
+{
+  "qualified_lead": "123",
+  "appointment_scheduled": "456",
+  "contract_signed": "789",
+  "funded_deal": "101112"
+}
+```
+
+Acceptance:
+
+1. Create four distinct Google Ads conversion actions and confirm the Google account IDs.
+2. Enable the Data Manager API and obtain OAuth credentials with the Data Manager scope.
+3. Use Meta Events Manager test events with Stonegate's Pixel/Dataset and temporary test code.
+4. Prepare one controlled conversion for each outcome and inspect the masked queue record.
+5. Confirm Google and Meta each receive one event and repeated preparation creates no duplicate.
+6. Remove the Meta test code, set mode to `live` in both services, deploy, and monitor retries.
+
 ## Future Provider Placeholders
 
-These capabilities are planned, but credentials must not be named until an adapter and provider
-are selected:
+These capabilities remain planned:
 
-- F5 buyer acquisition and enrichment source.
-- Google Ads offline conversion delivery.
-- Meta Conversions API delivery.
 - Address validation and live route-duration data.
 - Separate cold-email platform and sending domains.
 - Optional bank-data feed after the internal accounting ledger is proven.

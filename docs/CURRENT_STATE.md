@@ -310,7 +310,11 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 - Evidence-backed, versioned market launch checklists require all 11 operational controls before
   owner approval.
 - Business Setup provides one workspace for operating economics, contribution review, and market
-- Source/campaign performance, CPL, contract cost, ROAS, and offline conversion export records.
+- Source/campaign performance, CPL, contract cost, ROAS, and a governed advertising conversion
+  queue. Qualified lead, appointment, signed contract, and funded outcomes use independent Google
+  and Meta click attribution, hashed contact matching, stable deduplication keys, provider
+  readiness, retries, terminal failures, and delivery audit records. Live delivery is disabled
+  until provider acceptance.
 - AI agent definitions, prompt versions, tool permissions, run logs, tool-call logs, approvals,
   cost telemetry, and call-intelligence quality reporting.
 - Governed fourteen-specialist portfolio, orchestrator events, dry runs, retries, budgets, trace
@@ -330,6 +334,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Production monitoring | Scheduled readiness and owner alert verified; Sentry deferred | Activate Sentry and the worker webhook later if the owner chooses |
 | Private object storage | Cloudflare R2 adapter complete; database fallback active | Configure the private R2 bucket and run file acceptance |
 | E-signature | SignWell lifecycle and owner connection workflow complete | Add the API key, connect the account, load attorney-approved templates, and run controlled test-mode acceptance |
+| Advertising conversion delivery | Queue, Google Data Manager adapter, Meta adapter, retries, and UI complete; delivery disabled | Configure ad-account credentials and conversion actions, validate in provider test tools, then change mode to `live` |
 
 The dedicated SMS number and the Voice/support number are separate configuration values:
 

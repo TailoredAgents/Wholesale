@@ -162,6 +162,13 @@ envelope links the provider-retrieved final PDF back to its Stonegate document.
 - `bank_reconciliations`
 - `offline_conversion_exports`
 
+`offline_conversion_exports` is the single advertising outcome queue, not a second attribution
+system. It references existing lead, appointment, transaction, revenue, and browser conversion
+records. Each row carries a stable platform event key, source record, outcome time, attribution
+policy, consent basis, masked platform click evidence, hashed-contact payload snapshot, payload
+hash, delivery mode, retry schedule, sanitized provider response, and terminal result. The unique
+organization/platform/event-key constraint prevents duplicate provider outcomes.
+
 `accounting_posting_rules` stores the owner-approved, effective version of each deterministic
 operational posting rule. `accounting_source_links` joins one operational source and posting
 purpose to one journal, stores a source fingerprint, and surfaces changed sources without

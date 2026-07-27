@@ -437,8 +437,17 @@ F6E implemented workflow:
 
 ### F6G: Marketing Measurement
 
-- Define consent and attribution rules for downstream advertising events.
-- Add Google Ads and Meta conversion delivery with hashing, retries, idempotency, and audit events.
+- **Implemented:** Stonegate uses a versioned first-party measurement policy and last eligible
+  platform click within a 90-day window. Google and Meta are evaluated independently.
+- **Implemented:** Qualified lead, appointment scheduled, contract signed, and funded deal events
+  are prepared from existing CRM records. Stable event keys prevent duplicate provider outcomes.
+- **Implemented:** Google Data Manager and Meta Conversions API adapters use normalized SHA-256
+  contact identifiers, provider-specific click IDs, retries, terminal failure states, and an audit
+  record for every attempt.
+- **Implemented:** The Marketing workspace shows provider readiness, credential blockers, policy,
+  queue health, event history, and manual prepare/process controls.
+- External delivery remains intentionally disabled until Stonegate configures the ad accounts,
+  conversion actions, credentials, and completes controlled provider acceptance.
 - Keep budgets, campaigns, payments, compensation, accounting finalization, and published
   advertising changes human-approved.
 

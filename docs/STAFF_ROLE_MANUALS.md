@@ -101,6 +101,12 @@ Stonegate documents a payment that occurred elsewhere; it does not move money.
 
 Main pages: Marketing, Campaigns, and approved aggregate reporting.
 
+The Marketing role reviews source economics, public funnel performance, provider readiness, and
+the conversion delivery queue. It may prepare deterministic outcome records and investigate
+delivery errors. It does not alter CRM outcomes to improve reporting, expose payload hashes or
+provider secrets, approve budgets, publish campaigns, or treat the Marketing Copilot as authority
+to change advertising.
+
 - Create trackable campaigns and keep source, cost, and conversion evidence current.
 - Use approved audiences, consent rules, suppression controls, and company senders.
 - Review cost per lead, appointment, contract, and funded deal.

@@ -4032,6 +4032,18 @@ class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "revenue_record_id",
             name="uq_offline_exports_org_platform_revenue",
         ),
+        UniqueConstraint(
+            "organization_id",
+            "platform",
+            "event_key",
+            name="uq_offline_exports_org_platform_event",
+        ),
+        Index(
+            "ix_offline_exports_org_status_due",
+            "organization_id",
+            "status",
+            "next_attempt_at",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -4045,14 +4057,27 @@ class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     revenue_record_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("revenue_records.id"), index=True
     )
+    event_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_record_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    source_record_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     event_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attribution_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    consent_basis: Mapped[str] = mapped_column(String(160), nullable=False)
     click_id: Mapped[str] = mapped_column(String(255), nullable=False)
     click_id_type: Mapped[str] = mapped_column(String(80), nullable=False)
     value_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    delivery_mode: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     exported_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    provider_request_id: Mapped[str | None] = mapped_column(String(255))
+    provider_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 

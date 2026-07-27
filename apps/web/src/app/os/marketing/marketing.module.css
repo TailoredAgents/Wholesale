@@ -41,6 +41,20 @@
 .vitalGrid article strong { font-size: 11px; }
 .vitalGrid article p { margin-top: 7px; color: var(--sg-color-text-muted); font-size: 9px; }
 .vitalGrid > p { padding: 14px; }
+.measurementGrid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(280px, .8fr); }
+.measurementPolicy { padding: 14px; border-right: 1px solid var(--sg-color-border); }
+.measurementPolicy dl { margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.measurementPolicy dl div { display: grid; gap: 3px; }
+.measurementPolicy dt { color: var(--sg-color-text-muted); font-size: 9px; text-transform: uppercase; }
+.measurementPolicy dd { margin: 0; font-size: 12px; font-weight: 800; }
+.measurementPolicy p { margin: 14px 0 0; color: var(--sg-color-text-muted); font-size: 10px; line-height: 1.55; }
+.providerRows { display: grid; }
+.providerRows article { padding: 12px 14px; border-bottom: 1px solid var(--sg-color-border-soft); }
+.providerRows article:last-child { border-bottom: 0; }
+.providerRows article > div { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.providerRows article strong { font-size: 11px; }
+.providerRows article p { margin: 7px 0 0; color: var(--sg-color-text-muted); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
 @media (max-width: 900px) { .exceptionRows > a { grid-template-columns: 1fr 20px; } .exceptionRows dl { grid-column: 1 / -1; grid-row: 2; } .exportLayout { grid-template-columns: 1fr; } .exportLayout > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
 @media (max-width: 900px) { .funnelLayout { grid-template-columns: 1fr; } .funnelRows { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
-@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } .vitalGrid { grid-template-columns: 1fr; } .vitalGrid article { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } }
+@media (max-width: 900px) { .measurementGrid { grid-template-columns: 1fr; } .measurementPolicy { border-right: 0; border-bottom: 1px solid var(--sg-color-border); } }
+@media (max-width: 560px) { .exceptionRows dl { grid-template-columns: 1fr 1fr; } .exportLayout > div { grid-template-columns: 1fr; } .vitalGrid { grid-template-columns: 1fr; } .vitalGrid article { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .measurementPolicy dl { grid-template-columns: 1fr 1fr; } }

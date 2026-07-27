@@ -298,6 +298,69 @@ class Settings(BaseSettings):
         le=250,
         validation_alias="BUYER_DISCOVERY_MAX_RESULTS",
     )
+    marketing_conversion_mode: Literal["disabled", "simulate", "live"] = Field(
+        default="disabled",
+        validation_alias="MARKETING_CONVERSION_MODE",
+    )
+    marketing_conversion_window_days: int = Field(
+        default=90,
+        ge=1,
+        le=365,
+        validation_alias="MARKETING_CONVERSION_WINDOW_DAYS",
+    )
+    marketing_conversion_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        validation_alias="MARKETING_CONVERSION_MAX_ATTEMPTS",
+    )
+    marketing_conversion_retry_base_seconds: int = Field(
+        default=60,
+        ge=5,
+        le=3600,
+        validation_alias="MARKETING_CONVERSION_RETRY_BASE_SECONDS",
+    )
+    marketing_website_base_url: str = Field(
+        default="https://www.stonegatehomebuyer.com",
+        validation_alias="MARKETING_WEBSITE_BASE_URL",
+    )
+    google_data_manager_client_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_DATA_MANAGER_CLIENT_ID",
+    )
+    google_data_manager_client_secret: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_DATA_MANAGER_CLIENT_SECRET",
+    )
+    google_data_manager_refresh_token: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_DATA_MANAGER_REFRESH_TOKEN",
+    )
+    google_data_manager_login_account_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_DATA_MANAGER_LOGIN_ACCOUNT_ID",
+    )
+    google_data_manager_operating_account_id: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_DATA_MANAGER_OPERATING_ACCOUNT_ID",
+    )
+    google_data_manager_conversion_actions_raw: str = Field(
+        default="",
+        validation_alias="GOOGLE_DATA_MANAGER_CONVERSION_ACTIONS_JSON",
+    )
+    meta_conversions_access_token: str | None = Field(
+        default=None,
+        validation_alias="META_CONVERSIONS_ACCESS_TOKEN",
+    )
+    meta_pixel_id: str | None = Field(default=None, validation_alias="META_PIXEL_ID")
+    meta_conversions_api_version: str = Field(
+        default="v25.0",
+        validation_alias="META_CONVERSIONS_API_VERSION",
+    )
+    meta_test_event_code: str | None = Field(
+        default=None,
+        validation_alias="META_TEST_EVENT_CODE",
+    )
     attom_api_key: str | None = Field(default=None, validation_alias="ATTOM_API_KEY")
     rentcast_api_key: str | None = Field(default=None, validation_alias="RENTCAST_API_KEY")
     rentcast_base_url: str = Field(
@@ -463,6 +526,8 @@ class Settings(BaseSettings):
             raise ValueError("COMMUNICATION_PROVIDER_MODE=simulate is forbidden in production.")
         if self.app_env.lower() == "production" and self.esign_provider == "simulate":
             raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
+        if self.app_env.lower() == "production" and self.marketing_conversion_mode == "simulate":
+            raise ValueError("MARKETING_CONVERSION_MODE=simulate is forbidden in production.")
         return self
 
     @property
@@ -568,6 +633,54 @@ class Settings(BaseSettings):
             and self.twilio_voice_recording_disclosure
             and self.call_recording_retention_days
         )
+
+    @property
+    def google_data_manager_conversion_actions(self) -> dict[str, str]:
+        if not self.google_data_manager_conversion_actions_raw.strip():
+            return {}
+        import json
+
+        try:
+            parsed = json.loads(self.google_data_manager_conversion_actions_raw)
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(parsed, dict):
+            return {}
+        return {
+            str(key): str(value)
+            for key, value in parsed.items()
+            if isinstance(key, str) and isinstance(value, (str, int)) and str(value).strip()
+        }
+
+    @property
+    def google_conversion_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.google_data_manager_client_id:
+            blockers.append("GOOGLE_DATA_MANAGER_CLIENT_ID")
+        if not self.google_data_manager_client_secret:
+            blockers.append("GOOGLE_DATA_MANAGER_CLIENT_SECRET")
+        if not self.google_data_manager_refresh_token:
+            blockers.append("GOOGLE_DATA_MANAGER_REFRESH_TOKEN")
+        if not self.google_data_manager_operating_account_id:
+            blockers.append("GOOGLE_DATA_MANAGER_OPERATING_ACCOUNT_ID")
+        required_actions = {
+            "qualified_lead",
+            "appointment_scheduled",
+            "contract_signed",
+            "funded_deal",
+        }
+        if not required_actions.issubset(self.google_data_manager_conversion_actions):
+            blockers.append("GOOGLE_DATA_MANAGER_CONVERSION_ACTIONS_JSON")
+        return tuple(blockers)
+
+    @property
+    def meta_conversion_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.meta_conversions_access_token:
+            blockers.append("META_CONVERSIONS_ACCESS_TOKEN")
+        if not self.meta_pixel_id:
+            blockers.append("META_PIXEL_ID")
+        return tuple(blockers)
 
 
 @lru_cache

@@ -172,15 +172,27 @@ cost.
 
 ## Marketing Measurement
 
-Send down-funnel outcomes only after attribution and consent rules are defined:
+Stonegate's existing attribution records now feed one governed conversion queue:
 
-- Google enhanced conversions for leads can match offline outcomes using click identifiers and
-  normalized, hashed first-party data. For a new integration after June 15, 2026, evaluate Google's
-  Data Manager API because new offline-upload developer tokens have additional restrictions.
-- Meta's Conversions API may receive qualified-lead, appointment, contract, and funded outcomes
-  through a separate adapter.
-- Every delivery needs an idempotency key, consent basis, provider response, retry state, and audit
-  record.
+- Outcomes: `qualified_lead`, `appointment_scheduled`, `contract_signed`, and `funded_deal`.
+- Rule: last eligible click for each platform within 90 days and before the outcome. A Google click
+  never substitutes for a Meta click, or vice versa.
+- Matching: platform click ID plus normalized SHA-256 email and phone identifiers when available.
+  Raw email and phone values are not retained in the provider payload snapshot.
+- Deduplication: one stable versioned event key per source record, outcome, and platform.
+- Delivery: `pending`, `retry`, `delivered`, `simulated`, `blocked`, or `exhausted`, with
+  exponential retry timing, sanitized provider responses, and an audit event for every attempt.
+- Google uses the Data Manager API `events:ingest` route and maps each Stonegate outcome to a
+  separate Google Ads conversion action.
+- Meta uses the Conversions API server-event route and maps events to Lead, Schedule,
+  ContractSigned, and Purchase.
+- `MARKETING_CONVERSION_MODE=disabled` prepares and audits the queue without external delivery.
+  Production simulation is prohibited. Use provider test tools before enabling `live`.
+
+The public privacy notice is the recorded basis for first-party advertising measurement. The
+adapters do not assert Google advertising consent fields that Stonegate has not separately
+captured.
+
 - AI may recommend experiments. Humans approve budgets, campaigns, creative, audiences, and
   published changes.
 
@@ -203,7 +215,7 @@ mailbox reputation with day-to-day seller and closing mail.
 4. Add e-signature before transaction-document automation.
 5. Build the internal Stonegate Accounting Ledger after funded-deal reconciliation is verified and
    have a CPA approve its policies, opening balances, reports, and month-end process.
-6. Add Google and Meta offline conversion delivery after attribution review.
+6. Complete Google and Meta provider acceptance, then enable the implemented conversion delivery.
 7. Add a second property-data source, address validation, or live routes only when operating
    evidence shows the current solution is insufficient.
 
@@ -222,6 +234,8 @@ mailbox reputation with day-to-day seller and closing mail.
 - [Sentry Python SDK](https://getsentry.github.io/sentry-python/)
 - [Sentry Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/)
 - [Docusign Connect webhooks](https://developers.docusign.com/platform/webhooks/connect/)
-- [Google Ads offline conversions](https://developers.google.com/google-ads/api/docs/conversions/upload-offline)
+- [Google Data Manager event ingestion](https://developers.google.com/data-manager/api/reference/rest/v1/events/ingest)
+- [Google Data Manager send-events guide](https://developers.google.com/data-manager/api/devguides/events/send-events)
+- [Meta Conversions API](https://www.facebook.com/business/help/AboutConversionsAPI)
 - [FTC Telemarketing Sales Rule guidance](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
 - [FTC CAN-SPAM compliance guidance](https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business)

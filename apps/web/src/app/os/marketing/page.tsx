@@ -39,10 +39,6 @@ function date(value: string) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
 }
 
-function mask(value: string) {
-  return value.length <= 10 ? value : `${value.slice(0, 6)}...${value.slice(-4)}`;
-}
-
 function percentage(basisPoints: number | null) {
   return basisPoints === null ? "No baseline" : `${(basisPoints / 100).toFixed(1)}%`;
 }
@@ -55,6 +51,12 @@ function vitalTone(metric: string, value: number) {
   const good = metric === "LCP" ? value <= 2500 : metric === "INP" ? value <= 200 : value <= 0.1;
   const poor = metric === "LCP" ? value > 4000 : metric === "INP" ? value > 500 : value > 0.25;
   return good ? "success" : poor ? "danger" : "warning";
+}
+
+function deliveryTone(status: string) {
+  if (["delivered", "simulated"].includes(status)) return "success";
+  if (["exhausted", "blocked"].includes(status)) return "danger";
+  return "warning";
 }
 
 export default async function MarketingPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
@@ -80,6 +82,7 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     ? marketing.campaigns.reduce((total, item) => total + item.form_submits, 0) / marketing.campaigns.reduce((total, item) => total + item.form_starts, 0) * 100
     : 0;
   const funnel = marketing.public_funnel;
+  const measurement = marketing.measurement;
   const funnelRows = [
     ["Public page views", funnel.page_views],
     ["Address offer starts", funnel.offer_starts],
@@ -154,10 +157,30 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     </section>
 
     <section className={styles.section}>
-      <div className={styles.sectionHeading}><div><span>Revenue feedback</span><h2>Offline conversion queue</h2></div><strong>{marketing.offline_exports.length} records</strong></div>
+      <div className={styles.sectionHeading}><div><span>Measurement governance</span><h2>Advertising outcome feedback</h2></div><StatusBadge tone={measurement.mode === "live" ? "success" : measurement.mode === "simulate" ? "warning" : "neutral"}>{labelize(measurement.mode)}</StatusBadge></div>
+      <div className={marketingStyles.measurementGrid}>
+        <div className={marketingStyles.measurementPolicy}>
+          <dl>
+            <div><dt>Attribution rule</dt><dd>Last eligible platform click</dd></div>
+            <div><dt>Lookback window</dt><dd>{measurement.attribution_window_days} days</dd></div>
+            <div><dt>Prepared</dt><dd>{measurement.event_counts.total ?? 0}</dd></div>
+            <div><dt>Delivered</dt><dd>{measurement.event_counts.delivered ?? 0}</dd></div>
+            <div><dt>Queued</dt><dd>{(measurement.event_counts.pending ?? 0) + (measurement.event_counts.retry ?? 0)}</dd></div>
+            <div><dt>Needs attention</dt><dd>{(measurement.event_counts.blocked ?? 0) + (measurement.event_counts.exhausted ?? 0)}</dd></div>
+          </dl>
+          <p>Each platform receives only outcomes tied to its own captured click ID. Stable event IDs prevent duplicate reporting.</p>
+        </div>
+        <div className={marketingStyles.providerRows}>
+          {measurement.providers.map((provider) => <article key={provider.platform}><div><strong>{labelize(provider.platform)}</strong><StatusBadge tone={provider.configured ? "success" : "warning"}>{provider.configured ? "Ready" : "Credentials pending"}</StatusBadge></div><p>{provider.configured ? "Provider settings are complete." : provider.blockers.join(", ")}</p></article>)}
+        </div>
+      </div>
+    </section>
+
+    <section className={styles.section}>
+      <div className={styles.sectionHeading}><div><span>Outcome feedback</span><h2>Conversion delivery queue</h2></div><strong>{marketing.offline_exports.length} records</strong></div>
       <div className={marketingStyles.exportLayout}>
-        <div>{marketing.offline_exports.length ? marketing.offline_exports.map((item) => <article key={item.id}><div><strong>{labelize(item.platform)}</strong><StatusBadge tone={item.status === "exported" ? "success" : item.status === "failed" ? "danger" : "warning"}>{labelize(item.status)}</StatusBadge></div><dl><div><dt>Event</dt><dd>{labelize(item.event_name)}</dd></div><div><dt>Click ID</dt><dd>{mask(item.click_id)}</dd></div><div><dt>Value</dt><dd>{money(item.value_cents)}</dd></div><div><dt>Attempts</dt><dd>{item.attempt_count}</dd></div></dl>{item.lead_id ? <Link href={`/os/leads/${item.lead_id}`}>Open attributed lead</Link> : null}{item.last_error ? <p>{item.last_error}</p> : null}</article>) : <p className={styles.empty}>No offline conversion records have been generated.</p>}</div>
-        <aside><h3>Export controls</h3><p>Generate records only after collected revenue can be tied to a captured platform click identifier. Generation does not upload data to an ad platform.</p>{canExport ? <OfflineExportButton /> : <StatusBadge tone="warning">Your role cannot generate exports</StatusBadge>}</aside>
+        <div>{marketing.offline_exports.length ? marketing.offline_exports.map((item) => <article key={item.id}><div><strong>{labelize(item.platform)}</strong><StatusBadge tone={deliveryTone(item.status)}>{labelize(item.status)}</StatusBadge></div><dl><div><dt>Outcome</dt><dd>{labelize(item.event_name)}</dd></div><div><dt>Occurred</dt><dd>{date(item.occurred_at)}</dd></div><div><dt>{item.click_id_type.toUpperCase()}</dt><dd>{item.masked_click_id}</dd></div><div><dt>Value</dt><dd>{money(item.value_cents)}</dd></div><div><dt>Attempts</dt><dd>{item.attempt_count}</dd></div><div><dt>Source</dt><dd>{labelize(item.source_record_type)}</dd></div></dl>{item.lead_id ? <Link href={`/os/leads/${item.lead_id}`}>Open attributed lead</Link> : null}{item.last_error ? <p>{item.last_error}</p> : null}</article>) : <p className={styles.empty}>No conversion events have been prepared.</p>}</div>
+        <aside><h3>Queue controls</h3><p>Prepare qualified leads, appointments, signed contracts, and funded deals when they can be tied to a platform click. Delivery remains off until provider credentials and live mode are configured.</p>{canExport ? <OfflineExportButton deliveryEnabled={measurement.mode !== "disabled"} /> : <StatusBadge tone="warning">Your role cannot manage the queue</StatusBadge>}</aside>
       </div>
     </section>
   </WorkspacePage>;

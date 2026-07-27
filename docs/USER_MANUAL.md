@@ -894,11 +894,24 @@ Review:
 - Marketing spend, cost per lead, cost per contract, and return on ad spend.
 - Spend without leads.
 - Leads without contracts.
-- Pending offline conversion exports.
+- Advertising measurement mode and Google/Meta readiness.
+- Prepared qualified lead, appointment, signed contract, and funded-deal outcomes.
+- Queued, retried, delivered, blocked, or exhausted conversion events.
 - Marketing Copilot analysis.
 
+Select **Prepare conversion events** after CRM outcomes have been updated. Stonegate creates only
+new records tied to a captured Google or Meta click; selecting it again does not duplicate the same
+outcome. **Process next event** appears only when simulation or live delivery is enabled. Normally
+the worker processes due events automatically.
+
+Open the attributed lead when a record needs review. `Credentials pending` means the internal
+queue is working but Stonegate has not activated that provider. `Blocked` means configuration is
+missing, `Retry` means another attempt is scheduled, and `Exhausted` requires an owner to review
+the provider error before retrying operationally.
+
 Drill into source records before changing spend. The Marketing Copilot may recommend tests but
-cannot change budgets, audiences, ads, or campaigns.
+cannot change budgets, audiences, ads, or campaigns. Preparing or delivering outcomes never edits
+the lead, transaction, revenue, accounting, ad budget, campaign, or creative.
 
 ## 17. Operating Model
 

@@ -2,11 +2,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.models.foundation import OfflineConversionExport
 from app.schemas.management_copilots import (
     ManagementCopilotAnalyzeRead,
     ManagementCopilotAnalyzeRequest,
@@ -14,13 +17,21 @@ from app.schemas.management_copilots import (
     ManagementCopilotReviewRead,
     ManagementCopilotReviewRequest,
 )
-from app.schemas.marketing import MarketingOverview, OfflineConversionGenerateResponse
+from app.schemas.marketing import (
+    MarketingOverview,
+    OfflineConversionGenerateResponse,
+    OfflineConversionProcessResponse,
+)
 from app.services.management_copilots import (
     analyze_management,
     get_management_copilot_overview,
     review_management_recommendation,
 )
-from app.services.marketing import generate_offline_conversion_exports, get_marketing_overview
+from app.services.marketing import (
+    generate_offline_conversion_exports,
+    get_marketing_overview,
+    process_next_marketing_conversion,
+)
 
 router = APIRouter(prefix="/api/v1/marketing", tags=["marketing"])
 view_marketing_dependency = require_any_permission(
@@ -105,4 +116,29 @@ def create_offline_conversion_exports(
 ) -> OfflineConversionGenerateResponse:
     return OfflineConversionGenerateResponse(
         created=generate_offline_conversion_exports(db, principal)
+    )
+
+
+@router.post("/offline-conversions/process-next")
+def process_offline_conversion(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_marketing_dependency)],
+) -> OfflineConversionProcessResponse:
+    settings = get_settings()
+    processed_id = process_next_marketing_conversion(
+        db,
+        settings,
+        organization_id=principal.organization_id,
+    )
+    export_status = None
+    if processed_id is not None:
+        export_status = db.scalar(
+            select(OfflineConversionExport.status).where(
+                OfflineConversionExport.organization_id == principal.organization_id,
+                OfflineConversionExport.id == processed_id,
+            )
+        )
+    return OfflineConversionProcessResponse(
+        processed_id=processed_id,
+        status=export_status,
     )
