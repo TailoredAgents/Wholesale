@@ -88,6 +88,11 @@ Stonegate documents a payment that occurred elsewhere; it does not move money.
 - Keep tax identifiers inside the restricted W-9 file, never in notes or messages.
 - Record source-linked revenue, deductions, marketing costs, compensation, and payouts.
 - Reconcile funded deals before commissions are marked payable.
+- Use the Finance Copilot to prepare evidence-linked classification, balanced-journal,
+  bank-match, statement-variance, and close-readiness suggestions.
+- Verify every Copilot conclusion against its exact Stonegate citation, then accept, correct, or
+  reject the draft. Complete any real posting, matching, close, payment, or tax decision through
+  the normal human-controlled workflow.
 - Keep company margin, role compensation, and owner distributions separate.
 - Correct errors through traceable adjustments, not deleted history.
 - Do not approve operational offers, contracts, or buyer selection through Finance access.

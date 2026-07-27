@@ -25,7 +25,7 @@ Staff-facing copilots:
 | Acquisitions Copilot | Acquisitions Closer and covering CEO | Call brief, appointment preparation, property evidence, underwriting explanation, negotiation preparation, and follow-up |
 | Transaction Copilot | Transaction Coordinator | Documents, parties, deadlines, checklist gaps, closing drafts, and risk escalation |
 | Disposition Copilot | Disposition specialist | Buyer matching, package preparation, approved outreach, response comparison, showing, deposit, and backup coverage |
-| Finance Copilot | Owner and approved finance staff | Reconciliation, margin, commissions, accounting handoff, and exception detection |
+| Finance Copilot | Owner and approved finance staff | Reconciliation, ledger and statement review, posting and bank-match proposals, close readiness, margin, commissions, and exceptions |
 | Marketing Copilot | Owner and marketing staff | Attribution, funnel quality, source economics, and experiment recommendations |
 | Executive Copilot | CEO | Priorities, bottlenecks, staffing pressure, cash visibility, risk, and decisions |
 
@@ -419,8 +419,10 @@ Exit criteria:
 
 ## Phase AI9: Finance, Marketing, And Executive Copilots
 
-Status: **Provider-independent foundation complete in code. Provider adapters, production replay,
-redacted datasets, and measured pilots remain. See `PHASE_AI9_MANAGEMENT_COPILOTS.md`.**
+Status: **Provider-independent foundation and F6F accounting extension complete in code. The
+60-case Finance evaluation dataset, exact evidence controls, and pilot metrics are implemented.
+Production model replay and measured supervised pilots remain. See
+`PHASE_AI9_MANAGEMENT_COPILOTS.md`.**
 
 Goal: Give management dependable financial, growth, and operating intelligence.
 

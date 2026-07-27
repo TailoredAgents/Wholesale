@@ -135,7 +135,10 @@ PORTFOLIO = (
     (
         "finance_commission",
         "Finance and Commission",
-        "Reconcile deal economics and draft commission calculations.",
+        (
+            "Prepare evidence-linked deal reconciliation, accounting, statement, bank-match, "
+            "month-close, and commission review."
+        ),
         "finance.reconcile",
         "high",
     ),

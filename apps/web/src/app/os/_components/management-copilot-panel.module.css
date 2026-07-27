@@ -58,5 +58,11 @@
 .reviewActions { padding: 11px 14px; display: flex; gap: 8px; }
 .reviewActions button:first-child { border-color: var(--sg-color-brand); background: var(--sg-color-brand); color: #fff; }
 .reviewed, .empty { margin: 0; padding: 14px; color: var(--sg-color-text-muted); font-size: 10px; }
-@media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .metrics > div { border-bottom: 1px solid var(--sg-color-border-soft); } .factGrid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 760px) { .header, .command, .draftHeader { align-items: flex-start; flex-direction: column; } .metrics, .riskBand, .factGrid, .actionGrid, .evidenceBand { grid-template-columns: 1fr; } .metrics > div, .riskBand > div, .factGrid > div, .actionGrid > section:first-child, .evidenceBand > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .rows > div { grid-template-columns: 1fr; } .rows > div small { grid-column: auto; } .reviewActions { flex-wrap: wrap; } .command > span { margin-left: 0; } }
+.pilotMetrics { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); border-top: 1px solid var(--sg-color-border-soft); }
+.pilotMetrics > header { grid-column: 1 / -1; padding: 9px 14px; border-bottom: 1px solid var(--sg-color-border-soft); color: var(--sg-color-text-muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.pilotMetrics > div { min-height: 59px; padding: 9px 10px; border-right: 1px solid var(--sg-color-border-soft); display: grid; align-content: center; gap: 3px; }
+.pilotMetrics > div:last-child { border-right: 0; }
+.pilotMetrics span { color: var(--sg-color-text-muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.pilotMetrics strong { font-size: 11px; }
+@media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .metrics > div { border-bottom: 1px solid var(--sg-color-border-soft); } .factGrid { grid-template-columns: 1fr 1fr; } .pilotMetrics { grid-template-columns: repeat(4, 1fr); } .pilotMetrics > div:nth-of-type(4n) { border-right: 0; } }
+@media (max-width: 760px) { .header, .command, .draftHeader { align-items: flex-start; flex-direction: column; } .metrics, .riskBand, .factGrid, .actionGrid, .evidenceBand { grid-template-columns: 1fr; } .metrics > div, .riskBand > div, .factGrid > div, .actionGrid > section:first-child, .evidenceBand > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .rows > div { grid-template-columns: 1fr; } .rows > div small { grid-column: auto; } .reviewActions { flex-wrap: wrap; } .command > span { margin-left: 0; } .pilotMetrics { grid-template-columns: repeat(2, 1fr); } .pilotMetrics > div:nth-of-type(2n) { border-right: 0; } }

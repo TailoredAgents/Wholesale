@@ -4,13 +4,14 @@ from typing import cast
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.models.foundation import (
     AiAgentDefinition,
     AiCapabilityRuntimePolicy,
+    AiRunLog,
     AuditEvent,
     ManagementCopilotRecommendation,
     ManagementCopilotReview,
@@ -37,7 +38,9 @@ CAPABILITY_CONFIG: dict[ManagementCapability, dict[str, object]] = {
         "restrictions": [
             "Do not mark a deal funded or approve a reconciliation.",
             "Do not approve or alter compensation, reserves, or distributions.",
-            "Do not post accounting entries, move money, or classify tax treatment.",
+            "Do not approve or post journals, match bank lines, close periods, or move money.",
+            "Do not change accounting policy or make a final tax classification.",
+            "Treat classification, journal, and bank-match output only as review proposals.",
             "Distinguish recorded amounts from missing or conflicting evidence.",
         ],
     },
@@ -206,6 +209,29 @@ def analyze_management(
                     "Every factual statement must cite supplied evidence.",
                     "Every proposed action remains a draft requiring a human decision.",
                     "Do not claim any external or financial action was executed.",
+                    *(
+                        [
+                            (
+                                "Use exact Stonegate citation identifiers for every "
+                                "accounting conclusion."
+                            ),
+                            (
+                                "Propose a bank match only when the deterministic context "
+                                "contains one exact unused cash candidate; cite both records."
+                            ),
+                            (
+                                "Cite the source and approved posting rule for every "
+                                "classification or balanced-journal proposal."
+                            ),
+                            (
+                                "Explain statement variance without inventing a cause; "
+                                "request evidence when causation is not recorded."
+                            ),
+                        ]
+                        if capability_key
+                        in {"finance.reconcile", "finance.tax_review"}
+                        else []
+                    ),
                 ],
             },
         ),
@@ -222,10 +248,27 @@ def analyze_management(
             json.loads(run.output_summary)
         )
     except (json.JSONDecodeError, ValidationError) as exc:
+        _record_blocked_output(
+            db,
+            principal,
+            capability_key,
+            run.id,
+            "The model response did not match the governed output contract.",
+        )
         raise ValueError(
             "The model response did not match the management copilot contract."
         ) from exc
-    _validate_output(parsed)
+    try:
+        _validate_output(parsed, capability_key)
+    except ValueError as exc:
+        _record_blocked_output(
+            db,
+            principal,
+            capability_key,
+            run.id,
+            str(exc),
+        )
+        raise
 
     recommendation = ManagementCopilotRecommendation(
         organization_id=principal.organization_id,
@@ -313,7 +356,7 @@ def review_management_recommendation(
             raise ValueError(
                 "The corrected output must preserve the management response contract."
             ) from exc
-        _validate_output(parsed)
+        _validate_output(parsed, capability_key)
         final_output = parsed.model_dump(mode="json")
     elif payload.decision == "accepted":
         final_output = recommendation.output_payload
@@ -386,7 +429,10 @@ def review_read(item: ManagementCopilotReview) -> ManagementCopilotReviewRead:
     )
 
 
-def _validate_output(output: ManagementCopilotOutput) -> None:
+def _validate_output(
+    output: ManagementCopilotOutput,
+    capability_key: ManagementCapability,
+) -> None:
     evidence_groups = [
         *(item.evidence for item in output.confirmed_facts),
         *(item.evidence for item in output.exceptions),
@@ -396,12 +442,42 @@ def _validate_output(output: ManagementCopilotOutput) -> None:
     ]
     if any(not evidence for evidence in evidence_groups):
         raise ValueError("Every management conclusion must include supporting evidence.")
+    if capability_key in {"finance.reconcile", "finance.tax_review"}:
+        exact_prefixes = (
+            "accounting_",
+            "balance_sheet:",
+            "bank_",
+            "close_check:",
+            "deal_deduction:",
+            "deal_reconciliation:",
+            "finance_summary:",
+            "financial_statement:",
+            "journal_",
+            "marketing_spend:",
+            "revenue_record:",
+            "trial_balance:",
+        )
+        if any(
+            not any(reference.startswith(exact_prefixes) for reference in evidence)
+            for evidence in evidence_groups
+        ):
+            raise ValueError(
+                "Every finance conclusion must cite an exact Stonegate source identifier."
+            )
+        if not any(
+            reference.startswith(exact_prefixes) for reference in output.evidence
+        ):
+            raise ValueError(
+                "Finance evidence must include an exact Stonegate source identifier."
+            )
     completed_action_claims = (
         "i changed ",
         "i approved ",
         "i posted ",
         "i paid ",
         "i moved ",
+        "i matched ",
+        "i closed ",
         "i published ",
         "i sent ",
     )
@@ -447,6 +523,36 @@ def _metrics(
         item.decision in {"accepted", "edited"} for item in reviews
     )
     edited = sum(item.decision == "edited" for item in reviews)
+    rejected = sum(item.decision == "rejected" for item in reviews)
+    run_ids = [
+        item.ai_run_log_id
+        for item in recommendations
+        if item.ai_run_log_id is not None
+    ]
+    run_metrics = (
+        db.execute(
+            select(
+                func.avg(AiRunLog.latency_ms),
+                func.coalesce(func.sum(AiRunLog.cost_microusd), 0),
+            ).where(
+                AiRunLog.organization_id == principal.organization_id,
+                AiRunLog.id.in_(run_ids),
+            )
+        ).one()
+        if run_ids
+        else (None, 0)
+    )
+    blocked_output_count = int(
+        db.scalar(
+            select(func.count(AuditEvent.id)).where(
+                AuditEvent.organization_id == principal.organization_id,
+                AuditEvent.action
+                == f"management.copilot_output_blocked.{capability_key}",
+                AuditEvent.created_at >= since,
+            )
+        )
+        or 0
+    )
     return ManagementCopilotMetrics(
         generated=len(recommendations),
         reviewed=reviewed,
@@ -456,10 +562,46 @@ def _metrics(
         correction_rate_basis_points=(
             round(edited / reviewed * 10_000) if reviewed else 0
         ),
+        rejection_rate_basis_points=(
+            round(rejected / reviewed * 10_000) if reviewed else 0
+        ),
+        blocked_output_count=blocked_output_count,
+        average_latency_ms=(
+            round(float(run_metrics[0])) if run_metrics[0] is not None else None
+        ),
+        total_cost_microusd=int(run_metrics[1] or 0),
         estimated_time_saved_minutes=round(
             sum(item.estimated_time_saved_seconds for item in reviews) / 60
         ),
     )
+
+
+def _record_blocked_output(
+    db: Session,
+    principal: Principal,
+    capability_key: ManagementCapability,
+    run_id: UUID,
+    reason: str,
+) -> None:
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="system",
+            action=f"management.copilot_output_blocked.{capability_key}",
+            entity_type="ai_run_log",
+            entity_id=run_id,
+            previous_value=None,
+            new_value={
+                "capability_key": capability_key,
+                "reason": reason[:500],
+                "financial_changes_applied": False,
+                "external_actions_executed": False,
+            },
+            reason="Governed management Copilot output validation",
+        )
+    )
+    db.commit()
 
 
 def _audit(

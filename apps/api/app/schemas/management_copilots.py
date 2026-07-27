@@ -136,6 +136,10 @@ class ManagementCopilotMetrics(BaseModel):
     reviewed: int
     accepted_or_corrected_rate_basis_points: int
     correction_rate_basis_points: int
+    rejection_rate_basis_points: int
+    blocked_output_count: int
+    average_latency_ms: int | None
+    total_cost_microusd: int
     estimated_time_saved_minutes: int
 
 

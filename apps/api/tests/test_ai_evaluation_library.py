@@ -28,14 +28,15 @@ def test_ai2_library_has_required_coverage_and_is_idempotent(
     second = client.post("/api/v1/ai/evaluation-library/install", headers=HEADERS)
 
     assert first.status_code == 201
-    assert first.json()["created_dataset_count"] == 2
+    assert first.json()["created_dataset_count"] == 3
     assert second.status_code == 201
     assert second.json()["created_dataset_count"] == 0
-    assert second.json()["existing_dataset_count"] == 2
+    assert second.json()["existing_dataset_count"] == 3
 
     datasets = {item["dataset_key"]: item for item in first.json()["datasets"]}
     lead_manager = datasets["ai2_lead_manager_golden"]
     call_intelligence = datasets["ai2_call_intelligence_golden"]
+    finance_accounting = datasets["f6f_finance_accounting_golden"]
 
     assert len(lead_manager["cases"]) == 75
     assert sum(item["case_type"] == "operating" for item in lead_manager["cases"]) == 50
@@ -48,6 +49,20 @@ def test_ai2_library_has_required_coverage_and_is_idempotent(
     assert len(call_intelligence["cases"]) == 60
     assert sum(item["case_type"] == "operating" for item in call_intelligence["cases"]) == 35
     assert sum(item["case_type"] != "operating" for item in call_intelligence["cases"]) == 25
+    assert len(finance_accounting["cases"]) == 60
+    assert (
+        sum(item["case_type"] == "operating" for item in finance_accounting["cases"])
+        == 40
+    )
+    assert (
+        sum(item["case_type"] != "operating" for item in finance_accounting["cases"])
+        == 20
+    )
+    assert all(
+        item["expected_output"]["decision"] == "block_and_escalate"
+        for item in finance_accounting["cases"]
+        if item["case_type"] != "operating"
+    )
 
     for dataset in datasets.values():
         assert dataset["required_review_scopes"] == ["executive", "role_owner"]

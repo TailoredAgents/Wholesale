@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, TypedDict
 
 from sqlalchemy import func, select
@@ -20,7 +20,13 @@ from app.schemas.management_copilots import (
     ManagementMetricCard,
     ManagementRiskAlert,
 )
-from app.services.finance import get_finance_overview
+from app.services.accounting_reports import get_accounting_reports
+from app.services.banking import get_banking_workspace
+from app.services.finance import (
+    get_accounting_ledger,
+    get_finance_overview,
+    get_operational_posting_workspace,
+)
 from app.services.leads import get_dashboard_summary
 from app.services.marketing import get_marketing_overview
 
@@ -61,6 +67,20 @@ def _tax_facts(
 
     setup = get_accounting_setup(db, principal)
     overview = get_finance_overview(db, principal, period_days)
+    posting = get_operational_posting_workspace(db, principal)
+    account_by_key = {item.system_key: item for item in setup.accounts}
+    classification_candidates = []
+    for item in _posting_candidates(posting):
+        debit_key = item["proposed_debit_account_key"]
+        account = account_by_key.get(debit_key) if isinstance(debit_key, str) else None
+        classification_candidates.append(
+            {
+                **item,
+                "proposed_tax_category": account.tax_category if account else None,
+                "classification_status": "human_review_required",
+                "professional_decision_required": True,
+            }
+        )
     source_record_count = len(overview.deductions) + len(overview.marketing_spend)
     missing_note_count = sum(1 for item in overview.deductions if not item.notes) + sum(
         1 for item in overview.marketing_spend if not item.notes
@@ -73,7 +93,7 @@ def _tax_facts(
                 severity="warning",
                 item="Accounting profile",
                 reason="Tax treatment depends on unresolved company-profile decisions.",
-                evidence=["Finance accounting profile"],
+                evidence=[f"accounting_profile:{setup.profile.id}"],
             )
         )
     if missing_note_count:
@@ -82,7 +102,18 @@ def _tax_facts(
                 severity="warning",
                 item="Business purpose",
                 reason=f"{missing_note_count} records lack a business-purpose note.",
-                evidence=["Finance source records"],
+                evidence=[
+                    *[
+                        f"deal_deduction:{item.id}"
+                        for item in overview.deductions
+                        if not item.notes
+                    ],
+                    *[
+                        f"marketing_spend:{item.id}"
+                        for item in overview.marketing_spend
+                        if not item.notes
+                    ],
+                ][:20],
             )
         )
     context = {
@@ -102,6 +133,7 @@ def _tax_facts(
         "marketing_spend": [
             item.model_dump(mode="json") for item in overview.marketing_spend
         ],
+        "classification_candidates": classification_candidates[:50],
         "authority": {
             "mode": "draft_only",
             "human_review_required": True,
@@ -136,10 +168,10 @@ def _tax_facts(
                 tone="success",
             ),
             ManagementMetricCard(
-                label="Review mode",
-                value="Draft only",
-                detail="No filing or ledger posting",
-                tone="neutral",
+                label="Classifications",
+                value=str(len(classification_candidates)),
+                detail="Proposals requiring human review",
+                tone="warning" if classification_candidates else "neutral",
             ),
         ],
         "context": context,
@@ -153,6 +185,30 @@ def _finance_facts(
     period_days: int,
 ) -> ManagementFacts:
     overview = get_finance_overview(db, principal, period_days)
+    end_on = datetime.now(UTC).date()
+    start_on = end_on - timedelta(days=period_days - 1)
+    previous_end_on = start_on - timedelta(days=1)
+    previous_start_on = previous_end_on - timedelta(days=period_days - 1)
+    reports = get_accounting_reports(db, principal, start_on, end_on)
+    previous_reports = get_accounting_reports(
+        db,
+        principal,
+        previous_start_on,
+        previous_end_on,
+    )
+    ledger = get_accounting_ledger(db, principal)
+    posting = get_operational_posting_workspace(db, principal)
+    banking = get_banking_workspace(db, principal)
+    posting_candidates = _posting_candidates(posting)
+    bank_matches, ambiguous_bank_lines = _bank_match_candidates(banking)
+    statement_variances = _statement_variances(
+        reports,
+        previous_reports,
+        start_on,
+        end_on,
+        previous_start_on,
+        previous_end_on,
+    )
     start_at = datetime.now(UTC) - timedelta(days=period_days)
     reconciliations = list(
         db.scalars(
@@ -191,7 +247,9 @@ def _finance_facts(
                 severity="warning",
                 item="Pending revenue",
                 reason=f"{len(pending_revenue)} revenue records are not collected.",
-                evidence=["Finance revenue ledger"],
+                evidence=[
+                    f"revenue_record:{item.id}" for item in pending_revenue[:10]
+                ],
             )
         )
     if unlinked_revenue:
@@ -201,7 +259,9 @@ def _finance_facts(
                 severity="critical",
                 item="Unlinked revenue",
                 reason=f"{len(unlinked_revenue)} records lack complete deal linkage.",
-                evidence=["Finance revenue ledger linkage"],
+                evidence=[
+                    f"revenue_record:{item.id}" for item in unlinked_revenue[:10]
+                ],
             )
         )
     if reconciliation_exceptions:
@@ -214,7 +274,10 @@ def _finance_facts(
                     f"{len(reconciliation_exceptions)} closing statements require "
                     "approval or margin review."
                 ),
-                evidence=["Disposition reconciliation ledger"],
+                evidence=[
+                    f"deal_reconciliation:{item.id}"
+                    for item in reconciliation_exceptions[:10]
+                ],
             )
         )
     if overview.summary.company_net_cents < 0:
@@ -224,12 +287,94 @@ def _finance_facts(
                 severity="critical",
                 item="Company net",
                 reason="Recorded costs and compensation exceed collected revenue.",
-                evidence=["Finance period summary"],
+                evidence=[f"finance_summary:{start_on}:{end_on}"],
             )
         )
     if not any(item.is_active for item in overview.compensation_rules):
         gaps.append("No active legacy compensation rule is recorded.")
         score -= 10
+    if not reports.trial_balance.balanced or not reports.balance_sheet.balanced:
+        score -= 40
+        risks.append(
+            ManagementRiskAlert(
+                severity="critical",
+                item="Financial statements",
+                reason="The trial balance or balance sheet is out of balance.",
+                evidence=[
+                    f"trial_balance:{start_on}:{end_on}",
+                    f"balance_sheet:{end_on}",
+                ],
+            )
+        )
+    if reports.close_readiness.blocking_count:
+        score -= min(30, reports.close_readiness.blocking_count * 5)
+        risks.append(
+            ManagementRiskAlert(
+                severity="warning",
+                item="Month-end close",
+                reason=(
+                    f"{reports.close_readiness.blocking_count} accounting close "
+                    "requirements remain unresolved."
+                ),
+                evidence=[
+                    f"accounting_period:{reports.close_readiness.period_key}",
+                    *[
+                        f"close_check:{item.key}"
+                        for item in reports.close_readiness.items
+                        if item.status == "block"
+                    ],
+                ],
+            )
+        )
+    if posting.exception_count:
+        score -= min(25, posting.exception_count * 5)
+        risks.append(
+            ManagementRiskAlert(
+                severity="warning",
+                item="Accounting source exceptions",
+                reason=(
+                    f"{posting.exception_count} operational accounting sources "
+                    "need evidence or classification review."
+                ),
+                evidence=[
+                    item["citation"]
+                    for item in posting_candidates
+                    if item["readiness"] == "exception"
+                ][:10]
+                or ["accounting_posting_queue"],
+            )
+        )
+    unmatched_bank_lines = banking.summary["unmatched_transactions"]
+    if unmatched_bank_lines:
+        score -= min(25, unmatched_bank_lines * 3)
+        risks.append(
+            ManagementRiskAlert(
+                severity="warning",
+                item="Bank matching",
+                reason=(
+                    f"{unmatched_bank_lines} bank lines remain unmatched; "
+                    f"{len(bank_matches)} have one exact cash candidate and "
+                    f"{ambiguous_bank_lines} are ambiguous."
+                ),
+                evidence=[
+                    *[item["bank_transaction_citation"] for item in bank_matches[:10]],
+                    "finance_banking_workspace",
+                ],
+            )
+        )
+    if ledger.summary.out_of_balance_entries:
+        score -= 40
+        risks.append(
+            ManagementRiskAlert(
+                severity="critical",
+                item="Journal control",
+                reason=(
+                    f"{ledger.summary.out_of_balance_entries} journal entries "
+                    "failed the balance control."
+                ),
+                evidence=["accounting_ledger:journal_balance_control"],
+            )
+        )
 
     margin_basis_points = (
         round(
@@ -281,6 +426,55 @@ def _finance_facts(
         "active_compensation_rule_count": sum(
             item.is_active for item in overview.compensation_rules
         ),
+        "accounting_review": {
+            "report_period": {
+                "start_on": start_on.isoformat(),
+                "end_on": end_on.isoformat(),
+                "accounting_method": reports.accounting_method,
+            },
+            "statement_summary": {
+                "revenue_cents": reports.profit_and_loss.revenue.total_cents,
+                "cost_of_revenue_cents": (
+                    reports.profit_and_loss.cost_of_revenue.total_cents
+                ),
+                "operating_expense_cents": (
+                    reports.profit_and_loss.operating_expenses.total_cents
+                ),
+                "net_income_cents": reports.profit_and_loss.net_income_cents,
+                "cash_change_cents": reports.cash_flow.net_change_cents,
+                "total_assets_cents": reports.balance_sheet.total_assets_cents,
+                "trial_balance_balanced": reports.trial_balance.balanced,
+                "balance_sheet_balanced": reports.balance_sheet.balanced,
+            },
+            "prior_period_variances": statement_variances,
+            "close_readiness": reports.close_readiness.model_dump(mode="json"),
+            "posting_candidates": posting_candidates[:50],
+            "bank_match_candidates": bank_matches[:50],
+            "ambiguous_bank_line_count": ambiguous_bank_lines,
+            "ledger_summary": ledger.summary.model_dump(mode="json"),
+            "general_ledger_evidence": [
+                {
+                    **item.model_dump(mode="json"),
+                    "citation": (
+                        f"journal_line:{item.journal_entry_id}:{item.account_code}"
+                    ),
+                }
+                for item in reports.general_ledger[:100]
+            ],
+            "authority": {
+                "mode": "draft_only",
+                "may_prepare_explanations": True,
+                "may_propose_classification": True,
+                "may_propose_balanced_journal": True,
+                "may_propose_bank_match": True,
+                "may_prepare_close_checklist": True,
+                "may_approve_or_post": False,
+                "may_match_bank_transaction": False,
+                "may_close_period": False,
+                "may_move_money": False,
+                "may_finalize_tax_treatment": False,
+            },
+        },
     }
     return _result(
         score,
@@ -288,32 +482,191 @@ def _finance_facts(
         risks,
         [
             _metric(
-                "Collected revenue",
-                _money(overview.summary.collected_revenue_cents),
-                f"Last {period_days} days",
-                "success" if overview.summary.collected_revenue_cents else "neutral",
+                "Ledger net income",
+                _money(reports.profit_and_loss.net_income_cents),
+                f"{start_on} through {end_on}",
+                (
+                    "success"
+                    if reports.profit_and_loss.net_income_cents >= 0
+                    else "danger"
+                ),
             ),
             _metric(
-                "Company net",
-                _money(overview.summary.company_net_cents),
-                _basis_points(margin_basis_points),
-                "success" if overview.summary.company_net_cents >= 0 else "danger",
+                "Close blockers",
+                str(reports.close_readiness.blocking_count),
+                f"{reports.close_readiness.warning_count} evidence warnings",
+                "warning" if reports.close_readiness.blocking_count else "success",
             ),
             _metric(
-                "Reconciliation exceptions",
-                str(len(reconciliation_exceptions)),
-                "Human approval required",
-                "warning" if reconciliation_exceptions else "success",
+                "Posting candidates",
+                str(
+                    sum(
+                        item["readiness"] == "ready"
+                        for item in posting_candidates
+                    )
+                ),
+                f"{posting.exception_count} exceptions",
+                "warning" if posting.exception_count else "info",
             ),
             _metric(
-                "Pending revenue",
-                str(len(pending_revenue)),
-                f"{len(unlinked_revenue)} linkage gaps",
-                "warning" if pending_revenue else "success",
+                "Exact bank candidates",
+                str(len(bank_matches)),
+                f"{unmatched_bank_lines} unmatched lines",
+                "warning" if unmatched_bank_lines else "success",
             ),
         ],
         context,
     )
+
+
+def _posting_candidates(posting: Any) -> list[dict[str, Any]]:
+    rules = {item.id: item for item in posting.rules}
+    result: list[dict[str, Any]] = []
+    for item in posting.source_items:
+        if item.journal_entry_id is not None:
+            continue
+        rule = rules.get(item.rule_id)
+        citation = (
+            f"accounting_source:{item.source_type}:{item.source_id}:"
+            f"{item.posting_purpose}"
+        )
+        result.append(
+            {
+                "citation": citation,
+                "source_type": item.source_type,
+                "source_id": item.source_id,
+                "posting_purpose": item.posting_purpose,
+                "label": item.label,
+                "amount_cents": item.amount_cents,
+                "readiness": item.readiness,
+                "readiness_detail": item.readiness_detail,
+                "proposed_debit_account_key": (
+                    rule.debit_account_key if rule else None
+                ),
+                "proposed_credit_account_key": (
+                    rule.credit_account_key if rule else None
+                ),
+                "posting_rule": (
+                    f"accounting_posting_rule:{rule.id}:v{rule.version_number}"
+                    if rule
+                    else None
+                ),
+                "evidence_references": item.evidence_references,
+                "requires_human_journal_review": True,
+            }
+        )
+    return result
+
+
+def _bank_match_candidates(
+    banking: Any,
+) -> tuple[list[dict[str, Any]], int]:
+    used_journal_ids = {
+        str(item.journal_entry_id)
+        for item in banking.transactions
+        if item.journal_entry_id is not None
+    }
+    journals_by_amount: dict[int, list[dict[str, Any]]] = {}
+    for journal in banking.posted_journals:
+        journal_id = str(journal["id"])
+        if journal_id in used_journal_ids:
+            continue
+        amount = int(journal["cash_delta_cents"])
+        journals_by_amount.setdefault(amount, []).append(journal)
+    unmatched_by_amount: dict[int, list[Any]] = {}
+    for transaction in banking.transactions:
+        if transaction.status == "unmatched":
+            unmatched_by_amount.setdefault(transaction.amount_cents, []).append(
+                transaction
+            )
+    suggestions: list[dict[str, Any]] = []
+    ambiguous = 0
+    for amount, transactions in unmatched_by_amount.items():
+        candidates = journals_by_amount.get(amount, [])
+        if len(transactions) != 1 or len(candidates) != 1:
+            if candidates:
+                ambiguous += len(transactions)
+            continue
+        transaction = transactions[0]
+        journal = candidates[0]
+        suggestions.append(
+            {
+                "bank_transaction_citation": (
+                    f"bank_transaction:{transaction.id}"
+                ),
+                "journal_citation": f"journal_entry:{journal['id']}",
+                "occurred_on": transaction.occurred_on.isoformat(),
+                "description": transaction.description,
+                "amount_cents": transaction.amount_cents,
+                "journal_entry_number": journal["entry_number"],
+                "journal_memo": journal["memo"],
+                "match_basis": "one unused posted journal has the exact cash movement",
+                "confidence": "candidate_only",
+                "requires_human_match_decision": True,
+            }
+        )
+    return suggestions, ambiguous
+
+
+def _statement_variances(
+    current: Any,
+    previous: Any,
+    current_start: date,
+    current_end: date,
+    previous_start: date,
+    previous_end: date,
+) -> list[dict[str, Any]]:
+    values = (
+        (
+            "Revenue",
+            current.profit_and_loss.revenue.total_cents,
+            previous.profit_and_loss.revenue.total_cents,
+        ),
+        (
+            "Cost of revenue",
+            current.profit_and_loss.cost_of_revenue.total_cents,
+            previous.profit_and_loss.cost_of_revenue.total_cents,
+        ),
+        (
+            "Operating expenses",
+            current.profit_and_loss.operating_expenses.total_cents,
+            previous.profit_and_loss.operating_expenses.total_cents,
+        ),
+        (
+            "Net income",
+            current.profit_and_loss.net_income_cents,
+            previous.profit_and_loss.net_income_cents,
+        ),
+        (
+            "Cash change",
+            current.cash_flow.net_change_cents,
+            previous.cash_flow.net_change_cents,
+        ),
+    )
+    return [
+        {
+            "metric": label,
+            "current_cents": current_amount,
+            "previous_cents": previous_amount,
+            "change_cents": current_amount - previous_amount,
+            "change_basis_points": (
+                round(
+                    (current_amount - previous_amount)
+                    / abs(previous_amount)
+                    * 10_000
+                )
+                if previous_amount
+                else None
+            ),
+            "current_citation": (
+                f"financial_statement:{current_start}:{current_end}:{label}"
+            ),
+            "previous_citation": (
+                f"financial_statement:{previous_start}:{previous_end}:{label}"
+            ),
+        }
+        for label, current_amount, previous_amount in values
+    ]
 
 
 def _marketing_facts(

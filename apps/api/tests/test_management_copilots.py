@@ -124,6 +124,8 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
             assert statuses[capability]["requires_human_review"] is True
 
         class FakeOpenAIResponsesClient:
+            invalid_finance_output = False
+
             def __init__(self, **_: object) -> None:
                 pass
 
@@ -134,6 +136,14 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                 assert isinstance(prompt, str)
                 assert "Private Seller Name" not in prompt
                 assert "500 Management Test Way" not in prompt
+                citation = (
+                    "finance_summary:2026-07-01:2026-07-30"
+                    if (
+                        "accounting_review" in prompt
+                        and not self.invalid_finance_output
+                    )
+                    else "approved_management_record:test"
+                )
                 schema = kwargs["json_schema"]
                 assert isinstance(schema, dict)
                 assert schema["additionalProperties"] is False
@@ -146,7 +156,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                             {
                                 "label": "Reporting period",
                                 "value": "30 days",
-                                "evidence": ["Period-bounded Stonegate records"],
+                                "evidence": [citation],
                             }
                         ],
                         "exceptions": [
@@ -155,7 +165,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                                 "category": "operations",
                                 "title": "Review required",
                                 "detail": "A recorded exception needs an owner decision.",
-                                "evidence": ["Deterministic management risk ledger"],
+                                "evidence": [citation],
                             }
                         ],
                         "analysis": [
@@ -164,7 +174,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                                 "subject": "Current operating evidence",
                                 "signal": "warning",
                                 "analysis": "The sample supports review but not autonomous action.",
-                                "evidence": ["Approved aggregate management records"],
+                                "evidence": [citation],
                             }
                         ],
                         "draft_actions": [
@@ -173,7 +183,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                                 "reason": "Human authority is required.",
                                 "owner": "Owner",
                                 "workspace": "dashboard",
-                                "evidence": ["Deterministic management risk ledger"],
+                                "evidence": [citation],
                                 "requires_human_decision": True,
                             }
                         ],
@@ -182,13 +192,13 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                                 "decision": "Choose whether to investigate now.",
                                 "why_now": "The exception is active in the reporting period.",
                                 "options": ["Investigate now", "Assign a human review"],
-                                "evidence": ["Deterministic management risk ledger"],
+                                "evidence": [citation],
                             }
                         ],
                         "uncertainties": [
                             "Provider ledgers are not connected in this test."
                         ],
-                        "evidence": ["Stonegate aggregate records"],
+                        "evidence": [citation],
                         "confidence": 86,
                     },
                     {"input_tokens": 180, "output_tokens": 220, "total_tokens": 400},
@@ -259,6 +269,24 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
             )
             assert review.status_code == 200, review.text
             assert review.json()["decision"] == "accepted"
+
+        FakeOpenAIResponsesClient.invalid_finance_output = True
+        blocked = client.post(
+            "/api/v1/finance/copilot/analyze",
+            headers=HEADERS,
+            json={
+                "period_days": 30,
+                "idempotency_key": "management-copilot:blocked-finance",
+            },
+        )
+        assert blocked.status_code == 422
+        assert "exact Stonegate source" in blocked.json()["detail"]
+        finance_after_block = client.get(
+            "/api/v1/finance/copilot?period_days=30",
+            headers=HEADERS,
+        )
+        assert finance_after_block.status_code == 200
+        assert finance_after_block.json()["metrics"]["blocked_output_count"] == 1
 
     get_settings.cache_clear()
     assert db_session.scalar(

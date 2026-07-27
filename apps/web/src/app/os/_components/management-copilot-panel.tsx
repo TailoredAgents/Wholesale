@@ -33,6 +33,19 @@ const workspacePaths: Record<string, string> = {
   ai: "/os/ai",
 };
 
+function rate(basisPoints: number) {
+  return `${(basisPoints / 100).toFixed(1)}%`;
+}
+
+function aiCost(microusd: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(microusd / 1_000_000);
+}
+
 export function ManagementCopilotPanel({
   endpointBase,
   initialData,
@@ -343,6 +356,45 @@ export function ManagementCopilotPanel({
           Deterministic health and exception monitoring is active.
         </p>
       )}
+      <section className={styles.pilotMetrics}>
+        <header>30-day governed pilot performance</header>
+        <div>
+          <span>Generated</span>
+          <strong>{copilot.metrics.generated}</strong>
+        </div>
+        <div>
+          <span>Reviewed</span>
+          <strong>{copilot.metrics.reviewed}</strong>
+        </div>
+        <div>
+          <span>Correction rate</span>
+          <strong>{rate(copilot.metrics.correction_rate_basis_points)}</strong>
+        </div>
+        <div>
+          <span>Rejected</span>
+          <strong>{rate(copilot.metrics.rejection_rate_basis_points)}</strong>
+        </div>
+        <div>
+          <span>Blocked output</span>
+          <strong>{copilot.metrics.blocked_output_count}</strong>
+        </div>
+        <div>
+          <span>Average latency</span>
+          <strong>
+            {copilot.metrics.average_latency_ms === null
+              ? "No runs"
+              : `${copilot.metrics.average_latency_ms} ms`}
+          </strong>
+        </div>
+        <div>
+          <span>Model cost</span>
+          <strong>{aiCost(copilot.metrics.total_cost_microusd)}</strong>
+        </div>
+        <div>
+          <span>Time saved</span>
+          <strong>{copilot.metrics.estimated_time_saved_minutes} min</strong>
+        </div>
+      </section>
     </section>
   );
 }

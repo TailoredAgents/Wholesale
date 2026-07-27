@@ -737,14 +737,31 @@ Review:
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
 
-The Finance Copilot has two financial review capabilities. Reconciliation reviews funded-deal
-economics and commissions. Tax and Deductions reviews recorded costs, proposes classifications,
-and identifies missing evidence for the owner or tax professional. Neither capability can approve
-commissions, alter records, promise that an item is deductible, post accounting entries, close
-periods, move money, file returns, make final tax classifications, or change compensation policy.
-Later F6 phases will let this same Copilot draft balanced journals, propose bank matches, explain
-financial statements, and prepare month-end review work without gaining posting or payment
-authority.
+The Finance Copilot has two financial review capabilities. **Finance and Accounting Review**
+reviews funded-deal economics, commissions, the posted ledger, statements, posting candidates,
+possible bank matches, variances, and close blockers. **Tax and Deductions Review** reviews
+recorded costs, proposes classifications, and identifies missing evidence for the owner or tax
+professional. Neither capability can approve commissions, alter records, promise that an item is
+deductible, approve or post journals, match bank lines, close periods, move money, file returns,
+make final tax classifications, or change compensation policy.
+
+### Finance Copilot Review
+
+1. Select the reporting period in Finance and run the current financial reports.
+2. Open the Finance Copilot and select the financial review capability needed.
+3. Generate a draft. The deterministic review runs even when the model provider is unavailable.
+4. Check every material statement against its source-record, journal-line, bank-transaction,
+   statement, or close-check citation.
+5. Treat a posting item as a candidate only. Prepare the real draft through **Posting and Payment
+   Control**, then use the normal journal approval and posting workflow.
+6. Treat a bank match as a candidate only. Stonegate proposes one only when exactly one unused
+   posted journal has the matching cash amount; a person still decides the match.
+7. Do not accept an explanation for a variance unless the cause is supported by recorded evidence.
+8. Accept, correct, or reject the Copilot draft. The decision is retained without changing any
+   accounting record.
+
+The performance strip reports the last 30 days of generated and reviewed drafts, correction and
+rejection rates, blocked outputs, model latency, model cost, and estimated review time saved.
 
 ### Accounting Ledger
 

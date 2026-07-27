@@ -306,6 +306,12 @@ Marketing, and Executive drafts. The evidence snapshot and governed AI trace rem
 the original output; one immutable review preserves acceptance, correction, or rejection without
 mutating financial, marketing, staffing, permission, or external systems.
 
+Finance recommendations use the existing management-recommendation, review, AI-run, and audit
+records rather than a second accounting or AI data model. Their evidence snapshots may cite
+posting candidates, journal lines, financial statements, bank transactions, and close checks.
+Rejected model contracts are retained as blocked-output audit events; generating or reviewing a
+recommendation never writes to journals, bank matches, periods, payments, or tax classifications.
+
 AI10 external-action policies retain the approved audience, consent, template, schedule, volume,
 cost, quality, canary, pause, rollback, provider, and human-owner contract for every candidate
 action. Simulation attempts store deterministic checks, blockers, cost and audience bounds, and

@@ -1133,6 +1133,10 @@ export type AcquisitionsCopilotOverview = {
     reviewed: number;
     accepted_or_corrected_rate_basis_points: number;
     correction_rate_basis_points: number;
+    rejection_rate_basis_points: number;
+    blocked_output_count: number;
+    average_latency_ms: number | null;
+    total_cost_microusd: number;
     estimated_time_saved_minutes: number;
   };
 };
@@ -1556,7 +1560,8 @@ export type ManagementCopilotOutput = {
 
 export type ManagementCopilotRecommendation = {
   id: string;
-  capability_key: "finance.reconcile" | "marketing.analyze" | "operations.brief";
+  capability_key: "finance.reconcile" | "finance.tax_review" |
+    "marketing.analyze" | "operations.brief";
   reporting_period_days: number;
   ai_run_log_id: string | null;
   status: string;

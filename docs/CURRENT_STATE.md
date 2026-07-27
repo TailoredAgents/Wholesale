@@ -1,6 +1,6 @@
 # Current State
 
-Last updated: July 26, 2026
+Last updated: July 27, 2026
 
 ## Product
 
@@ -367,7 +367,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   posted-ledger Profit and Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger,
   receivable, payable, payment, commission, and deal-profitability reporting; close-readiness
   controls; and an authenticated CPA export archive. Production opening balances, one completed
-  month close, and CPA acceptance remain external operating steps.
+  month close, and CPA acceptance remain external operating steps. F6F extends the same Finance
+  Copilot with deterministic posting candidates, unique exact-amount bank-match candidates,
+  statement variances, close blockers, exact source and journal citations, blocked-output
+  auditing, and governed 30-day quality, latency, cost, and time-saved metrics. It cannot alter the
+  ledger, bank reconciliation, accounting period, payment state, or tax treatment.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or
@@ -376,8 +380,9 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   specialist mappings, field source and overwrite policies, an approved-knowledge registry,
   redaction and retention rules, deterministic data-quality rules, and owner approval controls are
   available in `/os/ai`. External execution remains disabled.
-- AI2 is implemented: the idempotent golden library contains 75 Lead Manager cases and 60 Call
-  Intelligence cases, including 25 policy, failure, and adversarial cases in each dataset.
+- AI2 and the F6F Finance extension are implemented: the idempotent golden library contains 75 Lead
+  Manager cases, 60 Call Intelligence cases, and 60 Finance and Accounting cases. The Finance set
+  contains 40 operating and 20 policy, failure, or adversarial cases.
   Factual-accuracy, evidence-coverage, critical-failure, latency, and cost thresholds are enforced.
   Executive and role-owner reviews, redaction validation, and corrected-production-case versioning
   are operational. Production signatures remain an operator checkpoint.
@@ -396,7 +401,8 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   governed analysis, immutable review, prompt minimization, and no accounting, compensation,
   payment, budget, campaign, staffing, permission, or external authority. F6A extends the existing
   Finance Copilot with an eleventh on-demand capability for evidence-linked tax and deduction
-  review; it does not create a second AI system. All eleven AI4-AI9/F6A copilot capabilities are
+  review. F6F further extends that same Copilot across ledger, statements, posting, bank-match, and
+  close-review evidence; it does not create a second AI system. All eleven AI4-AI9/F6A copilot capabilities are
   enabled for on-demand drafts with mandatory human review and read-only tools;
   global external actions remain disabled. AI10 adds four versioned external-action control
   contracts, owner approval, provider and evaluation readiness gates, canary bounds, deterministic

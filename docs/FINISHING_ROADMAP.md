@@ -411,6 +411,13 @@ F6E implemented workflow:
 
 ### F6F: Finance And Accounting Copilot
 
+- **Implementation status:** Core product work is complete. The existing Finance Copilot now reads
+  the Stonegate ledger, financial statements, posting queue, bank-statement workspace, close
+  checklist, and tax-review sources. It produces evidence-linked, review-only classification,
+  journal, bank-match, variance, and close-readiness guidance. A 60-case Finance evaluation
+  dataset and 30-day quality, latency, cost, blocked-output, correction, and rejection metrics are
+  included. Production model replay, supervised use on real periods, and CPA review remain
+  acceptance steps.
 - Extend the existing Finance Copilot to suggest account classifications, draft balanced journal
   entries, propose transaction matches, identify duplicate or missing records, explain variances,
   and prepare month-end and CPA review checklists.
