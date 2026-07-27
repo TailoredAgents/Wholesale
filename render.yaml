@@ -10,6 +10,8 @@ services:
         sync: false
       - key: NEXT_PUBLIC_API_BASE_URL
         sync: false
+      - key: NEXT_PUBLIC_SITE_URL
+        value: https://www.stonegatehb.com
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
         sync: false
       - key: CLERK_SECRET_KEY
@@ -55,7 +57,7 @@ services:
           name: oakwell-key-value
           property: connectionString
       - key: API_CORS_ORIGINS
-        value: https://www.stonegatehomebuyer.com,https://stonegatehomebuyer.com,https://oakwell-web.onrender.com
+        value: https://stonegatehb.com,https://www.stonegatehb.com,https://oakwell-web.onrender.com
       - key: DEFAULT_ORGANIZATION_NAME
         value: Stonegate Home Buyers
       - key: BOOTSTRAP_ADMIN_EMAIL
@@ -121,7 +123,7 @@ services:
       - key: EMAIL_OAUTH_STATE_SECRET
         sync: false
       - key: EMAIL_WEB_APP_BASE_URL
-        sync: false
+        value: https://www.stonegatehb.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET
@@ -195,7 +197,7 @@ services:
       - key: MARKETING_CONVERSION_RETRY_BASE_SECONDS
         value: 60
       - key: MARKETING_WEBSITE_BASE_URL
-        value: https://www.stonegatehomebuyer.com
+        value: https://www.stonegatehb.com
       - key: GOOGLE_DATA_MANAGER_CLIENT_ID
         sync: false
       - key: GOOGLE_DATA_MANAGER_CLIENT_SECRET
@@ -289,7 +291,7 @@ services:
       - key: CLERK_AUDIENCE
         sync: false
       - key: CLERK_AUTHORIZED_PARTIES
-        value: https://www.stonegatehomebuyer.com,https://stonegatehomebuyer.com,https://oakwell-web.onrender.com
+        value: https://stonegatehb.com,https://www.stonegatehb.com,https://oakwell-web.onrender.com
       - key: CLERK_SECRET_KEY
         sync: false
 
@@ -372,7 +374,7 @@ services:
       - key: EMAIL_OAUTH_STATE_SECRET
         sync: false
       - key: EMAIL_WEB_APP_BASE_URL
-        sync: false
+        value: https://www.stonegatehb.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET
@@ -388,7 +390,7 @@ services:
       - key: MARKETING_CONVERSION_RETRY_BASE_SECONDS
         value: 60
       - key: MARKETING_WEBSITE_BASE_URL
-        value: https://www.stonegatehomebuyer.com
+        value: https://www.stonegatehb.com
       - key: GOOGLE_DATA_MANAGER_CLIENT_ID
         sync: false
       - key: GOOGLE_DATA_MANAGER_CLIENT_SECRET

@@ -3,7 +3,7 @@ export const siteConfig = {
   shortName: "Stonegate",
   phoneDisplay: "(678) 541-7725",
   phoneHref: "tel:+16785417725",
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://stonegatehomebuyers.com",
+  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.stonegatehb.com",
   serviceArea: "Georgia, with an initial focus on metro Atlanta and surrounding communities",
 } as const;
 

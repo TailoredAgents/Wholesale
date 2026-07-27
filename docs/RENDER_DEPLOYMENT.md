@@ -33,7 +33,7 @@ variable names, service placement, activation status, and acceptance checks.
 
 ## Current URLs
 
-- Branded web and OS: `https://www.stonegatehomebuyer.com`
+- Branded web and OS: `https://www.stonegatehb.com`
 - Web: `https://oakwell-web.onrender.com`
 - API: `https://oakwell-api.onrender.com`
 - Health: `https://oakwell-api.onrender.com/health`

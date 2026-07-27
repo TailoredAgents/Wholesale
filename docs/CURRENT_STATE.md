@@ -35,7 +35,7 @@ be duplicated or renamed casually.
 
 Current public URLs:
 
-- Branded website and OS: `https://www.stonegatehomebuyer.com`
+- Branded website and OS: `https://www.stonegatehb.com`
 - Website: `https://oakwell-web.onrender.com`
 - Cash-offer form: `https://oakwell-web.onrender.com/get-a-cash-offer`
 - Privacy policy: `https://oakwell-web.onrender.com/privacy-policy`

@@ -193,6 +193,10 @@ def test_marketing_overview_and_offline_export_generation(
     assert export.click_id == "test-gclid-123"
     assert export.value_cents == 2500000
     assert export.event_name == "funded_deal"
+    assert (
+        export.payload_snapshot["landing_page"]
+        == "https://www.stonegatehb.com/get-a-cash-offer"
+    )
     assert export.payload_snapshot["phone_hashes"]
     assert "4045551212" not in str(export.payload_snapshot)
     measurement = updated_overview_response.json()["measurement"]

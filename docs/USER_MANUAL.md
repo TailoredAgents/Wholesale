@@ -9,8 +9,8 @@ System from initial outreach through funded closing, reconciliation, and managem
 
 The live web application is:
 
-- Public website: `https://www.stonegatehomebuyer.com`
-- Private OS: `https://www.stonegatehomebuyer.com/os`
+- Public website: `https://www.stonegatehb.com`
+- Private OS: `https://www.stonegatehb.com/os`
 
 The legacy Render URL remains a valid fallback. The `oakwell-*` service names are infrastructure
 identifiers for Stonegate, not a second company or workspace.

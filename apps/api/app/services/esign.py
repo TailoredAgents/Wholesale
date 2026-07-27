@@ -487,7 +487,7 @@ def preview_contract_for_signature(
                     if document_type == "assignment_contract"
                     else package.seller_name
                 ),
-                email="contract-preview@stonegatehomebuyer.com",
+                email="contract-preview@stonegatehb.com",
                 signing_order=1,
             )
         ],

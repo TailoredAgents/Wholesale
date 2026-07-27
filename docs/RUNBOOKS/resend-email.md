@@ -1,6 +1,6 @@
 # Resend Operational Email
 
-Last updated: July 24, 2026
+Last updated: July 27, 2026
 
 ## Status
 
@@ -27,12 +27,14 @@ Employees do not connect personal email accounts and do not share provider crede
 
 ## Domain Decision
 
+The approved company domain is `stonegatehb.com`. Do not configure the retired domain in Resend.
+
 Before changing DNS, choose one receiving model:
 
 1. **Dedicated operational subdomain, recommended:** Use an address such as
-   `name@reply.stonegatehomebuyer.com`. This isolates receiving and avoids taking over root-domain
+   `name@reply.stonegatehb.com`. This isolates receiving and avoids taking over root-domain
    mail routing.
-2. **Root-domain receiving:** Use `name@stonegatehomebuyer.com` and intentionally route all mail
+2. **Root-domain receiving:** Use `name@stonegatehb.com` and intentionally route all mail
    for the domain through Resend into Stonegate.
 
 Resend receives mail for every address on a receiving domain after its MX record is configured.

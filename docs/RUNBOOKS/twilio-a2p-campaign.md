@@ -1,9 +1,12 @@
 # Twilio A2P Campaign Registration
 
-Last updated: July 20, 2026
+Last updated: July 27, 2026
 
-Current status: the campaign described below was submitted and is under provider review. Preserve
-the submitted public URLs and wording unless Twilio requests a correction.
+Current status: the campaign described below was submitted and is under provider review. Stonegate
+subsequently changed its public domain to `stonegatehb.com`. If the pending campaign still shows
+the retired domain, correct it in Twilio if editing is available or contact Twilio support before
+activating campaign traffic. Keep the consent wording unchanged unless Twilio requests a
+correction.
 
 Use this runbook for Stonegate Home Buyers' separate seller-communications campaign. This campaign
 is limited to people who explicitly consent through Stonegate's public cash-offer form. It does not
@@ -68,13 +71,13 @@ campaign unless the campaign registration and samples are updated to disclose th
 
 ```text
 End users opt in only through the publicly accessible Stonegate Home Buyers cash-offer form at
-https://www.stonegatehomebuyer.com/get-a-cash-offer. They enter their own mobile number and
+https://www.stonegatehb.com/get-a-cash-offer. They enter their own mobile number and
 voluntarily check a separate, unchecked SMS consent box stating that they agree to recurring
 automated texts about their property inquiry, appointments, and cash-offer updates; message
 frequency varies; message and data rates may apply; reply STOP to opt out or HELP for help; and
 consent is not a condition of purchase. The form links directly to
-https://www.stonegatehomebuyer.com/terms and
-https://www.stonegatehomebuyer.com/privacy-policy.
+https://www.stonegatehb.com/terms and
+https://www.stonegatehb.com/privacy-policy.
 Stonegate stores the consent timestamp, source, wording version, IP address, and user agent.
 Stonegate does not use purchased, rented, or third-party lead consent and does not send unsolicited
 cold SMS.
@@ -82,8 +85,8 @@ cold SMS.
 
 ## Policy URLs
 
-- Privacy Policy: `https://www.stonegatehomebuyer.com/privacy-policy`
-- Terms and Conditions: `https://www.stonegatehomebuyer.com/terms`
+- Privacy Policy: `https://www.stonegatehb.com/privacy-policy`
+- Terms and Conditions: `https://www.stonegatehb.com/terms`
 
 The Render fallback URLs remain valid, but campaign registration should use the branded Stonegate
 URLs. Do not submit URLs that redirect to an unrelated brand or are not publicly accessible.

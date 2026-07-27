@@ -278,6 +278,7 @@ def generate_offline_conversion_exports(
                 principal,
                 outcome,
                 click_event,
+                website_base_url=settings.marketing_website_base_url,
             )
             db.add(
                 OfflineConversionExport(
@@ -423,6 +424,8 @@ def build_payload_snapshot(
     principal: Principal,
     outcome: ConversionOutcome,
     click_event: ConversionEvent,
+    *,
+    website_base_url: str,
 ) -> dict[str, object]:
     lead = db.scalar(
         select(Lead).where(
@@ -459,7 +462,10 @@ def build_payload_snapshot(
         "event_name": outcome.event_name,
         "occurred_at": outcome.occurred_at.isoformat(),
         "click_captured_at": click_event.created_at.isoformat(),
-        "landing_page": absolute_landing_page(click_event.landing_page),
+        "landing_page": absolute_landing_page(
+            click_event.landing_page,
+            website_base_url=website_base_url,
+        ),
         "email_hashes": email_hashes,
         "phone_hashes": phone_hashes,
         "external_id_hash": sha256(
@@ -902,12 +908,13 @@ def payload_hash(snapshot: dict[str, object]) -> str:
     return sha256(encoded)
 
 
-def absolute_landing_page(value: str | None) -> str:
+def absolute_landing_page(value: str | None, *, website_base_url: str) -> str:
+    base_url = website_base_url.rstrip("/")
     if not value:
-        return "https://www.stonegatehomebuyer.com"
+        return base_url
     if value.startswith(("https://", "http://")):
         return value
-    return f"https://www.stonegatehomebuyer.com/{value.lstrip('/')}"
+    return f"{base_url}/{value.lstrip('/')}"
 
 
 def mask_click_id(value: str) -> str:

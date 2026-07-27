@@ -1,9 +1,41 @@
 # Custom Domain Cutover
 
-Last updated: July 24, 2026
+Last updated: July 27, 2026
 
-Current status: branded web domain active at `https://www.stonegatehomebuyer.com`; provider
+Current status: branded web domain active at `https://www.stonegatehb.com`; provider
 callback and email-domain work remains.
+
+## July 2026 Domain Replacement
+
+Stonegate replaced its previous domain with `stonegatehb.com`. The canonical browser origin is
+`https://www.stonegatehb.com`; the apex redirects to `www`.
+
+Repository-managed values:
+
+```text
+NEXT_PUBLIC_SITE_URL=https://www.stonegatehb.com
+API_CORS_ORIGINS=https://stonegatehb.com,https://www.stonegatehb.com,https://oakwell-web.onrender.com
+CLERK_AUTHORIZED_PARTIES=https://stonegatehb.com,https://www.stonegatehb.com,https://oakwell-web.onrender.com
+EMAIL_WEB_APP_BASE_URL=https://www.stonegatehb.com
+MARKETING_WEBSITE_BASE_URL=https://www.stonegatehb.com
+```
+
+Provider-dashboard actions that source code cannot perform:
+
+1. Keep `stonegatehb.com` and `www.stonegatehb.com` attached to `oakwell-web` in Render. Keep the
+   `onrender.com` URL enabled.
+2. If Clerk still has the previous domain configured as its production primary domain, change it
+   to `stonegatehb.com`, complete Clerk's DNS/certificate steps, copy the newly generated publishable
+   key into `oakwell-web`, and redeploy. Development Clerk instances do not use this production
+   domain-change flow.
+3. Confirm a token created on the new site has an `azp` value of
+   `https://www.stonegatehb.com`.
+4. If the pending Twilio A2P campaign still displays old policy or opt-in URLs, correct the
+   campaign in Twilio if editing is available or contact Twilio support before activating traffic.
+5. When Resend is activated, verify a `stonegatehb.com` sending domain and the approved receiving
+   subdomain. Do not reuse DNS records issued for the retired domain.
+6. Replace old-domain links in advertising destinations, analytics, social profiles, and any
+   third-party form or directory.
 
 ## Recommended Structure
 
@@ -56,8 +88,8 @@ reliable. Do not configure DNS until Stonegate owns and controls the domain acco
 Current trusted web origins:
 
 ```text
-https://www.stonegatehomebuyer.com
-https://stonegatehomebuyer.com
+https://stonegatehb.com
+https://www.stonegatehb.com
 https://oakwell-web.onrender.com
 ```
 

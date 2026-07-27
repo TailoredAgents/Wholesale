@@ -29,7 +29,7 @@ appropriate Render service environment.
 | --- | --- | --- | --- | --- |
 | Core | GitHub | Source repository and CI | Live | Render account connection, not an environment variable |
 | Core | Render | Web, API, worker, PostgreSQL, and Key Value hosting | Live | All |
-| Core | Domain and DNS account | `stonegatehomebuyer.com` and provider records | Live | Provider dashboard only |
+| Core | Domain and DNS account | `stonegatehb.com` and provider records | Live | Provider dashboard only |
 | Core | Clerk | Staff sign-in and session tokens | Live | Web and API |
 | Core | Render PostgreSQL | Operational database | Render-managed | API and worker |
 | Core | Render Key Value | Worker coordination and queues | Render-managed | API and worker |
@@ -50,6 +50,19 @@ appropriate Render service environment.
 
 ## Core Runtime
 
+### Branded Domain
+
+| Variable | Secret | Render service | Value |
+| --- | --- | --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | No | `oakwell-web` | `https://www.stonegatehb.com` |
+| `API_CORS_ORIGINS` | No | `oakwell-api` | Apex, `www`, and Render fallback origins |
+| `EMAIL_WEB_APP_BASE_URL` | No | API and worker | `https://www.stonegatehb.com` |
+| `MARKETING_WEBSITE_BASE_URL` | No | API and worker | `https://www.stonegatehb.com` |
+
+The Render custom-domain attachment and DNS records are provider configuration, not environment
+credentials. The apex currently redirects to `www`, so canonical and provider-facing links use
+the `www` origin.
+
 ### Clerk
 
 Provider account owner: Stonegate owner-controlled company account.
@@ -63,9 +76,14 @@ Provider account owner: Stonegate owner-controlled company account.
 | `CLERK_AUDIENCE` | No | `oakwell-api` | Blank unless explicitly configured in Clerk |
 | `CLERK_AUTHORIZED_PARTIES` | No | `oakwell-api` | Branded apex, `www`, and Render fallback web origins |
 
+If the Clerk production instance was configured for the retired domain, changing its primary
+domain generates a new publishable key. Replace `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` in
+`oakwell-web` after that change. Keep the existing secret and issuer values unless Clerk explicitly
+reissues them.
+
 Acceptance:
 
-- Sign in through `https://www.stonegatehomebuyer.com`.
+- Sign in through `https://www.stonegatehb.com`.
 - Confirm `/api/v1/me` returns the Stonegate user and local permissions.
 - Confirm branded and Render fallback origins both work.
 

@@ -321,7 +321,7 @@ class Settings(BaseSettings):
         validation_alias="MARKETING_CONVERSION_RETRY_BASE_SECONDS",
     )
     marketing_website_base_url: str = Field(
-        default="https://www.stonegatehomebuyer.com",
+        default="https://www.stonegatehb.com",
         validation_alias="MARKETING_WEBSITE_BASE_URL",
     )
     google_data_manager_client_id: str | None = Field(
