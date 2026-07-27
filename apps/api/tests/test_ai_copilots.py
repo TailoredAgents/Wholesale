@@ -29,7 +29,7 @@ def test_ai1_foundation_is_complete_idempotent_and_human_owned(
 
     assert first.status_code == 201
     assert first.json()["created_copilot_count"] == 8
-    assert first.json()["created_contract_count"] == 14
+    assert first.json()["created_contract_count"] == 15
     assert first.json()["created_policy_count"] == 7
     assert first.json()["created_knowledge_source_count"] == 6
     assert first.json()["created_data_quality_rule_count"] == 6

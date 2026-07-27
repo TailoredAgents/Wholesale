@@ -70,12 +70,12 @@ def test_portfolio_install_and_dry_run_are_idempotent(
     )
 
     assert first == {
-        "created_agent_count": 14,
+        "created_agent_count": 15,
         "existing_agent_count": 0,
-        "total_agent_count": 14,
+        "total_agent_count": 15,
     }
     assert second["created_agent_count"] == 0
-    assert second["total_agent_count"] == 14
+    assert second["total_agent_count"] == 15
     assert duplicate_event["id"] == event["id"]
     assert dry_run.status_code == 201
     assert duplicate_run.json()["id"] == dry_run.json()["id"]

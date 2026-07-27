@@ -1,5 +1,6 @@
 from calendar import monthrange
 from datetime import UTC, date, datetime, timedelta
+from hashlib import sha256
 from uuid import UUID, uuid4
 
 from sqlalchemy import Select, delete, func, select
@@ -10,7 +11,9 @@ from app.core.auth import Principal
 from app.models.foundation import (
     AccountingAccount,
     AccountingPeriod,
+    AccountingPostingRule,
     AccountingProfile,
+    AccountingSourceLink,
     ActivityEvent,
     AuditEvent,
     CompensationCalculation,
@@ -18,13 +21,17 @@ from app.models.foundation import (
     Contact,
     Deal,
     DealDeduction,
-    Lead,
+    DealPayout,
+    DealReconciliation,
+    FinancialObligation,
     JournalEntry,
     JournalLine,
+    Lead,
     MarketingSpend,
     Property,
     RevenueRecord,
     Transaction,
+    TransactionDocument,
 )
 from app.schemas.finance import (
     AccountingAccountRead,
@@ -33,24 +40,32 @@ from app.schemas.finance import (
     AccountingPeriodCreate,
     AccountingPeriodRead,
     AccountingPeriodStatusUpdate,
+    AccountingPostingRuleRead,
+    AccountingPostingWorkspaceRead,
     AccountingProfileRead,
     AccountingProfileUpdate,
     AccountingSetupRead,
+    AccountingSourceDraftRequest,
+    AccountingSourceItemRead,
     CompensationCalculationRead,
     CompensationRuleCreate,
     CompensationRuleRead,
     DealDeductionCreate,
     DealDeductionRead,
+    DealPayoutStatusUpdate,
     FinanceOverview,
     FinanceSummary,
-    MarketingSpendCreate,
-    MarketingSpendRead,
+    FinancialObligationCreate,
+    FinancialObligationRead,
+    FinancialObligationStatusUpdate,
     JournalDecision,
     JournalEntryCreate,
     JournalEntryRead,
     JournalLineCreate,
     JournalLineRead,
     JournalReverseCreate,
+    MarketingSpendCreate,
+    MarketingSpendRead,
     RevenueCreate,
     RevenueRead,
     TaxReadinessRead,
@@ -82,6 +97,21 @@ OWNER_COMPENSATION_TREATMENTS = {
     "guaranteed_payment",
 }
 ACCOUNTING_PERIOD_STATUSES = {"open", "review", "closed", "locked"}
+OBLIGATION_TYPES = {
+    "vendor_payable",
+    "contractor_payable",
+    "reimbursement",
+    "owner_distribution",
+}
+OBLIGATION_STATUSES = {"draft", "approved", "payable", "paid", "disputed", "reversed"}
+PAYMENT_TRANSITIONS = {
+    "draft": {"approved"},
+    "approved": {"payable", "disputed"},
+    "payable": {"paid", "disputed"},
+    "disputed": {"approved", "reversed"},
+    "paid": {"reversed"},
+    "reversed": set(),
+}
 
 # The operating-model acquisition reserve is intentionally absent. It is a
 # profitability target, not an accounting expense without an underlying cost.
@@ -125,6 +155,119 @@ DEFAULT_WHOLESALE_ACCOUNTS = (
     ("6900", "other_operating_expense", "Other Operating Expense", "expense", "other", "debit", "other_deduction", False, "Reviewed operating costs without a more specific account."),
 )
 
+DEFAULT_POSTING_RULES = (
+    (
+        "assignment_revenue_collected",
+        "Collected assignment revenue",
+        "revenue_record",
+        "collected",
+        "cash_revenue",
+        "operating_cash",
+        "assignment_fee_revenue",
+        True,
+        "Draft cash-basis assignment revenue after funded-deal evidence and reconciliation are complete.",
+    ),
+    (
+        "double_close_revenue_collected",
+        "Collected double-close proceeds",
+        "revenue_record",
+        "collected",
+        "cash_revenue",
+        "operating_cash",
+        "wholesale_property_sale_revenue",
+        True,
+        "Draft gross double-close sale proceeds. Property basis and direct costs remain separate source entries.",
+    ),
+    (
+        "other_revenue_collected",
+        "Collected other operating revenue",
+        "revenue_record",
+        "collected",
+        "cash_revenue",
+        "operating_cash",
+        "other_operating_revenue",
+        True,
+        "Draft collected consulting or other approved operating revenue without classifying it as an assignment fee.",
+    ),
+    (
+        "deal_deduction_paid",
+        "Paid deal deduction",
+        "deal_deduction",
+        "paid",
+        "paid_expense",
+        "other_operating_expense",
+        "operating_cash",
+        False,
+        "Draft a paid deal cost using the approved category-to-account mapping.",
+    ),
+    (
+        "marketing_spend_paid",
+        "Paid marketing and operating spend",
+        "marketing_spend",
+        "paid",
+        "paid_expense",
+        "advertising",
+        "operating_cash",
+        False,
+        "Draft paid marketing, software, data, or prospecting costs using source-aware account mapping.",
+    ),
+    (
+        "commission_accrued",
+        "Approved commission payable",
+        "deal_payout",
+        "approved",
+        "commission_accrual",
+        "deal_commissions",
+        "commission_payable",
+        True,
+        "Draft an approved funded-deal commission as a payable without initiating payment.",
+    ),
+    (
+        "commission_paid",
+        "Commission payment",
+        "deal_payout",
+        "paid",
+        "liability_payment",
+        "commission_payable",
+        "operating_cash",
+        True,
+        "Draft settlement of a commission payable after a payment reference is recorded.",
+    ),
+    (
+        "obligation_accrued",
+        "Approved payable or reimbursement",
+        "financial_obligation",
+        "approved",
+        "obligation_accrual",
+        "other_operating_expense",
+        "accounts_payable",
+        True,
+        "Draft an approved vendor, contractor, or reimbursement obligation as a payable.",
+    ),
+    (
+        "obligation_paid",
+        "Payable settlement",
+        "financial_obligation",
+        "paid",
+        "liability_payment",
+        "accounts_payable",
+        "operating_cash",
+        True,
+        "Draft settlement of an approved payable after payment evidence is recorded.",
+    ),
+    (
+        "owner_distribution_paid",
+        "Owner distribution payment",
+        "financial_obligation",
+        "paid",
+        "owner_distribution",
+        "owner_distributions",
+        "operating_cash",
+        True,
+        "Draft an owner distribution as equity activity, never as an operating expense.",
+    ),
+)
+
 
 def get_accounting_setup(
     db: Session,
@@ -158,10 +301,8 @@ def get_accounting_setup(
     )
     source_records = len(deduction_records) + len(spend_records)
     missing_notes = sum(
-        1
-        for item in [*deduction_records, *spend_records]
-        if not item.notes or not item.notes.strip()
-    )
+        1 for item in deduction_records if not item.notes or not item.notes.strip()
+    ) + sum(1 for item in spend_records if not item.notes or not item.notes.strip())
     tax_gaps = list(readiness_gaps)
     if not source_records:
         tax_gaps.append("No expense or deal-deduction records are available for review.")
@@ -1252,6 +1393,998 @@ def add_accounting_audit(
             reason=reason,
         )
     )
+
+
+def ensure_operational_posting_rules(
+    db: Session,
+    principal: Principal,
+) -> list[AccountingPostingRule]:
+    existing = list(
+        db.scalars(
+            select(AccountingPostingRule).where(
+                AccountingPostingRule.organization_id == principal.organization_id
+            )
+        ).all()
+    )
+    existing_keys = {(rule.rule_key, rule.version_number) for rule in existing}
+    created = False
+    for (
+        rule_key,
+        name,
+        source_type,
+        trigger_status,
+        strategy_key,
+        debit_account_key,
+        credit_account_key,
+        evidence_required,
+        description,
+    ) in DEFAULT_POSTING_RULES:
+        if (rule_key, 1) in existing_keys:
+            continue
+        rule = AccountingPostingRule(
+            organization_id=principal.organization_id,
+            rule_key=rule_key,
+            version_number=1,
+            name=name,
+            source_type=source_type,
+            trigger_status=trigger_status,
+            strategy_key=strategy_key,
+            debit_account_key=debit_account_key,
+            credit_account_key=credit_account_key,
+            evidence_required=evidence_required,
+            status="draft",
+            description=description,
+            created_by_user_id=principal.user_id,
+            approved_by_user_id=None,
+            approved_at=None,
+            effective_at=None,
+            superseded_at=None,
+        )
+        db.add(rule)
+        existing.append(rule)
+        created = True
+    if created:
+        db.flush()
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="finance.posting_rules_install",
+                entity_type="accounting_posting_rule",
+                entity_id=None,
+                previous_value=None,
+                new_value={"rule_count": len(DEFAULT_POSTING_RULES), "status": "draft"},
+                reason="F6C operational posting rule foundation",
+            )
+        )
+        db.commit()
+    return sorted(existing, key=lambda rule: (rule.rule_key, rule.version_number))
+
+
+def approve_operational_posting_rule(
+    db: Session,
+    principal: Principal,
+    rule_id: UUID,
+) -> AccountingPostingRuleRead | None:
+    rule = db.scalar(
+        select(AccountingPostingRule)
+        .where(
+            AccountingPostingRule.organization_id == principal.organization_id,
+            AccountingPostingRule.id == rule_id,
+        )
+        .with_for_update()
+    )
+    if rule is None:
+        return None
+    if rule.status == "approved":
+        return posting_rule_to_read(rule)
+    if rule.status != "draft":
+        raise ValueError("Only a draft posting rule can be approved.")
+    now = datetime.now(UTC)
+    prior_rules = list(
+        db.scalars(
+            select(AccountingPostingRule).where(
+                AccountingPostingRule.organization_id == principal.organization_id,
+                AccountingPostingRule.rule_key == rule.rule_key,
+                AccountingPostingRule.status == "approved",
+                AccountingPostingRule.id != rule.id,
+            )
+        ).all()
+    )
+    for prior in prior_rules:
+        prior.status = "superseded"
+        prior.superseded_at = now
+    rule.status = "approved"
+    rule.approved_by_user_id = principal.user_id
+    rule.approved_at = now
+    rule.effective_at = now
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="finance.posting_rule_approve",
+            entity_type="accounting_posting_rule",
+            entity_id=rule.id,
+            previous_value={"status": "draft"},
+            new_value={
+                "status": "approved",
+                "rule_key": rule.rule_key,
+                "version_number": rule.version_number,
+            },
+            reason="Owner-approved operational posting rule",
+        )
+    )
+    db.commit()
+    db.refresh(rule)
+    return posting_rule_to_read(rule)
+
+
+def get_operational_posting_workspace(
+    db: Session,
+    principal: Principal,
+) -> AccountingPostingWorkspaceRead:
+    ensure_accounting_foundation(db, principal)
+    rules = ensure_operational_posting_rules(db, principal)
+    rule_by_key = {
+        rule.rule_key: rule
+        for rule in rules
+        if rule.status in {"draft", "approved"}
+    }
+    links = list(
+        db.scalars(
+            select(AccountingSourceLink).where(
+                AccountingSourceLink.organization_id == principal.organization_id
+            )
+        ).all()
+    )
+    link_by_source = {
+        (link.source_type, link.source_id, link.posting_purpose): link for link in links
+    }
+    journal_ids = {link.journal_entry_id for link in links}
+    journals = {
+        entry.id: entry
+        for entry in db.scalars(
+            select(JournalEntry).where(
+                JournalEntry.organization_id == principal.organization_id,
+                JournalEntry.id.in_(journal_ids),
+            )
+        ).all()
+    }
+    transaction_ids: set[UUID] = set()
+    revenue_records = list(
+        db.scalars(
+            select(RevenueRecord).where(
+                RevenueRecord.organization_id == principal.organization_id,
+                RevenueRecord.status == "collected",
+            )
+        ).all()
+    )
+    deductions = list(
+        db.scalars(
+            select(DealDeduction).where(
+                DealDeduction.organization_id == principal.organization_id
+            )
+        ).all()
+    )
+    for record in revenue_records:
+        if record.transaction_id is not None:
+            transaction_ids.add(record.transaction_id)
+    for deduction in deductions:
+        if deduction.transaction_id is not None:
+            transaction_ids.add(deduction.transaction_id)
+    payouts = list(
+        db.scalars(
+            select(DealPayout).where(
+                DealPayout.organization_id == principal.organization_id,
+                DealPayout.status.in_({"approved", "payable", "paid"}),
+            )
+        ).all()
+    )
+    reconciliation_ids = {payout.deal_reconciliation_id for payout in payouts}
+    reconciliations = list(
+        db.scalars(
+            select(DealReconciliation).where(
+                DealReconciliation.organization_id == principal.organization_id,
+                DealReconciliation.id.in_(reconciliation_ids),
+            )
+        ).all()
+    )
+    reconciliation_by_id = {item.id: item for item in reconciliations}
+    for reconciliation in reconciliations:
+        transaction_ids.add(reconciliation.transaction_id)
+    transaction_by_id = {
+        transaction.id: transaction
+        for transaction in db.scalars(
+            select(Transaction).where(
+                Transaction.organization_id == principal.organization_id,
+                Transaction.id.in_(transaction_ids),
+            )
+        ).all()
+    }
+    approved_reconciliation_by_transaction = {
+        reconciliation.transaction_id: reconciliation
+        for reconciliation in db.scalars(
+            select(DealReconciliation).where(
+                DealReconciliation.organization_id == principal.organization_id,
+                DealReconciliation.transaction_id.in_(transaction_ids),
+                DealReconciliation.status == "approved",
+            )
+        ).all()
+    }
+    documents_by_transaction: dict[UUID, list[TransactionDocument]] = {}
+    for document in db.scalars(
+        select(TransactionDocument).where(
+            TransactionDocument.organization_id == principal.organization_id,
+            TransactionDocument.transaction_id.in_(transaction_ids),
+            TransactionDocument.deleted_at.is_(None),
+        )
+    ).all():
+        documents_by_transaction.setdefault(document.transaction_id, []).append(document)
+
+    source_items: list[AccountingSourceItemRead] = []
+    stale_links = False
+
+    def add_item(
+        *,
+        source_type: str,
+        source_id: UUID,
+        purpose: str,
+        label: str,
+        amount_cents: int,
+        occurred_at: datetime,
+        source_status: str,
+        rule_key: str,
+        evidence_references: list[str],
+        evidence_gaps: list[str],
+        lead_id: UUID | None = None,
+        deal_id: UUID | None = None,
+        transaction_id: UUID | None = None,
+    ) -> None:
+        nonlocal stale_links
+        rule = rule_by_key.get(rule_key)
+        fingerprint = source_fingerprint(
+            source_type,
+            str(source_id),
+            purpose,
+            amount_cents,
+            source_status,
+            evidence_references,
+        )
+        link = link_by_source.get((source_type, str(source_id), purpose))
+        journal = journals.get(link.journal_entry_id) if link is not None else None
+        if link is not None and link.source_fingerprint != fingerprint:
+            if link.status != "stale":
+                link.status = "stale"
+                link.exception_detail = "The source record changed after the journal was drafted."
+                stale_links = True
+            readiness = "exception"
+            detail = link.exception_detail or "The linked draft requires review."
+        elif link is not None:
+            readiness = "linked"
+            detail = f"Linked journal is {journal.status if journal else 'unavailable'}."
+        elif rule is None or rule.status != "approved":
+            readiness = "rule_review"
+            detail = "Approve the versioned posting rule before preparing a draft."
+        elif evidence_gaps:
+            readiness = "needs_evidence"
+            detail = " ".join(evidence_gaps)
+        else:
+            readiness = "ready"
+            detail = "Source and evidence are ready for a balanced draft."
+        source_items.append(
+            AccountingSourceItemRead(
+                source_type=source_type,
+                source_id=str(source_id),
+                posting_purpose=purpose,
+                label=label,
+                amount_cents=amount_cents,
+                occurred_at=occurred_at,
+                status=source_status,
+                readiness=readiness,
+                readiness_detail=detail,
+                rule_id=rule.id if rule else None,
+                rule_key=rule_key,
+                journal_entry_id=journal.id if journal else None,
+                journal_status=journal.status if journal else None,
+                evidence_references=evidence_references,
+                lead_id=lead_id,
+                deal_id=deal_id,
+                transaction_id=transaction_id,
+            )
+        )
+
+    for record in revenue_records:
+        rule_key = {
+            "assignment_fee": "assignment_revenue_collected",
+            "double_close": "double_close_revenue_collected",
+            "consulting_fee": "other_revenue_collected",
+            "other": "other_revenue_collected",
+        }[record.source]
+        evidence, gaps = funded_deal_evidence(
+            record.transaction_id,
+            transaction_by_id,
+            approved_reconciliation_by_transaction,
+            documents_by_transaction,
+        )
+        add_item(
+            source_type="revenue_record",
+            source_id=record.id,
+            purpose="collected",
+            label=f"{record.source.replace('_', ' ').title()} collected",
+            amount_cents=record.amount_cents,
+            occurred_at=record.received_at,
+            source_status=record.status,
+            rule_key=rule_key,
+            evidence_references=evidence,
+            evidence_gaps=gaps,
+            lead_id=record.lead_id,
+            deal_id=record.deal_id,
+            transaction_id=record.transaction_id,
+        )
+    for deduction in deductions:
+        evidence, gaps = (
+            funded_deal_evidence(
+                deduction.transaction_id,
+                transaction_by_id,
+                approved_reconciliation_by_transaction,
+                documents_by_transaction,
+            )
+            if deduction.transaction_id is not None
+            else ([], [])
+        )
+        add_item(
+            source_type="deal_deduction",
+            source_id=deduction.id,
+            purpose="paid",
+            label=f"{deduction.category.replace('_', ' ').title()} deal cost",
+            amount_cents=deduction.amount_cents,
+            occurred_at=deduction.incurred_at,
+            source_status="paid",
+            rule_key="deal_deduction_paid",
+            evidence_references=evidence,
+            evidence_gaps=gaps,
+            lead_id=deduction.lead_id,
+            deal_id=deduction.deal_id,
+            transaction_id=deduction.transaction_id,
+        )
+    for spend in db.scalars(
+        select(MarketingSpend).where(
+            MarketingSpend.organization_id == principal.organization_id
+        )
+    ).all():
+        add_item(
+            source_type="marketing_spend",
+            source_id=spend.id,
+            purpose="paid",
+            label=f"{spend.source.replace('_', ' ').title()} spend",
+            amount_cents=spend.amount_cents,
+            occurred_at=spend.spend_month_at,
+            source_status="paid",
+            rule_key="marketing_spend_paid",
+            evidence_references=[],
+            evidence_gaps=[],
+        )
+    for payout in payouts:
+        payout_reconciliation = reconciliation_by_id.get(payout.deal_reconciliation_id)
+        transaction_id = (
+            payout_reconciliation.transaction_id if payout_reconciliation else None
+        )
+        evidence, gaps = funded_deal_evidence(
+            transaction_id,
+            transaction_by_id,
+            approved_reconciliation_by_transaction,
+            documents_by_transaction,
+        )
+        evidence = [*evidence, *payout.evidence_references]
+        add_item(
+            source_type="deal_payout",
+            source_id=payout.id,
+            purpose="accrued",
+            label=f"{payout.role_key.replace('_', ' ').title()} commission payable",
+            amount_cents=payout.amount_cents,
+            occurred_at=payout.approved_at or payout.created_at,
+            source_status=payout.status,
+            rule_key="commission_accrued",
+            evidence_references=evidence,
+            evidence_gaps=gaps,
+            transaction_id=transaction_id,
+        )
+        if payout.status == "paid":
+            payment_gaps = list(gaps)
+            if not payout.payment_reference:
+                payment_gaps.append("Add a payment reference before drafting settlement.")
+            add_item(
+                source_type="deal_payout",
+                source_id=payout.id,
+                purpose="paid",
+                label=f"{payout.role_key.replace('_', ' ').title()} commission paid",
+                amount_cents=payout.amount_cents,
+                occurred_at=payout.paid_at or payout.updated_at,
+                source_status=payout.status,
+                rule_key="commission_paid",
+                evidence_references=[
+                    *evidence,
+                    *(
+                        [f"payment:{payout.payment_reference}"]
+                        if payout.payment_reference
+                        else []
+                    ),
+                ],
+                evidence_gaps=payment_gaps,
+                transaction_id=transaction_id,
+            )
+    obligations = list(
+        db.scalars(
+            select(FinancialObligation)
+            .where(FinancialObligation.organization_id == principal.organization_id)
+            .order_by(FinancialObligation.created_at.desc())
+        ).all()
+    )
+    for obligation in obligations:
+        evidence_gaps = (
+            []
+            if obligation.evidence_references
+            else ["Attach an invoice, receipt, or approval reference."]
+        )
+        if obligation.obligation_type != "owner_distribution" and obligation.status in {
+            "approved",
+            "payable",
+            "paid",
+        }:
+            add_item(
+                source_type="financial_obligation",
+                source_id=obligation.id,
+                purpose="accrued",
+                label=f"{obligation.counterparty_name} payable",
+                amount_cents=obligation.amount_cents,
+                occurred_at=obligation.approved_at or obligation.created_at,
+                source_status=obligation.status,
+                rule_key="obligation_accrued",
+                evidence_references=obligation.evidence_references,
+                evidence_gaps=evidence_gaps,
+            )
+        if obligation.status == "paid":
+            payment_gaps = list(evidence_gaps)
+            if not obligation.payment_reference:
+                payment_gaps.append("Add a payment reference before drafting settlement.")
+            add_item(
+                source_type="financial_obligation",
+                source_id=obligation.id,
+                purpose=(
+                    "distribution"
+                    if obligation.obligation_type == "owner_distribution"
+                    else "paid"
+                ),
+                label=(
+                    f"{obligation.counterparty_name} owner distribution"
+                    if obligation.obligation_type == "owner_distribution"
+                    else f"{obligation.counterparty_name} paid"
+                ),
+                amount_cents=obligation.amount_cents,
+                occurred_at=obligation.paid_at or obligation.updated_at,
+                source_status=obligation.status,
+                rule_key=(
+                    "owner_distribution_paid"
+                    if obligation.obligation_type == "owner_distribution"
+                    else "obligation_paid"
+                ),
+                evidence_references=[
+                    *obligation.evidence_references,
+                    *(
+                        [f"payment:{obligation.payment_reference}"]
+                        if obligation.payment_reference
+                        else []
+                    ),
+                ],
+                evidence_gaps=payment_gaps,
+            )
+    if stale_links:
+        db.commit()
+    source_items.sort(key=lambda item: item.occurred_at, reverse=True)
+    return AccountingPostingWorkspaceRead(
+        rules=[posting_rule_to_read(rule) for rule in rules],
+        source_items=source_items,
+        obligations=[financial_obligation_to_read(item) for item in obligations],
+        draft_rule_count=sum(rule.status == "draft" for rule in rules),
+        ready_item_count=sum(item.readiness == "ready" for item in source_items),
+        exception_count=sum(
+            item.readiness in {"needs_evidence", "exception"} for item in source_items
+        ),
+    )
+
+
+def prepare_operational_source_journal(
+    db: Session,
+    principal: Principal,
+    payload: AccountingSourceDraftRequest,
+) -> JournalEntryRead:
+    workspace = get_operational_posting_workspace(db, principal)
+    item = next(
+        (
+            candidate
+            for candidate in workspace.source_items
+            if candidate.source_type == payload.source_type
+            and candidate.source_id == payload.source_id
+            and candidate.posting_purpose == payload.posting_purpose
+        ),
+        None,
+    )
+    if item is None:
+        raise ValueError("Operational accounting source was not found.")
+    if item.journal_entry_id is not None and item.readiness == "linked":
+        existing = get_journal_entry(db, principal, item.journal_entry_id)
+        if existing is None:
+            raise ValueError("The linked journal is unavailable.")
+        return load_journal_entry_read(db, principal, existing)
+    if item.readiness != "ready" or item.rule_id is None:
+        raise ValueError(item.readiness_detail)
+    rule = db.scalar(
+        select(AccountingPostingRule).where(
+            AccountingPostingRule.organization_id == principal.organization_id,
+            AccountingPostingRule.id == item.rule_id,
+            AccountingPostingRule.status == "approved",
+        )
+    )
+    if rule is None:
+        raise ValueError("The approved posting rule is unavailable.")
+    profile = ensure_accounting_foundation(db, principal)
+    debit_key, credit_key = posting_account_keys(db, principal, item, rule)
+    accounts = {
+        account.system_key: account
+        for account in db.scalars(
+            select(AccountingAccount).where(
+                AccountingAccount.organization_id == principal.organization_id,
+                AccountingAccount.policy_version == profile.policy_version,
+                AccountingAccount.system_key.in_({debit_key, credit_key}),
+                AccountingAccount.is_active.is_(True),
+            )
+        ).all()
+    }
+    if debit_key not in accounts or credit_key not in accounts:
+        raise ValueError("The posting rule references an unavailable accounting account.")
+    fingerprint = source_fingerprint(
+        item.source_type,
+        item.source_id,
+        item.posting_purpose,
+        item.amount_cents,
+        item.status,
+        item.evidence_references,
+    )
+    entry = create_journal_entry(
+        db,
+        principal,
+        JournalEntryCreate(
+            entry_date=item.occurred_at.date(),
+            memo=item.label,
+            source_type=item.source_type,
+            source_id=item.source_id,
+            posting_rule_version=rule.version_number,
+            evidence_references=item.evidence_references,
+            idempotency_key=(
+                f"operational:{item.source_type}:{item.source_id}:"
+                f"{item.posting_purpose}:v{rule.version_number}"
+            ),
+            currency=profile.currency,
+            lines=[
+                JournalLineCreate(
+                    accounting_account_id=accounts[debit_key].id,
+                    debit_cents=item.amount_cents,
+                    credit_cents=0,
+                    memo=item.label,
+                    deal_id=item.deal_id,
+                    transaction_id=item.transaction_id,
+                ),
+                JournalLineCreate(
+                    accounting_account_id=accounts[credit_key].id,
+                    debit_cents=0,
+                    credit_cents=item.amount_cents,
+                    memo=item.label,
+                    deal_id=item.deal_id,
+                    transaction_id=item.transaction_id,
+                ),
+            ],
+        ),
+        commit=False,
+    )
+    db.add(
+        AccountingSourceLink(
+            organization_id=principal.organization_id,
+            posting_rule_id=rule.id,
+            journal_entry_id=entry.id,
+            source_type=item.source_type,
+            source_id=item.source_id,
+            posting_purpose=item.posting_purpose,
+            source_fingerprint=fingerprint,
+            status="drafted",
+            exception_detail=None,
+            generated_by_user_id=principal.user_id,
+            generated_at=datetime.now(UTC),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="finance.operational_journal_prepare",
+            entity_type=item.source_type,
+            entity_id=UUID(item.source_id),
+            previous_value=None,
+            new_value={
+                "journal_entry_id": str(entry.id),
+                "posting_purpose": item.posting_purpose,
+                "posting_rule": rule.rule_key,
+                "posting_rule_version": rule.version_number,
+            },
+            reason="Balanced operational journal prepared for human review",
+        )
+    )
+    db.commit()
+    journal = get_journal_entry(db, principal, entry.id)
+    if journal is None:
+        raise ValueError("The prepared journal could not be loaded.")
+    return load_journal_entry_read(db, principal, journal)
+
+
+def create_financial_obligation(
+    db: Session,
+    principal: Principal,
+    payload: FinancialObligationCreate,
+) -> FinancialObligationRead:
+    if payload.obligation_type not in OBLIGATION_TYPES:
+        raise ValueError("Unsupported financial obligation type.")
+    if payload.status not in {"draft", "approved"}:
+        raise ValueError("New obligations must begin as draft or approved.")
+    if payload.obligation_type != "owner_distribution" and not payload.expense_account_key:
+        raise ValueError("Select an expense account for this obligation.")
+    now = datetime.now(UTC)
+    obligation = FinancialObligation(
+        organization_id=principal.organization_id,
+        obligation_type=payload.obligation_type,
+        direction="outbound",
+        counterparty_name=payload.counterparty_name.strip(),
+        user_id=payload.user_id,
+        expense_account_key=payload.expense_account_key,
+        amount_cents=payload.amount_cents,
+        status=payload.status,
+        source_type=payload.source_type,
+        source_id=payload.source_id,
+        due_at=payload.due_at,
+        approved_by_user_id=principal.user_id if payload.status == "approved" else None,
+        approved_at=now if payload.status == "approved" else None,
+        paid_at=None,
+        payment_reference=payload.payment_reference,
+        evidence_references=payload.evidence_references,
+        notes=payload.notes,
+    )
+    db.add(obligation)
+    db.flush()
+    add_finance_audit(
+        db,
+        principal,
+        "finance.obligation_create",
+        "financial_obligation",
+        obligation.id,
+        financial_obligation_snapshot(obligation),
+    )
+    db.commit()
+    db.refresh(obligation)
+    return financial_obligation_to_read(obligation)
+
+
+def update_financial_obligation_status(
+    db: Session,
+    principal: Principal,
+    obligation_id: UUID,
+    payload: FinancialObligationStatusUpdate,
+) -> FinancialObligationRead | None:
+    obligation = db.scalar(
+        select(FinancialObligation)
+        .where(
+            FinancialObligation.organization_id == principal.organization_id,
+            FinancialObligation.id == obligation_id,
+        )
+        .with_for_update()
+    )
+    if obligation is None:
+        return None
+    if payload.status == obligation.status:
+        return financial_obligation_to_read(obligation)
+    if payload.status not in PAYMENT_TRANSITIONS.get(obligation.status, set()):
+        raise ValueError(
+            f"Financial obligation cannot move from {obligation.status} to {payload.status}."
+        )
+    evidence = (
+        payload.evidence_references
+        if payload.evidence_references is not None
+        else obligation.evidence_references
+    )
+    reference = payload.payment_reference or obligation.payment_reference
+    if payload.status == "paid" and (not reference or not evidence):
+        raise ValueError("Paid obligations require a payment reference and evidence.")
+    previous = financial_obligation_snapshot(obligation)
+    now = datetime.now(UTC)
+    obligation.status = payload.status
+    obligation.payment_reference = reference
+    obligation.evidence_references = evidence
+    if payload.notes is not None:
+        obligation.notes = payload.notes
+    if payload.status == "approved":
+        obligation.approved_by_user_id = principal.user_id
+        obligation.approved_at = now
+    if payload.status == "paid":
+        obligation.paid_at = now
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="finance.obligation_status",
+            entity_type="financial_obligation",
+            entity_id=obligation.id,
+            previous_value=previous,
+            new_value=financial_obligation_snapshot(obligation),
+            reason=payload.notes or "Financial obligation payment state updated",
+        )
+    )
+    db.commit()
+    db.refresh(obligation)
+    return financial_obligation_to_read(obligation)
+
+
+def update_deal_payout_status(
+    db: Session,
+    principal: Principal,
+    payout_id: UUID,
+    payload: DealPayoutStatusUpdate,
+) -> AccountingPostingWorkspaceRead | None:
+    payout = db.scalar(
+        select(DealPayout)
+        .where(
+            DealPayout.organization_id == principal.organization_id,
+            DealPayout.id == payout_id,
+        )
+        .with_for_update()
+    )
+    if payout is None:
+        return None
+    if payload.status != payout.status:
+        allowed = {
+            "approved": {"payable"},
+            "payable": {"paid", "disputed"},
+            "disputed": {"payable"},
+        }
+        if payload.status not in allowed.get(payout.status, set()):
+            raise ValueError(
+                f"Commission payout cannot move from {payout.status} to {payload.status}."
+            )
+    evidence = (
+        payload.evidence_references
+        if payload.evidence_references is not None
+        else payout.evidence_references
+    )
+    reference = payload.payment_reference or payout.payment_reference
+    if payload.status == "paid" and (not reference or not evidence):
+        raise ValueError("Paid commissions require a payment reference and evidence.")
+    previous = {
+        "status": payout.status,
+        "payment_reference": payout.payment_reference,
+    }
+    payout.status = payload.status
+    payout.due_at = payload.due_at or payout.due_at
+    payout.payment_reference = reference
+    payout.evidence_references = evidence
+    if payload.status == "paid":
+        payout.paid_at = datetime.now(UTC)
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="finance.commission_payment_status",
+            entity_type="deal_payout",
+            entity_id=payout.id,
+            previous_value=previous,
+            new_value={
+                "status": payout.status,
+                "payment_reference": payout.payment_reference,
+                "due_at": payout.due_at.isoformat() if payout.due_at else None,
+            },
+            reason="Commission payment state updated",
+        )
+    )
+    db.commit()
+    return get_operational_posting_workspace(db, principal)
+
+
+def posting_account_keys(
+    db: Session,
+    principal: Principal,
+    item: AccountingSourceItemRead,
+    rule: AccountingPostingRule,
+) -> tuple[str, str]:
+    debit_key = rule.debit_account_key
+    credit_key = rule.credit_account_key
+    if item.source_type == "deal_deduction":
+        deduction = db.scalar(
+            select(DealDeduction).where(
+                DealDeduction.organization_id == principal.organization_id,
+                DealDeduction.id == UUID(item.source_id),
+            )
+        )
+        if deduction is None:
+            raise ValueError("Deal deduction source is unavailable.")
+        debit_key = {
+            "title": "deal_closing_costs",
+            "attorney": "deal_closing_costs",
+            "transaction": "deal_closing_costs",
+            "marketing": "advertising",
+            "seller_credit": "buyer_credits_refunds",
+            "other": "other_operating_expense",
+        }[deduction.category]
+    elif item.source_type == "marketing_spend":
+        spend = db.scalar(
+            select(MarketingSpend).where(
+                MarketingSpend.organization_id == principal.organization_id,
+                MarketingSpend.id == UUID(item.source_id),
+            )
+        )
+        if spend is None:
+            raise ValueError("Marketing spend source is unavailable.")
+        source = spend.source.lower()
+        if any(term in source for term in ("list", "data", "skip")):
+            debit_key = "lead_lists_data"
+        elif any(term in source for term in ("software", "hosting", "subscription")):
+            debit_key = "software_subscriptions"
+        elif any(term in source for term in ("caller", "va", "contractor", "labor")):
+            debit_key = "prospecting_labor"
+        else:
+            debit_key = "advertising"
+    elif (
+        item.source_type == "financial_obligation"
+        and item.posting_purpose == "accrued"
+    ):
+        obligation = db.scalar(
+            select(FinancialObligation).where(
+                FinancialObligation.organization_id == principal.organization_id,
+                FinancialObligation.id == UUID(item.source_id),
+            )
+        )
+        if obligation is None or not obligation.expense_account_key:
+            raise ValueError("Financial obligation account mapping is unavailable.")
+        debit_key = obligation.expense_account_key
+        credit_key = (
+            "contractor_payable"
+            if obligation.obligation_type == "contractor_payable"
+            else "accounts_payable"
+        )
+    elif (
+        item.source_type == "financial_obligation"
+        and item.posting_purpose == "paid"
+    ):
+        obligation = db.scalar(
+            select(FinancialObligation).where(
+                FinancialObligation.organization_id == principal.organization_id,
+                FinancialObligation.id == UUID(item.source_id),
+            )
+        )
+        if obligation is None:
+            raise ValueError("Financial obligation source is unavailable.")
+        debit_key = (
+            "contractor_payable"
+            if obligation.obligation_type == "contractor_payable"
+            else "accounts_payable"
+        )
+    return debit_key, credit_key
+
+
+def funded_deal_evidence(
+    transaction_id: UUID | None,
+    transaction_by_id: dict[UUID, Transaction],
+    reconciliation_by_transaction: dict[UUID, DealReconciliation],
+    documents_by_transaction: dict[UUID, list[TransactionDocument]],
+) -> tuple[list[str], list[str]]:
+    if transaction_id is None:
+        return [], ["Link this source to a funded transaction."]
+    transaction = transaction_by_id.get(transaction_id)
+    documents = documents_by_transaction.get(transaction_id, [])
+    document_types = {document.document_type for document in documents}
+    evidence = [
+        f"transaction_document:{document.id}"
+        for document in documents
+        if document.document_type in {"closing_statement", "funding_confirmation"}
+    ]
+    gaps: list[str] = []
+    if transaction is None or transaction.status != "funded":
+        gaps.append("Mark the transaction funded.")
+    if transaction_id not in reconciliation_by_transaction:
+        gaps.append("Approve the funded-deal reconciliation.")
+    if "closing_statement" not in document_types:
+        gaps.append("Upload the closing statement.")
+    if "funding_confirmation" not in document_types:
+        gaps.append("Upload funding confirmation.")
+    return evidence, gaps
+
+
+def source_fingerprint(
+    source_type: str,
+    source_id: str,
+    posting_purpose: str,
+    amount_cents: int,
+    status: str,
+    evidence_references: list[str],
+) -> str:
+    value = "|".join(
+        [
+            source_type,
+            source_id,
+            posting_purpose,
+            str(amount_cents),
+            status,
+            *sorted(evidence_references),
+        ]
+    )
+    return sha256(value.encode("utf-8")).hexdigest()
+
+
+def posting_rule_to_read(rule: AccountingPostingRule) -> AccountingPostingRuleRead:
+    return AccountingPostingRuleRead(
+        id=rule.id,
+        rule_key=rule.rule_key,
+        version_number=rule.version_number,
+        name=rule.name,
+        source_type=rule.source_type,
+        trigger_status=rule.trigger_status,
+        strategy_key=rule.strategy_key,
+        debit_account_key=rule.debit_account_key,
+        credit_account_key=rule.credit_account_key,
+        evidence_required=rule.evidence_required,
+        status=rule.status,
+        description=rule.description,
+        approved_by_user_id=rule.approved_by_user_id,
+        approved_at=rule.approved_at,
+        effective_at=rule.effective_at,
+    )
+
+
+def financial_obligation_to_read(
+    obligation: FinancialObligation,
+) -> FinancialObligationRead:
+    return FinancialObligationRead(
+        id=obligation.id,
+        obligation_type=obligation.obligation_type,
+        direction=obligation.direction,
+        counterparty_name=obligation.counterparty_name,
+        user_id=obligation.user_id,
+        expense_account_key=obligation.expense_account_key,
+        amount_cents=obligation.amount_cents,
+        status=obligation.status,
+        source_type=obligation.source_type,
+        source_id=obligation.source_id,
+        due_at=obligation.due_at,
+        approved_by_user_id=obligation.approved_by_user_id,
+        approved_at=obligation.approved_at,
+        paid_at=obligation.paid_at,
+        payment_reference=obligation.payment_reference,
+        evidence_references=obligation.evidence_references,
+        notes=obligation.notes,
+        created_at=obligation.created_at,
+    )
+
+
+def financial_obligation_snapshot(
+    obligation: FinancialObligation,
+) -> dict[str, object]:
+    return {
+        "obligation_type": obligation.obligation_type,
+        "counterparty_name": obligation.counterparty_name,
+        "amount_cents": obligation.amount_cents,
+        "status": obligation.status,
+        "expense_account_key": obligation.expense_account_key,
+        "payment_reference": obligation.payment_reference,
+    }
 
 
 def get_finance_overview(

@@ -726,6 +726,8 @@ Review:
 - Tax and Deductions Copilot drafts, missing business-purpose notes, and unresolved evidence.
 - Accounting Ledger balances, open-period state, draft journals, approved journals, posted
   journals, reversals, and exact source evidence.
+- Posting and Payment Control, including versioned rules, source readiness, evidence exceptions,
+  payables, reimbursements, distributions, and source-linked journal drafts.
 
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
@@ -767,6 +769,35 @@ an error.
 
 A period cannot close while draft or approved journals remain. Closing and locking do not replace
 bank reconciliation, month-end evidence, or CPA review.
+
+### Posting And Payment Control
+
+Use this workspace for normal accounting work created from Stonegate records. It is preferred over
+manual journal entry because it keeps the journal tied to the exact operational source.
+
+1. The owner reviews each draft posting rule and selects **Approve rule**.
+2. Stonegate lists collected revenue, deal costs, marketing spend, approved commissions, and
+   approved obligations in the source queue.
+3. A funded-deal item becomes ready after the transaction is funded, reconciliation is approved,
+   and both the closing statement and funding confirmation are uploaded.
+4. Select **Prepare draft**. Stonegate chooses the approved accounts, balances debit and credit,
+   links the source, and prevents a second draft for the same accounting event.
+5. Review the resulting journal in **Accounting Ledger**, then approve and post it under the normal
+   journal workflow.
+
+For a bill, contractor payment, reimbursement, or owner distribution, expand **Add payable,
+reimbursement, or owner distribution**. Enter the payee, amount, account, due date, business
+purpose, and evidence reference. Move an approved obligation to **Payable** when it is authorized.
+After the real payment occurs outside Stonegate, select **Record paid** and enter the bank, check,
+or transfer reference plus evidence. Stonegate records the state and prepares the settlement item;
+it never sends the payment.
+
+Commission payouts follow the same approach: approved, payable, then paid. Commission accrual and
+commission payment are separate accounting events, so the commission expense is not recorded
+twice. Owner distributions use the equity account and are never treated as ordinary expenses.
+
+If an amount, status, or evidence set changes after a draft is prepared, Stonegate shows an
+exception. Review and correct the linked journal rather than creating an unrelated duplicate.
 
 ## 16. Marketing
 

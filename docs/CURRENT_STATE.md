@@ -356,13 +356,16 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   and an embedded draft-only Tax and Deductions capability. F6B adds balanced journals, journal
   lines, monthly accounting periods, source evidence, idempotency, dedicated accounting
   permissions, human approval and posting, linked reversals, and auditable period review, close,
-  reopen, and lock controls. Bank reconciliation, complete financial statements, vendor and
-  source-document workflow, opening balances, and CPA acceptance remain F6C-F6E work.
+  reopen, and lock controls. F6C adds owner-approved versioned posting rules, a deterministic
+  source-linked accounting queue, funded-deal evidence checks, duplicate prevention, and explicit
+  commission, payable, reimbursement, and owner-distribution payment states. Bank reconciliation,
+  complete financial statements, full vendor and source-document workflow, opening balances, and
+  CPA acceptance remain F6D-F6E work.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or
   legal decisions.
-- AI1 is implemented: eight human-owned role copilots, 14 versioned capability contracts,
+- AI1 is implemented: eight human-owned role copilots, 15 versioned capability contracts,
   specialist mappings, field source and overwrite policies, an approved-knowledge registry,
   redaction and retention rules, deterministic data-quality rules, and owner approval controls are
   available in `/os/ai`. External execution remains disabled.

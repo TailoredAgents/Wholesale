@@ -2877,7 +2877,12 @@ class DealPayout(UuidPrimaryKeyMixin, TimestampMixin, Base):
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_reference: Mapped[str | None] = mapped_column(String(255))
+    evidence_references: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, server_default="[]"
+    )
 
 
 class RevenueRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -3560,6 +3565,124 @@ class JournalLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("transactions.id"), index=True
     )
+
+
+class AccountingPostingRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "accounting_posting_rules"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "rule_key",
+            "version_number",
+            name="uq_accounting_posting_rules_org_key_version",
+        ),
+        Index(
+            "ix_accounting_posting_rules_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    rule_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    trigger_status: Mapped[str] = mapped_column(String(80), nullable=False)
+    strategy_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    debit_account_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    credit_account_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    evidence_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AccountingSourceLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "accounting_source_links"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "source_type",
+            "source_id",
+            "posting_purpose",
+            name="uq_accounting_source_links_source_purpose",
+        ),
+        Index(
+            "ix_accounting_source_links_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    posting_rule_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("accounting_posting_rules.id"), index=True
+    )
+    journal_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("journal_entries.id"), index=True
+    )
+    source_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    posting_purpose: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    exception_detail: Mapped[str | None] = mapped_column(String(2000))
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+
+
+class FinancialObligation(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "financial_obligations"
+    __table_args__ = (
+        CheckConstraint(
+            "amount_cents > 0",
+            name="ck_financial_obligations_positive_amount",
+        ),
+        Index(
+            "ix_financial_obligations_org_status",
+            "organization_id",
+            "status",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    obligation_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    direction: Mapped[str] = mapped_column(String(20), nullable=False)
+    counterparty_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    expense_account_key: Mapped[str | None] = mapped_column(String(120))
+    amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    source_type: Mapped[str | None] = mapped_column(String(120))
+    source_id: Mapped[str | None] = mapped_column(String(255))
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_reference: Mapped[str | None] = mapped_column(String(255))
+    evidence_references: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000))
 
 
 class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):

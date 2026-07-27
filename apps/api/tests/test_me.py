@@ -192,6 +192,11 @@ def test_workspace_profile_is_available_to_non_acquisition_roles(
         "display_name": "Finance Lead",
         "role_keys": ["finance_accounting"],
         "permissions": [
+            "accounting:approve_journals",
+            "accounting:manage_periods",
+            "accounting:manage_policy",
+            "accounting:post_journals",
+            "accounting:prepare_journals",
             "compensation:change_rules",
             "compensation:view",
             "financials:view",

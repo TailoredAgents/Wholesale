@@ -1789,6 +1789,68 @@ export type AccountingLedger = {
   }>;
 };
 
+export type AccountingOperations = {
+  rules: Array<{
+    id: string;
+    rule_key: string;
+    version_number: number;
+    name: string;
+    source_type: string;
+    trigger_status: string;
+    strategy_key: string;
+    debit_account_key: string;
+    credit_account_key: string;
+    evidence_required: boolean;
+    status: string;
+    description: string;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    effective_at: string | null;
+  }>;
+  source_items: Array<{
+    source_type: string;
+    source_id: string;
+    posting_purpose: string;
+    label: string;
+    amount_cents: number;
+    occurred_at: string;
+    status: string;
+    readiness: string;
+    readiness_detail: string;
+    rule_id: string | null;
+    rule_key: string;
+    journal_entry_id: string | null;
+    journal_status: string | null;
+    evidence_references: string[];
+    lead_id: string | null;
+    deal_id: string | null;
+    transaction_id: string | null;
+  }>;
+  obligations: Array<{
+    id: string;
+    obligation_type: string;
+    direction: string;
+    counterparty_name: string;
+    user_id: string | null;
+    expense_account_key: string | null;
+    amount_cents: number;
+    status: string;
+    source_type: string | null;
+    source_id: string | null;
+    due_at: string | null;
+    approved_by_user_id: string | null;
+    approved_at: string | null;
+    paid_at: string | null;
+    payment_reference: string | null;
+    evidence_references: string[];
+    notes: string | null;
+    created_at: string;
+  }>;
+  draft_rule_count: number;
+  ready_item_count: number;
+  exception_count: number;
+};
+
 export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
@@ -3148,6 +3210,21 @@ export async function getAccountingLedger(): Promise<AccountingLedger | null> {
     });
     if (!response.ok) return null;
     return (await response.json()) as AccountingLedger;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAccountingOperations(): Promise<AccountingOperations | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/finance/accounting/operations`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as AccountingOperations;
   } catch {
     return null;
   }

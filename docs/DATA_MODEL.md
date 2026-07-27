@@ -143,7 +143,22 @@ envelope links the provider-retrieved final PDF back to its Stonegate document.
 - `compensation_rules`
 - `compensation_calculations`
 - `marketing_spend`
+- `accounting_profiles`
+- `accounting_accounts`
+- `accounting_periods`
+- `journal_entries`
+- `journal_lines`
+- `accounting_posting_rules`
+- `accounting_source_links`
+- `financial_obligations`
 - `offline_conversion_exports`
+
+`accounting_posting_rules` stores the owner-approved, effective version of each deterministic
+operational posting rule. `accounting_source_links` joins one operational source and posting
+purpose to one journal, stores a source fingerprint, and surfaces changed sources without
+duplicating the operational record. `financial_obligations` tracks vendor and contractor
+payables, reimbursements, and owner distributions through explicit approval and payment states;
+it records evidence and payment references but never initiates funds movement.
 
 ## Operating Model
 

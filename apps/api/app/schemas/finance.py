@@ -305,3 +305,106 @@ class AccountingLedgerOverview(BaseModel):
     summary: AccountingLedgerSummary
     periods: list[AccountingPeriodRead]
     entries: list[JournalEntryRead]
+
+
+class AccountingPostingRuleRead(BaseModel):
+    id: UUID
+    rule_key: str
+    version_number: int
+    name: str
+    source_type: str
+    trigger_status: str
+    strategy_key: str
+    debit_account_key: str
+    credit_account_key: str
+    evidence_required: bool
+    status: str
+    description: str
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    effective_at: datetime | None
+
+
+class AccountingSourceItemRead(BaseModel):
+    source_type: str
+    source_id: str
+    posting_purpose: str
+    label: str
+    amount_cents: int
+    occurred_at: datetime
+    status: str
+    readiness: str
+    readiness_detail: str
+    rule_id: UUID | None
+    rule_key: str
+    journal_entry_id: UUID | None
+    journal_status: str | None
+    evidence_references: list[str]
+    lead_id: UUID | None = None
+    deal_id: UUID | None = None
+    transaction_id: UUID | None = None
+
+
+class FinancialObligationCreate(BaseModel):
+    obligation_type: str = Field(max_length=80)
+    counterparty_name: str = Field(min_length=1, max_length=255)
+    user_id: UUID | None = None
+    expense_account_key: str | None = Field(default=None, max_length=120)
+    amount_cents: int = Field(ge=1)
+    status: str = Field(default="draft", max_length=40)
+    source_type: str | None = Field(default=None, max_length=120)
+    source_id: str | None = Field(default=None, max_length=255)
+    due_at: datetime | None = None
+    payment_reference: str | None = Field(default=None, max_length=255)
+    evidence_references: list[str] = Field(default_factory=list, max_length=50)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class FinancialObligationStatusUpdate(BaseModel):
+    status: str = Field(max_length=40)
+    payment_reference: str | None = Field(default=None, max_length=255)
+    evidence_references: list[str] | None = Field(default=None, max_length=50)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class FinancialObligationRead(BaseModel):
+    id: UUID
+    obligation_type: str
+    direction: str
+    counterparty_name: str
+    user_id: UUID | None
+    expense_account_key: str | None
+    amount_cents: int
+    status: str
+    source_type: str | None
+    source_id: str | None
+    due_at: datetime | None
+    approved_by_user_id: UUID | None
+    approved_at: datetime | None
+    paid_at: datetime | None
+    payment_reference: str | None
+    evidence_references: list[str]
+    notes: str | None
+    created_at: datetime
+
+
+class AccountingPostingWorkspaceRead(BaseModel):
+    rules: list[AccountingPostingRuleRead]
+    source_items: list[AccountingSourceItemRead]
+    obligations: list[FinancialObligationRead]
+    draft_rule_count: int
+    ready_item_count: int
+    exception_count: int
+
+
+class AccountingSourceDraftRequest(BaseModel):
+    source_type: str = Field(max_length=120)
+    source_id: str = Field(max_length=255)
+    posting_purpose: str = Field(max_length=120)
+
+
+class DealPayoutStatusUpdate(BaseModel):
+    status: str = Field(max_length=40)
+    due_at: datetime | None = None
+    payment_reference: str | None = Field(default=None, max_length=255)
+    evidence_references: list[str] | None = Field(default=None, max_length=50)

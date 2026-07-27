@@ -73,6 +73,11 @@ Main pages: Dispositions, Buyers, Transactions, Inbox, and Calendar.
 
 Main page: Finance.
 
+Use **Posting and Payment Control** to approve versioned rules, resolve evidence exceptions,
+prepare source-linked drafts, and track payables or commissions. Use **Accounting Ledger** to
+review, approve, post, or reverse the resulting balanced journals. Recording a payment in
+Stonegate documents a payment that occurred elsewhere; it does not move money.
+
 - Record source-linked revenue, deductions, marketing costs, compensation, and payouts.
 - Reconcile funded deals before commissions are marked payable.
 - Keep company margin, role compensation, and owner distributions separate.

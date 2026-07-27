@@ -8,23 +8,30 @@ from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.finance import (
-    AccountingProfileUpdate,
     AccountingLedgerOverview,
     AccountingPeriodCreate,
     AccountingPeriodRead,
     AccountingPeriodStatusUpdate,
+    AccountingPostingRuleRead,
+    AccountingPostingWorkspaceRead,
+    AccountingProfileUpdate,
     AccountingSetupRead,
+    AccountingSourceDraftRequest,
     CompensationRuleCreate,
     CompensationRuleRead,
     DealDeductionCreate,
     DealDeductionRead,
+    DealPayoutStatusUpdate,
     FinanceOverview,
-    MarketingSpendCreate,
-    MarketingSpendRead,
+    FinancialObligationCreate,
+    FinancialObligationRead,
+    FinancialObligationStatusUpdate,
     JournalDecision,
     JournalEntryCreate,
     JournalEntryRead,
     JournalReverseCreate,
+    MarketingSpendCreate,
+    MarketingSpendRead,
     RevenueCreate,
     RevenueRead,
 )
@@ -36,20 +43,26 @@ from app.schemas.management_copilots import (
     ManagementCopilotReviewRequest,
 )
 from app.services.finance import (
+    approve_journal_entry,
+    approve_operational_posting_rule,
+    create_accounting_period,
     create_compensation_rule,
     create_deal_deduction,
-    create_marketing_spend,
-    create_accounting_period,
+    create_financial_obligation,
     create_journal_entry,
     create_journal_reversal,
+    create_marketing_spend,
     create_revenue_record,
-    get_accounting_setup,
     get_accounting_ledger,
+    get_accounting_setup,
     get_finance_overview,
-    update_accounting_profile,
-    approve_journal_entry,
+    get_operational_posting_workspace,
     post_journal_entry,
+    prepare_operational_source_journal,
     update_accounting_period_status,
+    update_accounting_profile,
+    update_deal_payout_status,
+    update_financial_obligation_status,
 )
 from app.services.management_copilots import (
     analyze_management,
@@ -198,6 +211,90 @@ def reverse_accounting_journal(
         raise invalid(exc) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Journal entry not found.")
+    return result
+
+
+@router.get("/accounting/operations")
+def read_accounting_operations(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+) -> AccountingPostingWorkspaceRead:
+    return get_operational_posting_workspace(db, principal)
+
+
+@router.post("/accounting/posting-rules/{rule_id}/approve")
+def approve_accounting_posting_rule(
+    rule_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_accounting_dependency)],
+) -> AccountingPostingRuleRead:
+    try:
+        result = approve_operational_posting_rule(db, principal, rule_id)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Posting rule not found.")
+    return result
+
+
+@router.post("/accounting/operations/draft", status_code=201)
+def prepare_operational_journal(
+    payload: AccountingSourceDraftRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(prepare_journal_dependency)],
+) -> JournalEntryRead:
+    try:
+        return prepare_operational_source_journal(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/accounting/obligations", status_code=201)
+def record_financial_obligation(
+    payload: FinancialObligationCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(prepare_journal_dependency)],
+) -> FinancialObligationRead:
+    try:
+        return create_financial_obligation(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/accounting/obligations/{obligation_id}/status")
+def change_financial_obligation_status(
+    obligation_id: UUID,
+    payload: FinancialObligationStatusUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(approve_journal_dependency)],
+) -> FinancialObligationRead:
+    try:
+        result = update_financial_obligation_status(
+            db,
+            principal,
+            obligation_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Financial obligation not found.")
+    return result
+
+
+@router.post("/accounting/commission-payouts/{payout_id}/status")
+def change_commission_payout_status(
+    payout_id: UUID,
+    payload: DealPayoutStatusUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(approve_journal_dependency)],
+) -> AccountingPostingWorkspaceRead:
+    try:
+        result = update_deal_payout_status(db, principal, payout_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Commission payout not found.")
     return result
 
 

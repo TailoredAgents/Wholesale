@@ -61,8 +61,10 @@ def _tax_facts(
 
     setup = get_accounting_setup(db, principal)
     overview = get_finance_overview(db, principal, period_days)
-    source_records = [*overview.deductions, *overview.marketing_spend]
-    missing_notes = [item for item in source_records if not item.notes]
+    source_record_count = len(overview.deductions) + len(overview.marketing_spend)
+    missing_note_count = sum(1 for item in overview.deductions if not item.notes) + sum(
+        1 for item in overview.marketing_spend if not item.notes
+    )
     score = setup.tax_copilot.readiness_score
     risks: list[ManagementRiskAlert] = []
     if setup.readiness_gaps:
@@ -74,12 +76,12 @@ def _tax_facts(
                 evidence=["Finance accounting profile"],
             )
         )
-    if missing_notes:
+    if missing_note_count:
         risks.append(
             ManagementRiskAlert(
                 severity="warning",
                 item="Business purpose",
-                reason=f"{len(missing_notes)} records lack a business-purpose note.",
+                reason=f"{missing_note_count} records lack a business-purpose note.",
                 evidence=["Finance source records"],
             )
         )
@@ -117,15 +119,15 @@ def _tax_facts(
         "metric_cards": [
             ManagementMetricCard(
                 label="Source records",
-                value=str(len(source_records)),
+                value=str(source_record_count),
                 detail=f"Last {period_days} days",
                 tone="info",
             ),
             ManagementMetricCard(
                 label="Missing purpose",
-                value=str(len(missing_notes)),
+                value=str(missing_note_count),
                 detail="Needs owner evidence",
-                tone="warning" if missing_notes else "success",
+                tone="warning" if missing_note_count else "success",
             ),
             ManagementMetricCard(
                 label="Account structure",

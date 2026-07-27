@@ -7,13 +7,16 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models.foundation import (
     AccountingAccount,
+    AccountingPostingRule,
     AccountingProfile,
     AccountingPeriod,
+    AccountingSourceLink,
     AiCapabilityRuntimePolicy,
     AuditEvent,
     CompensationCalculation,
     CompensationRule,
     DealDeduction,
+    FinancialObligation,
     JournalEntry,
     JournalLine,
     MarketingSpend,
@@ -515,3 +518,178 @@ def test_journals_reject_imbalance_and_periods_control_posting(
     assert reopened.status_code == 200
     assert reopened.json()["status"] == "open"
     assert db_session.scalar(select(func.count()).select_from(AccountingPeriod)) == 1
+
+
+def approve_posting_rule(
+    client: TestClient,
+    headers: dict[str, str],
+    rule_key: str,
+) -> dict[str, object]:
+    workspace = client.get(
+        "/api/v1/finance/accounting/operations",
+        headers=headers,
+    ).json()
+    rule = next(item for item in workspace["rules"] if item["rule_key"] == rule_key)
+    response = client.post(
+        f"/api/v1/finance/accounting/posting-rules/{rule['id']}/approve",
+        headers=headers,
+        json={},
+    )
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_operational_posting_rules_require_approval_and_link_once(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    initial = client.get(
+        "/api/v1/finance/accounting/operations",
+        headers=headers,
+    )
+    assert initial.status_code == 200
+    assert initial.json()["draft_rule_count"] == 10
+    assert all(rule["status"] == "draft" for rule in initial.json()["rules"])
+
+    approve_posting_rule(client, headers, "marketing_spend_paid")
+    spend = client.post(
+        "/api/v1/finance/marketing-spend",
+        headers=headers,
+        json={
+            "source": "lead_lists_data",
+            "campaign": "Georgia absentee owners",
+            "amount_cents": 12500,
+            "notes": "Prospecting data subscription.",
+        },
+    )
+    assert spend.status_code == 201
+    workspace = client.get(
+        "/api/v1/finance/accounting/operations",
+        headers=headers,
+    ).json()
+    item = next(
+        source
+        for source in workspace["source_items"]
+        if source["source_type"] == "marketing_spend"
+    )
+    assert item["readiness"] == "ready"
+
+    payload = {
+        "source_type": item["source_type"],
+        "source_id": item["source_id"],
+        "posting_purpose": item["posting_purpose"],
+    }
+    drafted = client.post(
+        "/api/v1/finance/accounting/operations/draft",
+        headers=headers,
+        json=payload,
+    )
+    duplicate = client.post(
+        "/api/v1/finance/accounting/operations/draft",
+        headers=headers,
+        json=payload,
+    )
+
+    assert drafted.status_code == 201
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == drafted.json()["id"]
+    assert drafted.json()["status"] == "draft"
+    assert drafted.json()["total_debits_cents"] == 12500
+    assert drafted.json()["total_credits_cents"] == 12500
+    account_names = {line["account_name"] for line in drafted.json()["lines"]}
+    assert account_names == {"Lead Lists and Data", "Operating Cash"}
+    assert (
+        db_session.scalar(select(func.count()).select_from(AccountingSourceLink)) == 1
+    )
+    assert (
+        db_session.scalar(select(func.count()).select_from(AccountingPostingRule)) == 10
+    )
+
+
+def test_obligation_payment_states_create_separate_accrual_and_settlement_drafts(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    approve_posting_rule(client, headers, "obligation_accrued")
+    approve_posting_rule(client, headers, "obligation_paid")
+
+    obligation = client.post(
+        "/api/v1/finance/accounting/obligations",
+        headers=headers,
+        json={
+            "obligation_type": "vendor_payable",
+            "counterparty_name": "Stonegate Hosting",
+            "expense_account_key": "software_subscriptions",
+            "amount_cents": 4900,
+            "status": "approved",
+            "evidence_references": ["invoice:host-2026-07"],
+            "notes": "Monthly application hosting.",
+        },
+    )
+    assert obligation.status_code == 201
+    obligation_id = obligation.json()["id"]
+    payable = client.post(
+        f"/api/v1/finance/accounting/obligations/{obligation_id}/status",
+        headers=headers,
+        json={"status": "payable"},
+    )
+    paid = client.post(
+        f"/api/v1/finance/accounting/obligations/{obligation_id}/status",
+        headers=headers,
+        json={
+            "status": "paid",
+            "payment_reference": "ACH-1007",
+            "evidence_references": ["bank:ACH-1007"],
+        },
+    )
+    assert payable.status_code == 200
+    assert paid.status_code == 200
+    assert paid.json()["status"] == "paid"
+
+    workspace = client.get(
+        "/api/v1/finance/accounting/operations",
+        headers=headers,
+    ).json()
+    items = [
+        item
+        for item in workspace["source_items"]
+        if item["source_type"] == "financial_obligation"
+    ]
+    assert {item["posting_purpose"] for item in items} == {"accrued", "paid"}
+    assert all(item["readiness"] == "ready" for item in items)
+    drafts = []
+    for item in items:
+        response = client.post(
+            "/api/v1/finance/accounting/operations/draft",
+            headers=headers,
+            json={
+                "source_type": item["source_type"],
+                "source_id": item["source_id"],
+                "posting_purpose": item["posting_purpose"],
+            },
+        )
+        assert response.status_code == 201
+        drafts.append(response.json())
+
+    accrued = next(
+        entry for entry in drafts if entry["idempotency_key"].endswith(":accrued:v1")
+    )
+    settled = next(
+        entry for entry in drafts if entry["idempotency_key"].endswith(":paid:v1")
+    )
+    assert {line["account_name"] for line in accrued["lines"]} == {
+        "Software and Subscriptions",
+        "Accounts Payable",
+    }
+    assert {line["account_name"] for line in settled["lines"]} == {
+        "Accounts Payable",
+        "Operating Cash",
+    }
+    assert db_session.scalar(select(func.count()).select_from(FinancialObligation)) == 1

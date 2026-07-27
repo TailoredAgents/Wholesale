@@ -298,6 +298,14 @@ Starting point:
 
 ### F6C: Operational Posting Rules
 
+- **Implementation status:** Core product work is complete. Finance now installs ten
+  owner-approved, versioned posting rules; exposes a deterministic source work queue; proves
+  funded revenue and commissions against approved reconciliation, closing statement, and funding
+  confirmation; and creates one source-linked balanced draft per accounting event. Vendor
+  payables, contractor payables, reimbursements, owner distributions, and commission payouts use
+  explicit payment states and evidence. Generated entries remain drafts until separate journal
+  approval and posting. Production funded-deal acceptance and CPA rule approval remain external
+  acceptance steps.
 - Prove the existing funded-deal reconciliation with real or redacted closing statements before
   allowing it to draft accounting entries.
 - Draft balanced entries from approved funded-deal reconciliations without copying the lead,
@@ -308,6 +316,18 @@ Starting point:
 - Add payment-state progression for receivables, payables, commissions, reimbursements, and
   distributions.
 - Require human review of every new posting rule and every material exception.
+
+Implemented posting coverage:
+
+- Collected assignment revenue, double-close proceeds, and other operating revenue.
+- Paid deal deductions with category-aware account mapping.
+- Advertising, lead data, software, hosting, subscription, VA, contractor, and other marketing
+  spend with source-aware account mapping.
+- Approved commission accrual and separate commission settlement.
+- Vendor, contractor, and reimbursement accrual and settlement.
+- Owner distributions recorded as equity activity rather than operating expense.
+- Source fingerprints and unique source-purpose links that surface changed records as exceptions
+  instead of preparing a second journal.
 
 ### F6D: Banking, Vendors, And Evidence
 
