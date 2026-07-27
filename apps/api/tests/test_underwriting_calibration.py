@@ -14,6 +14,7 @@ from app.models.foundation import (
     User,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.underwriting_calibration import provider_adequacy
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -138,6 +139,8 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     overview = overview_response.json()
     assert overview["overall"] == {
         "market_key": "All markets",
+        "providers": ["rentcast"],
+        "methodology_versions": [],
         "sample_count": 1,
         "median_error_percentage": 5.3,
         "median_absolute_error_percentage": 5.3,
@@ -147,14 +150,112 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
         "balanced_count": 0,
         "repair_sample_count": 1,
         "repair_median_absolute_error_percentage": 9.1,
+        "seller_contract_sample_count": 1,
+        "seller_contract_median_absolute_variance_percentage": 6.7,
         "disposition_sample_count": 1,
         "disposition_median_absolute_error_percentage": 1.4,
+        "comp_review_case_count": 0,
+        "comp_review_decision_count": 0,
+        "comp_review_override_count": 0,
+        "comp_review_override_percentage": None,
+        "provider_adequacy": "insufficient_evidence",
+        "failure_patterns": ["ARV estimates show a material overvaluation bias."],
         "readiness": "insufficient_sample",
     }
     assert overview["markets"][0]["market_key"] == "GA | Fulton"
+    assert overview["provider_scorecards"][0]["providers"] == ["rentcast"]
     assert overview["uncalibrated_analysis_count"] == 0
     assert overview["minimum_sample_for_formula_review"] == 50
     assert overview["automatic_formula_changes_enabled"] is False
+    assert overview["decisions"] == []
+
+
+def test_provider_adequacy_uses_minimum_sample_and_pilot_thresholds() -> None:
+    assert (
+        provider_adequacy(sample_count=9, arv_mape=3, range_coverage=100)
+        == "insufficient_evidence"
+    )
+    assert (
+        provider_adequacy(sample_count=10, arv_mape=10, range_coverage=80)
+        == "adequate"
+    )
+    assert (
+        provider_adequacy(sample_count=10, arv_mape=13, range_coverage=80)
+        == "monitor"
+    )
+    assert (
+        provider_adequacy(sample_count=10, arv_mape=16, range_coverage=80)
+        == "provider_review_required"
+    )
+
+
+def test_formula_and_provider_changes_require_evidence_and_human_decision(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    analysis = seed_analysis(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    benchmark_response = client.put(
+        f"/api/v1/underwriting/calibration-cases/{analysis.id}",
+        headers=headers,
+        json={
+            "benchmark_type": "expert_review",
+            "evidence_date": "2026-07-21T12:00:00Z",
+            "benchmark_arv_cents": 28_500_000,
+        },
+    )
+    assert benchmark_response.status_code == 200
+
+    draft_response = client.post(
+        "/api/v1/underwriting/calibration-decisions",
+        headers=headers,
+        json={
+            "scope_key": "GA | Fulton",
+            "decision_type": "methodology_change",
+            "title": "Test a narrower ARV range",
+            "rationale": "The first verified case needs documented follow-up before changes.",
+            "proposed_methodology_version": "v2.2-candidate",
+            "proposed_changes": {
+                "summary": "Evaluate a tighter range after the sample threshold."
+            },
+        },
+    )
+    assert draft_response.status_code == 201
+    draft = draft_response.json()
+    assert draft["status"] == "draft"
+    assert draft["sample_count"] == 1
+    assert draft["minimum_sample_required"] == 50
+    assert draft["approval_blocked"] is True
+    assert draft["evidence_snapshot"]["median_absolute_error_percentage"] == 5.3
+
+    blocked_response = client.patch(
+        f"/api/v1/underwriting/calibration-decisions/{draft['id']}",
+        headers=headers,
+        json={
+            "status": "approved",
+            "decision_notes": "Approve the proposed formula.",
+        },
+    )
+    assert blocked_response.status_code == 422
+    assert "needs 50 verified cases" in blocked_response.json()["detail"]
+
+    rejected_response = client.patch(
+        f"/api/v1/underwriting/calibration-decisions/{draft['id']}",
+        headers=headers,
+        json={
+            "status": "rejected",
+            "decision_notes": "Keep collecting evidence before changing the formula.",
+        },
+    )
+    assert rejected_response.status_code == 200
+    assert rejected_response.json()["status"] == "rejected"
+
+    overview = client.get(
+        "/api/v1/underwriting/calibration",
+        headers=headers,
+    ).json()
+    assert overview["decisions"][0]["status"] == "rejected"
 
 
 def test_calibration_update_preserves_one_case_and_writes_audit_event(

@@ -1600,6 +1600,10 @@ export type ManagementCopilotOverview = {
     reviewed: number;
     accepted_or_corrected_rate_basis_points: number;
     correction_rate_basis_points: number;
+    rejection_rate_basis_points: number;
+    blocked_output_count: number;
+    average_latency_ms: number | null;
+    total_cost_microusd: number;
     estimated_time_saved_minutes: number;
   };
 };
@@ -2665,6 +2669,10 @@ export type UnderwritingCalibrationCase = {
   arv_error_percentage: number | null;
   arv_absolute_error_percentage: number | null;
   arv_range_hit: boolean | null;
+  provider: string;
+  methodology_version: string | null;
+  confidence_score: number;
+  comp_review_applied: boolean;
   evidence_reference: string | null;
   notes: string | null;
   recorded_by_user_id: string | null;
@@ -2674,6 +2682,8 @@ export type UnderwritingCalibrationCase = {
 
 export type UnderwritingCalibrationMetric = {
   market_key: string;
+  providers: string[];
+  methodology_versions: string[];
   sample_count: number;
   median_error_percentage: number | null;
   median_absolute_error_percentage: number | null;
@@ -2683,15 +2693,47 @@ export type UnderwritingCalibrationMetric = {
   balanced_count: number;
   repair_sample_count: number;
   repair_median_absolute_error_percentage: number | null;
+  seller_contract_sample_count: number;
+  seller_contract_median_absolute_variance_percentage: number | null;
   disposition_sample_count: number;
   disposition_median_absolute_error_percentage: number | null;
+  comp_review_case_count: number;
+  comp_review_decision_count: number;
+  comp_review_override_count: number;
+  comp_review_override_percentage: number | null;
+  provider_adequacy: string;
+  failure_patterns: string[];
   readiness: string;
+};
+
+export type UnderwritingCalibrationDecision = {
+  id: string;
+  scope_key: string;
+  decision_type: string;
+  status: string;
+  title: string;
+  rationale: string;
+  current_methodology_version: string | null;
+  proposed_methodology_version: string | null;
+  proposed_changes: Record<string, unknown>;
+  evidence_snapshot: Record<string, unknown>;
+  sample_count: number;
+  minimum_sample_required: number;
+  approval_blocked: boolean;
+  proposed_by_user_id: string | null;
+  decided_by_user_id: string | null;
+  decision_notes: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 export type UnderwritingCalibration = {
   overall: UnderwritingCalibrationMetric;
   markets: UnderwritingCalibrationMetric[];
+  provider_scorecards: UnderwritingCalibrationMetric[];
   cases: UnderwritingCalibrationCase[];
+  decisions: UnderwritingCalibrationDecision[];
   uncalibrated_analysis_count: number;
   minimum_sample_for_formula_review: number;
   automatic_formula_changes_enabled: boolean;

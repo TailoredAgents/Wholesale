@@ -46,6 +46,10 @@ class CalibrationCaseRead(BaseModel):
     arv_error_percentage: float | None
     arv_absolute_error_percentage: float | None
     arv_range_hit: bool | None
+    provider: str
+    methodology_version: str | None
+    confidence_score: int
+    comp_review_applied: bool
     evidence_reference: str | None
     notes: str | None
     recorded_by_user_id: UUID | None
@@ -55,6 +59,8 @@ class CalibrationCaseRead(BaseModel):
 
 class CalibrationMetricSummary(BaseModel):
     market_key: str
+    providers: list[str]
+    methodology_versions: list[str]
     sample_count: int
     median_error_percentage: float | None
     median_absolute_error_percentage: float | None
@@ -64,15 +70,67 @@ class CalibrationMetricSummary(BaseModel):
     balanced_count: int
     repair_sample_count: int
     repair_median_absolute_error_percentage: float | None
+    seller_contract_sample_count: int
+    seller_contract_median_absolute_variance_percentage: float | None
     disposition_sample_count: int
     disposition_median_absolute_error_percentage: float | None
+    comp_review_case_count: int
+    comp_review_decision_count: int
+    comp_review_override_count: int
+    comp_review_override_percentage: float | None
+    provider_adequacy: str
+    failure_patterns: list[str]
     readiness: str
+
+
+class CalibrationDecisionCreate(BaseModel):
+    scope_key: str = Field(min_length=1, max_length=255)
+    decision_type: Literal[
+        "continue_current_method",
+        "methodology_change",
+        "provider_change",
+    ]
+    title: str = Field(min_length=3, max_length=255)
+    rationale: str = Field(min_length=10, max_length=3000)
+    proposed_methodology_version: str | None = Field(default=None, max_length=80)
+    proposed_changes: dict[str, str | int | float | bool | None] = Field(
+        default_factory=dict
+    )
+
+
+class CalibrationDecisionAction(BaseModel):
+    status: Literal["approved", "rejected"]
+    decision_notes: str = Field(min_length=3, max_length=2000)
+
+
+class CalibrationDecisionRead(BaseModel):
+    id: UUID
+    scope_key: str
+    decision_type: str
+    status: str
+    title: str
+    rationale: str
+    current_methodology_version: str | None
+    proposed_methodology_version: str | None
+    proposed_changes: dict[str, object]
+    evidence_snapshot: dict[str, object]
+    sample_count: int
+    minimum_sample_required: int
+    approval_blocked: bool
+    proposed_by_user_id: UUID | None
+    decided_by_user_id: UUID | None
+    decision_notes: str | None
+    decided_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class CalibrationOverview(BaseModel):
     overall: CalibrationMetricSummary
     markets: list[CalibrationMetricSummary]
+    provider_scorecards: list[CalibrationMetricSummary]
     cases: list[CalibrationCaseRead]
+    decisions: list[CalibrationDecisionRead]
     uncalibrated_analysis_count: int
     minimum_sample_for_formula_review: int = 50
     automatic_formula_changes_enabled: bool = False

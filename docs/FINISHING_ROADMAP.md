@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 26, 2026
+Last updated: July 27, 2026
 
 ## Purpose
 
@@ -472,6 +472,25 @@ Exit criteria:
 
 Goal: Measure whether Stonegate's comps, ARV, repairs, and offer guidance are reliable enough for
 real acquisition decisions.
+
+Implementation checkpoint, July 27, 2026:
+
+- Existing immutable market analyses and human comp-review versions remain the source evidence;
+  F7 does not create a second valuation engine.
+- Verified outcomes now produce overall and market scorecards for ARV bias, median absolute error,
+  range coverage, repair error, seller-contract variance, disposition error, and operator comp
+  overrides.
+- Every market receives an explicit provider-adequacy state using versioned Stonegate pilot
+  thresholds. An insufficient sample is never labeled adequate.
+- Formula and provider proposals are retained in a methodology decision ledger with a frozen
+  evidence snapshot, current/proposed method versions, rationale, human decision notes, and audit
+  events.
+- Formula and provider changes may be drafted at any time but cannot be approved before 50 verified
+  cases exist in the selected market scope. No calibration result changes a formula automatically.
+- The Underwriting workspace exposes the market scorecard, failure patterns, decision drafts, and
+  verified outcome history.
+- Production proof remains open. Stonegate must collect real verified Georgia outcomes, perform
+  the operator reviews, and approve final report language before F7 exit criteria are satisfied.
 
 Work:
 

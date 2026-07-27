@@ -1850,6 +1850,47 @@ class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
+class UnderwritingCalibrationDecision(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_calibration_decisions"
+    __table_args__ = (
+        Index(
+            "ix_underwriting_calibration_decisions_org_scope",
+            "organization_id",
+            "scope_key",
+            "created_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    proposed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    scope_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    decision_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    rationale: Mapped[str] = mapped_column(String(3000), nullable=False)
+    current_methodology_version: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+    proposed_methodology_version: Mapped[str | None] = mapped_column(
+        String(80), nullable=True
+    )
+    proposed_changes: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    minimum_sample_required: Mapped[int] = mapped_column(Integer, nullable=False)
+    decision_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class RepairEstimate(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "repair_estimates"
 

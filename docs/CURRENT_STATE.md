@@ -251,10 +251,15 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
 - Lead-level verified outcome entry for expert reviews, appraisals, completed resales, and verified
   market sales, with optional actual rehab, seller contract, and disposition values.
 - Immutable calibration snapshots preserve the prediction made at analysis time and report median
-  ARV bias, median absolute ARV error, ARV-range coverage, and optional repair/disposition error by
-  market.
-- The Underwriting workspace shows calibration readiness and verified outcome history. Formula
-  review requires at least 50 cases; calibration never adjusts formulas automatically.
+  ARV bias, median absolute ARV error, ARV-range coverage, and optional repair, seller-contract,
+  and disposition variance by market.
+- Market scorecards identify provider and methodology versions, operator comp-review overrides,
+  material failure patterns, and whether the current property-data provider has enough measured
+  evidence to be considered adequate in that market.
+- The Underwriting workspace shows calibration readiness, provider adequacy, verified outcome
+  history, and a methodology decision ledger. Formula and provider changes require a frozen
+  evidence snapshot, human notes, and at least 50 verified cases before approval; calibration
+  never adjusts formulas automatically.
 - Lead underwriting now includes light, moderate, heavy, and structural repair presets that
   prefill an editable itemized scope with an explicit contingency.
 - Contractor bids, walkthrough estimates, and internal scopes can be retained as immutable repair

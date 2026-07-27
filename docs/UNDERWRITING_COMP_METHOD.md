@@ -288,10 +288,33 @@ The Underwriting workspace reports these robust portfolio and market metrics:
 - Range coverage to show how often the verified ARV falls inside the saved low/high range.
 - Overestimate, underestimate, and balanced counts using a two-percentage-point neutral band.
 - Median absolute repair and disposition error when actual values are available.
+- Median absolute seller-contract variance. This is an operating comparison to the predicted
+  ceiling, not a claim that the negotiated contract should equal the ceiling.
+- Operator comp-review override rate, measured against the immutable automated source analysis.
 
 Fewer than 10 cases is an insufficient sample. Ten through 49 cases builds evidence. At 50 cases,
 the market is ready for a human formula review. No threshold enables automatic formula changes;
 changes require documented review, a new methodology version, and continued human offer approval.
+
+The provider scorecard uses Stonegate pilot monitoring thresholds rather than representing them as
+universal appraisal standards:
+
+- Fewer than 10 verified outcomes: `insufficient_evidence`.
+- Median absolute ARV error above 12% or range coverage below 70%: `monitor`.
+- Median absolute ARV error above 15% or range coverage below 60%:
+  `provider_review_required`.
+- A market with at least 10 cases and none of those warning conditions: `adequate`.
+
+These thresholds organize review; they do not prove a valuation is correct. Every formula or
+provider proposal freezes the current scorecard into a decision record. A change can be drafted
+before 50 cases but cannot be approved before the selected market scope reaches 50 verified cases.
+Approval requires an authorized person and written decision notes. Rejection and continuing the
+current method are also retained, so later reviewers can see why Stonegate did or did not change.
+
+Provider adequacy is measured separately by market. RentCast remains the active source until the
+verified error, range misses, or operator override burden justifies a licensed sold-data source.
+RESO defines real-estate data standards; it is not itself a data provider. Adding "RESO data"
+therefore requires a licensed MLS or vendor that implements those standards.
 
 ## Validation Before Autonomy
 
@@ -313,3 +336,6 @@ Before broad operational reliance:
 - Fannie Mae comparable sales: https://selling-guide.fanniemae.com/sel/b4-1.3-08/comparable-sales
 - Fannie Mae sales comparison approach: https://selling-guide.fanniemae.com/sel/b4-1.3-07/sales-comparison-approach-section-appraisal-report
 - Fannie Mae comparable adjustments: https://selling-guide.fanniemae.com/sel/b4-1.3-09/adjustments-comparable-sales
+- FHFA automated valuation model quality controls:
+  https://www.fhfa.gov/regulation/federal-register/final-rule/quality-control-standards-for-automated-valuation-models
+- RESO Data Dictionary: https://www.reso.org/data-dictionary/
