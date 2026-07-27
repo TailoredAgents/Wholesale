@@ -491,7 +491,7 @@ export function OperatingModelWorkspace({
               <label><span>Lead manager (%)</span><input defaultValue="10" min="0" name="lead_manager" step="0.25" type="number" /></label>
               <label><span>Acquisitions closer (%)</span><input defaultValue="10" min="0" name="acquisitions_closer" step="0.25" type="number" /></label>
               <label><span>CEO management (%)</span><input defaultValue="10" min="0" name="ceo_management" step="0.25" type="number" /></label>
-              <label><span>Human dispositions (%)</span><input defaultValue="15" min="0" name="dispositions" step="0.25" type="number" /></label>
+              <label><span>Human dispositions (%)</span><input defaultValue="20" min="0" name="dispositions" step="0.25" type="number" /></label>
               <label><span>Transaction coordinator (%)</span><input defaultValue="5" min="0" name="transaction_coordinator" step="0.25" type="number" /></label>
               <label><span>TC cap ($)</span><input defaultValue="1000" min="0" name="transaction_coordinator_cap" step="1" type="number" /></label>
               <label><span>AI-managed dispositions (%)</span><input defaultValue="10" min="0" name="ai_managed" step="0.25" type="number" /></label>

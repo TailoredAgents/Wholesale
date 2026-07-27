@@ -66,7 +66,7 @@ class CompensationPlanCreate(BaseModel):
     lead_manager_basis_points: int = Field(default=1000, ge=0, le=5000)
     acquisitions_closer_basis_points: int = Field(default=1000, ge=0, le=5000)
     ceo_management_basis_points: int = Field(default=1000, ge=0, le=5000)
-    dispositions_basis_points: int = Field(default=1500, ge=0, le=5000)
+    dispositions_basis_points: int = Field(default=2000, ge=0, le=5000)
     transaction_coordinator_basis_points: int = Field(default=500, ge=0, le=5000)
     transaction_coordinator_cap_cents: int | None = Field(default=100000, ge=0, le=10000000)
     ai_managed_disposition_basis_points: int = Field(default=1000, ge=0, le=5000)

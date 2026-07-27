@@ -10,6 +10,7 @@ from app.core.auth import Principal, require_any_permission
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.email_delivery import EmailProviderError
 from app.integrations.google_gmail import GoogleGmailError
 from app.schemas.email import (
     EmailAccountListResponse,
@@ -18,11 +19,23 @@ from app.schemas.email import (
     EmailOAuthAuthorizeRead,
     EmailSendRead,
     EmailSendRequest,
+    EmailSenderAliasCreate,
+    EmailSenderAliasListResponse,
+    EmailSenderAliasRead,
+    EmailSenderAliasUpdate,
+    EmailSenderGrantCreate,
     EmailSyncRead,
     EmailTemplateCreate,
     EmailTemplateListResponse,
     EmailTemplateRead,
     EmailTemplateUpdate,
+)
+from app.services.email_aliases import (
+    create_email_sender_alias,
+    grant_email_sender_access,
+    list_email_sender_aliases,
+    revoke_email_sender_access,
+    update_email_sender_alias,
 )
 from app.services.email import (
     EmailAttachmentError,
@@ -47,6 +60,7 @@ email_user_dependency = require_any_permission(
     PermissionKeys.SEND_EMAIL,
     PermissionKeys.SEND_ASSIGNED_EMAIL,
 )
+email_manager_dependency = require_any_permission(PermissionKeys.MANAGE_EMAIL_ACCOUNTS)
 
 
 @router.get("/accounts")
@@ -55,6 +69,80 @@ def read_email_accounts(
     principal: Annotated[Principal, Depends(email_user_dependency)],
 ) -> EmailAccountListResponse:
     return list_email_accounts(db, principal)
+
+
+@router.get("/aliases")
+def read_email_sender_aliases(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_user_dependency)],
+) -> EmailSenderAliasListResponse:
+    return list_email_sender_aliases(db, principal)
+
+
+@router.post("/aliases", status_code=201)
+def post_email_sender_alias(
+    payload: EmailSenderAliasCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailSenderAliasRead:
+    try:
+        return create_email_sender_alias(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.patch("/aliases/{alias_id}")
+def patch_email_sender_alias(
+    alias_id: UUID,
+    payload: EmailSenderAliasUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailSenderAliasRead:
+    try:
+        alias = update_email_sender_alias(db, principal, alias_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if alias is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email alias not found.")
+    return alias
+
+
+@router.put("/aliases/{alias_id}/grants")
+def put_email_sender_grant(
+    alias_id: UUID,
+    payload: EmailSenderGrantCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailSenderAliasRead:
+    try:
+        alias = grant_email_sender_access(db, principal, alias_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if alias is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email alias not found.")
+    return alias
+
+
+@router.delete("/aliases/{alias_id}/grants/{user_id}")
+def delete_email_sender_grant(
+    alias_id: UUID,
+    user_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailSenderAliasRead:
+    alias = revoke_email_sender_access(db, principal, alias_id, user_id)
+    if alias is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email alias not found.")
+    return alias
 
 
 @router.post("/oauth/google/authorize")
@@ -144,7 +232,7 @@ def synchronize_email_account(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
-    except GoogleGmailError as exc:
+    except (EmailProviderError, GoogleGmailError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
@@ -229,7 +317,7 @@ def send_email_message(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
-    except GoogleGmailError as exc:
+    except (EmailProviderError, GoogleGmailError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")

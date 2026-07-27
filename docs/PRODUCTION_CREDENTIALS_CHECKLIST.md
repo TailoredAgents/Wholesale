@@ -39,7 +39,7 @@ appropriate Render service environment.
 | F4 | SignWell | Electronic signatures and completed contract PDFs | Built, activation pending | API |
 | F4 | ClamAV | Uploaded-file malware scanning | Optional / deferred | API/private service |
 | F5 | DealMachine | Buyer discovery and enrichment | Built, activation pending | API |
-| F8 | Resend | Operational outbound and inbound email | Selected, build pending | API and worker |
+| F8 | Resend | Operational outbound and inbound email | F8.1-F8.2 complete; delivery and receiving pending | API and worker |
 | F9 | Twilio Messaging | Seller and buyer SMS | Built, activation pending | API |
 | F9 | Twilio Voice | Browser calling, inbound calls, and recordings | Built, activation pending | API and worker |
 | Operations | Sentry | Error and trace monitoring | Optional / deferred | Web, API, and worker |
@@ -234,11 +234,12 @@ does not replace the Stonegate buyer CRM.
 
 ## F8 Resend Operational Email
 
-Resend is selected, but these values are planned and should not be added until the F8 adapter is
-implemented.
+Resend is selected and these values are defined by the F8.2 foundation. Secret values remain
+unset, and the provider remains disabled until F8.4-F8.7 implementation and acceptance are ready.
 
-| Planned variable | Secret | Planned Render service |
+| Variable | Secret | Render service |
 | --- | --- | --- |
+| `EMAIL_ENABLED` | No | API and worker |
 | `EMAIL_PROVIDER` | No | API and worker |
 | `RESEND_API_KEY` | Yes | API and worker |
 | `RESEND_WEBHOOK_SECRET` | Yes | API and worker |
@@ -249,9 +250,10 @@ implemented.
 
 Non-environment requirements:
 
-- Sending-domain DNS records.
-- Deliberately approved receiving-domain MX records.
-- Company aliases, signatures, reply routing, and retention policy.
+- `stonegatehb.com` sending-domain DNS records.
+- Approved root-domain receiving MX records for `stonegatehb.com`.
+- Approved named senders and department aliases from `PHASE_F8_RESEND_EMAIL.md`, plus signatures,
+  reply routing, and retention policy.
 - Signed webhook registration.
 
 Detailed procedure: `RUNBOOKS/resend-email.md`.
@@ -382,7 +384,7 @@ underwriting calibration demonstrates the need and its data license is approved.
 
 | Provider or system | Decision |
 | --- | --- |
-| Gmail / Google Workspace OAuth | Replaced by the planned Resend operational-email adapter |
+| Gmail / Google Workspace OAuth | Replaced by the implemented Resend operational-email adapter |
 | Google Calendar / Outlook Calendar | Stonegate's internal calendar is the system of record |
 | QuickBooks API | Stonegate will build its internal accounting ledger in F6 |
 | Separate CRM | Stonegate's CRM remains the source of truth |

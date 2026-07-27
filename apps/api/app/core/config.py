@@ -157,6 +157,10 @@ class Settings(BaseSettings):
         validation_alias="CALL_RECORDING_RETENTION_DAYS",
     )
     email_enabled: bool = Field(default=False, validation_alias="EMAIL_ENABLED")
+    email_provider: Literal["disabled", "simulate", "google", "resend"] = Field(
+        default="disabled",
+        validation_alias="EMAIL_PROVIDER",
+    )
     email_sync_enabled: bool = Field(default=False, validation_alias="EMAIL_SYNC_ENABLED")
     email_sync_poll_seconds: int = Field(
         default=30,
@@ -181,6 +185,27 @@ class Settings(BaseSettings):
     email_web_app_base_url: str = Field(
         default="http://localhost:3000",
         validation_alias="EMAIL_WEB_APP_BASE_URL",
+    )
+    resend_api_key: str | None = Field(default=None, validation_alias="RESEND_API_KEY")
+    resend_webhook_secret: str | None = Field(
+        default=None,
+        validation_alias="RESEND_WEBHOOK_SECRET",
+    )
+    resend_sending_domain: str = Field(
+        default="stonegatehb.com",
+        validation_alias="RESEND_SENDING_DOMAIN",
+    )
+    resend_receiving_domain: str = Field(
+        default="stonegatehb.com",
+        validation_alias="RESEND_RECEIVING_DOMAIN",
+    )
+    resend_default_from_email: str = Field(
+        default="offers@stonegatehb.com",
+        validation_alias="RESEND_DEFAULT_FROM_EMAIL",
+    )
+    resend_webhook_base_url: str = Field(
+        default="http://localhost:8000",
+        validation_alias="RESEND_WEBHOOK_BASE_URL",
     )
     document_storage_provider: Literal["database", "s3"] = Field(
         default="database",
@@ -528,6 +553,12 @@ class Settings(BaseSettings):
             raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
         if self.app_env.lower() == "production" and self.marketing_conversion_mode == "simulate":
             raise ValueError("MARKETING_CONVERSION_MODE=simulate is forbidden in production.")
+        if (
+            self.app_env.lower() == "production"
+            and self.email_enabled
+            and self.email_provider == "simulate"
+        ):
+            raise ValueError("EMAIL_PROVIDER=simulate is forbidden in production.")
         return self
 
     @property
@@ -551,14 +582,34 @@ class Settings(BaseSettings):
         blockers: list[str] = []
         if not self.email_enabled:
             blockers.append("EMAIL_ENABLED=true")
-        if not self.google_oauth_client_id:
-            blockers.append("GOOGLE_OAUTH_CLIENT_ID")
-        if not self.google_oauth_client_secret:
-            blockers.append("GOOGLE_OAUTH_CLIENT_SECRET")
-        if not self.email_token_encryption_key:
-            blockers.append("EMAIL_TOKEN_ENCRYPTION_KEY")
-        if not self.email_oauth_state_secret:
-            blockers.append("EMAIL_OAUTH_STATE_SECRET")
+        if self.email_provider == "disabled":
+            blockers.append("EMAIL_PROVIDER")
+        elif self.email_provider == "google":
+            if not self.google_oauth_client_id:
+                blockers.append("GOOGLE_OAUTH_CLIENT_ID")
+            if not self.google_oauth_client_secret:
+                blockers.append("GOOGLE_OAUTH_CLIENT_SECRET")
+            if not self.email_token_encryption_key:
+                blockers.append("EMAIL_TOKEN_ENCRYPTION_KEY")
+            if not self.email_oauth_state_secret:
+                blockers.append("EMAIL_OAUTH_STATE_SECRET")
+        elif self.email_provider == "resend":
+            if not self.resend_api_key:
+                blockers.append("RESEND_API_KEY")
+            if not self.resend_webhook_secret:
+                blockers.append("RESEND_WEBHOOK_SECRET")
+            if not self.resend_sending_domain.strip():
+                blockers.append("RESEND_SENDING_DOMAIN")
+            if not self.resend_receiving_domain.strip():
+                blockers.append("RESEND_RECEIVING_DOMAIN")
+            if not self.resend_default_from_email.strip():
+                blockers.append("RESEND_DEFAULT_FROM_EMAIL")
+            elif not self.resend_default_from_email.lower().endswith(
+                f"@{self.resend_sending_domain.strip().lower()}"
+            ):
+                blockers.append("RESEND_DEFAULT_FROM_EMAIL domain")
+            if not self.resend_webhook_base_url.strip():
+                blockers.append("RESEND_WEBHOOK_BASE_URL")
         return tuple(blockers)
 
     @property

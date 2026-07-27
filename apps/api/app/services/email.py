@@ -3,6 +3,7 @@ import binascii
 import hashlib
 from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
+from html import escape
 from html.parser import HTMLParser
 from typing import Any
 from uuid import UUID
@@ -16,15 +17,19 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
-from app.integrations.communications import (
-    OutboundMessageRequest,
-    SimulatedCommunicationProvider,
+from app.integrations.email_delivery import (
+    EmailDeliveryProvider,
+    EmailDeliveryRequest,
+    EmailProviderError,
+    GoogleEmailDeliveryProvider,
+    SimulatedEmailDeliveryProvider,
 )
 from app.integrations.google_gmail import (
     GoogleGmailClient,
     GoogleGmailError,
     get_google_gmail_client,
 )
+from app.integrations.resend_email import ResendEmailDeliveryProvider
 from app.models.foundation import (
     ActivityEvent,
     AuditEvent,
@@ -36,6 +41,7 @@ from app.models.foundation import (
     Conversation,
     EmailAccount,
     EmailAttachment,
+    EmailSenderAlias,
     EmailTemplate,
     Lead,
     User,
@@ -53,6 +59,7 @@ from app.schemas.email import (
     EmailTemplateRead,
     EmailTemplateUpdate,
 )
+from app.services.email_aliases import get_authorized_email_sender_alias
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
 
 
@@ -105,10 +112,8 @@ def create_google_authorization(
     client: GoogleGmailClient | None = None,
 ) -> EmailOAuthAuthorizeRead:
     settings = settings or get_settings()
-    if settings.email_configuration_blockers:
-        raise EmailConfigurationError(
-            "Email is not configured: " + ", ".join(settings.email_configuration_blockers)
-        )
+    if settings.email_provider != "google" or settings.email_configuration_blockers:
+        raise EmailConfigurationError("Email is not configured for legacy Google OAuth.")
     assert settings.email_oauth_state_secret is not None
     state = jwt.encode(
         {
@@ -134,8 +139,8 @@ def complete_google_authorization(
     client: GoogleGmailClient | None = None,
 ) -> EmailAccount:
     settings = settings or get_settings()
-    if settings.email_configuration_blockers:
-        raise EmailConfigurationError("Email is not fully configured.")
+    if settings.email_provider != "google" or settings.email_configuration_blockers:
+        raise EmailConfigurationError("Legacy Google email is not fully configured.")
     assert settings.email_oauth_state_secret is not None
     try:
         claims = jwt.decode(
@@ -246,7 +251,10 @@ def list_email_accounts(db: Session, principal: Principal) -> EmailAccountListRe
     settings = get_settings()
     return EmailAccountListResponse(
         items=[email_account_to_read(account, principal) for account in accounts],
-        provider_configured=not settings.email_configuration_blockers,
+        provider_configured=(
+            settings.communication_simulation_enabled
+            or not settings.email_configuration_blockers
+        ),
         configuration_blockers=list(settings.email_configuration_blockers),
     )
 
@@ -398,6 +406,47 @@ def update_email_template(
     return email_template_to_read(template)
 
 
+def email_delivery_provider_name(settings: Settings) -> str:
+    if settings.communication_simulation_enabled or settings.email_provider == "simulate":
+        return "simulated"
+    return settings.email_provider
+
+
+def get_email_delivery_provider(
+    db: Session,
+    account: EmailAccount | None,
+    alias: EmailSenderAlias | None,
+    settings: Settings,
+    *,
+    conversation_id: UUID,
+    client: GoogleGmailClient | None = None,
+) -> EmailDeliveryProvider:
+    provider_name = email_delivery_provider_name(settings)
+    if provider_name == "simulated":
+        return SimulatedEmailDeliveryProvider(thread_id=f"sim-thread-{conversation_id}")
+    if provider_name == "google":
+        if account is None:
+            raise EmailConfigurationError("Select a legacy Google email account.")
+        if account.provider != "google":
+            raise EmailConfigurationError(
+                "The selected account is not a legacy Google email account."
+            )
+        gmail = client or get_google_gmail_client(settings)
+        access_token = get_account_access_token(db, account, settings, gmail)
+        return GoogleEmailDeliveryProvider(gmail, access_token)
+    if provider_name == "resend":
+        if alias is None or alias.provider != "resend":
+            raise EmailConfigurationError(
+                "Select an active Stonegate Resend email alias."
+            )
+        if not settings.resend_api_key:
+            raise EmailConfigurationError("Resend outbound delivery is not configured.")
+        return ResendEmailDeliveryProvider(
+            api_key=settings.resend_api_key,
+        )
+    raise EmailConfigurationError("Select an operational email provider.")
+
+
 def send_conversation_email(
     db: Session,
     principal: Principal,
@@ -422,9 +471,50 @@ def send_conversation_email(
             "Email is not configured: " + ", ".join(settings.email_configuration_blockers)
         )
 
-    account = get_scoped_email_account(db, principal, payload.email_account_id, allow_shared=True)
-    if account is None or account.status != "active":
-        raise EmailConfigurationError("Select an active Stonegate email account.")
+    provider_name = email_delivery_provider_name(settings)
+    account: EmailAccount | None = None
+    alias: EmailSenderAlias | None = None
+    if payload.email_sender_alias_id is not None:
+        alias = get_authorized_email_sender_alias(
+            db,
+            principal,
+            payload.email_sender_alias_id,
+        )
+        if alias is None:
+            raise EmailConfigurationError("Select an active Stonegate email alias.")
+        if alias.status != "active" or not alias.outbound_enabled:
+            raise EmailConfigurationError(
+                "The selected Stonegate email alias is not active for outbound email."
+            )
+        if provider_name == "google":
+            raise EmailConfigurationError(
+                "Legacy Google delivery requires a connected email account."
+            )
+        sender_id = alias.id
+        sender_name = alias.display_name
+        sender_email = alias.email_address
+        sender_signature = alias.signature_text
+        sender_metadata = {"email_sender_alias_id": str(alias.id)}
+    else:
+        if provider_name == "resend":
+            raise EmailConfigurationError(
+                "Resend delivery requires an authorized Stonegate email alias."
+            )
+        if payload.email_account_id is None:
+            raise EmailConfigurationError("Select an active Stonegate email account.")
+        account = get_scoped_email_account(
+            db,
+            principal,
+            payload.email_account_id,
+            allow_shared=True,
+        )
+        if account is None or account.status != "active":
+            raise EmailConfigurationError("Select an active Stonegate email account.")
+        sender_id = account.id
+        sender_name = account.display_name
+        sender_email = account.email_address
+        sender_signature = account.signature_text
+        sender_metadata = {"email_account_id": str(account.id)}
     contact = db.get(Contact, conversation.contact_id)
     lead = db.get(Lead, conversation.lead_id)
     if contact is None or lead is None:
@@ -446,7 +536,8 @@ def send_conversation_email(
     decoded_attachments = decode_outbound_attachments(payload, settings)
     request_hash = hashlib.sha256(
         (
-            f"{account.id}|{recipient}|{subject}|{body}|"
+            f"{sender_id}|{recipient}|{subject}|{body}|{payload.html_body or ''}|"
+            f"{','.join(payload.cc)}|{','.join(payload.bcc)}|"
             + "|".join(
                 f"{filename}:{content_type}:{hashlib.sha256(content).hexdigest()}"
                 for filename, content_type, content in decoded_attachments
@@ -494,12 +585,12 @@ def send_conversation_email(
         recipient=recipient,
         request_body_hash=request_hash,
         status="pending",
-        provider="simulated" if simulation_enabled else "google",
+        provider=provider_name,
         provider_message_id=None,
         error_code=None,
         error_message=None,
         completed_at=None,
-        dispatch_metadata={"email_account_id": str(account.id)},
+        dispatch_metadata=sender_metadata,
     )
     db.add(dispatch)
     db.commit()
@@ -515,69 +606,60 @@ def send_conversation_email(
         .order_by(CommunicationRecord.occurred_at.desc())
     )
     prior_metadata = (prior_email.communication_metadata if prior_email else None) or {}
-    message_body = append_signature(body, account.signature_text)
-    gmail: GoogleGmailClient | None = None
-    access_token: str | None = None
-    if simulation_enabled:
-        simulated_result = SimulatedCommunicationProvider().send(
-            OutboundMessageRequest(
+    message_body = append_signature(body, sender_signature)
+    message_html_body = append_html_signature(payload.html_body, sender_signature)
+    try:
+        delivery_provider = get_email_delivery_provider(
+            db,
+            account,
+            alias,
+            settings,
+            conversation_id=conversation.id,
+            client=client,
+        )
+        delivery_result = delivery_provider.send(
+            EmailDeliveryRequest(
                 lead_id=str(lead.id),
                 contact_id=str(contact.id),
-                channel="email",
+                sender_name=sender_name,
+                sender_email=sender_email,
                 recipient=recipient,
                 subject=subject,
                 body=message_body,
                 idempotency_key=payload.idempotency_key,
-                metadata={"attachment_count": str(len(decoded_attachments))},
-            )
-        )
-        provider_message_id = simulated_result.provider_message_id or f"sim-email-{dispatch_id}"
-        provider_thread_id = str(
-            prior_metadata.get("provider_thread_id") or f"sim-thread-{conversation.id}"
-        )
-        provider_payload = simulated_result.raw_payload
-        rfc_message_id = f"<{provider_message_id}@example.test>"
-        provider_name = simulated_result.provider
-    else:
-        gmail = client or get_google_gmail_client(settings)
-        try:
-            access_token = get_account_access_token(db, account, settings, gmail)
-            result = gmail.send_message(
-                access_token,
-                sender_name=account.display_name,
-                sender_email=account.email_address,
-                recipient=recipient,
-                subject=subject,
-                body=message_body,
+                html_body=message_html_body,
+                cc=payload.cc,
+                bcc=payload.bcc,
                 attachments=decoded_attachments,
-                thread_id=(
+                provider_thread_id=(
                     str(prior_metadata["provider_thread_id"])
-                    if prior_metadata and prior_metadata.get("provider_thread_id")
+                    if prior_metadata.get("provider_thread_id")
                     else None
                 ),
                 in_reply_to=(
                     str(prior_metadata["rfc_message_id"])
-                    if prior_metadata and prior_metadata.get("rfc_message_id")
+                    if prior_metadata.get("rfc_message_id")
                     else None
                 ),
                 references=(
                     str(prior_metadata["references"])
-                    if prior_metadata and prior_metadata.get("references")
+                    if prior_metadata.get("references")
                     else (
                         str(prior_metadata["rfc_message_id"])
-                        if prior_metadata and prior_metadata.get("rfc_message_id")
+                        if prior_metadata.get("rfc_message_id")
                         else None
                     )
                 ),
             )
-        except (EmailConfigurationError, GoogleGmailError) as exc:
-            mark_email_dispatch_failed(db, dispatch_id, str(exc))
-            raise
-        provider_message_id = result.message_id
-        provider_thread_id = result.thread_id
-        provider_payload = result.raw_payload
-        rfc_message_id = str(result.raw_payload.get("rfc_message_id", ""))
-        provider_name = "google"
+        )
+    except (EmailConfigurationError, EmailProviderError, GoogleGmailError) as exc:
+        mark_email_dispatch_failed(db, dispatch_id, str(exc))
+        raise
+    provider_message_id = delivery_result.provider_message_id
+    provider_thread_id = delivery_result.provider_thread_id
+    provider_payload = delivery_result.raw_payload
+    rfc_message_id = delivery_result.rfc_message_id
+    provider_name = delivery_result.provider
 
     occurred_at = datetime.now(UTC)
     communication = CommunicationRecord(
@@ -597,7 +679,7 @@ def send_conversation_email(
         external_payload=provider_payload,
         communication_metadata={
             "source": "shared_inbox",
-            "email_account_id": str(account.id),
+            **sender_metadata,
             "provider_thread_id": provider_thread_id,
             "rfc_message_id": rfc_message_id,
             "references": " ".join(
@@ -608,8 +690,10 @@ def send_conversation_email(
                 ]
                 if part
             ),
-            "from": account.email_address,
+            "from": sender_email,
             "to": recipient,
+            "cc": payload.cc,
+            "bcc": payload.bcc,
             "attachment_count": len(decoded_attachments),
         },
     )
@@ -652,13 +736,23 @@ def send_conversation_email(
         )
     )
     db.commit()
-    if gmail is not None and access_token is not None:
+    if account is not None:
         try:
-            provider_message = gmail.get_message(access_token, provider_message_id)
+            provider_message = delivery_provider.retrieve_sent_message(provider_message_id)
+            if provider_message is None:
+                return EmailSendRead(
+                    communication_id=communication.id,
+                    provider_message_id=provider_message_id,
+                    provider_thread_id=provider_thread_id,
+                    status="sent",
+                    recipient=recipient,
+                )
             index_message_attachments(db, account, communication, provider_message)
             db.commit()
-        except GoogleGmailError:
-            account.last_error = "Email sent, but attachment metadata will be indexed during sync."
+        except (EmailProviderError, GoogleGmailError):
+            account.last_error = (
+                "Email sent, but attachment metadata will be indexed during sync."
+            )
             db.commit()
     return EmailSendRead(
         communication_id=communication.id,
@@ -677,8 +771,14 @@ def sync_email_account(
     client: GoogleGmailClient | None = None,
 ) -> EmailSyncRead:
     settings = settings or get_settings()
-    if settings.email_configuration_blockers or not settings.email_sync_enabled:
-        raise EmailConfigurationError("Email synchronization is not enabled.")
+    if (
+        settings.email_provider != "google"
+        or settings.email_configuration_blockers
+        or not settings.email_sync_enabled
+    ):
+        raise EmailConfigurationError("Legacy Google email synchronization is not enabled.")
+    if account.provider != "google":
+        raise EmailConfigurationError("This account is not a legacy Google mailbox.")
     if account.status != "active" or not account.sync_enabled:
         raise EmailConfigurationError("This email account is not active for synchronization.")
     gmail = client or get_google_gmail_client(settings)
@@ -794,12 +894,17 @@ def sync_next_email_account(
     client: GoogleGmailClient | None = None,
 ) -> UUID | None:
     settings = settings or get_settings()
-    if settings.email_configuration_blockers or not settings.email_sync_enabled:
+    if (
+        settings.email_provider != "google"
+        or settings.email_configuration_blockers
+        or not settings.email_sync_enabled
+    ):
         return None
     due_before = datetime.now(UTC) - timedelta(seconds=settings.email_sync_poll_seconds)
     account = db.scalar(
         select(EmailAccount)
         .where(
+            EmailAccount.provider == "google",
             EmailAccount.status == "active",
             EmailAccount.sync_enabled.is_(True),
             or_(
@@ -1096,6 +1201,16 @@ def decode_outbound_attachments(
 def append_signature(body: str, signature: str | None) -> str:
     signature = signature.strip() if signature else ""
     return f"{body}\n\n--\n{signature}" if signature else body
+
+
+def append_html_signature(body: str | None, signature: str | None) -> str | None:
+    if body is None:
+        return None
+    signature = signature.strip() if signature else ""
+    if not signature:
+        return body
+    escaped_signature = "<br>".join(escape(line) for line in signature.splitlines())
+    return f"{body}<br><br>--<br>{escaped_signature}"
 
 
 def mark_email_dispatch_failed(db: Session, dispatch_id: UUID, message: str) -> None:

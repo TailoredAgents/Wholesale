@@ -512,6 +512,24 @@ Exit criteria:
 
 Goal: Replace the disabled Gmail/OAuth integration with two-way operational email in Stonegate.
 
+Phase sequence and implementation ownership are defined in `PHASE_F8_RESEND_EMAIL.md`.
+
+Implementation checkpoint, July 27, 2026:
+
+- F8.1 team, named-sender, department-alias, and routing decisions are approved and documented.
+- New compensation-plan drafts default to a 20% human-led Dispositions pool. Devon and Austin use
+  two approved 50% role credits when the agreed buyer and field-support split applies.
+- Root-domain sending and receiving through `stonegatehb.com` is approved because Stonegate is the
+  intended company mailbox and no competing mailbox provider is configured.
+- F8.2 is complete in code: provider-neutral delivery contracts, company alias and grant records,
+  owner APIs, provider-specific configuration, migration `0066`, and simulation compatibility are
+  implemented.
+- F8.3 is complete in code: authorized alias delivery through Resend, text and HTML bodies, CC/BCC,
+  attachments, signatures, RFC threading evidence, provider IDs, database and provider
+  idempotency, failure recording, and focused tests are implemented.
+- Inbound processing, lifecycle webhooks, Inbox administration, DNS, credentials, webhook
+  registration, acceptance, and launch remain in F8.4 through F8.8.
+
 Architecture:
 
 - Use the Resend API for sending.
@@ -526,7 +544,7 @@ Architecture:
 
 Work:
 
-- Decide whether operational mail uses the root domain or a dedicated subdomain.
+- Configure the approved `stonegatehb.com` root sending and receiving domain.
 - Verify SPF and DKIM; add DMARC policy and monitoring.
 - Build the Resend adapter and provider-neutral email interface.
 - Replace Google OAuth connection screens with owner-managed Stonegate aliases.

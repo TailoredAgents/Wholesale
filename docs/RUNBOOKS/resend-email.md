@@ -4,8 +4,11 @@ Last updated: July 27, 2026
 
 ## Status
 
-Resend is selected as Stonegate's operational email provider. The Resend adapter is not yet
-implemented.
+Resend is selected as Stonegate's operational email provider. F8.2-F8.3 have implemented the
+provider-neutral delivery boundary, company alias and sender-grant records, owner APIs,
+provider-specific configuration, database migration, and tested outbound Resend adapter. Live
+sending, Receiving webhooks, recovery, and Inbox administration remain disabled until F8.4
+through F8.7 are complete and accepted.
 
 The existing Google Workspace/Gmail OAuth implementation remains disabled and is superseded. Do
 not configure Google OAuth or enable Gmail synchronization.
@@ -27,31 +30,36 @@ Employees do not connect personal email accounts and do not share provider crede
 
 ## Domain Decision
 
-The approved company domain is `stonegatehb.com`. Do not configure the retired domain in Resend.
+The approved sending and receiving domain is `stonegatehb.com`. Do not configure the retired
+domain in Resend.
 
-Before changing DNS, choose one receiving model:
+Stonegate intentionally uses root-domain receiving because the OS will be the company mailbox and
+the domain has no competing mailbox provider. Resend receives mail for the domain after its MX
+record is configured. The Render website records remain separate from email MX records.
 
-1. **Dedicated operational subdomain, recommended:** Use an address such as
-   `name@reply.stonegatehb.com`. This isolates receiving and avoids taking over root-domain
-   mail routing.
-2. **Root-domain receiving:** Use `name@stonegatehb.com` and intentionally route all mail
-   for the domain through Resend into Stonegate.
-
-Resend receives mail for every address on a receiving domain after its MX record is configured.
-Do not change the root-domain MX record casually.
+If another mailbox provider is added later, use a dedicated receiving subdomain or deliberate
+forwarding before changing MX priorities.
 
 Use a sending subdomain when useful for reputation isolation. Configure SPF and DKIM and add DMARC
 monitoring before production delivery.
 
-## Planned Aliases
+## Approved Aliases
 
-Examples only; approve the final list before implementation:
+Named senders:
 
-- `offers@...`: seller intake and seller follow-up.
-- `acquisitions@...`: Lead Manager and closer correspondence.
-- `transactions@...`: seller, attorney, title, and closing correspondence.
-- `buyers@...`: approved disposition packages and buyer replies.
-- `support@...`: operational help.
+- `austin@stonegatehb.com`
+- `devon@stonegatehb.com`
+- `conner@stonegatehb.com`
+- `michael@stonegatehb.com`, reserved and inactive until Michael joins
+
+Department aliases:
+
+- `offers@stonegatehb.com`: seller intake and initial follow-up
+- `acquisitions@stonegatehb.com`: qualified sellers, appointments, and negotiation
+- `transactions@stonegatehb.com`: seller, attorney, title, and closing correspondence
+- `buyers@stonegatehb.com`: approved disposition packages and buyer replies
+- `accounting@stonegatehb.com`: bills, tax documents, commissions, and bookkeeping
+- `support@stonegatehb.com`: operational help and messaging-program support
 
 Each alias needs:
 
@@ -63,10 +71,14 @@ Each alias needs:
 - Retention policy.
 - Allowed templates.
 
-## Planned Environment Variables
+The complete initial and post-Michael routing matrix is in `../PHASE_F8_RESEND_EMAIL.md`.
 
-Do not add these until the adapter defines them:
+## Defined Environment Variables
 
+These variables are declared in application configuration and Render. Keep `EMAIL_ENABLED=false`
+and `EMAIL_PROVIDER=disabled` until the outbound and inbound acceptance phases are ready:
+
+- `EMAIL_ENABLED`
 - `EMAIL_PROVIDER=resend`
 - `RESEND_API_KEY`
 - `RESEND_WEBHOOK_SECRET`
@@ -77,18 +89,22 @@ Do not add these until the adapter defines them:
 
 Secrets belong in Render. Only non-secret public configuration may be exposed to the browser.
 
-## Outbound Requirements
+## Outbound Implementation
 
-The adapter must:
+The adapter now:
 
 - Send through the Resend Email API.
 - Require an approved Stonegate sender alias.
-- Enforce role, conversation, consent, suppression, and template rules.
+- Enforces role, conversation, owner, team, and direct-grant sender permissions.
 - Use an idempotency key for each dispatch.
 - Preserve reply and thread headers.
 - Support approved attachments within Stonegate limits.
-- Store provider email ID, recipient, sender, subject, timestamps, and dispatch status.
+- Stores provider email ID, RFC `Message-ID`, recipient, sender, subject, timestamps, and dispatch
+  status.
 - Never expose the API key to the browser.
+
+Delivery, delay, bounce, complaint, and suppression transitions remain part of F8.4 signed webhook
+processing. Live outbound stays disabled until inbound recovery and acceptance are ready.
 
 ## Inbound Requirements
 

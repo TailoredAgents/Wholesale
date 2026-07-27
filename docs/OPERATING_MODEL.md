@@ -1,6 +1,6 @@
 # Stonegate Operating Model
 
-Last updated: July 24, 2026
+Last updated: July 27, 2026
 
 ## Purpose
 
@@ -40,6 +40,25 @@ Each employee receives an individual login and a role manual. They submit a work
 **My Setup**, and an owner approves it only after confirming that normal work is available and
 restricted areas remain unavailable.
 
+### Initial Team Assignment
+
+Stonegate's approved launch coverage is:
+
+| Seat | Initial primary | Planned transition |
+| --- | --- | --- |
+| Owner and CEO Management | Austin | No planned change |
+| Acquisitions Closer | Austin | No planned change |
+| Lead Manager | Devon | Michael becomes primary approximately 60 days after launch; Devon transfers to Dispositions |
+| Dispositions | Devon, with Austin providing field and package support | Devon remains primary; Austin remains an approved 50% role-credit participant when both perform the agreed work |
+| Transaction Coordinator | Conner | No planned change |
+| Finance and bookkeeping | Conner | No planned change |
+| VA Prospecting | Two to three individually assigned Upwork contractors | Add or deactivate individual accounts as staffing changes |
+
+The planned transition changes seat ownership and email routing, not lead, conversation, or
+transaction history. Michael is not activated or given access before joining. Every VA uses an
+individual restricted login; a VA receives a Stonegate mailbox only when the work actually
+requires operational email.
+
 ### Owner And CEO Management
 
 The CEO owns strategy, advertising, hiring, training, performance management, systems, approvals,
@@ -71,8 +90,8 @@ purchase contract. The CEO initially performs this role.
 
 The Transaction Coordinator owns the file from executed seller contract through funded closing:
 closing-attorney intake, earnest money, title, payoff, due-diligence, document, assignment, and
-closing deadlines. The CEO initially covers this role until the workload justifies a dedicated
-operator.
+closing deadlines. Conner initially performs this role and the related bookkeeping work, with the
+CEO retaining management visibility and approval authority.
 
 ### Dispositions
 
@@ -185,13 +204,20 @@ closed period requires an audited management reason.
 | Lead Manager | 10% |
 | Acquisitions Closer | 10% |
 | CEO Management | 10% |
-| Dispositions | 15% |
+| Dispositions | 20% |
 | Transaction Coordinator | 5%, capped at $1,000 |
-| Company before ordinary overhead | Approximately 50% |
+| Company before ordinary overhead | Approximately 45% |
 
 When the CEO also closes the seller, the CEO earns 10% for management and 10% for acquisition
 closing. When a dedicated Closer is assigned, that person earns the Closer share while the CEO
 retains management compensation for performing the management role.
+
+The initial human-led Dispositions share is split through two approved role credits: 50% to Devon
+for buyer relationships, distribution, inquiry handling, offer development, and buyer execution,
+and 50% to Austin for property access, photographs, cleanup coordination, field support, and other
+documented deal-placement work. Each therefore receives 10% of Adjusted Deal Margin when the full
+split applies. A different contribution split must be recorded and approved before closing; the
+system does not infer the split after funding.
 
 Any unused Transaction Coordinator amount above its cap returns to the company. Owner
 distributions occur only after commissions, taxes, operating reserves, and the company profit
@@ -201,7 +227,7 @@ target are protected.
 
 | Operating mode | Human disposition share | Expected company share before overhead |
 | --- | ---: | ---: |
-| Human-led | 15% | Approximately 50% |
+| Human-led | 20% | Approximately 45% |
 | AI-operated, human-managed | 10% | Approximately 55% |
 | AI-led, human exception oversight | 5% to 7.5% | Approximately 57.5% to 60% |
 

@@ -6,10 +6,19 @@ from sqlalchemy.orm import Session
 
 from app.main import app
 from app.models.foundation import AuditEvent
+from app.schemas.operating_model import CompensationPlanCreate
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
 LEAD_MANAGER_EMAIL = "lead.manager@example.com"
+
+
+def test_current_compensation_plan_defaults() -> None:
+    payload = CompensationPlanCreate()
+
+    assert payload.dispositions_basis_points == 2000
+    assert payload.ai_managed_disposition_basis_points == 1000
+    assert payload.target_company_margin_basis_points == 3000
 
 
 def create_lead(client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
@@ -83,7 +92,7 @@ def test_versioned_compensation_role_credit_and_market_launch_controls(
             "lead_manager_basis_points": 1000,
             "acquisitions_closer_basis_points": 1000,
             "ceo_management_basis_points": 1000,
-            "dispositions_basis_points": 1500,
+            "dispositions_basis_points": 2000,
             "transaction_coordinator_basis_points": 500,
             "transaction_coordinator_cap_cents": 100000,
             "ai_managed_disposition_basis_points": 1000,

@@ -124,11 +124,12 @@ SMS and Voice activation and the Resend operational-email migration remain pendi
 - Current property data: RentCast.
 - SMS and Voice: Twilio, with a dedicated Stonegate Messaging Service and SMS number.
 - Operational email: Resend API and Receiving webhooks, with Stonegate Inbox as the staff mailbox.
+- Operational email domain: root-domain sending and receiving through `stonegatehb.com`, using
+  approved named senders and department aliases.
 - Cold email, if approved later: separate outreach infrastructure and sending domain.
 
 ## Open Decisions
 
-- Resend operational sender aliases and receiving-domain choice.
 - Recording disclosure and state coverage.
 - Object storage provider.
 - E-signature provider.

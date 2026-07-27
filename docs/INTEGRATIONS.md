@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: July 26, 2026
+Last updated: July 27, 2026
 
 All external providers are adapters. PostgreSQL remains the platform database. The internal
 Stonegate Accounting Ledger is a native subsystem, not a provider integration.
@@ -16,7 +16,7 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
 | Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
-| Resend | Operational seller email | Selected; adapter migration pending | Choose receiving domain, verify DNS, build sending/Receiving adapter, register signed webhooks, and run acceptance tests |
+| Resend | Operational seller email | F8.2-F8.3 provider-neutral foundation, aliases, grants, owner APIs, and tested outbound adapter implemented | Build inbound webhooks/recovery and Inbox administration, verify DNS, register signed webhooks, and run acceptance tests |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
 | National DNC API | None planned | Not used | Application-level DNC evidence integration was removed at Owner direction |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |
@@ -126,9 +126,10 @@ attachments, deduplicate at-least-once webhook delivery, tolerate out-of-order e
 missed inbound events, and record sent, delivered, delayed, bounced, complained, failed,
 suppressed, and received states.
 
-The preferred receiving design is a dedicated operational subdomain unless Stonegate explicitly
-decides that all root-domain mail should route into the OS. Resend receives mail for every address
-on a configured receiving domain, so MX changes require deliberate approval.
+Stonegate has approved `stonegatehb.com` for root-domain sending and receiving because the OS is
+the intended company mailbox and the domain has no competing mailbox provider. Resend receives
+mail for every address on the configured receiving domain, so any future mailbox-provider change
+requires deliberate MX or forwarding design.
 
 Cold outreach is excluded. Future cold email must use separate domains, sender reputation,
 compliance rules, and a dedicated outreach adapter. See `RUNBOOKS/resend-email.md`.

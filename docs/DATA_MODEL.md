@@ -65,6 +65,8 @@ authorization or evidence contract.
 - `communication_dispatches`
 - `communication_provider_events`
 - `email_accounts`
+- `email_sender_aliases`
+- `email_sender_grants`
 - `email_templates`
 - `email_attachments`
 - `voice_lines`

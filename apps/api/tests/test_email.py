@@ -188,6 +188,7 @@ def gmail_message(
 def email_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
     values = {
         "EMAIL_ENABLED": "true",
+        "EMAIL_PROVIDER": "google",
         "EMAIL_SYNC_ENABLED": "true",
         "EMAIL_TOKEN_ENCRYPTION_KEY": "test-encryption-key-with-sufficient-entropy",
         "EMAIL_OAUTH_STATE_SECRET": "test-oauth-state-secret-with-sufficient-entropy",

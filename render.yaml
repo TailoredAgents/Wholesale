@@ -112,6 +112,8 @@ services:
         value: 180
       - key: EMAIL_ENABLED
         value: false
+      - key: EMAIL_PROVIDER
+        value: disabled
       - key: EMAIL_SYNC_ENABLED
         value: false
       - key: EMAIL_SYNC_POLL_SECONDS
@@ -124,6 +126,18 @@ services:
         sync: false
       - key: EMAIL_WEB_APP_BASE_URL
         value: https://www.stonegatehb.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_SENDING_DOMAIN
+        value: stonegatehb.com
+      - key: RESEND_RECEIVING_DOMAIN
+        value: stonegatehb.com
+      - key: RESEND_DEFAULT_FROM_EMAIL
+        value: offers@stonegatehb.com
+      - key: RESEND_WEBHOOK_BASE_URL
+        value: https://oakwell-api.onrender.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET
@@ -363,6 +377,8 @@ services:
         value: 180
       - key: EMAIL_ENABLED
         value: false
+      - key: EMAIL_PROVIDER
+        value: disabled
       - key: EMAIL_SYNC_ENABLED
         value: false
       - key: EMAIL_SYNC_POLL_SECONDS
@@ -375,6 +391,18 @@ services:
         sync: false
       - key: EMAIL_WEB_APP_BASE_URL
         value: https://www.stonegatehb.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_WEBHOOK_SECRET
+        sync: false
+      - key: RESEND_SENDING_DOMAIN
+        value: stonegatehb.com
+      - key: RESEND_RECEIVING_DOMAIN
+        value: stonegatehb.com
+      - key: RESEND_DEFAULT_FROM_EMAIL
+        value: offers@stonegatehb.com
+      - key: RESEND_WEBHOOK_BASE_URL
+        value: https://oakwell-api.onrender.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET

@@ -1148,6 +1148,69 @@ class EmailAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
     account_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
+class EmailSenderAlias(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "email_sender_aliases"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "email_address",
+            name="uq_email_sender_aliases_org_address",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    assigned_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("teams.id", ondelete="SET NULL"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_identity_id: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    email_address: Mapped[str] = mapped_column(String(320), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    alias_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    purpose_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    inbound_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    outbound_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    signature_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    routing_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class EmailSenderGrant(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "email_sender_grants"
+    __table_args__ = (
+        UniqueConstraint(
+            "email_sender_alias_id",
+            "user_id",
+            name="uq_email_sender_grants_alias_user",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    email_sender_alias_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("email_sender_aliases.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    granted_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    access_level: Mapped[str] = mapped_column(String(40), nullable=False)
+    can_send: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    receives_notifications: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
+
+
 class EmailTemplate(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "email_templates"
     __table_args__ = (
