@@ -353,9 +353,11 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
 - Stonegate's Finance area records deal economics, revenue, deductions, marketing spend,
   compensation, payouts, and funded-deal reconciliation. F6A now adds an organization-scoped
   accounting profile, a versioned wholesaling chart of accounts, accounting-readiness decisions,
-  and an embedded draft-only Tax and Deductions capability. The internal double-entry journal,
-  bank reconciliation, period close, complete financial statements, source-document workflow,
-  and CPA acceptance remain to be implemented in F6B-F6E.
+  and an embedded draft-only Tax and Deductions capability. F6B adds balanced journals, journal
+  lines, monthly accounting periods, source evidence, idempotency, dedicated accounting
+  permissions, human approval and posting, linked reversals, and auditable period review, close,
+  reopen, and lock controls. Bank reconciliation, complete financial statements, vendor and
+  source-document workflow, opening balances, and CPA acceptance remain F6C-F6E work.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or

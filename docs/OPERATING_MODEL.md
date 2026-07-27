@@ -172,6 +172,12 @@ that occurred. Assignment revenue and double-close property resale are accounted
 earnest money, inventory, owner activity, and funded commissions retain their own account
 treatment.
 
+Operational records remain the source facts. Accounting journals reference those records and
+their evidence instead of copying or replacing them. Journals move through draft, approved, and
+posted states; posted entries are immutable and corrections use a separately approved linked
+reversal. Monthly periods move through open, review, closed, and locked states, and reopening a
+closed period requires an audited management reason.
+
 ### Full Human Disposition
 
 | Role | Adjusted Deal Margin |

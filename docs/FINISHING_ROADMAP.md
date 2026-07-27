@@ -282,6 +282,11 @@ Starting point:
 
 ### F6B: Double-Entry Ledger And Posting Controls
 
+- **Implementation status:** Core product work is complete. Finance now provides monthly
+  accounting periods, balanced journal entries and lines, source and evidence references,
+  idempotency, dedicated preparation/approval/posting/period permissions, linked reversing
+  journals, and auditable period review, close, reopen, and lock transitions. Production opening
+  balances and CPA acceptance remain F6E work.
 - Add journal entries and journal lines that require total debits to equal total credits.
 - Use `draft`, `approved`, `posted`, and `reversed` states. Posted entries are immutable and can
   only be corrected through linked reversing and replacement entries.

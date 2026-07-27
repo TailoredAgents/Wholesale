@@ -9,6 +9,10 @@ from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.finance import (
     AccountingProfileUpdate,
+    AccountingLedgerOverview,
+    AccountingPeriodCreate,
+    AccountingPeriodRead,
+    AccountingPeriodStatusUpdate,
     AccountingSetupRead,
     CompensationRuleCreate,
     CompensationRuleRead,
@@ -17,6 +21,10 @@ from app.schemas.finance import (
     FinanceOverview,
     MarketingSpendCreate,
     MarketingSpendRead,
+    JournalDecision,
+    JournalEntryCreate,
+    JournalEntryRead,
+    JournalReverseCreate,
     RevenueCreate,
     RevenueRead,
 )
@@ -31,10 +39,17 @@ from app.services.finance import (
     create_compensation_rule,
     create_deal_deduction,
     create_marketing_spend,
+    create_accounting_period,
+    create_journal_entry,
+    create_journal_reversal,
     create_revenue_record,
     get_accounting_setup,
+    get_accounting_ledger,
     get_finance_overview,
     update_accounting_profile,
+    approve_journal_entry,
+    post_journal_entry,
+    update_accounting_period_status,
 )
 from app.services.management_copilots import (
     analyze_management,
@@ -46,6 +61,10 @@ router = APIRouter(prefix="/api/v1/finance", tags=["finance"])
 view_financials_dependency = require_permission(PermissionKeys.VIEW_FINANCIALS)
 change_compensation_dependency = require_permission(PermissionKeys.CHANGE_COMPENSATION_RULES)
 manage_accounting_dependency = require_permission(PermissionKeys.MANAGE_ACCOUNTING_POLICY)
+prepare_journal_dependency = require_permission(PermissionKeys.PREPARE_JOURNALS)
+approve_journal_dependency = require_permission(PermissionKeys.APPROVE_JOURNALS)
+post_journal_dependency = require_permission(PermissionKeys.POST_JOURNALS)
+manage_period_dependency = require_permission(PermissionKeys.MANAGE_ACCOUNTING_PERIODS)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -82,6 +101,104 @@ def change_accounting_profile(
         return update_accounting_profile(db, principal, payload)
     except ValueError as exc:
         raise invalid(exc) from exc
+
+
+@router.get("/accounting/ledger")
+def read_accounting_ledger(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+) -> AccountingLedgerOverview:
+    return get_accounting_ledger(db, principal)
+
+
+@router.post("/accounting/periods", status_code=201)
+def open_accounting_period(
+    payload: AccountingPeriodCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_period_dependency)],
+) -> AccountingPeriodRead:
+    return create_accounting_period(db, principal, payload)
+
+
+@router.post("/accounting/periods/{period_id}/status")
+def change_accounting_period_status(
+    period_id: UUID,
+    payload: AccountingPeriodStatusUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_period_dependency)],
+) -> AccountingPeriodRead:
+    try:
+        result = update_accounting_period_status(
+            db,
+            principal,
+            period_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Accounting period not found.")
+    return result
+
+
+@router.post("/accounting/journals", status_code=201)
+def prepare_accounting_journal(
+    payload: JournalEntryCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(prepare_journal_dependency)],
+) -> JournalEntryRead:
+    try:
+        return create_journal_entry(db, principal, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.post("/accounting/journals/{entry_id}/approve")
+def approve_accounting_journal(
+    entry_id: UUID,
+    payload: JournalDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(approve_journal_dependency)],
+) -> JournalEntryRead:
+    try:
+        result = approve_journal_entry(db, principal, entry_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Journal entry not found.")
+    return result
+
+
+@router.post("/accounting/journals/{entry_id}/post")
+def post_accounting_journal(
+    entry_id: UUID,
+    payload: JournalDecision,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(post_journal_dependency)],
+) -> JournalEntryRead:
+    try:
+        result = post_journal_entry(db, principal, entry_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Journal entry not found.")
+    return result
+
+
+@router.post("/accounting/journals/{entry_id}/reverse", status_code=201)
+def reverse_accounting_journal(
+    entry_id: UUID,
+    payload: JournalReverseCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(prepare_journal_dependency)],
+) -> JournalEntryRead:
+    try:
+        result = create_journal_reversal(db, principal, entry_id, payload)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Journal entry not found.")
+    return result
 
 
 @router.get("/copilot")

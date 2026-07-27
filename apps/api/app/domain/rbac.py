@@ -33,6 +33,10 @@ class PermissionKeys:
     CHANGE_AI_PROMPTS = "ai:change_prompts"
     CHANGE_COMPENSATION_RULES = "compensation:change_rules"
     MANAGE_ACCOUNTING_POLICY = "accounting:manage_policy"
+    PREPARE_JOURNALS = "accounting:prepare_journals"
+    APPROVE_JOURNALS = "accounting:approve_journals"
+    POST_JOURNALS = "accounting:post_journals"
+    MANAGE_ACCOUNTING_PERIODS = "accounting:manage_periods"
     DELETE_OR_ARCHIVE_RECORDS = "records:delete_or_archive"
     MANAGE_USERS = "users:manage"
     VIEW_AUDIT_LOGS = "audit:view"
@@ -194,6 +198,26 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Manage the accounting profile and versioned chart of accounts.",
     ),
     PermissionDefinition(
+        PermissionKeys.PREPARE_JOURNALS,
+        "Prepare journals",
+        "Prepare balanced accounting journals and linked reversals.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.APPROVE_JOURNALS,
+        "Approve journals",
+        "Approve balanced accounting journals for posting.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.POST_JOURNALS,
+        "Post journals",
+        "Post approved journals into an open accounting period.",
+    ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_ACCOUNTING_PERIODS,
+        "Manage accounting periods",
+        "Open, review, close, lock, and reopen accounting periods.",
+    ),
+    PermissionDefinition(
         PermissionKeys.DELETE_OR_ARCHIVE_RECORDS,
         "Delete or archive records",
         "Archive or delete records where allowed.",
@@ -335,6 +359,10 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.VIEW_COMPENSATION,
             PermissionKeys.CHANGE_COMPENSATION_RULES,
             PermissionKeys.MANAGE_ACCOUNTING_POLICY,
+            PermissionKeys.PREPARE_JOURNALS,
+            PermissionKeys.APPROVE_JOURNALS,
+            PermissionKeys.POST_JOURNALS,
+            PermissionKeys.MANAGE_ACCOUNTING_PERIODS,
         ),
     ),
     RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),

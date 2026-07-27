@@ -1724,6 +1724,71 @@ export type AccountingSetup = {
   };
 };
 
+export type AccountingLedger = {
+  summary: {
+    draft_entries: number;
+    approved_entries: number;
+    posted_entries: number;
+    reversed_entries: number;
+    posted_amount_cents: number;
+    out_of_balance_entries: number;
+  };
+  periods: Array<{
+    id: string;
+    period_key: string;
+    period_start_at: string;
+    period_end_at: string;
+    status: string;
+    review_started_at: string | null;
+    closed_at: string | null;
+    locked_at: string | null;
+    reopened_at: string | null;
+    reopen_reason: string | null;
+    draft_entries: number;
+    approved_entries: number;
+    posted_entries: number;
+  }>;
+  entries: Array<{
+    id: string;
+    accounting_period_id: string;
+    entry_number: string;
+    entry_date: string;
+    status: string;
+    memo: string;
+    source_type: string;
+    source_id: string | null;
+    posting_rule_version: number;
+    evidence_references: string[];
+    idempotency_key: string;
+    currency: string;
+    total_debits_cents: number;
+    total_credits_cents: number;
+    prepared_by_user_id: string;
+    approved_by_user_id: string | null;
+    posted_by_user_id: string | null;
+    reversed_by_user_id: string | null;
+    reverses_entry_id: string | null;
+    reversal_entry_id: string | null;
+    approved_at: string | null;
+    posted_at: string | null;
+    reversed_at: string | null;
+    review_notes: string | null;
+    created_at: string;
+    lines: Array<{
+      id: string;
+      accounting_account_id: string;
+      account_code: string;
+      account_name: string;
+      line_number: number;
+      debit_cents: number;
+      credit_cents: number;
+      memo: string | null;
+      deal_id: string | null;
+      transaction_id: string | null;
+    }>;
+  }>;
+};
+
 export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
@@ -3068,6 +3133,21 @@ export async function getAccountingSetup(): Promise<AccountingSetup | null> {
     });
     if (!response.ok) return null;
     return (await response.json()) as AccountingSetup;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAccountingLedger(): Promise<AccountingLedger | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/finance/accounting/ledger`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as AccountingLedger;
   } catch {
     return null;
   }

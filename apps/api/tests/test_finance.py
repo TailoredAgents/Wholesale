@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -8,11 +8,14 @@ from app.main import app
 from app.models.foundation import (
     AccountingAccount,
     AccountingProfile,
+    AccountingPeriod,
     AiCapabilityRuntimePolicy,
     AuditEvent,
     CompensationCalculation,
     CompensationRule,
     DealDeduction,
+    JournalEntry,
+    JournalLine,
     MarketingSpend,
     RevenueRecord,
 )
@@ -292,3 +295,223 @@ def test_accounting_profile_and_tax_copilot_require_human_review(
     assert policy is not None
     assert policy.status == "enabled"
     assert policy.requires_human_review is True
+
+
+def journal_payload(
+    setup: dict[str, object],
+    *,
+    idempotency_key: str,
+    amount_cents: int = 2500000,
+) -> dict[str, object]:
+    accounts = {
+        item["system_key"]: item["id"]
+        for item in setup["accounts"]  # type: ignore[index,union-attr]
+    }
+    return {
+        "entry_date": date.today().isoformat(),
+        "memo": "Assignment fee deposited after closing.",
+        "source_type": "manual_test",
+        "source_id": "closing-001",
+        "posting_rule_version": 1,
+        "evidence_references": ["closing-statement:test-001"],
+        "idempotency_key": idempotency_key,
+        "currency": "USD",
+        "lines": [
+            {
+                "accounting_account_id": accounts["operating_cash"],
+                "debit_cents": amount_cents,
+                "credit_cents": 0,
+                "memo": "Cash received.",
+            },
+            {
+                "accounting_account_id": accounts["assignment_fee_revenue"],
+                "debit_cents": 0,
+                "credit_cents": amount_cents,
+                "memo": "Assignment revenue.",
+            },
+        ],
+    }
+
+
+def test_double_entry_journal_lifecycle_and_linked_reversal(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    setup = client.get(
+        "/api/v1/finance/accounting/setup",
+        headers=headers,
+    ).json()
+
+    created = client.post(
+        "/api/v1/finance/accounting/journals",
+        headers=headers,
+        json=journal_payload(setup, idempotency_key="assignment-closing-001"),
+    )
+    duplicate = client.post(
+        "/api/v1/finance/accounting/journals",
+        headers=headers,
+        json=journal_payload(setup, idempotency_key="assignment-closing-001"),
+    )
+    entry_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/approve",
+        headers=headers,
+        json={"notes": "Closing statement and cleared proceeds reviewed."},
+    )
+    posted = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/post",
+        headers=headers,
+        json={"notes": "Posted to the open monthly period."},
+    )
+    reversal = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/reverse",
+        headers=headers,
+        json={
+            "reversal_date": date.today().isoformat(),
+            "reason": "Test correction through a linked reversal.",
+            "idempotency_key": "reverse-assignment-closing-001",
+        },
+    )
+    reversal_id = reversal.json()["id"]
+    reversal_approved = client.post(
+        f"/api/v1/finance/accounting/journals/{reversal_id}/approve",
+        headers=headers,
+        json={"notes": "Reversal reviewed."},
+    )
+    reversal_posted = client.post(
+        f"/api/v1/finance/accounting/journals/{reversal_id}/post",
+        headers=headers,
+        json={"notes": "Reversal posted."},
+    )
+    ledger = client.get(
+        "/api/v1/finance/accounting/ledger",
+        headers=headers,
+    )
+
+    assert created.status_code == 201
+    assert duplicate.status_code == 201
+    assert duplicate.json()["id"] == entry_id
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    assert posted.status_code == 200
+    assert posted.json()["status"] == "posted"
+    assert reversal.status_code == 201
+    assert reversal.json()["status"] == "draft"
+    assert reversal.json()["reverses_entry_id"] == entry_id
+    assert reversal.json()["lines"][0]["debit_cents"] == 0
+    assert reversal.json()["lines"][0]["credit_cents"] == 2500000
+    assert reversal_approved.status_code == 200
+    assert reversal_posted.status_code == 200
+    assert reversal_posted.json()["status"] == "posted"
+    assert ledger.status_code == 200
+    ledger_entries = {item["id"]: item for item in ledger.json()["entries"]}
+    assert ledger_entries[entry_id]["status"] == "reversed"
+    assert ledger_entries[entry_id]["reversal_entry_id"] == reversal_id
+    assert ledger.json()["summary"]["out_of_balance_entries"] == 0
+    assert int(db_session.scalar(select(func.count()).select_from(JournalEntry)) or 0) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(JournalLine)) or 0) == 4
+
+
+def test_journals_reject_imbalance_and_periods_control_posting(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    setup = client.get(
+        "/api/v1/finance/accounting/setup",
+        headers=headers,
+    ).json()
+    invalid_payload = journal_payload(
+        setup,
+        idempotency_key="unbalanced-closing-001",
+    )
+    invalid_payload["lines"][1]["credit_cents"] = 2400000  # type: ignore[index]
+    unbalanced = client.post(
+        "/api/v1/finance/accounting/journals",
+        headers=headers,
+        json=invalid_payload,
+    )
+
+    created = client.post(
+        "/api/v1/finance/accounting/journals",
+        headers=headers,
+        json=journal_payload(setup, idempotency_key="period-closing-001"),
+    )
+    entry_id = created.json()["id"]
+    approved = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/approve",
+        headers=headers,
+        json={"notes": "Ready for posting."},
+    )
+    ledger = client.get(
+        "/api/v1/finance/accounting/ledger",
+        headers=headers,
+    ).json()
+    period_id = ledger["periods"][0]["id"]
+    review = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "review"},
+    )
+    blocked_post = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/post",
+        headers=headers,
+        json={"notes": "Should be blocked while period is under review."},
+    )
+    blocked_close = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "closed"},
+    )
+    reopen = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "open"},
+    )
+    posted = client.post(
+        f"/api/v1/finance/accounting/journals/{entry_id}/post",
+        headers=headers,
+        json={"notes": "Posted after review returned to open."},
+    )
+    review_again = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "review"},
+    )
+    closed = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "closed"},
+    )
+    reopened_without_reason = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "open"},
+    )
+    reopened = client.post(
+        f"/api/v1/finance/accounting/periods/{period_id}/status",
+        headers=headers,
+        json={"status": "open", "reason": "Owner-approved correcting entry required."},
+    )
+
+    assert unbalanced.status_code == 422
+    assert "equal" in unbalanced.json()["detail"]
+    assert created.status_code == 201
+    assert approved.status_code == 200
+    assert review.status_code == 200
+    assert blocked_post.status_code == 422
+    assert blocked_close.status_code == 422
+    assert "unposted" in blocked_close.json()["detail"]
+    assert reopen.status_code == 200
+    assert posted.status_code == 200
+    assert review_again.status_code == 200
+    assert closed.status_code == 200
+    assert reopened_without_reason.status_code == 422
+    assert reopened.status_code == 200
+    assert reopened.json()["status"] == "open"
+    assert db_session.scalar(select(func.count()).select_from(AccountingPeriod)) == 1

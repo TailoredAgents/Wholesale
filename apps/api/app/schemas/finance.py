@@ -192,3 +192,116 @@ class AccountingSetupRead(BaseModel):
     readiness_gaps: list[str]
     policy_notes: list[str]
     tax_copilot: TaxReadinessRead
+
+
+class AccountingPeriodCreate(BaseModel):
+    period_key: str = Field(pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+class AccountingPeriodStatusUpdate(BaseModel):
+    status: str = Field(max_length=40)
+    reason: str | None = Field(default=None, max_length=2000)
+
+
+class JournalLineCreate(BaseModel):
+    accounting_account_id: UUID
+    debit_cents: int = Field(default=0, ge=0)
+    credit_cents: int = Field(default=0, ge=0)
+    memo: str | None = Field(default=None, max_length=1000)
+    deal_id: UUID | None = None
+    transaction_id: UUID | None = None
+
+
+class JournalEntryCreate(BaseModel):
+    entry_date: date
+    memo: str = Field(min_length=1, max_length=1000)
+    source_type: str = Field(default="manual", min_length=1, max_length=120)
+    source_id: str | None = Field(default=None, max_length=255)
+    posting_rule_version: int = Field(default=1, ge=1)
+    evidence_references: list[str] = Field(default_factory=list, max_length=50)
+    idempotency_key: str = Field(min_length=8, max_length=255)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+    lines: list[JournalLineCreate] = Field(min_length=2, max_length=100)
+
+
+class JournalDecision(BaseModel):
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class JournalReverseCreate(BaseModel):
+    reversal_date: date
+    reason: str = Field(min_length=1, max_length=2000)
+    idempotency_key: str = Field(min_length=8, max_length=255)
+
+
+class AccountingPeriodRead(BaseModel):
+    id: UUID
+    period_key: str
+    period_start_at: date
+    period_end_at: date
+    status: str
+    review_started_at: datetime | None
+    closed_at: datetime | None
+    locked_at: datetime | None
+    reopened_at: datetime | None
+    reopen_reason: str | None
+    draft_entries: int
+    approved_entries: int
+    posted_entries: int
+
+
+class JournalLineRead(BaseModel):
+    id: UUID
+    accounting_account_id: UUID
+    account_code: str
+    account_name: str
+    line_number: int
+    debit_cents: int
+    credit_cents: int
+    memo: str | None
+    deal_id: UUID | None
+    transaction_id: UUID | None
+
+
+class JournalEntryRead(BaseModel):
+    id: UUID
+    accounting_period_id: UUID
+    entry_number: str
+    entry_date: date
+    status: str
+    memo: str
+    source_type: str
+    source_id: str | None
+    posting_rule_version: int
+    evidence_references: list[str]
+    idempotency_key: str
+    currency: str
+    total_debits_cents: int
+    total_credits_cents: int
+    prepared_by_user_id: UUID
+    approved_by_user_id: UUID | None
+    posted_by_user_id: UUID | None
+    reversed_by_user_id: UUID | None
+    reverses_entry_id: UUID | None
+    reversal_entry_id: UUID | None
+    approved_at: datetime | None
+    posted_at: datetime | None
+    reversed_at: datetime | None
+    review_notes: str | None
+    created_at: datetime
+    lines: list[JournalLineRead]
+
+
+class AccountingLedgerSummary(BaseModel):
+    draft_entries: int
+    approved_entries: int
+    posted_entries: int
+    reversed_entries: int
+    posted_amount_cents: int
+    out_of_balance_entries: int
+
+
+class AccountingLedgerOverview(BaseModel):
+    summary: AccountingLedgerSummary
+    periods: list[AccountingPeriodRead]
+    entries: list[JournalEntryRead]

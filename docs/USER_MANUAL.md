@@ -724,6 +724,8 @@ Review:
 - Books and Tax Setup, including legal entity, federal tax classification, accounting method,
   books start date, owner-compensation treatment, and the active chart of accounts.
 - Tax and Deductions Copilot drafts, missing business-purpose notes, and unresolved evidence.
+- Accounting Ledger balances, open-period state, draft journals, approved journals, posted
+  journals, reversals, and exact source evidence.
 
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
@@ -736,6 +738,35 @@ periods, move money, file returns, make final tax classifications, or change com
 Later F6 phases will let this same Copilot draft balanced journals, propose bank matches, explain
 financial statements, and prepare month-end review work without gaining posting or payment
 authority.
+
+### Accounting Ledger
+
+Use **Prepare manual journal** only after the underlying revenue, expense, owner activity, or deal
+event has been recorded and supporting evidence is available.
+
+1. Select the entry date and source type.
+2. Add the source record or document reference.
+3. Enter a clear memo and evidence references.
+4. Add at least two lines using the approved chart of accounts.
+5. Confirm total debits equal total credits.
+6. Prepare the journal.
+7. A user with approval authority reviews the accounts, amounts, source, and evidence.
+8. A user with posting authority posts the approved journal while the period is open.
+
+Draft and approved journals are unfinished accounting work. Posted journals are permanent. To
+correct a posted journal, select **Prepare reversal**, document the reason, then approve and post
+the reversing journal through the same workflow. Never create an unrelated offset merely to hide
+an error.
+
+### Accounting Periods
+
+- **Open:** Journals can be prepared, approved, and posted.
+- **Review:** Posting pauses while the month is reviewed; unresolved journals remain visible.
+- **Closed:** The month is complete. Reopening requires a recorded reason.
+- **Locked:** The period is permanently protected from reopening in the operating workflow.
+
+A period cannot close while draft or approved journals remain. Closing and locking do not replace
+bank reconciliation, month-end evidence, or CPA review.
 
 ## 16. Marketing
 

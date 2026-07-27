@@ -6,6 +6,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -3400,6 +3401,165 @@ class AccountingAccount(UuidPrimaryKeyMixin, TimestampMixin, Base):
     deal_tracking: Mapped[bool] = mapped_column(Boolean, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False)
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
+
+
+class AccountingPeriod(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "accounting_periods"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "period_key",
+            name="uq_accounting_periods_org_key",
+        ),
+        CheckConstraint(
+            "period_end_at >= period_start_at",
+            name="ck_accounting_period_date_order",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    accounting_profile_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("accounting_profiles.id", ondelete="CASCADE"), index=True
+    )
+    period_key: Mapped[str] = mapped_column(String(7), nullable=False)
+    period_start_at: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end_at: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    review_started_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    review_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reopened_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reopen_reason: Mapped[str | None] = mapped_column(String(2000))
+
+
+class JournalEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "journal_entries"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "entry_number",
+            name="uq_journal_entries_org_number",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_journal_entries_org_idempotency",
+        ),
+        UniqueConstraint(
+            "reverses_entry_id",
+            name="uq_journal_entries_reverses_entry",
+        ),
+        CheckConstraint(
+            "total_debits_cents = total_credits_cents",
+            name="ck_journal_entries_balanced_totals",
+        ),
+        CheckConstraint(
+            "total_debits_cents > 0",
+            name="ck_journal_entries_positive_total",
+        ),
+        Index(
+            "ix_journal_entries_org_status_date",
+            "organization_id",
+            "status",
+            "entry_date",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    accounting_period_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("accounting_periods.id"), index=True
+    )
+    entry_number: Mapped[str] = mapped_column(String(40), nullable=False)
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    memo: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    source_id: Mapped[str | None] = mapped_column(String(255))
+    posting_rule_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    evidence_references: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    total_debits_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    total_credits_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    prepared_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    posted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    reversed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id")
+    )
+    reverses_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("journal_entries.id"), index=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    posted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reversed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class JournalLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "journal_lines"
+    __table_args__ = (
+        UniqueConstraint(
+            "journal_entry_id",
+            "line_number",
+            name="uq_journal_lines_entry_number",
+        ),
+        CheckConstraint(
+            "debit_cents >= 0 AND credit_cents >= 0",
+            name="ck_journal_lines_nonnegative",
+        ),
+        CheckConstraint(
+            "(debit_cents > 0 AND credit_cents = 0) OR "
+            "(credit_cents > 0 AND debit_cents = 0)",
+            name="ck_journal_lines_single_side",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    journal_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("journal_entries.id", ondelete="CASCADE"), index=True
+    )
+    accounting_account_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("accounting_accounts.id"), index=True
+    )
+    line_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    debit_cents: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0"
+    )
+    credit_cents: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, server_default="0"
+    )
+    memo: Mapped[str | None] = mapped_column(String(1000))
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("deals.id"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id"), index=True
+    )
 
 
 class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):

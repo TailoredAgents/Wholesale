@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   getDashboardData,
   getDispositionOverview,
+  getAccountingLedger,
   getAccountingSetup,
   getFinanceCopilotOverview,
   getFinanceOverview,
@@ -19,6 +20,7 @@ import { StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { FinanceForms } from "./finance-forms";
 import { AccountingSetupPanel } from "./accounting-setup";
+import { AccountingLedgerPanel } from "./accounting-ledger";
 import styles from "../_components/management-workspaces.module.css";
 
 export const dynamic = "force-dynamic";
@@ -63,9 +65,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     getFinanceCopilotOverview(copilotPeriodDays),
     getAccountingSetup(),
   ]);
-  const taxCopilot = accountingSetup
-    ? await getTaxCopilotOverview(copilotPeriodDays)
-    : null;
+  const [taxCopilot, accountingLedger] = accountingSetup
+    ? await Promise.all([
+        getTaxCopilotOverview(copilotPeriodDays),
+        getAccountingLedger(),
+      ])
+    : [null, null];
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
   const margin = finance.summary.collected_revenue_cents
@@ -79,6 +84,12 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const canManageAccounting = Boolean(
     profile?.permissions.includes("accounting:manage_policy"),
   );
+  const accountingPermissions = {
+    prepare: Boolean(profile?.permissions.includes("accounting:prepare_journals")),
+    approve: Boolean(profile?.permissions.includes("accounting:approve_journals")),
+    post: Boolean(profile?.permissions.includes("accounting:post_journals")),
+    managePeriods: Boolean(profile?.permissions.includes("accounting:manage_periods")),
+  };
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
   const primaryException = reconciliationExceptions[0] ?? null;
 
@@ -106,6 +117,13 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     ) : null}
     {accountingSetup ? (
       <AccountingSetupPanel setup={accountingSetup} canEdit={canManageAccounting} />
+    ) : null}
+    {accountingSetup && accountingLedger ? (
+      <AccountingLedgerPanel
+        ledger={accountingLedger}
+        permissions={accountingPermissions}
+        setup={accountingSetup}
+      />
     ) : null}
     {taxCopilot ? (
       <ManagementCopilotPanel

@@ -1,5 +1,6 @@
-from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from calendar import monthrange
+from datetime import UTC, date, datetime, timedelta
+from uuid import UUID, uuid4
 
 from sqlalchemy import Select, delete, func, select
 from sqlalchemy.orm import InstrumentedAttribute, Session
@@ -8,6 +9,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.core.auth import Principal
 from app.models.foundation import (
     AccountingAccount,
+    AccountingPeriod,
     AccountingProfile,
     ActivityEvent,
     AuditEvent,
@@ -17,6 +19,8 @@ from app.models.foundation import (
     Deal,
     DealDeduction,
     Lead,
+    JournalEntry,
+    JournalLine,
     MarketingSpend,
     Property,
     RevenueRecord,
@@ -24,6 +28,11 @@ from app.models.foundation import (
 )
 from app.schemas.finance import (
     AccountingAccountRead,
+    AccountingLedgerOverview,
+    AccountingLedgerSummary,
+    AccountingPeriodCreate,
+    AccountingPeriodRead,
+    AccountingPeriodStatusUpdate,
     AccountingProfileRead,
     AccountingProfileUpdate,
     AccountingSetupRead,
@@ -36,6 +45,12 @@ from app.schemas.finance import (
     FinanceSummary,
     MarketingSpendCreate,
     MarketingSpendRead,
+    JournalDecision,
+    JournalEntryCreate,
+    JournalEntryRead,
+    JournalLineCreate,
+    JournalLineRead,
+    JournalReverseCreate,
     RevenueCreate,
     RevenueRead,
     TaxReadinessRead,
@@ -66,6 +81,7 @@ OWNER_COMPENSATION_TREATMENTS = {
     "payroll",
     "guaranteed_payment",
 }
+ACCOUNTING_PERIOD_STATUSES = {"open", "review", "closed", "locked"}
 
 # The operating-model acquisition reserve is intentionally absent. It is a
 # profitability target, not an accounting expense without an underlying cost.
@@ -412,6 +428,829 @@ def accounting_account_to_read(account: AccountingAccount) -> AccountingAccountR
         deal_tracking=account.deal_tracking,
         is_active=account.is_active,
         description=account.description,
+    )
+
+
+def get_accounting_ledger(
+    db: Session,
+    principal: Principal,
+) -> AccountingLedgerOverview:
+    profile = ensure_accounting_foundation(db, principal)
+    ensure_accounting_period(db, principal, date.today(), profile)
+    periods = list(
+        db.scalars(
+            select(AccountingPeriod)
+            .where(AccountingPeriod.organization_id == principal.organization_id)
+            .order_by(AccountingPeriod.period_start_at.desc())
+            .limit(24)
+        ).all()
+    )
+    entries = list(
+        db.scalars(
+            select(JournalEntry)
+            .where(JournalEntry.organization_id == principal.organization_id)
+            .order_by(JournalEntry.entry_date.desc(), JournalEntry.created_at.desc())
+            .limit(100)
+        ).all()
+    )
+    entry_ids = [entry.id for entry in entries]
+    lines = (
+        list(
+            db.scalars(
+                select(JournalLine)
+                .where(JournalLine.journal_entry_id.in_(entry_ids))
+                .order_by(JournalLine.journal_entry_id, JournalLine.line_number)
+            ).all()
+        )
+        if entry_ids
+        else []
+    )
+    account_ids = {line.accounting_account_id for line in lines}
+    accounts = (
+        {
+            account.id: account
+            for account in db.scalars(
+                select(AccountingAccount).where(AccountingAccount.id.in_(account_ids))
+            ).all()
+        }
+        if account_ids
+        else {}
+    )
+    lines_by_entry: dict[UUID, list[JournalLine]] = {}
+    for line in lines:
+        lines_by_entry.setdefault(line.journal_entry_id, []).append(line)
+    reversal_by_original = {
+        entry.reverses_entry_id: entry.id
+        for entry in entries
+        if entry.reverses_entry_id is not None
+    }
+    period_counts: dict[UUID, dict[str, int]] = {
+        period.id: {"draft": 0, "approved": 0, "posted": 0} for period in periods
+    }
+    for period_id, status, count in db.execute(
+        select(
+            JournalEntry.accounting_period_id,
+            JournalEntry.status,
+            func.count(JournalEntry.id),
+        )
+        .where(JournalEntry.organization_id == principal.organization_id)
+        .group_by(JournalEntry.accounting_period_id, JournalEntry.status)
+    ).all():
+        counts = period_counts.get(period_id)
+        if counts is not None and status in counts:
+            counts[status] = int(count)
+    status_summary = {
+        status: (int(count), int(amount or 0))
+        for status, count, amount in db.execute(
+            select(
+                JournalEntry.status,
+                func.count(JournalEntry.id),
+                func.sum(JournalEntry.total_debits_cents),
+            )
+            .where(JournalEntry.organization_id == principal.organization_id)
+            .group_by(JournalEntry.status)
+        ).all()
+    }
+    return AccountingLedgerOverview(
+        summary=AccountingLedgerSummary(
+            draft_entries=status_summary.get("draft", (0, 0))[0],
+            approved_entries=status_summary.get("approved", (0, 0))[0],
+            posted_entries=status_summary.get("posted", (0, 0))[0],
+            reversed_entries=status_summary.get("reversed", (0, 0))[0],
+            posted_amount_cents=(
+                status_summary.get("posted", (0, 0))[1]
+                + status_summary.get("reversed", (0, 0))[1]
+            ),
+            out_of_balance_entries=int(
+                db.scalar(
+                    select(func.count(JournalEntry.id)).where(
+                        JournalEntry.organization_id == principal.organization_id,
+                        JournalEntry.total_debits_cents
+                        != JournalEntry.total_credits_cents,
+                    )
+                )
+                or 0
+            ),
+        ),
+        periods=[
+            accounting_period_to_read(period, period_counts[period.id])
+            for period in periods
+        ],
+        entries=[
+            journal_entry_to_read(
+                entry,
+                lines_by_entry.get(entry.id, []),
+                accounts,
+                reversal_by_original.get(entry.id),
+            )
+            for entry in entries
+        ],
+    )
+
+
+def create_accounting_period(
+    db: Session,
+    principal: Principal,
+    payload: AccountingPeriodCreate,
+) -> AccountingPeriodRead:
+    year, month = (int(part) for part in payload.period_key.split("-"))
+    profile = ensure_accounting_foundation(db, principal)
+    period = ensure_accounting_period(
+        db,
+        principal,
+        date(year, month, 1),
+        profile,
+    )
+    db.commit()
+    return accounting_period_to_read(
+        period,
+        accounting_period_entry_counts(db, principal, period.id),
+    )
+
+
+def create_journal_entry(
+    db: Session,
+    principal: Principal,
+    payload: JournalEntryCreate,
+    *,
+    commit: bool = True,
+) -> JournalEntryRead:
+    existing = db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing is not None:
+        return load_journal_entry_read(db, principal, existing)
+
+    profile = ensure_accounting_foundation(db, principal)
+    period = ensure_accounting_period(db, principal, payload.entry_date, profile)
+    if period.status != "open":
+        raise ValueError("Journal entries can only be prepared in an open period.")
+    if payload.currency.upper() != profile.currency:
+        raise ValueError(f"Journal currency must be {profile.currency}.")
+
+    account_ids = {line.accounting_account_id for line in payload.lines}
+    accounts = {
+        account.id: account
+        for account in db.scalars(
+            select(AccountingAccount).where(
+                AccountingAccount.organization_id == principal.organization_id,
+                AccountingAccount.id.in_(account_ids),
+                AccountingAccount.policy_version == profile.policy_version,
+            )
+        ).all()
+    }
+    if set(accounts) != account_ids:
+        raise ValueError(
+            "Every journal line must use an active account from the current policy."
+        )
+    if any(not account.is_active for account in accounts.values()):
+        raise ValueError("Inactive accounting accounts cannot receive new journal lines.")
+    validate_journal_links(db, principal, payload)
+
+    total_debits = 0
+    total_credits = 0
+    for line in payload.lines:
+        if (line.debit_cents > 0) == (line.credit_cents > 0):
+            raise ValueError(
+                "Each journal line must contain either a debit or a credit, but not both."
+            )
+        total_debits += line.debit_cents
+        total_credits += line.credit_cents
+    if total_debits <= 0 or total_debits != total_credits:
+        raise ValueError("Journal debits and credits must be equal and greater than zero.")
+
+    entry_id = uuid4()
+    entry = JournalEntry(
+        id=entry_id,
+        organization_id=principal.organization_id,
+        accounting_period_id=period.id,
+        entry_number=f"JE-{payload.entry_date:%Y%m}-{str(entry_id)[:8].upper()}",
+        entry_date=payload.entry_date,
+        status="draft",
+        memo=payload.memo.strip(),
+        source_type=payload.source_type.strip(),
+        source_id=payload.source_id,
+        posting_rule_version=payload.posting_rule_version,
+        evidence_references=payload.evidence_references,
+        idempotency_key=payload.idempotency_key,
+        currency=profile.currency,
+        total_debits_cents=total_debits,
+        total_credits_cents=total_credits,
+        prepared_by_user_id=principal.user_id,
+        approved_by_user_id=None,
+        posted_by_user_id=None,
+        reversed_by_user_id=None,
+        reverses_entry_id=None,
+        approved_at=None,
+        posted_at=None,
+        reversed_at=None,
+        review_notes=None,
+    )
+    db.add(entry)
+    db.flush()
+    for line_number, payload_line in enumerate(payload.lines, start=1):
+        db.add(
+            JournalLine(
+                organization_id=principal.organization_id,
+                journal_entry_id=entry.id,
+                accounting_account_id=payload_line.accounting_account_id,
+                line_number=line_number,
+                debit_cents=payload_line.debit_cents,
+                credit_cents=payload_line.credit_cents,
+                memo=payload_line.memo,
+                deal_id=payload_line.deal_id,
+                transaction_id=payload_line.transaction_id,
+            )
+        )
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.journal_prepare",
+        entry,
+        None,
+        journal_snapshot(entry),
+        "Balanced journal prepared for review",
+    )
+    if commit:
+        db.commit()
+        db.refresh(entry)
+    else:
+        db.flush()
+    return load_journal_entry_read(db, principal, entry)
+
+
+def approve_journal_entry(
+    db: Session,
+    principal: Principal,
+    entry_id: UUID,
+    payload: JournalDecision,
+) -> JournalEntryRead | None:
+    entry = get_journal_entry(db, principal, entry_id, for_update=True)
+    if entry is None:
+        return None
+    if entry.status != "draft":
+        raise ValueError("Only a draft journal can be approved.")
+    period = get_accounting_period(
+        db,
+        principal,
+        entry.accounting_period_id,
+        for_update=True,
+    )
+    if period is None or period.status not in {"open", "review"}:
+        raise ValueError("The accounting period is not open for journal review.")
+    previous = journal_snapshot(entry)
+    entry.status = "approved"
+    entry.approved_by_user_id = principal.user_id
+    entry.approved_at = datetime.now(UTC)
+    entry.review_notes = payload.notes
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.journal_approve",
+        entry,
+        previous,
+        journal_snapshot(entry),
+        payload.notes or "Journal approved",
+    )
+    db.commit()
+    db.refresh(entry)
+    return load_journal_entry_read(db, principal, entry)
+
+
+def post_journal_entry(
+    db: Session,
+    principal: Principal,
+    entry_id: UUID,
+    payload: JournalDecision,
+) -> JournalEntryRead | None:
+    entry = get_journal_entry(db, principal, entry_id, for_update=True)
+    if entry is None:
+        return None
+    if entry.status != "approved":
+        raise ValueError("Only an approved journal can be posted.")
+    period = get_accounting_period(
+        db,
+        principal,
+        entry.accounting_period_id,
+        for_update=True,
+    )
+    if period is None or period.status != "open":
+        raise ValueError("Journals can only be posted in an open accounting period.")
+    lines = list(
+        db.scalars(
+            select(JournalLine).where(JournalLine.journal_entry_id == entry.id)
+        ).all()
+    )
+    total_debits = sum(line.debit_cents for line in lines)
+    total_credits = sum(line.credit_cents for line in lines)
+    if (
+        len(lines) < 2
+        or total_debits <= 0
+        or total_debits != total_credits
+        or total_debits != entry.total_debits_cents
+    ):
+        raise ValueError("Journal balance validation failed before posting.")
+    previous = journal_snapshot(entry)
+    entry.status = "posted"
+    entry.posted_by_user_id = principal.user_id
+    entry.posted_at = datetime.now(UTC)
+    if payload.notes:
+        entry.review_notes = payload.notes
+    if entry.reverses_entry_id is not None:
+        original = get_journal_entry(db, principal, entry.reverses_entry_id)
+        if original is None or original.status != "posted":
+            raise ValueError("The original journal is not available for reversal.")
+        original_previous = journal_snapshot(original)
+        original.status = "reversed"
+        original.reversed_by_user_id = principal.user_id
+        original.reversed_at = entry.posted_at
+        add_accounting_audit(
+            db,
+            principal,
+            "finance.journal_reversed",
+            original,
+            original_previous,
+            journal_snapshot(original),
+            f"Reversed by {entry.entry_number}",
+        )
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.journal_post",
+        entry,
+        previous,
+        journal_snapshot(entry),
+        payload.notes or "Approved journal posted",
+    )
+    db.commit()
+    db.refresh(entry)
+    return load_journal_entry_read(db, principal, entry)
+
+
+def create_journal_reversal(
+    db: Session,
+    principal: Principal,
+    entry_id: UUID,
+    payload: JournalReverseCreate,
+) -> JournalEntryRead | None:
+    original = get_journal_entry(db, principal, entry_id, for_update=True)
+    if original is None:
+        return None
+    if original.status != "posted":
+        raise ValueError("Only a posted journal can be reversed.")
+    existing_reversal = db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.reverses_entry_id == original.id,
+        )
+    )
+    if existing_reversal is not None:
+        return load_journal_entry_read(db, principal, existing_reversal)
+    idempotent_entry = db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if idempotent_entry is not None:
+        if idempotent_entry.reverses_entry_id == original.id:
+            return load_journal_entry_read(db, principal, idempotent_entry)
+        raise ValueError("The reversal idempotency key is already in use.")
+    original_lines = list(
+        db.scalars(
+            select(JournalLine)
+            .where(JournalLine.journal_entry_id == original.id)
+            .order_by(JournalLine.line_number)
+        ).all()
+    )
+    reversal = create_journal_entry(
+        db,
+        principal,
+        JournalEntryCreate(
+            entry_date=payload.reversal_date,
+            memo=f"Reversal of {original.entry_number}: {payload.reason}",
+            source_type="journal_reversal",
+            source_id=str(original.id),
+            posting_rule_version=original.posting_rule_version,
+            evidence_references=[
+                *original.evidence_references,
+                f"journal:{original.entry_number}",
+            ],
+            idempotency_key=payload.idempotency_key,
+            currency=original.currency,
+            lines=[
+                JournalLineCreate(
+                    accounting_account_id=line.accounting_account_id,
+                    debit_cents=line.credit_cents,
+                    credit_cents=line.debit_cents,
+                    memo=f"Reverse line {line.line_number}",
+                    deal_id=line.deal_id,
+                    transaction_id=line.transaction_id,
+                )
+                for line in original_lines
+            ],
+        ),
+        commit=False,
+    )
+    reversal_model = get_journal_entry(db, principal, reversal.id)
+    if reversal_model is None:
+        raise ValueError("Journal reversal could not be created.")
+    reversal_model.reverses_entry_id = original.id
+    reversal_model.review_notes = payload.reason
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.journal_reversal_prepare",
+        reversal_model,
+        None,
+        journal_snapshot(reversal_model),
+        payload.reason,
+    )
+    db.commit()
+    db.refresh(reversal_model)
+    return load_journal_entry_read(db, principal, reversal_model)
+
+
+def update_accounting_period_status(
+    db: Session,
+    principal: Principal,
+    period_id: UUID,
+    payload: AccountingPeriodStatusUpdate,
+) -> AccountingPeriodRead | None:
+    period = get_accounting_period(db, principal, period_id, for_update=True)
+    if period is None:
+        return None
+    if payload.status not in ACCOUNTING_PERIOD_STATUSES:
+        raise ValueError("Unsupported accounting period status.")
+    if payload.status == period.status:
+        return accounting_period_to_read(
+            period,
+            accounting_period_entry_counts(db, principal, period.id),
+        )
+    allowed = {
+        "open": {"review"},
+        "review": {"open", "closed"},
+        "closed": {"open", "locked"},
+        "locked": set(),
+    }
+    if payload.status not in allowed[period.status]:
+        raise ValueError(
+            f"Accounting period cannot move from {period.status} to {payload.status}."
+        )
+    if period.status == "closed" and payload.status == "open" and not payload.reason:
+        raise ValueError("A reason is required to reopen a closed accounting period.")
+    if payload.status == "closed":
+        unposted = int(
+            db.scalar(
+                select(func.count(JournalEntry.id)).where(
+                    JournalEntry.organization_id == principal.organization_id,
+                    JournalEntry.accounting_period_id == period.id,
+                    JournalEntry.status.in_(("draft", "approved")),
+                )
+            )
+            or 0
+        )
+        if unposted:
+            raise ValueError(
+                f"Resolve {unposted} unposted journal entries before closing this period."
+            )
+    now = datetime.now(UTC)
+    previous = accounting_period_snapshot(period)
+    period.status = payload.status
+    if payload.status == "review":
+        period.review_started_by_user_id = principal.user_id
+        period.review_started_at = now
+    elif payload.status == "closed":
+        period.closed_by_user_id = principal.user_id
+        period.closed_at = now
+    elif payload.status == "locked":
+        period.locked_by_user_id = principal.user_id
+        period.locked_at = now
+    elif payload.status == "open" and previous["status"] == "closed":
+        period.reopened_by_user_id = principal.user_id
+        period.reopened_at = now
+        period.reopen_reason = payload.reason
+        period.closed_by_user_id = None
+        period.closed_at = None
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.accounting_period_status",
+        period,
+        previous,
+        accounting_period_snapshot(period),
+        payload.reason or f"Accounting period moved to {payload.status}",
+    )
+    db.commit()
+    db.refresh(period)
+    return accounting_period_to_read(
+        period,
+        accounting_period_entry_counts(db, principal, period.id),
+    )
+
+
+def ensure_accounting_period(
+    db: Session,
+    principal: Principal,
+    entry_date: date,
+    profile: AccountingProfile | None = None,
+) -> AccountingPeriod:
+    period_key = entry_date.strftime("%Y-%m")
+    period = db.scalar(
+        select(AccountingPeriod).where(
+            AccountingPeriod.organization_id == principal.organization_id,
+            AccountingPeriod.period_key == period_key,
+        )
+    )
+    if period is not None:
+        return period
+    profile = profile or ensure_accounting_foundation(db, principal)
+    start_at = date(entry_date.year, entry_date.month, 1)
+    end_at = date(
+        entry_date.year,
+        entry_date.month,
+        monthrange(entry_date.year, entry_date.month)[1],
+    )
+    period = AccountingPeriod(
+        organization_id=principal.organization_id,
+        accounting_profile_id=profile.id,
+        period_key=period_key,
+        period_start_at=start_at,
+        period_end_at=end_at,
+        status="open",
+        review_started_by_user_id=None,
+        review_started_at=None,
+        closed_by_user_id=None,
+        closed_at=None,
+        locked_by_user_id=None,
+        locked_at=None,
+        reopened_by_user_id=None,
+        reopened_at=None,
+        reopen_reason=None,
+    )
+    db.add(period)
+    db.flush()
+    add_accounting_audit(
+        db,
+        principal,
+        "finance.accounting_period_create",
+        period,
+        None,
+        accounting_period_snapshot(period),
+        "Monthly accounting period opened",
+    )
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+def get_accounting_period(
+    db: Session,
+    principal: Principal,
+    period_id: UUID,
+    *,
+    for_update: bool = False,
+) -> AccountingPeriod | None:
+    statement = select(AccountingPeriod).where(
+        AccountingPeriod.id == period_id,
+        AccountingPeriod.organization_id == principal.organization_id,
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
+
+
+def get_journal_entry(
+    db: Session,
+    principal: Principal,
+    entry_id: UUID,
+    *,
+    for_update: bool = False,
+) -> JournalEntry | None:
+    statement = select(JournalEntry).where(
+        JournalEntry.id == entry_id,
+        JournalEntry.organization_id == principal.organization_id,
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
+
+
+def validate_journal_links(
+    db: Session,
+    principal: Principal,
+    payload: JournalEntryCreate,
+) -> None:
+    deal_ids = {line.deal_id for line in payload.lines if line.deal_id is not None}
+    transaction_ids = {
+        line.transaction_id
+        for line in payload.lines
+        if line.transaction_id is not None
+    }
+    if deal_ids:
+        found_deals = set(
+            db.scalars(
+                select(Deal.id).where(
+                    Deal.organization_id == principal.organization_id,
+                    Deal.id.in_(deal_ids),
+                )
+            ).all()
+        )
+        if found_deals != deal_ids:
+            raise ValueError("A journal line references an unavailable deal.")
+    if transaction_ids:
+        found_transactions = set(
+            db.scalars(
+                select(Transaction.id).where(
+                    Transaction.organization_id == principal.organization_id,
+                    Transaction.id.in_(transaction_ids),
+                )
+            ).all()
+        )
+        if found_transactions != transaction_ids:
+            raise ValueError("A journal line references an unavailable transaction.")
+
+
+def load_journal_entry_read(
+    db: Session,
+    principal: Principal,
+    entry: JournalEntry,
+) -> JournalEntryRead:
+    lines = list(
+        db.scalars(
+            select(JournalLine)
+            .where(JournalLine.journal_entry_id == entry.id)
+            .order_by(JournalLine.line_number)
+        ).all()
+    )
+    account_ids = {line.accounting_account_id for line in lines}
+    accounts = {
+        account.id: account
+        for account in db.scalars(
+            select(AccountingAccount).where(
+                AccountingAccount.organization_id == principal.organization_id,
+                AccountingAccount.id.in_(account_ids),
+            )
+        ).all()
+    }
+    reversal_entry_id = db.scalar(
+        select(JournalEntry.id).where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.reverses_entry_id == entry.id,
+        )
+    )
+    return journal_entry_to_read(
+        entry,
+        lines,
+        accounts,
+        reversal_entry_id,
+    )
+
+
+def journal_entry_to_read(
+    entry: JournalEntry,
+    lines: list[JournalLine],
+    accounts: dict[UUID, AccountingAccount],
+    reversal_entry_id: UUID | None,
+) -> JournalEntryRead:
+    return JournalEntryRead(
+        id=entry.id,
+        accounting_period_id=entry.accounting_period_id,
+        entry_number=entry.entry_number,
+        entry_date=entry.entry_date,
+        status=entry.status,
+        memo=entry.memo,
+        source_type=entry.source_type,
+        source_id=entry.source_id,
+        posting_rule_version=entry.posting_rule_version,
+        evidence_references=entry.evidence_references,
+        idempotency_key=entry.idempotency_key,
+        currency=entry.currency,
+        total_debits_cents=entry.total_debits_cents,
+        total_credits_cents=entry.total_credits_cents,
+        prepared_by_user_id=entry.prepared_by_user_id,
+        approved_by_user_id=entry.approved_by_user_id,
+        posted_by_user_id=entry.posted_by_user_id,
+        reversed_by_user_id=entry.reversed_by_user_id,
+        reverses_entry_id=entry.reverses_entry_id,
+        reversal_entry_id=reversal_entry_id,
+        approved_at=entry.approved_at,
+        posted_at=entry.posted_at,
+        reversed_at=entry.reversed_at,
+        review_notes=entry.review_notes,
+        created_at=entry.created_at,
+        lines=[
+            JournalLineRead(
+                id=line.id,
+                accounting_account_id=line.accounting_account_id,
+                account_code=accounts[line.accounting_account_id].code,
+                account_name=accounts[line.accounting_account_id].name,
+                line_number=line.line_number,
+                debit_cents=line.debit_cents,
+                credit_cents=line.credit_cents,
+                memo=line.memo,
+                deal_id=line.deal_id,
+                transaction_id=line.transaction_id,
+            )
+            for line in lines
+        ],
+    )
+
+
+def accounting_period_to_read(
+    period: AccountingPeriod,
+    counts: dict[str, int],
+) -> AccountingPeriodRead:
+    return AccountingPeriodRead(
+        id=period.id,
+        period_key=period.period_key,
+        period_start_at=period.period_start_at,
+        period_end_at=period.period_end_at,
+        status=period.status,
+        review_started_at=period.review_started_at,
+        closed_at=period.closed_at,
+        locked_at=period.locked_at,
+        reopened_at=period.reopened_at,
+        reopen_reason=period.reopen_reason,
+        draft_entries=counts.get("draft", 0),
+        approved_entries=counts.get("approved", 0),
+        posted_entries=counts.get("posted", 0),
+    )
+
+
+def accounting_period_entry_counts(
+    db: Session,
+    principal: Principal,
+    period_id: UUID,
+) -> dict[str, int]:
+    counts = {"draft": 0, "approved": 0, "posted": 0}
+    for status, count in db.execute(
+        select(JournalEntry.status, func.count(JournalEntry.id))
+        .where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.accounting_period_id == period_id,
+        )
+        .group_by(JournalEntry.status)
+    ).all():
+        if status in counts:
+            counts[status] = int(count)
+    return counts
+
+
+def journal_snapshot(entry: JournalEntry) -> dict[str, object]:
+    return {
+        "entry_number": entry.entry_number,
+        "entry_date": entry.entry_date.isoformat(),
+        "status": entry.status,
+        "source_type": entry.source_type,
+        "source_id": entry.source_id,
+        "currency": entry.currency,
+        "total_debits_cents": entry.total_debits_cents,
+        "total_credits_cents": entry.total_credits_cents,
+        "reverses_entry_id": (
+            str(entry.reverses_entry_id) if entry.reverses_entry_id else None
+        ),
+    }
+
+
+def accounting_period_snapshot(period: AccountingPeriod) -> dict[str, object]:
+    return {
+        "period_key": period.period_key,
+        "status": period.status,
+        "period_start_at": period.period_start_at.isoformat(),
+        "period_end_at": period.period_end_at.isoformat(),
+        "reopen_reason": period.reopen_reason,
+    }
+
+
+def add_accounting_audit(
+    db: Session,
+    principal: Principal,
+    action: str,
+    entity: AccountingPeriod | JournalEntry,
+    previous_value: dict[str, object] | None,
+    new_value: dict[str, object],
+    reason: str,
+) -> None:
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action=action,
+            entity_type=(
+                "accounting_period"
+                if isinstance(entity, AccountingPeriod)
+                else "journal_entry"
+            ),
+            entity_id=entity.id,
+            previous_value=previous_value,
+            new_value=new_value,
+            reason=reason,
+        )
     )
 
 
