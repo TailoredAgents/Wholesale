@@ -1,6 +1,6 @@
 # Stonegate Staff Role Manuals
 
-Last updated: July 24, 2026
+Last updated: July 27, 2026
 
 ## How To Use This Guide
 
@@ -78,6 +78,10 @@ prepare source-linked drafts, and track payables or commissions. Use **Accountin
 review, approve, post, or reverse the resulting balanced journals. Recording a payment in
 Stonegate documents a payment that occurred elsewhere; it does not move money.
 
+- Use **Statements, close, and CPA handoff** to run the Profit and Loss, Balance Sheet, Cash Flow,
+  Trial Balance, and General Ledger for one consistent date range.
+- Resolve every close blocker, review statement and source-line detail, then download the CPA
+  package only after the period agrees to the reconciled bank statement.
 - Use **Vendors, Bills, and Private Evidence** to maintain contractors, W-9 status, itemized bills,
   invoices, receipts, and proof of payment.
 - Code unlike costs on separate bill lines and verify the invoice total before approval.

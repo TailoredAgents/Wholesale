@@ -361,10 +361,13 @@ Do not reuse another company's Messaging Service, A2P Campaign, number, or webho
   commission, payable, reimbursement, and owner-distribution payment states. F6D1 adds shared
   counterparty-backed vendor profiles, itemized bills, private invoices and receipts, audited W-9
   lifecycle management, year-to-date vendor payments, and approved-bill integration with the same
-  obligation and posting queue. Bank and credit-card import and reconciliation, complete
-  financial statements, opening balances, and CPA acceptance remain F6E work. F6D2 adds
+  obligation and posting queue. F6D2 adds
   provider-free CSV statement preview/import, private statement retention, duplicate prevention,
-  manual posted-journal matching, and balance-controlled reconciliation approval.
+  manual posted-journal matching, and balance-controlled reconciliation approval. F6E adds
+  posted-ledger Profit and Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger,
+  receivable, payable, payment, commission, and deal-profitability reporting; close-readiness
+  controls; and an authenticated CPA export archive. Production opening balances, one completed
+  month close, and CPA acceptance remain external operating steps.
 - Google Ads and Meta conversion delivery adapters are not implemented.
 - AI evaluation datasets still need redacted operating examples and measured model pilots. Agents
   do not autonomously send seller messages, change offers, send contracts, or make financial or

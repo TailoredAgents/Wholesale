@@ -730,6 +730,9 @@ Review:
   payables, reimbursements, distributions, and source-linked journal drafts.
 - Vendors, Bills, and Private Evidence, including contractor W-9 status, itemized invoices,
   approved payables, receipts, and year-to-date vendor payments.
+- Financial Statements, including Profit and Loss, Balance Sheet, Cash Flow, Trial Balance,
+  General Ledger, receivables, payables, payment history, deal profitability, close readiness, and
+  the CPA export package.
 
 Only funded, reconciled proceeds should create earned commissions. Keep projected, earned,
 approved, payable, paid, reversed, and disputed states distinct.
@@ -838,6 +841,30 @@ Keep that information only in the restricted W-9 document.
    available only when the difference is zero and every included line is resolved.
 
 Stonegate does not connect to the bank, initiate payments, or decide matches automatically.
+
+### Financial Statements And Month Close
+
+1. In **Statements, close, and CPA handoff**, select the first and last date for the period.
+2. Select **Run reports**. Only posted journals affect the statements. Draft or approved journals
+   remain unfinished work and appear in the close checklist.
+3. Review Profit and Loss and Balance Sheet first. Balance Sheet and Trial Balance must both show
+   **Balanced**.
+4. Expand **Trial balance** to compare total debits and credits.
+5. Expand **General ledger** to inspect the exact journal, account, memo, source, and evidence count
+   behind the report.
+6. Expand **Receivables, payables, and payments** to review pending proceeds, approved vendor and
+   commission obligations, completed payment records, and deal-coded profitability.
+7. Resolve every close blocker: unfinished journals, missing bank reconciliation, unmatched bank
+   transactions, or an open accounting period. Missing evidence is a warning that should be fixed
+   before CPA review.
+8. Use the Accounting Ledger period control to move the month to **Review**, finish adjustments,
+   then **Close** it. Lock only after the final outside review is complete.
+9. Select **Download CPA package**. The ZIP contains the manifest, financial statements, trial
+   balance, general ledger, receivables, payables, payments, and deal-profitability files.
+
+Opening balances and CPA adjustments are entered as manual balanced journals with a clear source
+type, date, explanation, and evidence. They follow the same prepare, approve, and post workflow as
+every other journal. The report screen never edits ledger data.
 
 ## 16. Marketing
 

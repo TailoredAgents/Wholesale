@@ -6,6 +6,7 @@ import {
   getDispositionOverview,
   getAccountingLedger,
   getAccountingOperations,
+  getAccountingReports,
   getAccountingSetup,
   getBankingWorkspace,
   getFinanceCopilotOverview,
@@ -25,6 +26,7 @@ import { FinanceForms } from "./finance-forms";
 import { AccountingSetupPanel } from "./accounting-setup";
 import { AccountingLedgerPanel } from "./accounting-ledger";
 import { AccountingOperationsPanel } from "./accounting-operations";
+import { AccountingReportsPanel } from "./accounting-reports";
 import { VendorAccountingPanel } from "./vendor-accounting";
 import { BankingWorkspacePanel } from "./banking-workspace";
 import styles from "../_components/management-workspaces.module.css";
@@ -51,7 +53,15 @@ function date(value: string) {
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium" }).format(new Date(value));
 }
 
-export default async function FinancePage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+export default async function FinancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    period?: string;
+    report_start?: string;
+    report_end?: string;
+  }>;
+}) {
   const params = await searchParams;
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
   const periodDays = period === "all" ? undefined : Number(period);
@@ -71,15 +81,23 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     getFinanceCopilotOverview(copilotPeriodDays),
     getAccountingSetup(),
   ]);
-  const [taxCopilot, accountingLedger, accountingOperations, vendorAccounting, bankingWorkspace] = accountingSetup
+  const [
+    taxCopilot,
+    accountingLedger,
+    accountingOperations,
+    vendorAccounting,
+    bankingWorkspace,
+    accountingReports,
+  ] = accountingSetup
     ? await Promise.all([
         getTaxCopilotOverview(copilotPeriodDays),
         getAccountingLedger(),
         getAccountingOperations(),
         getVendorAccounting(),
         getBankingWorkspace(),
+        getAccountingReports(params.report_start, params.report_end),
       ])
-    : [null, null, null, null, null];
+    : [null, null, null, null, null, null];
   const finance = financeData.finance;
   const previous = finance.previous_summary ?? undefined;
   const margin = finance.summary.collected_revenue_cents
@@ -170,6 +188,9 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
         permissions={accountingPermissions}
         setup={accountingSetup}
       />
+    ) : null}
+    {accountingReports ? (
+      <AccountingReportsPanel reports={accountingReports} />
     ) : null}
     {taxCopilot ? (
       <ManagementCopilotPanel

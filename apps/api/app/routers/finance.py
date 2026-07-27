@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -7,6 +8,20 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.schemas.accounting_reports import AccountingReportsWorkspaceRead
+from app.schemas.banking import (
+    BankAccountCreate,
+    BankAccountRead,
+    BankImportPreview,
+    BankImportRequest,
+    BankingWorkspaceRead,
+    BankReconciliationCreate,
+    BankReconciliationRead,
+    BankStatementImportRead,
+    BankTransactionMatchCreate,
+    BankTransactionRead,
+    BankTransactionStatusUpdate,
+)
 from app.schemas.finance import (
     AccountingLedgerOverview,
     AccountingPeriodCreate,
@@ -53,19 +68,7 @@ from app.schemas.vendor_accounting import (
     VendorProfileUpdate,
     VendorW9StatusUpdate,
 )
-from app.schemas.banking import (
-    BankAccountCreate,
-    BankAccountRead,
-    BankingWorkspaceRead,
-    BankImportPreview,
-    BankImportRequest,
-    BankReconciliationCreate,
-    BankReconciliationRead,
-    BankStatementImportRead,
-    BankTransactionMatchCreate,
-    BankTransactionRead,
-    BankTransactionStatusUpdate,
-)
+from app.services.accounting_reports import build_cpa_export, get_accounting_reports
 from app.services.banking import (
     approve_reconciliation,
     create_bank_account,
@@ -173,6 +176,42 @@ def read_accounting_ledger(
     principal: Annotated[Principal, Depends(view_financials_dependency)],
 ) -> AccountingLedgerOverview:
     return get_accounting_ledger(db, principal)
+
+
+@router.get("/accounting/reports")
+def read_accounting_reports(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+    start_on: Annotated[date, Query()],
+    end_on: Annotated[date, Query()],
+) -> AccountingReportsWorkspaceRead:
+    try:
+        return get_accounting_reports(db, principal, start_on, end_on)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+
+
+@router.get("/accounting/reports/cpa-export")
+def download_accounting_cpa_export(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_financials_dependency)],
+    start_on: Annotated[date, Query()],
+    end_on: Annotated[date, Query()],
+) -> Response:
+    try:
+        content = build_cpa_export(db, principal, start_on, end_on)
+    except ValueError as exc:
+        raise invalid(exc) from exc
+    return Response(
+        content=content,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="stonegate-cpa-{start_on}-{end_on}.zip"'
+            ),
+            "Cache-Control": "private, no-store",
+        },
+    )
 
 
 @router.post("/accounting/periods", status_code=201)

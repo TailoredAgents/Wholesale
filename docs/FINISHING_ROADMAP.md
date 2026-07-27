@@ -331,13 +331,15 @@ Implemented posting coverage:
 
 ### F6D: Banking, Vendors, And Evidence
 
-- **Implementation status:** F6D1 vendor accounting is complete. Finance now uses the shared
+- **Implementation status:** Core F6D product work is complete. Finance uses the shared
   business-counterparty identity for organization-scoped vendor profiles, itemized bills,
   tax-reportable and W-9 lifecycle status, private source documents, year-to-date vendor payments,
-  and bill approval. An approved bill creates the existing financial obligation and flows through
-  F6C posting and payment control; it does not create a parallel payable ledger. W-9 files are
-  sensitive private documents with audited access, and tax identifiers are never copied into
-  ordinary fields. F6D2 bank and credit-card import and reconciliation remains planned.
+  and bill approval. It also provides provider-free CSV statement preview and import, private
+  statement retention, duplicate prevention, manual posted-journal matching, and balance-controlled
+  bank reconciliation. An approved bill creates the existing financial obligation and flows
+  through F6C posting and payment control; it does not create a parallel payable ledger. W-9 files
+  are sensitive private documents with audited access, and tax identifiers are never copied into
+  ordinary fields.
 - Add bank and credit-card accounts, statement imports, normalized transactions, matching,
   reconciliation sessions, statement balances, and unexplained-difference tracking.
 - Start with secure CSV/OFX statement import. Add a read-only bank-feed adapter later only if
@@ -376,6 +378,15 @@ F6D2 implemented workflow:
 
 ### F6E: Reports, Close, And CPA Handoff
 
+- **Implementation status:** Core product work is complete. `/os/finance` now produces
+  date-controlled Profit and Loss, Balance Sheet, Cash Flow, Trial Balance, and General Ledger
+  reports exclusively from posted journals. It also provides receivable, payable, commission,
+  payment-history, and deal-profitability schedules; a close-readiness checklist; and an
+  authenticated CPA ZIP package containing the supporting report files. Existing period controls
+  handle review, close, reopen, and year-end lock. Opening balances and adjusting entries use the
+  same reviewed manual-journal lifecycle instead of a separate balance store. A real month close,
+  opening-balance acceptance, and report-package approval by Stonegate's CPA remain external
+  acceptance steps.
 - Add Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, accounts
   receivable, accounts payable, commission payable, vendor-payment, and deal-profitability reports.
 - Make every report drillable to journal lines, source records, approvals, and supporting
@@ -384,6 +395,19 @@ F6D2 implemented workflow:
   close, year-end lock, and a complete CPA export package.
 - Keep optional generic exports so Stonegate can work with tax preparation or outside accounting
   tools without making QuickBooks, Xero, or another ledger the source of truth.
+
+F6E implemented workflow:
+
+- Select a statement start and end date. Reports include posted journal activity only; drafts and
+  approvals remain visible as close blockers.
+- Drill from statements into account totals and the chronological journal-line ledger with source
+  IDs and evidence counts.
+- Review pending revenue as receivables, approved obligations and commissions as payables,
+  completed settlements as payment history, and deal-coded journals as deal profitability.
+- Resolve unfinished journals, unmatched statement lines, missing reconciliations, and period
+  status before close. Missing evidence remains a visible warning.
+- Download one CPA archive containing a manifest, statements, trial balance, general ledger,
+  receivables, payables, payments, and deal-profitability schedules.
 
 ### F6F: Finance And Accounting Copilot
 

@@ -1,8 +1,8 @@
 # Data Model
 
-Last updated: July 24, 2026
+Last updated: July 27, 2026
 
-The schema is managed through Alembic migrations. Migration `0056_f4_documents_esign` is the
+The schema is managed through Alembic migrations. Migration `0063_f6_banking_reconciliation` is the
 current head.
 
 ## Identity And Access
@@ -183,6 +183,12 @@ credentials or full account numbers. Statement CSVs remain private in `bank_stat
 `bank_transactions` keeps normalized imported lines and `bank_transaction_matches` ties a cleared
 line to one posted operating-cash journal. `bank_reconciliations` records the statement balance,
 computed balance, unresolved-line count, and approval evidence without moving money.
+
+Financial statements and CPA schedules are derived views, not additional source tables. Profit and
+Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, and deal profitability use posted
+`journal_entries` and `journal_lines`. Receivable, payable, commission, and payment schedules read
+the existing operational source records. This keeps one accounting source of truth and prevents a
+report from creating or altering financial data.
 
 ## Operating Model
 

@@ -1966,6 +1966,122 @@ export type BankingWorkspace = {
   summary: { active_accounts: number; unmatched_transactions: number; unreconciled_imports: number; open_reconciliations: number };
 };
 
+export type AccountingReports = {
+  period_start_on: string;
+  period_end_on: string;
+  accounting_method: string;
+  profit_and_loss: {
+    revenue: AccountingReportSection;
+    cost_of_revenue: AccountingReportSection;
+    operating_expenses: AccountingReportSection;
+    gross_profit_cents: number;
+    net_income_cents: number;
+  };
+  balance_sheet: {
+    assets: AccountingReportSection;
+    liabilities: AccountingReportSection;
+    equity: AccountingReportSection;
+    current_earnings_cents: number;
+    total_assets_cents: number;
+    total_liabilities_and_equity_cents: number;
+    balanced: boolean;
+  };
+  cash_flow: {
+    operating_cents: number;
+    investing_cents: number;
+    financing_cents: number;
+    net_change_cents: number;
+  };
+  trial_balance: {
+    total_debits_cents: number;
+    total_credits_cents: number;
+    balanced: boolean;
+    lines: AccountingReportLine[];
+  };
+  general_ledger: Array<{
+    journal_entry_id: string;
+    entry_number: string;
+    entry_date: string;
+    memo: string;
+    source_type: string;
+    source_id: string | null;
+    evidence_references: string[];
+    account_code: string;
+    account_name: string;
+    debit_cents: number;
+    credit_cents: number;
+    deal_id: string | null;
+    transaction_id: string | null;
+  }>;
+  receivables: Array<{
+    id: string;
+    source: string;
+    amount_cents: number;
+    status: string;
+    expected_on: string;
+    lead_id: string | null;
+    deal_id: string | null;
+    transaction_id: string | null;
+  }>;
+  payables: Array<{
+    id: string;
+    category: string;
+    counterparty: string;
+    amount_cents: number;
+    status: string;
+    due_on: string | null;
+    source_id: string | null;
+  }>;
+  payments: Array<{
+    id: string;
+    category: string;
+    counterparty: string;
+    amount_cents: number;
+    paid_on: string;
+    payment_reference: string | null;
+    source_id: string | null;
+  }>;
+  deal_profitability: Array<{
+    deal_id: string;
+    revenue_cents: number;
+    cost_cents: number;
+    profit_cents: number;
+  }>;
+  close_readiness: {
+    period_key: string;
+    period_status: string;
+    ready_to_close: boolean;
+    blocking_count: number;
+    warning_count: number;
+    items: Array<{
+      key: string;
+      label: string;
+      status: string;
+      detail: string;
+      action_href: string;
+    }>;
+  };
+};
+
+export type AccountingReportLine = {
+  account_id: string;
+  code: string;
+  name: string;
+  account_type: string;
+  opening_balance_cents: number;
+  debit_cents: number;
+  credit_cents: number;
+  ending_balance_cents: number;
+  journal_count: number;
+};
+
+export type AccountingReportSection = {
+  key: string;
+  label: string;
+  total_cents: number;
+  lines: AccountingReportLine[];
+};
+
 export type MarketingSummary = {
   total_spend_cents: number;
   collected_revenue_cents: number;
@@ -3367,6 +3483,28 @@ export async function getBankingWorkspace(): Promise<BankingWorkspace | null> {
     const response = await fetch(`${apiBaseUrl}/api/v1/finance/banking`, { headers, cache: "no-store" });
     if (!response.ok) return null;
     return (await response.json()) as BankingWorkspace;
+  } catch {
+    return null;
+  }
+}
+
+export async function getAccountingReports(
+  requestedStartOn?: string,
+  requestedEndOn?: string,
+): Promise<AccountingReports | null> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const today = new Date().toISOString().slice(0, 10);
+  const startOn = requestedStartOn ?? `${today.slice(0, 8)}01`;
+  const endOn = requestedEndOn ?? today;
+  try {
+    const headers = await getServerApiHeaders();
+    const query = new URLSearchParams({ start_on: startOn, end_on: endOn });
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/finance/accounting/reports?${query}`,
+      { headers, cache: "no-store" },
+    );
+    if (!response.ok) return null;
+    return (await response.json()) as AccountingReports;
   } catch {
     return null;
   }
