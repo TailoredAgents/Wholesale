@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { publicNavigation, siteConfig } from "./site-config";
+import { StonegateLogo } from "./stonegate-logo";
 import styles from "./public-site-header.module.css";
 
 export function PublicSiteHeader() {
@@ -14,8 +15,7 @@ export function PublicSiteHeader() {
     <header className={styles.header}>
       <div className={styles.inner}>
         <Link className={styles.brand} href="/" onClick={() => setIsOpen(false)}>
-          <span aria-hidden="true">S</span>
-          <strong>{siteConfig.name}</strong>
+          <StonegateLogo />
         </Link>
 
         <button

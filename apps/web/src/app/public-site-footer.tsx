@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { directOfferDisclosure, siteConfig } from "./site-config";
+import { StonegateLogo } from "./stonegate-logo";
 import { TrackedPhoneLink } from "./tracked-phone-link";
 import styles from "./public-site-footer.module.css";
 
@@ -9,8 +10,7 @@ export function PublicSiteFooter() {
     <footer className={styles.footer}>
       <div className={styles.identity}>
         <Link className={styles.brand} href="/">
-          <span aria-hidden="true">S</span>
-          {siteConfig.name}
+          <StonegateLogo inverse />
         </Link>
         <p>Direct, as-is home sale options for Georgia property owners.</p>
         <TrackedPhoneLink className={styles.phone} href={siteConfig.phoneHref}>

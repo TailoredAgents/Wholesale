@@ -20,22 +20,7 @@
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   color: #12231b;
-  font-size: 17px;
-}
-
-.brand span {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: 4px;
-  background: #1d5a3d;
-  color: #ffffff;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 20px;
-  font-weight: 700;
 }
 
 .navigation {
@@ -130,6 +115,10 @@
   }
 
   .brand {
-    font-size: 15px;
+    --stonegate-logo-size: 38px;
+  }
+
+  .brand strong {
+    font-size: 16px;
   }
 }

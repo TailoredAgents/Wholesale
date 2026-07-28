@@ -1,0 +1,45 @@
+.logo {
+  --stonegate-logo-size: 42px;
+  --stonegate-logo-title: #173428;
+  --stonegate-logo-subtitle: #a87321;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.mark {
+  width: var(--stonegate-logo-size);
+  height: var(--stonegate-logo-size);
+  flex: 0 0 var(--stonegate-logo-size);
+  object-fit: contain;
+}
+
+.wordmark {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  line-height: 1;
+}
+
+.wordmark strong {
+  color: var(--stonegate-logo-title);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.wordmark span {
+  color: var(--stonegate-logo-subtitle);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0;
+  line-height: 1.1;
+}
+
+.inverse {
+  --stonegate-logo-title: #ffffff;
+  --stonegate-logo-subtitle: #d7b45f;
+}

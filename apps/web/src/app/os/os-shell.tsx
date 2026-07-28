@@ -8,6 +8,7 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { WorkspaceProfile } from "../lib/api";
+import { StonegateLogo } from "../stonegate-logo";
 import { AuthControls } from "./auth-controls";
 import {
   defaultRouteForProfile,
@@ -265,9 +266,8 @@ export function OsShell({
       >
         <div className={styles.sidebarTop}>
           <div className={styles.brandBlock}>
-            <span className={styles.brandMark} aria-hidden="true" />
+            <StonegateLogo className={styles.osBrandLogo} inverse />
             <div className={styles.brandCopy}>
-              <p className={styles.eyebrow}>Stonegate Home Buyers</p>
               <strong className={styles.brandTitle} id="stonegate-workspace-title">Operating System</strong>
               <span>Acquisitions and deal execution.</span>
             </div>

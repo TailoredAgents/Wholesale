@@ -13,24 +13,10 @@
 }
 
 .brand {
+  --stonegate-logo-size: 44px;
   display: inline-flex;
   align-items: center;
-  gap: 10px;
   color: #ffffff;
-  font-size: 16px;
-  font-weight: 850;
-}
-
-.brand span {
-  width: 34px;
-  height: 34px;
-  display: inline-grid;
-  place-items: center;
-  border: 1px solid #4f755f;
-  border-radius: 4px;
-  color: #d6ae66;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 20px;
 }
 
 .identity > p {
