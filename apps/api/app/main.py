@@ -24,6 +24,7 @@ from app.routers import (
     operations,
     prospecting,
     public,
+    resend_webhooks,
     tasks,
     transactions,
     underwriting,
@@ -70,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(operations.router)
     app.include_router(prospecting.router)
     app.include_router(public.router)
+    app.include_router(resend_webhooks.router)
     app.include_router(tasks.router)
     app.include_router(transactions.router)
     app.include_router(underwriting.router)

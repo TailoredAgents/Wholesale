@@ -1248,8 +1248,11 @@ class EmailAttachment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     communication_record_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("communication_records.id", ondelete="CASCADE"), index=True
     )
-    email_account_id: Mapped[uuid.UUID] = mapped_column(
+    email_account_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("email_accounts.id", ondelete="CASCADE"), index=True
+    )
+    email_sender_alias_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("email_sender_aliases.id", ondelete="SET NULL"), index=True
     )
     provider_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
     provider_attachment_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -1258,6 +1261,14 @@ class EmailAttachment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
     content_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
     disposition: Mapped[str] = mapped_column(String(40), nullable=False)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    content_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    storage_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    malware_scan_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    retention_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     attachment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )

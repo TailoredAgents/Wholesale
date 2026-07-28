@@ -24,6 +24,10 @@ from app.services.operations import (
     register_worker,
     resolve_operation_failures,
 )
+from app.services.resend_email_events import (
+    process_next_resend_event,
+    recover_next_received_email,
+)
 from app.services.voice import purge_next_expired_recording
 
 logger = structlog.get_logger()
@@ -53,6 +57,8 @@ def run_worker(stop_event: threading.Event) -> None:
         ("call_transcription", process_next_call_transcript),
         ("recording_retention", purge_next_expired_recording),
         ("email_sync", sync_next_email_account),
+        ("resend_email_events", process_next_resend_event),
+        ("resend_email_recovery", recover_next_received_email),
         ("acquisition_reminders", process_next_acquisition_reminder),
         ("lead_manager_escalations", process_next_escalation),
         ("marketing_conversions", process_next_marketing_conversion),

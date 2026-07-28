@@ -1,6 +1,7 @@
 import base64
 from email.headerregistry import Address
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -86,6 +87,53 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
             # Delivery succeeded even if metadata is not immediately available.
             return None
 
+    def retrieve_received_email(self, provider_message_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/emails/receiving/{provider_message_id}")
+
+    def list_received_emails(
+        self,
+        *,
+        limit: int = 100,
+        after: str | None = None,
+    ) -> dict[str, Any]:
+        params = {"limit": str(limit)}
+        if after:
+            params["after"] = after
+        return self._request("GET", "/emails/receiving", params=params)
+
+    def retrieve_received_attachment(
+        self,
+        provider_message_id: str,
+        provider_attachment_id: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            (
+                f"/emails/receiving/{provider_message_id}"
+                f"/attachments/{provider_attachment_id}"
+            ),
+        )
+
+    def download_received_attachment(
+        self,
+        provider_message_id: str,
+        provider_attachment_id: str,
+        *,
+        max_bytes: int,
+    ) -> tuple[dict[str, Any], bytes]:
+        metadata = self.retrieve_received_attachment(
+            provider_message_id,
+            provider_attachment_id,
+        )
+        download_url = str(metadata.get("download_url", "")).strip()
+        parsed = urlparse(download_url)
+        if parsed.scheme != "https" or parsed.hostname != "inbound-cdn.resend.com":
+            raise ResendEmailError("Resend returned an invalid attachment download URL.")
+        content = self._download(download_url)
+        if len(content) > max_bytes:
+            raise ResendEmailError("The received attachment exceeds Stonegate's size limit.")
+        return metadata, content
+
     def _request(
         self,
         method: str,
@@ -93,6 +141,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         *,
         json: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
+        params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         request_headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -108,6 +157,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
                     f"{self.base_url}{path}",
                     json=json,
                     headers=request_headers,
+                    params=params,
                 )
             else:
                 with httpx.Client(timeout=self.timeout_seconds) as client:
@@ -116,6 +166,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
                         f"{self.base_url}{path}",
                         json=json,
                         headers=request_headers,
+                        params=params,
                     )
         except httpx.RequestError as exc:
             raise ResendEmailError("Resend could not be reached.") from exc
@@ -128,6 +179,21 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         if not isinstance(data, dict):
             raise ResendEmailError("Resend returned an invalid response.")
         return data
+
+    def _download(self, url: str) -> bytes:
+        try:
+            if self.client is not None:
+                response = self.client.get(url)
+            else:
+                with httpx.Client(timeout=self.timeout_seconds) as client:
+                    response = client.get(url)
+        except httpx.RequestError as exc:
+            raise ResendEmailError("Resend attachment content could not be reached.") from exc
+        if response.status_code >= 400:
+            raise ResendEmailError(
+                f"Resend attachment download failed with status {response.status_code}."
+            )
+        return bytes(response.content)
 
 
 def format_sender(display_name: str, email_address: str) -> str:

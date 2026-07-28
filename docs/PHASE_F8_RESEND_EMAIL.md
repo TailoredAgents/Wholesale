@@ -136,12 +136,14 @@ Exit:
 
 - Controlled tests send once from an authorized alias and retain complete provider evidence.
 
-Delivery lifecycle updates beyond the initial `sent` or `failed` result remain in F8.4 because
-they arrive through signed Resend webhooks.
+F8.4 now reconciles delivery lifecycle updates beyond the initial `sent` or `failed` result
+through signed Resend webhooks.
 
 ## Phase F8.4: Inbound Receiving And Recovery
 
 Owner: Codex.
+
+Status: **Complete in code on July 27, 2026. Production receiving remains disabled.**
 
 - Add a signed Resend webhook endpoint and durable provider-event intake.
 - Retrieve received bodies, headers, and attachments.
@@ -149,6 +151,32 @@ Owner: Codex.
 - Route by recipient alias and conversation evidence.
 - Send ambiguous matches to an owner review queue instead of guessing.
 - Add a worker recovery job for missed received-email events.
+
+Implemented:
+
+- `POST /api/v1/webhooks/resend` verifies the raw body with Resend's Svix signature headers,
+  rejects stale or invalid signatures, and durably records the event before returning.
+- Provider event IDs are organization-scoped and unique. Webhook retries and manual replays return
+  the existing event instead of duplicating work.
+- The worker retrieves full received-email content because Resend webhooks contain metadata only.
+- Exact `In-Reply-To` and `References` evidence is preferred. A single seller-email match is the
+  bounded fallback. Multiple or missing matches remain `ambiguous` or `unmatched` provider events
+  for the owner review interface in F8.5.
+- Inbound messages preserve Resend IDs, RFC headers, sender and recipient aliases, text, HTML
+  availability, chronological conversation history, unread state, and activity history.
+- Received attachments are downloaded before Resend's temporary URL expires, checked against
+  Stonegate size, file, malware-scan, and retention rules, and retained in private database or
+  object storage. Legacy Google attachments remain readable during migration.
+- Sent, delivered, delayed, bounced, complained, failed, and suppressed events reconcile the
+  communication and dispatch records without allowing late, lower-priority events to regress the
+  current state.
+- The worker scans Resend Receiving with cursor pagination and creates synthetic durable events
+  for received emails whose webhooks were missed.
+- Migration `0067_f8_resend_inbound` makes email attachments provider-neutral and adds durable
+  content, checksum, storage, malware-scan, and retention evidence.
+- Focused tests cover valid and invalid signatures, replay deduplication, exact reply threading,
+  durable attachment retrieval, authorized download, out-of-order lifecycle events, unmatched
+  review routing, and missed-webhook recovery.
 
 Exit:
 

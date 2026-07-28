@@ -527,8 +527,11 @@ Implementation checkpoint, July 27, 2026:
 - F8.3 is complete in code: authorized alias delivery through Resend, text and HTML bodies, CC/BCC,
   attachments, signatures, RFC threading evidence, provider IDs, database and provider
   idempotency, failure recording, and focused tests are implemented.
-- Inbound processing, lifecycle webhooks, Inbox administration, DNS, credentials, webhook
-  registration, acceptance, and launch remain in F8.4 through F8.8.
+- F8.4 is complete in code: signed durable webhook intake, received body and attachment retrieval,
+  exact and bounded fallback routing, unmatched review records, lifecycle reconciliation,
+  replay-safe processing, and cursor-based recovery are implemented.
+- Inbox administration, DNS, credentials, webhook registration, acceptance, and launch remain in
+  F8.5 through F8.8.
 
 Architecture:
 

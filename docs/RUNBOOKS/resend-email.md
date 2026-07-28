@@ -4,11 +4,11 @@ Last updated: July 27, 2026
 
 ## Status
 
-Resend is selected as Stonegate's operational email provider. F8.2-F8.3 have implemented the
+Resend is selected as Stonegate's operational email provider. F8.2-F8.4 have implemented the
 provider-neutral delivery boundary, company alias and sender-grant records, owner APIs,
-provider-specific configuration, database migration, and tested outbound Resend adapter. Live
-sending, Receiving webhooks, recovery, and Inbox administration remain disabled until F8.4
-through F8.7 are complete and accepted.
+provider-specific configuration, outbound delivery, signed inbound processing, durable
+attachments, lifecycle events, and missed-webhook recovery. Live sending and receiving remain
+disabled until Inbox administration and F8.6-F8.7 provider acceptance are complete.
 
 The existing Google Workspace/Gmail OAuth implementation remains disabled and is superseded. Do
 not configure Google OAuth or enable Gmail synchronization.
@@ -103,12 +103,13 @@ The adapter now:
   status.
 - Never expose the API key to the browser.
 
-Delivery, delay, bounce, complaint, and suppression transitions remain part of F8.4 signed webhook
-processing. Live outbound stays disabled until inbound recovery and acceptance are ready.
+Delivery, delay, bounce, complaint, and suppression transitions are reconciled through the F8.4
+signed webhook processor. Live outbound stays disabled until Inbox administration and provider
+acceptance are ready.
 
-## Inbound Requirements
+## Inbound Implementation
 
-The webhook must:
+The webhook and worker now:
 
 - Accept `email.received`.
 - Verify the Resend/Svix signature before processing.
@@ -117,11 +118,11 @@ The webhook must:
 - Retrieve full message content through the Receiving API.
 - Retrieve authorized attachments before temporary URLs expire.
 - Route using recipient alias, sender, reply headers, and retained provider IDs.
-- Create a review exception instead of guessing when conversation matching is ambiguous.
+- Retain unmatched and ambiguous events for the F8.5 owner review interface instead of guessing.
 - Preserve the original provider event and normalized communication record separately.
 
-The worker needs a recovery job that lists received emails and imports any event missed during an
-outage.
+The worker uses cursor pagination to list received emails and creates a durable synthetic provider
+event for an email missed during an outage.
 
 ## Delivery Events
 

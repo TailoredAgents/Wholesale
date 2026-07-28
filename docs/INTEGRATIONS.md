@@ -16,7 +16,7 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
 | Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
-| Resend | Operational seller email | F8.2-F8.3 provider-neutral foundation, aliases, grants, owner APIs, and tested outbound adapter implemented | Build inbound webhooks/recovery and Inbox administration, verify DNS, register signed webhooks, and run acceptance tests |
+| Resend | Operational seller email | F8.2-F8.4 provider-neutral foundation, authorized outbound delivery, signed inbound processing, durable attachments, lifecycle events, and recovery implemented | Build Inbox administration, verify DNS, register signed webhooks, and run acceptance tests |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |
 | National DNC API | None planned | Not used | Application-level DNC evidence integration was removed at Owner direction |
 | Smartlead or equivalent | Future cold email | Not implemented | Separate compliance and infrastructure decision required |

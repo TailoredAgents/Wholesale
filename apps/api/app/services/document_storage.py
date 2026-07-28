@@ -16,12 +16,15 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-excel",
     "image/jpeg",
     "image/heic",
     "image/png",
     "image/tiff",
     "image/webp",
     "text/csv",
+    "text/plain",
 }
 
 

@@ -235,7 +235,8 @@ does not replace the Stonegate buyer CRM.
 ## F8 Resend Operational Email
 
 Resend is selected and these values are defined by the F8.2 foundation. Secret values remain
-unset, and the provider remains disabled until F8.4-F8.7 implementation and acceptance are ready.
+unset, and the provider remains disabled until F8.5-F8.7 administration, setup, and acceptance are
+ready.
 
 | Variable | Secret | Render service |
 | --- | --- | --- |

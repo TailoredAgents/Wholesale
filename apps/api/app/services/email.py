@@ -59,6 +59,7 @@ from app.schemas.email import (
     EmailTemplateRead,
     EmailTemplateUpdate,
 )
+from app.services.document_storage import read_content
 from app.services.email_aliases import get_authorized_email_sender_alias
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
 
@@ -941,17 +942,30 @@ def get_attachment_content(
         return None
     if get_scoped_conversation(db, principal, communication.conversation_id) is None:
         return None
-    account = db.get(EmailAccount, attachment.email_account_id)
-    if account is None:
-        return None
     settings = settings or get_settings()
-    gmail = client or get_google_gmail_client(settings)
-    access_token = get_account_access_token(db, account, settings, gmail)
-    content = gmail.get_attachment(
-        access_token,
-        message_id=attachment.provider_message_id,
-        attachment_id=attachment.provider_attachment_id,
-    )
+    if attachment.storage_provider:
+        try:
+            content = read_content(
+                provider=attachment.storage_provider,
+                key=attachment.storage_key,
+                database_bytes=attachment.content_data,
+                settings=settings,
+            )
+        except ValueError as exc:
+            raise EmailAttachmentError(str(exc)) from exc
+    else:
+        if attachment.email_account_id is None:
+            raise EmailAttachmentError("The received attachment was not retained.")
+        account = db.get(EmailAccount, attachment.email_account_id)
+        if account is None:
+            return None
+        gmail = client or get_google_gmail_client(settings)
+        access_token = get_account_access_token(db, account, settings, gmail)
+        content = gmail.get_attachment(
+            access_token,
+            message_id=attachment.provider_message_id,
+            attachment_id=attachment.provider_attachment_id,
+        )
     if len(content) > settings.email_max_attachment_bytes:
         raise EmailAttachmentError("The attachment exceeds Stonegate's download limit.")
     return (

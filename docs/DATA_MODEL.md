@@ -75,6 +75,11 @@ authorization or evidence contract.
 - `call_recordings`
 - `call_transcripts`
 
+Resend inbound email is first retained as an idempotent provider event. After routing, the
+normalized communication stores the provider and RFC thread evidence. Email attachments are
+provider-neutral and can retain private database or object-storage content, checksum, malware-scan
+status, and retention evidence while legacy Gmail attachments remain readable during migration.
+
 ## Underwriting And Transactions
 
 - `underwriting_versions`
