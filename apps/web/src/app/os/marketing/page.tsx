@@ -7,7 +7,7 @@ import {
   getWorkspaceProfile,
 } from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
-import { ManagementCopilotPanel } from "../_components/management-copilot-panel";
+import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporting-period";
@@ -95,7 +95,17 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
 
   return <WorkspacePage>
     <PageHeader
-      actions={<ReportingPeriod active={period} basePath="/os/marketing" />}
+      actions={
+        <>
+          <ReportingPeriod active={period} basePath="/os/marketing" />
+          {marketingCopilot ? (
+            <ManagementCopilotLauncher
+              endpointBase="/api/v1/marketing/copilot"
+              initialData={marketingCopilot}
+            />
+          ) : null}
+        </>
+      }
       description="Compare source economics, attributable outcomes, and conversion export readiness."
       eyebrow="Business / growth economics"
       meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Attribution current" : "Marketing data unavailable"}</StatusBadge>}
@@ -109,13 +119,6 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
       nextAction={{ label: "Management next step", value: primary ? "Review source economics" : marketing.summary.pending_offline_exports ? "Process conversion exports" : "Monitor attribution", detail: "Metrics drill into source records", tone: "info" }}
       period={{ label: "Reporting basis", value: periodLabel, detail: marketing.period_start_at ? `${date(marketing.period_start_at)} through today` : "Lifetime attribution", tone: "neutral" }}
     />
-    {marketingCopilot ? (
-      <ManagementCopilotPanel
-        endpointBase="/api/v1/marketing/copilot"
-        initialData={marketingCopilot}
-      />
-    ) : null}
-
     <section className={styles.metricGrid} aria-label="Marketing performance">
       <div><BadgeDollarSign size={17} /><span>Marketing spend</span><strong>{money(marketing.summary.total_spend_cents)}</strong><small>{delta(marketing.summary.total_spend_cents, previous?.total_spend_cents)}</small></div>
       <div><CircleDollarSign size={17} /><span>Attributed revenue</span><strong>{money(marketing.summary.collected_revenue_cents)}</strong><small>{delta(marketing.summary.collected_revenue_cents, previous?.collected_revenue_cents)}</small></div>

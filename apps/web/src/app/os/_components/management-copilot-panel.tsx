@@ -49,9 +49,11 @@ function aiCost(microusd: number) {
 export function ManagementCopilotPanel({
   endpointBase,
   initialData,
+  layout = "page",
 }: {
   endpointBase: string;
   initialData: ManagementCopilotOverview;
+  layout?: "page" | "drawer";
 }) {
   const { getToken } = useAuth();
   const [copilot, setCopilot] = useState(initialData);
@@ -164,7 +166,7 @@ export function ManagementCopilotPanel({
   }
 
   return (
-    <section className={styles.panel}>
+    <section className={styles.panel} data-layout={layout}>
       <header className={styles.header}>
         <div>
           <span>

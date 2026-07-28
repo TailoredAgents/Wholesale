@@ -15,6 +15,7 @@ export function StonegateLogo({
     <span
       aria-label="Stonegate Home Buyers"
       className={`${styles.logo} ${inverse ? styles.inverse : ""} ${className}`}
+      role="img"
     >
       <Image
         alt=""

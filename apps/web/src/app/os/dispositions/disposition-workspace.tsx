@@ -27,6 +27,7 @@ import type {
   DispositionCopilotRecommendation,
   DispositionOverview,
 } from "../../lib/api";
+import { CopilotLauncher } from "../_components/copilot-launcher";
 import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
@@ -467,12 +468,20 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
                 />
               </div>
               {copilot && copilotCaseId === selected.id ? (
-                <DispositionCopilotPanel
-                  busy={busy}
-                  copilot={copilot}
-                  onGenerate={generateCopilot}
-                  onReview={reviewCopilot}
-                />
+                <CopilotLauncher
+                  attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}
+                  description="Reviews buyer fit, package evidence, offers, and placement risks without contacting buyers or selecting an offer."
+                  name="Disposition Copilot"
+                  score={copilot.readiness_score}
+                  summary={copilot.risk_alerts[0]?.reason ?? copilot.readiness_gaps[0] ?? "Buyer placement evidence is ready for review."}
+                >
+                  <DispositionCopilotPanel
+                    busy={busy}
+                    copilot={copilot}
+                    onGenerate={generateCopilot}
+                    onReview={reviewCopilot}
+                  />
+                </CopilotLauncher>
               ) : null}
               <nav className={styles.tabs}>{(["package", "buyers", "offers", "reconciliation"] as Tab[]).map((item) => <button className={tab === item ? styles.activeTab : ""} key={item} onClick={() => setTab(item)} type="button">{labelize(item)}</button>)}</nav>
 

@@ -23,6 +23,7 @@ import type {
   ProspectingEntry,
   ProspectingWorkbenchOverview,
 } from "../../lib/api";
+import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import styles from "./prospecting.module.css";
 
@@ -340,25 +341,33 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
 
       {view === "workbench" ? (
         <>
-          <ProspectingCopilotPrep
-            copilot={data.copilot}
-            editing={editingBrief}
-            editedSummary={editedSummary}
-            localRecommendation={localRecommendation}
-            onAnalyze={analyzeProspect}
-            onEdit={() => setEditingBrief(true)}
-            onEditedSummary={setEditedSummary}
-            onReview={reviewProspectBrief}
-            onReviewNotes={setReviewNotes}
-            onSelect={(entryId) => {
-              setSelectedCopilotEntryId(entryId);
-              setLocalRecommendation(null);
-              setEditingBrief(false);
-            }}
-            reviewNotes={reviewNotes}
-            saving={status === "saving"}
-            selectedEntryId={selectedCopilotEntryId}
-          />
+          <CopilotLauncher
+            attentionCount={data.copilot.work_items.length}
+            description="Prepares assigned call context, approved script guidance, handoff notes, and reviewed call coaching."
+            name="Prospecting Copilot"
+            summary={data.copilot.work_items.find((item) => item.entry_id === selectedCopilotEntryId)?.recommended_action ?? "The assigned calling queue is ready."}
+            triggerLabel="Prepare selected call"
+          >
+            <ProspectingCopilotPrep
+              copilot={data.copilot}
+              editing={editingBrief}
+              editedSummary={editedSummary}
+              localRecommendation={localRecommendation}
+              onAnalyze={analyzeProspect}
+              onEdit={() => setEditingBrief(true)}
+              onEditedSummary={setEditedSummary}
+              onReview={reviewProspectBrief}
+              onReviewNotes={setReviewNotes}
+              onSelect={(entryId) => {
+                setSelectedCopilotEntryId(entryId);
+                setLocalRecommendation(null);
+                setEditingBrief(false);
+              }}
+              reviewNotes={reviewNotes}
+              saving={status === "saving"}
+              selectedEntryId={selectedCopilotEntryId}
+            />
+          </CopilotLauncher>
           <WorkbenchView
             activeAttempt={activeAttempt}
             activeScript={data.active_script}

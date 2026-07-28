@@ -23,10 +23,11 @@ import type {
   LeadManagerCopilotRecommendation,
   LeadManagerOverview,
 } from "../../lib/api";
+import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import styles from "./lead-manager.module.css";
 
-type View = "copilot" | "today" | "qualification" | "performance" | "standards";
+type View = "today" | "qualification" | "performance" | "standards";
 
 const standardQuestions = [
   ["ownership", "Ownership", "Please confirm who owns the property and how title is held.", true],
@@ -104,7 +105,7 @@ export function LeadManagerWorkspace({
   );
   const initialCopilotItem = data.copilot.work_items.find((item) => item.lead_id === initialLeadId);
   const [view, setView] = useState<View>(
-    initialQualificationCase ? "qualification" : "copilot",
+    initialQualificationCase ? "qualification" : "today",
   );
   const [selectedCaseId, setSelectedCaseId] = useState(
     initialQualificationCase?.id ?? data.qualification_queue[0]?.id ?? "",
@@ -272,21 +273,13 @@ export function LeadManagerWorkspace({
         <div className={data.metrics.neglected_leads ? styles.riskMetric : ""}><span>Neglected</span><strong>{data.metrics.neglected_leads}</strong></div>
       </section>
 
-      <nav className={styles.tabs} aria-label="Acquisitions Desk views">
-        {([
-          ["copilot", "Copilot"],
-          ["today", "Daily queue"],
-          ["qualification", "Qualification"],
-          ["performance", "Performance"],
-          ...(data.can_manage ? [["standards", "Standards"]] : []),
-        ] as Array<[View, string]>).map(([key, label]) => (
-          <button className={view === key ? styles.activeTab : ""} key={key} onClick={() => setView(key)} type="button">{label}</button>
-        ))}
-      </nav>
-
-      {message ? <p className={message === "Saved." ? styles.notice : styles.error}>{message}</p> : null}
-
-      {view === "copilot" ? (
+      <CopilotLauncher
+        attentionCount={data.copilot.work_items.length}
+        description="Prepares seller summaries, qualification questions, follow-up drafts, and appointment proposals without changing CRM records or contacting sellers."
+        name="Lead Manager Copilot"
+        summary={selectedCopilotItem?.recommended_action ?? "No active seller case needs AI preparation."}
+        triggerLabel="Review AI assistance"
+      >
         <div className={styles.copilotView}>
           <section className={styles.copilotGuard}>
             <div>
@@ -481,7 +474,20 @@ export function LeadManagerWorkspace({
             </section>
           </div>
         </div>
-      ) : null}
+      </CopilotLauncher>
+
+      <nav className={styles.tabs} aria-label="Acquisitions Desk views">
+        {([
+          ["today", "Daily queue"],
+          ["qualification", "Qualification"],
+          ["performance", "Performance"],
+          ...(data.can_manage ? [["standards", "Standards"]] : []),
+        ] as Array<[View, string]>).map(([key, label]) => (
+          <button className={view === key ? styles.activeTab : ""} key={key} onClick={() => setView(key)} type="button">{label}</button>
+        ))}
+      </nav>
+
+      {message ? <p className={message === "Saved." ? styles.notice : styles.error}>{message}</p> : null}
 
       {view === "today" ? (
         <div className={styles.queueGrid}>

@@ -16,7 +16,7 @@ import {
   getWorkspaceProfile,
 } from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
-import { ManagementCopilotPanel } from "../_components/management-copilot-panel";
+import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporting-period";
@@ -139,7 +139,17 @@ export default async function FinancePage({
 
   return <WorkspacePage>
     <PageHeader
-      actions={<ReportingPeriod active={period} basePath="/os/finance" />}
+      actions={
+        <>
+          <ReportingPeriod active={period} basePath="/os/finance" />
+          {financeCopilot ? (
+            <ManagementCopilotLauncher
+              endpointBase="/api/v1/finance/copilot"
+              initialData={financeCopilot}
+            />
+          ) : null}
+        </>
+      }
       description="Monitor cash, margin, reconciliation exceptions, commissions, and ledger evidence."
       eyebrow="Business / financial control"
       meta={<StatusBadge tone={financeData.apiConnected ? "success" : "danger"}>{financeData.apiConnected ? "Ledger current" : "Finance unavailable"}</StatusBadge>}
@@ -153,12 +163,6 @@ export default async function FinancePage({
       nextAction={{ label: "Management next step", value: primaryException ? "Open deal reconciliation" : pendingRevenue.length ? "Review pending revenue" : "Monitor margin", detail: "Source records remain linked", tone: "info" }}
       period={{ label: "Reporting basis", value: periodLabel, detail: finance.period_start_at ? `${date(finance.period_start_at)} through today` : "Lifetime ledger", tone: "neutral" }}
     />
-    {financeCopilot ? (
-      <ManagementCopilotPanel
-        endpointBase="/api/v1/finance/copilot"
-        initialData={financeCopilot}
-      />
-    ) : null}
     {accountingSetup ? (
       <AccountingSetupPanel setup={accountingSetup} canEdit={canManageAccounting} />
     ) : null}
@@ -193,9 +197,10 @@ export default async function FinancePage({
       <AccountingReportsPanel reports={accountingReports} />
     ) : null}
     {taxCopilot ? (
-      <ManagementCopilotPanel
+      <ManagementCopilotLauncher
         endpointBase="/api/v1/finance/tax-copilot"
         initialData={taxCopilot}
+        placement="inline"
       />
     ) : null}
 

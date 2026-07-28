@@ -312,6 +312,7 @@ function OverlayDialog({
   footer,
   onClose,
   open,
+  size = "standard",
   title,
   variant,
 }: {
@@ -320,6 +321,7 @@ function OverlayDialog({
   footer?: ReactNode;
   onClose: () => void;
   open: boolean;
+  size?: "standard" | "wide";
   title: string;
   variant: "dialog" | "drawer";
 }) {
@@ -338,7 +340,7 @@ function OverlayDialog({
     <dialog
       aria-describedby={description ? descriptionId : undefined}
       aria-labelledby={titleId}
-      className={classes(styles.overlay, styles[variant])}
+      className={classes(styles.overlay, styles[variant], size === "wide" && styles.overlayWide)}
       onCancel={(event) => {
         event.preventDefault();
         onClose();

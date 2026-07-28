@@ -596,6 +596,10 @@
   border-radius: 0;
 }
 
+.drawer.overlayWide {
+  width: min(760px, calc(100vw - 16px));
+}
+
 .overlayHeader,
 .overlayFooter {
   min-height: 64px;

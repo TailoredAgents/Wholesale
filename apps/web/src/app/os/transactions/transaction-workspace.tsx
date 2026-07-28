@@ -30,6 +30,7 @@ import type {
   TransactionDetail,
   TransactionOverview,
 } from "../../lib/api";
+import { CopilotLauncher } from "../_components/copilot-launcher";
 import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import { TransactionCopilotPanel } from "./transaction-copilot-panel";
@@ -335,18 +336,26 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
                 nextAction={{ label: "Authorized next step", value: pendingPackage ? "Resolve contract approval" : requiredOpen[0]?.title ?? (detail.status === "funded" ? "Closing complete" : "Confirm funding"), detail: "Server gates remain enforced", tone: detail.status === "funded" ? "success" : "info" }}
               />
             </div>
-            <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
-            {message ? <div className={message === "Saved." || message.startsWith("SignWell connected") ? styles.success : styles.notice}>{message}</div> : null}
-
-            {tab === "closing" ? <>
-              {copilot ? (
+            {copilot ? (
+              <CopilotLauncher
+                attentionCount={copilot.readiness_gaps.length + copilot.deadline_risks.length}
+                description="Reviews closing evidence, missing documents, and deadlines without changing the transaction."
+                name="Transaction Copilot"
+                score={copilot.readiness_score}
+                summary={copilot.deadline_risks[0]?.reason ?? copilot.readiness_gaps[0] ?? "Closing evidence is ready for review."}
+              >
                 <TransactionCopilotPanel
                   busy={busy}
                   copilot={copilot}
                   onGenerate={generateCopilot}
                   onReview={reviewCopilot}
                 />
-              ) : null}
+              </CopilotLauncher>
+            ) : null}
+            <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
+            {message ? <div className={message === "Saved." || message.startsWith("SignWell connected") ? styles.success : styles.notice}>{message}</div> : null}
+
+            {tab === "closing" ? <>
               <div className={styles.sectionGrid}>
               <section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing controls</span><h4>Required workflow</h4></div><strong>{detail.checklist.filter((item) => item.status === "complete").length}/{detail.checklist.length}</strong></div>
                 <div className={styles.checklist}>{detail.checklist.map((item) => <div className={styles.checkItem} key={item.id}><button aria-label={item.status === "complete" ? "Reopen item" : "Complete item"} disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/checklist/${item.id}`, { method: "PATCH", body: JSON.stringify({ status: item.status === "complete" ? "open" : "complete" }) }))} type="button">{item.status === "complete" ? <Check size={15} /> : null}</button><div><strong>{item.title}</strong><span>{item.description}</span><small>{labelize(item.category)} · {item.due_at ? date(item.due_at) : "No deadline"}</small></div></div>)}</div>

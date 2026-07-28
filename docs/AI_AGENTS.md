@@ -1,6 +1,6 @@
 # AI Agent System
 
-Last updated: July 23, 2026
+Last updated: July 28, 2026
 
 Stonegate uses one governed, event-driven AI system with specialized capabilities. It does not use
 fourteen independent chatbots with separate memory or authority.
@@ -22,6 +22,25 @@ must manage.
 The copilot assists its human role; it does not own that role. In particular, the Lead Manager
 Copilot organizes, summarizes, drafts, recommends, and monitors while the human Lead Manager owns
 qualification, seller communication, appointment quality, and handoff.
+
+### Staff Experience
+
+Copilots use one consistent interaction model throughout the OS:
+
+- The operating workspace and its current human task remain the primary page content.
+- A compact page-level launcher opens the role's Copilot in a shared right-side drawer.
+- Management workspaces place the launcher in the page header. Operational workspaces place it
+  next to the relevant queue, record, or workflow.
+- The drawer contains recommendations, evidence, drafts, corrections, and review controls without
+  hiding the underlying business record.
+- Deterministic warnings, blockers, and required decisions remain visible in the main workflow
+  even when the Copilot drawer is closed.
+- Mobile uses the same drawer as a full-height working surface rather than squeezing AI content
+  beside the operational page.
+
+Staff do not choose backend specialists or manage separate AI conversations. The role-facing
+Copilot selects the bounded capability needed for the current record. Copilot output remains a
+draft until the assigned staff member accepts, corrects, or rejects it.
 
 The target operating loop is:
 

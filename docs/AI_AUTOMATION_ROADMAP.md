@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: July 24, 2026
+Last updated: July 28, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -94,6 +94,9 @@ Delivered:
   deterministic readiness simulations, and immutable zero-delivery evidence.
 - All ten AI4-AI9 copilot capabilities are available on demand in supervised draft-only mode.
   Every output requires human review, tools remain read-only, and external actions remain blocked.
+- All eight staff-facing copilots now use the same compact launcher and responsive right-side
+  drawer. Operational work remains the primary page content, while deterministic warnings stay
+  visible outside the drawer.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -103,7 +106,6 @@ Still required:
 
 - Complete production review of the AI2 datasets and live model replay for the first capability.
 - Configure provider error monitoring and pass the AI3 staging acceptance checklist.
-- Copilot workspace experiences for the remaining human roles inside their existing OS workflows.
 - Measured draft-only pilots and capability-specific promotion decisions.
 - Provider integrations required for documents, accounting, advertising, and approved external
   communication.

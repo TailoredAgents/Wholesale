@@ -20,7 +20,7 @@ import {
   type SpeedToLeadTask,
 } from "../lib/api";
 import { StatusBadge } from "./_components/design-system";
-import { ManagementCopilotPanel } from "./_components/management-copilot-panel";
+import { ManagementCopilotLauncher } from "./_components/management-copilot-launcher";
 import { PageHeader, WorkspacePage } from "./_components/page-contracts";
 import { isOwnerProfile, primaryRoleLabel } from "./os-navigation";
 import {
@@ -183,6 +183,12 @@ export default async function Home() {
             <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Inbox</Link>
             <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Work Queue</Link>
             <Link href="/os/calendar"><CalendarDays aria-hidden="true" size={16} />Calendar</Link>
+            {executiveCopilot ? (
+              <ManagementCopilotLauncher
+                endpointBase="/api/v1/dashboard/executive-copilot"
+                initialData={executiveCopilot}
+              />
+            ) : null}
           </div>
         }
         description={dashboardDescription(roleKeys)}
@@ -200,13 +206,6 @@ export default async function Home() {
           </div>
         </div>
       ) : null}
-      {executiveCopilot ? (
-        <ManagementCopilotPanel
-          endpointBase="/api/v1/dashboard/executive-copilot"
-          initialData={executiveCopilot}
-        />
-      ) : null}
-
       <section className={styles.dailyMetrics} aria-label="Daily work summary">
         <Link className={styles.dangerMetric} href="/os/tasks?view=overdue">
           <span><Clock3 aria-hidden="true" size={16} />Overdue</span>

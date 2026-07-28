@@ -64,5 +64,21 @@
 .pilotMetrics > div:last-child { border-right: 0; }
 .pilotMetrics span { color: var(--sg-color-text-muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .pilotMetrics strong { font-size: 11px; }
+.panel[data-layout="drawer"] { border: 0; border-radius: 0; }
+.panel[data-layout="drawer"] > .header { display: none; }
+.panel[data-layout="drawer"] .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.panel[data-layout="drawer"] .metrics > div { border-bottom: 1px solid var(--sg-color-border-soft); }
+.panel[data-layout="drawer"] .riskBand,
+.panel[data-layout="drawer"] .factGrid,
+.panel[data-layout="drawer"] .actionGrid,
+.panel[data-layout="drawer"] .evidenceBand { grid-template-columns: 1fr; }
+.panel[data-layout="drawer"] .riskBand > div,
+.panel[data-layout="drawer"] .factGrid > div,
+.panel[data-layout="drawer"] .actionGrid > section:first-child,
+.panel[data-layout="drawer"] .evidenceBand > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); }
+.panel[data-layout="drawer"] .rows > div { grid-template-columns: 1fr; }
+.panel[data-layout="drawer"] .rows > div small { grid-column: auto; }
+.panel[data-layout="drawer"] .pilotMetrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.panel[data-layout="drawer"] .pilotMetrics > div:nth-of-type(2n) { border-right: 0; }
 @media (max-width: 1100px) { .metrics { grid-template-columns: repeat(3, 1fr); } .metrics > div { border-bottom: 1px solid var(--sg-color-border-soft); } .factGrid { grid-template-columns: 1fr 1fr; } .pilotMetrics { grid-template-columns: repeat(4, 1fr); } .pilotMetrics > div:nth-of-type(4n) { border-right: 0; } }
 @media (max-width: 760px) { .header, .command, .draftHeader { align-items: flex-start; flex-direction: column; } .metrics, .riskBand, .factGrid, .actionGrid, .evidenceBand { grid-template-columns: 1fr; } .metrics > div, .riskBand > div, .factGrid > div, .actionGrid > section:first-child, .evidenceBand > div { border-right: 0; border-bottom: 1px solid var(--sg-color-border-soft); } .rows > div { grid-template-columns: 1fr; } .rows > div small { grid-column: auto; } .reviewActions { flex-wrap: wrap; } .command > span { margin-left: 0; } .pilotMetrics { grid-template-columns: repeat(2, 1fr); } .pilotMetrics > div:nth-of-type(2n) { border-right: 0; } }

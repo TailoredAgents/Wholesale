@@ -31,6 +31,7 @@ import type {
   FieldOperationsOverview,
   FieldRoomObservation,
 } from "../../lib/api";
+import { CopilotLauncher } from "../_components/copilot-launcher";
 import { labelize } from "../os-utils";
 import styles from "./field-operations.module.css";
 import { useFieldApi } from "./use-field-api";
@@ -327,12 +328,21 @@ export function FieldMeetingWorkspace({
                     </div>
                   </>
                 ) : <p className={styles.emptyState}>Generate the brief before leaving for the appointment. It freezes the current qualification, underwriting, and approved negotiation evidence into a versioned snapshot.</p>}
-                <AcquisitionsCopilotPanel
-                  appointmentId={appointmentId}
-                  run={run}
-                  saving={saving}
-                  workspace={workspace}
-                />
+                <CopilotLauncher
+                  attentionCount={workspace.copilot.readiness_gaps.length}
+                  description="Prepares meeting questions, evidence-backed negotiation guidance, and follow-up drafts without presenting an offer."
+                  name="Acquisitions Copilot"
+                  score={workspace.copilot.readiness_score}
+                  summary={workspace.copilot.readiness_gaps[0] ?? "Meeting evidence is ready for preparation."}
+                  triggerLabel="Prepare with AI"
+                >
+                  <AcquisitionsCopilotPanel
+                    appointmentId={appointmentId}
+                    run={run}
+                    saving={saving}
+                    workspace={workspace}
+                  />
+                </CopilotLauncher>
               </div>
             ) : null}
 
