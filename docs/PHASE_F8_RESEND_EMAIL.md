@@ -218,6 +218,9 @@ Exit:
 
 ## Phase F8.6: Deployment And Provider Setup
 
+Status: Complete July 28, 2026. The branded API domain is live; Resend sending and receiving DNS,
+the production API key, the signed webhook secret, and subscribed webhook endpoint are configured.
+
 Owners: Codex for deployment configuration; Austin for provider and DNS actions.
 
 Codex:
@@ -239,6 +242,8 @@ Exit:
 - API and worker readiness identify Resend as configured without exposing secrets.
 
 ## Phase F8.7: Acceptance
+
+Status: In progress. Production transport is enabled for controlled company-address testing only.
 
 Owners: Austin and Codex.
 

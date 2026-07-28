@@ -111,11 +111,11 @@ services:
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
       - key: EMAIL_ENABLED
-        value: false
+        value: true
       - key: EMAIL_PROVIDER
-        value: disabled
+        value: resend
       - key: EMAIL_SYNC_ENABLED
-        value: false
+        value: true
       - key: EMAIL_SYNC_POLL_SECONDS
         value: 30
       - key: EMAIL_MAX_ATTACHMENT_BYTES
@@ -376,11 +376,11 @@ services:
       - key: CALL_RECORDING_RETENTION_DAYS
         value: 180
       - key: EMAIL_ENABLED
-        value: false
+        value: true
       - key: EMAIL_PROVIDER
-        value: disabled
+        value: resend
       - key: EMAIL_SYNC_ENABLED
-        value: false
+        value: true
       - key: EMAIL_SYNC_POLL_SECONDS
         value: 30
       - key: EMAIL_MAX_ATTACHMENT_BYTES

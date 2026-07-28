@@ -473,7 +473,7 @@ Exit criteria:
 Goal: Measure whether Stonegate's comps, ARV, repairs, and offer guidance are reliable enough for
 real acquisition decisions.
 
-Implementation checkpoint, July 27, 2026:
+Implementation checkpoint, July 28, 2026:
 
 - Existing immutable market analyses and human comp-review versions remain the source evidence;
   F7 does not create a second valuation engine.
@@ -533,7 +533,9 @@ Implementation checkpoint, July 27, 2026:
 - F8.5 is complete in code: authorized From selection, owner-managed aliases and grants,
   signatures, provider and failure status, VA boundaries, and owner routing-exception resolution
   are implemented.
-- DNS, credentials, webhook registration, acceptance, and launch remain in F8.6 through F8.8.
+- F8.6 is complete: the branded API domain, Resend sending and receiving DNS, production API key,
+  signed webhook secret, and subscribed webhook endpoint are configured.
+- F8.7 controlled acceptance and F8.8 production launch remain.
 
 Architecture:
 
