@@ -24,6 +24,8 @@ Start with:
 - `docs/USER_MANUAL.md`: detailed role-based instructions for using the public site and private OS.
 - `docs/LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for Stonegate Lead Managers.
 - `docs/FINISHING_ROADMAP.md`: canonical remaining sequence from production safety through AI pilots.
+- `docs/PHASE_F8_7_MAILBOX_ROUTING_UPGRADE.md`: staged plan for named, team, restricted, and
+  general-purpose email inside the existing shared Inbox.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
 - `docs/PRODUCTION_CREDENTIALS_CHECKLIST.md`: canonical provider-account and Render-variable

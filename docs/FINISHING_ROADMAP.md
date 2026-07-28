@@ -535,7 +535,7 @@ Implementation checkpoint, July 27, 2026:
   are implemented.
 - F8.6 is complete: the branded API domain, Resend sending and receiving DNS, production API key,
   signed webhook secret, and subscribed webhook endpoint are configured.
-- F8.7 controlled acceptance and F8.8 production launch remain.
+- F8.7A internal mailbox routing, F8.7 controlled acceptance, and F8.8 production launch remain.
 
 Architecture:
 
@@ -574,6 +574,8 @@ Exit criteria:
 - No Google OAuth secret or Gmail synchronization job is required.
 
 See `RUNBOOKS/resend-email.md`.
+The implementation plan for named, team, restricted, and general-purpose internal mailbox views is
+`PHASE_F8_7_MAILBOX_ROUTING_UPGRADE.md`.
 
 ## Phase F9: Twilio Communications Acceptance
 

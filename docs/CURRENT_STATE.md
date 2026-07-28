@@ -334,7 +334,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 | Twilio SMS | Code complete; final provider cutover pending | Configure the new Messaging Service SID and new SMS sender, then run STOP/START/inbound/delivery tests |
 | Twilio Voice | Code complete; activation paused | Finish API key, TwiML App, Render variables, outbound test, and inbound webhook on the Voice number |
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |
-| Resend operational email | F8.1-F8.6 implementation and provider setup are complete; the branded API domain, sending and receiving DNS, credentials, and signed webhook are configured; controlled transport is enabled | Complete F8.7 acceptance, then approve F8.8 production launch |
+| Resend operational email | F8.1-F8.6 implementation and provider setup are complete; the branded API domain, sending and receiving DNS, credentials, and signed webhook are configured; controlled transport is enabled | Complete F8.7A mailbox routing upgrade and F8.7 acceptance, then approve F8.8 production launch |
 | Custom domain | Branded web domain live | Keep branded and Render fallback origins aligned in Clerk and CORS; add provider callback URLs as integrations activate |
 | Production monitoring | Scheduled readiness and owner alert verified; Sentry deferred | Activate Sentry and the worker webhook later if the owner chooses |
 | Private object storage | Cloudflare R2 adapter complete; database fallback active | Configure the private R2 bucket and run file acceptance |
