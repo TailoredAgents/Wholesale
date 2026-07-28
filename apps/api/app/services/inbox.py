@@ -19,13 +19,16 @@ from app.models.foundation import (
     ContactMethod,
     Conversation,
     ConversationAssignmentEvent,
+    ConversationContextLink,
     ConversationWatcher,
     EmailAttachment,
+    EmailSenderAlias,
     Lead,
     Property,
     Role,
     RoleAssignment,
     Task,
+    Team,
     User,
 )
 from app.schemas.email import EmailAttachmentRead
@@ -97,9 +100,13 @@ def ensure_primary_conversation(
 
     conversation = Conversation(
         organization_id=lead.organization_id,
+        conversation_type="lead",
         lead_id=lead.id,
         contact_id=lead.contact_id,
         assigned_user_id=lead.assigned_user_id,
+        assigned_team_id=None,
+        source_alias_id=None,
+        visibility_scope="standard",
         status="open",
         queue_key=queue_key
         or ("acquisitions_follow_up" if lead.assigned_user_id else "unassigned"),
@@ -114,6 +121,20 @@ def ensure_primary_conversation(
     db.add(conversation)
     db.flush()
     db.add(
+        ConversationContextLink(
+            organization_id=lead.organization_id,
+            conversation_id=conversation.id,
+            context_type="lead",
+            lead_id=lead.id,
+            transaction_id=None,
+            buyer_id=None,
+            disposition_case_id=None,
+            created_by_user_id=lead.assigned_user_id,
+            is_primary=True,
+            link_metadata={"source": "lead_creation"},
+        )
+    )
+    db.add(
         ConversationAssignmentEvent(
             organization_id=lead.organization_id,
             conversation_id=conversation.id,
@@ -126,6 +147,96 @@ def ensure_primary_conversation(
             reason="Conversation created from lead.",
         )
     )
+    return conversation
+
+
+def create_general_conversation(
+    db: Session,
+    *,
+    organization_id: UUID,
+    contact_id: UUID,
+    assigned_user_id: UUID | None = None,
+    assigned_team_id: UUID | None = None,
+    source_alias_id: UUID | None = None,
+    visibility_scope: str = "standard",
+) -> Conversation:
+    if visibility_scope not in {"standard", "restricted"}:
+        raise ValueError("Unsupported conversation visibility scope.")
+    contact = db.scalar(
+        select(Contact).where(
+            Contact.organization_id == organization_id,
+            Contact.id == contact_id,
+        )
+    )
+    if contact is None:
+        raise ValueError("Conversation contact is not available in this workspace.")
+    if assigned_user_id is not None:
+        user = db.scalar(
+            select(User).where(
+                User.organization_id == organization_id,
+                User.id == assigned_user_id,
+                User.is_active.is_(True),
+            )
+        )
+        if user is None:
+            raise ValueError("Conversation assignee is not an active workspace user.")
+    if assigned_team_id is not None:
+        team = db.scalar(
+            select(Team).where(
+                Team.organization_id == organization_id,
+                Team.id == assigned_team_id,
+                Team.is_active.is_(True),
+            )
+        )
+        if team is None:
+            raise ValueError("Conversation team is not active in this workspace.")
+    if source_alias_id is not None:
+        alias = db.scalar(
+            select(EmailSenderAlias).where(
+                EmailSenderAlias.organization_id == organization_id,
+                EmailSenderAlias.id == source_alias_id,
+                EmailSenderAlias.status == "active",
+                EmailSenderAlias.inbound_enabled.is_(True),
+            )
+        )
+        if alias is None:
+            raise ValueError("Conversation source alias is not active for inbound email.")
+
+    conversation = Conversation(
+        organization_id=organization_id,
+        conversation_type="general",
+        lead_id=None,
+        contact_id=contact.id,
+        assigned_user_id=assigned_user_id,
+        assigned_team_id=assigned_team_id,
+        source_alias_id=source_alias_id,
+        visibility_scope=visibility_scope,
+        status="open",
+        queue_key="unassigned",
+        priority="normal",
+        unread_count=0,
+        last_activity_at=datetime.now(UTC),
+        last_inbound_at=None,
+        last_outbound_at=None,
+        closed_at=None,
+        conversation_metadata={"source": "general_email", "unified_timeline": True},
+    )
+    db.add(conversation)
+    db.flush()
+    db.add(
+        ConversationAssignmentEvent(
+            organization_id=organization_id,
+            conversation_id=conversation.id,
+            lead_id=None,
+            actor_user_id=assigned_user_id,
+            previous_assigned_user_id=None,
+            assigned_user_id=assigned_user_id,
+            previous_queue_key="unassigned",
+            queue_key="unassigned",
+            reason="General conversation created.",
+        )
+    )
+    db.flush()
     return conversation
 
 
@@ -238,12 +349,14 @@ def get_conversation_detail(
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
         return None
-    lead = db.get(Lead, conversation.lead_id)
     contact = db.get(Contact, conversation.contact_id)
-    if lead is None or contact is None:
-        raise RuntimeError("Conversation is missing its lead or contact.")
-    property_record = db.get(Property, lead.property_id)
-    if property_record is None:
+    if contact is None:
+        raise RuntimeError("Conversation is missing its contact.")
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    if conversation.conversation_type == "lead" and lead is None:
+        raise RuntimeError("Lead conversation is missing its lead.")
+    property_record = db.get(Property, lead.property_id) if lead is not None else None
+    if lead is not None and property_record is None:
         raise RuntimeError("Conversation lead is missing its property.")
 
     contact_methods = db.scalars(
@@ -355,25 +468,33 @@ def get_conversation_detail(
         )
         .limit(100)
     ).all()
-    tasks = db.scalars(
-        select(Task)
-        .where(
-            Task.organization_id == principal.organization_id,
-            Task.lead_id == lead.id,
-            Task.status.in_(("open", "in_progress")),
-        )
-        .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
-        .limit(20)
-    ).all()
-    appointments = db.scalars(
-        select(Appointment)
-        .where(
-            Appointment.organization_id == principal.organization_id,
-            Appointment.lead_id == lead.id,
-        )
-        .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.asc())
-        .limit(20)
-    ).all()
+    tasks = (
+        db.scalars(
+            select(Task)
+            .where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == lead.id,
+                Task.status.in_(("open", "in_progress")),
+            )
+            .order_by(Task.due_at.is_(None), Task.due_at.asc(), Task.created_at.asc())
+            .limit(20)
+        ).all()
+        if lead is not None
+        else []
+    )
+    appointments = (
+        db.scalars(
+            select(Appointment)
+            .where(
+                Appointment.organization_id == principal.organization_id,
+                Appointment.lead_id == lead.id,
+            )
+            .order_by(Appointment.scheduled_start_at.asc(), Appointment.created_at.asc())
+            .limit(20)
+        ).all()
+        if lead is not None
+        else []
+    )
 
     actor_ids = {
         actor_id
@@ -498,17 +619,17 @@ def get_conversation_detail(
             )
             for method in contact_methods
         ],
-        source=lead.source,
-        stage_key=lead.stage_key,
-        lead_temperature=lead.lead_temperature,
-        motivation=lead.motivation,
-        desired_timeline=lead.desired_timeline,
-        property_condition=lead.property_condition,
-        occupancy_status=lead.occupancy_status,
-        appointment_status=lead.appointment_status,
-        next_follow_up_at=lead.next_follow_up_at,
-        property_type=property_record.property_type,
-        property_county=property_record.county,
+        source=lead.source if lead is not None else None,
+        stage_key=lead.stage_key if lead is not None else None,
+        lead_temperature=lead.lead_temperature if lead is not None else None,
+        motivation=lead.motivation if lead is not None else None,
+        desired_timeline=lead.desired_timeline if lead is not None else None,
+        property_condition=lead.property_condition if lead is not None else None,
+        occupancy_status=lead.occupancy_status if lead is not None else None,
+        appointment_status=lead.appointment_status if lead is not None else None,
+        next_follow_up_at=lead.next_follow_up_at if lead is not None else None,
+        property_type=property_record.property_type if property_record is not None else None,
+        property_county=property_record.county if property_record is not None else None,
         timeline=timeline,
         open_tasks=[
             ConversationTaskRead(
@@ -616,6 +737,10 @@ def handoff_conversation(
     )
     if conversation is None:
         return None
+    if conversation.lead_id is None:
+        raise ValueError(
+            "General conversation assignment is introduced in the mailbox routing phase."
+        )
 
     can_manage_all = PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS in principal.permission_keys
     if not can_manage_all and (
@@ -945,15 +1070,17 @@ def get_user_role_keys(db: Session, user: User) -> set[str]:
 
 
 def conversation_to_read(db: Session, conversation: Conversation) -> ConversationRead:
-    lead = db.get(Lead, conversation.lead_id)
     contact = db.get(Contact, conversation.contact_id)
     assigned_user = (
         db.get(User, conversation.assigned_user_id) if conversation.assigned_user_id else None
     )
-    if lead is None or contact is None:
-        raise RuntimeError("Conversation is missing its lead or contact.")
-    property_record = db.get(Property, lead.property_id)
-    if property_record is None:
+    if contact is None:
+        raise RuntimeError("Conversation is missing its contact.")
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    if conversation.conversation_type == "lead" and lead is None:
+        raise RuntimeError("Lead conversation is missing its lead.")
+    property_record = db.get(Property, lead.property_id) if lead is not None else None
+    if lead is not None and property_record is None:
         raise RuntimeError("Conversation lead is missing its property.")
 
     watcher_rows = db.execute(
@@ -979,16 +1106,22 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
     ).all()
     return ConversationRead(
         id=conversation.id,
+        conversation_type=conversation.conversation_type,
         lead_id=conversation.lead_id,
         contact_id=conversation.contact_id,
         seller_name=contact.legal_name,
         property_address=(
             f"{property_record.street_address}, {property_record.city}, "
             f"{property_record.state} {property_record.postal_code}"
+            if property_record is not None
+            else "General correspondence"
         ),
         assigned_user_id=conversation.assigned_user_id,
         assigned_user_email=assigned_user.email if assigned_user else None,
         assigned_user_display_name=assigned_user.display_name if assigned_user else None,
+        assigned_team_id=conversation.assigned_team_id,
+        source_alias_id=conversation.source_alias_id,
+        visibility_scope=conversation.visibility_scope,
         status=conversation.status,
         queue_key=conversation.queue_key,
         priority=conversation.priority,

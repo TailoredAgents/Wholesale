@@ -98,13 +98,17 @@ class VoiceEligibilityRead(BaseModel):
 
 class ConversationRead(BaseModel):
     id: UUID
-    lead_id: UUID
+    conversation_type: str
+    lead_id: UUID | None
     contact_id: UUID
     seller_name: str
     property_address: str
     assigned_user_id: UUID | None
     assigned_user_email: str | None
     assigned_user_display_name: str | None
+    assigned_team_id: UUID | None
+    source_alias_id: UUID | None
+    visibility_scope: str
     status: str
     queue_key: str
     priority: str
@@ -122,8 +126,8 @@ class ConversationRead(BaseModel):
 class ConversationDetailRead(ConversationRead):
     preferred_name: str | None
     contact_methods: list[ConversationContactMethodRead]
-    source: str
-    stage_key: str
+    source: str | None
+    stage_key: str | None
     lead_temperature: str | None
     motivation: str | None
     desired_timeline: str | None

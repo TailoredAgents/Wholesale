@@ -514,7 +514,7 @@ Goal: Replace the disabled Gmail/OAuth integration with two-way operational emai
 
 Phase sequence and implementation ownership are defined in `PHASE_F8_RESEND_EMAIL.md`.
 
-Implementation checkpoint, July 27, 2026:
+Implementation checkpoint, July 28, 2026:
 
 - F8.1 team, named-sender, department-alias, and routing decisions are approved and documented.
 - New compensation-plan drafts default to a 20% human-led Dispositions pool. Devon and Austin use
@@ -535,7 +535,11 @@ Implementation checkpoint, July 27, 2026:
   are implemented.
 - F8.6 is complete: the branded API domain, Resend sending and receiving DNS, production API key,
   signed webhook secret, and subscribed webhook endpoint are configured.
-- F8.7A internal mailbox routing, F8.7 controlled acceptance, and F8.8 production launch remain.
+- F8.7A.1 is complete in code: the existing conversation model now supports lead, transaction,
+  buyer, and general contexts; lead-independent email; team, source-alias, and visibility fields;
+  structured context links; structured message participants; and a safe in-place backfill.
+- F8.7A.2 deterministic routing is next. The remaining mailbox phases, F8.7 controlled acceptance,
+  and F8.8 production launch remain.
 
 Architecture:
 

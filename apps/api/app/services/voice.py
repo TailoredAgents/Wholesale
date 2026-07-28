@@ -237,6 +237,10 @@ def create_call_intent(
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
         return call_intent_to_read(existing, line, get_settings())
 
+    if conversation.lead_id is None:
+        raise VoiceConfigurationError(
+            "Calling from general email conversations is not available yet."
+        )
     contact = db.get(Contact, conversation.contact_id)
     lead = db.get(Lead, conversation.lead_id)
     if contact is None or lead is None:
@@ -389,6 +393,8 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
     conversation = find_conversation_by_phone(db, line.organization_id, caller)
     if conversation is None:
         conversation = create_inbound_call_lead(db, line, caller)
+    if conversation.lead_id is None:
+        raise VoiceConfigurationError("Inbound calling currently requires a lead conversation.")
     target_user_id = resolve_inbound_user(db, line, conversation.id)
     communication, call = create_call_records(
         db,
@@ -1049,6 +1055,7 @@ def find_conversation_by_phone(
         .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
         .where(
             Conversation.organization_id == organization_id,
+            Conversation.lead_id.is_not(None),
             ContactMethod.organization_id == organization_id,
             ContactMethod.method_type == "phone",
             ContactMethod.normalized_value.in_(values),

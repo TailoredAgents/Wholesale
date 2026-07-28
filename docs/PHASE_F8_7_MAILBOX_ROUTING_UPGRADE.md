@@ -77,6 +77,8 @@ From the right panel, an authorized user can:
 
 Goal: Evolve the existing conversation records without replacing them.
 
+Status: Complete in code on July 28, 2026.
+
 Work:
 
 - Add a conversation context classification: `lead`, `transaction`, `buyer`, or `general`.
@@ -95,9 +97,25 @@ Exit:
 - A general conversation can be created and can retain inbound or outbound email.
 - Migration rollback and production-backup restore are tested.
 
+Delivered:
+
+- Migration `0068_f8_mailbox_context` generalizes the existing records in place and backfills
+  every seller conversation with a primary lead-context link.
+- Conversations now support nullable lead context, type, team assignment, source alias, and
+  standard or restricted visibility.
+- Communication records, dispatches, and assignment events can exist without a seller lead.
+- Structured context links support leads, transactions, buyers, and disposition cases.
+- Structured email participants retain From, To, CC, BCC, contact, user, and sender-alias
+  relationships.
+- General conversations can persist inbound and outbound email without creating a fake lead.
+- The full API suite, application type check, and isolated PostgreSQL upgrade/downgrade/re-upgrade
+  cycle pass.
+
 ## Phase F8.7A.2: Deterministic Routing Engine
 
 Goal: Route new email predictably while retaining human control over uncertain matches.
+
+Status: Next.
 
 Routing precedence:
 

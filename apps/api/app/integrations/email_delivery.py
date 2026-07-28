@@ -16,7 +16,7 @@ class EmailProviderError(RuntimeError):
 
 @dataclass(frozen=True)
 class EmailDeliveryRequest:
-    lead_id: str
+    lead_id: str | None
     contact_id: str
     sender_name: str
     sender_email: str

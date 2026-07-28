@@ -14,7 +14,12 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.integrations.resend_email import ResendEmailDeliveryProvider
 from app.main import app
-from app.models.foundation import CommunicationDispatch, CommunicationRecord, Conversation
+from app.models.foundation import (
+    CommunicationDispatch,
+    CommunicationParticipant,
+    CommunicationRecord,
+    Conversation,
+)
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -219,6 +224,30 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
         communications[0].communication_metadata["email_sender_alias_id"]
         == alias_id
     )
+    participants = db_session.scalars(
+        select(CommunicationParticipant)
+        .where(
+            CommunicationParticipant.communication_record_id == communications[0].id
+        )
+        .order_by(
+            CommunicationParticipant.participant_role.asc(),
+            CommunicationParticipant.normalized_email.asc(),
+        )
+    ).all()
+    assert {
+        (participant.participant_role, participant.normalized_email)
+        for participant in participants
+    } == {
+        ("bcc", "audit@stonegatehb.com"),
+        ("cc", "conner@stonegatehb.com"),
+        ("from", "offers@stonegatehb.com"),
+        ("to", "seller@example.com"),
+    }
+    assert next(
+        participant
+        for participant in participants
+        if participant.participant_role == "from"
+    ).email_sender_alias_id == UUID(alias_id)
 
 
 def test_resend_failure_returns_gateway_error_and_marks_dispatch_failed(

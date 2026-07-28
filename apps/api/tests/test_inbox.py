@@ -12,10 +12,14 @@ from app.models.foundation import (
     CallRecord,
     CallRecording,
     CallTranscript,
+    CommunicationParticipant,
     CommunicationProviderEvent,
+    CommunicationRecord,
+    Contact,
     ContactMethod,
     Conversation,
     ConversationAssignmentEvent,
+    ConversationContextLink,
     ConversationWatcher,
     Lead,
     Organization,
@@ -25,7 +29,9 @@ from app.models.foundation import (
     UnderwritingVersion,
     User,
 )
+from app.services.communication_participants import record_email_participants
 from app.services.bootstrap import bootstrap_foundation
+from app.services.inbox import create_general_conversation, update_conversation_activity
 
 OWNER_EMAIL = "owner@example.com"
 VA_EMAIL = "caller@example.com"
@@ -484,6 +490,15 @@ def test_inbox_detail_combines_context_timeline_and_read_state(
         select(Conversation).where(Conversation.lead_id == UUID(lead_id))
     )
     assert conversation is not None
+    assert conversation.conversation_type == "lead"
+    context_link = db_session.scalar(
+        select(ConversationContextLink).where(
+            ConversationContextLink.conversation_id == conversation.id,
+            ConversationContextLink.lead_id == UUID(lead_id),
+        )
+    )
+    assert context_link is not None
+    assert context_link.is_primary is True
     db_session.add_all(
         [
             ContactMethod(
@@ -555,3 +570,117 @@ def test_inbox_detail_combines_context_timeline_and_read_state(
     )
     assert read_response.status_code == 200
     assert read_response.json()["unread_count"] == 0
+
+
+def test_general_conversation_retains_email_without_a_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, _va, _acquisitions = seed_workspace(db_session)
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Taylor Vendor",
+        preferred_name="Taylor",
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=owner.organization_id,
+            contact_id=contact.id,
+            method_type="email",
+            value="taylor@example.com",
+            normalized_value="taylor@example.com",
+            is_primary=True,
+        )
+    )
+    conversation = create_general_conversation(
+        db_session,
+        organization_id=owner.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=owner.id,
+    )
+    occurred_at = datetime.now(UTC)
+    communication = CommunicationRecord(
+        organization_id=owner.organization_id,
+        conversation_id=conversation.id,
+        lead_id=None,
+        contact_id=contact.id,
+        actor_user_id=None,
+        direction="inbound",
+        channel="email",
+        status="received",
+        provider="resend",
+        provider_message_id="general-inbound-1",
+        subject="General company question",
+        body="Can you send the requested company information?",
+        occurred_at=occurred_at,
+        external_payload={"id": "general-inbound-1"},
+        communication_metadata={"source": "test"},
+    )
+    db_session.add(communication)
+    db_session.flush()
+    participants = record_email_participants(
+        db_session,
+        communication,
+        from_values="Taylor Vendor <taylor@example.com>",
+        to_values="austin@stonegatehb.com",
+        external_contact_id=contact.id,
+        external_roles={"from"},
+        sender_user_id=None,
+        source="test",
+    )
+    update_conversation_activity(
+        conversation,
+        direction="inbound",
+        occurred_at=occurred_at,
+    )
+    db_session.commit()
+
+    assert conversation.lead_id is None
+    assert conversation.conversation_type == "general"
+    assert len(participants) == 2
+    assert {participant.participant_role for participant in participants} == {"from", "to"}
+    assert db_session.scalar(
+        select(CommunicationParticipant).where(
+            CommunicationParticipant.communication_record_id == communication.id,
+            CommunicationParticipant.participant_role == "from",
+        )
+    ).contact_id == contact.id
+    assignment = db_session.scalar(
+        select(ConversationAssignmentEvent).where(
+            ConversationAssignmentEvent.conversation_id == conversation.id
+        )
+    )
+    assert assignment is not None
+    assert assignment.lead_id is None
+
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    list_response = client.get("/api/v1/inbox/conversations", headers=headers)
+    assert list_response.status_code == 200
+    listed = next(
+        item
+        for item in list_response.json()["items"]
+        if item["id"] == str(conversation.id)
+    )
+    assert listed["conversation_type"] == "general"
+    assert listed["lead_id"] is None
+    assert listed["property_address"] == "General correspondence"
+
+    detail_response = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["seller_name"] == "Taylor Vendor"
+    assert detail["source"] is None
+    assert detail["stage_key"] is None
+    assert detail["open_tasks"] == []
+    assert detail["appointments"] == []
+    assert [item["subject"] for item in detail["timeline"] if item["channel"] == "email"] == [
+        "General company question"
+    ]

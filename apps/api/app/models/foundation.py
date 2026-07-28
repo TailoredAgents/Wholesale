@@ -941,17 +941,41 @@ class Conversation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "conversations"
     __table_args__ = (
         UniqueConstraint("organization_id", "lead_id", name="uq_conversations_org_lead"),
+        CheckConstraint(
+            "conversation_type IN ('lead', 'transaction', 'buyer', 'general')",
+            name="ck_conversations_type",
+        ),
+        CheckConstraint(
+            "conversation_type != 'lead' OR lead_id IS NOT NULL",
+            name="ck_conversations_lead_context",
+        ),
+        CheckConstraint(
+            "visibility_scope IN ('standard', 'restricted')",
+            name="ck_conversations_visibility_scope",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("leads.id", ondelete="CASCADE"), index=True
+    conversation_type: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="lead", index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="SET NULL"), index=True
     )
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id"), index=True
+    )
+    assigned_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("teams.id", ondelete="SET NULL"), index=True
+    )
+    source_alias_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("email_sender_aliases.id", ondelete="SET NULL"), index=True
+    )
+    visibility_scope: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="standard", index=True
     )
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     queue_key: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
@@ -1001,7 +1025,7 @@ class ConversationAssignmentEvent(UuidPrimaryKeyMixin, Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     previous_assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id")
@@ -1013,6 +1037,83 @@ class ConversationAssignmentEvent(UuidPrimaryKeyMixin, Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class ConversationContextLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "conversation_context_links"
+    __table_args__ = (
+        CheckConstraint(
+            "("
+            "context_type = 'lead' AND lead_id IS NOT NULL "
+            "AND transaction_id IS NULL AND buyer_id IS NULL AND disposition_case_id IS NULL"
+            ") OR ("
+            "context_type = 'transaction' AND lead_id IS NULL "
+            "AND transaction_id IS NOT NULL AND buyer_id IS NULL "
+            "AND disposition_case_id IS NULL"
+            ") OR ("
+            "context_type = 'buyer' AND lead_id IS NULL "
+            "AND transaction_id IS NULL AND buyer_id IS NOT NULL "
+            "AND disposition_case_id IS NULL"
+            ") OR ("
+            "context_type = 'disposition' AND lead_id IS NULL "
+            "AND transaction_id IS NULL AND buyer_id IS NULL "
+            "AND disposition_case_id IS NOT NULL"
+            ")",
+            name="ck_conversation_context_links_target",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "lead_id",
+            name="uq_conversation_context_links_lead",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "transaction_id",
+            name="uq_conversation_context_links_transaction",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "buyer_id",
+            name="uq_conversation_context_links_buyer",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            "disposition_case_id",
+            name="uq_conversation_context_links_disposition",
+        ),
+        Index(
+            "uq_conversation_context_links_primary",
+            "conversation_id",
+            unique=True,
+            postgresql_where=text("is_primary"),
+            sqlite_where=text("is_primary = 1"),
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    context_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="CASCADE"), index=True
+    )
+    transaction_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("transactions.id", ondelete="CASCADE"), index=True
+    )
+    buyer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("buyers.id", ondelete="CASCADE"), index=True
+    )
+    disposition_case_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    link_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -1059,7 +1160,7 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     conversation_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("conversations.id", ondelete="SET NULL"), index=True
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     direction: Mapped[str] = mapped_column(String(40), nullable=False)
@@ -1072,6 +1173,48 @@ class CommunicationRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     external_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     communication_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class CommunicationParticipant(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "communication_participants"
+    __table_args__ = (
+        CheckConstraint(
+            "participant_role IN ('from', 'to', 'cc', 'bcc', 'reply_to')",
+            name="ck_communication_participants_role",
+        ),
+        UniqueConstraint(
+            "communication_record_id",
+            "participant_role",
+            "normalized_email",
+            name="uq_communication_participants_message_role_email",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    communication_record_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("communication_records.id", ondelete="CASCADE"), index=True
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
+    )
+    contact_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("contacts.id", ondelete="SET NULL"), index=True
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    email_sender_alias_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("email_sender_aliases.id", ondelete="SET NULL"), index=True
+    )
+    participant_role: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    email_address: Mapped[str] = mapped_column(String(320), nullable=False)
+    normalized_email: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    participant_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
 
@@ -1092,7 +1235,7 @@ class CommunicationDispatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     conversation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("conversations.id", ondelete="CASCADE"), index=True
     )
-    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     contact_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("contacts.id"), index=True)
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     communication_record_id: Mapped[uuid.UUID | None] = mapped_column(

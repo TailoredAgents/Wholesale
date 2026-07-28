@@ -5,7 +5,7 @@ from typing import Protocol
 
 @dataclass(frozen=True)
 class OutboundMessageRequest:
-    lead_id: str
+    lead_id: str | None
     contact_id: str
     channel: str
     recipient: str

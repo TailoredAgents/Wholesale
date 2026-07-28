@@ -73,6 +73,10 @@ def send_conversation_sms(
         )
     ):
         raise PermissionError("SMS can only be sent from an assigned conversation.")
+    if conversation.lead_id is None:
+        raise SmsConfigurationError(
+            "SMS from general email conversations is not available yet."
+        )
 
     body = payload.body.strip()
     body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -536,6 +540,7 @@ def find_conversation_by_phone(
         .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
         .where(
             Conversation.organization_id == organization_id,
+            Conversation.lead_id.is_not(None),
             ContactMethod.organization_id == organization_id,
             ContactMethod.method_type == "phone",
             ContactMethod.normalized_value.in_(lookup_values),

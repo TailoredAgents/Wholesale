@@ -59,6 +59,7 @@ from app.schemas.email import (
     EmailTemplateRead,
     EmailTemplateUpdate,
 )
+from app.services.communication_participants import record_email_participants
 from app.services.document_storage import read_content
 from app.services.email_aliases import get_authorized_email_sender_alias
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
@@ -517,8 +518,8 @@ def send_conversation_email(
         sender_signature = account.signature_text
         sender_metadata = {"email_account_id": str(account.id)}
     contact = db.get(Contact, conversation.contact_id)
-    lead = db.get(Lead, conversation.lead_id)
-    if contact is None or lead is None:
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    if contact is None:
         return None
     recipient_method = db.scalar(
         select(ContactMethod)
@@ -577,7 +578,7 @@ def send_conversation_email(
     dispatch = CommunicationDispatch(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=conversation.lead_id,
         contact_id=contact.id,
         actor_user_id=principal.user_id,
         communication_record_id=None,
@@ -620,7 +621,7 @@ def send_conversation_email(
         )
         delivery_result = delivery_provider.send(
             EmailDeliveryRequest(
-                lead_id=str(lead.id),
+                lead_id=str(lead.id) if lead is not None else None,
                 contact_id=str(contact.id),
                 sender_name=sender_name,
                 sender_email=sender_email,
@@ -666,7 +667,7 @@ def send_conversation_email(
     communication = CommunicationRecord(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=conversation.lead_id,
         contact_id=contact.id,
         actor_user_id=principal.user_id,
         direction="outbound",
@@ -700,6 +701,19 @@ def send_conversation_email(
     )
     db.add(communication)
     db.flush()
+    record_email_participants(
+        db,
+        communication,
+        from_values=f"{sender_name} <{sender_email}>",
+        to_values=recipient,
+        cc_values=payload.cc,
+        bcc_values=payload.bcc,
+        external_contact_id=contact.id,
+        external_roles={"to"},
+        sender_user_id=principal.user_id,
+        sender_alias_ids=[alias.id] if alias is not None else [],
+        source="shared_inbox",
+    )
     completed_dispatch = db.get(CommunicationDispatch, dispatch_id)
     if completed_dispatch is None:
         raise RuntimeError("Email dispatch disappeared before completion.")
@@ -712,9 +726,9 @@ def send_conversation_email(
         ActivityEvent(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
-            entity_type="lead",
-            entity_id=lead.id,
-            event_type="lead.email_sent",
+            entity_type="lead" if lead is not None else "conversation",
+            entity_id=lead.id if lead is not None else conversation.id,
+            event_type="lead.email_sent" if lead is not None else "conversation.email_sent",
             summary=f"Email sent to {recipient}.",
         )
     )

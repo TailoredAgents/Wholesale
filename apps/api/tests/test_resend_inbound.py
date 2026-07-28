@@ -15,6 +15,7 @@ from app.core.config import Settings, get_settings
 from app.integrations.resend_email import ResendEmailDeliveryProvider
 from app.main import app
 from app.models.foundation import (
+    CommunicationParticipant,
     CommunicationProviderEvent,
     CommunicationRecord,
     Conversation,
@@ -275,6 +276,23 @@ def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
     assert inbound is not None
     assert inbound.conversation_id == conversation.id
     assert inbound.body == "Tuesday works for me."
+    participants = db_session.scalars(
+        select(CommunicationParticipant).where(
+            CommunicationParticipant.communication_record_id == inbound.id
+        )
+    ).all()
+    assert {
+        (participant.participant_role, participant.normalized_email)
+        for participant in participants
+    } == {
+        ("from", "seller@example.com"),
+        ("to", "offers@stonegatehb.com"),
+    }
+    assert next(
+        participant
+        for participant in participants
+        if participant.participant_role == "from"
+    ).contact_id == conversation.contact_id
     db_session.refresh(conversation)
     assert conversation.unread_count == 1
 

@@ -24,6 +24,7 @@ from app.models.foundation import (
     Lead,
     Organization,
 )
+from app.services.communication_participants import record_email_participants
 from app.services.document_storage import store_content
 from app.services.inbox import update_conversation_activity
 
@@ -199,16 +200,16 @@ def process_received_email(
     conversation = db.get(Conversation, UUID(str(route["conversation_id"])))
     if conversation is None:
         raise RuntimeError("Matched Resend conversation no longer exists.")
-    lead = db.get(Lead, conversation.lead_id)
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     contact = db.get(Contact, conversation.contact_id)
-    if lead is None or contact is None:
-        raise RuntimeError("Matched Resend conversation is missing lead context.")
+    if contact is None:
+        raise RuntimeError("Matched Resend conversation is missing contact context.")
     headers = normalized_headers(message.get("headers"))
     occurred_at = parse_datetime(message.get("created_at")) or datetime.now(UTC)
     communication = CommunicationRecord(
         organization_id=event.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=conversation.lead_id,
         contact_id=contact.id,
         actor_user_id=None,
         direction="inbound",
@@ -240,6 +241,21 @@ def process_received_email(
     )
     db.add(communication)
     db.flush()
+    record_email_participants(
+        db,
+        communication,
+        from_values=message.get("from"),
+        to_values=message.get("to"),
+        cc_values=message.get("cc"),
+        bcc_values=message.get("bcc"),
+        external_contact_id=contact.id,
+        external_roles={"from"},
+        sender_alias_ids=[
+            UUID(str(alias_id))
+            for alias_id in route["email_sender_alias_ids"]
+        ],
+        source="resend_receiving",
+    )
     retain_received_attachments(
         db,
         communication,
@@ -257,9 +273,13 @@ def process_received_email(
         ActivityEvent(
             organization_id=event.organization_id,
             actor_user_id=None,
-            entity_type="lead",
-            entity_id=lead.id,
-            event_type="lead.email_received",
+            entity_type="lead" if lead is not None else "conversation",
+            entity_id=lead.id if lead is not None else conversation.id,
+            event_type=(
+                "lead.email_received"
+                if lead is not None
+                else "conversation.email_received"
+            ),
             summary=f"Email received from {optional_string(message.get('from'))}.",
         )
     )
