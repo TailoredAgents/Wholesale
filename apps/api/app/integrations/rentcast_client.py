@@ -5,7 +5,18 @@ import httpx
 
 
 class RentCastClientError(RuntimeError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        operation: str,
+        status_code: int | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.operation = operation
+        self.status_code = status_code
+        self.error_code = error_code
 
 
 @dataclass(frozen=True)
@@ -70,18 +81,28 @@ class RentCastClient:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise RentCastClientError(parse_rentcast_error(exc.response)) from exc
+            raise rentcast_http_error(exc.response, operation="value estimate") from exc
         except httpx.HTTPError as exc:
-            raise RentCastClientError(f"RentCast request failed: {exc}") from exc
+            raise RentCastClientError(
+                f"RentCast value estimate request failed: {exc}",
+                operation="value estimate",
+            ) from exc
 
-        payload = response.json()
+        payload = parse_rentcast_json(response, operation="value estimate")
         if not isinstance(payload, dict):
-            raise RentCastClientError("RentCast returned an unexpected response shape.")
+            raise RentCastClientError(
+                "RentCast value estimate returned an unexpected response shape.",
+                operation="value estimate",
+                status_code=response.status_code,
+            )
 
         return value_estimate_from_payload(payload)
 
     def get_property_record(self, *, address: str) -> dict[str, Any]:
-        records = self._get_property_records({"address": address, "limit": 1})
+        records = self._get_property_records(
+            {"address": address, "limit": 1},
+            operation="property record",
+        )
         return records[0] if records else {}
 
     def get_recent_sales(
@@ -120,7 +141,7 @@ class RentCastClient:
                 max(1700, year_built - 25),
                 year_built + 25,
             )
-        return self._get_property_records(params)
+        return self._get_property_records(params, operation="recent sales")
 
     def get_rent_estimate(
         self,
@@ -135,32 +156,48 @@ class RentCastClient:
         mapped_property_type = map_property_type(property_type)
         if mapped_property_type:
             params["propertyType"] = mapped_property_type
-        payload = self._get_json("/avm/rent/long-term", params)
+        payload = self._get_json(
+            "/avm/rent/long-term",
+            params,
+            operation="rent estimate",
+        )
         return rent_estimate_from_payload(payload)
 
     def _get_property_records(
         self,
         params: dict[str, str | int | float | bool],
+        *,
+        operation: str,
     ) -> list[dict[str, Any]]:
-        payload = self._get_json_value("/properties", params)
+        payload = self._get_json_value("/properties", params, operation=operation)
         if not isinstance(payload, list):
-            raise RentCastClientError("RentCast returned an unexpected property-record response.")
+            raise RentCastClientError(
+                f"RentCast {operation} returned an unexpected response shape.",
+                operation=operation,
+            )
         return [record for record in payload if isinstance(record, dict)]
 
     def _get_json(
         self,
         path: str,
         params: dict[str, str | int | float | bool],
+        *,
+        operation: str,
     ) -> dict[str, Any]:
-        payload = self._get_json_value(path, params)
+        payload = self._get_json_value(path, params, operation=operation)
         if not isinstance(payload, dict):
-            raise RentCastClientError("RentCast returned an unexpected response shape.")
+            raise RentCastClientError(
+                f"RentCast {operation} returned an unexpected response shape.",
+                operation=operation,
+            )
         return payload
 
     def _get_json_value(
         self,
         path: str,
         params: dict[str, str | int | float | bool],
+        *,
+        operation: str,
     ) -> Any:
         try:
             response = httpx.get(
@@ -174,23 +211,69 @@ class RentCastClient:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            raise RentCastClientError(parse_rentcast_error(exc.response)) from exc
+            raise rentcast_http_error(exc.response, operation=operation) from exc
         except httpx.HTTPError as exc:
-            raise RentCastClientError(f"RentCast request failed: {exc}") from exc
-        return response.json()
+            raise RentCastClientError(
+                f"RentCast {operation} request failed: {exc}",
+                operation=operation,
+            ) from exc
+        return parse_rentcast_json(response, operation=operation)
 
 
 def parse_rentcast_error(response: httpx.Response) -> str:
+    message, _error_code = rentcast_error_details(response)
+    return message or f"RentCast returned HTTP {response.status_code}."
+
+
+def rentcast_http_error(
+    response: httpx.Response,
+    *,
+    operation: str,
+) -> RentCastClientError:
+    provider_message, error_code = rentcast_error_details(response)
+    qualifiers = [f"HTTP {response.status_code}"]
+    if error_code:
+        qualifiers.append(error_code)
+    message = f"RentCast {operation} failed ({', '.join(qualifiers)})"
+    if provider_message:
+        message = f"{message}: {provider_message}"
+    return RentCastClientError(
+        message,
+        operation=operation,
+        status_code=response.status_code,
+        error_code=error_code,
+    )
+
+
+def rentcast_error_details(response: httpx.Response) -> tuple[str | None, str | None]:
     try:
         payload = response.json()
     except ValueError:
         payload = None
     if isinstance(payload, dict):
-        for key in ("message", "error", "detail"):
+        error_code = payload.get("error")
+        normalized_error_code = (
+            error_code.strip()
+            if isinstance(error_code, str) and error_code.strip()
+            else None
+        )
+        for key in ("message", "detail"):
             value = payload.get(key)
             if isinstance(value, str) and value.strip():
-                return value
-    return f"RentCast returned HTTP {response.status_code}."
+                return value.strip(), normalized_error_code
+        return None, normalized_error_code
+    return None, None
+
+
+def parse_rentcast_json(response: httpx.Response, *, operation: str) -> Any:
+    try:
+        return response.json()
+    except ValueError as exc:
+        raise RentCastClientError(
+            f"RentCast {operation} returned invalid JSON (HTTP {response.status_code}).",
+            operation=operation,
+            status_code=response.status_code,
+        ) from exc
 
 
 def optional_int(value: Any) -> int | None:

@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import structlog
 from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -123,6 +124,8 @@ from app.services.underwriting_v2 import (
     UnderwritingV2Result,
     analyze_underwriting_v2,
 )
+
+logger = structlog.get_logger()
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
 COMMUNICATION_DIRECTIONS = {"inbound", "outbound", "internal"}
@@ -1539,6 +1542,15 @@ def create_lead_market_analysis(
                 year_built=optional_int(subject_facts.get("yearBuilt")),
             )
         except RentCastClientError as exc:
+            logger.warning(
+                "underwriting_market_data_failed",
+                lead_id=str(lead.id),
+                provider="rentcast",
+                operation=exc.operation,
+                provider_status_code=exc.status_code,
+                provider_error_code=exc.error_code,
+                error_message=str(exc),
+            )
             raise RuntimeError(str(exc)) from exc
 
         try:
@@ -1547,6 +1559,15 @@ def create_lead_market_analysis(
                 property_type=property_record.property_type,
             )
         except RentCastClientError as exc:
+            logger.warning(
+                "underwriting_optional_rent_data_failed",
+                lead_id=str(lead.id),
+                provider="rentcast",
+                operation=exc.operation,
+                provider_status_code=exc.status_code,
+                provider_error_code=exc.error_code,
+                error_message=str(exc),
+            )
             rent_error = str(exc)
 
     if subject_record:

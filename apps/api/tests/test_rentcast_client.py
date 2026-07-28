@@ -1,9 +1,10 @@
 from typing import Any
 
 import httpx
+import pytest
 from pytest import MonkeyPatch
 
-from app.integrations.rentcast_client import RentCastClient
+from app.integrations.rentcast_client import RentCastClient, RentCastClientError
 
 
 def test_recent_sales_uses_recorded_sale_filters(monkeypatch: MonkeyPatch) -> None:
@@ -57,3 +58,70 @@ def test_recent_sales_uses_recorded_sale_filters(monkeypatch: MonkeyPatch) -> No
         "squareFootage": "1440:2160",
         "yearBuilt": "1955:2005",
     }
+
+
+def test_value_estimate_error_preserves_provider_diagnostics(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    request = httpx.Request(
+        "GET",
+        "https://api.rentcast.io/v1/avm/value",
+    )
+    response = httpx.Response(
+        401,
+        request=request,
+        json={
+            "status": 401,
+            "error": "billing/subscription-inactive",
+            "message": "The API subscription is not active.",
+        },
+    )
+
+    def fake_get(*_args: object, **_kwargs: object) -> httpx.Response:
+        return response
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(RentCastClientError) as error:
+        RentCastClient(api_key="test-key").get_value_estimate(
+            address="123 Peachtree St, Atlanta, GA 30303",
+        )
+
+    assert error.value.operation == "value estimate"
+    assert error.value.status_code == 401
+    assert error.value.error_code == "billing/subscription-inactive"
+    assert str(error.value) == (
+        "RentCast value estimate failed "
+        "(HTTP 401, billing/subscription-inactive): "
+        "The API subscription is not active."
+    )
+
+
+def test_invalid_json_is_reported_as_provider_failure(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    request = httpx.Request(
+        "GET",
+        "https://api.rentcast.io/v1/properties",
+    )
+    response = httpx.Response(
+        200,
+        request=request,
+        text="<html>temporary provider response</html>",
+    )
+
+    def fake_get(*_args: object, **_kwargs: object) -> httpx.Response:
+        return response
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    with pytest.raises(RentCastClientError) as error:
+        RentCastClient(api_key="test-key").get_property_record(
+            address="123 Peachtree St, Atlanta, GA 30303",
+        )
+
+    assert error.value.operation == "property record"
+    assert error.value.status_code == 200
+    assert str(error.value) == (
+        "RentCast property record returned invalid JSON (HTTP 200)."
+    )
