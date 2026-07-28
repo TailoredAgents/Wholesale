@@ -54,7 +54,7 @@ Add these variables only to `oakwell-api`:
 | `TWILIO_API_KEY_SECRET` | New API key secret |
 | `TWILIO_TWIML_APP_SID` | Stonegate TwiML App SID starting with `AP` |
 | `TWILIO_VOICE_FROM_NUMBER` | `+16785417725` |
-| `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://oakwell-api.onrender.com` |
+| `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://api.stonegatehb.com` |
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
 | `TWILIO_VOICE_ENABLED` | Keep `false` until the activation steps are complete |
 | `TWILIO_VOICE_TOKEN_TTL_SECONDS` | `3600` |

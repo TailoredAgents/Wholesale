@@ -165,7 +165,7 @@ Acceptance:
 | `ESIGN_PROVIDER` | No | `oakwell-api` | Change from `disabled` to `signwell` |
 | `ESIGN_API_KEY` | Yes | `oakwell-api` | SignWell API settings |
 | `ESIGN_BASE_URL` | No | `oakwell-api` | `https://www.signwell.com/api/v1` |
-| `ESIGN_WEBHOOK_CALLBACK_URL` | No | `oakwell-api` | `https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell` |
+| `ESIGN_WEBHOOK_CALLBACK_URL` | No | `oakwell-api` | `https://api.stonegatehb.com/api/v1/webhooks/esign/signwell` |
 | `ESIGN_SIGNWELL_WEBHOOK_ID` | Legacy fallback | `oakwell-api` | Leave blank when using Stonegate's connection action |
 | `ESIGN_TEST_MODE` | No | `oakwell-api` | `true` until controlled acceptance passes |
 
@@ -274,7 +274,7 @@ objects.
 | `TWILIO_SMS_FROM_NUMBER` | No | API | Campaign-approved SMS sender |
 | `TWILIO_VOICE_FROM_NUMBER` | No | API | Company Voice number |
 | `TWILIO_TWIML_APP_SID` | Sensitive identifier | API | Browser Voice TwiML application |
-| `TWILIO_WEBHOOK_BASE_URL` | No | API | `https://oakwell-api.onrender.com` |
+| `TWILIO_WEBHOOK_BASE_URL` | No | API | `https://api.stonegatehb.com` |
 
 Activation switches remain `false` until their individual acceptance tests pass:
 

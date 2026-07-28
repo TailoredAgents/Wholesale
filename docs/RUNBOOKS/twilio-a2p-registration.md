@@ -55,7 +55,7 @@ The Voice line remains independently configured through `TWILIO_VOICE_FROM_NUMBE
 5. Enable Twilio's standard or Advanced Opt-Out behavior for STOP, START, and HELP.
 6. Configure incoming messages as HTTP `POST` to:
 
-   `https://oakwell-api.onrender.com/api/v1/webhooks/twilio/messaging/incoming`
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/incoming`
 
 7. Enter the new Messaging Service SID and new SMS number on `oakwell-api`.
 8. Confirm `TWILIO_AUTH_TOKEN` is the actual Auth Token, not the Account SID.

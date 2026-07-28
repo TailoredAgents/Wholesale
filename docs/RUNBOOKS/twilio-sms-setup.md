@@ -37,7 +37,7 @@ Add these environment variables only to the API service:
 | `TWILIO_AUTH_TOKEN` | Auth Token from Twilio |
 | `TWILIO_MESSAGING_SERVICE_SID` | Messaging Service SID from Twilio |
 | `TWILIO_SMS_FROM_NUMBER` | Newly purchased, campaign-approved Stonegate SMS number in E.164 format |
-| `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://oakwell-api.onrender.com` |
+| `TWILIO_WEBHOOK_BASE_URL` | Public API origin, such as `https://api.stonegatehb.com` |
 | `TWILIO_VALIDATE_WEBHOOK_SIGNATURES` | `true` |
 | `TWILIO_SMS_ENABLED` | `true` after the remaining steps are complete |
 | `TWILIO_SMS_TIMEZONE` | `America/New_York` |

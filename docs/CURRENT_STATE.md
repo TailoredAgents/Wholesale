@@ -40,7 +40,7 @@ Current public URLs:
 - Cash-offer form: `https://oakwell-web.onrender.com/get-a-cash-offer`
 - Privacy policy: `https://oakwell-web.onrender.com/privacy-policy`
 - Terms: `https://oakwell-web.onrender.com/terms`
-- API health: `https://oakwell-api.onrender.com/health`
+- API health: `https://api.stonegatehb.com/health`
 
 The branded web domain is active. The Render URLs remain valid as deployment fallbacks. Both web
 origins must remain in `API_CORS_ORIGINS` and `CLERK_AUTHORIZED_PARTIES`.

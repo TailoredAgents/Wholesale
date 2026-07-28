@@ -35,7 +35,7 @@ Set these values on the `oakwell-api` service:
 ESIGN_PROVIDER=signwell
 ESIGN_API_KEY=<SignWell API key>
 ESIGN_BASE_URL=https://www.signwell.com/api/v1
-ESIGN_WEBHOOK_CALLBACK_URL=https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
+ESIGN_WEBHOOK_CALLBACK_URL=https://api.stonegatehb.com/api/v1/webhooks/esign/signwell
 ESIGN_TEST_MODE=true
 ESIGN_REQUEST_TIMEOUT_SECONDS=30
 ```

@@ -35,9 +35,9 @@ variable names, service placement, activation status, and acceptance checks.
 
 - Branded web and OS: `https://www.stonegatehb.com`
 - Web: `https://oakwell-web.onrender.com`
-- API: `https://oakwell-api.onrender.com`
-- Health: `https://oakwell-api.onrender.com/health`
-- Readiness: `https://oakwell-api.onrender.com/ready`
+- API: `https://api.stonegatehb.com`
+- Health: `https://api.stonegatehb.com/health`
+- Readiness: `https://api.stonegatehb.com/ready`
 
 ## Pending Deployment Work
 

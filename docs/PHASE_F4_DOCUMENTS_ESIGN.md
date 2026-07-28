@@ -101,7 +101,7 @@ Do not set scanning to required until the scanner is reachable from the API serv
 ESIGN_PROVIDER=signwell
 ESIGN_API_KEY=<signwell-api-key>
 ESIGN_BASE_URL=https://www.signwell.com/api/v1
-ESIGN_WEBHOOK_CALLBACK_URL=https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
+ESIGN_WEBHOOK_CALLBACK_URL=https://api.stonegatehb.com/api/v1/webhooks/esign/signwell
 ESIGN_TEST_MODE=true
 ESIGN_REQUEST_TIMEOUT_SECONDS=30
 ```

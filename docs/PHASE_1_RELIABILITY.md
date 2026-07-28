@@ -68,7 +68,7 @@ group.
 Production API readiness requires a fresh worker heartbeat. Use:
 
 ```bash
-curl --fail https://oakwell-api.onrender.com/ready
+curl --fail https://api.stonegatehb.com/ready
 ```
 
 Set `OPERATIONS_ALERT_WEBHOOK_URL` only on `oakwell-worker`. The worker sends a minimal JSON event
@@ -130,7 +130,7 @@ and then at least quarterly.
 After each Render deployment:
 
 ```bash
-API_BASE_URL='https://oakwell-api.onrender.com' \
+API_BASE_URL='https://api.stonegatehb.com' \
 WEB_BASE_URL='https://oakwell-web.onrender.com' \
 npm run ops:smoke
 ```

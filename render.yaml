@@ -7,9 +7,9 @@ services:
     startCommand: npm run start
     envVars:
       - key: API_BASE_URL
-        sync: false
+        value: https://api.stonegatehb.com
       - key: NEXT_PUBLIC_API_BASE_URL
-        sync: false
+        value: https://api.stonegatehb.com
       - key: NEXT_PUBLIC_SITE_URL
         value: https://www.stonegatehb.com
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
@@ -137,7 +137,7 @@ services:
       - key: RESEND_DEFAULT_FROM_EMAIL
         value: offers@stonegatehb.com
       - key: RESEND_WEBHOOK_BASE_URL
-        value: https://oakwell-api.onrender.com
+        value: https://api.stonegatehb.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET
@@ -179,7 +179,7 @@ services:
       - key: ESIGN_SIGNWELL_WEBHOOK_ID
         sync: false
       - key: ESIGN_WEBHOOK_CALLBACK_URL
-        value: https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell
+        value: https://api.stonegatehb.com/api/v1/webhooks/esign/signwell
       - key: ESIGN_TEST_MODE
         value: true
       - key: ESIGN_REQUEST_TIMEOUT_SECONDS
@@ -251,7 +251,7 @@ services:
       - key: TWILIO_SMS_FROM_NUMBER
         sync: false
       - key: TWILIO_WEBHOOK_BASE_URL
-        sync: false
+        value: https://api.stonegatehb.com
       - key: TWILIO_VALIDATE_WEBHOOK_SIGNATURES
         value: true
       - key: TWILIO_SMS_TIMEZONE
@@ -402,7 +402,7 @@ services:
       - key: RESEND_DEFAULT_FROM_EMAIL
         value: offers@stonegatehb.com
       - key: RESEND_WEBHOOK_BASE_URL
-        value: https://oakwell-api.onrender.com
+        value: https://api.stonegatehb.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET

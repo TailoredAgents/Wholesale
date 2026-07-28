@@ -156,7 +156,7 @@ Production operations:
 DATABASE_URL='...' npm run db:backup
 RESTORE_DATABASE_URL='...stonegate_restore_test' ALLOW_RESTORE_TEST=true \
   npm run db:restore-verify -- .backups/stonegate-YYYYMMDDTHHMMSSZ.dump
-API_BASE_URL='https://oakwell-api.onrender.com' \
+API_BASE_URL='https://api.stonegatehb.com' \
 WEB_BASE_URL='https://oakwell-web.onrender.com' npm run ops:smoke
 ```
 
@@ -183,7 +183,7 @@ CI is defined in `.github/workflows/ci.yml`. Branch protection and labels are do
 `main` deploys through the Render Blueprint. Public staging is currently available at:
 
 - Website: https://oakwell-web.onrender.com
-- API health: https://oakwell-api.onrender.com/health
+- API health: https://api.stonegatehb.com/health
 
 The `oakwell-*` names are existing infrastructure identifiers, not a second product. Keep customer
 copy branded as Stonegate Home Buyers. Use `docs/RENDER_DEPLOYMENT.md` and the provider runbooks

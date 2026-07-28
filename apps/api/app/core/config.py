@@ -273,7 +273,7 @@ class Settings(BaseSettings):
         validation_alias="ESIGN_SIGNWELL_WEBHOOK_ID",
     )
     esign_webhook_callback_url: str = Field(
-        default="https://oakwell-api.onrender.com/api/v1/webhooks/esign/signwell",
+        default="https://api.stonegatehb.com/api/v1/webhooks/esign/signwell",
         validation_alias="ESIGN_WEBHOOK_CALLBACK_URL",
     )
     esign_test_mode: bool = Field(default=True, validation_alias="ESIGN_TEST_MODE")
