@@ -13,6 +13,7 @@ from app.models.foundation import (
     CallRecord,
     CallRecording,
     CallTranscript,
+    CommunicationDispatch,
     CommunicationRecord,
     Contact,
     ContactMethod,
@@ -280,6 +281,21 @@ def get_conversation_detail(
         attachments_by_communication_id.setdefault(
             attachment.communication_record_id, []
         ).append(attachment)
+    dispatches = (
+        db.scalars(
+            select(CommunicationDispatch).where(
+                CommunicationDispatch.organization_id == principal.organization_id,
+                CommunicationDispatch.communication_record_id.in_(communication_ids),
+            )
+        ).all()
+        if communication_ids
+        else []
+    )
+    dispatch_by_communication_id = {
+        dispatch.communication_record_id: dispatch
+        for dispatch in dispatches
+        if dispatch.communication_record_id is not None
+    }
     calls = (
         db.scalars(
             select(CallRecord).where(
@@ -398,6 +414,11 @@ def get_conversation_detail(
             channel=item.channel,
             status=item.status,
             provider=item.provider,
+            status_detail=(
+                dispatch_by_communication_id[item.id].error_message
+                if item.id in dispatch_by_communication_id
+                else None
+            ),
             subject=item.subject,
             body=item.body,
             actor_user_id=item.actor_user_id,

@@ -45,6 +45,7 @@ def create_user(
     *,
     email: str,
     display_name: str,
+    role_key: str = "acquisition_rep",
 ) -> dict[str, Any]:
     response = client.post(
         "/api/v1/operations/users",
@@ -52,7 +53,7 @@ def create_user(
         json={
             "email": email,
             "display_name": display_name,
-            "role_key": "acquisition_rep",
+            "role_key": role_key,
         },
     )
     assert response.status_code == 201, response.text
@@ -80,6 +81,25 @@ def test_owner_manages_provider_neutral_aliases_and_sender_access(
         email="other.login@example.com",
         display_name="Other Closer",
     )
+    va = create_user(
+        client,
+        email="va.login@example.com",
+        display_name="VA Caller",
+        role_key="prospecting_caller",
+    )
+    admin_options = client.get("/api/v1/email/admin/options", headers=OWNER_HEADERS)
+    assert admin_options.status_code == 200, admin_options.text
+    assert {item["display_name"] for item in admin_options.json()["users"]} == {
+        "Austin",
+        "Devon",
+        "Other Closer",
+        "VA Caller",
+    }
+    forbidden_options = client.get(
+        "/api/v1/email/admin/options",
+        headers={"X-Dev-User-Email": "devon.login@example.com"},
+    )
+    assert forbidden_options.status_code == 403
 
     named_response = client.post(
         "/api/v1/email/aliases",
@@ -144,6 +164,22 @@ def test_owner_manages_provider_neutral_aliases_and_sender_access(
     )
     assert grant_response.status_code == 200, grant_response.text
     assert grant_response.json()["grants"][0]["user_name"] == "Devon"
+    va_grant = client.put(
+        f"/api/v1/email/aliases/{offers['id']}/grants",
+        headers=OWNER_HEADERS,
+        json={
+            "user_id": va["id"],
+            "access_level": "watcher",
+            "can_send": True,
+            "receives_notifications": True,
+        },
+    )
+    assert va_grant.status_code == 200, va_grant.text
+    va_aliases = client.get(
+        "/api/v1/email/aliases",
+        headers={"X-Dev-User-Email": "va.login@example.com"},
+    )
+    assert va_aliases.status_code == 403
 
     devon_list = client.get(
         "/api/v1/email/aliases",
@@ -206,7 +242,7 @@ def test_owner_manages_provider_neutral_aliases_and_sender_access(
     )
     assert (
         db_session.scalar(select(func.count()).select_from(EmailSenderGrant))
-        == 0
+        == 1
     )
     assert (
         db_session.scalar(

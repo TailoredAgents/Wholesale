@@ -186,11 +186,30 @@ Exit:
 
 Owner: Codex.
 
+Status: **Complete in code on July 27, 2026. Production email remains disabled.**
+
 - Replace Google connection controls with owner-managed alias controls.
 - Add authorized From selection, signatures, routing owners, watchers, status, and failure detail.
 - Support the initial team map and the later Devon-to-Michael routing change without rewriting
   history.
 - Keep VAs limited to their assigned role and conversations.
+
+Implemented:
+
+- The Shared Inbox now loads authorized Stonegate aliases instead of legacy Google accounts and
+  sends with `email_sender_alias_id`.
+- Each user sees only active aliases available through ownership, team membership, direct sender
+  grants, or email-administrator authority. VA callers remain outside the email APIs.
+- The owner administration dialog creates and updates named, department, and contractor aliases;
+  controls status, inbound/outbound use, defaults, owners, teams, signatures, and direct sender or
+  watcher grants; and shows current Resend readiness without exposing secrets.
+- Unmatched and ambiguous Resend email appears in an owner-only routing queue. Manual assignment
+  records an audit event and returns the durable provider event to the worker for normal import.
+- Inbox messages show provider lifecycle status and retained dispatch failure detail.
+- Alias reassignment updates the current route while preserving prior audit and communication
+  history, including the planned Devon-to-Michael transition.
+- Focused tests cover owner-only administration, active-user options, VA denial, manual exception
+  routing, normal import after resolution, and the existing sender authorization boundaries.
 
 Exit:
 

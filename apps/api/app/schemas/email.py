@@ -132,6 +132,44 @@ class EmailSenderAliasListResponse(BaseModel):
     configuration_blockers: list[str]
 
 
+class EmailAdminUserRead(BaseModel):
+    id: UUID
+    email: str
+    display_name: str
+    role_keys: list[str]
+
+
+class EmailAdminTeamRead(BaseModel):
+    id: UUID
+    name: str
+    team_type: str
+
+
+class EmailAdminOptionsRead(BaseModel):
+    users: list[EmailAdminUserRead]
+    teams: list[EmailAdminTeamRead]
+
+
+class EmailRoutingExceptionRead(BaseModel):
+    id: UUID
+    processing_status: str
+    provider_message_id: str
+    sender: str
+    recipients: list[str]
+    subject: str | None
+    received_at: datetime
+    reason: str
+    candidate_conversation_ids: list[UUID]
+
+
+class EmailRoutingExceptionListResponse(BaseModel):
+    items: list[EmailRoutingExceptionRead]
+
+
+class EmailRoutingResolutionRequest(BaseModel):
+    conversation_id: UUID
+
+
 class EmailTemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     subject_template: str = Field(min_length=1, max_length=255)

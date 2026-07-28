@@ -4,11 +4,12 @@ Last updated: July 27, 2026
 
 ## Status
 
-Resend is selected as Stonegate's operational email provider. F8.2-F8.4 have implemented the
+Resend is selected as Stonegate's operational email provider. F8.2-F8.5 have implemented the
 provider-neutral delivery boundary, company alias and sender-grant records, owner APIs,
 provider-specific configuration, outbound delivery, signed inbound processing, durable
-attachments, lifecycle events, and missed-webhook recovery. Live sending and receiving remain
-disabled until Inbox administration and F8.6-F8.7 provider acceptance are complete.
+attachments, lifecycle events, missed-webhook recovery, authorized Inbox senders, owner
+administration, and manual routing review. Live sending and receiving remain disabled until
+F8.6-F8.7 provider setup and acceptance are complete.
 
 The existing Google Workspace/Gmail OAuth implementation remains disabled and is superseded. Do
 not configure Google OAuth or enable Gmail synchronization.
@@ -104,8 +105,8 @@ The adapter now:
 - Never expose the API key to the browser.
 
 Delivery, delay, bounce, complaint, and suppression transitions are reconciled through the F8.4
-signed webhook processor. Live outbound stays disabled until Inbox administration and provider
-acceptance are ready.
+signed webhook processor. Live outbound stays disabled until provider setup and acceptance are
+ready.
 
 ## Inbound Implementation
 
@@ -118,11 +119,28 @@ The webhook and worker now:
 - Retrieve full message content through the Receiving API.
 - Retrieve authorized attachments before temporary URLs expire.
 - Route using recipient alias, sender, reply headers, and retained provider IDs.
-- Retain unmatched and ambiguous events for the F8.5 owner review interface instead of guessing.
+- Retain unmatched and ambiguous events for the owner review interface instead of guessing.
 - Preserve the original provider event and normalized communication record separately.
 
 The worker uses cursor pagination to list received emails and creates a durable synthetic provider
 event for an email missed during an outage.
+
+## Inbox Administration
+
+The Inbox uses Stonegate aliases, not connected employee mailboxes.
+
+- Staff select only aliases authorized through ownership, team membership, or a direct grant.
+- The selected alias supplies the display name, From address, and signature.
+- Austin opens **Email administration** from the Inbox email status button.
+- **Senders** manages aliases, routing owners, teams, signatures, defaults, channel status, and
+  direct sender or watcher grants.
+- **Routing** lists unmatched and ambiguous inbound email. Selecting the correct seller
+  conversation returns the durable event to the worker for normal import and records the manual
+  decision in the audit trail.
+- Provider lifecycle and failure details appear on the relevant Inbox timeline message.
+
+Changing an alias owner or team changes future routing without rewriting prior messages, grants,
+or audit evidence.
 
 ## Delivery Events
 

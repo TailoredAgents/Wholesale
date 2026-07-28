@@ -530,8 +530,10 @@ Implementation checkpoint, July 27, 2026:
 - F8.4 is complete in code: signed durable webhook intake, received body and attachment retrieval,
   exact and bounded fallback routing, unmatched review records, lifecycle reconciliation,
   replay-safe processing, and cursor-based recovery are implemented.
-- Inbox administration, DNS, credentials, webhook registration, acceptance, and launch remain in
-  F8.5 through F8.8.
+- F8.5 is complete in code: authorized From selection, owner-managed aliases and grants,
+  signatures, provider and failure status, VA boundaries, and owner routing-exception resolution
+  are implemented.
+- DNS, credentials, webhook registration, acceptance, and launch remain in F8.6 through F8.8.
 
 Architecture:
 

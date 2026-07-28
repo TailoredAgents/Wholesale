@@ -1,0 +1,583 @@
+.backdrop {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  padding: 24px;
+  background: rgba(16, 25, 27, 0.58);
+  display: grid;
+  place-items: center;
+}
+
+.panel {
+  width: min(1080px, 100%);
+  height: min(820px, calc(100vh - 48px));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.header {
+  min-height: 68px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.header span,
+.editorHeading span,
+.sectionHeading span,
+.routingHeading span {
+  color: var(--brand);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.header h2,
+.editorHeading h3,
+.routingHeading h3 {
+  margin: 0;
+  color: var(--text);
+  letter-spacing: 0;
+}
+
+.header h2 {
+  font-size: 20px;
+}
+
+.header > button {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.providerStatus {
+  min-height: 48px;
+  padding: 9px 18px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--amber-soft);
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.providerStatus[data-ready="true"] {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.providerStatus > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.providerStatus strong {
+  font-size: 12px;
+}
+
+.providerStatus span {
+  overflow: hidden;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabs {
+  min-height: 46px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: end;
+  gap: 18px;
+}
+
+.tabs button {
+  min-height: 45px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected="true"] {
+  border-bottom-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.tabs button span {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+}
+
+.error,
+.success {
+  margin: 0;
+  padding: 9px 18px;
+  border-bottom: 1px solid;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.error {
+  border-color: #e5b8af;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.success {
+  border-color: #c6d9cd;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.senderWorkspace {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+}
+
+.senderList {
+  min-height: 0;
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.senderList > button {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.senderList > button[aria-current="true"] {
+  border-color: #bcd4c5;
+  background: var(--brand-soft);
+}
+
+.senderList > button span {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.senderList > button small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.senderList > button em {
+  width: fit-content;
+  color: var(--brand);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.senderList > button em[data-status="disabled"] {
+  color: var(--danger);
+}
+
+.senderList .addSender {
+  min-height: 38px;
+  margin-bottom: 5px;
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--brand-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-weight: 850;
+}
+
+.editor {
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.editor > form {
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.editorHeading,
+.sectionHeading,
+.routingHeading {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.editorHeading > div,
+.sectionHeading > div,
+.routingHeading > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.editorHeading h3,
+.routingHeading h3 {
+  overflow: hidden;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editorHeading button,
+.grantControls button,
+.routing article > div button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.editorHeading button:disabled,
+.grantControls button:disabled,
+.routing article > div button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formGrid label,
+.signature {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.formGrid label > span,
+.signature > span {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.formGrid input,
+.formGrid select,
+.signature textarea,
+.grantControls select,
+.routing select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.signature {
+  margin-top: 14px;
+}
+
+.signature textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+.toggleRow {
+  margin-top: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.toggleRow label {
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.toggleRow input {
+  accent-color: var(--brand);
+}
+
+.access {
+  padding: 18px;
+}
+
+.sectionHeading {
+  margin-bottom: 12px;
+  color: var(--brand);
+}
+
+.sectionHeading strong {
+  font-size: 13px;
+}
+
+.grantControls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px auto;
+  gap: 8px;
+}
+
+.grantList {
+  margin-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.grantList > div {
+  min-height: 48px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grantList > div > span {
+  display: grid;
+  gap: 2px;
+}
+
+.grantList strong {
+  font-size: 12px;
+}
+
+.grantList small,
+.grantList p {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.grantList button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--danger);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.routing {
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.routingHeading > strong {
+  min-width: 34px;
+  height: 34px;
+  border-radius: 17px;
+  background: var(--surface-muted);
+  color: var(--text-soft);
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+}
+
+.routing article {
+  margin-bottom: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.routing article header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.routing article header > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.routing article header strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.routing article header span,
+.routing article p {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.routing article em {
+  color: var(--amber);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.routing article p {
+  margin: 10px 0;
+}
+
+.routing article > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.routingEmpty {
+  min-height: 230px;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.routingEmpty svg {
+  color: var(--brand);
+}
+
+.routingEmpty strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.routingEmpty span {
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .backdrop {
+    padding: 0;
+  }
+
+  .panel {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .senderWorkspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow: hidden;
+  }
+
+  .senderList {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px;
+    display: flex;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .senderList > button {
+    min-width: 156px;
+    padding: 8px;
+  }
+
+  .senderList .addSender {
+    min-width: 112px;
+    margin: 0;
+  }
+
+  .editor {
+    min-height: 0;
+  }
+
+  .formGrid,
+  .grantControls {
+    grid-template-columns: 1fr;
+  }
+
+  .editor > form,
+  .access,
+  .routing {
+    padding: 14px;
+  }
+
+  .routing article > div {
+    grid-template-columns: 1fr;
+  }
+}

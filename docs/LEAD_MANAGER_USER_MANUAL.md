@@ -140,7 +140,7 @@ The middle of the Inbox contains the full timeline. It can include:
 Use the correct composer:
 
 - **SMS:** Send a text when SMS is configured and allowed.
-- **Email:** Send an email when the mailbox is connected.
+- **Email:** Select an authorized Stonegate From address and send when email is enabled.
 - **Call:** Start or record a call.
 - **Note:** Add internal information that the seller must not receive.
 

@@ -1,7 +1,7 @@
 import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
@@ -140,15 +140,18 @@ def signed_webhook(
     occurred_at = timestamp or datetime.now(UTC)
     body = json.dumps(payload, separators=(",", ":"))
     signature = Webhook(WEBHOOK_SECRET).sign(event_id, occurred_at, body)
-    return client.post(
-        "/api/v1/webhooks/resend",
-        content=body,
-        headers={
-            "content-type": "application/json",
-            "svix-id": event_id,
-            "svix-timestamp": str(int(occurred_at.timestamp())),
-            "svix-signature": signature,
-        },
+    return cast(
+        httpx.Response,
+        client.post(
+            "/api/v1/webhooks/resend",
+            content=body,
+            headers={
+                "content-type": "application/json",
+                "svix-id": event_id,
+                "svix-timestamp": str(int(occurred_at.timestamp())),
+                "svix-signature": signature,
+            },
+        ),
     )
 
 
@@ -454,4 +457,36 @@ def test_unmatched_inbound_email_stays_in_the_review_queue(
             .where(CommunicationRecord.provider_message_id == "unmatched-1")
         )
         == 0
+    )
+
+    exceptions = client.get(
+        "/api/v1/email/routing-exceptions",
+        headers=OWNER_HEADERS,
+    )
+    assert exceptions.status_code == 200, exceptions.text
+    assert exceptions.json()["items"][0]["id"] == str(event.id)
+    resolved = client.post(
+        f"/api/v1/email/routing-exceptions/{event.id}/resolve",
+        headers=OWNER_HEADERS,
+        json={"conversation_id": str(db_session.scalar(select(Conversation.id)))},
+    )
+    assert resolved.status_code == 200, resolved.text
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    routed = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "unmatched-1"
+        )
+    )
+    assert routed is not None
+    assert routed.conversation_id == db_session.scalar(select(Conversation.id))
+    assert (
+        client.get(
+            "/api/v1/email/routing-exceptions",
+            headers=OWNER_HEADERS,
+        ).json()["items"]
+        == []
     )

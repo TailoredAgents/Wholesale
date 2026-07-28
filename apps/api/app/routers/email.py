@@ -16,7 +16,11 @@ from app.schemas.email import (
     EmailAccountListResponse,
     EmailAccountRead,
     EmailAccountUpdate,
+    EmailAdminOptionsRead,
     EmailOAuthAuthorizeRead,
+    EmailRoutingExceptionListResponse,
+    EmailRoutingExceptionRead,
+    EmailRoutingResolutionRequest,
     EmailSendRead,
     EmailSendRequest,
     EmailSenderAliasCreate,
@@ -29,13 +33,6 @@ from app.schemas.email import (
     EmailTemplateListResponse,
     EmailTemplateRead,
     EmailTemplateUpdate,
-)
-from app.services.email_aliases import (
-    create_email_sender_alias,
-    grant_email_sender_access,
-    list_email_sender_aliases,
-    revoke_email_sender_access,
-    update_email_sender_alias,
 )
 from app.services.email import (
     EmailAttachmentError,
@@ -53,6 +50,18 @@ from app.services.email import (
     sync_email_account,
     update_email_account,
     update_email_template,
+)
+from app.services.email_admin import (
+    get_email_admin_options,
+    list_email_routing_exceptions,
+    resolve_email_routing_exception,
+)
+from app.services.email_aliases import (
+    create_email_sender_alias,
+    grant_email_sender_access,
+    list_email_sender_aliases,
+    revoke_email_sender_access,
+    update_email_sender_alias,
 )
 
 router = APIRouter(prefix="/api/v1/email", tags=["email"])
@@ -143,6 +152,44 @@ def delete_email_sender_grant(
     if alias is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Email alias not found.")
     return alias
+
+
+@router.get("/admin/options")
+def read_email_admin_options(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailAdminOptionsRead:
+    return get_email_admin_options(db, principal)
+
+
+@router.get("/routing-exceptions")
+def read_email_routing_exceptions(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailRoutingExceptionListResponse:
+    return list_email_routing_exceptions(db, principal)
+
+
+@router.post("/routing-exceptions/{event_id}/resolve")
+def resolve_resend_routing_exception(
+    event_id: UUID,
+    payload: EmailRoutingResolutionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailRoutingExceptionRead:
+    try:
+        event = resolve_email_routing_exception(db, principal, event_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Email routing exception not found.",
+        )
+    return event
 
 
 @router.post("/oauth/google/authorize")

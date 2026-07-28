@@ -40,6 +40,7 @@ class ConversationTimelineItemRead(BaseModel):
     channel: str
     status: str
     provider: str | None
+    status_detail: str | None = None
     subject: str | None
     body: str
     actor_user_id: UUID | None

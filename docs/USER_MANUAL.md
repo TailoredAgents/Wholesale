@@ -382,6 +382,18 @@ Composer modes:
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
 
+For email, select only the Stonegate From address appropriate to the conversation. The system
+shows only addresses authorized for your account and applies that address's approved signature.
+Delivery status and any retained provider failure appear on the timeline message.
+
+Owners can click the email status control to open **Email administration**:
+
+- **Senders** controls company addresses, owners, teams, signatures, defaults, and direct sender
+  or watcher access.
+- **Routing** lists inbound email that could not be matched safely. Review the sender and subject,
+  select the correct seller conversation, and assign it. Never guess when the correct lead is not
+  clear.
+
 If SMS, Voice, or email reports that it is not configured, use the approved manual contact process
 and log the communication. Do not put another company's credentials or numbers into Stonegate.
 

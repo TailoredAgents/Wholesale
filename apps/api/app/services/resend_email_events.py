@@ -178,7 +178,14 @@ def process_received_email(
         return
 
     message = provider.retrieve_received_email(provider_message_id)
-    route = resolve_inbound_route(db, event.organization_id, message)
+    stored_route = event.payload.get("_routing")
+    route = (
+        stored_route
+        if isinstance(stored_route, dict)
+        and stored_route.get("status") == "matched"
+        and stored_route.get("conversation_id")
+        else resolve_inbound_route(db, event.organization_id, message)
+    )
     event.payload = {
         **event.payload,
         "_routing": route,

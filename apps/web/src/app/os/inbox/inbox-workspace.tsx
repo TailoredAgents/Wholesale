@@ -38,6 +38,10 @@ import {
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  EmailAdminPanel,
+  type EmailSenderAlias,
+} from "./email-admin-panel";
 import styles from "./inbox.module.css";
 
 type Me = {
@@ -83,6 +87,7 @@ type TimelineItem = {
   channel: string;
   status: string;
   provider: string | null;
+  status_detail: string | null;
   subject: string | null;
   body: string;
   actor_user_id: string | null;
@@ -211,21 +216,6 @@ type Assignee = {
   email: string;
   display_name: string;
   role_keys: string[];
-};
-
-type EmailAccount = {
-  id: string;
-  user_id: string;
-  provider: string;
-  email_address: string;
-  display_name: string;
-  status: string;
-  is_shared: boolean;
-  sync_enabled: boolean;
-  last_synced_at: string | null;
-  last_error: string | null;
-  signature_text: string | null;
-  is_owned_by_current_user: boolean;
 };
 
 type EmailTemplate = {
@@ -659,18 +649,16 @@ export function InboxWorkspace({
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [detail, setDetail] = useState<ConversationDetail | null>(null);
   const [assignees, setAssignees] = useState<Assignee[]>([]);
-  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [emailAliases, setEmailAliases] = useState<EmailSenderAlias[]>([]);
   const [emailTemplates, setEmailTemplates] = useState<EmailTemplate[]>([]);
-  const [emailAccountId, setEmailAccountId] = useState("");
+  const [emailAliasId, setEmailAliasId] = useState("");
   const [emailProviderConfigured, setEmailProviderConfigured] = useState(false);
   const [emailConfigurationBlockers, setEmailConfigurationBlockers] = useState<string[]>([]);
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
-  const [emailSignatureDrafts, setEmailSignatureDrafts] = useState<Record<string, string>>({});
+  const [emailAdminOpen, setEmailAdminOpen] = useState(false);
   const [emailTemplateName, setEmailTemplateName] = useState("");
   const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
-  const [emailSettingsStatus, setEmailSettingsStatus] = useState<
-    "idle" | "saving" | "saved" | "syncing"
-  >("idle");
+  const [, setEmailSettingsStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<InboxFilterKey>(initialFilter);
   const [search, setSearch] = useState("");
@@ -747,33 +735,33 @@ export function InboxWorkspace({
   );
 
   const loadEmailConfiguration = useCallback(async () => {
-    const [accountsPayload, templatesPayload] = await Promise.all([
+    const [aliasesPayload, templatesPayload] = await Promise.all([
       request<{
-        items: EmailAccount[];
+        items: EmailSenderAlias[];
+        provider: string;
         provider_configured: boolean;
         configuration_blockers: string[];
-      }>("/api/v1/email/accounts"),
+      }>("/api/v1/email/aliases"),
       request<{ items: EmailTemplate[] }>("/api/v1/email/templates"),
     ]);
-    setEmailAccounts(accountsPayload.items);
+    setEmailAliases(aliasesPayload.items);
     setEmailTemplates(templatesPayload.items);
-    setEmailProviderConfigured(accountsPayload.provider_configured);
-    setEmailConfigurationBlockers(accountsPayload.configuration_blockers);
-    setEmailSignatureDrafts((current) =>
-      Object.fromEntries(
-        accountsPayload.items.map((account) => [
-          account.id,
-          current[account.id] ?? account.signature_text ?? "",
-        ]),
-      ),
-    );
-    setEmailAccountId((current) => {
-      if (current && accountsPayload.items.some((account) => account.id === current)) {
+    setEmailProviderConfigured(aliasesPayload.provider_configured);
+    setEmailConfigurationBlockers(aliasesPayload.configuration_blockers);
+    setEmailAliasId((current) => {
+      if (
+        current &&
+        aliasesPayload.items.some((alias) => alias.id === current && alias.can_send)
+      ) {
         return current;
       }
-      return accountsPayload.items.find((account) => account.status === "active")?.id ?? "";
+      return (
+        aliasesPayload.items.find((alias) => alias.is_default && alias.can_send)?.id ??
+        aliasesPayload.items.find((alias) => alias.can_send)?.id ??
+        ""
+      );
     });
-    return accountsPayload.items;
+    return aliasesPayload.items;
   }, [request]);
 
   const loadConversations = useCallback(async () => {
@@ -1098,23 +1086,6 @@ export function InboxWorkspace({
   }, [loadConversations, loadEmailConfiguration, request]);
 
   useEffect(() => {
-    const result = new URLSearchParams(window.location.search).get("email");
-    if (!result) return;
-    const handle = window.setTimeout(() => {
-      if (result === "connected") {
-        setChannel("email");
-        setEmailSettingsOpen(true);
-      } else if (result === "connection_failed") {
-        setError("Google could not connect that mailbox. Check the OAuth settings and try again.");
-      } else if (result === "connection_cancelled") {
-        setError("Google mailbox connection was cancelled.");
-      }
-    }, 0);
-    window.history.replaceState({}, "", window.location.pathname);
-    return () => window.clearTimeout(handle);
-  }, []);
-
-  useEffect(() => {
     const handle = window.setTimeout(() => {
       if (selectedId) void loadDetail(selectedId);
       else setDetail(null);
@@ -1185,11 +1156,9 @@ export function InboxWorkspace({
   const queueOptions = canManageAssignments ? managerQueueOptions : acquisitionQueueOptions;
   const primaryPhone = detail?.contact_methods.find((method) => method.method_type === "phone");
   const primaryEmail = detail?.contact_methods.find((method) => method.method_type === "email");
-  const selectedEmailAccount =
-    emailAccounts.find((account) => account.id === emailAccountId) ?? null;
-  const emailSignature = selectedEmailAccount
-    ? (emailSignatureDrafts[selectedEmailAccount.id] ?? selectedEmailAccount.signature_text ?? "")
-    : "";
+  const selectedEmailAlias =
+    emailAliases.find((alias) => alias.id === emailAliasId && alias.can_send) ?? null;
+  const emailSignature = selectedEmailAlias?.signature_text ?? "";
   const nextAppointment = detail?.appointments.find((appointment) =>
     ["scheduled", "rescheduled"].includes(appointment.status),
   );
@@ -1211,7 +1180,7 @@ export function InboxWorkspace({
     (!isLiveSms || Boolean(canUseSms && detail?.sms_eligibility.can_send)) &&
     (!isLiveEmail ||
       Boolean(
-        canUseEmail && primaryEmail && selectedEmailAccount?.status === "active" && subject.trim(),
+        canUseEmail && primaryEmail && selectedEmailAlias?.can_send && subject.trim(),
       ));
 
   function selectConversation(conversationId: string) {
@@ -1227,68 +1196,6 @@ export function InboxWorkspace({
       if (selectedId) await loadDetail(selectedId);
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh inbox.");
-    }
-  }
-
-  async function connectGoogleEmail() {
-    setError(null);
-    try {
-      const payload = await request<{ authorization_url: string }>(
-        "/api/v1/email/oauth/google/authorize",
-        { method: "POST" },
-      );
-      window.location.assign(payload.authorization_url);
-    } catch (connectError) {
-      setError(
-        connectError instanceof Error
-          ? connectError.message
-          : "Google Workspace could not be connected.",
-      );
-    }
-  }
-
-  async function saveEmailSignature() {
-    if (!selectedEmailAccount) return;
-    setEmailSettingsStatus("saving");
-    setError(null);
-    try {
-      await request(`/api/v1/email/accounts/${selectedEmailAccount.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ signature_text: emailSignature.trim() || null }),
-      });
-      await loadEmailConfiguration();
-      setEmailSettingsStatus("saved");
-      window.setTimeout(() => setEmailSettingsStatus("idle"), 1500);
-    } catch (signatureError) {
-      setEmailSettingsStatus("idle");
-      setError(
-        signatureError instanceof Error
-          ? signatureError.message
-          : "The email signature could not be saved.",
-      );
-    }
-  }
-
-  async function synchronizeEmailAccount() {
-    if (!selectedEmailAccount) return;
-    setEmailSettingsStatus("syncing");
-    setError(null);
-    try {
-      await request(`/api/v1/email/accounts/${selectedEmailAccount.id}/sync`, {
-        method: "POST",
-      });
-      await Promise.all([
-        loadEmailConfiguration(),
-        loadConversations(),
-        selectedId ? loadDetail(selectedId) : Promise.resolve(),
-      ]);
-      setEmailSettingsStatus("saved");
-      window.setTimeout(() => setEmailSettingsStatus("idle"), 1500);
-    } catch (syncError) {
-      setEmailSettingsStatus("idle");
-      setError(
-        syncError instanceof Error ? syncError.message : "The mailbox could not be synchronized.",
-      );
     }
   }
 
@@ -1393,7 +1300,7 @@ export function InboxWorkspace({
           }),
         });
         smsIdempotencyKeyRef.current = null;
-      } else if (isLiveEmail && selectedEmailAccount) {
+      } else if (isLiveEmail && selectedEmailAlias) {
         emailIdempotencyKeyRef.current ??= window.crypto.randomUUID();
         const attachments = await Promise.all(
           emailAttachments.map(async (file) => ({
@@ -1405,7 +1312,7 @@ export function InboxWorkspace({
         await request(`/api/v1/email/conversations/${detail.id}/messages`, {
           method: "POST",
           body: JSON.stringify({
-            email_account_id: selectedEmailAccount.id,
+            email_sender_alias_id: selectedEmailAlias.id,
             subject: subject.trim(),
             body: body.trim(),
             idempotency_key: emailIdempotencyKeyRef.current,
@@ -1484,26 +1391,24 @@ export function InboxWorkspace({
           {canUseEmail ? (
             <button
               className={styles.emailStatusButton}
-              data-connected={emailAccounts.some((account) => account.status === "active")}
+              data-connected={emailAliases.some((alias) => alias.can_send)}
               onClick={() => {
-                if (emailAccounts.some((account) => account.status === "active")) {
-                  setChannel("email");
-                  setEmailSettingsOpen(true);
+                setChannel("email");
+                if (me?.permissions.includes("communications:manage_email_accounts")) {
+                  setEmailAdminOpen(true);
                 } else {
-                  void connectGoogleEmail();
+                  setEmailSettingsOpen(true);
                 }
               }}
               title={
-                emailAccounts.some((account) => account.status === "active")
-                  ? "Open email settings"
-                  : "Connect Google Workspace"
+                me?.permissions.includes("communications:manage_email_accounts")
+                  ? "Manage Stonegate email"
+                  : "View available email sender"
               }
               type="button"
             >
               <Mail size={16} aria-hidden="true" />
-              {emailAccounts.some((account) => account.status === "active")
-                ? "Email connected"
-                : "Connect email"}
+              {emailAliases.some((alias) => alias.can_send) ? "Email ready" : "Email unavailable"}
             </button>
           ) : null}
           <button
@@ -1938,6 +1843,12 @@ export function InboxWorkspace({
                         {" · "}
                         {labelize(item.status)}
                       </small>
+                      {item.status_detail ? (
+                        <span className={styles.deliveryFailure}>
+                          <CircleAlert aria-hidden="true" size={13} />
+                          {item.status_detail}
+                        </span>
+                      ) : null}
                     </article>
                   ) : (
                     <div className={styles.systemEvent} key={item.id}>
@@ -2053,17 +1964,17 @@ export function InboxWorkspace({
                       <select
                         aria-label="Email sender"
                         onChange={(event) => {
-                          setEmailAccountId(event.target.value);
+                          setEmailAliasId(event.target.value);
                           emailIdempotencyKeyRef.current = null;
                         }}
-                        value={emailAccountId}
+                        value={emailAliasId}
                       >
                         <option value="">Select sender</option>
-                        {emailAccounts
-                          .filter((account) => account.status === "active")
-                          .map((account) => (
-                            <option key={account.id} value={account.id}>
-                              {account.email_address}
+                        {emailAliases
+                          .filter((alias) => alias.can_send)
+                          .map((alias) => (
+                            <option key={alias.id} value={alias.id}>
+                              {alias.display_name} · {alias.email_address}
                             </option>
                           ))}
                       </select>
@@ -2113,66 +2024,39 @@ export function InboxWorkspace({
                   <div className={styles.emailSettingsPanel}>
                     <div className={styles.emailSettingsHeader}>
                       <div>
-                        <strong>Google Workspace</strong>
+                        <strong>Stonegate sender</strong>
                         <span>
-                          {selectedEmailAccount
-                            ? selectedEmailAccount.email_address
-                            : "No mailbox connected"}
+                          {selectedEmailAlias
+                            ? selectedEmailAlias.email_address
+                            : "No authorized sender"}
                         </span>
                       </div>
-                      <button
-                        disabled={!emailProviderConfigured}
-                        onClick={() => void connectGoogleEmail()}
-                        type="button"
-                      >
-                        <Plus size={14} aria-hidden="true" />
-                        Connect mailbox
-                      </button>
+                      {me?.permissions.includes("communications:manage_email_accounts") ? (
+                        <button onClick={() => setEmailAdminOpen(true)} type="button">
+                          <Settings2 size={14} aria-hidden="true" />
+                          Manage senders
+                        </button>
+                      ) : null}
                     </div>
                     {!emailProviderConfigured ? (
                       <p className={styles.emailConfigurationNote}>
-                        Email remains disabled until the Google OAuth environment variables are
-                        configured.
+                        {emailConfigurationBlockers.join(" ") ||
+                          "Resend production delivery is not configured yet."}
                       </p>
                     ) : null}
-                    {selectedEmailAccount ? (
+                    {selectedEmailAlias ? (
                       <div className={styles.emailSettingsGrid}>
-                        <label>
-                          Signature
-                          <textarea
-                            disabled={
-                              !selectedEmailAccount.is_owned_by_current_user &&
-                              !me?.permissions.includes("communications:manage_email_accounts")
-                            }
-                            maxLength={4000}
-                            onChange={(event) =>
-                              setEmailSignatureDrafts((current) => ({
-                                ...current,
-                                [selectedEmailAccount.id]: event.target.value,
-                              }))
-                            }
-                            placeholder="Name, role, company, and contact details"
-                            rows={3}
-                            value={emailSignature}
-                          />
-                        </label>
-                        <div className={styles.emailSettingsActions}>
-                          <button
-                            disabled={emailSettingsStatus === "saving"}
-                            onClick={() => void saveEmailSignature()}
-                            type="button"
-                          >
-                            <Check size={14} aria-hidden="true" />
-                            {emailSettingsStatus === "saving" ? "Saving" : "Save signature"}
-                          </button>
-                          <button
-                            disabled={emailSettingsStatus === "syncing"}
-                            onClick={() => void synchronizeEmailAccount()}
-                            type="button"
-                          >
-                            <RefreshCw size={14} aria-hidden="true" />
-                            {emailSettingsStatus === "syncing" ? "Syncing" : "Sync now"}
-                          </button>
+                        <div>
+                          <strong>{selectedEmailAlias.display_name}</strong>
+                          <span>
+                            {selectedEmailAlias.owner_user_name ||
+                              selectedEmailAlias.assigned_team_name ||
+                              "Company managed"}
+                          </span>
+                        </div>
+                        <div>
+                          <strong>Signature</strong>
+                          <span>{emailSignature || "No signature configured"}</span>
                         </div>
                       </div>
                     ) : null}
@@ -2218,12 +2102,12 @@ export function InboxWorkspace({
                   <>
                     <div
                       className={
-                        canUseEmail && primaryEmail && selectedEmailAccount
+                        canUseEmail && primaryEmail && selectedEmailAlias
                           ? styles.emailReady
                           : styles.emailBlocked
                       }
                     >
-                      {canUseEmail && primaryEmail && selectedEmailAccount ? (
+                      {canUseEmail && primaryEmail && selectedEmailAlias ? (
                         <ShieldCheck size={15} aria-hidden="true" />
                       ) : (
                         <ShieldAlert size={15} aria-hidden="true" />
@@ -2233,10 +2117,10 @@ export function InboxWorkspace({
                           ? "Your role cannot send seller email."
                           : !primaryEmail
                             ? "This seller does not have an email address."
-                            : selectedEmailAccount
-                              ? `Ready to email ${primaryEmail.value} from ${selectedEmailAccount.email_address}`
+                            : selectedEmailAlias
+                              ? `Ready to email ${primaryEmail.value} from ${selectedEmailAlias.email_address}`
                               : emailProviderConfigured
-                                ? "Connect or select a Google Workspace mailbox."
+                                ? "Select an authorized Stonegate sender."
                                 : emailConfigurationBlockers.join(" ")}
                       </span>
                     </div>
@@ -2578,6 +2462,24 @@ export function InboxWorkspace({
           )}
         </aside>
       </section>
+      {emailAdminOpen &&
+      me?.permissions.includes("communications:manage_email_accounts") ? (
+        <EmailAdminPanel
+          aliases={emailAliases}
+          configurationBlockers={emailConfigurationBlockers}
+          conversations={conversations.map((conversation) => ({
+            id: conversation.id,
+            seller_name: conversation.seller_name,
+            property_address: conversation.property_address,
+          }))}
+          onAliasesChanged={async () => {
+            await loadEmailConfiguration();
+          }}
+          onClose={() => setEmailAdminOpen(false)}
+          open={emailAdminOpen}
+          providerConfigured={emailProviderConfigured}
+        />
+      ) : null}
     </>
   );
 }
