@@ -125,3 +125,74 @@ def test_invalid_json_is_reported_as_provider_failure(
     assert str(error.value) == (
         "RentCast property record returned invalid JSON (HTTP 200)."
     )
+
+
+def test_property_record_uses_normalized_avm_id(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"id": "134-Waterstone-Trl,-Canton,-GA-30114"}
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        captured["url"] = url
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    record = RentCastClient(api_key="test-key").get_property_record(
+        address="134 Waterstone Trail, Canton, GA 30114",
+        property_id="134-Waterstone-Trl,-Canton,-GA-30114",
+    )
+
+    assert record["id"] == "134-Waterstone-Trl,-Canton,-GA-30114"
+    assert captured["url"] == (
+        "https://api.rentcast.io/v1/properties/"
+        "134-Waterstone-Trl%2C-Canton%2C-GA-30114"
+    )
+    assert captured["params"] == {}
+
+
+def test_recent_sales_prefers_avm_coordinates(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict[str, object]]:
+            return []
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        captured["url"] = url
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    RentCastClient(api_key="test-key").get_recent_sales(
+        address="134 Waterstone Trail, Canton, GA 30114",
+        property_type="single_family",
+        bedrooms=4,
+        bathrooms=3,
+        square_footage=2400,
+        year_built=2002,
+        latitude=34.245,
+        longitude=-84.49,
+    )
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["latitude"] == 34.245
+    assert params["longitude"] == -84.49
+    assert "address" not in params

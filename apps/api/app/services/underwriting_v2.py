@@ -58,6 +58,7 @@ def analyze_underwriting_v2(
     contingency_override_percentage: int | None,
     holding_period_months: int,
     condition_overrides: dict[str, str],
+    provider_warnings: list[str],
     comp_review_decisions: list[dict[str, Any]] | None = None,
     address_validation_status: str,
     settings: Settings,
@@ -82,6 +83,7 @@ def analyze_underwriting_v2(
         avm_subject=estimate.subject_property,
         local_property_type=local_property_type,
     )
+    data_disagreements.extend(provider_warnings)
     if address_validation_status == "needs_review":
         data_disagreements.append(
             "Entered address differs from the provider property record and needs review."

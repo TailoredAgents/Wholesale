@@ -6,7 +6,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
+from app.integrations.rentcast_client import (
+    RentCastClientError,
+    RentCastRentEstimate,
+    RentCastValueEstimate,
+)
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -923,6 +927,120 @@ def test_preview_lead_market_value_requires_rentcast_key(
     assert response.status_code == 422
     assert response.json()["detail"] == "RENTCAST_API_KEY is not configured."
     get_settings.cache_clear()
+
+
+def test_market_analysis_continues_without_separate_property_record(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    get_settings.cache_clear()
+    sales_request: dict[str, object] = {}
+
+    class MissingPropertyRecordRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            subject = {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "lotSize": 8000,
+                "latitude": 33.749,
+                "longitude": -84.388,
+            }
+            return RentCastValueEstimate(
+                price=300000,
+                price_range_low=275000,
+                price_range_high=325000,
+                subject_property=subject,
+                comparables=[],
+                raw_response={
+                    "price": 300000,
+                    "priceRangeLow": 275000,
+                    "priceRangeHigh": 325000,
+                    "subjectProperty": subject,
+                    "comparables": [],
+                },
+            )
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            raise RentCastClientError(
+                "RentCast property record failed "
+                "(HTTP 404, resource/not-found): No data found.",
+                operation="property record",
+                status_code=404,
+                error_code="resource/not-found",
+            )
+
+        def get_recent_sales(self, **kwargs: object) -> list[dict[str, object]]:
+            sales_request.update(kwargs)
+            return [
+                {
+                    "id": "comp-1",
+                    "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 295000,
+                    "lastSaleDate": "2026-05-01T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1750,
+                    "yearBuilt": 1981,
+                    "lotSize": 7800,
+                    "distance": 0.3,
+                }
+            ]
+
+        def get_rent_estimate(self, **_: object) -> RentCastRentEstimate:
+            return RentCastRentEstimate(
+                rent=2400,
+                rent_range_low=2200,
+                rent_range_high=2600,
+                comparables=[],
+                raw_response={
+                    "rent": 2400,
+                    "rentRangeLow": 2200,
+                    "rentRangeHigh": 2600,
+                    "comparables": [],
+                },
+            )
+
+    monkeypatch.setattr(
+        "app.services.leads.RentCastClient",
+        MissingPropertyRecordRentCastClient,
+    )
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={},
+    )
+
+    assert response.status_code == 201, response.text
+    analysis = response.json()
+    assert len(analysis["selected_comps"]) == 1
+    assert analysis["manual_review_required"] is True
+    assert analysis["data_disagreements"] == [
+        "The separate public property record was unavailable; subject facts came "
+        "from the RentCast AVM response."
+    ]
+    assert sales_request["latitude"] == 33.749
+    assert sales_request["longitude"] == -84.388
 
 
 def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(

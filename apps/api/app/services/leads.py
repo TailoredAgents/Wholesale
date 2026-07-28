@@ -1496,6 +1496,8 @@ def create_lead_market_analysis(
     if payload.comp_review_decisions and not reuse_market_data:
         raise ValueError("Run a market analysis before reviewing comparable sales.")
     rent_error: str | None = None
+    property_record_error: str | None = None
+    provider_warnings: list[str] = []
     rent_estimate: RentCastRentEstimate | None = None
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
@@ -1503,6 +1505,9 @@ def create_lead_market_analysis(
         cached_subject = cached_raw.get("subject_record") if cached_raw else None
         cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
         cached_rent = cached_raw.get("rent") if cached_raw else None
+        cached_property_record_error = (
+            cached_raw.get("property_record_error") if cached_raw else None
+        )
         subject_record = cached_subject if isinstance(cached_subject, dict) else {}
         sale_records = (
             [record for record in cached_sales if isinstance(record, dict)]
@@ -1514,6 +1519,12 @@ def create_lead_market_analysis(
             if isinstance(cached_rent, dict)
             else None
         )
+        if isinstance(cached_property_record_error, str) and cached_property_record_error:
+            property_record_error = cached_property_record_error
+            provider_warnings.append(
+                "The separate public property record was unavailable; subject facts came "
+                "from the RentCast AVM response."
+            )
     else:
         client = RentCastClient(
             api_key=settings.rentcast_api_key,
@@ -1525,8 +1536,42 @@ def create_lead_market_analysis(
                 address=address,
                 property_type=property_record.property_type,
             )
-            subject_record = client.get_property_record(address=address)
-            subject_facts = {**estimate.subject_property, **subject_record}
+        except RentCastClientError as exc:
+            logger.warning(
+                "underwriting_market_data_failed",
+                lead_id=str(lead.id),
+                provider="rentcast",
+                operation=exc.operation,
+                provider_status_code=exc.status_code,
+                provider_error_code=exc.error_code,
+                error_message=str(exc),
+            )
+            raise RuntimeError(str(exc)) from exc
+
+        try:
+            subject_record = client.get_property_record(
+                address=address,
+                property_id=string_or_none(estimate.subject_property.get("id")),
+            )
+        except RentCastClientError as exc:
+            subject_record = {}
+            property_record_error = str(exc)
+            provider_warnings.append(
+                "The separate public property record was unavailable; subject facts came "
+                "from the RentCast AVM response."
+            )
+            logger.warning(
+                "underwriting_optional_property_record_failed",
+                lead_id=str(lead.id),
+                provider="rentcast",
+                operation=exc.operation,
+                provider_status_code=exc.status_code,
+                provider_error_code=exc.error_code,
+                error_message=str(exc),
+            )
+
+        subject_facts = {**estimate.subject_property, **subject_record}
+        try:
             sale_records = client.get_recent_sales(
                 address=address,
                 property_type=(
@@ -1540,6 +1585,8 @@ def create_lead_market_analysis(
                     ("squareFootage", "livingArea", "grossLivingArea"),
                 ),
                 year_built=optional_int(subject_facts.get("yearBuilt")),
+                latitude=optional_float(subject_facts.get("latitude")),
+                longitude=optional_float(subject_facts.get("longitude")),
             )
         except RentCastClientError as exc:
             logger.warning(
@@ -1591,6 +1638,7 @@ def create_lead_market_analysis(
             decision.model_dump(mode="json")
             for decision in payload.comp_review_decisions
         ],
+        provider_warnings=provider_warnings,
         address_validation_status=property_record.address_validation_status,
         settings=settings,
     )
@@ -1705,6 +1753,7 @@ def create_lead_market_analysis(
         "data_disagreements": result.data_disagreements,
         "assumptions": result.assumptions,
         "rent_estimate_error": rent_error,
+        "property_record_error": property_record_error,
     }
 
     latest_version = db.scalar(
@@ -1775,6 +1824,7 @@ def create_lead_market_analysis(
             "subject_record": subject_record,
             "recorded_sales": sale_records,
             "rent": rent_estimate.raw_response if rent_estimate else None,
+            "property_record_error": property_record_error,
         },
         analysis_metadata=analysis_metadata,
     )

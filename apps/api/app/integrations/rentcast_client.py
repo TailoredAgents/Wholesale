@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -98,7 +99,19 @@ class RentCastClient:
 
         return value_estimate_from_payload(payload)
 
-    def get_property_record(self, *, address: str) -> dict[str, Any]:
+    def get_property_record(
+        self,
+        *,
+        address: str,
+        property_id: str | None = None,
+    ) -> dict[str, Any]:
+        if property_id:
+            payload = self._get_json(
+                f"/properties/{quote(property_id, safe='')}",
+                {},
+                operation="property record",
+            )
+            return payload
         records = self._get_property_records(
             {"address": address, "limit": 1},
             operation="property record",
@@ -114,16 +127,22 @@ class RentCastClient:
         bathrooms: float | None,
         square_footage: int | None,
         year_built: int | None,
+        latitude: float | None = None,
+        longitude: float | None = None,
         radius: float = 1,
         days_old: int = 365,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         params: dict[str, str | int | float | bool] = {
-            "address": address,
             "radius": radius,
             "saleDateRange": days_old,
             "limit": limit,
         }
+        if latitude is not None and longitude is not None:
+            params["latitude"] = latitude
+            params["longitude"] = longitude
+        else:
+            params["address"] = address
         mapped_property_type = map_property_type(property_type)
         if mapped_property_type:
             params["propertyType"] = mapped_property_type
