@@ -24,6 +24,7 @@ class EmailDeliveryRequest:
     subject: str
     body: str
     idempotency_key: str
+    to: list[str] = field(default_factory=list)
     html_body: str | None = None
     cc: list[str] = field(default_factory=list)
     bcc: list[str] = field(default_factory=list)
@@ -57,7 +58,11 @@ class SimulatedEmailDeliveryProvider:
         self.thread_id = thread_id
 
     def send(self, request: EmailDeliveryRequest) -> EmailDeliveryResult:
-        metadata = {"attachment_count": str(len(request.attachments))}
+        recipients = request.to or [request.recipient]
+        metadata = {
+            "attachment_count": str(len(request.attachments)),
+            "recipient_count": str(len(recipients)),
+        }
         if request.cc:
             metadata["cc_count"] = str(len(request.cc))
         if request.bcc:
@@ -67,7 +72,7 @@ class SimulatedEmailDeliveryProvider:
                 lead_id=request.lead_id,
                 contact_id=request.contact_id,
                 channel="email",
-                recipient=request.recipient,
+                recipient=recipients[0],
                 subject=request.subject,
                 body=request.body,
                 idempotency_key=request.idempotency_key,
@@ -97,11 +102,12 @@ class GoogleEmailDeliveryProvider:
         self.access_token = access_token
 
     def send(self, request: EmailDeliveryRequest) -> EmailDeliveryResult:
+        recipients = request.to or [request.recipient]
         result = self.client.send_message(
             self.access_token,
             sender_name=request.sender_name,
             sender_email=request.sender_email,
-            recipient=request.recipient,
+            recipient=recipients[0],
             subject=request.subject,
             body=request.body,
             attachments=request.attachments,

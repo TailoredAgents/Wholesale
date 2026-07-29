@@ -50,5 +50,5 @@ def test_demo_email_uses_simulator_without_google_credentials(db_session: Sessio
         "dry_run": True,
         "channel": "email",
         "recipient": result.recipient,
-        "metadata": {"attachment_count": "0"},
+        "metadata": {"attachment_count": "0", "recipient_count": "1"},
     }

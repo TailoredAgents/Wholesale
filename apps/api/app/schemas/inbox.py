@@ -116,6 +116,11 @@ class ConversationRead(BaseModel):
     last_activity_at: datetime | None
     last_inbound_at: datetime | None
     last_outbound_at: datetime | None
+    response_state: str
+    response_kind: str | None
+    response_age_minutes: int | None
+    response_target_minutes: int | None
+    response_due_at: datetime | None
     closed_at: datetime | None
     watchers: list[ConversationWatcherRead]
     assignment_history: list[ConversationAssignmentEventRead]
@@ -146,6 +151,25 @@ class ConversationDetailRead(ConversationRead):
 
 class ConversationListResponse(BaseModel):
     items: list[ConversationRead]
+
+
+class MailboxResponseBucketRead(BaseModel):
+    scope_id: UUID | None
+    scope_label: str
+    conversation_count: int
+    needs_reply_count: int
+    overdue_count: int
+    oldest_wait_minutes: int | None
+
+
+class MailboxResponseOverviewRead(BaseModel):
+    conversation_count: int
+    needs_reply_count: int
+    overdue_count: int
+    oldest_wait_minutes: int | None
+    by_alias: list[MailboxResponseBucketRead]
+    by_team: list[MailboxResponseBucketRead]
+    by_assignee: list[MailboxResponseBucketRead]
 
 
 class ConversationHandoffRequest(BaseModel):

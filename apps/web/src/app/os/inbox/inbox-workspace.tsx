@@ -42,6 +42,7 @@ import {
   EmailAdminPanel,
   type EmailSenderAlias,
 } from "./email-admin-panel";
+import { GlobalEmailCompose } from "./global-email-compose";
 import styles from "./inbox.module.css";
 
 type Me = {
@@ -79,6 +80,11 @@ type Conversation = {
   last_activity_at: string | null;
   last_inbound_at: string | null;
   last_outbound_at: string | null;
+  response_state: "none" | "waiting" | "due_soon" | "overdue";
+  response_kind: "first" | "follow_up" | null;
+  response_age_minutes: number | null;
+  response_target_minutes: number | null;
+  response_due_at: string | null;
   watchers: Watcher[];
   created_at: string;
   updated_at: string;
@@ -359,6 +365,14 @@ function formatFileSize(sizeBytes: number) {
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function formatResponseAge(minutes: number | null) {
+  if (minutes === null || minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
 async function fileToBase64(file: File) {
   const buffer = await file.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -371,9 +385,31 @@ async function fileToBase64(file: File) {
 }
 
 function hasNeedsReply(conversation: Conversation) {
+  if (conversation.response_state) return conversation.response_state !== "none";
   if (!conversation.last_inbound_at) return false;
   if (!conversation.last_outbound_at) return true;
   return new Date(conversation.last_inbound_at) > new Date(conversation.last_outbound_at);
+}
+
+function isRestrictedAlias(alias: EmailSenderAlias) {
+  const configuredScope = String(alias.routing_metadata.visibility_scope ?? "").toLowerCase();
+  return (
+    configuredScope === "restricted" ||
+    ["accounting", "closing", "legal", "transaction", "transactions"].includes(
+      alias.purpose_key,
+    )
+  );
+}
+
+function parseEmailRecipients(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[;,]/)
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  );
 }
 
 function displayError(payload: unknown, fallback: string) {
@@ -636,9 +672,11 @@ function CallTranscriptPanel({
 
 export function InboxWorkspace({
   initialFilter = "team",
+  initialConversationId = null,
   initialLeadId = null,
 }: {
   initialFilter?: InboxFilterKey;
+  initialConversationId?: string | null;
   initialLeadId?: string | null;
 }) {
   const { getToken } = useAuth();
@@ -662,6 +700,10 @@ export function InboxWorkspace({
   const [emailAdminOpen, setEmailAdminOpen] = useState(false);
   const [emailTemplateName, setEmailTemplateName] = useState("");
   const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
+  const [emailCc, setEmailCc] = useState("");
+  const [emailBcc, setEmailBcc] = useState("");
+  const [globalComposeOpen, setGlobalComposeOpen] = useState(false);
+  const [mailboxAliasId, setMailboxAliasId] = useState<string | null>(null);
   const [, setEmailSettingsStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<InboxFilterKey>(initialFilter);
@@ -771,8 +813,14 @@ export function InboxWorkspace({
   const loadConversations = useCallback(async () => {
     const payload = await request<{ items: Conversation[] }>("/api/v1/inbox/conversations");
     setConversations(payload.items);
-    const requestedConversation = !initialSelectionAppliedRef.current && initialLeadId
-      ? payload.items.find((item) => item.lead_id === initialLeadId)
+    const requestedConversation = !initialSelectionAppliedRef.current
+      ? payload.items.find((item) =>
+          initialConversationId
+            ? item.id === initialConversationId
+            : initialLeadId
+              ? item.lead_id === initialLeadId
+              : false,
+        )
       : null;
     initialSelectionAppliedRef.current = true;
     setSelectedId((current) => {
@@ -781,7 +829,7 @@ export function InboxWorkspace({
     });
     if (requestedConversation) setMobilePane("thread");
     return payload.items;
-  }, [initialLeadId, request]);
+  }, [initialConversationId, initialLeadId, request]);
 
   const loadDetail = useCallback(
     async (conversationId: string) => {
@@ -1136,12 +1184,40 @@ export function InboxWorkspace({
       needs_reply: conversations.filter(hasNeedsReply).length,
       appointments: conversations.filter((item) => item.queue_key === "appointment_set").length,
       unread: conversations.filter((item) => item.unread_count > 0).length,
+      overdue: conversations.filter((item) => item.response_state === "overdue").length,
     };
   }, [conversations, me?.user_id]);
+
+  const mailboxGroups = useMemo(() => {
+    const activeAliases = emailAliases.filter(
+      (alias) => alias.status === "active" && alias.inbound_enabled,
+    );
+    const restricted = activeAliases.filter(isRestrictedAlias);
+    const standardAliases = activeAliases.filter((alias) => !isRestrictedAlias(alias));
+    const mine = standardAliases.filter(
+      (alias) =>
+        alias.owner_user_id === me?.user_id ||
+        alias.grants.some((grant) => grant.user_id === me?.user_id),
+    );
+    const myAliasIds = new Set(mine.map((alias) => alias.id));
+    const team = standardAliases.filter(
+      (alias) =>
+        !myAliasIds.has(alias.id) &&
+        (alias.alias_type === "department" ||
+          Boolean(alias.assigned_team_id) ||
+          alias.owner_user_id !== me?.user_id),
+    );
+    return { mine, team, restricted };
+  }, [emailAliases, me?.user_id]);
+
+  const selectedMailboxAlias =
+    emailAliases.find((alias) => alias.id === mailboxAliasId) ?? null;
 
   const visibleConversations = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
     return conversations.filter((item) => {
+      const matchesMailbox =
+        mailboxAliasId === null || item.source_alias_id === mailboxAliasId;
       const matchesFilter =
         filter === "team" ||
         (filter === "mine" && item.assigned_user_id === me?.user_id) ||
@@ -1152,10 +1228,14 @@ export function InboxWorkspace({
       const matchesSearch =
         !normalizedSearch ||
         item.seller_name.toLowerCase().includes(normalizedSearch) ||
-        item.property_address.toLowerCase().includes(normalizedSearch);
-      return matchesFilter && matchesSearch;
+        item.property_address.toLowerCase().includes(normalizedSearch) ||
+        emailAliases
+          .find((alias) => alias.id === item.source_alias_id)
+          ?.email_address.toLowerCase()
+          .includes(normalizedSearch);
+      return matchesMailbox && matchesFilter && matchesSearch;
     });
-  }, [conversations, filter, me?.user_id, search]);
+  }, [conversations, emailAliases, filter, mailboxAliasId, me?.user_id, search]);
 
   const canHandoff =
     me?.permissions.includes("communications:manage_assignments") ||
@@ -1181,6 +1261,7 @@ export function InboxWorkspace({
   const canUseEmail =
     me?.permissions.includes("communications:send_email") ||
     me?.permissions.includes("communications:send_assigned_email");
+  const canComposeGlobalEmail = me?.permissions.includes("communications:send_email");
   const canSubmitComposer =
     Boolean(body.trim()) &&
     composerStatus !== "saving" &&
@@ -1205,6 +1286,16 @@ export function InboxWorkspace({
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh inbox.");
     }
+  }
+
+  async function handleGlobalEmailSent(conversationId: string) {
+    setMailboxAliasId(null);
+    setFilter("team");
+    setSelectedId(conversationId);
+    setMobilePane("thread");
+    await loadConversations();
+    await loadDetail(conversationId);
+    setGlobalComposeOpen(false);
   }
 
   async function saveCurrentEmailAsTemplate() {
@@ -1323,6 +1414,8 @@ export function InboxWorkspace({
             email_sender_alias_id: selectedEmailAlias.id,
             subject: subject.trim(),
             body: body.trim(),
+            cc: parseEmailRecipients(emailCc),
+            bcc: parseEmailRecipients(emailBcc),
             idempotency_key: emailIdempotencyKeyRef.current,
             attachments,
           }),
@@ -1344,6 +1437,8 @@ export function InboxWorkspace({
       setSubject("");
       setBody("");
       setEmailAttachments([]);
+      setEmailCc("");
+      setEmailBcc("");
       setComposerStatus("saved");
       await Promise.all([loadConversations(), loadDetail(detail.id)]);
       window.setTimeout(() => setComposerStatus("idle"), 1800);
@@ -1392,10 +1487,22 @@ export function InboxWorkspace({
           <p className={styles.eyebrow}>Seller communications</p>
           <h1>Inbox</h1>
           <span className={styles.headerSummary}>
-            {counts.needs_reply} need reply · {counts.unread} unread · {counts.unassigned} unassigned
+            {counts.needs_reply} need reply · {counts.overdue} overdue · {counts.unread} unread
           </span>
         </div>
         <div className={styles.headerActions}>
+          {canComposeGlobalEmail ? (
+            <button
+              className={styles.composeEmailButton}
+              disabled={!emailProviderConfigured || !emailAliases.some((alias) => alias.can_send)}
+              onClick={() => setGlobalComposeOpen(true)}
+              title="Compose a new company email"
+              type="button"
+            >
+              <Plus size={16} aria-hidden="true" />
+              Compose
+            </button>
+          ) : null}
           {canUseEmail ? (
             <button
               className={styles.emailStatusButton}
@@ -1561,9 +1668,16 @@ export function InboxWorkspace({
               const Icon = item.icon;
               return (
                 <button
-                  className={filter === item.key ? styles.activeFilter : undefined}
+                  className={
+                    mailboxAliasId === null && filter === item.key
+                      ? styles.activeFilter
+                      : undefined
+                  }
                   key={item.key}
-                  onClick={() => setFilter(item.key)}
+                  onClick={() => {
+                    setMailboxAliasId(null);
+                    setFilter(item.key);
+                  }}
                   type="button"
                 >
                   <Icon size={16} aria-hidden="true" />
@@ -1574,11 +1688,69 @@ export function InboxWorkspace({
             })}
           </div>
 
+          {emailAliases.length > 0 ? (
+            <nav className={styles.mailboxRail} aria-label="Email mailboxes">
+              {(
+                [
+                  ["My addresses", mailboxGroups.mine],
+                  ["Team inboxes", mailboxGroups.team],
+                  ["Restricted", mailboxGroups.restricted],
+                ] as const
+              ).map(([label, aliases]) =>
+                aliases.length > 0 ? (
+                  <section key={label}>
+                    <span>{label}</span>
+                    {aliases.map((alias) => {
+                      const aliasConversations = conversations.filter(
+                        (conversation) => conversation.source_alias_id === alias.id,
+                      );
+                      const aliasUnread = aliasConversations.reduce(
+                        (total, conversation) => total + conversation.unread_count,
+                        0,
+                      );
+                      return (
+                        <button
+                          className={
+                            mailboxAliasId === alias.id ? styles.activeMailbox : undefined
+                          }
+                          key={alias.id}
+                          onClick={() => {
+                            setMailboxAliasId(alias.id);
+                            setFilter("team");
+                          }}
+                          title={alias.email_address}
+                          type="button"
+                        >
+                          {isRestrictedAlias(alias) ? (
+                            <ShieldCheck size={14} aria-hidden="true" />
+                          ) : (
+                            <Mail size={14} aria-hidden="true" />
+                          )}
+                          <span>{alias.display_name}</span>
+                          <strong>{aliasUnread || aliasConversations.length}</strong>
+                        </button>
+                      );
+                    })}
+                  </section>
+                ) : null,
+              )}
+            </nav>
+          ) : null}
+
           <div className={styles.listHeader}>
             <div>
-              <strong>{filters.find((item) => item.key === filter)?.label}</strong>
+              <strong>
+                {selectedMailboxAlias?.display_name ??
+                  filters.find((item) => item.key === filter)?.label}
+              </strong>
               <span>{visibleConversations.length} conversations</span>
             </div>
+            {selectedMailboxAlias ? (
+              <span className={styles.mailboxContext}>
+                {selectedMailboxAlias.email_address}
+                {isRestrictedAlias(selectedMailboxAlias) ? " · Restricted" : ""}
+              </span>
+            ) : null}
             <label className={styles.searchBox}>
               <Search size={15} aria-hidden="true" />
               <input
@@ -1613,9 +1785,20 @@ export function InboxWorkspace({
                   </span>
                   <span className={styles.address}>{item.property_address}</span>
                   <span className={styles.listMeta}>
-                    <span>{labelize(item.queue_key)}</span>
+                    <span>
+                      {emailAliases.find((alias) => alias.id === item.source_alias_id)
+                        ?.display_name ?? labelize(item.queue_key)}
+                    </span>
                     {item.priority === "urgent" ? <em className={styles.urgentLabel}>Urgent</em> : null}
-                    {hasNeedsReply(item) ? <em>Needs reply</em> : null}
+                    {hasNeedsReply(item) ? (
+                      <em
+                        className={styles.responseBadge}
+                        data-state={item.response_state}
+                      >
+                        {item.response_state === "overdue" ? "Overdue" : "Waiting"}{" "}
+                        {formatResponseAge(item.response_age_minutes)}
+                      </em>
+                    ) : null}
                   </span>
                 </span>
                 {item.unread_count > 0 ? (
@@ -1647,7 +1830,22 @@ export function InboxWorkspace({
                         : labelize(detail.stage_key)}
                     </span>
                   </div>
-                  <p>{detail.property_address}</p>
+                  <p>
+                    {detail.conversation_type === "general"
+                      ? emailAliases.find((alias) => alias.id === detail.source_alias_id)
+                          ?.email_address || "Stonegate company email"
+                      : detail.property_address}
+                  </p>
+                  {detail.response_state !== "none" ? (
+                    <span
+                      className={styles.threadResponseStatus}
+                      data-state={detail.response_state}
+                    >
+                      {detail.response_kind === "first" ? "First response" : "Follow-up"}{" "}
+                      {detail.response_state === "overdue" ? "overdue" : "due"} · waiting{" "}
+                      {formatResponseAge(detail.response_age_minutes)}
+                    </span>
+                  ) : null}
                 </div>
                 <div className={styles.contactActions}>
                   {primaryPhone ? (
@@ -2061,6 +2259,37 @@ export function InboxWorkspace({
                           "Resend production delivery is not configured yet."}
                       </p>
                     ) : null}
+                    <div className={styles.emailRecipientFields}>
+                      <label>
+                        <span>To</span>
+                        <input
+                          disabled
+                          value={primaryEmail?.value ?? "No contact email"}
+                        />
+                      </label>
+                      <label>
+                        <span>CC</span>
+                        <input
+                          onChange={(event) => {
+                            setEmailCc(event.target.value);
+                            emailIdempotencyKeyRef.current = null;
+                          }}
+                          placeholder="Optional, separate with commas"
+                          value={emailCc}
+                        />
+                      </label>
+                      <label>
+                        <span>BCC</span>
+                        <input
+                          onChange={(event) => {
+                            setEmailBcc(event.target.value);
+                            emailIdempotencyKeyRef.current = null;
+                          }}
+                          placeholder="Optional, separate with commas"
+                          value={emailBcc}
+                        />
+                      </label>
+                    </div>
                     {selectedEmailAlias ? (
                       <div className={styles.emailSettingsGrid}>
                         <div>
@@ -2509,6 +2738,18 @@ export function InboxWorkspace({
           )}
         </aside>
       </section>
+      {globalComposeOpen && canComposeGlobalEmail ? (
+        <GlobalEmailCompose
+          aliases={emailAliases}
+          apiBaseUrl={apiBaseUrl}
+          configurationBlockers={emailConfigurationBlockers}
+          getHeaders={getHeaders}
+          onClose={() => setGlobalComposeOpen(false)}
+          onSent={handleGlobalEmailSent}
+          providerConfigured={emailProviderConfigured}
+          templates={emailTemplates}
+        />
+      ) : null}
       {emailAdminOpen &&
       me?.permissions.includes("communications:manage_email_accounts") ? (
         <EmailAdminPanel

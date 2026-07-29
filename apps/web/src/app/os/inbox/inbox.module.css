@@ -52,6 +52,31 @@
   color: var(--brand-strong);
 }
 
+.composeEmailButton {
+  min-height: 38px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.composeEmailButton:hover {
+  background: var(--brand-strong);
+}
+
+.composeEmailButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -251,7 +276,7 @@
   border-right: 1px solid var(--line);
   background: #fbfaf7;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .filterRail {
@@ -314,6 +339,78 @@
   color: var(--brand-strong);
 }
 
+.mailboxRail {
+  max-height: 196px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.mailboxRail section {
+  display: grid;
+  gap: 3px;
+}
+
+.mailboxRail section > span {
+  padding: 1px 5px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.mailboxRail button {
+  width: 100%;
+  min-height: 31px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text-soft);
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mailboxRail button:hover {
+  background: var(--surface-muted);
+}
+
+.mailboxRail button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mailboxRail button strong {
+  min-width: 18px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 9px;
+  text-align: center;
+}
+
+.mailboxRail .activeMailbox {
+  border-color: #c9ddd1;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.mailboxRail .activeMailbox strong {
+  background: #dcece2;
+  color: var(--brand-strong);
+}
+
 .listMeta .urgentLabel {
   color: var(--danger);
 }
@@ -339,6 +436,15 @@
 .listHeader span {
   color: var(--muted);
   font-size: 11px;
+}
+
+.listHeader .mailboxContext {
+  overflow: hidden;
+  color: var(--brand-strong);
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .searchBox {
@@ -465,6 +571,21 @@
   font-weight: 800;
 }
 
+.listMeta .responseBadge {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.listMeta .responseBadge[data-state="due_soon"] {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.listMeta .responseBadge[data-state="overdue"] {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .unreadBadge {
   min-width: 20px;
   height: 20px;
@@ -506,6 +627,28 @@
 
 .threadHeader > div:first-child {
   min-width: 0;
+}
+
+.threadResponseStatus {
+  width: fit-content;
+  margin-top: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.threadResponseStatus[data-state="due_soon"] {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.threadResponseStatus[data-state="overdue"] {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .threadTitleRow {
@@ -1310,6 +1453,43 @@
   gap: 8px;
 }
 
+.emailRecipientFields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.emailRecipientFields label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.emailRecipientFields span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.emailRecipientFields input {
+  width: 100%;
+  height: 31px;
+  min-width: 0;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+
+.emailRecipientFields input:disabled {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
 .emailSettingsGrid > div {
   min-width: 0;
   padding: 8px;
@@ -2062,6 +2242,13 @@
     font-size: 0;
   }
 
+  .composeEmailButton {
+    width: 38px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
+  }
+
   .callDock {
     width: 100%;
     border-radius: 7px;
@@ -2119,6 +2306,10 @@
   }
 
   .emailSettingsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .emailRecipientFields {
     grid-template-columns: 1fr;
   }
 

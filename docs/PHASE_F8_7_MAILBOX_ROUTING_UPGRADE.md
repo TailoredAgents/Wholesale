@@ -1,6 +1,6 @@
 # Phase F8.7A: Internal Mailbox And Routing Upgrade
 
-Last updated: July 28, 2026
+Last updated: July 29, 2026
 
 ## Decision
 
@@ -18,7 +18,7 @@ Named addresses and department addresses remain `EmailSenderAlias` records. A st
 "mailbox" is a permission-scoped view of shared conversations, not a separate copy of messages.
 This preserves continuity when assignments change and still gives each person a focused work view.
 
-## Current Baseline
+## Baseline Before This Upgrade
 
 Already implemented:
 
@@ -31,7 +31,7 @@ Already implemented:
 - Exact email reply matching through RFC `Message-ID`, `In-Reply-To`, and `References`.
 - Manual routing review for unmatched and ambiguous inbound email.
 
-Current limitation:
+Limitations this roadmap was created to remove:
 
 - Every `Conversation`, `CommunicationRecord`, and outbound dispatch assumes a seller lead and
   contact.
@@ -202,7 +202,38 @@ Delivered:
 
 Goal: Make the model understandable and efficient for nontechnical staff.
 
-Status: Next.
+Status: Core workflow complete in code on July 29, 2026.
+
+Delivered:
+
+- Mine, Unassigned, Team, Needs Reply, and Unread filters with counts. The current Team filter is
+  the user's complete scoped team view.
+- My Addresses, individual Team Inboxes, and authorized Restricted Inbox navigation with
+  mailbox-level unread or conversation counts.
+- One chronological cross-channel timeline with email delivery state and attachments.
+- Authorized sender aliases, signatures, reusable templates, subjects, bodies, and attachments in
+  an existing conversation.
+- To, CC, and BCC controls in the global composer and CC/BCC controls in existing conversations.
+- Recipient search across contacts the user is already authorized to access.
+- A global Compose action that creates a real business contact and general conversation without
+  creating a fake property lead.
+- Atomic dispatch and idempotency handling so repeated clicks do not duplicate the email or
+  conversation.
+- Multiple To-recipient delivery with the primary CRM contact linked only to the matching
+  participant.
+- General inbound email conversations that do not require a lead or property.
+- Exact reply-header, provider-thread, sender-and-alias, and owner/team routing with a manual
+  exception queue for ambiguous messages.
+- Owner, named-alias, team, watcher, grant, standard-lead, and restricted-mailbox access controls,
+  including tests proving VAs and unrelated acquisitions users cannot view accounting mail.
+- Clear sender-address, mailbox, restricted-visibility, and general-correspondence labels in the
+  Inbox.
+
+Deferred context enhancement:
+
+- Link or reassign a general conversation to an existing lead, transaction, buyer, or disposition
+  case from the right panel. The durable context-link model already exists; this is a later
+  operator convenience and does not block general email.
 
 Left panel:
 
@@ -244,6 +275,8 @@ Exit:
 
 Goal: Ensure replies are owned and acted on.
 
+Status: Complete in code on July 29, 2026.
+
 Work:
 
 - Notify the direct assignee for personal conversations.
@@ -257,6 +290,26 @@ Work:
 Exit:
 
 - Every inbound message has a visible owner or team and a measurable response state.
+
+Delivered:
+
+- The existing communications worker creates Inbox notifications for each new unanswered inbound
+  email or SMS.
+- Direct assignees receive personal alerts. Unassigned department conversations notify active
+  team members and the team manager.
+- Named-alias owners, notification-enabled sender grants, and unmuted watchers receive alerts
+  according to their configured notification level.
+- Recipient sets are deduplicated before delivery, and database dedupe keys prevent repeat alerts
+  when one person is an assignee, team member, watcher, or alias grantee at the same time.
+- Configurable first-response and follow-up targets produce visible Waiting, Due Soon, and Overdue
+  states without blocking staff from replying.
+- Unassigned conversations and aging unanswered conversations escalate to active Owner, Founder,
+  or CEO users at separate configurable thresholds.
+- Opening a conversation clears the signed-in user's related mailbox alerts. Sending a reply or
+  closing the conversation causes the worker to resolve remaining alerts.
+- Scoped response reporting is available by sender alias, assigned team, and assignee, including
+  pending count, overdue count, and oldest wait.
+- Render and local environment templates include all four response-target settings.
 
 ## Phase F8.7A.6: Controlled Migration And Acceptance
 

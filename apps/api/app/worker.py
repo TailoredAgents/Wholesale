@@ -15,6 +15,7 @@ from app.services.acquisition_operations import process_next_acquisition_reminde
 from app.services.call_intelligence import process_next_call_transcript
 from app.services.email import sync_next_email_account
 from app.services.lead_manager import process_next_escalation
+from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
 from app.services.operations import (
     COMMUNICATIONS_WORKER,
@@ -59,6 +60,7 @@ def run_worker(stop_event: threading.Event) -> None:
         ("email_sync", sync_next_email_account),
         ("resend_email_events", process_next_resend_event),
         ("resend_email_recovery", recover_next_received_email),
+        ("mailbox_notifications", process_next_mailbox_notification),
         ("acquisition_reminders", process_next_acquisition_reminder),
         ("lead_manager_escalations", process_next_escalation),
         ("marketing_conversions", process_next_marketing_conversion),

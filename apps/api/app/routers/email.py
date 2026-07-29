@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.core.auth import Principal, require_any_permission
+from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
@@ -18,6 +18,7 @@ from app.schemas.email import (
     EmailAccountUpdate,
     EmailAdminOptionsRead,
     EmailOAuthAuthorizeRead,
+    EmailRecipientOptionListResponse,
     EmailRoutingExceptionListResponse,
     EmailRoutingExceptionRead,
     EmailRoutingResolutionRequest,
@@ -33,12 +34,15 @@ from app.schemas.email import (
     EmailTemplateListResponse,
     EmailTemplateRead,
     EmailTemplateUpdate,
+    GeneralEmailComposeRead,
+    GeneralEmailComposeRequest,
 )
 from app.services.email import (
     EmailAttachmentError,
     EmailConfigurationError,
     EmailDispatchConflictError,
     complete_google_authorization,
+    compose_general_email,
     create_email_template,
     create_google_authorization,
     disconnect_email_account,
@@ -46,6 +50,7 @@ from app.services.email import (
     get_scoped_email_account,
     list_email_accounts,
     list_email_templates,
+    search_email_recipients,
     send_conversation_email,
     sync_email_account,
     update_email_account,
@@ -70,6 +75,7 @@ email_user_dependency = require_any_permission(
     PermissionKeys.SEND_ASSIGNED_EMAIL,
 )
 email_manager_dependency = require_any_permission(PermissionKeys.MANAGE_EMAIL_ACCOUNTS)
+global_email_dependency = require_permission(PermissionKeys.SEND_EMAIL)
 
 
 @router.get("/accounts")
@@ -86,6 +92,17 @@ def read_email_sender_aliases(
     principal: Annotated[Principal, Depends(email_user_dependency)],
 ) -> EmailSenderAliasListResponse:
     return list_email_sender_aliases(db, principal)
+
+
+@router.get("/recipients")
+def read_email_recipient_options(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(global_email_dependency)],
+    q: str = Query(default="", max_length=255),
+) -> EmailRecipientOptionListResponse:
+    return EmailRecipientOptionListResponse(
+        items=search_email_recipients(db, principal, q)
+    )
 
 
 @router.post("/aliases", status_code=201)
@@ -369,6 +386,32 @@ def send_email_message(
     if result is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return result
+
+
+@router.post("/compose", status_code=201)
+def compose_new_email(
+    payload: GeneralEmailComposeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(global_email_dependency)],
+) -> GeneralEmailComposeRead:
+    try:
+        return compose_general_email(db, principal, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except EmailAttachmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except EmailDispatchConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except (EmailConfigurationError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except (EmailProviderError, GoogleGmailError) as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @router.get("/attachments/{attachment_id}")

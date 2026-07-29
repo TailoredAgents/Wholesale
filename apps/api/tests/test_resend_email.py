@@ -15,6 +15,8 @@ from app.core.config import get_settings
 from app.integrations.resend_email import ResendEmailDeliveryProvider
 from app.main import app
 from app.models.foundation import (
+    Contact,
+    ContactMethod,
     CommunicationDispatch,
     CommunicationParticipant,
     CommunicationRecord,
@@ -250,6 +252,120 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
     ).email_sender_alias_id == UUID(alias_id)
 
 
+def test_global_compose_creates_general_conversation_and_reuses_idempotency(
+    db_session: Session,
+    api_db_override: None,
+    resend_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    requests: list[dict[str, Any]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST":
+            payload = json.loads(request.content)
+            requests.append(payload)
+            return httpx.Response(
+                200,
+                json={"id": f"resend-compose-{len(requests)}"},
+                request=request,
+            )
+        provider_id = request.url.path.rsplit("/", 1)[-1]
+        return httpx.Response(
+            200,
+            json={
+                "id": provider_id,
+                "message_id": f"<{provider_id}@resend.test>",
+                "last_event": "sent",
+            },
+            request=request,
+        )
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    monkeypatch.setattr(
+        "app.services.email.ResendEmailDeliveryProvider",
+        lambda **_kwargs: provider,
+    )
+
+    client = TestClient(app)
+    alias_id, _lead_conversation = create_alias_and_conversation(db_session, client)
+    payload = {
+        "email_sender_alias_id": alias_id,
+        "to": ["new.contact@example.com", "partner@example.com"],
+        "contact_name": "New Contact",
+        "cc": ["conner@stonegatehb.com"],
+        "bcc": ["audit@stonegatehb.com"],
+        "subject": "Stonegate introduction",
+        "body": "This email is not tied to a property lead.",
+        "idempotency_key": "global-compose-1",
+    }
+    first = client.post(
+        "/api/v1/email/compose",
+        headers=OWNER_HEADERS,
+        json=payload,
+    )
+    assert first.status_code == 201, first.text
+    duplicate = client.post(
+        "/api/v1/email/compose",
+        headers=OWNER_HEADERS,
+        json=payload,
+    )
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json() == first.json()
+    assert len(requests) == 1
+    assert requests[0]["to"] == [
+        "new.contact@example.com",
+        "partner@example.com",
+    ]
+    assert requests[0]["cc"] == ["conner@stonegatehb.com"]
+    assert requests[0]["bcc"] == ["audit@stonegatehb.com"]
+
+    conversation = db_session.get(Conversation, UUID(first.json()["conversation_id"]))
+    assert conversation is not None
+    assert conversation.lead_id is None
+    assert conversation.source_alias_id == UUID(alias_id)
+    contact = db_session.get(Contact, conversation.contact_id)
+    assert contact is not None
+    assert contact.legal_name == "New Contact"
+    primary_method = db_session.scalar(
+        select(ContactMethod).where(ContactMethod.contact_id == contact.id)
+    )
+    assert primary_method is not None
+    assert primary_method.normalized_value == "new.contact@example.com"
+
+    communication = db_session.get(
+        CommunicationRecord,
+        UUID(first.json()["message"]["communication_id"]),
+    )
+    assert communication is not None
+    participants = db_session.scalars(
+        select(CommunicationParticipant).where(
+            CommunicationParticipant.communication_record_id == communication.id
+        )
+    ).all()
+    participant_by_email = {
+        participant.normalized_email: participant for participant in participants
+    }
+    assert participant_by_email["new.contact@example.com"].contact_id == contact.id
+    assert participant_by_email["partner@example.com"].contact_id is None
+
+    search_response = client.get(
+        "/api/v1/email/recipients?q=New",
+        headers=OWNER_HEADERS,
+    )
+    assert search_response.status_code == 200, search_response.text
+    assert search_response.json()["items"] == [
+        {
+            "contact_id": str(contact.id),
+            "display_name": "New Contact",
+            "email_address": "new.contact@example.com",
+            "contact_type": "business_contact",
+        }
+    ]
+
+
 def test_resend_failure_returns_gateway_error_and_marks_dispatch_failed(
     db_session: Session,
     api_db_override: None,
@@ -311,6 +427,19 @@ def test_assigned_user_cannot_send_from_an_ungranted_alias(
     assert user_response.status_code == 201, user_response.text
     conversation.assigned_user_id = UUID(user_response.json()["id"])
     db_session.commit()
+
+    global_response = client.post(
+        "/api/v1/email/compose",
+        headers={"X-Dev-User-Email": "devon.login@example.com"},
+        json={
+            "email_sender_alias_id": alias_id,
+            "to": ["unrelated@example.com"],
+            "subject": "Unrelated correspondence",
+            "body": "This should require workspace-wide email permission.",
+            "idempotency_key": "global-permission-1",
+        },
+    )
+    assert global_response.status_code == 403, global_response.text
 
     response = client.post(
         f"/api/v1/email/conversations/{conversation.id}/messages",

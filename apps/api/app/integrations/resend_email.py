@@ -34,9 +34,10 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         self.client = client
 
     def send(self, request: EmailDeliveryRequest) -> EmailDeliveryResult:
+        recipients = request.to or [request.recipient]
         payload: dict[str, Any] = {
             "from": format_sender(request.sender_name, request.sender_email),
-            "to": [request.recipient],
+            "to": recipients,
             "subject": request.subject,
             "text": request.body,
         }

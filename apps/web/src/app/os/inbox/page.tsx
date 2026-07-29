@@ -14,7 +14,7 @@ const inboxFilters = new Set<InboxFilterKey>([
 export default async function InboxPage({
   searchParams,
 }: {
-  searchParams: Promise<{ lead?: string; view?: string }>;
+  searchParams: Promise<{ conversation?: string; lead?: string; view?: string }>;
 }) {
   const params = await searchParams;
   const requestedFilter = params.view as InboxFilterKey | undefined;
@@ -22,6 +22,7 @@ export default async function InboxPage({
   return (
     <InboxWorkspace
       initialFilter={requestedFilter && inboxFilters.has(requestedFilter) ? requestedFilter : "team"}
+      initialConversationId={params.conversation ?? null}
       initialLeadId={params.lead ?? null}
     />
   );

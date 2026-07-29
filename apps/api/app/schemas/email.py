@@ -170,6 +170,17 @@ class EmailRoutingResolutionRequest(BaseModel):
     conversation_id: UUID
 
 
+class EmailRecipientOptionRead(BaseModel):
+    contact_id: UUID
+    display_name: str
+    email_address: str
+    contact_type: str
+
+
+class EmailRecipientOptionListResponse(BaseModel):
+    items: list[EmailRecipientOptionRead]
+
+
 class EmailTemplateCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     subject_template: str = Field(min_length=1, max_length=255)
@@ -215,6 +226,7 @@ class OutboundEmailAttachment(BaseModel):
 class EmailSendRequest(BaseModel):
     email_sender_alias_id: UUID | None = None
     email_account_id: UUID | None = None
+    to: list[str] = Field(default_factory=list, max_length=20)
     subject: str = Field(min_length=1, max_length=255)
     body: str = Field(min_length=1, max_length=4000)
     html_body: str | None = Field(default=None, max_length=100_000)
@@ -223,7 +235,7 @@ class EmailSendRequest(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=120)
     attachments: list[OutboundEmailAttachment] = Field(default_factory=list, max_length=5)
 
-    @field_validator("cc", "bcc")
+    @field_validator("to", "cc", "bcc")
     @classmethod
     def normalize_recipients(cls, values: list[str]) -> list[str]:
         normalized: list[str] = []
@@ -233,7 +245,7 @@ class EmailSendRequest(BaseModel):
             _name, address = parseaddr(value.strip())
             local, separator, domain = address.rpartition("@")
             if not separator or not local or "." not in domain:
-                raise ValueError("Enter valid CC and BCC email addresses.")
+                raise ValueError("Enter valid email recipients.")
             candidate = address.lower()
             if candidate not in normalized:
                 normalized.append(candidate)
@@ -250,12 +262,27 @@ class EmailSendRequest(BaseModel):
         return self
 
 
+class GeneralEmailComposeRequest(EmailSendRequest):
+    contact_name: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def require_primary_recipient(self) -> "GeneralEmailComposeRequest":
+        if not self.to:
+            raise ValueError("Enter at least one To recipient.")
+        return self
+
+
 class EmailSendRead(BaseModel):
     communication_id: UUID
     provider_message_id: str
     provider_thread_id: str
     status: str
     recipient: str
+
+
+class GeneralEmailComposeRead(BaseModel):
+    conversation_id: UUID
+    message: EmailSendRead
 
 
 class EmailSyncRead(BaseModel):

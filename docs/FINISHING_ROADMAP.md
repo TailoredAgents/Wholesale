@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 28, 2026
+Last updated: July 29, 2026
 
 ## Purpose
 
@@ -545,8 +545,14 @@ Implementation checkpoint, July 28, 2026:
   replies, provider threads, unique sender contexts, and configured personal or team aliases route
   predictably; ambiguous mail remains in review, and restricted mailboxes are enforced in lists,
   detail, attachments, and sending.
-- F8.7A.4 Inbox views and global Compose are next. Notifications, controlled acceptance, and F8.8
-  production launch remain.
+- F8.7A.4 is complete in code: My Addresses, Team Inboxes, authorized Restricted Inbox views,
+  global Compose, recipient search, To/CC/BCC, templates, signatures, attachments, general
+  conversations, and duplicate-send protection are implemented.
+- F8.7A.5 is complete in code: assignee, team, watcher, and alias-grant notifications; recipient
+  deduplication; configurable first and follow-up response timers; overdue owner escalation;
+  automatic alert resolution; Inbox wait-state labels; and scoped reporting by alias, team, and
+  assignee are implemented.
+- F8.7A.6 controlled production acceptance and F8.8 production launch remain.
 
 Architecture:
 

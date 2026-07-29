@@ -5,6 +5,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.core.config import get_settings
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -25,6 +26,7 @@ from app.models.foundation import (
     EmailSenderGrant,
     EmailSenderAlias,
     Lead,
+    Notification,
     Property,
     Role,
     RoleAssignment,
@@ -46,6 +48,8 @@ from app.schemas.inbox import (
     ConversationWatcherCreate,
     ConversationWatcherRead,
     InboxAssigneeRead,
+    MailboxResponseBucketRead,
+    MailboxResponseOverviewRead,
     SmsEligibilityRead,
     VoiceEligibilityRead,
 )
@@ -53,6 +57,11 @@ from app.services.call_intelligence import transcript_to_read
 from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
+)
+from app.services.mailbox_notifications import (
+    MAILBOX_NOTIFICATION_TYPES,
+    latest_inbound_channel,
+    mailbox_response_status,
 )
 
 CONVERSATION_QUEUE_KEYS = {
@@ -334,6 +343,98 @@ def list_conversations(
         .limit(limit)
     ).all()
     return [conversation_to_read(db, conversation) for conversation in conversations]
+
+
+def get_mailbox_response_overview(
+    db: Session,
+    principal: Principal,
+) -> MailboxResponseOverviewRead:
+    conversations = list_conversations(db, principal, limit=1000)
+    alias_labels = {
+        alias.id: f"{alias.display_name} · {alias.email_address}"
+        for alias in db.scalars(
+            select(EmailSenderAlias).where(
+                EmailSenderAlias.organization_id == principal.organization_id
+            )
+        ).all()
+    }
+    team_labels = {
+        team.id: team.name
+        for team in db.scalars(
+            select(Team).where(Team.organization_id == principal.organization_id)
+        ).all()
+    }
+    user_labels = {
+        user.id: user.display_name
+        for user in db.scalars(
+            select(User).where(User.organization_id == principal.organization_id)
+        ).all()
+    }
+    return MailboxResponseOverviewRead(
+        conversation_count=len(conversations),
+        needs_reply_count=sum(item.response_state != "none" for item in conversations),
+        overdue_count=sum(item.response_state == "overdue" for item in conversations),
+        oldest_wait_minutes=_oldest_wait_minutes(conversations),
+        by_alias=_response_buckets(
+            conversations,
+            key_name="source_alias_id",
+            labels=alias_labels,
+            empty_label="No email alias",
+        ),
+        by_team=_response_buckets(
+            conversations,
+            key_name="assigned_team_id",
+            labels=team_labels,
+            empty_label="No assigned team",
+        ),
+        by_assignee=_response_buckets(
+            conversations,
+            key_name="assigned_user_id",
+            labels=user_labels,
+            empty_label="Unassigned",
+        ),
+    )
+
+
+def _response_buckets(
+    conversations: list[ConversationRead],
+    *,
+    key_name: str,
+    labels: dict[UUID, str],
+    empty_label: str,
+) -> list[MailboxResponseBucketRead]:
+    grouped: dict[UUID | None, list[ConversationRead]] = {}
+    for conversation in conversations:
+        scope_id = getattr(conversation, key_name)
+        grouped.setdefault(scope_id, []).append(conversation)
+    buckets = [
+        MailboxResponseBucketRead(
+            scope_id=scope_id,
+            scope_label=labels.get(scope_id, empty_label) if scope_id is not None else empty_label,
+            conversation_count=len(items),
+            needs_reply_count=sum(item.response_state != "none" for item in items),
+            overdue_count=sum(item.response_state == "overdue" for item in items),
+            oldest_wait_minutes=_oldest_wait_minutes(items),
+        )
+        for scope_id, items in grouped.items()
+    ]
+    return sorted(
+        buckets,
+        key=lambda item: (
+            -item.overdue_count,
+            -item.needs_reply_count,
+            item.scope_label.lower(),
+        ),
+    )
+
+
+def _oldest_wait_minutes(conversations: list[ConversationRead]) -> int | None:
+    ages = [
+        item.response_age_minutes
+        for item in conversations
+        if item.response_age_minutes is not None
+    ]
+    return max(ages) if ages else None
 
 
 def get_conversation(
@@ -688,8 +789,22 @@ def mark_conversation_read(
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
         return None
-    if conversation.unread_count:
+    notifications = db.scalars(
+        select(Notification).where(
+            Notification.organization_id == principal.organization_id,
+            Notification.recipient_user_id == principal.user_id,
+            Notification.entity_type == "conversation",
+            Notification.entity_id == conversation.id,
+            Notification.notification_type.in_(MAILBOX_NOTIFICATION_TYPES),
+            Notification.read_at.is_(None),
+        )
+    ).all()
+    had_unread = conversation.unread_count > 0
+    if had_unread:
         conversation.unread_count = 0
+    for notification in notifications:
+        notification.read_at = datetime.now(UTC)
+    if had_unread or notifications:
         db.commit()
         db.refresh(conversation)
     return conversation_to_read(db, conversation)
@@ -1160,6 +1275,11 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         )
         .limit(20)
     ).all()
+    response = mailbox_response_status(
+        conversation,
+        get_settings(),
+        latest_inbound_channel=latest_inbound_channel(db, conversation),
+    )
     return ConversationRead(
         id=conversation.id,
         conversation_type=conversation.conversation_type,
@@ -1185,6 +1305,11 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         last_activity_at=conversation.last_activity_at,
         last_inbound_at=conversation.last_inbound_at,
         last_outbound_at=conversation.last_outbound_at,
+        response_state=response.state,
+        response_kind=response.kind,
+        response_age_minutes=response.age_minutes,
+        response_target_minutes=response.target_minutes,
+        response_due_at=response.due_at,
         closed_at=conversation.closed_at,
         watchers=[
             ConversationWatcherRead(

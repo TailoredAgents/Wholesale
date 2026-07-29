@@ -52,17 +52,25 @@ from app.schemas.email import (
     EmailAccountUpdate,
     EmailAttachmentRead,
     EmailOAuthAuthorizeRead,
+    EmailRecipientOptionRead,
     EmailSendRead,
     EmailSendRequest,
     EmailSyncRead,
     EmailTemplateCreate,
     EmailTemplateRead,
     EmailTemplateUpdate,
+    GeneralEmailComposeRead,
+    GeneralEmailComposeRequest,
 )
 from app.services.communication_participants import record_email_participants
 from app.services.document_storage import read_content
 from app.services.email_aliases import get_authorized_email_sender_alias
-from app.services.inbox import get_scoped_conversation, update_conversation_activity
+from app.services.inbox import (
+    create_general_conversation,
+    get_scoped_conversation,
+    list_conversations,
+    update_conversation_activity,
+)
 
 
 class EmailConfigurationError(RuntimeError):
@@ -355,6 +363,63 @@ def list_email_templates(db: Session, principal: Principal) -> list[EmailTemplat
     return [email_template_to_read(template) for template in templates]
 
 
+def search_email_recipients(
+    db: Session,
+    principal: Principal,
+    query: str,
+    *,
+    limit: int = 20,
+) -> list[EmailRecipientOptionRead]:
+    scoped_contact_ids = {
+        conversation.contact_id for conversation in list_conversations(db, principal)
+    }
+    if not scoped_contact_ids:
+        return []
+    filters = [
+        Contact.organization_id == principal.organization_id,
+        Contact.id.in_(scoped_contact_ids),
+        ContactMethod.organization_id == principal.organization_id,
+        ContactMethod.method_type == "email",
+    ]
+    normalized_query = query.strip()
+    if normalized_query:
+        pattern = f"%{normalized_query}%"
+        filters.append(
+            or_(
+                Contact.legal_name.ilike(pattern),
+                Contact.preferred_name.ilike(pattern),
+                ContactMethod.value.ilike(pattern),
+            )
+        )
+    rows = db.execute(
+        select(Contact, ContactMethod)
+        .join(ContactMethod, ContactMethod.contact_id == Contact.id)
+        .where(*filters)
+        .order_by(
+            ContactMethod.is_primary.desc(),
+            Contact.legal_name.asc(),
+            ContactMethod.value.asc(),
+        )
+        .limit(limit)
+    ).all()
+    seen: set[str] = set()
+    items: list[EmailRecipientOptionRead] = []
+    for contact, method in rows:
+        email_address = method.value.strip().lower()
+        if email_address in seen:
+            continue
+        seen.add(email_address)
+        items.append(
+            EmailRecipientOptionRead(
+                contact_id=contact.id,
+                display_name=contact.preferred_name or contact.legal_name,
+                email_address=email_address,
+                contact_type=contact.contact_type,
+            )
+        )
+    return items
+
+
 def create_email_template(
     db: Session,
     principal: Principal,
@@ -497,6 +562,8 @@ def send_conversation_email(
         sender_email = alias.email_address
         sender_signature = alias.signature_text
         sender_metadata = {"email_sender_alias_id": str(alias.id)}
+        if conversation.source_alias_id is None:
+            conversation.source_alias_id = alias.id
     else:
         if provider_name == "resend":
             raise EmailConfigurationError(
@@ -521,24 +588,27 @@ def send_conversation_email(
     lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     if contact is None:
         return None
-    recipient_method = db.scalar(
-        select(ContactMethod)
-        .where(
-            ContactMethod.organization_id == principal.organization_id,
-            ContactMethod.contact_id == contact.id,
-            ContactMethod.method_type == "email",
+    recipients = list(payload.to)
+    if not recipients:
+        recipient_method = db.scalar(
+            select(ContactMethod)
+            .where(
+                ContactMethod.organization_id == principal.organization_id,
+                ContactMethod.contact_id == contact.id,
+                ContactMethod.method_type == "email",
+            )
+            .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
         )
-        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
-    )
-    if recipient_method is None:
-        raise EmailConfigurationError("This seller does not have an email address.")
-    recipient = recipient_method.value.strip().lower()
+        if recipient_method is None:
+            raise EmailConfigurationError("This contact does not have an email address.")
+        recipients = [recipient_method.value.strip().lower()]
+    recipient = recipients[0]
     subject = payload.subject.strip()
     body = payload.body.strip()
     decoded_attachments = decode_outbound_attachments(payload, settings)
     request_hash = hashlib.sha256(
         (
-            f"{sender_id}|{recipient}|{subject}|{body}|{payload.html_body or ''}|"
+            f"{sender_id}|{','.join(recipients)}|{subject}|{body}|{payload.html_body or ''}|"
             f"{','.join(payload.cc)}|{','.join(payload.bcc)}|"
             + "|".join(
                 f"{filename}:{content_type}:{hashlib.sha256(content).hexdigest()}"
@@ -629,6 +699,7 @@ def send_conversation_email(
                 subject=subject,
                 body=message_body,
                 idempotency_key=payload.idempotency_key,
+                to=recipients,
                 html_body=message_html_body,
                 cc=payload.cc,
                 bcc=payload.bcc,
@@ -693,7 +764,7 @@ def send_conversation_email(
                 if part
             ),
             "from": sender_email,
-            "to": recipient,
+            "to": recipients,
             "cc": payload.cc,
             "bcc": payload.bcc,
             "attachment_count": len(decoded_attachments),
@@ -705,11 +776,12 @@ def send_conversation_email(
         db,
         communication,
         from_values=f"{sender_name} <{sender_email}>",
-        to_values=recipient,
+        to_values=recipients,
         cc_values=payload.cc,
         bcc_values=payload.bcc,
         external_contact_id=contact.id,
         external_roles={"to"},
+        external_contact_email=recipient,
         sender_user_id=principal.user_id,
         sender_alias_ids=[alias.id] if alias is not None else [],
         source="shared_inbox",
@@ -729,7 +801,11 @@ def send_conversation_email(
             entity_type="lead" if lead is not None else "conversation",
             entity_id=lead.id if lead is not None else conversation.id,
             event_type="lead.email_sent" if lead is not None else "conversation.email_sent",
-            summary=f"Email sent to {recipient}.",
+            summary=(
+                f"Email sent to {recipient}."
+                if len(recipients) == 1
+                else f"Email sent to {len(recipients)} recipients."
+            ),
         )
     )
     db.add(
@@ -745,6 +821,7 @@ def send_conversation_email(
                 "provider_message_id": provider_message_id,
                 "provider_thread_id": provider_thread_id,
                 "recipient": recipient,
+                "recipients": recipients,
                 "attachment_count": len(decoded_attachments),
             },
             reason="One-to-one email sent from shared inbox",
@@ -775,6 +852,155 @@ def send_conversation_email(
         provider_thread_id=provider_thread_id,
         status="sent",
         recipient=recipient,
+    )
+
+
+def compose_general_email(
+    db: Session,
+    principal: Principal,
+    payload: GeneralEmailComposeRequest,
+    *,
+    settings: Settings | None = None,
+    client: GoogleGmailClient | None = None,
+) -> GeneralEmailComposeRead:
+    existing_dispatch = db.scalar(
+        select(CommunicationDispatch).where(
+            CommunicationDispatch.organization_id == principal.organization_id,
+            CommunicationDispatch.idempotency_key == payload.idempotency_key,
+        )
+    )
+    if existing_dispatch is not None:
+        existing_communication = (
+            db.get(CommunicationRecord, existing_dispatch.communication_record_id)
+            if existing_dispatch.communication_record_id
+            else None
+        )
+        existing_conversation = (
+            get_scoped_conversation(db, principal, existing_dispatch.conversation_id)
+            if existing_dispatch.conversation_id
+            else None
+        )
+        metadata = (
+            existing_communication.communication_metadata
+            if existing_communication is not None
+            else None
+        ) or {}
+        if (
+            existing_communication is not None
+            and existing_conversation is not None
+            and existing_communication.provider_message_id
+            and existing_communication.subject == payload.subject.strip()
+            and existing_communication.body.startswith(payload.body.strip())
+            and list(metadata.get("to") or []) == payload.to
+            and list(metadata.get("cc") or []) == payload.cc
+            and list(metadata.get("bcc") or []) == payload.bcc
+            and str(metadata.get("email_sender_alias_id", ""))
+            == str(payload.email_sender_alias_id or "")
+        ):
+            return GeneralEmailComposeRead(
+                conversation_id=existing_conversation.id,
+                message=EmailSendRead(
+                    communication_id=existing_communication.id,
+                    provider_message_id=existing_communication.provider_message_id,
+                    provider_thread_id=str(metadata.get("provider_thread_id", "")),
+                    status=existing_communication.status,
+                    recipient=payload.to[0],
+                ),
+            )
+        raise EmailDispatchConflictError(
+            "The compose request was already used; start a new email to retry."
+        )
+
+    if payload.email_sender_alias_id is None:
+        raise EmailConfigurationError("Select an active Stonegate email alias.")
+    alias = get_authorized_email_sender_alias(
+        db,
+        principal,
+        payload.email_sender_alias_id,
+    )
+    if (
+        alias is None
+        or alias.status != "active"
+        or not alias.outbound_enabled
+        or not alias.inbound_enabled
+    ):
+        raise EmailConfigurationError("Select an authorized Stonegate sender.")
+    primary_email = payload.to[0]
+    contact = db.scalar(
+        select(Contact)
+        .join(ContactMethod, ContactMethod.contact_id == Contact.id)
+        .where(
+            Contact.organization_id == principal.organization_id,
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.method_type == "email",
+            ContactMethod.normalized_value == primary_email,
+        )
+        .order_by(Contact.updated_at.desc())
+    )
+    if contact is None:
+        contact = Contact(
+            organization_id=principal.organization_id,
+            legal_name=(payload.contact_name or primary_email).strip(),
+            preferred_name=None,
+            contact_type="business_contact",
+            assigned_user_id=alias.owner_user_id or principal.user_id,
+        )
+        db.add(contact)
+        db.flush()
+        db.add(
+            ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=contact.id,
+                method_type="email",
+                value=primary_email,
+                normalized_value=primary_email,
+                is_primary=True,
+            )
+        )
+        db.flush()
+
+    metadata = alias.routing_metadata or {}
+    configured_scope = str(metadata.get("visibility_scope", "")).strip().lower()
+    visibility_scope = (
+        configured_scope
+        if configured_scope in {"standard", "restricted"}
+        else (
+            "restricted"
+            if alias.purpose_key
+            in {"accounting", "closing", "legal", "transaction", "transactions"}
+            else "standard"
+        )
+    )
+    conversation = create_general_conversation(
+        db,
+        organization_id=principal.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=alias.owner_user_id or (
+            None if alias.assigned_team_id is not None else principal.user_id
+        ),
+        assigned_team_id=alias.assigned_team_id,
+        source_alias_id=alias.id,
+        visibility_scope=visibility_scope,
+    )
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "source": "global_email_compose",
+        "initial_subject": payload.subject.strip(),
+    }
+    db.flush()
+    result = send_conversation_email(
+        db,
+        principal,
+        conversation.id,
+        payload,
+        settings=settings,
+        client=client,
+    )
+    if result is None:
+        raise RuntimeError("The composed conversation could not be loaded.")
+    return GeneralEmailComposeRead(
+        conversation_id=conversation.id,
+        message=result,
     )
 
 

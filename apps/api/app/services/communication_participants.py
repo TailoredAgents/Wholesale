@@ -22,6 +22,7 @@ def record_email_participants(
     bcc_values: object = None,
     external_contact_id: UUID | None,
     external_roles: set[str],
+    external_contact_email: str | None = None,
     sender_user_id: UUID | None = None,
     sender_alias_ids: Iterable[UUID] = (),
     source: str,
@@ -53,6 +54,9 @@ def record_email_participants(
         ).all()
     }
     created: list[CommunicationParticipant] = []
+    normalized_external_email = (
+        external_contact_email.strip().lower() if external_contact_email else None
+    )
     role_values = {
         "from": from_values,
         "to": to_values,
@@ -73,7 +77,15 @@ def record_email_participants(
                 organization_id=communication.organization_id,
                 communication_record_id=communication.id,
                 conversation_id=communication.conversation_id,
-                contact_id=external_contact_id if role in external_roles else None,
+                contact_id=(
+                    external_contact_id
+                    if role in external_roles
+                    and (
+                        normalized_external_email is None
+                        or normalized == normalized_external_email
+                    )
+                    else None
+                ),
                 user_id=sender_user_id if role == "from" else None,
                 email_sender_alias_id=alias_by_address.get(normalized),
                 participant_role=role,

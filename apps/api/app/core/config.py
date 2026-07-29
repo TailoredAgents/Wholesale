@@ -37,6 +37,30 @@ class Settings(BaseSettings):
         le=480,
         validation_alias="LEAD_MANAGER_HANDOFF_SLA_MINUTES",
     )
+    mailbox_first_response_target_minutes: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        validation_alias="MAILBOX_FIRST_RESPONSE_TARGET_MINUTES",
+    )
+    mailbox_next_response_target_minutes: int = Field(
+        default=120,
+        ge=1,
+        le=2880,
+        validation_alias="MAILBOX_NEXT_RESPONSE_TARGET_MINUTES",
+    )
+    mailbox_unassigned_escalation_minutes: int = Field(
+        default=15,
+        ge=1,
+        le=1440,
+        validation_alias="MAILBOX_UNASSIGNED_ESCALATION_MINUTES",
+    )
+    mailbox_owner_escalation_minutes: int = Field(
+        default=240,
+        ge=5,
+        le=10080,
+        validation_alias="MAILBOX_OWNER_ESCALATION_MINUTES",
+    )
     communication_provider_mode: Literal["disabled", "simulate", "live"] = Field(
         default="live",
         validation_alias="COMMUNICATION_PROVIDER_MODE",

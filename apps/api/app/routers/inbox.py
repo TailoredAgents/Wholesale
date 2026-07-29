@@ -15,12 +15,14 @@ from app.schemas.inbox import (
     ConversationRead,
     ConversationWatcherCreate,
     InboxAssigneeListResponse,
+    MailboxResponseOverviewRead,
     SmsSendRead,
     SmsSendRequest,
 )
 from app.services.inbox import (
     add_conversation_watcher,
     get_conversation_detail,
+    get_mailbox_response_overview,
     handoff_conversation,
     list_conversations,
     list_eligible_assignees,
@@ -70,6 +72,14 @@ def read_conversations(
             detail=str(exc),
         ) from exc
     return ConversationListResponse(items=items)
+
+
+@router.get("/response-overview")
+def read_mailbox_response_overview(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_inbox_dependency)],
+) -> MailboxResponseOverviewRead:
+    return get_mailbox_response_overview(db, principal)
 
 
 @router.get("/conversations/{conversation_id}")
