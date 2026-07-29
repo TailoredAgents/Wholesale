@@ -23,6 +23,7 @@ from app.schemas.field_operations import (
     DispatchSlotRequest,
     FieldAppointmentWorkspaceRead,
     FieldCalendarRead,
+    FieldInPersonSigningRequest,
     FieldInspectionPhotoRead,
     FieldInspectionRead,
     FieldInspectionUpdate,
@@ -32,6 +33,7 @@ from app.schemas.field_operations import (
     FieldOperationsOverview,
     FieldUnderwritingTransferRead,
 )
+from app.schemas.transactions import EsignEnvelopeRead
 from app.services.acquisitions_copilot import (
     analyze_appointment,
     review_recommendation,
@@ -52,6 +54,7 @@ from app.services.field_workflows import (
     generate_meeting_brief,
     get_photo_content,
     save_negotiation,
+    start_field_in_person_signing,
     start_inspection,
     submit_inspection,
     transfer_to_underwriting,
@@ -64,6 +67,7 @@ work_dependency = require_any_permission(
     PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
 )
 manage_dependency = require_permission(PermissionKeys.MANAGE_ACQUISITION_OPERATIONS)
+contract_send_dependency = require_permission(PermissionKeys.SEND_CONTRACTS)
 
 
 @router.get("")
@@ -113,6 +117,29 @@ def create_meeting_brief(
 ) -> FieldMeetingBriefRead:
     try:
         result = generate_meeting_brief(db, principal, appointment_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Appointment not found.")
+    return result
+
+
+@router.post(
+    "/appointments/{appointment_id}/contract-signing",
+    status_code=201,
+)
+def create_in_person_contract_signing(
+    appointment_id: UUID,
+    payload: FieldInPersonSigningRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(contract_send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = start_field_in_person_signing(db, principal, appointment_id, payload)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

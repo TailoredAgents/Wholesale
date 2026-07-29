@@ -24,6 +24,10 @@ The `/os/field-operations` workspace now covers the complete seller-appointment 
   assignment fees, and negotiation controls remain in the private workspace;
 - structured decision-maker, seller price, offer, counter, objection, commitment, outcome, and
   follow-up capture;
+- an accepted-outcome contract panel for reviewing the exact approved agreement and launching a
+  resumable SignWell session on the appointment iPad;
+- a full-screen signer handoff that hides the operating system, sequences separate seller and
+  Stonegate signer identities, and returns status to the existing transaction record;
 - a hard server-side block against presenting or accepting a price above the currently approved
   seller ceiling;
 - a reviewed transfer that creates a new repair estimate and draft underwriting version without
@@ -49,6 +53,12 @@ offer, approved ceiling, repair budget, assignment fee, buyer profit, or concess
 Refresh the meeting brief after changing the comp analysis so the appointment uses current
 evidence.
 
+In-person signing is separately gated. It requires the `contracts:send` permission, an accepted
+field outcome, confirmed decision makers, an exact agreed price, and an approved purchase-agreement
+package with the same price. The appointment cannot create or silently approve contract terms.
+SignWell remains responsible for the signing interface, signer audit evidence, document locking,
+and completed PDF.
+
 Inspection images currently use private, authenticated database storage with a 5 MB per-image and
 30-image per-inspection limit. This is appropriate for controlled launch volume. Before sustained
 high-volume operations, move image bytes to encrypted object storage while preserving the existing
@@ -64,8 +74,8 @@ optimization, not an incomplete Phase 6 workflow.
 
 - API regression coverage exercises calendar retrieval, versioned meeting briefs, walkthrough
   drafts, authenticated photographs, immutable submission, approved-ceiling enforcement,
-  negotiation outcomes, underwriting transfer, prospecting-caller denial, and the client
-  presentation allowlist.
+  negotiation outcomes, exact-price in-person contract signing, resume idempotency, underwriting
+  transfer, prospecting-caller denial, and the client presentation allowlist.
 - Python formatting, linting, and static typing pass.
 - TypeScript and ESLint pass for the new Field Operations interface.
 - Alembic upgrades through `0036_phase6_field_workflow`, downgrades one revision, and upgrades again

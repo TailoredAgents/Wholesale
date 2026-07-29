@@ -2471,6 +2471,9 @@ class EsignEnvelope(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_document_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    delivery_mode: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="email"
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str | None] = mapped_column(String(2000))
@@ -2501,6 +2504,7 @@ class EsignRecipient(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("esign_envelopes.id", ondelete="CASCADE"), index=True
     )
     provider_recipient_id: Mapped[str | None] = mapped_column(String(255))
+    embedded_signing_url: Mapped[str | None] = mapped_column(String(1000))
     placeholder_name: Mapped[str] = mapped_column(String(120), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     email: Mapped[str] = mapped_column(String(320), nullable=False)

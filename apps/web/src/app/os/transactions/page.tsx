@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ transaction?: string }>;
+  searchParams: Promise<{ transaction?: string; tab?: string }>;
 }) {
   const [{ transactions, apiConnected }, params] = await Promise.all([
     getTransactionOverview(),
@@ -25,7 +25,11 @@ export default async function TransactionsPage({
       />
       <DealJourney active="transactions" />
       {transactions ? (
-        <TransactionWorkspace initialData={transactions} initialTransactionId={params.transaction} />
+        <TransactionWorkspace
+          initialData={transactions}
+          initialTab={params.tab === "contract" ? "contract" : "closing"}
+          initialTransactionId={params.transaction}
+        />
       ) : (
         <SectionPanel description="A deal-access role and an available API connection are required." title="Transaction workspace unavailable">
           The server did not return transaction data.

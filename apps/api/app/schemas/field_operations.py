@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.transactions import EsignEnvelopeRead, EsignRecipientCreate
+
 
 class CloserProfileUpsert(BaseModel):
     timezone: str = Field(default="America/New_York", min_length=1, max_length=80)
@@ -498,12 +500,36 @@ class FieldUnderwritingTransferRead(BaseModel):
     created_at: datetime
 
 
+class FieldInPersonSigningRequest(BaseModel):
+    package_id: UUID
+    subject: str = Field(min_length=1, max_length=255)
+    message: str | None = Field(default=None, max_length=2000)
+    recipients: list[EsignRecipientCreate] = Field(min_length=1, max_length=9)
+
+
+class FieldContractSigningRead(BaseModel):
+    transaction_id: UUID | None
+    transaction_status: str | None
+    package_id: UUID | None
+    package_version: int | None
+    package_status: str | None
+    seller_name: str | None
+    purchase_price_cents: int | None
+    closing_date: datetime | None
+    agreed_price_cents: int | None
+    ready: bool
+    blocker: str | None
+    can_send: bool
+    envelope: EsignEnvelopeRead | None
+
+
 class FieldAppointmentWorkspaceRead(BaseModel):
     appointment: FieldCalendarAppointmentRead
     brief: FieldMeetingBriefRead | None
     inspection: FieldInspectionRead | None
     negotiation: FieldNegotiationRead | None
     underwriting_transfer: FieldUnderwritingTransferRead | None
+    contract_signing: FieldContractSigningRead
     copilot: AcquisitionsCopilotOverview
     can_edit: bool
     can_review_underwriting: bool

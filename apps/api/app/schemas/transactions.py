@@ -232,6 +232,7 @@ class EsignSendRequest(BaseModel):
     subject: str = Field(min_length=1, max_length=255)
     message: str | None = Field(default=None, max_length=2000)
     recipients: list[EsignRecipientCreate] = Field(min_length=1, max_length=10)
+    delivery_mode: Literal["email", "in_person"] = "email"
 
 
 class EsignRecipientRead(BaseModel):
@@ -246,11 +247,21 @@ class EsignRecipientRead(BaseModel):
     declined_at: datetime | None
 
 
+class EsignEmbeddedSignerRead(BaseModel):
+    recipient_id: UUID
+    placeholder_name: str
+    name: str
+    email: str
+    signing_order: int
+    signing_url: str
+
+
 class EsignEnvelopeRead(BaseModel):
     id: UUID
     contract_package_id: UUID
     provider: str
     provider_document_id: str
+    delivery_mode: str
     status: str
     subject: str
     message: str | None
@@ -262,6 +273,7 @@ class EsignEnvelopeRead(BaseModel):
     expired_at: datetime | None
     cancelled_at: datetime | None
     recipients: list[EsignRecipientRead]
+    embedded_signers: list[EsignEmbeddedSignerRead]
     created_at: datetime
 
 

@@ -493,6 +493,24 @@ assignment fee, buyer profit, or concession history.
 The Copilot may prepare questions and follow-up drafts. It cannot present or change a binding
 offer.
 
+### Sign An Accepted Agreement On The iPad
+
+The signing panel appears after the outcome is saved as **Accepted**.
+
+1. Confirm every owner is listed as a decision maker and the agreed price is exact.
+2. If the panel says the agreement is not ready, open **Prepare exact agreement**. Create, preview,
+   and approve the purchase agreement for the same accepted price.
+3. Return to the appointment and select **Review PDF**.
+4. Enter a separate legal name and email for every owner.
+5. Select **Start on this iPad** and hand the device to the person named on the handoff screen.
+6. Each seller completes their assigned fields. The Stonegate representative signs last.
+7. After completion, take the iPad back and select **Return to Stonegate**.
+8. Confirm the signed PDF and audit page appear in the transaction.
+
+Use **Resume signing** if the session was interrupted. Do not create another package or signature
+request for the same approved agreement. The seller handoff screen hides the Stonegate workspace
+until the device is returned.
+
 ## 9. All Leads, Pipeline, And Lead Record
 
 ### All Leads
@@ -639,6 +657,10 @@ The Transactions workspace has:
 9. Track recipients under **Signature requests**. Use **Refresh status** if a provider update is
    delayed.
 10. Confirm the completed provider PDF appears in Documents before continuing closing work.
+
+For an accepted in-person appointment, use the signing panel in **Field Operations > Meetings >
+Finish** instead of the email form. Both methods use the same approved package, signer records,
+provider status, completed PDF, and audit trail.
 
 Until production SignWell acceptance is complete, use the controlled manual execution workflow.
 Never mark a contract executed merely because a draft was approved or an email was sent.

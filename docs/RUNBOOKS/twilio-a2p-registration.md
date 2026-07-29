@@ -1,12 +1,12 @@
 # Stonegate A2P 10DLC Registration
 
-Last updated: July 20, 2026
+Last updated: July 29, 2026
 
 ## Current Status
 
-Stonegate's separate Low Volume Mixed Campaign has been submitted and is under provider review.
-Approval timing is controlled by Twilio and carrier review; resume this runbook when the Campaign
-shows approved or verified.
+Stonegate's separate Low Volume Mixed Campaign is approved. The remaining work is to attach the
+approved Stonegate number to its dedicated Messaging Service, configure the production values,
+and complete the SMS acceptance checks in this runbook.
 
 Submitted public evidence:
 

@@ -1310,6 +1310,323 @@
   gap: 18px;
 }
 
+.finishWorkspace {
+  display: grid;
+  gap: 22px;
+}
+
+.contractSigningPanel {
+  border: 1px solid var(--line);
+  background: var(--surface-soft);
+}
+
+.contractSigningHeader {
+  min-height: 58px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contractSigningHeader span {
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.contractSigningHeader strong {
+  font-size: 15px;
+}
+
+.contractSigningPanel > p,
+.contractSigningPanel > a {
+  margin: 14px;
+}
+
+.contractSigningPanel > p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.contractSigningPanel a {
+  width: fit-content;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--brand);
+  border-radius: 5px;
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.contractFacts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.contractFacts div {
+  min-height: 62px;
+  padding: 10px 14px;
+  border-right: 1px solid var(--line);
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.contractFacts div:last-child {
+  border-right: 0;
+}
+
+.contractFacts dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.contractFacts dd {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.contractSignerForm {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 11px;
+}
+
+.contractSignerForm label {
+  display: grid;
+  gap: 5px;
+}
+
+.contractSignerForm label span {
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.contractSignerForm input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.contractSignerForm > small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.contractSignerForm > button,
+.contractResume button,
+.signingHandoff button {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--brand-strong);
+  border-radius: 5px;
+  background: var(--brand);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.contractSignerForm > button {
+  grid-column: 1 / -1;
+  width: fit-content;
+}
+
+.contractSignerForm > button:disabled,
+.signingHandoff button:disabled {
+  opacity: 0.5;
+}
+
+.contractReviewAction {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: var(--brand-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contractReviewAction span {
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.contractReviewAction button {
+  min-height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.contractSigningError {
+  margin: 12px 14px 0;
+  padding: 10px;
+  border-left: 3px solid var(--danger);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.contractBlocker,
+.contractResume {
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contractBlocker p,
+.contractResume p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.contractBlocker a {
+  white-space: nowrap;
+  color: var(--brand-strong);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.signingOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #f6f7f5;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.signingToolbar {
+  min-height: 50px;
+  padding: 8px 12px;
+  border-bottom: 1px solid #d9dedb;
+  background: #24322c;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.signingToolbar span {
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.signingToolbar button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #7f9489;
+  border-radius: 4px;
+  background: transparent;
+  color: white;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.signwellContainer {
+  min-width: 0;
+  min-height: 0;
+  background: white;
+  overflow: auto;
+}
+
+.signwellContainer iframe {
+  width: 100%;
+  min-height: calc(100vh - 50px);
+  border: 0;
+}
+
+.signingHandoff {
+  grid-row: 1 / -1;
+  width: min(640px, calc(100% - 32px));
+  margin: auto;
+  padding: 44px;
+  color: #1f2924;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.signingHandoff > span {
+  color: #617068;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.signingHandoff h2 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0;
+}
+
+.signingHandoff p {
+  max-width: 52ch;
+  margin: 0 0 8px;
+  color: #56635c;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.signingBrand {
+  margin-bottom: 26px;
+  color: #174f37;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 900;
+}
+
 .briefActions,
 .inspectionStatus,
 .photoSection > header,
@@ -2708,6 +3025,37 @@
   .priceGrid,
   .outcomeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .contractFacts,
+  .contractSignerForm {
+    grid-template-columns: 1fr;
+  }
+
+  .contractFacts div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .contractFacts div:last-child {
+    border-bottom: 0;
+  }
+
+  .contractReviewAction,
+  .contractBlocker,
+  .contractResume,
+  .contractSigningHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .contractSignerForm > button,
+  .contractResume button {
+    width: 100%;
+  }
+
+  .signingHandoff {
+    padding: 24px 8px;
   }
 
   .sellerPresentation > header,

@@ -13,8 +13,10 @@ from app.models.foundation import (
     Appointment,
     ApprovalRequest,
     AuditEvent,
+    ContractPackage,
     Contact,
     ContactMethod,
+    EsignEnvelope,
     FieldInspection,
     FieldInspectionPhoto,
     FieldMeetingBrief,
@@ -26,6 +28,7 @@ from app.models.foundation import (
     Property,
     RepairEstimate,
     Task,
+    Transaction,
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
     User,
@@ -34,6 +37,8 @@ from app.schemas.field_operations import (
     FieldAppointmentWorkspaceRead,
     FieldCalendarAppointmentRead,
     FieldCalendarRead,
+    FieldContractSigningRead,
+    FieldInPersonSigningRequest,
     FieldInspectionPhotoRead,
     FieldInspectionRead,
     FieldInspectionUpdate,
@@ -45,7 +50,9 @@ from app.schemas.field_operations import (
     FieldRoomObservation,
     FieldUnderwritingTransferRead,
 )
+from app.schemas.transactions import EsignEnvelopeRead, EsignSendRequest
 from app.services.document_storage import delete_content, read_content, store_content
+from app.services.esign import envelope_read, send_contract_for_signature
 from app.services.offer_concessions import record_field_agreement, record_field_offer
 
 ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
@@ -190,9 +197,144 @@ def appointment_workspace(
         inspection=inspection_read(db, inspection) if inspection else None,
         negotiation=negotiation_read(negotiation) if negotiation else None,
         underwriting_transfer=transfer_read(db, transfer) if transfer else None,
+        contract_signing=field_contract_signing_summary(
+            db,
+            principal,
+            appointment,
+            negotiation,
+        ),
         copilot=get_acquisitions_copilot_overview(db, principal, appointment),
         can_edit=can_manage(principal) or appointment.owner_user_id == principal.user_id,
         can_review_underwriting=can_review_underwriting(principal),
+    )
+
+
+def field_contract_signing_summary(
+    db: Session,
+    principal: Principal,
+    appointment: Appointment,
+    negotiation: FieldNegotiationSession | None,
+) -> FieldContractSigningRead:
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.lead_id == appointment.lead_id,
+            Transaction.status.in_(
+                ("contract_prep", "approval_pending", "sent", "executed", "closing")
+            ),
+        )
+        .order_by(Transaction.created_at.desc())
+    )
+    package = (
+        db.scalar(
+            select(ContractPackage)
+            .where(
+                ContractPackage.organization_id == principal.organization_id,
+                ContractPackage.transaction_id == transaction.id,
+                ContractPackage.voided_at.is_(None),
+                ContractPackage.terms_snapshot["document_type"].as_string()
+                == "purchase_agreement",
+            )
+            .order_by(ContractPackage.version_number.desc())
+        )
+        if transaction
+        else None
+    )
+    envelope = (
+        db.scalar(
+            select(EsignEnvelope)
+            .where(
+                EsignEnvelope.organization_id == principal.organization_id,
+                EsignEnvelope.contract_package_id == package.id,
+            )
+            .order_by(EsignEnvelope.created_at.desc())
+        )
+        if package
+        else None
+    )
+    can_send = PermissionKeys.SEND_CONTRACTS in principal.permission_keys
+    agreed_price = negotiation.agreed_price_cents if negotiation else None
+    blocker: str | None = None
+    ready = False
+    if not can_send:
+        blocker = "Your role cannot start a contract signing session."
+    elif negotiation is None or negotiation.outcome != "accepted":
+        blocker = "Record the seller outcome as accepted before starting a contract."
+    elif not negotiation.decision_makers_confirmed:
+        blocker = "Confirm every decision maker before starting a contract."
+    elif agreed_price is None:
+        blocker = "Record the exact agreed price before starting a contract."
+    elif transaction is None:
+        blocker = "Open the transaction from this lead before preparing the agreement."
+    elif package is None:
+        blocker = "Create and approve the purchase agreement in Transactions."
+    elif package.purchase_price_cents != agreed_price:
+        blocker = "The approved agreement must match the exact accepted price."
+    elif envelope and envelope.status == "completed":
+        blocker = "The purchase agreement is complete."
+    elif envelope and envelope.delivery_mode != "in_person":
+        blocker = "This agreement already has a non-appointment signature request."
+    elif envelope and envelope.status not in {
+        "declined",
+        "expired",
+        "cancelled",
+        "error",
+    }:
+        ready = True
+    elif package.status != "approved":
+        blocker = "Approve this exact purchase agreement before signing."
+    else:
+        ready = True
+    return FieldContractSigningRead(
+        transaction_id=transaction.id if transaction else None,
+        transaction_status=transaction.status if transaction else None,
+        package_id=package.id if package else None,
+        package_version=package.version_number if package else None,
+        package_status=package.status if package else None,
+        seller_name=package.seller_name if package else None,
+        purchase_price_cents=package.purchase_price_cents if package else None,
+        closing_date=package.closing_date if package else None,
+        agreed_price_cents=agreed_price,
+        ready=ready,
+        blocker=blocker,
+        can_send=can_send,
+        envelope=envelope_read(db, envelope) if envelope else None,
+    )
+
+
+def start_field_in_person_signing(
+    db: Session,
+    principal: Principal,
+    appointment_id: UUID,
+    payload: FieldInPersonSigningRequest,
+) -> EsignEnvelopeRead | None:
+    appointment = scoped_appointment(db, principal, appointment_id)
+    if appointment is None:
+        return None
+    negotiation = db.scalar(
+        select(FieldNegotiationSession).where(
+            FieldNegotiationSession.appointment_id == appointment.id
+        )
+    )
+    summary = field_contract_signing_summary(db, principal, appointment, negotiation)
+    if not summary.ready:
+        raise ValueError(summary.blocker or "The agreement is not ready for signing.")
+    if summary.package_id != payload.package_id or summary.transaction_id is None:
+        raise ValueError("The approved agreement changed. Refresh the appointment before signing.")
+    if summary.envelope is not None:
+        return summary.envelope
+    return send_contract_for_signature(
+        db,
+        principal,
+        summary.transaction_id,
+        payload.package_id,
+        EsignSendRequest(
+            subject=payload.subject,
+            message=payload.message,
+            recipients=payload.recipients,
+            delivery_mode="in_person",
+        ),
     )
 
 

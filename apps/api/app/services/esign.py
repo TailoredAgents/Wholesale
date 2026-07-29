@@ -28,6 +28,7 @@ from app.models.foundation import (
     User,
 )
 from app.schemas.transactions import (
+    EsignEmbeddedSignerRead,
     EsignEnvelopeRead,
     EsignRecipientCreate,
     EsignRecipientRead,
@@ -367,7 +368,19 @@ def send_contract_for_signature(
             "id": f"sim-{uuid4()}",
             "status": "sent",
             "recipients": [
-                {"id": str(index), "email": str(item.email)}
+                {
+                    "id": str(index),
+                    "email": str(item.email),
+                    **(
+                        {
+                            "embedded_signing_url": (
+                                f"https://www.signwell.com/docs/simulated-{uuid4()}/"
+                            )
+                        }
+                        if payload.delivery_mode == "in_person"
+                        else {}
+                    ),
+                }
                 for index, item in enumerate(recipients, start=1)
             ],
         }
@@ -385,6 +398,7 @@ def send_contract_for_signature(
         completed_document_id=None,
         provider=active.esign_provider,
         provider_document_id=provider_document_id,
+        delivery_mode=payload.delivery_mode,
         status="sent",
         subject=payload.subject,
         message=payload.message,
@@ -413,6 +427,11 @@ def send_contract_for_signature(
                 provider_recipient_id=(
                     str(provider_item.get("id")) if provider_item.get("id") else None
                 ),
+                embedded_signing_url=(
+                    str(provider_item.get("embedded_signing_url"))
+                    if provider_item.get("embedded_signing_url")
+                    else None
+                ),
                 placeholder_name=item.placeholder_name,
                 name=item.name,
                 email=str(item.email).lower(),
@@ -434,12 +453,17 @@ def send_contract_for_signature(
             lead_id=transaction.lead_id,
             actor_user_id=principal.user_id,
             event_type="esign.sent",
-            summary=f"Contract package v{package.version_number} sent through SignWell.",
+            summary=(
+                f"Contract package v{package.version_number} prepared for in-person signing."
+                if payload.delivery_mode == "in_person"
+                else f"Contract package v{package.version_number} sent through SignWell."
+            ),
             details={
                 "envelope_id": str(envelope.id),
                 "provider_document_id": provider_document_id,
                 "source_document_id": str(source_document.id),
                 "test_mode": envelope.test_mode,
+                "delivery_mode": payload.delivery_mode,
             },
             occurred_at=now,
         )
@@ -536,8 +560,10 @@ def build_signwell_document_payload(
         "text_tags": True,
         "draft": False,
         "apply_signing_order": True,
-        "reminders": True,
+        "reminders": request.delivery_mode == "email",
         "allow_reassign": False,
+        "embedded_signing": request.delivery_mode == "in_person",
+        "embedded_signing_notifications": request.delivery_mode == "in_person",
         "metadata": {
             "stonegate_transaction_id": str(transaction.id),
             "stonegate_contract_package_id": str(package.id),
@@ -659,6 +685,7 @@ def envelope_read(db: Session, envelope: EsignEnvelope) -> EsignEnvelopeRead:
         contract_package_id=envelope.contract_package_id,
         provider=envelope.provider,
         provider_document_id=envelope.provider_document_id,
+        delivery_mode=envelope.delivery_mode,
         status=envelope.status,
         subject=envelope.subject,
         message=envelope.message,
@@ -682,6 +709,18 @@ def envelope_read(db: Session, envelope: EsignEnvelope) -> EsignEnvelopeRead:
                 declined_at=item.declined_at,
             )
             for item in recipients
+        ],
+        embedded_signers=[
+            EsignEmbeddedSignerRead(
+                recipient_id=item.id,
+                placeholder_name=item.placeholder_name,
+                name=item.name,
+                email=item.email,
+                signing_order=item.signing_order,
+                signing_url=item.embedded_signing_url,
+            )
+            for item in recipients
+            if item.embedded_signing_url
         ],
         created_at=envelope.created_at,
     )

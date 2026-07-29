@@ -1155,6 +1155,21 @@ export type FieldAppointmentWorkspace = {
     created_underwriting_version_number: number;
     created_at: string;
   } | null;
+  contract_signing: {
+    transaction_id: string | null;
+    transaction_status: string | null;
+    package_id: string | null;
+    package_version: number | null;
+    package_status: string | null;
+    seller_name: string | null;
+    purchase_price_cents: number | null;
+    closing_date: string | null;
+    agreed_price_cents: number | null;
+    ready: boolean;
+    blocker: string | null;
+    can_send: boolean;
+    envelope: EsignEnvelope | null;
+  };
   copilot: AcquisitionsCopilotOverview;
   can_edit: boolean;
   can_review_underwriting: boolean;
@@ -2806,6 +2821,44 @@ export type TransactionOverview = {
   items: TransactionQueueItem[];
 };
 
+export type EsignEnvelope = {
+  id: string;
+  contract_package_id: string;
+  provider: string;
+  provider_document_id: string;
+  delivery_mode: string;
+  status: string;
+  subject: string;
+  message: string | null;
+  test_mode: boolean;
+  completed_document_id: string | null;
+  sent_at: string | null;
+  completed_at: string | null;
+  declined_at: string | null;
+  expired_at: string | null;
+  cancelled_at: string | null;
+  recipients: Array<{
+    id: string;
+    placeholder_name: string;
+    name: string;
+    email: string;
+    signing_order: number;
+    status: string;
+    viewed_at: string | null;
+    signed_at: string | null;
+    declined_at: string | null;
+  }>;
+  embedded_signers: Array<{
+    recipient_id: string;
+    placeholder_name: string;
+    name: string;
+    email: string;
+    signing_order: number;
+    signing_url: string;
+  }>;
+  created_at: string;
+};
+
 export type TransactionDetail = {
   id: string;
   lead_id: string;
@@ -2851,34 +2904,7 @@ export type TransactionDetail = {
     executed_at: string | null;
     created_at: string;
   }>;
-  esign_envelopes: Array<{
-    id: string;
-    contract_package_id: string;
-    provider: string;
-    provider_document_id: string;
-    status: string;
-    subject: string;
-    message: string | null;
-    test_mode: boolean;
-    completed_document_id: string | null;
-    sent_at: string | null;
-    completed_at: string | null;
-    declined_at: string | null;
-    expired_at: string | null;
-    cancelled_at: string | null;
-    recipients: Array<{
-      id: string;
-      placeholder_name: string;
-      name: string;
-      email: string;
-      signing_order: number;
-      status: string;
-      viewed_at: string | null;
-      signed_at: string | null;
-      declined_at: string | null;
-    }>;
-    created_at: string;
-  }>;
+  esign_envelopes: EsignEnvelope[];
   documents: Array<{
     id: string;
     contract_package_id: string | null;

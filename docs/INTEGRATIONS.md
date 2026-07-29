@@ -1,6 +1,6 @@
 # Integrations
 
-Last updated: July 27, 2026
+Last updated: July 29, 2026
 
 All external providers are adapters. PostgreSQL remains the platform database. The internal
 Stonegate Accounting Ledger is a native subsystem, not a provider integration.
@@ -14,7 +14,7 @@ Stonegate Accounting Ledger is a native subsystem, not a provider integration.
 | Render | Web, API, worker, PostgreSQL, Key Value | Live | Branded web domain is active; final production operator checks remain |
 | RentCast | Property facts, valuation estimates, and sale-listing-based comps | Live | Continue validation; do not label provider estimates as appraisals or verified closed sales |
 | OpenAI | Transcription, structured call notes, future agents | Implemented | Recording activation and agent evaluations pending |
-| Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign under review; final sender cutover pending |
+| Twilio Messaging | Seller SMS | Implemented | Dedicated A2P Campaign approved; final sender cutover and acceptance pending |
 | Twilio Voice | Browser and inbound calls | Implemented | API key, TwiML App, Render activation, and webhook tests pending |
 | Resend | Operational seller email | F8.2-F8.5 provider-neutral foundation, authorized outbound delivery, signed inbound processing, durable attachments, lifecycle events, recovery, Inbox sender controls, owner administration, and routing review implemented | Verify DNS, register signed webhooks, and run acceptance tests |
 | Stonegate internal calendar | Appointments and reminders | Implemented | System of record; no external provider required |

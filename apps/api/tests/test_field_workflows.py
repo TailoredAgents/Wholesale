@@ -161,7 +161,12 @@ def field_appointment(db: Session) -> tuple[User, Lead, Appointment, Underwritin
 def test_field_meeting_evidence_and_underwriting_transfer(
     db_session: Session,
     api_db_override: None,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("ESIGN_PROVIDER", "simulate")
+    monkeypatch.setenv("ESIGN_SIGNWELL_WEBHOOK_ID", "test-signwell-webhook-id")
+    monkeypatch.setenv("ESIGN_TEST_MODE", "true")
+    get_settings.cache_clear()
     bootstrap_foundation(
         db_session,
         organization_name="Stonegate Home Buyers",
@@ -331,6 +336,97 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     assert accepted.status_code == 200, accepted.text
     assert accepted.json()["approved_ceiling_cents"] == 18_000_000
 
+    transaction = client.post(
+        f"/api/v1/leads/{lead.id}/transactions",
+        headers=headers,
+        json={
+            "purchase_price_cents": 16_000_000,
+            "earnest_money_cents": 100_000,
+            "closing_date": "2026-08-14T21:00:00Z",
+            "inspection_period_days": 7,
+        },
+    )
+    assert transaction.status_code == 201, transaction.text
+    transaction_id = transaction.json()["transactions"][0]["id"]
+    package = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages",
+        headers=headers,
+        json={
+            "document_type": "purchase_agreement",
+            "seller_name": "Jordan Seller",
+            "buyer_entity_name": "Stonegate Acquisitions LLC",
+            "purchase_price_cents": 16_000_000,
+            "earnest_money_cents": 100_000,
+            "closing_date": "2026-08-14T21:00:00Z",
+            "inspection_period_days": 7,
+        },
+    )
+    assert package.status_code == 201, package.text
+    package_id = package.json()["id"]
+    approval = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/request-approval",
+        headers=headers,
+    )
+    assert approval.status_code == 200, approval.text
+    approved = client.patch(
+        f"/api/v1/approvals/{approval.json()['approval_request_id']}/decision",
+        headers=headers,
+        json={"status": "approved", "decision_notes": "Exact accepted terms verified."},
+    )
+    assert approved.status_code == 200, approved.text
+    signing_ready = client.get(
+        f"/api/v1/field-operations/appointments/{appointment.id}/workspace",
+        headers=headers,
+    )
+    assert signing_ready.status_code == 200, signing_ready.text
+    assert signing_ready.json()["contract_signing"]["ready"] is True
+    signing = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/contract-signing",
+        headers=headers,
+        json={
+            "package_id": package_id,
+            "subject": "Stonegate purchase agreement",
+            "message": "Please review and complete the agreement.",
+            "recipients": [
+                {
+                    "placeholder_name": "Seller",
+                    "name": "Jordan Seller",
+                    "email": "jordan@example.com",
+                    "signing_order": 1,
+                }
+            ],
+        },
+    )
+    assert signing.status_code == 201, signing.text
+    assert signing.json()["delivery_mode"] == "in_person"
+    assert len(signing.json()["embedded_signers"]) == 2
+    assert [item["placeholder_name"] for item in signing.json()["embedded_signers"]] == [
+        "Seller",
+        "Stonegate",
+    ]
+    assert all(
+        item["signing_url"].startswith("https://www.signwell.com/docs/")
+        for item in signing.json()["embedded_signers"]
+    )
+    resumed = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/contract-signing",
+        headers=headers,
+        json={
+            "package_id": package_id,
+            "subject": "Stonegate purchase agreement",
+            "recipients": [
+                {
+                    "placeholder_name": "Seller",
+                    "name": "Jordan Seller",
+                    "email": "jordan@example.com",
+                    "signing_order": 1,
+                }
+            ],
+        },
+    )
+    assert resumed.status_code == 201, resumed.text
+    assert resumed.json()["id"] == signing.json()["id"]
+
     transfer = client.post(
         f"/api/v1/field-operations/inspections/{inspection_id}/underwriting-transfer",
         headers=headers,
@@ -356,6 +452,7 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     repair = db_session.scalar(select(RepairEstimate).where(RepairEstimate.lead_id == lead.id))
     assert repair is not None
     assert repair.total_cents == 2_300_000
+    get_settings.cache_clear()
 
 
 def test_offer_concessions_govern_field_negotiation(

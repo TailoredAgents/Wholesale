@@ -47,6 +47,10 @@ Main pages: Calendar, Field Operations, Underwriting, Inbox, and the assigned Le
 - Confirm condition, occupancy, decision-makers, access, and material property facts.
 - Negotiate only within approved authority.
 - Record the inspection, seller concerns, outcome, and next action.
+- After an accepted outcome, use the iPad signing panel only when the exact agreement is approved
+  and matches the recorded accepted price.
+- Review the PDF privately before handing the iPad to each named signer, then confirm the completed
+  contract returns to Transactions.
 - Do not alter approved ARV, offer ceilings, or contract terms without the required approval.
 
 ## Transaction Coordinator

@@ -386,6 +386,8 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     assert sent.status_code == 201, sent.text
     envelope = sent.json()
     assert envelope["status"] == "sent"
+    assert envelope["delivery_mode"] == "email"
+    assert envelope["embedded_signers"] == []
     assert envelope["test_mode"] is True
     generated_detail = client.get(
         f"/api/v1/transactions/{transaction_id}",

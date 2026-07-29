@@ -11,9 +11,11 @@ import {
   ClipboardCheck,
   Download,
   Expand,
+  FileSignature,
   FileSearch,
   House,
   LoaderCircle,
+  LockKeyhole,
   Minimize2,
   Pencil,
   Plus,
@@ -21,14 +23,17 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Tablet,
   Trash2,
   UserRoundCheck,
   Wrench,
   X,
 } from "lucide-react";
 import Link from "next/link";
+import Script from "next/script";
 import {
   ChangeEvent,
+  FormEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -38,6 +43,7 @@ import {
 
 import type {
   AcquisitionsCopilotRecommendation,
+  EsignEnvelope,
   FieldAppointmentWorkspace,
   FieldInspection,
   FieldMeetingBrief,
@@ -50,6 +56,30 @@ import styles from "./field-operations.module.css";
 import { useFieldApi } from "./use-field-api";
 
 type MeetingTab = "brief" | "walkthrough" | "presentation" | "negotiation";
+
+type SignWellEmbedConfiguration = {
+  url: string;
+  containerId: string;
+  allowClose: boolean;
+  allowDecline: boolean;
+  allowDownload: boolean;
+  allowRedirect: boolean;
+  showHeader: boolean;
+  events: {
+    completed: () => void;
+    declined: () => void;
+    closed: () => void;
+    error: () => void;
+  };
+};
+
+declare global {
+  interface Window {
+    SignWellEmbed?: new (configuration: SignWellEmbedConfiguration) => {
+      open: () => void;
+    };
+  }
+}
 
 type FieldNegotiationLedger = {
   active_plan: {
@@ -557,7 +587,23 @@ export function FieldMeetingWorkspace({
               />
             ) : null}
 
-            {tab === "negotiation" ? <NegotiationForm appointmentId={appointmentId} saving={saving} workspace={workspace} run={run} /> : null}
+            {tab === "negotiation" ? (
+              <div className={styles.finishWorkspace}>
+                <NegotiationForm
+                  appointmentId={appointmentId}
+                  saving={saving}
+                  workspace={workspace}
+                  run={run}
+                />
+                {workspace.negotiation?.outcome === "accepted" ? (
+                  <InPersonContractPanel
+                    appointmentId={appointmentId}
+                    onRefresh={() => loadWorkspace(appointmentId)}
+                    workspace={workspace}
+                  />
+                ) : null}
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -963,6 +1009,353 @@ function AcquisitionsCopilotPanel({
         <p className={styles.copilotEmpty}>No AI guidance has been generated for this appointment. The versioned meeting brief above remains the source of truth.</p>
       )}
     </section>
+  );
+}
+
+function InPersonContractPanel({
+  appointmentId,
+  onRefresh,
+  workspace,
+}: {
+  appointmentId: string;
+  onRefresh: () => Promise<void>;
+  workspace: FieldAppointmentWorkspace;
+}) {
+  const { fetchBlob, requestJson } = useFieldApi();
+  const signing = workspace.contract_signing;
+  const sellerBrief = asRecord(workspace.brief?.brief_data.seller);
+  const contactMethods = asList(sellerBrief.contact_methods).map(asRecord);
+  const defaultEmail = String(
+    contactMethods.find((item) => item.type === "email" && item.primary)?.value
+      ?? contactMethods.find((item) => item.type === "email")?.value
+      ?? "",
+  );
+  const decisionMakers = workspace.negotiation?.decision_makers ?? [];
+  const [envelope, setEnvelope] = useState<EsignEnvelope | null>(signing.envelope);
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [scriptReady, setScriptReady] = useState(false);
+  const [phase, setPhase] = useState<"handoff" | "signing" | "complete" | "stopped">(
+    "handoff",
+  );
+  const [signerIndex, setSignerIndex] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const signers = useMemo(
+    () =>
+      [...(envelope?.embedded_signers ?? [])].sort(
+        (left, right) => left.signing_order - right.signing_order,
+      ),
+    [envelope?.embedded_signers],
+  );
+  const currentSigner = signers[signerIndex] ?? null;
+
+  useEffect(() => {
+    if (!overlayOpen) setEnvelope(signing.envelope);
+  }, [overlayOpen, signing.envelope]);
+
+  useEffect(() => {
+    if (!overlayOpen) return;
+    const priorOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = priorOverflow;
+    };
+  }, [overlayOpen]);
+
+  useEffect(() => {
+    if (
+      !overlayOpen
+      || phase !== "signing"
+      || !scriptReady
+      || !currentSigner
+      || !window.SignWellEmbed
+    ) {
+      return;
+    }
+    const container = document.getElementById("signwell-in-person-container");
+    container?.replaceChildren();
+    const embed = new window.SignWellEmbed({
+      url: currentSigner.signing_url,
+      containerId: "signwell-in-person-container",
+      allowClose: false,
+      allowDecline: true,
+      allowDownload: true,
+      allowRedirect: false,
+      showHeader: true,
+      events: {
+        completed: () => {
+          if (signerIndex < signers.length - 1) {
+            setSignerIndex((current) => current + 1);
+            setPhase("handoff");
+          } else {
+            setPhase("complete");
+          }
+        },
+        declined: () => setPhase("stopped"),
+        closed: () => setPhase("stopped"),
+        error: () => {
+          setError("SignWell could not display this signing session.");
+          setPhase("stopped");
+        },
+      },
+    });
+    embed.open();
+    return () => container?.replaceChildren();
+  }, [currentSigner, overlayOpen, phase, scriptReady, signerIndex, signers.length]);
+
+  async function previewAgreement() {
+    if (!signing.transaction_id || !signing.package_id) return;
+    setError("");
+    try {
+      const content = await fetchBlob(
+        `/api/v1/transactions/${signing.transaction_id}/contract-packages/${signing.package_id}/preview`,
+      );
+      const url = URL.createObjectURL(content);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The agreement could not be opened.");
+    }
+  }
+
+  function openEnvelope(nextEnvelope: EsignEnvelope) {
+    if (!nextEnvelope.embedded_signers.length) {
+      setError("SignWell did not return an in-person signing session.");
+      return;
+    }
+    setEnvelope(nextEnvelope);
+    setSignerIndex(
+      Math.max(
+        0,
+        nextEnvelope.embedded_signers.findIndex((signer) => {
+          const recipient = nextEnvelope.recipients.find(
+            (item) => item.id === signer.recipient_id,
+          );
+          return recipient?.status !== "signed";
+        }),
+      ),
+    );
+    setPhase("handoff");
+    setOverlayOpen(true);
+  }
+
+  async function startSigning(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!signing.package_id) return;
+    if (!navigator.onLine) {
+      setError("Connect this iPad to the internet before starting SignWell.");
+      return;
+    }
+    const form = new FormData(event.currentTarget);
+    const recipients = [1, 2].flatMap((order) => {
+      const suffix = order === 1 ? "" : "_2";
+      const name = String(form.get(`seller_name${suffix}`) ?? "").trim();
+      const email = String(form.get(`seller_email${suffix}`) ?? "").trim();
+      if (!name && !email) return [];
+      return [
+        {
+          placeholder_name: order === 1 ? "Seller" : "Seller 2",
+          name,
+          email,
+          signing_order: order,
+        },
+      ];
+    });
+    setBusy(true);
+    setError("");
+    try {
+      const nextEnvelope = await requestJson<EsignEnvelope>(
+        `/api/v1/field-operations/appointments/${appointmentId}/contract-signing`,
+        "POST",
+        {
+          package_id: signing.package_id,
+          subject: `Stonegate purchase agreement for ${workspace.appointment.property_address}`,
+          message: "Please review and complete the approved purchase agreement.",
+          recipients,
+        },
+      );
+      openEnvelope(nextEnvelope);
+      await onRefresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Signing could not be started.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function returnToStonegate() {
+    setBusy(true);
+    setError("");
+    try {
+      if (
+        phase === "complete"
+        && envelope
+        && signing.transaction_id
+        && envelope.provider !== "simulate"
+      ) {
+        await requestJson(
+          `/api/v1/transactions/${signing.transaction_id}/esign/${envelope.id}/reconcile`,
+          "POST",
+        );
+      }
+      await onRefresh();
+      setOverlayOpen(false);
+      setPhase("handoff");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Contract status is still updating.");
+      setOverlayOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (signing.envelope?.status === "completed") {
+    return (
+      <section className={styles.contractSigningPanel}>
+        <div className={styles.contractSigningHeader}>
+          <span><CircleCheckBig size={17} />Purchase agreement</span>
+          <strong>Signed and retained</strong>
+        </div>
+        <p>The completed agreement and SignWell audit page are available in Transactions.</p>
+        {signing.transaction_id ? (
+          <Link href={`/os/transactions?transaction=${signing.transaction_id}&tab=contract`}>
+            Open signed contract
+          </Link>
+        ) : null}
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <Script
+        onError={() => setError("The SignWell signing service could not be loaded.")}
+        onLoad={() => setScriptReady(true)}
+        src="https://static.signwell.com/assets/embedded.js"
+        strategy="afterInteractive"
+      />
+      <section className={styles.contractSigningPanel}>
+        <div className={styles.contractSigningHeader}>
+          <span><FileSignature size={17} />Purchase agreement</span>
+          <strong>Sign at this appointment</strong>
+        </div>
+        {signing.package_id ? (
+          <dl className={styles.contractFacts}>
+            <div><dt>Agreement</dt><dd>Version {signing.package_version}</dd></div>
+            <div><dt>Accepted price</dt><dd>{money(signing.agreed_price_cents)}</dd></div>
+            <div><dt>Closing</dt><dd>{signing.closing_date ? new Date(signing.closing_date).toLocaleDateString() : "Not set"}</dd></div>
+          </dl>
+        ) : null}
+        {error ? <p className={styles.contractSigningError}>{error}</p> : null}
+        {signing.envelope?.delivery_mode === "in_person" && signing.envelope.embedded_signers.length ? (
+          <div className={styles.contractResume}>
+            <p>An in-person signing session is already active for this agreement.</p>
+            <button onClick={() => openEnvelope(signing.envelope as EsignEnvelope)} type="button">
+              <Tablet size={16} />Resume signing
+            </button>
+          </div>
+        ) : signing.ready ? (
+          <form className={styles.contractSignerForm} onSubmit={startSigning}>
+            <div className={styles.contractReviewAction}>
+              <span><LockKeyhole size={16} />The approved terms are locked before the iPad is handed over.</span>
+              <button onClick={() => void previewAgreement()} type="button">
+                <FileSearch size={15} />Review PDF
+              </button>
+            </div>
+            <label>
+              <span>Seller legal name</span>
+              <input
+                defaultValue={decisionMakers[0] ?? signing.seller_name ?? ""}
+                name="seller_name"
+                required
+              />
+            </label>
+            <label>
+              <span>Seller email</span>
+              <input defaultValue={defaultEmail} name="seller_email" required type="email" />
+            </label>
+            <label>
+              <span>Second owner</span>
+              <input defaultValue={decisionMakers[1] ?? ""} name="seller_name_2" placeholder="Optional" />
+            </label>
+            <label>
+              <span>Second owner email</span>
+              <input name="seller_email_2" placeholder="Optional" type="email" />
+            </label>
+            <small>Stonegate adds the company signer after all owners. Every signer receives a separate audit identity.</small>
+            <button disabled={busy || !scriptReady} type="submit">
+              <Tablet size={17} />{busy ? "Preparing agreement..." : "Start on this iPad"}
+            </button>
+          </form>
+        ) : (
+          <div className={styles.contractBlocker}>
+            <p>{signing.blocker}</p>
+            {signing.transaction_id ? (
+              <Link
+                href={`/os/transactions?transaction=${signing.transaction_id}&tab=contract`}
+                rel="noreferrer"
+                target="_blank"
+              >
+                Prepare exact agreement
+              </Link>
+            ) : (
+              <Link href={`${workspace.appointment.lead_url}?tab=deal`} rel="noreferrer" target="_blank">
+                Open lead deal
+              </Link>
+            )}
+          </div>
+        )}
+      </section>
+      {overlayOpen && envelope ? (
+        <div aria-modal="true" className={styles.signingOverlay} role="dialog">
+          {phase === "signing" ? (
+            <>
+              <div className={styles.signingToolbar}>
+                <span>Secure SignWell session</span>
+                <button onClick={() => setPhase("stopped")} type="button">End session</button>
+              </div>
+              <div className={styles.signwellContainer} id="signwell-in-person-container" />
+            </>
+          ) : (
+            <div className={styles.signingHandoff}>
+              <div className={styles.signingBrand}><House size={28} /><span>Stonegate Home Buyers</span></div>
+              {phase === "handoff" && currentSigner ? (
+                <>
+                  <Tablet size={46} />
+                  <span>Signer {signerIndex + 1} of {signers.length}</span>
+                  <h2>{currentSigner.name}</h2>
+                  <p>
+                    Review the complete agreement, then fill every field assigned to{" "}
+                    {currentSigner.placeholder_name}.
+                  </p>
+                  <button onClick={() => setPhase("signing")} type="button">
+                    Begin secure signing
+                  </button>
+                </>
+              ) : phase === "complete" ? (
+                <>
+                  <CircleCheckBig size={52} />
+                  <h2>Signing complete</h2>
+                  <p>Return this iPad to the Stonegate representative.</p>
+                  <button disabled={busy} onClick={() => void returnToStonegate()} type="button">
+                    Return to Stonegate
+                  </button>
+                </>
+              ) : (
+                <>
+                  <LockKeyhole size={48} />
+                  <h2>Signing stopped</h2>
+                  <p>No Stonegate workspace information is visible. Return the iPad to the representative.</p>
+                  <button disabled={busy} onClick={() => void returnToStonegate()} type="button">
+                    Return to Stonegate
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </>
   );
 }
 

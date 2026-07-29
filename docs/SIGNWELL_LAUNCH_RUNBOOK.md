@@ -12,6 +12,8 @@ Stonegate's SignWell integration is implemented for:
 - Automatic signature and signed-date placement using SignWell text tags.
 - Purchase, assignment, addendum, and generic executed-document classification.
 - Ordered seller, end-buyer, and company signers.
+- Remote email delivery and embedded in-person iPad signing.
+- Durable in-person signer sessions that can be resumed without creating a duplicate document.
 - Reconciliation when a provider event is delayed.
 - Completed PDF and SignWell audit-page retrieval.
 - Private transaction-document retention and download.
@@ -80,6 +82,28 @@ Keep `ESIGN_TEST_MODE=true` and use controlled email addresses.
 8. Repeat with an assignment package and a controlled assignee address.
 9. Send one additional test and use **Reconcile** to confirm recovery works.
 10. Confirm a repeated provider event does not create a duplicate file or timeline event.
+
+### In-Person iPad Acceptance
+
+1. Record an accepted seller outcome in **Field Operations > Meetings > Finish**.
+2. Confirm every decision maker and the exact agreed price.
+3. Open the related transaction, create the purchase agreement for that exact price, preview it,
+   and approve that package version.
+4. Return to the appointment. The **Sign at this appointment** panel should show the approved
+   package, accepted price, and closing date.
+5. Select **Review PDF** and inspect the locked agreement before handing over the iPad.
+6. Enter a separate legal name and email for each property owner.
+7. Select **Start on this iPad**, hand the device to the named signer, and complete each signer in
+   order. The signed-in Stonegate user is the final signer.
+8. Confirm the full-screen handoff hides the Stonegate workspace while a seller has the device.
+9. Stop and resume one test session. Confirm Stonegate reopens the existing SignWell document
+   instead of creating another envelope.
+10. Complete the session and confirm the signed PDF and audit page appear in Transactions.
+
+Stonegate blocks in-person signing when the appointment is not accepted, decision makers are not
+confirmed, the contract package is not approved, or the package price differs from the recorded
+accepted price. If no exact package is ready, the appointment links directly to the transaction's
+Contract tab.
 
 After counsel approval and both controlled tests pass, set:
 

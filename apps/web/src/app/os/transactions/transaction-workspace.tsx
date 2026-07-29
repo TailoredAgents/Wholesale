@@ -52,7 +52,15 @@ function date(value: string | null) {
   return value ? new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Not set";
 }
 
-export function TransactionWorkspace({ initialData, initialTransactionId }: { initialData: TransactionOverview; initialTransactionId?: string }) {
+export function TransactionWorkspace({
+  initialData,
+  initialTab = "closing",
+  initialTransactionId,
+}: {
+  initialData: TransactionOverview;
+  initialTab?: Tab;
+  initialTransactionId?: string;
+}) {
   const { getToken } = useAuth();
   const [overview, setOverview] = useState(initialData);
   const [selectedId, setSelectedId] = useState(initialTransactionId ?? initialData.items[0]?.id ?? null);
@@ -60,7 +68,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
   const [copilot, setCopilot] = useState<TransactionCopilotOverview | null>(null);
   const [f4Status, setF4Status] = useState<F4IntegrationStatus | null>(null);
   const [signaturePackageId, setSignaturePackageId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("closing");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000", []);
@@ -383,7 +391,7 @@ export function TransactionWorkspace({ initialData, initialTransactionId }: { in
                 </section>
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Provider evidence</span><h4>Signature requests</h4></div><PenLine size={18} /></div>
-                  <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small>{!["completed", "declined", "expired", "cancelled"].includes(envelope.status) ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>
+                  <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {labelize(envelope.delivery_mode)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small>{!["completed", "declined", "expired", "cancelled"].includes(envelope.status) ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>
                 </section>
               </div>
               <div className={styles.rightStack}>
