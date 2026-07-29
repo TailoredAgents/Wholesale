@@ -9,7 +9,7 @@ from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValue
 from app.schemas.leads import MarketAnalysisCompRead
 
 MONEY = 100
-METHODOLOGY_VERSION = "v2.1"
+METHODOLOGY_VERSION = "v2.2"
 
 
 @dataclass(frozen=True)
@@ -36,6 +36,8 @@ class UnderwritingV2Result:
     legacy_rule_cents: int | None
     monthly_rent_cents: int | None
     confidence_score: int
+    confidence_tier: str
+    confidence_factors: list[dict[str, Any]]
     manual_review_required: bool
     review_reasons: list[str]
     data_disagreements: list[str]
@@ -61,6 +63,8 @@ def analyze_underwriting_v2(
     provider_warnings: list[str],
     comp_review_decisions: list[dict[str, Any]] | None = None,
     address_validation_status: str,
+    address_match_score: int | None,
+    secondary_evidence: dict[str, Any],
     settings: Settings,
 ) -> UnderwritingV2Result:
     subject, subject_fact_provenance = canonical_subject_facts(
@@ -134,15 +138,20 @@ def analyze_underwriting_v2(
         repair_items=repair_items,
         contingency_override_percentage=contingency_override_percentage,
     )
-    confidence_score, review_reasons = confidence_and_review_reasons(
-        selected_comps=selected_comps,
-        renovated_comps=renovated,
-        as_is_comps=as_is,
-        arv_low_cents=arv_low,
-        arv_point_cents=arv_point,
-        arv_high_cents=arv_high,
-        avm_value_cents=dollars_to_cents(estimate.price),
-        data_disagreements=data_disagreements,
+    confidence_score, confidence_tier, confidence_factors, review_reasons = (
+        confidence_and_review_reasons(
+            selected_comps=selected_comps,
+            renovated_comps=renovated,
+            as_is_comps=as_is,
+            arv_low_cents=arv_low,
+            arv_point_cents=arv_point,
+            arv_high_cents=arv_high,
+            avm_value_cents=dollars_to_cents(estimate.price),
+            data_disagreements=data_disagreements,
+            address_validation_status=address_validation_status,
+            address_match_score=address_match_score,
+            secondary_evidence=secondary_evidence,
+        )
     )
     conservative_arv = conservative_arv_cents(
         low=arv_low,
@@ -235,6 +244,8 @@ def analyze_underwriting_v2(
             else None
         ),
         "ppsf_outlier_method": "verified_renovated_median_mad_and_35_percent_guardrail",
+        "secondary_evidence_status": secondary_evidence.get("status"),
+        "secondary_source_count": len(secondary_evidence.get("sources", [])),
         "purchase_cost_percentage": settings.underwriting_purchase_cost_percentage,
         "financing_holding_percentage": buyer_economics["assumptions"].get(
             "financing_holding_percentage"
@@ -275,6 +286,8 @@ def analyze_underwriting_v2(
         legacy_rule_cents=legacy_rule,
         monthly_rent_cents=optional_int(buyer_economics["monthly_rent_cents"]),
         confidence_score=confidence_score,
+        confidence_tier=confidence_tier,
+        confidence_factors=confidence_factors,
         manual_review_required=manual_review_required,
         review_reasons=dedupe(review_reasons),
         data_disagreements=data_disagreements,
@@ -819,33 +832,55 @@ def confidence_and_review_reasons(
     arv_high_cents: int | None,
     avm_value_cents: int | None,
     data_disagreements: list[str],
-) -> tuple[int, list[str]]:
+    address_validation_status: str,
+    address_match_score: int | None,
+    secondary_evidence: dict[str, Any],
+) -> tuple[int, str, list[dict[str, Any]], list[str]]:
     reasons: list[str] = []
     average_score = (
         sum(comp.score for comp in selected_comps) / len(selected_comps)
         if selected_comps
         else 0
     )
-    confidence = 20 + min(len(selected_comps), 5) * 10 + average_score * 0.25
+    address_points = 0
+    if address_validation_status == "provider_confirmed" and (address_match_score or 0) >= 90:
+        address_points = 20
+        address_summary = "Provider subject record matches the entered address."
+    elif (address_match_score or 0) >= 80:
+        address_points = 14
+        address_summary = "Address is a probable provider match and needs confirmation."
+        reasons.append("Confirm the resolved subject address before approving value.")
+    elif address_validation_status == "unverified":
+        address_points = 8
+        address_summary = "Address has not been independently confirmed."
+        reasons.append("Confirm the subject property address.")
+    else:
+        address_summary = "Address evidence is missing or conflicting."
+        reasons.append("Resolve the subject property address before approval.")
+
+    comp_points = min(len(selected_comps), 5) * 5
+    comp_quality_points = min(25, round(average_score * 0.25))
     if len(selected_comps) < 3:
         reasons.append("Fewer than three verified recorded sales were available.")
-        confidence -= 15
+    condition_points = 0
     if len(renovated_comps) < 3:
         reasons.append(
             "ARV and offer calculations are preliminary until at least three recorded sales "
             "have confirmed renovated condition."
         )
-        confidence = min(confidence, 59)
+        condition_points = 7 if renovated_comps else 0
     else:
-        confidence += 10
+        condition_points = 15
     if len(as_is_comps) < 2:
         reasons.append("As-is value is an AVM benchmark until as-is comps are classified.")
     spread = value_spread(arv_low_cents, arv_point_cents, arv_high_cents)
+    precision_points = 0
     if spread is not None and spread > 0.15:
         reasons.append("The supported ARV range is wider than 15%.")
-        confidence -= 12
     elif spread is not None and spread > 0.10:
-        confidence -= 5
+        precision_points = 7
+    elif spread is not None:
+        precision_points = 10
     if (
         avm_value_cents
         and arv_low_cents
@@ -853,11 +888,112 @@ def confidence_and_review_reasons(
         and not (arv_low_cents * 0.9 <= avm_value_cents <= arv_high_cents * 1.1)
     ):
         reasons.append("The RentCast AVM falls outside the recorded-sale range.")
-        confidence -= 8
+    conflict_count = len(data_disagreements)
+    agreement_points = max(0, 5 - min(conflict_count, 5))
     if data_disagreements:
-        reasons.append("Subject property facts disagree between available data sources.")
-        confidence -= 12
-    return max(20, min(95, round(confidence))), reasons
+        reasons.append("Provider limitations or source disagreements require review.")
+    confidence = (
+        address_points
+        + comp_points
+        + comp_quality_points
+        + condition_points
+        + precision_points
+        + agreement_points
+    )
+    if len(renovated_comps) < 3:
+        confidence = min(confidence, 59)
+    confidence = max(10, min(95, round(confidence)))
+    tier = confidence_tier(confidence)
+    factors = [
+        confidence_factor(
+            "address",
+            "Subject address",
+            address_points,
+            20,
+            address_summary,
+        ),
+        confidence_factor(
+            "comp_quantity",
+            "Comparable quantity",
+            comp_points,
+            25,
+            f"{len(selected_comps)} screened recorded sales were selected.",
+        ),
+        confidence_factor(
+            "comp_quality",
+            "Comparable fit",
+            comp_quality_points,
+            25,
+            (
+                f"Average comp fit score is {round(average_score)}%."
+                if selected_comps
+                else "No usable comp fit score is available."
+            ),
+        ),
+        confidence_factor(
+            "condition",
+            "Condition evidence",
+            condition_points,
+            15,
+            f"{len(renovated_comps)} renovated and {len(as_is_comps)} as-is comps classified.",
+        ),
+        confidence_factor(
+            "precision",
+            "Range precision",
+            precision_points,
+            10,
+            (
+                f"Supported ARV spread is {round(spread * 100, 1)}%."
+                if spread is not None
+                else "No supported ARV spread is available."
+            ),
+        ),
+        confidence_factor(
+            "agreement",
+            "Source agreement",
+            agreement_points,
+            5,
+            (
+                (
+                    "No material conflicts were detected across the available evidence."
+                    if secondary_evidence.get("status") in {"completed", "insufficient"}
+                    else (
+                        "No material conflicts were detected in the available "
+                        "provider evidence."
+                    )
+                )
+                if conflict_count == 0
+                else f"{conflict_count} source conflict(s) require review."
+            ),
+        ),
+    ]
+    return confidence, tier, factors, reasons
+
+
+def confidence_tier(score: int) -> str:
+    if score >= 85:
+        return "high"
+    if score >= 70:
+        return "moderate"
+    if score >= 50:
+        return "low"
+    return "insufficient"
+
+
+def confidence_factor(
+    key: str,
+    label: str,
+    score: int,
+    maximum: int,
+    summary: str,
+) -> dict[str, Any]:
+    return {
+        "key": key,
+        "label": label,
+        "score": score,
+        "maximum": maximum,
+        "summary": summary,
+    }
 
 
 def conservative_arv_cents(

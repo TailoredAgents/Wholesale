@@ -156,6 +156,73 @@ class OpenAIResponsesClient:
             raise OpenAIClientError("OpenAI returned an invalid call-notes object.")
         return parsed, extract_usage(payload)
 
+    def create_grounded_structured_response(
+        self,
+        *,
+        model: str,
+        system_prompt: str,
+        user_prompt: str,
+        schema_name: str,
+        json_schema: dict[str, Any],
+        reasoning_effort: str = "low",
+        max_output_tokens: int = 1600,
+        safety_identifier: str | None = None,
+        prompt_cache_key: str | None = None,
+        user_location: dict[str, str] | None = None,
+        blocked_domains: list[str] | None = None,
+        max_tool_calls: int = 3,
+    ) -> tuple[dict[str, Any], dict[str, int | None], list[dict[str, str]]]:
+        validate_strict_json_schema(json_schema)
+        web_search: dict[str, Any] = {
+            "type": "web_search",
+            "search_context_size": "low",
+            "external_web_access": True,
+        }
+        if user_location:
+            web_search["user_location"] = {
+                "type": "approximate",
+                **user_location,
+            }
+        if blocked_domains:
+            web_search["filters"] = {"blocked_domains": blocked_domains[:100]}
+        request_payload: dict[str, Any] = {
+            "model": model,
+            "input": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "reasoning": {"effort": reasoning_effort},
+            "max_output_tokens": max_output_tokens,
+            "max_tool_calls": max(1, min(max_tool_calls, 5)),
+            "store": False,
+            "tools": [web_search],
+            "tool_choice": "required",
+            "include": ["web_search_call.action.sources"],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": json_schema,
+                }
+            },
+        }
+        if safety_identifier:
+            request_payload["safety_identifier"] = safety_identifier[:64]
+        if prompt_cache_key:
+            request_payload["prompt_cache_key"] = prompt_cache_key
+        payload = self._post_json("/responses", request_payload)
+        raw_text = extract_response_text(payload)
+        try:
+            parsed = json.loads(raw_text)
+        except json.JSONDecodeError as exc:
+            raise OpenAIClientError(
+                "OpenAI returned invalid structured web evidence."
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise OpenAIClientError("OpenAI returned an invalid web-evidence object.")
+        return parsed, extract_usage(payload), extract_web_sources(payload)
+
     def create_audio_transcription(
         self,
         *,
@@ -258,6 +325,67 @@ def extract_usage(payload: dict[str, Any]) -> dict[str, int | None]:
         "output_tokens": output_tokens,
         "total_tokens": total_tokens,
     }
+
+
+def extract_web_sources(payload: dict[str, Any]) -> list[dict[str, str]]:
+    sources: list[dict[str, str]] = []
+    output = payload.get("output")
+    if not isinstance(output, list):
+        return sources
+    seen: set[str] = set()
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        action = item.get("action")
+        if isinstance(action, dict):
+            add_web_sources(sources, seen, action.get("sources"))
+        content = item.get("content")
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            annotations = block.get("annotations")
+            if not isinstance(annotations, list):
+                continue
+            for annotation in annotations:
+                if not isinstance(annotation, dict):
+                    continue
+                url = annotation.get("url")
+                if not isinstance(url, str) or not url or url in seen:
+                    continue
+                seen.add(url)
+                title = annotation.get("title")
+                sources.append(
+                    {
+                        "url": url,
+                        "title": title if isinstance(title, str) else url,
+                    }
+                )
+    return sources
+
+
+def add_web_sources(
+    target: list[dict[str, str]],
+    seen: set[str],
+    value: Any,
+) -> None:
+    if not isinstance(value, list):
+        return
+    for source in value:
+        if not isinstance(source, dict):
+            continue
+        url = source.get("url")
+        if not isinstance(url, str) or not url or url in seen:
+            continue
+        seen.add(url)
+        title = source.get("title")
+        target.append(
+            {
+                "url": url,
+                "title": title if isinstance(title, str) else url,
+            }
+        )
 
 
 def numeric_token_count(value: object) -> int | None:

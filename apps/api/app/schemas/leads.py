@@ -388,6 +388,10 @@ class LeadMarketAnalysisRead(BaseModel):
     transaction_reserve_cents: int | None = None
     monthly_rent_cents: int | None = None
     manual_review_required: bool = True
+    confidence_tier: str = "insufficient"
+    confidence_factors: list[dict[str, Any]] = Field(default_factory=list)
+    address_evidence: dict[str, Any] = Field(default_factory=dict)
+    secondary_evidence: dict[str, Any] = Field(default_factory=dict)
     review_reasons: list[str] = Field(default_factory=list)
     data_disagreements: list[str] = Field(default_factory=list)
     assumptions: dict[str, Any] = Field(default_factory=dict)

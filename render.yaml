@@ -95,7 +95,7 @@ services:
       - key: OPENAI_REASONING_EFFORT
         value: medium
       - key: OPENAI_WEB_SEARCH_ENABLED
-        value: false
+        value: true
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: OPENAI_PRICING_OVERRIDES_JSON

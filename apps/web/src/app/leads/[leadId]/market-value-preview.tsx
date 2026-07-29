@@ -93,6 +93,35 @@ type CompReviewDraft = {
   weight_percentage: number;
 };
 
+type ConfidenceFactor = {
+  key: string;
+  label: string;
+  score: number;
+  maximum: number;
+  summary: string;
+};
+
+type SecondaryEvidence = {
+  status?: string;
+  summary?: string;
+  address_match?: string;
+  facts?: {
+    fact_type: string;
+    value: string;
+    source_url: string;
+    source_title: string;
+  }[];
+  conflicts?: {
+    field: string;
+    primary_value: string;
+    web_value: string;
+    source_url: string;
+    explanation: string;
+  }[];
+  limitations?: string[];
+  sources?: { url: string; title: string }[];
+};
+
 type MarketValueEstimate = {
   id?: string;
   provider: string;
@@ -121,6 +150,16 @@ type MarketValueEstimate = {
   recommended_offer_cents?: number | null;
   monthly_rent_cents?: number | null;
   confidence_score?: number;
+  confidence_tier?: string;
+  confidence_factors?: ConfidenceFactor[];
+  address_evidence?: {
+    resolved_address?: string;
+    resolution_method?: string;
+    match_score?: number;
+    status?: string;
+    issues?: string[];
+  };
+  secondary_evidence?: SecondaryEvidence;
   manual_review_required?: boolean;
   review_reasons?: string[];
   data_disagreements?: string[];
@@ -699,7 +738,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     },
   );
   const isLoading = status === "loading";
-  const isV2 = estimate?.methodology_version === "v2.1";
+  const isV2 = estimate?.methodology_version?.startsWith("v2") ?? false;
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
   const hasVerifiedArv =
     estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales";
@@ -716,23 +755,21 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     <section className={styles.marketValuePanel}>
       <div className={styles.marketValueHeader}>
         <div>
-          <span className={styles.underwritingEyebrow}>Underwriting V2.1</span>
+          <span className={styles.underwritingEyebrow}>Underwriting V2.2</span>
           <strong>Recorded sales and buyer economics</strong>
           <span>Human-reviewed evidence for ARV, repairs, and seller negotiation limits</span>
         </div>
         <div className={styles.marketValueActions}>
-          {estimate ? (
-            <button
-              className={styles.secondaryButton}
-              disabled={isLoading}
-              onClick={() => createAnalysis(true)}
-              type="button"
-            >
-              Refresh market data
-            </button>
-          ) : null}
-          <button disabled={isLoading} onClick={() => createAnalysis(false)} type="button">
-            {isLoading ? "Calculating..." : estimate ? "Recalculate" : "Run analysis"}
+          <button
+            disabled={isLoading}
+            onClick={() => createAnalysis(Boolean(estimate))}
+            type="button"
+          >
+            {isLoading
+              ? "Analyzing..."
+              : estimate
+                ? "Refresh complete analysis"
+                : "Run complete analysis"}
           </button>
         </div>
       </div>
@@ -928,7 +965,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         <div className={styles.marketValueResult}>
           {!isV2 ? (
             <div className={styles.reviewBanner}>
-              This saved analysis uses the prior method. Recalculate to create a V2.1 analysis.
+              This saved analysis uses the prior method. Refresh to create a V2.2 analysis.
             </div>
           ) : null}
           <div
@@ -944,10 +981,106 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 : "Evidence threshold met"}
             </strong>
             <span>
-              {estimate.confidence_score ?? 0}% confidence. A person must still approve the
-              acquisition decision.
+              {(estimate.confidence_tier ?? "insufficient").replaceAll("_", " ")} confidence
+              {" · "}
+              {estimate.confidence_score ?? 0}/100. A person must still approve the acquisition
+              decision.
             </span>
           </div>
+
+          <div className={styles.evidenceSummary}>
+            <div>
+              <span>Subject match</span>
+              <strong>
+                {(estimate.address_evidence?.status ?? "not checked").replaceAll("_", " ")}
+              </strong>
+              <small>
+                {estimate.address_evidence?.resolved_address ?? estimate.requested_address}
+              </small>
+            </div>
+            <div>
+              <span>Core valuation evidence</span>
+              <strong>{estimate.selected_comps?.length ?? 0} recorded sales</strong>
+              <small>Screened by similarity and price per square foot</small>
+            </div>
+            <div>
+              <span>Secondary research</span>
+              <strong>
+                {(estimate.secondary_evidence?.status ?? "unavailable").replaceAll("_", " ")}
+              </strong>
+              <small>
+                {estimate.secondary_evidence?.sources?.length ?? 0} cited public sources
+              </small>
+            </div>
+          </div>
+
+          {estimate.confidence_factors?.length ? (
+            <details className={styles.evidenceDetails}>
+              <summary>Why this confidence score</summary>
+              <div className={styles.confidenceFactors}>
+                {estimate.confidence_factors.map((factor) => (
+                  <div key={factor.key}>
+                    <span>{factor.label}</span>
+                    <strong>
+                      {factor.score}/{factor.maximum}
+                    </strong>
+                    <small>{factor.summary}</small>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+
+          {estimate.secondary_evidence?.status === "completed" ||
+          estimate.secondary_evidence?.status === "insufficient" ? (
+            <details className={styles.evidenceDetails}>
+              <summary>Secondary public evidence</summary>
+              <div className={styles.secondaryEvidence}>
+                <p>{estimate.secondary_evidence.summary}</p>
+                {estimate.secondary_evidence.facts?.map((fact, index) => (
+                  <article key={`${fact.source_url}-${index}`}>
+                    <div>
+                      <span>{fact.fact_type.replaceAll("_", " ")}</span>
+                      <strong>{fact.value}</strong>
+                    </div>
+                    <a href={fact.source_url} rel="noreferrer" target="_blank">
+                      {fact.source_title}
+                    </a>
+                  </article>
+                ))}
+                {estimate.secondary_evidence.conflicts?.map((conflict, index) => (
+                  <article
+                    className={styles.evidenceConflict}
+                    key={`${conflict.source_url}-${conflict.field}-${index}`}
+                  >
+                    <div>
+                      <span>Conflict: {conflict.field.replaceAll("_", " ")}</span>
+                      <strong>{conflict.explanation}</strong>
+                      <small>
+                        Provider: {conflict.primary_value} · Public source: {conflict.web_value}
+                      </small>
+                    </div>
+                    <a href={conflict.source_url} rel="noreferrer" target="_blank">
+                      Review source
+                    </a>
+                  </article>
+                ))}
+                {estimate.secondary_evidence.sources?.length ? (
+                  <div className={styles.evidenceSources}>
+                    <span>Sources consulted</span>
+                    {estimate.secondary_evidence.sources.map((source) => (
+                      <a href={source.url} key={source.url} rel="noreferrer" target="_blank">
+                        {source.title}
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+                {estimate.secondary_evidence.limitations?.length ? (
+                  <small>{estimate.secondary_evidence.limitations.join(" ")}</small>
+                ) : null}
+              </div>
+            </details>
+          ) : null}
 
           <dl className={styles.decisionMetrics}>
             <div>

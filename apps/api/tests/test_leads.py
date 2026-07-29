@@ -1270,7 +1270,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert response.status_code == 201
     payload = response.json()
     assert payload["provider"] == "rentcast"
-    assert payload["methodology_version"] == "v2.1"
+    assert payload["methodology_version"] == "v2.2"
     assert payload["as_is_value_low_cents"] == 23351400
     assert payload["as_is_value_cents"] == 23351400
     assert payload["as_is_value_high_cents"] == 23657100

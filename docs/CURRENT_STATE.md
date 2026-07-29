@@ -245,8 +245,15 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
   staff-created and website-created leads.
 - RentCast property-record validation retains match status, score, issues, provider address,
   non-owner subject facts, timestamp, and audit history without replacing the CRM address.
+- Underwriting V2.2 retries provider-safe address variants, rejects material identity mismatches,
+  and can continue with verified subject records plus recorded sales when the AVM is unavailable.
 - Underwriting uses an explicit canonical subject-fact set with field-level provider/CRM
   provenance; address mismatches reduce confidence and require review without gating outputs.
+- One complete-analysis action runs address resolution, RentCast evidence, optional bounded OpenAI
+  public-record research, comp screening, confidence, repair math, and buyer economics. Web
+  research cannot set ARV or offer values and does not block the primary workflow when unavailable.
+- Confidence is explained as address, comp quantity, comp fit, condition, range precision, and
+  source-agreement factors with High, Moderate, Low, or Insufficient tiers.
 - Reports remain available even when renovation status is not yet confirmed.
 - Lead-level verified outcome entry for expert reviews, appraisals, completed resales, and verified
   market sales, with optional actual rehab, seller contract, and disposition values.
@@ -265,8 +272,9 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
 - Contractor bids, walkthrough estimates, and internal scopes can be retained as immutable repair
   evidence and selected for a new analysis without rewriting the source estimate.
 - Investor reports identify the selected repair source, contractor, estimate date, reference,
-  labor, materials, contingency, and total. Saved underwriting versions can be compared directly
-  on the lead page.
+  labor, materials, contingency, total, confidence factors, address resolution, and cited public
+  evidence. Client reports retain the public evidence record while omitting Stonegate economics.
+  Saved underwriting versions can be compared directly on the lead page.
 - The lead underwriting workspace creates immutable negotiation plans with opening, target,
   stretch, and hard-ceiling values tied to one saved underwriting version.
 - Offer approval requests cancel superseded pending plans, reject stale versions, record the

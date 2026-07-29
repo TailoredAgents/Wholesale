@@ -477,6 +477,9 @@ Implementation checkpoint, July 28, 2026:
 
 - Existing immutable market analyses and human comp-review versions remain the source evidence;
   F7 does not create a second valuation engine.
+- Underwriting V2.2 adds provider-safe address retries, recorded-sales continuity when the AVM is
+  unavailable but the subject is verified, bounded cited public-record research, one complete
+  analysis action, and a factor-by-factor confidence score. Secondary research cannot set value.
 - Verified outcomes now produce overall and market scorecards for ARV bias, median absolute error,
   range coverage, repair error, seller-contract variance, disposition error, and operator comp
   overrides.

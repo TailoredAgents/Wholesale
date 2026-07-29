@@ -316,7 +316,7 @@ def build_investor_story(
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
     is_v2 = is_v2_method(metadata.get("methodology_version"))
-    is_v2_1 = metadata.get("methodology_version") == "v2.1"
+    is_v2_1 = is_v2_method(metadata.get("methodology_version"))
     assumptions = dict_value(metadata.get("assumptions"))
     arv_value_basis = first_string(assumptions, ("arv_value_basis",))
     arv_verified = arv_value_basis == "verified_renovated_recorded_sales"
@@ -520,6 +520,7 @@ def build_investor_story(
             styles,
         ),
         Spacer(1, 0.16 * inch),
+        *evidence_audit_story(context, styles, include_factors=True),
         disclaimer_box(
             (
                 "Internal use only. Provider records and human classifications may be incomplete "
@@ -538,7 +539,7 @@ def build_client_story(
 ) -> list[Flowable]:
     analysis = context.analysis
     metadata = analysis.analysis_metadata or {}
-    is_v2_1 = metadata.get("methodology_version") == "v2.1"
+    is_v2_1 = is_v2_method(metadata.get("methodology_version"))
     assumptions = dict_value(metadata.get("assumptions"))
     arv_verified = (
         first_string(assumptions, ("arv_value_basis",))
@@ -707,6 +708,7 @@ def build_client_story(
             styles,
         ),
         Spacer(1, 0.16 * inch),
+        *evidence_audit_story(context, styles, include_factors=False),
         closing_box(context, styles),
     ]
 
@@ -749,6 +751,91 @@ def section_heading(title: str, styles: dict[str, ParagraphStyle]) -> KeepTogeth
 
 def body_paragraph(text: str, styles: dict[str, ParagraphStyle]) -> Paragraph:
     return Paragraph(escape(text), styles["body"])
+
+
+def evidence_audit_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+    *,
+    include_factors: bool,
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    address_evidence = dict_value(metadata.get("address_evidence"))
+    secondary_evidence = dict_value(metadata.get("secondary_evidence"))
+    sources = list_of_dicts(secondary_evidence.get("sources"))
+    factors = list_of_dicts(metadata.get("confidence_factors"))
+    story: list[Flowable] = [
+        section_heading("Evidence and confidence record", styles),
+        key_value_table(
+            [
+                (
+                    "Confidence",
+                    (
+                        f"{labelize(safe_string(metadata.get('confidence_tier')))} "
+                        f"({context.analysis.confidence_score}/100)"
+                    ),
+                ),
+                (
+                    "Address match",
+                    (
+                        f"{labelize(safe_string(address_evidence.get('status')))}; "
+                        f"{optional_int(address_evidence.get('match_score')) or 0}/100"
+                    ),
+                ),
+                (
+                    "Resolved property",
+                    safe_string(address_evidence.get("resolved_address"))
+                    or context.analysis.requested_address,
+                ),
+                (
+                    "Secondary research",
+                    (
+                        f"{labelize(safe_string(secondary_evidence.get('status')))}; "
+                        f"{len(sources)} cited public source(s)"
+                    ),
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.12 * inch),
+    ]
+    if include_factors and factors:
+        rows: list[tuple[str, str]] = []
+        for factor in factors:
+            rows.append(
+                (
+                    safe_string(factor.get("label")),
+                    (
+                        f"{optional_int(factor.get('score')) or 0}/"
+                        f"{optional_int(factor.get('maximum')) or 0} - "
+                        f"{safe_string(factor.get('summary'))}"
+                    ),
+                )
+            )
+        story.extend([key_value_table(rows, styles), Spacer(1, 0.12 * inch)])
+    if sources:
+        story.append(
+            body_paragraph(
+                "Secondary public research supports diligence only and does not set ARV or "
+                "offer amounts. Source pages may change after this report is saved.",
+                styles,
+            )
+        )
+        for source in sources[:8]:
+            url = safe_string(source.get("url"))
+            title = safe_string(source.get("title"))
+            story.append(
+                Paragraph(
+                    (
+                        f'<link href="{escape_attribute(url)}" '
+                        f'color="#245F43">{escape(title)}</link><br/>'
+                        f'<font size="6.6" color="#68716D">{escape(url)}</font>'
+                    ),
+                    styles["small"],
+                )
+            )
+        story.append(Spacer(1, 0.14 * inch))
+    return story
 
 
 def metric_table(
@@ -1513,11 +1600,13 @@ def page_decorator(
 
 
 def confidence_label(score: int) -> str:
-    if score >= 80:
-        return "Strong"
-    if score >= 60:
+    if score >= 85:
+        return "High"
+    if score >= 70:
         return "Moderate"
-    return "Limited"
+    if score >= 50:
+        return "Low"
+    return "Insufficient"
 
 
 def report_stage_label(value: str | None) -> str:
@@ -1636,6 +1725,10 @@ def safe_string(value: object) -> str:
     return str(value)
 
 
+def escape_attribute(value: object) -> str:
+    return escape(safe_string(value), {'"': "&quot;"})
+
+
 def string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -1644,6 +1737,12 @@ def string_list(value: object) -> list[str]:
 
 def dict_value(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+def list_of_dicts(value: object) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def is_v2_method(value: object) -> bool:

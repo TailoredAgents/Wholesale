@@ -124,6 +124,12 @@ from app.services.underwriting_v2 import (
     UnderwritingV2Result,
     analyze_underwriting_v2,
 )
+from app.services.underwriting_evidence import (
+    collect_secondary_market_evidence,
+    resolve_rentcast_subject,
+    secondary_conflict_warnings,
+    unavailable_secondary_evidence,
+)
 
 logger = structlog.get_logger()
 
@@ -1483,15 +1489,16 @@ def create_lead_market_analysis(
         if cached_analysis is not None
         and cached_analysis.analysis_metadata
         and cached_analysis.analysis_metadata.get("methodology_version")
-        in {"v2", METHODOLOGY_VERSION}
+        in {"v2", "v2.1", METHODOLOGY_VERSION}
         and isinstance(cached_analysis.raw_response, dict)
         else None
     )
     cached_avm = cached_raw.get("avm") if cached_raw else None
+    cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
     reuse_market_data = (
         (payload.source_analysis_id is not None or not payload.refresh_market_data)
         and isinstance(cached_avm, dict)
-        and cached_avm.get("price") is not None
+        and isinstance(cached_sales, list)
     )
     if payload.comp_review_decisions and not reuse_market_data:
         raise ValueError("Run a market analysis before reviewing comparable sales.")
@@ -1499,14 +1506,40 @@ def create_lead_market_analysis(
     property_record_error: str | None = None
     provider_warnings: list[str] = []
     rent_estimate: RentCastRentEstimate | None = None
+    address_evidence: dict[str, Any] = {}
+    secondary_evidence = unavailable_secondary_evidence(
+        "No fresh market-data research was requested."
+    )
+    avm_error: str | None = None
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
         cached_subject = cached_raw.get("subject_record") if cached_raw else None
-        cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
         cached_rent = cached_raw.get("rent") if cached_raw else None
+        cached_address_evidence = (
+            cached_raw.get("address_evidence") if cached_raw else None
+        )
+        cached_secondary_evidence = (
+            cached_raw.get("secondary_evidence") if cached_raw else None
+        )
+        cached_avm_error = cached_raw.get("avm_error") if cached_raw else None
         cached_property_record_error = (
             cached_raw.get("property_record_error") if cached_raw else None
+        )
+        address_evidence = (
+            cached_address_evidence
+            if isinstance(cached_address_evidence, dict)
+            else {}
+        )
+        secondary_evidence = (
+            cached_secondary_evidence
+            if isinstance(cached_secondary_evidence, dict)
+            else secondary_evidence
+        )
+        avm_error = (
+            cached_avm_error
+            if isinstance(cached_avm_error, str) and cached_avm_error
+            else None
         )
         subject_record = cached_subject if isinstance(cached_subject, dict) else {}
         sale_records = (
@@ -1532,9 +1565,10 @@ def create_lead_market_analysis(
             timeout_seconds=settings.openai_request_timeout_seconds,
         )
         try:
-            estimate = client.get_value_estimate(
-                address=address,
-                property_type=property_record.property_type,
+            resolution = resolve_rentcast_subject(
+                client,
+                property_record,
+                requested_address=address,
             )
         except RentCastClientError as exc:
             logger.warning(
@@ -1547,15 +1581,13 @@ def create_lead_market_analysis(
                 error_message=str(exc),
             )
             raise RuntimeError(str(exc)) from exc
-
-        try:
-            subject_record = client.get_property_record(
-                address=address,
-                property_id=string_or_none(estimate.subject_property.get("id")),
-            )
-        except RentCastClientError as exc:
-            subject_record = {}
-            property_record_error = str(exc)
+        estimate = resolution.estimate
+        subject_record = resolution.subject_record
+        address_evidence = resolution.address_evidence
+        property_record_error = resolution.property_record_error
+        avm_error = resolution.avm_error
+        resolved_address = resolution.resolved_address
+        if property_record_error:
             provider_warnings.append(
                 "The separate public property record was unavailable; subject facts came "
                 "from the RentCast AVM response."
@@ -1564,16 +1596,19 @@ def create_lead_market_analysis(
                 "underwriting_optional_property_record_failed",
                 lead_id=str(lead.id),
                 provider="rentcast",
-                operation=exc.operation,
-                provider_status_code=exc.status_code,
-                provider_error_code=exc.error_code,
-                error_message=str(exc),
+                operation="property record",
+                error_message=property_record_error,
+            )
+        if avm_error:
+            provider_warnings.append(
+                "The RentCast AVM was unavailable; value conclusions use screened recorded "
+                "sales only."
             )
 
         subject_facts = {**estimate.subject_property, **subject_record}
         try:
             sale_records = client.get_recent_sales(
-                address=address,
+                address=resolved_address,
                 property_type=(
                     string_or_none(subject_facts.get("propertyType"))
                     or property_record.property_type
@@ -1602,7 +1637,7 @@ def create_lead_market_analysis(
 
         try:
             rent_estimate = client.get_rent_estimate(
-                address=address,
+                address=resolved_address,
                 property_type=property_record.property_type,
             )
         except RentCastClientError as exc:
@@ -1616,9 +1651,20 @@ def create_lead_market_analysis(
                 error_message=str(exc),
             )
             rent_error = str(exc)
+        secondary_evidence = collect_secondary_market_evidence(
+            settings,
+            property_record,
+            requested_address=resolved_address,
+            subject_facts=subject_facts,
+        )
+        provider_warnings.extend(secondary_conflict_warnings(secondary_evidence))
 
     if subject_record:
         validate_provider_record(property_record, subject_record)
+        property_record.address_validation_metadata = {
+            **(property_record.address_validation_metadata or {}),
+            "resolution": address_evidence,
+        }
     result = analyze_underwriting_v2(
         estimate=estimate,
         subject_record=subject_record,
@@ -1640,6 +1686,13 @@ def create_lead_market_analysis(
         ],
         provider_warnings=provider_warnings,
         address_validation_status=property_record.address_validation_status,
+        address_match_score=(
+            optional_int(address_evidence.get("match_score"))
+            or optional_int(
+                (property_record.address_validation_metadata or {}).get("match_score")
+            )
+        ),
+        secondary_evidence=secondary_evidence,
         settings=settings,
     )
     custom_inputs_applied = any(
@@ -1733,6 +1786,10 @@ def create_lead_market_analysis(
         "address_validation_match_score": (
             (property_record.address_validation_metadata or {}).get("match_score")
         ),
+        "address_evidence": address_evidence,
+        "secondary_evidence": secondary_evidence,
+        "confidence_tier": result.confidence_tier,
+        "confidence_factors": result.confidence_factors,
         "comp_review": comp_review,
         "as_is_value_low_cents": result.as_is_low_cents,
         "as_is_value_cents": result.as_is_value_cents,
@@ -1754,6 +1811,7 @@ def create_lead_market_analysis(
         "assumptions": result.assumptions,
         "rent_estimate_error": rent_error,
         "property_record_error": property_record_error,
+        "avm_error": avm_error,
     }
 
     latest_version = db.scalar(
@@ -1825,6 +1883,9 @@ def create_lead_market_analysis(
             "recorded_sales": sale_records,
             "rent": rent_estimate.raw_response if rent_estimate else None,
             "property_record_error": property_record_error,
+            "avm_error": avm_error,
+            "address_evidence": address_evidence,
+            "secondary_evidence": secondary_evidence,
         },
         analysis_metadata=analysis_metadata,
     )
@@ -1854,7 +1915,7 @@ def create_lead_market_analysis(
                     f"{len(result.rejected_comps)} excluded sales"
                     if comp_review
                     else (
-                        "Underwriting V2.1 created with "
+                        "Underwriting V2.2 created with "
                         f"{len(result.selected_comps)} recorded-sale comps"
                     )
                 )
@@ -3284,7 +3345,7 @@ def build_v2_market_analysis_notes(
         else "Evidence threshold met; human approval still required."
     )
     return (
-        "Underwriting V2.1 used recorded sales, price-per-square-foot screening, "
+        "Underwriting V2.2 used recorded sales, price-per-square-foot screening, "
         "subject-size value indicators, and explicit buyer economics. "
         f"Selected {len(result.selected_comps)} recorded comps. "
         f"Confidence: {result.confidence_score}%. "
@@ -3327,7 +3388,7 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         ],
         source_note=(
             (
-                "Underwriting V2.1 uses screened recorded sales and subject-size value "
+                "Underwriting V2.2 uses screened recorded sales and subject-size value "
                 "indicators. Unverified comp conditions produce preliminary results; three "
                 "verified renovated sales produce a comp-supported result. All offer terms "
                 "still require human approval."
@@ -3361,6 +3422,10 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         transaction_reserve_cents=optional_int(metadata.get("transaction_reserve_cents")),
         monthly_rent_cents=optional_int(metadata.get("monthly_rent_cents")),
         manual_review_required=bool(metadata.get("human_review_required", True)),
+        confidence_tier=string_or_none(metadata.get("confidence_tier")) or "insufficient",
+        confidence_factors=list_of_dicts(metadata.get("confidence_factors")),
+        address_evidence=dict_value(metadata.get("address_evidence")),
+        secondary_evidence=dict_value(metadata.get("secondary_evidence")),
         review_reasons=string_list(metadata.get("review_reasons")),
         data_disagreements=string_list(metadata.get("data_disagreements")),
         assumptions=dict_value(metadata.get("assumptions")),
@@ -3385,6 +3450,12 @@ def string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def list_of_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
 
 
 def dict_value(value: Any) -> dict[str, Any]:

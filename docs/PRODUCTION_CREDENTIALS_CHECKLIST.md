@@ -112,11 +112,14 @@ Acceptance:
 | `OPENAI_HIGH_VOLUME_MODEL` | No | API and worker | Optional evaluated lower-cost model |
 | `OPENAI_ESCALATION_MODEL` | No | API and worker | Optional evaluated escalation model |
 | `OPENAI_TRANSCRIPTION_MODEL` | No | API and worker | Approved transcription model |
+| `OPENAI_WEB_SEARCH_ENABLED` | No | `oakwell-api` | `true` enables bounded cited underwriting research |
 
 Acceptance:
 
 - A governed Copilot draft completes and records model, tokens, latency, and estimated cost.
 - A controlled recording transcribes after Twilio recording is activated.
+- A fresh underwriting analysis retains cited secondary sources or a visible unavailable reason;
+  web research never changes ARV or offer math directly.
 - No OpenAI credential is exposed through a browser variable.
 
 ### RentCast

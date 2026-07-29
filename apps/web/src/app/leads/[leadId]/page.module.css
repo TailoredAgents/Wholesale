@@ -2495,6 +2495,146 @@
   line-height: 1.4;
 }
 
+.evidenceSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.evidenceSummary > div {
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid #e2ded4;
+  border-radius: 6px;
+  background: #fbfaf7;
+  display: grid;
+  gap: 4px;
+}
+
+.evidenceSummary span,
+.confidenceFactors span,
+.secondaryEvidence article span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.evidenceSummary strong,
+.confidenceFactors strong {
+  color: #202426;
+  font-size: 13px;
+  text-transform: capitalize;
+}
+
+.evidenceSummary small,
+.confidenceFactors small,
+.secondaryEvidence small {
+  overflow-wrap: anywhere;
+  color: #687073;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.evidenceDetails {
+  border: 1px solid #e2ded4;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.evidenceDetails summary {
+  padding: 11px 12px;
+  cursor: pointer;
+  color: #29302d;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.confidenceFactors {
+  padding: 0 12px 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.confidenceFactors > div {
+  min-width: 0;
+  padding: 9px;
+  border-top: 2px solid #8eb19b;
+  background: #f7f8f5;
+  display: grid;
+  gap: 3px;
+}
+
+.secondaryEvidence {
+  padding: 0 12px 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.secondaryEvidence > p {
+  color: #4f5658;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.secondaryEvidence article {
+  padding: 9px 10px;
+  border-left: 3px solid #8eb19b;
+  background: #f7f8f5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.secondaryEvidence article > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.secondaryEvidence article strong {
+  color: #29302d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.secondaryEvidence article a {
+  max-width: 34%;
+  overflow-wrap: anywhere;
+  color: #245f43;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.secondaryEvidence .evidenceConflict {
+  border-left-color: #b18436;
+  background: #fff8ea;
+}
+
+.evidenceSources {
+  padding-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.evidenceSources > span {
+  flex-basis: 100%;
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.evidenceSources a {
+  overflow-wrap: anywhere;
+  color: #245f43;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .compSectionHeader {
   display: flex;
   align-items: flex-end;
@@ -2969,6 +3109,8 @@
 
   .marketValueResult .decisionMetrics,
   .underwritingControls,
+  .evidenceSummary,
+  .confidenceFactors,
   .preMeetingGrid {
     grid-template-columns: 1fr;
   }

@@ -80,3 +80,96 @@ def test_structured_response_rejects_non_strict_schema_before_network() -> None:
                 "required": ["summary"],
             },
         )
+
+
+def test_grounded_structured_response_configures_bounded_web_search(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_post(url: str, **kwargs: object) -> httpx.Response:
+        captured["url"] = url
+        captured.update(kwargs)
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            200,
+            request=request,
+            json={
+                "output": [
+                    {
+                        "type": "web_search_call",
+                        "action": {
+                            "type": "search",
+                            "sources": [
+                                {
+                                    "url": "https://assessor.example.gov/property/134",
+                                    "title": "County assessor",
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "type": "message",
+                        "content": [
+                            {
+                                "type": "output_text",
+                                "text": json.dumps(
+                                    {"summary": "Verified.", "risks": []}
+                                ),
+                                "annotations": [],
+                            }
+                        ],
+                    },
+                ],
+                "usage": {"input_tokens": 20, "output_tokens": 10},
+            },
+        )
+
+    monkeypatch.setattr("app.integrations.openai_client.httpx.post", fake_post)
+    client = OpenAIResponsesClient(
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+        timeout_seconds=30,
+    )
+    result, usage, sources = client.create_grounded_structured_response(
+        model="gpt-5.6-sol",
+        system_prompt="Use public records.",
+        user_prompt="Research the subject.",
+        schema_name="stonegate_grounded_test",
+        json_schema=STRICT_SCHEMA,
+        user_location={
+            "country": "US",
+            "city": "Canton",
+            "region": "GA",
+        },
+        blocked_domains=["reddit.com"],
+        max_tool_calls=2,
+    )
+
+    payload = captured["json"]
+    assert isinstance(payload, dict)
+    assert payload["tools"] == [
+        {
+            "type": "web_search",
+            "search_context_size": "low",
+            "external_web_access": True,
+            "user_location": {
+                "type": "approximate",
+                "country": "US",
+                "city": "Canton",
+                "region": "GA",
+            },
+            "filters": {"blocked_domains": ["reddit.com"]},
+        }
+    ]
+    assert payload["tool_choice"] == "required"
+    assert payload["max_tool_calls"] == 2
+    assert payload["include"] == ["web_search_call.action.sources"]
+    assert result == {"summary": "Verified.", "risks": []}
+    assert usage["total_tokens"] == 30
+    assert sources == [
+        {
+            "url": "https://assessor.example.gov/property/134",
+            "title": "County assessor",
+        }
+    ]

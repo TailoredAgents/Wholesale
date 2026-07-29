@@ -1,8 +1,8 @@
-# Underwriting V2.1 Method
+# Underwriting V2.2 Method
 
 ## Purpose
 
-Underwriting V2.1 creates an auditable acquisition recommendation. It does not approve an
+Underwriting V2.2 creates an auditable acquisition recommendation. It does not approve an
 offer. A qualified user must verify comparable condition, repair scope, title, buyer demand,
 and exit assumptions before changing an underwriting version from `needs_review`.
 
@@ -26,6 +26,21 @@ separately. Common suffixes, directionals, state codes, and ZIP+4/ZIP5 are norma
 matching. Provider confirmation compares street number/name, city, state, ZIP, and unit evidence;
 the match score, issues, provider property ID, reviewer-visible facts, and timestamp are audited.
 Editing the CRM address clears stale validation.
+
+The analysis performs one deterministic address-resolution sequence:
+
+1. Try the staff-entered full address.
+2. Reuse a previously provider-confirmed formatted address when available.
+3. Retry the provider-standard `Street, City, State, ZIP` format.
+4. Retry normalized street suffixes such as `Trail` to `Trl`.
+5. Accept a fallback only when street number, city, state, ZIP, and an overall match score meet
+   the configured identity threshold.
+
+Every attempt, provider response status, resolved address, match score, and rejection reason is
+saved. A result with a different street number, city, state, or ZIP is never silently accepted.
+If the RentCast AVM remains unavailable but an acceptable property record is found, Stonegate
+continues with screened recorded sales and clearly marks the AVM unavailable. If the subject
+property itself cannot be identified, the analysis stops instead of comping the wrong property.
 
 The underwriting subject is assembled field by field from the RentCast property record, then the
 AVM subject, then the CRM property type when provider data is absent. Every retained subject field
@@ -187,8 +202,22 @@ offer formula.
 
 ## Confidence And Review Gates
 
-Confidence combines comp count and fit, condition evidence, value-range spread, AVM
-agreement, and subject-data agreement. Manual review is required when:
+Confidence is a visible 100-point evidence score:
+
+| Factor | Maximum |
+| --- | ---: |
+| Confirmed subject address | 20 |
+| Quantity of screened recorded sales | 25 |
+| Physical and market fit of those sales | 25 |
+| Human-confirmed renovated/as-is condition evidence | 15 |
+| Precision of the supported ARV range | 10 |
+| Agreement across provider and secondary sources | 5 |
+
+The UI and PDFs show every factor, its points, and an explanation. Confidence tiers are `High`
+at 85-100, `Moderate` at 70-84, `Low` at 50-69, and `Insufficient` below 50. A preliminary ARV
+without three renovated comps is capped below 60 regardless of the other evidence.
+
+Manual review is required when:
 
 - Confidence is below 75.
 - Fewer than three renovated comps are confirmed.
@@ -198,6 +227,24 @@ agreement, and subject-data agreement. Manual review is required when:
 - Subject facts disagree across sources.
 
 Even when evidence thresholds are met, a human must approve the acquisition decision.
+
+## Controlled Secondary Research
+
+On a fresh complete analysis, the existing OpenAI Responses API integration may run one bounded
+web-search pass when `OPENAI_WEB_SEARCH_ENABLED=true`. It:
+
+- Searches only for public, property-level evidence.
+- Prioritizes county/municipal records, assessor records, permits, and dated brokerage listings.
+- Excludes owner, occupant, tenant, phone, email, and other personal information.
+- Cannot estimate ARV, repairs, an offer, or a price range.
+- Cannot modify comps, valuation math, or CRM facts.
+- Keeps only facts tied to URLs that the search actually consulted.
+- Stores source titles, URLs, limitations, conflicts, model, and token usage with the immutable
+  analysis.
+
+Secondary research corroborates or challenges the primary provider evidence. It never becomes a
+second valuation engine. A conflict lowers source-agreement confidence and appears in the review
+list. Search failure does not block the RentCast/recorded-sales workflow.
 
 ## Reports And Audit
 
@@ -215,13 +262,17 @@ audit log.
 
 The investor PDF includes the report stage, structured repair inputs, itemized costs and
 notes, buyer economics, repair contingency, seller ceiling, opening recommendation, raw comp
-prices, price per square foot, subject-size indicators, comp rationale, and decision controls.
+prices, price per square foot, subject-size indicators, comp rationale, confidence factors,
+resolved-address evidence, cited public sources, and decision controls.
 The client PDF shows the report stage but excludes
 Stonegate's repair budget, assignment, profit, and negotiation assumptions; it presents only
-property facts, as-is/renovated value evidence, comparable sales, and limitations.
+property facts, as-is/renovated value evidence, comparable sales, cited public sources, and
+limitations.
 
-Changing classifications or repair scope reuses the latest saved provider evidence and does
-not consume another market-data pull. `Refresh market data` deliberately retrieves new data.
+Applying a comp review reuses its chosen immutable analysis. The primary `Run complete analysis`
+or `Refresh complete analysis` action performs address resolution, provider retrieval, secondary
+research when enabled, comp screening, confidence scoring, repair math, and buyer economics in one
+workflow.
 
 ## Repair Evidence And Presets
 
@@ -333,6 +384,8 @@ Before broad operational reliance:
 - RentCast property records: https://developers.rentcast.io/reference/property-records
 - RentCast property valuation: https://developers.rentcast.io/reference/property-valuation
 - RentCast long-term rent estimate: https://developers.rentcast.io/reference/rent-estimate-long-term
+- OpenAI Responses API web search:
+  https://developers.openai.com/api/docs/guides/tools-web-search
 - Fannie Mae comparable sales: https://selling-guide.fanniemae.com/sel/b4-1.3-08/comparable-sales
 - Fannie Mae sales comparison approach: https://selling-guide.fanniemae.com/sel/b4-1.3-07/sales-comparison-approach-section-appraisal-report
 - Fannie Mae comparable adjustments: https://selling-guide.fanniemae.com/sel/b4-1.3-09/adjustments-comparable-sales

@@ -220,11 +220,20 @@ mailbox reputation with day-to-day seller and closing mail.
 7. Add a second property-data source, address validation, or live routes only when operating
    evidence shows the current solution is insufficient.
 
+Current underwriting evidence behavior:
+
+- RentCast remains the only numerical property-data provider.
+- Underwriting V2.2 performs deterministic address retries and a recorded-sales fallback when a
+  verified subject record exists but the AVM is unavailable.
+- OpenAI web search supplies cited public diligence evidence only. It cannot create ARV, repair,
+  offer, or contract values, and its failure does not block the core analysis.
+
 ## Official References
 
 - [OpenAI model guidance](https://developers.openai.com/api/docs/guides/latest-model)
 - [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents)
 - [OpenAI agent evaluations](https://developers.openai.com/api/docs/guides/agent-evals)
+- [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search)
 - [RentCast property valuation](https://developers.rentcast.io/reference/property-valuation)
 - [Twilio Voice JavaScript SDK](https://www.twilio.com/docs/voice/sdks/javascript)
 - [Resend sending API](https://resend.com/docs/api-reference/emails/send-email)
