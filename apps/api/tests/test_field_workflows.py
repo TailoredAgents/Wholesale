@@ -24,6 +24,7 @@ from app.models.foundation import (
     Role,
     RoleAssignment,
     Task,
+    UnderwritingMarketAnalysis,
     UnderwritingVersion,
     User,
 )
@@ -168,6 +169,59 @@ def test_field_meeting_evidence_and_underwriting_transfer(
         admin_name="Owner",
     )
     owner, lead, appointment, original_underwriting = field_appointment(db_session)
+    analysis = UnderwritingMarketAnalysis(
+        organization_id=owner.organization_id,
+        lead_id=lead.id,
+        property_id=lead.property_id,
+        underwriting_version_id=original_underwriting.id,
+        created_by_user_id=owner.id,
+        provider="rentcast",
+        requested_address="125 Fieldstone Drive, Atlanta, GA 30303",
+        estimated_value_cents=29_000_000,
+        estimated_value_low_cents=27_500_000,
+        estimated_value_high_cents=30_500_000,
+        arv_low_cents=30_000_000,
+        arv_high_cents=32_000_000,
+        repair_low_cents=4_000_000,
+        repair_high_cents=5_000_000,
+        mao_low_cents=16_000_000,
+        mao_high_cents=18_000_000,
+        recommended_offer_cents=17_500_000,
+        assignment_fee_cents=1_500_000,
+        offer_low_percentage=65,
+        offer_high_percentage=70,
+        confidence_score=82,
+        selected_comp_count=1,
+        rejected_comp_count=0,
+        selected_comps=[
+            {
+                "formatted_address": "140 Fieldstone Drive, Atlanta, GA 30303",
+                "property_type": "single_family",
+                "price_cents": 31_500_000,
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "square_footage": 1550,
+                "year_built": 1988,
+                "distance_miles": 0.4,
+                "sale_date": "2026-05-10",
+                "condition_classification": "renovated",
+                "condition_evidence": "Reviewed listing evidence",
+                "price_per_square_foot_cents": 20_323,
+                "adjusted_value_cents": 31_000_000,
+                "score": 91,
+                "selection_reason": "Strong physical and market fit",
+            }
+        ],
+        rejected_comps=[],
+        subject_property={},
+        raw_response={},
+        analysis_metadata={
+            "methodology_version": "v2.2",
+            "confidence_tier": "moderate",
+        },
+    )
+    db_session.add(analysis)
+    db_session.commit()
     client = TestClient(app)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
 
@@ -188,6 +242,13 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     )
     assert brief.status_code == 200, brief.text
     assert brief.json()["brief_data"]["approved_offer"]["seller_ceiling_cents"] == 18_000_000
+    presentation = brief.json()["brief_data"]["client_presentation"]
+    assert presentation["value_evidence"]["methodology_version"] == "v2.2"
+    assert presentation["comparables"][0]["price_cents"] == 31_500_000
+    assert "selection_reason" not in presentation["comparables"][0]
+    assert set(presentation) == {"property", "value_evidence", "comparables"}
+    assert "recommended_offer_cents" not in presentation["value_evidence"]
+    assert "seller_ceiling_cents" not in presentation["value_evidence"]
 
     started = client.post(
         f"/api/v1/field-operations/appointments/{appointment.id}/inspection",

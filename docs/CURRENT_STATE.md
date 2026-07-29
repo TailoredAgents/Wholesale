@@ -181,6 +181,11 @@ release gates. Detailed delivered and remaining scope is maintained in `ROADMAP.
   context, and meeting launch.
 - Versioned seller-meeting briefs, mobile walkthrough evidence and photographs, structured repair
   scope, negotiation outcomes, and approved-ceiling enforcement.
+- iPad-focused appointment execution with a four-step progress rail, touch-friendly walkthrough
+  entry, full-screen seller presentation, selected recorded-sale evidence, and direct client-PDF
+  download.
+- Seller presentation data uses an explicit allowlist and excludes Stonegate offer authority,
+  repair economics, assignment fees, buyer profit, and negotiation history.
 - Reviewed walkthrough transfer creates a new repair estimate and draft underwriting version while
   preserving prior approved underwriting, plus 30-day closer preparation and documentation
   scorecards.

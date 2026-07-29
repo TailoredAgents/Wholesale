@@ -1086,6 +1086,20 @@
   grid-template-columns: minmax(245px, 0.62fr) minmax(0, 2fr);
 }
 
+.meetingShellFocused {
+  min-height: calc(100vh - 190px);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.meetingShellFocused .meetingQueue {
+  display: none;
+}
+
+.meetingShellFocused .meetingDesk {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
 .meetingQueue {
   padding: 17px;
   border-right: 1px solid var(--line);
@@ -1178,23 +1192,96 @@
   font-size: 13px;
 }
 
-.meetingHeader a {
+.meetingHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.meetingHeader a,
+.meetingHeaderActions button {
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
+  background: var(--surface);
   color: var(--text-soft);
   display: flex;
   align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
   font-size: 12px;
   font-weight: 800;
 }
 
+.appointmentSteps {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.appointmentSteps button {
+  min-width: 0;
+  min-height: 50px;
+  padding: 7px 10px;
+  border: 0;
+  border-right: 1px solid var(--line);
+  background: var(--surface-soft);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font: inherit;
+}
+
+.appointmentSteps button:last-child {
+  border-right: 0;
+}
+
+.appointmentSteps button > span {
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.appointmentSteps button > strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.appointmentSteps .completedStep {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.appointmentSteps .completedStep > span {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+}
+
 .meetingTabs {
   margin: 14px 0 18px;
+  position: sticky;
+  top: 0;
+  z-index: 8;
   display: flex;
   gap: 4px;
   border-bottom: 1px solid var(--line);
+  background: var(--surface);
 }
 
 .meetingTabs button {
@@ -1217,6 +1304,7 @@
 
 .briefWorkspace,
 .walkthroughWorkspace,
+.sellerPresentation,
 .negotiationForm {
   display: grid;
   gap: 18px;
@@ -1672,6 +1760,31 @@
   border-top: 1px solid var(--line);
 }
 
+.quickAddRail {
+  margin: 9px 0 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quickAddRail button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-soft);
+  color: var(--text-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.quickAddRail button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.5;
+}
+
 .observationRow,
 .repairRow,
 .objectionEditor > div {
@@ -1851,6 +1964,309 @@
 .reviewTransfer small {
   color: var(--muted);
   line-height: 1.4;
+}
+
+.presentationEmpty {
+  min-height: 360px;
+  padding: 32px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.presentationEmpty svg {
+  color: var(--brand-strong);
+}
+
+.presentationEmpty strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.presentationEmpty span {
+  max-width: 60ch;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sellerPresentation {
+  min-width: 0;
+  background: var(--surface);
+}
+
+.presentationActive {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  padding: clamp(20px, 4vw, 56px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #f8faf8;
+}
+
+.sellerPresentation > header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.presentationBrand,
+.presentationActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.presentationBrand > span {
+  width: 42px;
+  height: 42px;
+  border-radius: 6px;
+  background: var(--brand);
+  color: white;
+  display: grid;
+  place-items: center;
+}
+
+.presentationBrand > div {
+  display: grid;
+  gap: 2px;
+}
+
+.presentationBrand strong {
+  font-size: 15px;
+}
+
+.presentationBrand small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.presentationActions button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.presentationActions button:last-child {
+  border-color: var(--brand-strong);
+  background: var(--brand);
+  color: white;
+}
+
+.presentationHero {
+  max-width: 900px;
+  padding: clamp(30px, 6vw, 72px) 0 clamp(24px, 4vw, 48px);
+}
+
+.presentationHero > span,
+.presentationComps > div:first-child > span {
+  color: var(--brand-strong);
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.presentationHero h3 {
+  margin-top: 8px;
+  color: #17241d;
+  font-size: clamp(28px, 4vw, 48px);
+  line-height: 1.08;
+}
+
+.presentationHero p {
+  max-width: 68ch;
+  margin-top: 14px;
+  color: var(--text-soft);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.presentationMetrics {
+  display: grid;
+  grid-template-columns: 0.7fr 1.4fr 0.9fr;
+  border-block: 1px solid var(--line);
+}
+
+.presentationMetrics > div {
+  min-width: 0;
+  min-height: 108px;
+  padding: 20px;
+  border-right: 1px solid var(--line);
+  display: grid;
+  align-content: center;
+  gap: 6px;
+}
+
+.presentationMetrics > div:last-child {
+  border-right: 0;
+}
+
+.presentationMetrics span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.presentationMetrics strong {
+  color: #17241d;
+  overflow-wrap: anywhere;
+  font-size: 20px;
+}
+
+.presentationMetrics small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.presentationComps {
+  padding: clamp(26px, 4vw, 48px) 0;
+}
+
+.presentationComps h4 {
+  margin-top: 4px;
+  font-size: 21px;
+}
+
+.presentationCompGrid {
+  margin-top: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.presentationCompGrid article {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+}
+
+.presentationCompGrid article > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.presentationCompGrid article > header span {
+  color: var(--brand-strong);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.presentationCompGrid article > header strong {
+  color: #17241d;
+  font-size: 18px;
+}
+
+.presentationCompGrid h5 {
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.presentationCompGrid dl {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid var(--line-soft);
+}
+
+.presentationCompGrid dl > div {
+  min-width: 0;
+  padding: 10px 8px 0 0;
+}
+
+.presentationCompGrid dt {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.presentationCompGrid dd {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+  color: var(--text-soft);
+  font-size: 11px;
+}
+
+.presentationNoComps {
+  margin-top: 18px;
+  padding: 20px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+
+.presentationMethod {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--line);
+}
+
+.presentationMethod > div {
+  min-width: 0;
+  min-height: 96px;
+  padding: 18px;
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+}
+
+.presentationMethod > div:last-child {
+  border-right: 0;
+}
+
+.presentationMethod strong {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+}
+
+.presentationMethod span {
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.sellerPresentation > footer {
+  max-width: 90ch;
+  padding: 20px 0 4px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
 }
 
 .ceilingBanner {
@@ -2090,6 +2506,39 @@
   }
 }
 
+@media (min-width: 761px) and (max-width: 1180px) {
+  .appointmentFocus .meetingDesk {
+    padding: 20px;
+  }
+
+  .appointmentFocus .meetingTabs button,
+  .appointmentFocus .appointmentSteps button,
+  .appointmentFocus .quickAddRail button,
+  .appointmentFocus .actionRow button,
+  .appointmentFocus .photoCapture label,
+  .appointmentFocus input,
+  .appointmentFocus select {
+    min-height: 46px;
+  }
+
+  .appointmentFocus .observationRow,
+  .appointmentFocus .repairRow {
+    grid-template-columns: minmax(150px, 0.8fr) minmax(130px, 0.55fr) 40px;
+  }
+
+  .appointmentFocus .observationRow > input:nth-of-type(2),
+  .appointmentFocus .repairRow > input {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .appointmentFocus .observationRow > button,
+  .appointmentFocus .repairRow > button {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
 @media (max-width: 760px) {
   .metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2186,6 +2635,41 @@
     overflow: hidden;
   }
 
+  .meetingHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .meetingHeaderActions {
+    width: 100%;
+  }
+
+  .meetingHeaderActions button,
+  .meetingHeaderActions a {
+    flex: 1 1 0;
+  }
+
+  .appointmentSteps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .appointmentSteps button:nth-child(2) {
+    border-right: 0;
+  }
+
+  .appointmentSteps button:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .meetingTabs {
+    overflow-x: auto;
+  }
+
+  .meetingTabs button {
+    min-height: 46px;
+    flex: 1 0 auto;
+  }
+
   .negotiationForm,
   .fieldAuthority,
   .fieldAuthority > header > div {
@@ -2218,9 +2702,41 @@
   .walkthroughFields,
   .fieldAuthority dl,
   .fieldConcessionEditor,
+  .presentationMetrics,
+  .presentationCompGrid,
+  .presentationMethod,
   .priceGrid,
   .outcomeGrid {
     grid-template-columns: 1fr;
+  }
+
+  .sellerPresentation > header,
+  .presentationActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .presentationActions button {
+    width: 100%;
+  }
+
+  .presentationActive {
+    padding: 16px;
+  }
+
+  .presentationMetrics > div,
+  .presentationMethod > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .presentationMetrics > div:last-child,
+  .presentationMethod > div:last-child {
+    border-bottom: 0;
+  }
+
+  .presentationCompGrid dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .fieldAuthority > header {

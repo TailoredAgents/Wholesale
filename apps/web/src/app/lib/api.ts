@@ -3417,6 +3417,33 @@ export async function getFieldOperationsOverview(): Promise<{
   }
 }
 
+export async function getFieldAppointmentWorkspace(
+  appointmentId: string,
+): Promise<FieldAppointmentWorkspace | null> {
+  if (!appointmentId) return null;
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(
+      `${apiBaseUrl}/api/v1/field-operations/appointments/${encodeURIComponent(
+        appointmentId,
+      )}/workspace`,
+      {
+        headers,
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return (await response.json()) as FieldAppointmentWorkspace;
+  } catch (error) {
+    console.error("Stonegate appointment workspace request failed.", error);
+    return null;
+  }
+}
+
 export async function getBuyers(): Promise<{
   buyers: BuyerListItem[];
   apiConnected: boolean;

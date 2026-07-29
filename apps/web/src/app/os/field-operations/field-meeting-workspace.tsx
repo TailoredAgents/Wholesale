@@ -9,10 +9,15 @@ import {
   Check,
   CircleCheckBig,
   ClipboardCheck,
+  Download,
+  Expand,
   FileSearch,
+  House,
   LoaderCircle,
+  Minimize2,
   Pencil,
   Plus,
+  Presentation,
   RefreshCw,
   ShieldCheck,
   Sparkles,
@@ -22,12 +27,20 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type {
   AcquisitionsCopilotRecommendation,
   FieldAppointmentWorkspace,
   FieldInspection,
+  FieldMeetingBrief,
   FieldOperationsOverview,
   FieldRoomObservation,
 } from "../../lib/api";
@@ -36,7 +49,7 @@ import { labelize } from "../os-utils";
 import styles from "./field-operations.module.css";
 import { useFieldApi } from "./use-field-api";
 
-type MeetingTab = "brief" | "walkthrough" | "negotiation";
+type MeetingTab = "brief" | "walkthrough" | "presentation" | "negotiation";
 
 type FieldNegotiationLedger = {
   active_plan: {
@@ -62,6 +75,28 @@ const repairCategories = [
   "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen", "bathrooms",
   "flooring", "paint_drywall", "windows_doors", "exterior", "landscaping", "permits",
   "cleanup", "other",
+];
+
+const propertyAreas = [
+  "Exterior",
+  "Roof",
+  "Kitchen",
+  "Living areas",
+  "Bedrooms",
+  "Bathrooms",
+  "Foundation",
+  "Mechanical systems",
+];
+
+const quickRepairCategories = [
+  "roof",
+  "hvac",
+  "foundation",
+  "kitchen",
+  "bathrooms",
+  "flooring",
+  "paint_drywall",
+  "cleanup",
 ];
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -143,16 +178,23 @@ function EvidencePhoto({ photo }: { photo: FieldInspection["photos"][number] }) 
 
 export function FieldMeetingWorkspace({
   data,
+  initialWorkspace,
   requestedAppointmentId,
 }: {
   data: FieldOperationsOverview;
+  initialWorkspace: FieldAppointmentWorkspace | null;
   requestedAppointmentId: string;
 }) {
   const { request, requestJson, requestPhoto } = useFieldApi();
   const [appointmentId, setAppointmentId] = useState(
     requestedAppointmentId || data.upcoming_appointments[0]?.id || "",
   );
-  const [workspace, setWorkspace] = useState<FieldAppointmentWorkspace | null>(null);
+  const [workspace, setWorkspace] = useState<FieldAppointmentWorkspace | null>(
+    initialWorkspace,
+  );
+  const skipInitialLoad = useRef(
+    Boolean(initialWorkspace && initialWorkspace.appointment.id === appointmentId),
+  );
   const [tab, setTab] = useState<MeetingTab>("brief");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -160,6 +202,7 @@ export function FieldMeetingWorkspace({
   const [error, setError] = useState("");
   const [inspection, setInspection] = useState<Partial<FieldInspection>>({});
   const [photoArea, setPhotoArea] = useState("Exterior");
+  const [focusMode, setFocusMode] = useState(Boolean(requestedAppointmentId));
 
   const loadWorkspace = useCallback(async (id: string) => {
     if (!id) return;
@@ -175,12 +218,22 @@ export function FieldMeetingWorkspace({
   }, [request]);
 
   useEffect(() => {
-    if (requestedAppointmentId) setAppointmentId(requestedAppointmentId);
+    if (requestedAppointmentId) {
+      setAppointmentId(requestedAppointmentId);
+      setFocusMode(true);
+    }
   }, [requestedAppointmentId]);
 
   useEffect(() => {
+    if (
+      skipInitialLoad.current
+      && initialWorkspace?.appointment.id === appointmentId
+    ) {
+      skipInitialLoad.current = false;
+      return;
+    }
     void loadWorkspace(appointmentId);
-  }, [appointmentId, loadWorkspace]);
+  }, [appointmentId, initialWorkspace?.appointment.id, loadWorkspace]);
 
   useEffect(() => {
     setInspection(workspace?.inspection ?? {});
@@ -212,6 +265,31 @@ export function FieldMeetingWorkspace({
   const property = asRecord(brief?.property);
   const underwriting = asRecord(brief?.underwriting);
   const approvedOffer = asRecord(brief?.approved_offer);
+  const clientPresentation = asRecord(brief?.client_presentation);
+  const appointmentSteps: Array<{
+    key: MeetingTab;
+    label: string;
+    complete: boolean;
+  }> = [
+    { key: "brief", label: "Prepare", complete: Boolean(workspace?.brief) },
+    {
+      key: "walkthrough",
+      label: "Walkthrough",
+      complete: workspace?.inspection?.status === "submitted",
+    },
+    {
+      key: "presentation",
+      label: "Present",
+      complete: asList(clientPresentation.comparables).length > 0,
+    },
+    {
+      key: "negotiation",
+      label: "Finish",
+      complete: Boolean(
+        workspace?.negotiation && workspace.negotiation.outcome !== "pending",
+      ),
+    },
+  ];
 
   async function saveInspection() {
     if (!workspace?.inspection) return;
@@ -231,6 +309,21 @@ export function FieldMeetingWorkspace({
     );
   }
 
+  function addArea(area: string) {
+    if (rooms.some((item) => item.area.toLowerCase() === area.toLowerCase())) return;
+    updateInspection("room_observations", [
+      ...rooms,
+      { area, condition: "fair", notes: null },
+    ]);
+  }
+
+  function addRepair(category: string) {
+    updateInspection("repair_items", [
+      ...repairs,
+      { category, estimated_cost_cents: 100_000, details: null },
+    ]);
+  }
+
   async function uploadPhotos(event: ChangeEvent<HTMLInputElement>) {
     if (!workspace?.inspection || !event.target.files?.length) return;
     const files = Array.from(event.target.files);
@@ -248,8 +341,8 @@ export function FieldMeetingWorkspace({
   }
 
   return (
-    <div className={styles.meetingArea}>
-      <section className={styles.fieldScorecards} aria-label="Thirty day closer scorecards">
+    <div className={`${styles.meetingArea} ${focusMode ? styles.appointmentFocus : ""}`}>
+      {!focusMode ? <section className={styles.fieldScorecards} aria-label="Thirty day closer scorecards">
         {data.scorecards.map((scorecard) => (
           <div key={scorecard.user_id}>
             <span><strong>{scorecard.user_name}</strong><small>Last 30 days</small></span>
@@ -259,8 +352,10 @@ export function FieldMeetingWorkspace({
             <span><strong>{scorecard.accepted_outcomes}</strong><small>Accepted</small></span>
           </div>
         ))}
-      </section>
-      <section className={styles.meetingShell}>
+      </section> : null}
+      <section
+        className={`${styles.meetingShell} ${focusMode ? styles.meetingShellFocused : ""}`}
+      >
       <aside className={styles.meetingQueue}>
         <div className={styles.sectionHeader}>
           <div><span>Assigned field work</span><h3>Seller meetings</h3></div>
@@ -294,11 +389,36 @@ export function FieldMeetingWorkspace({
                 <h3>{workspace.appointment.seller_name}</h3>
                 <p>{workspace.appointment.property_address}</p>
               </div>
-              <Link href={workspace.appointment.lead_url}>Open lead</Link>
+              <div className={styles.meetingHeaderActions}>
+                <button
+                  aria-label={focusMode ? "Exit appointment focus" : "Enter appointment focus"}
+                  onClick={() => setFocusMode((current) => !current)}
+                  title={focusMode ? "Exit appointment focus" : "Enter appointment focus"}
+                  type="button"
+                >
+                  {focusMode ? <Minimize2 size={16} /> : <Expand size={16} />}
+                  {focusMode ? "Exit focus" : "Appointment mode"}
+                </button>
+                <Link href={workspace.appointment.lead_url}>Open lead</Link>
+              </div>
             </header>
+            <nav className={styles.appointmentSteps} aria-label="Appointment progress">
+              {appointmentSteps.map((step, index) => (
+                <button
+                  className={step.complete ? styles.completedStep : ""}
+                  key={step.key}
+                  onClick={() => setTab(step.key)}
+                  type="button"
+                >
+                  <span>{step.complete ? <Check size={14} /> : index + 1}</span>
+                  <strong>{step.label}</strong>
+                </button>
+              ))}
+            </nav>
             <nav className={styles.meetingTabs} aria-label="Seller meeting workflow">
-              <button className={tab === "brief" ? styles.activeMeetingTab : ""} onClick={() => setTab("brief")} type="button"><FileSearch size={16} />Brief</button>
+              <button className={tab === "brief" ? styles.activeMeetingTab : ""} onClick={() => setTab("brief")} type="button"><FileSearch size={16} />Prepare</button>
               <button className={tab === "walkthrough" ? styles.activeMeetingTab : ""} onClick={() => setTab("walkthrough")} type="button"><ClipboardCheck size={16} />Walkthrough</button>
+              <button className={tab === "presentation" ? styles.activeMeetingTab : ""} onClick={() => setTab("presentation")} type="button"><Presentation size={16} />Seller view</button>
               <button className={tab === "negotiation" ? styles.activeMeetingTab : ""} onClick={() => setTab("negotiation")} type="button"><UserRoundCheck size={16} />Outcome</button>
             </nav>
 
@@ -366,7 +486,23 @@ export function FieldMeetingWorkspace({
                     </fieldset>
 
                     <section className={styles.observationSection}>
-                      <header><div><span>Area by area</span><h4>Condition observations</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => updateInspection("room_observations", [...rooms, { area: "", condition: "fair", notes: null }])} type="button"><Plus size={15} />Add area</button> : null}</header>
+                      <header><div><span>Area by area</span><h4>Condition observations</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => addArea(`Area ${rooms.length + 1}`)} type="button"><Plus size={15} />Custom area</button> : null}</header>
+                      {workspace.inspection.status === "draft" ? (
+                        <div className={styles.quickAddRail}>
+                          {propertyAreas.map((area) => (
+                            <button
+                              disabled={rooms.some(
+                                (item) => item.area.toLowerCase() === area.toLowerCase(),
+                              )}
+                              key={area}
+                              onClick={() => addArea(area)}
+                              type="button"
+                            >
+                              {area}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {rooms.map((room, index) => (
                         <div className={styles.observationRow} key={index}>
                           <input aria-label="Area" disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateInspection("room_observations", rooms.map((item, itemIndex) => itemIndex === index ? { ...item, area: event.target.value } : item))} placeholder="Kitchen, roof, exterior" value={room.area} />
@@ -378,7 +514,16 @@ export function FieldMeetingWorkspace({
                     </section>
 
                     <section className={styles.observationSection}>
-                      <header><div><span>Repair scope</span><h4>Cost observations</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => updateInspection("repair_items", [...repairs, { category: "other", estimated_cost_cents: 10000, details: null }])} type="button"><Plus size={15} />Add repair</button> : null}</header>
+                      <header><div><span>Repair scope</span><h4>Cost observations</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => addRepair("other")} type="button"><Plus size={15} />Custom repair</button> : null}</header>
+                      {workspace.inspection.status === "draft" ? (
+                        <div className={styles.quickAddRail}>
+                          {quickRepairCategories.map((category) => (
+                            <button key={category} onClick={() => addRepair(category)} type="button">
+                              {labelize(category)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
                       {repairs.map((repair, index) => (
                         <div className={styles.repairRow} key={index}>
                           <select disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateInspection("repair_items", repairs.map((item, itemIndex) => itemIndex === index ? { ...item, category: event.target.value } : item))} value={repair.category}>{repairCategories.map((category) => <option key={category} value={category}>{labelize(category)}</option>)}</select>
@@ -404,6 +549,14 @@ export function FieldMeetingWorkspace({
               </div>
             ) : null}
 
+            {tab === "presentation" ? (
+              <SellerPresentation
+                brief={workspace.brief}
+                propertyAddress={workspace.appointment.property_address}
+                sellerName={workspace.appointment.seller_name}
+              />
+            ) : null}
+
             {tab === "negotiation" ? <NegotiationForm appointmentId={appointmentId} saving={saving} workspace={workspace} run={run} /> : null}
           </>
         ) : null}
@@ -411,6 +564,212 @@ export function FieldMeetingWorkspace({
       </section>
     </div>
   );
+}
+
+function SellerPresentation({
+  brief,
+  propertyAddress,
+  sellerName,
+}: {
+  brief: FieldMeetingBrief | null;
+  propertyAddress: string;
+  sellerName: string;
+}) {
+  const { fetchBlob } = useFieldApi();
+  const [presenting, setPresenting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [error, setError] = useState("");
+  const data = brief?.brief_data ?? {};
+  const presentation = asRecord(data.client_presentation);
+  const valueEvidence = asRecord(presentation.value_evidence);
+  const comps = asList(presentation.comparables).map(asRecord);
+  const analysisId = String(brief?.source_snapshot.market_analysis_id ?? "");
+  const leadId = String(brief?.source_snapshot.lead_id ?? "");
+  const confidenceScore = Number(valueEvidence.confidence_score ?? 0);
+  const confidenceTier = String(
+    valueEvidence.confidence_tier
+      ?? (confidenceScore >= 85
+        ? "high"
+        : confidenceScore >= 70
+          ? "moderate"
+          : confidenceScore >= 50
+            ? "low"
+            : "insufficient"),
+  );
+
+  async function downloadClientReport() {
+    if (!analysisId || !leadId) return;
+    setDownloading(true);
+    setError("");
+    try {
+      const blob = await fetchBlob(
+        `/api/v1/leads/${leadId}/underwriting/market-analysis/${analysisId}/report.pdf?audience=client`,
+      );
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `stonegate-property-review-${propertyAddress.split(",")[0]
+        .toLowerCase()
+        .replaceAll(/[^a-z0-9]+/g, "-")}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "The client report is unavailable.");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  if (!brief) {
+    return (
+      <div className={styles.presentationEmpty}>
+        <Presentation size={26} />
+        <strong>Generate the meeting brief before presenting market evidence.</strong>
+        <span>The brief freezes the current property facts, comps, and value range.</span>
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className={`${styles.sellerPresentation} ${
+        presenting ? styles.presentationActive : ""
+      }`}
+    >
+      <header>
+        <div className={styles.presentationBrand}>
+          <span><House size={22} /></span>
+          <div>
+            <strong>Stonegate Home Buyers</strong>
+            <small>Property value review</small>
+          </div>
+        </div>
+        <div className={styles.presentationActions}>
+          {analysisId ? (
+            <button
+              disabled={downloading}
+              onClick={() => void downloadClientReport()}
+              type="button"
+            >
+              <Download size={16} />
+              {downloading ? "Preparing..." : "Client PDF"}
+            </button>
+          ) : null}
+          <button onClick={() => setPresenting((current) => !current)} type="button">
+            {presenting ? <Minimize2 size={16} /> : <Expand size={16} />}
+            {presenting ? "Exit presentation" : "Present full screen"}
+          </button>
+        </div>
+      </header>
+
+      {error ? <p className={styles.error}>{error}</p> : null}
+
+      <div className={styles.presentationHero}>
+        <span>Prepared for {sellerName}</span>
+        <h3>{propertyAddress}</h3>
+        <p>
+          A review of nearby recorded sales and the evidence supporting the property&apos;s
+          potential renovated value.
+        </p>
+      </div>
+
+      <div className={styles.presentationMetrics}>
+        <div>
+          <span>Recorded sales reviewed</span>
+          <strong>{comps.length}</strong>
+        </div>
+        <div>
+          <span>Indicated renovated range</span>
+          <strong>
+            {comps.length
+              ? formatMarketRange(
+                valueEvidence.arv_low_cents,
+                valueEvidence.arv_high_cents,
+              )
+              : "Needs comp review"}
+          </strong>
+        </div>
+        <div>
+          <span>Evidence confidence</span>
+          <strong>{labelize(confidenceTier)}</strong>
+          <small>{confidenceScore}/100 evidence score</small>
+        </div>
+      </div>
+
+      <section className={styles.presentationComps}>
+        <div>
+          <span>Comparable evidence</span>
+          <h4>Nearby recorded sales</h4>
+        </div>
+        {comps.length ? (
+          <div className={styles.presentationCompGrid}>
+            {comps.map((comp, index) => (
+              <article key={`${String(comp.formatted_address)}-${index}`}>
+                <header>
+                  <span>Sale {index + 1}</span>
+                  <strong>{money(comp.price_cents)}</strong>
+                </header>
+                <h5>{displayValue(comp.formatted_address)}</h5>
+                <dl>
+                  <div><dt>Sold</dt><dd>{formatShortDate(comp.sale_date)}</dd></div>
+                  <div><dt>Distance</dt><dd>{formatDistance(comp.distance_miles)}</dd></div>
+                  <div><dt>Size</dt><dd>{formatSquareFeet(comp.square_footage)}</dd></div>
+                  <div><dt>Bed / bath</dt><dd>{formatBedBath(comp.bedrooms, comp.bathrooms)}</dd></div>
+                </dl>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.presentationNoComps}>
+            No selected recorded sales are attached to this meeting brief yet.
+          </p>
+        )}
+      </section>
+
+      <div className={styles.presentationMethod}>
+        <div><strong>1</strong><span>Confirm the correct property and its physical details.</span></div>
+        <div><strong>2</strong><span>Screen recent nearby sales for similarity and outliers.</span></div>
+        <div><strong>3</strong><span>Review condition and repairs before discussing an offer.</span></div>
+      </div>
+
+      <footer>
+        This market review is not an appraisal or a guaranteed resale value. Final conclusions
+        depend on verified property condition, title, access, and current buyer demand.
+      </footer>
+    </section>
+  );
+}
+
+function formatShortDate(value: unknown) {
+  if (typeof value !== "string" || !value) return "Not recorded";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function formatDistance(value: unknown) {
+  return typeof value === "number" ? `${value.toFixed(1)} mi` : "Not recorded";
+}
+
+function formatMarketRange(low: unknown, high: unknown) {
+  if (typeof low !== "number" && typeof high !== "number") return "Not yet supported";
+  if (typeof low !== "number") return money(high);
+  if (typeof high !== "number") return money(low);
+  return `${money(low)} – ${money(high)}`;
+}
+
+function formatSquareFeet(value: unknown) {
+  return typeof value === "number"
+    ? `${new Intl.NumberFormat("en-US").format(value)} sq ft`
+    : "Not recorded";
+}
+
+function formatBedBath(bedrooms: unknown, bathrooms: unknown) {
+  if (typeof bedrooms !== "number" && typeof bathrooms !== "number") return "Not recorded";
+  return `${typeof bedrooms === "number" ? bedrooms : "—"} / ${
+    typeof bathrooms === "number" ? bathrooms : "—"
+  }`;
 }
 
 function textList(output: Record<string, unknown>, key: string): string[] {

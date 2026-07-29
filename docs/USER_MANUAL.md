@@ -448,24 +448,43 @@ Open **Field Operations**. Views are:
 ### Prepare A Meeting
 
 1. Open **Meetings** and select the appointment.
-2. Review **Brief** for seller goals, history, property, unresolved questions, and logistics.
-3. Review underwriting and approved authority.
-4. Generate and review Acquisitions Copilot preparation when useful.
+2. Appointments opened from Calendar or a lead enter **Appointment mode** automatically.
+3. Review **Prepare** for seller goals, history, property, unresolved questions, and logistics.
+4. Refresh the meeting brief after changing underwriting or comparable sales.
+5. Review underwriting and approved authority privately.
+6. Generate and review Acquisitions Copilot preparation when useful.
+
+The progress rail shows **Prepare**, **Walkthrough**, **Present**, and **Finish**. Use **Exit focus**
+to return to the team meeting queue.
 
 ### Record The Walkthrough
 
-1. Open **Walkthrough** on a phone or laptop.
+1. Open **Walkthrough** on the iPad, phone, or laptop.
 2. Confirm occupancy, access, decision-makers, and material property facts.
-3. Record repair categories, severity, notes, and photographs.
-4. Submit the inspection.
-5. Transfer confirmed field evidence into a new underwriting draft.
+3. Tap the common property areas, then record condition and notes.
+4. Tap common repair categories, enter estimated costs and scope, and capture photographs.
+5. Save the draft while walking the property.
+6. Submit the inspection when the walkthrough is complete.
+7. Transfer confirmed field evidence into a new underwriting draft.
 
 Submitted inspections and evidence are retained. Correct material errors with a new record rather
 than silently rewriting historical evidence.
 
+### Present Market Evidence
+
+1. Open **Seller view**.
+2. Confirm the address, recorded-sale count, renovated-value range, and evidence confidence.
+3. Review the comparable sales with the seller.
+4. Select **Present full screen** before handing over or rotating the iPad.
+5. Download the **Client PDF** when a printed or retained copy is useful.
+6. Exit the presentation before returning to Stonegate's private offer controls.
+
+Seller view does not display Stonegate's repair budget, offer ceiling, opening position,
+assignment fee, buyer profit, or concession history.
+
 ### Record Negotiation And Outcome
 
-1. Open **Negotiation**.
+1. Open **Outcome** after leaving the seller presentation.
 2. Confirm the current approved offer authority.
 3. Record objections, seller counters, Stonegate discussions, and outcome.
 4. Request approval before exceeding the current ceiling.

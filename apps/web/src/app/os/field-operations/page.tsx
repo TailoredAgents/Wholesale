@@ -1,4 +1,7 @@
-import { getFieldOperationsOverview } from "../../lib/api";
+import {
+  getFieldAppointmentWorkspace,
+  getFieldOperationsOverview,
+} from "../../lib/api";
 import { AcquisitionJourney } from "../_components/acquisition-journey";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { FieldOperationsWorkspace } from "./field-operations-workspace";
@@ -13,7 +16,10 @@ export default async function FieldOperationsPage({
   searchParams: Promise<{ appointment?: string; lead?: string; view?: string }>;
 }) {
   const params = await searchParams;
-  const { fieldOperations, apiConnected } = await getFieldOperationsOverview();
+  const [{ fieldOperations, apiConnected }, initialWorkspace] = await Promise.all([
+    getFieldOperationsOverview(),
+    getFieldAppointmentWorkspace(params.appointment ?? ""),
+  ]);
   const initialView = fieldViews.has(params.view ?? "")
     ? (params.view as "dispatch" | "calendar" | "meetings" | "capacity")
     : "dispatch";
@@ -33,6 +39,7 @@ export default async function FieldOperationsPage({
           data={fieldOperations}
           initialAppointmentId={params.appointment ?? ""}
           initialLeadId={params.lead ?? ""}
+          initialWorkspace={initialWorkspace}
           initialView={initialView}
         />
       ) : (

@@ -271,6 +271,11 @@ def generate_meeting_brief(
         },
         "qualification": answers,
         "underwriting": underwriting_summary(underwriting, analysis),
+        "client_presentation": client_presentation_summary(
+            property_record,
+            underwriting,
+            analysis,
+        ),
         "approved_offer": approved_offer_summary(approved_plan, approval),
         "unresolved_questions": unresolved,
         "likely_objections": objections,
@@ -1023,6 +1028,74 @@ def underwriting_summary(
         "confidence_score": analysis.confidence_score if analysis else None,
         "selected_comp_count": analysis.selected_comp_count if analysis else None,
     }
+
+
+def client_presentation_summary(
+    property_record: Property,
+    version: UnderwritingVersion | None,
+    analysis: UnderwritingMarketAnalysis | None,
+) -> dict[str, object]:
+    analysis_metadata = (analysis.analysis_metadata or {}) if analysis else {}
+    subject = analysis.subject_property if analysis else {}
+    return {
+        "property": {
+            "address": (
+                f"{property_record.street_address}, {property_record.city}, "
+                f"{property_record.state} {property_record.postal_code}"
+            ),
+            "county": property_record.county,
+            "property_type": property_record.property_type,
+            "bedrooms": subject.get("bedrooms"),
+            "bathrooms": subject.get("bathrooms"),
+            "square_footage": subject.get("squareFootage"),
+            "year_built": subject.get("yearBuilt"),
+        },
+        "value_evidence": {
+            "arv_low_cents": (
+                version.arv_low_cents
+                if version
+                else analysis.arv_low_cents
+                if analysis
+                else None
+            ),
+            "arv_high_cents": (
+                version.arv_high_cents
+                if version
+                else analysis.arv_high_cents
+                if analysis
+                else None
+            ),
+            "confidence_score": analysis.confidence_score if analysis else None,
+            "confidence_tier": analysis_metadata.get("confidence_tier"),
+            "methodology_version": analysis_metadata.get("methodology_version"),
+            "selected_comp_count": analysis.selected_comp_count if analysis else 0,
+        },
+        "comparables": [
+            client_comp_summary(item)
+            for item in (analysis.selected_comps if analysis else [])[:8]
+            if isinstance(item, Mapping)
+        ],
+    }
+
+
+def client_comp_summary(comp: Mapping[str, object]) -> dict[str, object]:
+    allowed_keys = (
+        "formatted_address",
+        "property_type",
+        "price_cents",
+        "bedrooms",
+        "bathrooms",
+        "square_footage",
+        "year_built",
+        "distance_miles",
+        "sale_date",
+        "condition_classification",
+        "condition_evidence",
+        "price_per_square_foot_cents",
+        "adjusted_value_cents",
+        "score",
+    )
+    return {key: comp.get(key) for key in allowed_keys}
 
 
 def approved_offer_summary(

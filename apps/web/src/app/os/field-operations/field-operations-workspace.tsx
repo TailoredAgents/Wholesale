@@ -20,6 +20,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type {
   DispatchCandidate,
   DispatchSlotEvaluation,
+  FieldAppointmentWorkspace,
   FieldOperationsOverview,
 } from "../../lib/api";
 import { labelize } from "../os-utils";
@@ -62,11 +63,13 @@ export function FieldOperationsWorkspace({
   data,
   initialAppointmentId = "",
   initialLeadId = "",
+  initialWorkspace = null,
   initialView = "dispatch",
 }: {
   data: FieldOperationsOverview;
   initialAppointmentId?: string;
   initialLeadId?: string;
+  initialWorkspace?: FieldAppointmentWorkspace | null;
   initialView?: View;
 }) {
   const router = useRouter();
@@ -336,6 +339,7 @@ export function FieldOperationsWorkspace({
       {view === "meetings" ? (
         <FieldMeetingWorkspace
           data={data}
+          initialWorkspace={initialWorkspace}
           requestedAppointmentId={requestedAppointmentId}
         />
       ) : null}
