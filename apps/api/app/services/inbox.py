@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -22,6 +22,7 @@ from app.models.foundation import (
     ConversationContextLink,
     ConversationWatcher,
     EmailAttachment,
+    EmailSenderGrant,
     EmailSenderAlias,
     Lead,
     Property,
@@ -29,6 +30,7 @@ from app.models.foundation import (
     RoleAssignment,
     Task,
     Team,
+    TeamMembership,
     User,
 )
 from app.schemas.email import EmailAttachmentRead
@@ -312,7 +314,9 @@ def list_conversations(
     limit: int = 100,
 ) -> list[ConversationRead]:
     filters = [Conversation.organization_id == principal.organization_id]
-    if PermissionKeys.VIEW_CONVERSATIONS not in principal.permission_keys or assigned_to_me:
+    if not principal_has_owner_mailbox_access(db, principal):
+        filters.append(conversation_access_filter(db, principal))
+    if assigned_to_me:
         filters.append(Conversation.assigned_user_id == principal.user_id)
     if queue_key:
         if queue_key not in CONVERSATION_QUEUE_KEYS:
@@ -1049,11 +1053,63 @@ def get_scoped_conversation(
         Conversation.organization_id == principal.organization_id,
         Conversation.id == conversation_id,
     ]
-    if (require_all or PermissionKeys.VIEW_CONVERSATIONS not in principal.permission_keys) and (
-        PermissionKeys.MANAGE_CONVERSATION_ASSIGNMENTS not in principal.permission_keys
-    ):
-        filters.append(Conversation.assigned_user_id == principal.user_id)
+    if not principal_has_owner_mailbox_access(db, principal):
+        filters.append(conversation_access_filter(db, principal))
     return db.scalar(select(Conversation).where(*filters))
+
+
+def principal_has_owner_mailbox_access(
+    db: Session,
+    principal: Principal,
+) -> bool:
+    role_key = db.scalar(
+        select(Role.key)
+        .join(RoleAssignment, RoleAssignment.role_id == Role.id)
+        .where(
+            RoleAssignment.organization_id == principal.organization_id,
+            RoleAssignment.user_id == principal.user_id,
+            Role.key.in_(OWNER_WATCHER_ROLE_KEYS),
+        )
+    )
+    return role_key is not None
+
+
+def conversation_access_filter(
+    db: Session,
+    principal: Principal,
+):
+    team_ids = select(TeamMembership.team_id).where(
+        TeamMembership.organization_id == principal.organization_id,
+        TeamMembership.user_id == principal.user_id,
+    )
+    watched_conversation_ids = select(ConversationWatcher.conversation_id).where(
+        ConversationWatcher.organization_id == principal.organization_id,
+        ConversationWatcher.user_id == principal.user_id,
+    )
+    granted_alias_ids = select(EmailSenderGrant.email_sender_alias_id).where(
+        EmailSenderGrant.organization_id == principal.organization_id,
+        EmailSenderGrant.user_id == principal.user_id,
+    )
+    owned_alias_ids = select(EmailSenderAlias.id).where(
+        EmailSenderAlias.organization_id == principal.organization_id,
+        EmailSenderAlias.owner_user_id == principal.user_id,
+        EmailSenderAlias.status == "active",
+    )
+    access = [
+        Conversation.assigned_user_id == principal.user_id,
+        Conversation.assigned_team_id.in_(team_ids),
+        Conversation.id.in_(watched_conversation_ids),
+        Conversation.source_alias_id.in_(granted_alias_ids),
+        Conversation.source_alias_id.in_(owned_alias_ids),
+    ]
+    if PermissionKeys.VIEW_CONVERSATIONS in principal.permission_keys:
+        access.append(
+            and_(
+                Conversation.conversation_type == "lead",
+                Conversation.visibility_scope == "standard",
+            )
+        )
+    return or_(*access)
 
 
 def get_user_role_keys(db: Session, user: User) -> set[str]:

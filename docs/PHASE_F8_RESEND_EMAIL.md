@@ -245,7 +245,7 @@ Exit:
 
 Status: In progress. Production transport is enabled for controlled company-address testing only.
 
-Before final acceptance, complete the internal mailbox and routing upgrade in
+Before final acceptance, complete the remaining internal mailbox upgrade in
 `PHASE_F8_7_MAILBOX_ROUTING_UPGRADE.md`. It generalizes the existing shared Inbox for named,
 department, transaction, buyer, accounting, and general company correspondence without creating
 a second email system.

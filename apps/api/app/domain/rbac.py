@@ -292,6 +292,8 @@ DISPOSITION_KEYS = (
     PermissionKeys.EDIT_DEALS,
     PermissionKeys.VIEW_BUYERS,
     PermissionKeys.EDIT_BUYERS,
+    PermissionKeys.VIEW_CONVERSATIONS,
+    PermissionKeys.SEND_EMAIL,
 )
 
 ROLES: tuple[RoleDefinition, ...] = (
@@ -342,6 +344,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.HANDOFF_ASSIGNED_CONVERSATIONS,
             PermissionKeys.LOG_ASSIGNED_COMMUNICATIONS,
             PermissionKeys.SEND_ASSIGNED_SMS,
+            PermissionKeys.SEND_ASSIGNED_EMAIL,
             PermissionKeys.PLACE_ASSIGNED_CALLS,
             PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
             PermissionKeys.VIEW_ACQUISITION_OPERATIONS,
@@ -362,6 +365,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.EDIT_DEALS,
             PermissionKeys.SEND_CONTRACTS,
             PermissionKeys.MODIFY_CONTRACTS,
+            PermissionKeys.VIEW_CONVERSATIONS,
+            PermissionKeys.SEND_EMAIL,
         ),
     ),
     RoleDefinition(
@@ -384,6 +389,8 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.MANAGE_VENDORS,
             PermissionKeys.MANAGE_FINANCE_EVIDENCE,
             PermissionKeys.MANAGE_BANKING,
+            PermissionKeys.VIEW_CONVERSATIONS,
+            PermissionKeys.SEND_EMAIL,
         ),
     ),
     RoleDefinition("read_only_partner", "Read-only partner", (PermissionKeys.VIEW_DEALS,)),

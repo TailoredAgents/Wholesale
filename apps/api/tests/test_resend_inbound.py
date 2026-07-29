@@ -18,8 +18,10 @@ from app.models.foundation import (
     CommunicationParticipant,
     CommunicationProviderEvent,
     CommunicationRecord,
+    ContactMethod,
     Conversation,
     EmailAttachment,
+    User,
 )
 from app.services.bootstrap import bootstrap_foundation
 from app.services.resend_email_events import (
@@ -318,6 +320,224 @@ def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
         )
         == 1
     )
+
+
+def test_inbound_email_uses_retained_provider_thread_when_rfc_headers_are_missing(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, _outbound = prepare_conversation(db_session, client)
+    message = inbound_message("provider-thread-1")
+    message["headers"] = {}
+    message["provider_thread_id"] = "outbound-1"
+    accepted = signed_webhook(
+        client,
+        event_id="evt-provider-thread",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "provider-thread-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    provider = provider_for_messages({"provider-thread-1": message})
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-provider-thread"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "processed"
+    assert event.payload["_routing"]["rule"] == "provider_thread"
+    inbound = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "provider-thread-1"
+        )
+    )
+    assert inbound is not None
+    assert inbound.conversation_id == conversation.id
+
+
+def test_inbound_email_matches_unique_sender_and_recipient_alias(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, _outbound = prepare_conversation(db_session, client)
+    message = inbound_message("sender-alias-1")
+    message["headers"] = {}
+    accepted = signed_webhook(
+        client,
+        event_id="evt-sender-alias",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "sender-alias-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    provider = provider_for_messages({"sender-alias-1": message})
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-sender-alias"
+        )
+    )
+    assert event is not None
+    assert event.payload["_routing"]["rule"] == "sender_and_alias"
+    inbound = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "sender-alias-1"
+        )
+    )
+    assert inbound is not None
+    assert inbound.conversation_id == conversation.id
+
+
+def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Austin",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    alias_response = client.post(
+        "/api/v1/email/aliases",
+        headers=OWNER_HEADERS,
+        json={
+            "email_address": "austin@stonegatehb.com",
+            "display_name": "Austin at Stonegate",
+            "alias_type": "named",
+            "purpose_key": "owner",
+            "owner_user_id": str(owner.id),
+        },
+    )
+    assert alias_response.status_code == 201, alias_response.text
+    message = inbound_message("new-correspondent-1")
+    message["to"] = ["austin@stonegatehb.com"]
+    message["from"] = "New Partner <partner@example.net>"
+    message["headers"] = {}
+    accepted = signed_webhook(
+        client,
+        event_id="evt-new-correspondent",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "new-correspondent-1",
+                "from": "partner@example.net",
+                "to": ["austin@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    provider = provider_for_messages({"new-correspondent-1": message})
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-new-correspondent"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "processed"
+    assert event.payload["_routing"]["rule"] == "alias_owner_or_team"
+    assert event.payload["_routing"]["created_general_conversation"] is True
+    conversation = db_session.get(Conversation, event.conversation_id)
+    assert conversation is not None
+    assert conversation.conversation_type == "general"
+    assert conversation.lead_id is None
+    assert conversation.assigned_user_id == owner.id
+    assert str(conversation.source_alias_id) == alias_response.json()["id"]
+    contact_method = db_session.scalar(
+        select(ContactMethod).where(
+            ContactMethod.contact_id == conversation.contact_id,
+            ContactMethod.normalized_value == "partner@example.net",
+        )
+    )
+    assert contact_method is not None
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "new-correspondent-1"
+        )
+    )
+    assert communication is not None
+    assert communication.conversation_id == conversation.id
+
+
+def test_inbound_email_from_stonegate_identity_is_ignored_as_a_loop(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    message = inbound_message("internal-loop-1")
+    message["from"] = "Stonegate <offers@stonegatehb.com>"
+    message["headers"] = {}
+    accepted = signed_webhook(
+        client,
+        event_id="evt-internal-loop",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "internal-loop-1",
+                "from": "offers@stonegatehb.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    provider = provider_for_messages({"internal-loop-1": message})
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-internal-loop"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "ignored"
+    assert event.payload["_routing"]["rule"] == "internal_loop_protection"
+    assert db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "internal-loop-1"
+        )
+    ) is None
 
 
 def test_delivery_events_are_idempotent_and_cannot_regress_status(

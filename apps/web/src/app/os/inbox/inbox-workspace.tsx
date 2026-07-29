@@ -61,13 +61,17 @@ type Watcher = {
 
 type Conversation = {
   id: string;
-  lead_id: string;
+  conversation_type: "lead" | "transaction" | "buyer" | "general";
+  lead_id: string | null;
   contact_id: string;
   seller_name: string;
   property_address: string;
   assigned_user_id: string | null;
   assigned_user_email: string | null;
   assigned_user_display_name: string | null;
+  assigned_team_id: string | null;
+  source_alias_id: string | null;
+  visibility_scope: "standard" | "restricted";
   status: string;
   queue_key: string;
   priority: string;
@@ -161,8 +165,8 @@ type ConversationDetail = Conversation & {
     value: string;
     is_primary: boolean;
   }>;
-  source: string;
-  stage_key: string;
+  source: string | null;
+  stage_key: string | null;
   lead_temperature: string | null;
   motivation: string | null;
   desired_timeline: string | null;
@@ -787,6 +791,10 @@ export function InboxWorkspace({
           `/api/v1/inbox/conversations/${conversationId}`,
         );
         setDetail(item);
+        if (item.conversation_type === "general") {
+          setChannel("email");
+          setDirection("outbound");
+        }
         if (item.unread_count > 0) {
           await request<Conversation>(`/api/v1/inbox/conversations/${conversationId}/read`, {
             method: "PATCH",
@@ -1633,7 +1641,11 @@ export function InboxWorkspace({
                 <div>
                   <div className={styles.threadTitleRow}>
                     <h3>{detail.preferred_name || detail.seller_name}</h3>
-                    <span className={styles.stageBadge}>{labelize(detail.stage_key)}</span>
+                    <span className={styles.stageBadge}>
+                      {detail.conversation_type === "general"
+                        ? "General email"
+                        : labelize(detail.stage_key)}
+                    </span>
                   </div>
                   <p>{detail.property_address}</p>
                 </div>
@@ -1874,22 +1886,27 @@ export function InboxWorkspace({
                   role="tablist"
                   aria-label="Communication channel"
                 >
-                  {composerChannels.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        aria-selected={channel === item.key}
-                        className={channel === item.key ? styles.activeComposerTab : undefined}
-                        key={item.key}
-                        onClick={() => setChannel(item.key)}
-                        role="tab"
-                        type="button"
-                      >
-                        <Icon size={15} aria-hidden="true" />
-                        {item.label}
-                      </button>
-                    );
-                  })}
+                  {composerChannels
+                    .filter(
+                      (item) =>
+                        detail.conversation_type !== "general" || item.key === "email",
+                    )
+                    .map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <button
+                          aria-selected={channel === item.key}
+                          className={channel === item.key ? styles.activeComposerTab : undefined}
+                          key={item.key}
+                          onClick={() => setChannel(item.key)}
+                          role="tab"
+                          type="button"
+                        >
+                          <Icon size={15} aria-hidden="true" />
+                          {item.label}
+                        </button>
+                      );
+                    })}
                 </div>
                 <div className={styles.composerControls}>
                   {channel === "call" ? (
@@ -2232,13 +2249,19 @@ export function InboxWorkspace({
             <>
               <header className={styles.detailHeader}>
                 <div>
-                  <span>Lead context</span>
+                  <span>
+                    {detail.conversation_type === "general"
+                      ? "Company correspondence"
+                      : "Lead context"}
+                  </span>
                   <h3>{detail.seller_name}</h3>
                 </div>
-                <Link href={`/os/leads/${detail.lead_id}`}>
-                  Full record
-                  <ChevronRight size={15} aria-hidden="true" />
-                </Link>
+                {detail.lead_id ? (
+                  <Link href={`/os/leads/${detail.lead_id}`}>
+                    Full record
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                ) : null}
               </header>
 
               <section className={styles.detailSection}>
@@ -2310,73 +2333,95 @@ export function InboxWorkspace({
                 </div>
               </section>
 
-              <section className={styles.detailSection}>
-                <h4>Property</h4>
-                <p className={styles.propertyAddress}>{detail.property_address}</p>
-                <dl className={styles.contextGrid}>
-                  <div>
-                    <dt>Type</dt>
-                    <dd>{labelize(detail.property_type)}</dd>
-                  </div>
-                  <div>
-                    <dt>County</dt>
-                    <dd>{detail.property_county || "Not captured"}</dd>
-                  </div>
-                  <div>
-                    <dt>Source</dt>
-                    <dd>{labelize(detail.source)}</dd>
-                  </div>
-                  <div>
-                    <dt>Temperature</dt>
-                    <dd>{labelize(detail.lead_temperature)}</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className={styles.detailSection}>
-                <h4>Qualification</h4>
-                <dl className={styles.detailList}>
-                  <div>
-                    <dt>Motivation</dt>
-                    <dd>{detail.motivation || "Not captured"}</dd>
-                  </div>
-                  <div>
-                    <dt>Timeline</dt>
-                    <dd>{labelize(detail.desired_timeline)}</dd>
-                  </div>
-                  <div>
-                    <dt>Condition</dt>
-                    <dd>{labelize(detail.property_condition)}</dd>
-                  </div>
-                  <div>
-                    <dt>Occupancy</dt>
-                    <dd>{labelize(detail.occupancy_status)}</dd>
-                  </div>
-                </dl>
-              </section>
-
-              <section className={styles.detailSection}>
-                <h4>Next action</h4>
-                {nextAppointment ? (
-                  <div className={styles.nextAction}>
-                    <CalendarClock size={17} aria-hidden="true" />
+              {detail.conversation_type === "general" ? (
+                <section className={styles.detailSection}>
+                  <h4>Mailbox</h4>
+                  <dl className={styles.detailList}>
                     <div>
-                      <strong>{labelize(nextAppointment.appointment_type)}</strong>
-                      <span>{formatDateTime(nextAppointment.scheduled_start_at)}</span>
+                      <dt>Receiving address</dt>
+                      <dd>
+                        {emailAliases.find(
+                          (alias) => alias.id === detail.source_alias_id,
+                        )?.email_address || "Stonegate company address"}
+                      </dd>
                     </div>
-                  </div>
-                ) : nextTask ? (
-                  <div className={styles.nextAction}>
-                    <Clock3 size={17} aria-hidden="true" />
                     <div>
-                      <strong>{nextTask.title}</strong>
-                      <span>{formatDateTime(nextTask.due_at)}</span>
+                      <dt>Visibility</dt>
+                      <dd>{labelize(detail.visibility_scope)}</dd>
                     </div>
-                  </div>
-                ) : (
-                  <p className={styles.mutedText}>No open task or appointment.</p>
-                )}
-              </section>
+                  </dl>
+                </section>
+              ) : (
+                <>
+                  <section className={styles.detailSection}>
+                    <h4>Property</h4>
+                    <p className={styles.propertyAddress}>{detail.property_address}</p>
+                    <dl className={styles.contextGrid}>
+                      <div>
+                        <dt>Type</dt>
+                        <dd>{labelize(detail.property_type)}</dd>
+                      </div>
+                      <div>
+                        <dt>County</dt>
+                        <dd>{detail.property_county || "Not captured"}</dd>
+                      </div>
+                      <div>
+                        <dt>Source</dt>
+                        <dd>{labelize(detail.source)}</dd>
+                      </div>
+                      <div>
+                        <dt>Temperature</dt>
+                        <dd>{labelize(detail.lead_temperature)}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className={styles.detailSection}>
+                    <h4>Qualification</h4>
+                    <dl className={styles.detailList}>
+                      <div>
+                        <dt>Motivation</dt>
+                        <dd>{detail.motivation || "Not captured"}</dd>
+                      </div>
+                      <div>
+                        <dt>Timeline</dt>
+                        <dd>{labelize(detail.desired_timeline)}</dd>
+                      </div>
+                      <div>
+                        <dt>Condition</dt>
+                        <dd>{labelize(detail.property_condition)}</dd>
+                      </div>
+                      <div>
+                        <dt>Occupancy</dt>
+                        <dd>{labelize(detail.occupancy_status)}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className={styles.detailSection}>
+                    <h4>Next action</h4>
+                    {nextAppointment ? (
+                      <div className={styles.nextAction}>
+                        <CalendarClock size={17} aria-hidden="true" />
+                        <div>
+                          <strong>{labelize(nextAppointment.appointment_type)}</strong>
+                          <span>{formatDateTime(nextAppointment.scheduled_start_at)}</span>
+                        </div>
+                      </div>
+                    ) : nextTask ? (
+                      <div className={styles.nextAction}>
+                        <Clock3 size={17} aria-hidden="true" />
+                        <div>
+                          <strong>{nextTask.title}</strong>
+                          <span>{formatDateTime(nextTask.due_at)}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className={styles.mutedText}>No open task or appointment.</p>
+                    )}
+                  </section>
+                </>
+              )}
 
               <section className={styles.detailSection}>
                 <h4>Ownership</h4>
@@ -2403,7 +2448,9 @@ export function InboxWorkspace({
                 ) : null}
               </section>
 
-              {canHandoff && assignees.length > 0 ? (
+              {detail.conversation_type !== "general" &&
+              canHandoff &&
+              assignees.length > 0 ? (
                 <section className={styles.detailSection}>
                   <h4>Assign or hand off</h4>
                   <form className={styles.handoffForm} onSubmit={submitHandoff}>

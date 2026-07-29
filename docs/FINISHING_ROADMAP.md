@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 27, 2026
+Last updated: July 28, 2026
 
 ## Purpose
 
@@ -538,8 +538,12 @@ Implementation checkpoint, July 28, 2026:
 - F8.7A.1 is complete in code: the existing conversation model now supports lead, transaction,
   buyer, and general contexts; lead-independent email; team, source-alias, and visibility fields;
   structured context links; structured message participants; and a safe in-place backfill.
-- F8.7A.2 deterministic routing is next. The remaining mailbox phases, F8.7 controlled acceptance,
-  and F8.8 production launch remain.
+- F8.7A.2 deterministic routing and F8.7A.3 mailbox access policies are complete in code. Exact
+  replies, provider threads, unique sender contexts, and configured personal or team aliases route
+  predictably; ambiguous mail remains in review, and restricted mailboxes are enforced in lists,
+  detail, attachments, and sending.
+- F8.7A.4 Inbox views and global Compose are next. Notifications, controlled acceptance, and F8.8
+  production launch remain.
 
 Architecture:
 

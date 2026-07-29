@@ -179,7 +179,10 @@ def test_owner_manages_provider_neutral_aliases_and_sender_access(
         "/api/v1/email/aliases",
         headers={"X-Dev-User-Email": "va.login@example.com"},
     )
-    assert va_aliases.status_code == 403
+    assert va_aliases.status_code == 200
+    assert [item["email_address"] for item in va_aliases.json()["items"]] == [
+        "offers@stonegatehb.com"
+    ]
 
     devon_list = client.get(
         "/api/v1/email/aliases",

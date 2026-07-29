@@ -21,11 +21,14 @@ from app.models.foundation import (
     ConversationAssignmentEvent,
     ConversationContextLink,
     ConversationWatcher,
+    EmailSenderAlias,
     Lead,
     Organization,
     Role,
     RoleAssignment,
     Task,
+    Team,
+    TeamMembership,
     UnderwritingVersion,
     User,
 )
@@ -684,3 +687,109 @@ def test_general_conversation_retains_email_without_a_lead(
     assert [item["subject"] for item in detail["timeline"] if item["channel"] == "email"] == [
         "General company question"
     ]
+
+
+def test_restricted_general_mailbox_is_visible_only_to_owner_or_assigned_team(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, va, acquisitions = seed_workspace(db_session)
+    organization = db_session.get(Organization, owner.organization_id)
+    assert organization is not None
+    finance = create_user_with_role(
+        db_session,
+        organization,
+        email="finance@example.com",
+        name="Finance Specialist",
+        role_key="finance_accounting",
+    )
+    accounting_team = Team(
+        organization_id=organization.id,
+        name="Accounting",
+        team_type="finance",
+        manager_user_id=finance.id,
+        is_active=True,
+    )
+    db_session.add(accounting_team)
+    db_session.flush()
+    db_session.add(
+        TeamMembership(
+            organization_id=organization.id,
+            team_id=accounting_team.id,
+            user_id=finance.id,
+            membership_role="member",
+        )
+    )
+    alias = EmailSenderAlias(
+        organization_id=organization.id,
+        owner_user_id=None,
+        assigned_team_id=accounting_team.id,
+        created_by_user_id=owner.id,
+        provider="resend",
+        provider_identity_id=None,
+        email_address="accounting@stonegatehb.com",
+        display_name="Stonegate Accounting",
+        alias_type="department",
+        purpose_key="accounting",
+        status="active",
+        inbound_enabled=True,
+        outbound_enabled=True,
+        is_default=False,
+        signature_text=None,
+        routing_metadata={"visibility_scope": "restricted"},
+    )
+    contact = Contact(
+        organization_id=organization.id,
+        legal_name="Accounting Vendor",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=None,
+    )
+    db_session.add_all([alias, contact])
+    db_session.flush()
+    conversation = create_general_conversation(
+        db_session,
+        organization_id=organization.id,
+        contact_id=contact.id,
+        assigned_team_id=accounting_team.id,
+        source_alias_id=alias.id,
+        visibility_scope="restricted",
+    )
+    db_session.commit()
+
+    client = TestClient(app)
+    owner_items = client.get(
+        "/api/v1/inbox/conversations",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert owner_items.status_code == 200
+    assert str(conversation.id) in {
+        item["id"] for item in owner_items.json()["items"]
+    }
+
+    finance_items = client.get(
+        "/api/v1/inbox/conversations",
+        headers={"X-Dev-User-Email": finance.email},
+    )
+    assert finance_items.status_code == 200
+    assert [item["id"] for item in finance_items.json()["items"]] == [
+        str(conversation.id)
+    ]
+
+    acquisitions_items = client.get(
+        "/api/v1/inbox/conversations",
+        headers={"X-Dev-User-Email": acquisitions.email},
+    )
+    assert acquisitions_items.status_code == 200
+    assert str(conversation.id) not in {
+        item["id"] for item in acquisitions_items.json()["items"]
+    }
+
+    va_items = client.get(
+        "/api/v1/inbox/conversations",
+        headers={"X-Dev-User-Email": va.email},
+    )
+    assert va_items.status_code == 200
+    assert str(conversation.id) not in {
+        item["id"] for item in va_items.json()["items"]
+    }

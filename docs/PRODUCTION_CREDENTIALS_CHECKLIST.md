@@ -39,7 +39,7 @@ appropriate Render service environment.
 | F4 | SignWell | Electronic signatures and completed contract PDFs | Built, activation pending | API |
 | F4 | ClamAV | Uploaded-file malware scanning | Optional / deferred | API/private service |
 | F5 | DealMachine | Buyer discovery and enrichment | Built, activation pending | API |
-| F8 | Resend | Operational outbound and inbound email | F8.1-F8.2 complete; delivery and receiving pending | API and worker |
+| F8 | Resend | Operational outbound and inbound email | Live for controlled testing; mailbox UI and launch acceptance pending | API and worker |
 | F9 | Twilio Messaging | Seller and buyer SMS | Built, activation pending | API |
 | F9 | Twilio Voice | Browser calling, inbound calls, and recordings | Built, activation pending | API and worker |
 | Operations | Sentry | Error and trace monitoring | Optional / deferred | Web, API, and worker |

@@ -23,10 +23,11 @@ from app.models.foundation import (
     EmailSenderAlias,
     Lead,
     Organization,
+    User,
 )
 from app.services.communication_participants import record_email_participants
 from app.services.document_storage import store_content
-from app.services.inbox import update_conversation_activity
+from app.services.inbox import create_general_conversation, update_conversation_activity
 
 LIFECYCLE_STATUSES = {
     "email.sent": "sent",
@@ -200,6 +201,12 @@ def process_received_email(
     conversation = db.get(Conversation, UUID(str(route["conversation_id"])))
     if conversation is None:
         raise RuntimeError("Matched Resend conversation no longer exists.")
+    route_alias_ids = [
+        UUID(str(alias_id))
+        for alias_id in route["email_sender_alias_ids"]
+    ]
+    if conversation.source_alias_id is None and len(route_alias_ids) == 1:
+        conversation.source_alias_id = route_alias_ids[0]
     lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     contact = db.get(Contact, conversation.contact_id)
     if contact is None:
@@ -251,8 +258,7 @@ def process_received_email(
         external_contact_id=contact.id,
         external_roles={"from"},
         sender_alias_ids=[
-            UUID(str(alias_id))
-            for alias_id in route["email_sender_alias_ids"]
+            *route_alias_ids,
         ],
         source="resend_receiving",
     )
@@ -401,20 +407,52 @@ def resolve_inbound_route(
     recipients = normalized_addresses(
         string_list(message.get("to")) + string_list(message.get("received_for"))
     )
-    aliases = db.scalars(
-        select(EmailSenderAlias).where(
-            EmailSenderAlias.organization_id == organization_id,
-            EmailSenderAlias.email_address.in_(recipients),
-            EmailSenderAlias.status == "active",
-            EmailSenderAlias.inbound_enabled.is_(True),
+    aliases = list(
+        db.scalars(
+            select(EmailSenderAlias).where(
+                EmailSenderAlias.organization_id == organization_id,
+                EmailSenderAlias.email_address.in_(recipients),
+                EmailSenderAlias.status == "active",
+                EmailSenderAlias.inbound_enabled.is_(True),
+            )
         )
-    ).all()
+    )
+    aliases.sort(
+        key=lambda alias: (
+            recipients.index(alias.email_address)
+            if alias.email_address in recipients
+            else len(recipients),
+            alias.email_address,
+        )
+    )
     alias_ids = [str(alias.id) for alias in aliases]
     if not aliases:
         return {
             "status": "unmatched",
+            "rule": "recipient_alias",
+            "confidence": 0,
             "reason": "No active inbound Stonegate alias matched the recipient.",
             "email_sender_alias_ids": [],
+            "candidate_conversation_ids": [],
+        }
+
+    senders = normalized_addresses([optional_string(message.get("from"))])
+    if not senders:
+        return {
+            "status": "unmatched",
+            "rule": "sender_address",
+            "confidence": 0,
+            "reason": "Inbound email did not contain one valid sender address.",
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [],
+        }
+    if internal_sender(db, organization_id, senders):
+        return {
+            "status": "ignored",
+            "rule": "internal_loop_protection",
+            "confidence": 100,
+            "reason": "Ignored an inbound loop from a Stonegate address or staff identity.",
+            "email_sender_alias_ids": alias_ids,
             "candidate_conversation_ids": [],
         }
 
@@ -442,6 +480,8 @@ def resolve_inbound_route(
         metadata = matched_message.communication_metadata or {}
         return {
             "status": "matched",
+            "rule": "exact_rfc_reply",
+            "confidence": 100,
             "reason": "Matched exact RFC reply headers.",
             "conversation_id": str(conversation_id),
             "provider_thread_id": metadata.get("provider_thread_id"),
@@ -451,6 +491,8 @@ def resolve_inbound_route(
     if len(thread_matches) > 1:
         return {
             "status": "ambiguous",
+            "rule": "exact_rfc_reply",
+            "confidence": 0,
             "reason": "Reply headers matched more than one Stonegate conversation.",
             "email_sender_alias_ids": alias_ids,
             "candidate_conversation_ids": [
@@ -458,7 +500,51 @@ def resolve_inbound_route(
             ],
         }
 
-    senders = normalized_addresses([optional_string(message.get("from"))])
+    provider_thread_values = {
+        value
+        for value in (
+            optional_string(message.get("thread_id")),
+            optional_string(message.get("provider_thread_id")),
+            headers.get("x-resend-thread-id", ""),
+        )
+        if value
+    }
+    provider_thread_matches: dict[UUID, CommunicationRecord] = {}
+    if provider_thread_values:
+        for communication in communications:
+            metadata = communication.communication_metadata or {}
+            provider_thread_id = optional_string(metadata.get("provider_thread_id"))
+            if (
+                provider_thread_id
+                and provider_thread_id in provider_thread_values
+                and communication.conversation_id is not None
+            ):
+                provider_thread_matches[communication.conversation_id] = communication
+    if len(provider_thread_matches) == 1:
+        conversation_id, matched_message = next(iter(provider_thread_matches.items()))
+        metadata = matched_message.communication_metadata or {}
+        return {
+            "status": "matched",
+            "rule": "provider_thread",
+            "confidence": 100,
+            "reason": "Matched retained Resend thread evidence.",
+            "conversation_id": str(conversation_id),
+            "provider_thread_id": metadata.get("provider_thread_id"),
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [str(conversation_id)],
+        }
+    if len(provider_thread_matches) > 1:
+        return {
+            "status": "ambiguous",
+            "rule": "provider_thread",
+            "confidence": 0,
+            "reason": "Resend thread evidence matched more than one Stonegate conversation.",
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [
+                str(conversation_id) for conversation_id in provider_thread_matches
+            ],
+        }
+
     contact_ids = list(
         db.scalars(
             select(ContactMethod.contact_id).where(
@@ -471,37 +557,298 @@ def resolve_inbound_route(
             )
         )
     )
-    candidates = db.scalars(
-        select(Conversation)
-        .where(
-            Conversation.organization_id == organization_id,
-            Conversation.contact_id.in_(contact_ids),
+    candidates = list(
+        db.scalars(
+            select(Conversation)
+            .where(
+                Conversation.organization_id == organization_id,
+                Conversation.contact_id.in_(contact_ids),
+            )
+            .order_by(
+                Conversation.status == "closed",
+                Conversation.last_activity_at.desc(),
+            )
         )
-        .order_by(
-            Conversation.status == "closed",
-            Conversation.last_activity_at.desc(),
-        )
-    ).all()
+    )
     candidate_ids = list(dict.fromkeys(conversation.id for conversation in candidates))
-    if len(candidate_ids) == 1:
+
+    alias_candidate_ids = conversations_for_aliases(
+        db,
+        organization_id,
+        candidates,
+        aliases,
+    )
+    if len(alias_candidate_ids) == 1:
         return {
             "status": "matched",
-            "reason": "Matched the seller email address to one conversation.",
-            "conversation_id": str(candidate_ids[0]),
+            "rule": "sender_and_alias",
+            "confidence": 95,
+            "reason": "Matched one conversation for this sender and Stonegate address.",
+            "conversation_id": str(alias_candidate_ids[0]),
             "provider_thread_id": None,
             "email_sender_alias_ids": alias_ids,
-            "candidate_conversation_ids": [str(candidate_ids[0])],
+            "candidate_conversation_ids": [str(alias_candidate_ids[0])],
         }
+    if len(alias_candidate_ids) > 1:
+        return {
+            "status": "ambiguous",
+            "rule": "sender_and_alias",
+            "confidence": 0,
+            "reason": "The sender and Stonegate address matched more than one conversation.",
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [str(item) for item in alias_candidate_ids],
+        }
+
+    active_candidate_ids = list(
+        dict.fromkeys(
+            conversation.id
+            for conversation in candidates
+            if conversation.status != "closed"
+        )
+    )
+    if len(active_candidate_ids) == 1:
+        return {
+            "status": "matched",
+            "rule": "unique_active_contact_context",
+            "confidence": 85,
+            "reason": "Matched the sender to one active Stonegate conversation.",
+            "conversation_id": str(active_candidate_ids[0]),
+            "provider_thread_id": None,
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [str(active_candidate_ids[0])],
+        }
+    if len(active_candidate_ids) > 1:
+        return {
+            "status": "ambiguous",
+            "rule": "unique_active_contact_context",
+            "confidence": 0,
+            "reason": "The sender is connected to more than one active Stonegate conversation.",
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [str(item) for item in active_candidate_ids],
+        }
+
+    routing_alias = next(
+        (
+            alias
+            for alias in aliases
+            if alias.owner_user_id is not None or alias.assigned_team_id is not None
+        ),
+        None,
+    )
+    if routing_alias is not None:
+        contact = ensure_inbound_contact(
+            db,
+            organization_id,
+            message,
+            senders[0],
+            contact_ids,
+            assigned_user_id=routing_alias.owner_user_id,
+        )
+        visibility_scope = inbound_visibility_scope(routing_alias)
+        conversation = create_general_conversation(
+            db,
+            organization_id=organization_id,
+            contact_id=contact.id,
+            assigned_user_id=routing_alias.owner_user_id,
+            assigned_team_id=routing_alias.assigned_team_id,
+            source_alias_id=routing_alias.id,
+            visibility_scope=visibility_scope,
+        )
+        conversation.conversation_metadata = {
+            **(conversation.conversation_metadata or {}),
+            "routing_rule": "alias_owner_or_team",
+            "routing_confidence": 80,
+            "email_category": inbound_email_category(message, headers),
+            "initial_subject": optional_string(message.get("subject"))[:255] or None,
+        }
+        db.flush()
+        return {
+            "status": "matched",
+            "rule": "alias_owner_or_team",
+            "confidence": 80,
+            "reason": (
+                "Created a general conversation in the receiving Stonegate mailbox."
+            ),
+            "conversation_id": str(conversation.id),
+            "provider_thread_id": None,
+            "email_sender_alias_ids": alias_ids,
+            "candidate_conversation_ids": [str(conversation.id)],
+            "created_general_conversation": True,
+        }
+
     return {
-        "status": "ambiguous" if candidate_ids else "unmatched",
+        "status": "unmatched",
+        "rule": "alias_owner_or_team",
+        "confidence": 0,
         "reason": (
-            "Seller email address matched more than one Stonegate conversation."
-            if candidate_ids
-            else "No seller conversation matched the sender or reply headers."
+            "The receiving Stonegate address needs an owner or team before new mail can route."
         ),
         "email_sender_alias_ids": alias_ids,
         "candidate_conversation_ids": [str(item) for item in candidate_ids],
     }
+
+
+def internal_sender(
+    db: Session,
+    organization_id: UUID,
+    senders: list[str],
+) -> bool:
+    alias_id = db.scalar(
+        select(EmailSenderAlias.id).where(
+            EmailSenderAlias.organization_id == organization_id,
+            EmailSenderAlias.email_address.in_(senders),
+        )
+    )
+    if alias_id is not None:
+        return True
+    user_id = db.scalar(
+        select(User.id).where(
+            User.organization_id == organization_id,
+            User.email.in_(senders),
+        )
+    )
+    return user_id is not None
+
+
+def conversations_for_aliases(
+    db: Session,
+    organization_id: UUID,
+    candidates: list[Conversation],
+    aliases: list[EmailSenderAlias],
+) -> list[UUID]:
+    if not candidates or not aliases:
+        return []
+    candidate_ids = {conversation.id for conversation in candidates}
+    alias_ids = {str(alias.id) for alias in aliases}
+    matches = {
+        conversation.id
+        for conversation in candidates
+        if conversation.source_alias_id is not None
+        and str(conversation.source_alias_id) in alias_ids
+    }
+    for communication in db.scalars(
+        select(CommunicationRecord).where(
+            CommunicationRecord.organization_id == organization_id,
+            CommunicationRecord.conversation_id.in_(candidate_ids),
+            CommunicationRecord.channel == "email",
+        )
+    ):
+        metadata = communication.communication_metadata or {}
+        sender_alias_id = optional_string(metadata.get("email_sender_alias_id"))
+        inbound_alias_ids = {
+            optional_string(value)
+            for value in (
+                metadata.get("email_sender_alias_ids")
+                if isinstance(metadata.get("email_sender_alias_ids"), list)
+                else []
+            )
+        }
+        if (
+            communication.conversation_id is not None
+            and (
+                sender_alias_id in alias_ids
+                or bool(alias_ids.intersection(inbound_alias_ids))
+            )
+        ):
+            matches.add(communication.conversation_id)
+    ordered = [
+        conversation.id
+        for conversation in candidates
+        if conversation.id in matches and conversation.status != "closed"
+    ]
+    if ordered:
+        return list(dict.fromkeys(ordered))
+    return list(
+        dict.fromkeys(
+            conversation.id for conversation in candidates if conversation.id in matches
+        )
+    )
+
+
+def ensure_inbound_contact(
+    db: Session,
+    organization_id: UUID,
+    message: dict[str, Any],
+    sender: str,
+    contact_ids: list[UUID],
+    *,
+    assigned_user_id: UUID | None,
+) -> Contact:
+    if contact_ids:
+        contact = db.scalar(
+            select(Contact)
+            .where(
+                Contact.organization_id == organization_id,
+                Contact.id.in_(contact_ids),
+            )
+            .order_by(Contact.created_at.asc())
+        )
+        if contact is not None:
+            return contact
+
+    parsed = getaddresses([optional_string(message.get("from"))])
+    display_name = next(
+        (
+            name.strip()
+            for name, address in parsed
+            if address.strip().lower() == sender and name.strip()
+        ),
+        "",
+    )
+    fallback_name = sender.split("@", 1)[0].replace(".", " ").replace("_", " ").title()
+    contact = Contact(
+        organization_id=organization_id,
+        legal_name=(display_name or fallback_name or sender)[:255],
+        preferred_name=(display_name or fallback_name)[:255] or None,
+        contact_type="business_contact",
+        assigned_user_id=assigned_user_id,
+    )
+    db.add(contact)
+    db.flush()
+    db.add(
+        ContactMethod(
+            organization_id=organization_id,
+            contact_id=contact.id,
+            method_type="email",
+            value=sender,
+            normalized_value=sender,
+            is_primary=True,
+        )
+    )
+    db.flush()
+    return contact
+
+
+def inbound_visibility_scope(alias: EmailSenderAlias) -> str:
+    metadata = alias.routing_metadata or {}
+    configured_scope = optional_string(metadata.get("visibility_scope")).lower()
+    if configured_scope in {"standard", "restricted"}:
+        return configured_scope
+    if alias.purpose_key in {
+        "accounting",
+        "closing",
+        "legal",
+        "transaction",
+        "transactions",
+    }:
+        return "restricted"
+    return "standard"
+
+
+def inbound_email_category(
+    message: dict[str, Any],
+    headers: dict[str, str],
+) -> str:
+    sender = optional_string(message.get("from")).lower()
+    subject = optional_string(message.get("subject")).lower()
+    auto_submitted = headers.get("auto-submitted", "").lower()
+    if "dmarc" in subject or "report domain" in subject:
+        return "dmarc_report"
+    if "mailer-daemon" in sender or "postmaster" in sender:
+        return "delivery_notice"
+    if auto_submitted and auto_submitted != "no":
+        return "automated"
+    return "correspondence"
 
 
 def retain_received_attachments(

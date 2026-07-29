@@ -115,7 +115,7 @@ Delivered:
 
 Goal: Route new email predictably while retaining human control over uncertain matches.
 
-Status: Next.
+Status: Complete in code on July 28, 2026.
 
 Routing precedence:
 
@@ -142,9 +142,24 @@ Exit:
 - Valid messages no longer require an existing seller lead to appear in the Inbox.
 - Uncertain messages remain visible and actionable without being attached to the wrong record.
 
+Delivered:
+
+- Exact RFC replies and retained provider-thread evidence have the highest routing priority.
+- A unique sender and receiving-alias context routes before broader contact matching.
+- A sender is attached to an existing CRM conversation only when one active context is
+  unambiguous.
+- New external correspondents create a pending business contact and general conversation under
+  the configured alias owner or team.
+- Internal Stonegate loops are ignored, automated mail is categorized, and aliases without an
+  owner or team remain in the owner routing queue.
+- Every decision records the routing rule, confidence, candidates, and result in the provider
+  event. Duplicate and out-of-order webhook protections remain intact.
+
 ## Phase F8.7A.3: Access And Mailbox Policies
 
 Goal: Give each role a focused mailbox while preserving owner oversight.
+
+Status: Core authorization complete in code on July 28, 2026.
 
 Policies:
 
@@ -170,9 +185,24 @@ Exit:
 
 - API tests prove every role can access only the intended conversations and attachments.
 
+Delivered:
+
+- Austin's Owner role retains organization-wide mailbox oversight.
+- Named-alias owners, assigned users, team members, watchers, and explicit alias grantees can
+  access their conversations.
+- Broad seller-Inbox permission continues to expose standard lead conversations but does not
+  expose general or restricted correspondence.
+- Accounting, transaction, closing, and legal aliases default to restricted visibility unless
+  their routing configuration explicitly chooses another scope.
+- Dispositions, transaction coordination, finance, and assigned VAs receive the email permissions
+  needed for their authorized mailbox work without gaining unrelated conversation access.
+- The same scoped-conversation service protects list, detail, attachment, and send operations.
+
 ## Phase F8.7A.4: Inbox Views And General Compose
 
 Goal: Make the model understandable and efficient for nontechnical staff.
+
+Status: Next.
 
 Left panel:
 
