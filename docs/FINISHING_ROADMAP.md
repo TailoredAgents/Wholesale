@@ -4,671 +4,477 @@ Last updated: July 29, 2026
 
 ## Purpose
 
-This is the canonical sequence for taking Stonegate from a feature-complete manual operating
-system to a production-proven business platform.
-
-The original product phases remain the record of what was built. This roadmap covers what is
-still required: production verification, company configuration, provider activation, real-world
-validation, internal accounting, and controlled AI pilots.
-
-`CURRENT_STATE.md` remains the source of truth for what exists today. Do not mark a finishing phase
-complete merely because code exists. The exit criteria must be demonstrated in production or a
-controlled production-like test.
-
-## Scope Rules
-
-This roadmap extends the Stonegate platform already in production. It does not authorize parallel
-versions of the CRM, Inbox, calendar, buyer database, Finance area, or AI control plane.
-
-- **Acceptance** means proving and configuring existing code for real operations.
-- **Extension** means adding records and workflows to an existing Stonegate module.
-- **Integration** means connecting a provider through an adapter while Stonegate retains its own
-  normalized records, permissions, history, and audit trail.
-- **New subsystem** means a genuinely new internal capability, such as the double-entry accounting
-  ledger in F6. It must reference existing source records instead of copying or replacing them.
-- PostgreSQL remains the platform database. Existing lead, deal, reconciliation, compensation,
-  and marketing records remain the operational evidence; posted journal entries become the
-  accounting authority for financial statements.
-- Every generated or provider-backed record requires source references, organization scope,
-  permissions, audit history, and duplicate protection.
-- The existing governed AI runtime serves every Copilot. No phase creates a second AI system.
-- Every provider decision and runtime credential name must be reflected in
-  `PRODUCTION_CREDENTIALS_CHECKLIST.md`. Actual secret values never belong in git.
-
-## Current Boundary
-
-Already built:
-
-- Public seller website and consented intake.
-- CRM, campaigns, prospecting, Lead Desk, Inbox, tasks, and calendar.
-- Field acquisitions, underwriting, offer governance, reports, and negotiation records.
-- Manual contract-to-close, buyer, disposition, reconciliation, finance, and marketing workflows.
-- Eight staff-facing copilots and the governed AI control plane.
-
-Still required:
-
-- Production safety and operator verification.
-- Real Stonegate users, policies, scripts, templates, territories, and counterparties.
-- Resend operational email migration.
-- Dedicated Twilio SMS and Voice acceptance.
-- Outreach, recording, and market compliance approval.
-- Object storage, e-signature, buyer delivery, the internal accounting ledger, and advertising
-  integrations.
-- Underwriting calibration using verified outcomes.
-- Redacted AI model replay and measured supervised pilots.
-
-## Provider Decision
-
-Resend is the approved operational email provider. Google Workspace and Gmail OAuth will not be
-activated.
-
-The existing Gmail implementation is disabled legacy code and must be replaced deliberately.
-Stonegate will use:
-
-- Company-controlled sender aliases.
-- Resend Email API for outbound operational messages.
-- Resend Receiving and signed webhooks for inbound replies.
-- Stonegate's shared Inbox as the staff mailbox experience.
-- PostgreSQL as the communication source of truth.
-
-Cold email remains a separate future system. It must not use the operational seller-email domain,
-sender reputation, or consent assumptions.
-
-## Phase Summary
-
-| Phase | Name | Build type | Main result |
-| --- | --- | --- | --- |
-| F1 | Production Safety Closeout | Acceptance and upgrade | Recoverable, monitored, access-controlled production |
-| F2 | Company Configuration And Role Acceptance | Configuration and acceptance | Real staff can execute their jobs correctly |
-| F3 | Compliance And Operating Policy | Deferred external policy | No new application-level communication gates |
-| F4 | Documents, Contracts, And Closing | Existing workflow extension plus integrations | Secure files and e-signature support live transactions |
-| F5 | Buyers And Disposition Readiness | Existing module extension plus buyer-data integration | Buyer data, packages, offers, and selection are production-ready |
-| F6 | Stonegate Accounting And Marketing Measurement | New accounting subsystem plus existing-module extensions | Complete internal books and audited advertising attribution |
-| F7 | Underwriting Calibration And Market Proof | Existing workflow calibration | Offer guidance is measured against verified outcomes |
-| F8 | Resend Operational Email | Existing Inbox provider replacement | Two-way email works inside the shared Inbox |
-| F9 | Twilio Communications Acceptance | Existing communications activation | Dedicated SMS and Voice work end to end |
-| F10 | AI Production Pilots And Controlled Automation | Existing AI-system validation and promotion | Copilots are proven before narrow automation |
-
-## Phase F1: Production Safety Closeout
-
-Goal: Make production observable, recoverable, and safe before broad employee use.
-
-Owner-directed scope exception:
-
-- Credential rotation, MFA rollout, and secret-security remediation are intentionally excluded
-  from the current F1 execution. They remain known risks and are not implied complete when F1
-  reliability acceptance is complete.
-
-Work:
-
-- Activate the scheduled GitHub production-readiness check for `/ready` and required public pages.
-- Configure an owner-controlled failure alert destination.
-- Connect the implemented Sentry error monitoring for the web, API, and worker.
-- Run and record an isolated database restore drill.
-- Run and record employee access-revocation and record-reassignment checks.
-- Verify worker heartbeat, retries, and failure visibility.
-- Run deployment smoke tests against the branded domain and Render fallbacks.
-- Record the production environment inventory without storing secret values in git.
-
-Exit criteria:
-
-- A backup has been restored into an isolated database successfully.
-- An owner receives a controlled readiness or worker alert.
-- A deactivated employee immediately loses access.
-- The branded website, OS, API, worker, database, and Key Value service pass the production
-  checklist.
-- Web, API, and worker errors reach the approved Sentry projects without default PII collection.
-
-## Phase F2: Company Configuration And Role Acceptance
-
-Goal: Replace demonstration assumptions with Stonegate's real operating data.
-
-Implementation checkpoint, July 24, 2026:
-
-- The existing Operating Model now includes standard operating seats, named primary and backup
-  coverage, partner verification, readiness checks, staff manual assignments, employee workspace
-  test evidence, manager approval, and complete audit events.
-- Every user has a restricted **My Setup** workspace. Owners manage the process from
-  **Operating Model > Company setup**.
-- This is the configuration and acceptance layer for existing users, roles, markets, scripts,
-  compensation, closer capacity, and buyers. It does not duplicate those systems.
-- Operational acceptance remains ongoing as real staff and Georgia counterparties are hired and
-  approved.
-
-Work:
-
-- Create individual users for the Owner, Lead Manager, closers, VAs, dispositions, transaction
-  coordination, finance, and marketing as those people are hired.
-- Configure teams, ownership rules, watchers, and workload routing.
-- Activate the approved compensation plan and role-credit rules.
-- Configure Georgia markets, territories, closer capacity, work hours, and unavailable time.
-- Approve VA and Lead Manager scripts.
-- Load attorney-reviewed templates and approved operating knowledge.
-- Add closing attorneys, title companies, and other standard counterparties.
-- Seed the initial verified buyer list and proof-of-funds review process.
-- Complete role-based acceptance testing using restricted accounts.
-- Write staff manuals for Owner, VA, Closer, Transaction Coordinator, Dispositions, and Finance.
-
-Exit criteria:
-
-- Every active employee has an individual login and only the access required for the job.
-- A controlled lead can move through every staff handoff without Owner-only workarounds.
-- Compensation, territory, script, capacity, and assignment policies are approved and active.
-- Each role owner signs off on their daily workspace and manual.
-
-## Phase F3: Compliance And Operating Policy
-
-Status: Application-level F3 restrictions were removed at the Owner's direction on July 24, 2026.
-
-Current product boundary:
-
-- No DNC evidence, policy approval, training acknowledgment, email permission, or recording-policy
-  approval is required by the application.
-- Blank imported DNC values do not block imports or calling batches.
-- The temporary Compliance workspace and its approval APIs are not part of the product.
-- Existing seller opt-outs, explicit do-not-contact values, company suppression, invalid contact
-  data, provider configuration, and provider delivery failures still behave normally.
-
-Any future policy tooling must be requested explicitly and should default to advisory reporting
-rather than silently blocking operations.
-
-## Phase F4: Documents, Contracts, And Closing
-
-Goal: Run a real contract-to-funding workflow with secure files and provider evidence.
-
-Implementation checkpoint, July 24, 2026:
-
-- The private storage adapter now covers legal templates, transaction documents, completed signed
-  agreements, inspection photographs, and buyer proof-of-funds documents. Existing database files
-  remain readable; Cloudflare R2 is the selected production object store.
-- SignWell is the selected e-signature provider. Envelope, recipient, webhook, reconciliation,
-  completed-PDF, test-mode, and provider evidence are implemented inside the existing transaction
-  workflow.
-- The Transaction workspace supports owner-driven account verification and webhook registration,
-  internal purchase, assignment, and addendum generation, ordered signers, approved-package sending,
-  signature status, provider reconciliation, and storage/scan visibility.
-- Local simulation and automated provider-connection, webhook, purchase, and assignment tests are
-  implemented. R2 credentials, the SignWell API key, attorney-approved templates, and controlled
-  production acceptance remain external completion steps.
-- See `SIGNWELL_LAUNCH_RUNBOOK.md` for setup and acceptance and
-  `SIGNWELL_COUNSEL_BRIEF.md` for the production document specification.
-
-Work:
-
-- Select private S3-compatible object storage. **Selected: Cloudflare R2.**
-- Route persistent uploaded photographs, proof-of-funds, legal templates, and contracts behind
-  authenticated object access. Keep provider-hosted recordings and generated reports behind their
-  existing authenticated endpoints.
-- Add malware scanning, retention, checksums, short-lived downloads, and deletion controls.
-- Select and integrate an e-signature provider. **Selected: SignWell.**
-- Load attorney-approved Georgia purchase and assignment templates.
-- Reconcile envelopes, recipients, signatures, final documents, and webhook events.
-- Prepare closing-party templates and provider-neutral delivery records; activate delivery in
-  Phase F8.
-- Run a redacted contract-to-funding simulation.
-
-Exit criteria:
-
-- A contract package is approved, sent, signed, reconciled, and retained without manual status
-  fabrication.
-- Every material document and signature event has provider evidence.
-- Funding remains blocked until the existing checklist and evidence gates pass.
-
-## Phase F5: Buyers And Disposition Readiness
-
-Goal: Turn the internal buyer CRM into an operational deal-placement system.
-
-Status as of July 26, 2026:
-
-- DealMachine is selected and the provider adapter, deal-specific search, scored candidate
-  evidence, selective import, contact extraction, cross-run deduplication, and audit history are
-  implemented.
-- Imported candidates flow into the existing buyer CRM, deterministic match ranking, and
-  Dispositions Copilot. No parallel buyer database or second AI system was created.
-- Live Georgia API acceptance, initial buyer verification, controlled audience simulation, and a
-  funded reconciliation simulation remain before F5 is operationally complete.
-
-Work:
-
-- Select the first buyer acquisition source or API based on cost and coverage.
-- Import and deduplicate the initial buyer list.
-- Verify criteria, market, capacity, contact permission, and proof of funds.
-- Prepare approved buyer-package audiences and provider-neutral delivery records.
-- Process manually logged inquiries, showing interest, offers, deposit terms, and opt-outs in one
-  case until communication providers activate.
-- Test primary and backup buyer selection.
-- Run a contract-to-buyer-to-reconciliation simulation.
-- Compare human-led and AI-assisted disposition work only after the manual process has volume.
-
-Exit criteria:
-
-- An approved deal package is ready for a controlled buyer audience without bypassing release
-  approval.
-- Manually logged replies and offers attach to the correct disposition case.
-- Proof of funds and selection gates cannot be bypassed.
-- A funded simulation reconciles buyer outcome, revenue, deductions, commissions, and company
-  margin.
-
-## Phase F6: Stonegate Accounting And Marketing Measurement
-
-Goal: Extend the existing Finance area into Stonegate's internal bookkeeping system and connect
-approved funnel outcomes to advertising providers without duplicating operational records.
-
-Starting point:
-
-- Stonegate already records revenue, deal deductions, marketing spend, compensation rules,
-  compensation calculations, role credits, deal payouts, funded-deal reconciliation, company
-  margin, owner approvals, audit events, and accounting CSV output.
-- The existing Finance records are operational deal economics. They are not yet a complete
-  accounting ledger because there is no chart of accounts, balanced journal, accounting-period
-  close, bank reconciliation, vendor ledger, or complete financial-statement package.
-- The existing Finance Copilot already analyzes finance exceptions in draft-only mode. F6 extends
-  that same Copilot; it does not add another agent framework.
-
-### F6A: Accounting Policy And Account Structure
-
-- **Implementation status:** Core product work is complete. `/os/finance` now installs one
-  organization-scoped accounting profile and versioned wholesaling chart of accounts, exposes the
-  unresolved entity and owner-compensation decisions, and preserves an audit history. CPA
-  confirmation remains an external acceptance step.
-- Have Stonegate's CPA approve the legal entity, tax year, cash or accrual method, opening-balance
-  date, retention policy, and treatment of assignment fees, double closes, earnest money, closing
-  costs, commissions, contractor labor, software, advertising, owner contributions, and
-  distributions.
-- Add a versioned chart of accounts with asset, liability, equity, revenue, cost, and expense
-  account types.
-- Add organization-scoped accounting permissions for preparation, approval, posting, period close,
-  reporting, and CPA read-only access.
-
-### F6B: Double-Entry Ledger And Posting Controls
-
-- **Implementation status:** Core product work is complete. Finance now provides monthly
-  accounting periods, balanced journal entries and lines, source and evidence references,
-  idempotency, dedicated preparation/approval/posting/period permissions, linked reversing
-  journals, and auditable period review, close, reopen, and lock transitions. Production opening
-  balances and CPA acceptance remain F6E work.
-- Add journal entries and journal lines that require total debits to equal total credits.
-- Use `draft`, `approved`, `posted`, and `reversed` states. Posted entries are immutable and can
-  only be corrected through linked reversing and replacement entries.
-- Add source type, source ID, posting-rule version, evidence references, preparer, approver,
-  timestamps, and idempotency keys to prevent duplicate posting.
-- Add accounting periods with open, review, closed, and locked states. Reopening a closed period
-  requires explicit Owner or Finance authority and an audit reason.
-- Store money in integer cents and require currency consistency for every journal.
-
-### F6C: Operational Posting Rules
-
-- **Implementation status:** Core product work is complete. Finance now installs ten
-  owner-approved, versioned posting rules; exposes a deterministic source work queue; proves
-  funded revenue and commissions against approved reconciliation, closing statement, and funding
-  confirmation; and creates one source-linked balanced draft per accounting event. Vendor
-  payables, contractor payables, reimbursements, owner distributions, and commission payouts use
-  explicit payment states and evidence. Generated entries remain drafts until separate journal
-  approval and posting. Production funded-deal acceptance and CPA rule approval remain external
-  acceptance steps.
-- Prove the existing funded-deal reconciliation with real or redacted closing statements before
-  allowing it to draft accounting entries.
-- Draft balanced entries from approved funded-deal reconciliations without copying the lead,
-  transaction, payout, or compensation record.
-- Draft entries for collected assignment revenue, double-close economics, deal deductions,
-  approved commissions, marketing spend, software, contractor labor, owner activity, and other
-  approved business expenses.
-- Add payment-state progression for receivables, payables, commissions, reimbursements, and
-  distributions.
-- Require human review of every new posting rule and every material exception.
-
-Implemented posting coverage:
-
-- Collected assignment revenue, double-close proceeds, and other operating revenue.
-- Paid deal deductions with category-aware account mapping.
-- Advertising, lead data, software, hosting, subscription, VA, contractor, and other marketing
-  spend with source-aware account mapping.
-- Approved commission accrual and separate commission settlement.
-- Vendor, contractor, and reimbursement accrual and settlement.
-- Owner distributions recorded as equity activity rather than operating expense.
-- Source fingerprints and unique source-purpose links that surface changed records as exceptions
-  instead of preparing a second journal.
-
-### F6D: Banking, Vendors, And Evidence
-
-- **Implementation status:** Core F6D product work is complete. Finance uses the shared
-  business-counterparty identity for organization-scoped vendor profiles, itemized bills,
-  tax-reportable and W-9 lifecycle status, private source documents, year-to-date vendor payments,
-  and bill approval. It also provides provider-free CSV statement preview and import, private
-  statement retention, duplicate prevention, manual posted-journal matching, and balance-controlled
-  bank reconciliation. An approved bill creates the existing financial obligation and flows
-  through F6C posting and payment control; it does not create a parallel payable ledger. W-9 files
-  are sensitive private documents with audited access, and tax identifiers are never copied into
-  ordinary fields.
-- Add bank and credit-card accounts, statement imports, normalized transactions, matching,
-  reconciliation sessions, statement balances, and unexplained-difference tracking.
-- Start with secure CSV/OFX statement import. Add a read-only bank-feed adapter later only if
-  operating volume justifies its cost and support burden.
-- Add vendors and contractors, bills, receipts, closing statements, payment evidence, W-9
-  collection status, and reportable-payment tracking.
-- Store sensitive tax documents in the private object-storage system from F4 with restricted
-  access; do not place tax identifiers in ordinary notes or logs.
-- Do not initiate bank transfers, payroll, tax payments, or card payments in the initial ledger
-  release.
-
-F6D1 implemented workflow:
-
-- Add a vendor, contractor, closing service, funding partner, or other service provider without
-  duplicating an existing business counterparty.
-- Track payment terms, default account coding, tax-reportable status, and requested, received,
-  verified, or not-required W-9 state.
-- Upload invoices, receipts, W-9s, payment evidence, closing statements, contracts, and related
-  private evidence with checksum, malware-scan state, retention, and access auditing.
-- Enter one or more coded bill lines. Approval creates one source-linked payable; settlement is
-  recorded only after payment occurs outside Stonegate.
-- Draft itemized accrual journals from bill lines and preserve document evidence through accrual
-  and settlement.
-
-F6D2 implemented workflow:
-
-- Add company bank and credit-card accounts using a label and optional last four digits only.
-- Preview a CSV statement with explicit date, description, amount, balance, and transaction-ID
-  column mappings before importing it. The original CSV is retained as private evidence.
-- Block an exact duplicate statement file and row-level duplicate transactions.
-- Match cleared bank lines manually to exactly one existing posted operating-cash journal, or mark a
-  non-operating line ignored with an audit reason.
-- Prepare and approve a reconciliation only after every included line is resolved and the statement
-  closing balance equals opening balance plus imported activity. No provider credentials, bank
-  login, payment initiation, or automatic match decisions are included.
-
-### F6E: Reports, Close, And CPA Handoff
-
-- **Implementation status:** Core product work is complete. `/os/finance` now produces
-  date-controlled Profit and Loss, Balance Sheet, Cash Flow, Trial Balance, and General Ledger
-  reports exclusively from posted journals. It also provides receivable, payable, commission,
-  payment-history, and deal-profitability schedules; a close-readiness checklist; and an
-  authenticated CPA ZIP package containing the supporting report files. Existing period controls
-  handle review, close, reopen, and year-end lock. Opening balances and adjusting entries use the
-  same reviewed manual-journal lifecycle instead of a separate balance store. A real month close,
-  opening-balance acceptance, and report-package approval by Stonegate's CPA remain external
-  acceptance steps.
-- Add Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, accounts
-  receivable, accounts payable, commission payable, vendor-payment, and deal-profitability reports.
-- Make every report drillable to journal lines, source records, approvals, and supporting
-  documents.
-- Add opening balances, month-end checklist, reconciliation signoff, adjusting entries, period
-  close, year-end lock, and a complete CPA export package.
-- Keep optional generic exports so Stonegate can work with tax preparation or outside accounting
-  tools without making QuickBooks, Xero, or another ledger the source of truth.
-
-F6E implemented workflow:
-
-- Select a statement start and end date. Reports include posted journal activity only; drafts and
-  approvals remain visible as close blockers.
-- Drill from statements into account totals and the chronological journal-line ledger with source
-  IDs and evidence counts.
-- Review pending revenue as receivables, approved obligations and commissions as payables,
-  completed settlements as payment history, and deal-coded journals as deal profitability.
-- Resolve unfinished journals, unmatched statement lines, missing reconciliations, and period
-  status before close. Missing evidence remains a visible warning.
-- Download one CPA archive containing a manifest, statements, trial balance, general ledger,
-  receivables, payables, payments, and deal-profitability schedules.
-
-### F6F: Finance And Accounting Copilot
-
-- **Implementation status:** Core product work is complete. The existing Finance Copilot now reads
-  the Stonegate ledger, financial statements, posting queue, bank-statement workspace, close
-  checklist, and tax-review sources. It produces evidence-linked, review-only classification,
-  journal, bank-match, variance, and close-readiness guidance. A 60-case Finance evaluation
-  dataset and 30-day quality, latency, cost, blocked-output, correction, and rejection metrics are
-  included. Production model replay, supervised use on real periods, and CPA review remain
-  acceptance steps.
-- Extend the existing Finance Copilot to suggest account classifications, draft balanced journal
-  entries, propose transaction matches, identify duplicate or missing records, explain variances,
-  and prepare month-end and CPA review checklists.
-- Keep the Copilot embedded in the existing `/os/finance` workspace and powered by the existing AI
-  control plane, model runner, review records, budgets, and shutdown controls.
-- Require citations to the exact source records, journal lines, statements, and evidence used.
-- Measure classification accuracy, reconciliation accuracy, unsupported claims, correction rate,
-  latency, cost, and time saved through the existing AI evaluation and review system.
-- The Copilot cannot approve or post journals, change accounting policy, close or reopen periods,
-  approve compensation, classify taxes finally, move money, file returns, or submit regulatory
-  forms.
-- Keep Tax and Deductions as a specialist capability inside the existing Finance Copilot. It may
-  review source records, propose expense, inventory, capitalized-cost, and owner-activity
-  classifications, identify missing business purpose or evidence, and prepare a professional
-  review package. It remains draft-only and cannot promise deductibility, file returns, submit
-  elections, alter source records, or post ledger entries.
-
-### F6G: Marketing Measurement
-
-- **Implemented:** Stonegate uses a versioned first-party measurement policy and last eligible
-  platform click within a 90-day window. Google and Meta are evaluated independently.
-- **Implemented:** Qualified lead, appointment scheduled, contract signed, and funded deal events
-  are prepared from existing CRM records. Stable event keys prevent duplicate provider outcomes.
-- **Implemented:** Google Data Manager and Meta Conversions API adapters use normalized SHA-256
-  contact identifiers, provider-specific click IDs, retries, terminal failure states, and an audit
-  record for every attempt.
-- **Implemented:** The Marketing workspace shows provider readiness, credential blockers, policy,
-  queue health, event history, and manual prepare/process controls.
-- External delivery remains intentionally disabled until Stonegate configures the ad accounts,
-  conversion actions, credentials, and completes controlled provider acceptance.
-- Keep budgets, campaigns, payments, compensation, accounting finalization, and published
-  advertising changes human-approved.
-
-Exit criteria:
-
-- The CPA has approved the accounting policy, opening balances, chart of accounts, posting rules,
-  month-end process, and report package.
-- Every posted journal is balanced, source-linked, auditable, and immutable.
-- One approved funded deal produces exactly one reviewed accounting result without duplicate
-  revenue, deduction, commission, or payout posting.
-- One bank statement reconciles to zero unexplained difference, with exceptions visibly retained.
-- Profit And Loss, Balance Sheet, Cash Flow, Trial Balance, and General Ledger agree for the same
-  closed period.
-- The Finance and Accounting Copilot passes its evaluation set and remains unable to post, close,
-  pay, or file.
-- Qualified lead, appointment, contract, and funded outcomes can be delivered to approved
-  advertising providers and audited.
-- Provider failures are retryable and do not alter Stonegate's operational or accounting source
-  records.
-
-## Phase F7: Underwriting Calibration And Market Proof
-
-Goal: Measure whether Stonegate's comps, ARV, repairs, and offer guidance are reliable enough for
-real acquisition decisions.
-
-Implementation checkpoint, July 28, 2026:
-
-- Existing immutable market analyses and human comp-review versions remain the source evidence;
-  F7 does not create a second valuation engine.
-- Underwriting V2.2 adds provider-safe address retries, recorded-sales continuity when the AVM is
-  unavailable but the subject is verified, bounded cited public-record research, one complete
-  analysis action, and a factor-by-factor confidence score. Secondary research cannot set value.
-- Verified outcomes now produce overall and market scorecards for ARV bias, median absolute error,
-  range coverage, repair error, seller-contract variance, disposition error, and operator comp
-  overrides.
-- Every market receives an explicit provider-adequacy state using versioned Stonegate pilot
-  thresholds. An insufficient sample is never labeled adequate.
-- Formula and provider proposals are retained in a methodology decision ledger with a frozen
-  evidence snapshot, current/proposed method versions, rationale, human decision notes, and audit
-  events.
-- Formula and provider changes may be drafted at any time but cannot be approved before 50 verified
-  cases exist in the selected market scope. No calibration result changes a formula automatically.
-- The Underwriting workspace exposes the market scorecard, failure patterns, decision drafts, and
-  verified outcome history.
-- Production proof remains open. Stonegate must collect real verified Georgia outcomes, perform
-  the operator reviews, and approve final report language before F7 exit criteria are satisfied.
-
-Work:
-
-- Record verified expert reviews, appraisals, resales, and closed outcomes.
-- Compare predicted ARV, range coverage, repairs, seller contract, and disposition results.
-- Review selected and excluded comps with experienced operators.
-- Establish minimum case counts before changing formulas.
-- Determine whether RentCast is adequate by Georgia market.
-- Add MLS/RESO, ATTOM, or another provider only if measured error or operator time justifies it.
-- Finalize investor and seller-report branding and approved language.
-
-Exit criteria:
-
-- Calibration reports contain enough verified cases for the approved review threshold.
+This is the canonical remaining sequence for taking Stonegate from an implemented business
+platform to a production-proven Georgia operation.
+
+`SYSTEM_MAP.md` describes what exists. This roadmap includes only:
+
+- unfinished external configuration
+- real-company setup
+- controlled provider acceptance
+- professional review
+- real-world calibration
+- supervised AI pilots
+
+Git history preserves completed build phases. A feature is not missing merely because an external
+acceptance step remains.
+
+## Status Rules
+
+- **Implemented** means the workflow exists in code.
+- **Configured** means the required production account and values are present.
+- **Active** means a controlled end-to-end production test passed.
+- **Accepted** means the named Stonegate owner or professional approved the result.
+
+Do not mark a phase finished from code alone when its exit criteria require production evidence.
+
+## Product Boundaries
+
+- Extend the existing CRM, Inbox, calendar, buyer CRM, Finance system, and AI control plane.
+- Do not create parallel business databases or a second AI system.
+- PostgreSQL remains the operational source of truth.
+- Posted journal entries remain the financial-statement source of truth.
+- External providers connect through adapters while Stonegate retains normalized records,
+  permissions, evidence, and audit history.
+- Provider names and environment variables belong in `SETUP_REFERENCE.md`.
+- Secret values never belong in Git or documentation.
+
+## Current Summary
+
+| Phase | Current state | Remaining proof |
+| --- | --- | --- |
+| F1 Production reliability | Reliability tooling implemented | Restore, revocation, readiness, and optional monitoring acceptance |
+| F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
+| F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
+| F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
+| F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
+| F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
+| F7 Underwriting proof | V2.2 and calibration workflows implemented | Verified Georgia outcomes and operator review |
+| F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
+| F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
+| F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
+
+## Recommended Order
+
+The practical order from the current state is:
+
+1. Finish F8 Resend controlled acceptance.
+2. Complete F2 actual staff setup as people join.
+3. Finish F4 SignWell and contract acceptance before the first live seller agreement.
+4. Resume F9 immediately after A2P approval.
+5. Run F5 buyer and disposition acceptance as the first contract approaches.
+6. Run F1 restore and access-revocation checks before broad employee use.
+7. Begin F7 outcome collection with every reviewed analysis.
+8. Complete F6 accounting acceptance before relying on the first closed period.
+9. Review F3 outreach and recording policy before broad campaigns or recording activation.
+10. Run F10 Copilot pilots after the underlying human workflows have real operating volume.
+
+Some phases overlap. Their exit criteria remain independent.
+
+## F1. Production Reliability Acceptance
+
+### Already Implemented
+
+- API health and dependency readiness
+- worker heartbeat and stale-worker readiness checks
+- durable operational failures and retries
+- optional owner alert webhook
+- optional Sentry integration with default PII capture disabled
+- database backup and guarded restore scripts
+- smoke tests and scheduled readiness monitoring
+- user deactivation and reassignment workflow
+
+### Remaining Actions
+
+1. Run an isolated restore from a real production backup.
+2. Confirm the restored database opens and expected records exist.
+3. Use a disposable staff account to test deactivation and immediate access loss.
+4. Reassign that account's open work and verify history remains attributable.
+5. Run the production smoke test against the branded website and API.
+6. Confirm `/ready` reports a fresh worker heartbeat.
+7. Optionally configure Sentry and an owner-controlled alert webhook.
+
+Credential rotation and MFA rollout remain known risks but are excluded from this phase at the
+Owner's current direction.
+
+### Exit Criteria
+
+- One real backup has been restored into an isolated database.
+- One staff-revocation test has passed.
+- Website, OS, API, worker, database, and key-value dependencies pass readiness checks.
+- Any configured alert destination receives a controlled test.
+
+## F2. Company Configuration And Role Acceptance
+
+### Already Implemented
+
+- individual users and local role assignments
+- teams and team membership
+- operating seats and backups
+- staff role manuals and My Setup acceptance
+- markets, territories, closer profiles, and availability
+- campaign, script, compensation, and role-credit configuration
+- counterparties and market launch checklists
+- role-aware navigation and server-side permissions
+
+### Initial Team Plan
+
+- Austin: Owner/CEO and Acquisitions Closer
+- Devon: Lead Manager and Dispositions during the initial period
+- Conner: transaction paperwork, bookkeeping, and finance support
+- Michael: later Lead Manager transition
+- two or three individually authenticated VA Callers
+
+The approved operating and compensation details remain in `OPERATING_MODEL.md`.
+
+### Remaining Actions
+
+1. Create one Stonegate user for each real employee and contractor.
+2. Have each person create or use their own Clerk login.
+3. Assign only the roles needed for that person's current work.
+4. Configure initial teams, primary owner, backup coverage, and routing.
+5. Configure Georgia markets, territories, closer hours, travel buffer, and unavailable time.
+6. Approve the current VA and Lead Manager scripts.
+7. Activate the approved compensation plan and current role credits.
+8. Add the selected closing attorney, title/closing contacts, contractors, and vendors.
+9. Have each person test their normal workflow and prohibited areas.
+10. Record their role acceptance in My Setup and manager approval in Operating Model.
+
+### Exit Criteria
+
+- Every active person has an individual login.
+- Each role can complete its work without Owner-only workarounds.
+- VAs cannot access underwriting, contracts, buyers, finance, exports, or unrelated records.
+- Finance and restricted mail remain visible only to authorized users.
+- Staff and manager acceptance records are complete.
+
+## F3. Operating Policy Review
+
+### Current Product Decision
+
+Application-level DNC screening evidence, policy approval, training acknowledgment, and broad
+recording-policy gates were removed at the Owner's direction.
+
+The system still honors:
+
+- explicit seller opt-outs
+- explicit do-not-contact values
+- Stonegate company suppression
+- invalid contact data
+- provider failures
+- SMS STOP and START state
+- role and mailbox permissions
+
+### Remaining External Actions
+
+Before broad live outreach or recording:
+
+1. Have the appropriate professional review Stonegate's planned states, channels, scripts, and
+   contractor practices.
+2. Approve seller SMS consent language and A2P campaign claims.
+3. Approve call-recording disclosure and retention behavior.
+4. Train VAs and employees on the approved operating policy.
+5. Keep any future in-product policy tooling advisory unless the Owner explicitly requests a
+   blocking control.
+
+### Exit Criteria
+
+- Stonegate management has approved the operating policy used by actual staff.
+- Provider registration claims match the public site and real workflow.
+- Recording remains disabled until its disclosure decision is documented.
+
+## F4. Documents, Contracts, And SignWell
+
+### Already Implemented
+
+- versioned internal contract sources and generated PDFs
+- contract packages and human approval
+- transaction documents, facts, parties, and checklists
+- database and S3-compatible private storage adapters
+- retention, checksum, private-download, and malware-scan state
+- SignWell account verification and webhook registration
+- envelope, recipient, event, status, and completed-document evidence
+- remote signature and in-person iPad signing
+- simulation and focused automated tests
+
+### Remaining Actions
+
+1. Decide whether database document storage is acceptable for the controlled first launch or
+   configure the selected Cloudflare R2 private bucket.
+2. Activate SignWell using the values in `SETUP_REFERENCE.md`.
+3. Verify the current Stonegate purchase-agreement source and signer fields.
+4. Obtain professional approval of the Georgia language when Stonegate is ready for that review.
+5. Run one complete remote-signature test.
+6. Run one complete in-person iPad signing test.
+7. Confirm webhook reconciliation and completed PDF storage.
+8. Run one redacted contract-to-funding simulation with documents and checklist evidence.
+
+Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document boundaries.
+
+### Exit Criteria
+
+- An approved package is sent, signed, reconciled, and retained.
+- The completed PDF and provider events attach to the correct transaction.
+- Remote and in-person signatures use the same approved package and audit trail.
+- Missing or conflicting required facts block release.
+- Unauthorized roles cannot send or download restricted documents.
+
+## F5. Buyer And Disposition Acceptance
+
+### Already Implemented
+
+- buyer CRM, criteria, proof, capacity, engagement, and offers
+- disposition cases, package approval, matching, campaigns, selection, and reconciliation
+- deterministic buyer ranking
+- DealMachine adapter, provider status, discovery runs, candidates, evidence, and selective import
+- duplicate protection and audit history
+- Disposition Copilot in supervised draft-only mode
+
+### Current Provider Decision
+
+DealMachine is the selected first buyer-data provider. Subscription and API activation are
+deliberately deferred until Stonegate is close to a contracted deal so monthly cost is not wasted.
+
+### Remaining Actions
+
+1. Activate the appropriate DealMachine API access near the first deal.
+2. Run controlled buyer discovery for a known market and property.
+3. Review data quality, contacts, activity, score explanations, duplicates, and cost.
+4. Import only approved candidates into the existing buyer CRM.
+5. Verify initial buyer criteria and proof.
+6. Send one approved deal package after operational email is accepted.
+7. Record engagement, offers, deposits, primary buyer, and backup buyer.
+8. Complete one contract-to-buyer-to-reconciliation simulation.
+
+### Exit Criteria
+
+- Provider candidates do not overwrite trusted buyer records.
+- One approved package reaches a controlled audience.
+- Replies and offers attach to the correct case.
+- Proof and buyer-selection approval cannot be bypassed.
+- Reconciliation produces the expected revenue, deductions, compensation, and margin.
+
+## F6. Accounting And Marketing Acceptance
+
+### Already Implemented
+
+- internal double-entry ledger and chart of accounts
+- accounting periods, journal preparation, approval, posting, reversal, and source links
+- operational posting rules
+- vendors, bills, W-9 status, obligations, and private evidence
+- bank account labels, statement preview/import, matching, and reconciliation
+- Profit and Loss, Balance Sheet, Cash Flow, Trial Balance, General Ledger, schedules, and CPA ZIP
+- Finance and Tax Copilots in supervised draft-only mode
+- Google Data Manager and Meta Conversions API adapters
+- stable event IDs, hashed identifiers, retries, and provider audit
+
+### Remaining Accounting Actions
+
+1. Have the CPA approve entity facts, accounting method, tax year, opening date, chart of accounts,
+   and posting policies.
+2. Enter and approve opening balances.
+3. Process one real or fully redacted funded deal through reconciliation and journals.
+4. Import and reconcile one actual statement.
+5. Complete one month close.
+6. Have the CPA review the statements and CPA export.
+7. Record corrections through adjustments or reversals.
+
+### Remaining Marketing Actions
+
+1. Configure the approved Google and Meta advertising accounts.
+2. Map qualified lead, appointment, contract, and funded events to provider actions.
+3. Enter credentials in Render.
+4. Use provider test modes for controlled delivery.
+5. Confirm acceptance, deduplication, retries, and audit history.
+6. Keep budgets and published campaign changes under human authority.
+
+### Exit Criteria
+
+- Posted journals balance and reconcile to the same closed period.
+- One funded deal produces one reviewed accounting result.
+- One bank statement reconciles with no unexplained difference.
+- The CPA accepts the first report package and operating procedure.
+- Test conversion events reach the correct ad accounts without duplicates.
+
+## F7. Underwriting Calibration And Market Proof
+
+### Already Implemented
+
+- Underwriting V2.2 complete-analysis workflow
+- address retries and subject identity checks
+- recorded-sale continuity when AVM coverage fails
+- bounded cited public-record research
+- comp screening, outlier handling, price-per-square-foot context, and condition review
+- ARV, as-is, repair, offer, confidence, and investor/client reports
+- immutable comp-review versions
+- verified outcome records
+- market scorecards and methodology decision ledger
+
+### Remaining Actions
+
+For every suitable reviewed Georgia analysis:
+
+1. Preserve the original prediction.
+2. Record the later verified expert, appraisal, resale, contract, disposition, repair, or closing
+   outcome.
+3. Review selected and excluded comps.
+4. Classify provider or methodology failures.
+5. Review market-level bias, absolute error, and range coverage.
+6. Do not change formulas from anecdotal cases.
+7. Consider another provider only when measured error or operator time justifies it.
+8. Require the configured minimum evidence and human approval for method changes.
+
+### Exit Criteria
+
+- The first market has enough verified cases for the approved review threshold.
 - Material bias and failure patterns are documented.
-- Formula or provider changes require versioned evidence and human approval.
+- Stonegate has decided whether RentCast is adequate for that market.
+- Formula and provider decisions are evidence-backed, versioned, and human approved.
 
-## Phase F8: Resend Operational Email
+Calibration continues after launch.
 
-Goal: Replace the disabled Gmail/OAuth integration with two-way operational email in Stonegate.
+## F8. Resend Mailbox Acceptance
 
-Phase sequence and implementation ownership are defined in `PHASE_F8_RESEND_EMAIL.md`.
+### Already Implemented
 
-Implementation checkpoint, July 28, 2026:
+- provider-neutral email records and Resend delivery
+- named, team, general, and restricted aliases
+- sender grants, signatures, templates, To/CC/BCC, and attachments
+- new email without fake property leads
+- signed inbound webhooks and recovery
+- exact and bounded reply/thread routing
+- routing-exception review
+- shared Inbox views and permissions
+- assignee, team, watcher, and sender notifications
+- first-response, next-response, and owner-escalation timers
+- provider status, idempotency, and failure evidence
+- production domain, DNS, API key, and webhook configuration
 
-- F8.1 team, named-sender, department-alias, and routing decisions are approved and documented.
-- New compensation-plan drafts default to a 20% human-led Dispositions pool. Devon and Austin use
-  two approved 50% role credits when the agreed buyer and field-support split applies.
-- Root-domain sending and receiving through `stonegatehb.com` is approved because Stonegate is the
-  intended company mailbox and no competing mailbox provider is configured.
-- F8.2 is complete in code: provider-neutral delivery contracts, company alias and grant records,
-  owner APIs, provider-specific configuration, migration `0066`, and simulation compatibility are
-  implemented.
-- F8.3 is complete in code: authorized alias delivery through Resend, text and HTML bodies, CC/BCC,
-  attachments, signatures, RFC threading evidence, provider IDs, database and provider
-  idempotency, failure recording, and focused tests are implemented.
-- F8.4 is complete in code: signed durable webhook intake, received body and attachment retrieval,
-  exact and bounded fallback routing, unmatched review records, lifecycle reconciliation,
-  replay-safe processing, and cursor-based recovery are implemented.
-- F8.5 is complete in code: authorized From selection, owner-managed aliases and grants,
-  signatures, provider and failure status, VA boundaries, and owner routing-exception resolution
-  are implemented.
-- F8.6 is complete: the branded API domain, Resend sending and receiving DNS, production API key,
-  signed webhook secret, and subscribed webhook endpoint are configured.
-- F8.7A.1 is complete in code: the existing conversation model now supports lead, transaction,
-  buyer, and general contexts; lead-independent email; team, source-alias, and visibility fields;
-  structured context links; structured message participants; and a safe in-place backfill.
-- F8.7A.2 deterministic routing and F8.7A.3 mailbox access policies are complete in code. Exact
-  replies, provider threads, unique sender contexts, and configured personal or team aliases route
-  predictably; ambiguous mail remains in review, and restricted mailboxes are enforced in lists,
-  detail, attachments, and sending.
-- F8.7A.4 is complete in code: My Addresses, Team Inboxes, authorized Restricted Inbox views,
-  global Compose, recipient search, To/CC/BCC, templates, signatures, attachments, general
-  conversations, and duplicate-send protection are implemented.
-- F8.7A.5 is complete in code: assignee, team, watcher, and alias-grant notifications; recipient
-  deduplication; configurable first and follow-up response timers; overdue owner escalation;
-  automatic alert resolution; Inbox wait-state labels; and scoped reporting by alias, team, and
-  assignee are implemented.
-- F8.7A.6 controlled production acceptance and F8.8 production launch remain.
+### Remaining Actions
 
-Architecture:
+Using company-controlled addresses:
 
-- Use the Resend API for sending.
-- Use Resend Receiving for inbound email.
-- Verify every webhook signature and deduplicate by event ID.
-- Retrieve inbound body, headers, and attachments after the `email.received` event.
-- Preserve `Message-ID`, `In-Reply-To`, and `References` evidence for threading.
-- Map approved sender and receiving aliases to Stonegate users and conversations.
-- Keep signatures and templates in Stonegate.
-- Record sent, delivered, delayed, bounced, complained, failed, suppressed, and received events.
-- Suppress unsafe recipients after hard bounce, complaint, unsubscribe, or policy block.
+1. Confirm Resend shows sending and receiving DNS as verified.
+2. Confirm SPF and DKIM; add and monitor DMARC.
+3. Send from each approved named and department alias.
+4. Test To, CC, BCC, signatures, templates, and attachments.
+5. Reply to each alias and confirm the expected person or team inbox.
+6. Test one general conversation not tied to a lead.
+7. Test one restricted accounting conversation.
+8. Confirm unread, Needs Reply, first-response, and follow-up timers.
+9. Test a bounce or controlled failure.
+10. Confirm duplicate webhooks do not duplicate messages.
+11. Confirm an unauthorized user cannot view or send restricted correspondence.
+12. Activate closing-party and buyer-package email after the tests pass.
 
-Work:
+### Exit Criteria
 
-- Configure the approved `stonegatehb.com` root sending and receiving domain.
-- Verify SPF and DKIM; add DMARC policy and monitoring.
-- Build the Resend adapter and provider-neutral email interface.
-- Replace Google OAuth connection screens with owner-managed Stonegate aliases.
-- Add signed outbound and inbound webhook routes.
-- Add inbound recovery using the Resend received-email list API.
-- Add attachments, reply threading, idempotency, retry, and out-of-order event handling.
-- Migrate existing email-account records without retaining unused Google credentials.
-- Replace Gmail tests, Render variables, UI labels, worker jobs, and runbooks.
-- Activate the prepared closing-party and buyer-package email workflows.
-- Test using company-controlled addresses before seller or buyer use.
+- Outbound and inbound email remains in one correct Stonegate thread.
+- Every alias routes to the intended people and permissions.
+- Attachments and restricted mail remain protected.
+- Delivery and response problems become visible work.
+- No Gmail or Google OAuth account is required.
 
-Exit criteria:
+## F9. Twilio SMS And Voice Acceptance
 
-- A staff user sends from an approved Stonegate alias inside Inbox.
-- The recipient reply returns to the same Stonegate conversation.
-- Attachments are available only to authorized users.
-- Delivery, delay, bounce, complaint, failure, and suppression states are visible.
-- Duplicate and out-of-order webhooks do not duplicate or regress communication state.
-- Approved closing-party and buyer-package email attach to the correct business records.
-- No Google OAuth secret or Gmail synchronization job is required.
+### Already Implemented
 
-See `RUNBOOKS/resend-email.md`.
-The implementation plan for named, team, restricted, and general-purpose internal mailbox views is
-`PHASE_F8_7_MAILBOX_ROUTING_UPGRADE.md`.
+- Twilio SMS adapter
+- signed inbound and delivery callbacks
+- STOP, START, suppression, consent, idempotency, and delivery state
+- browser Voice tokens and call intents
+- company lines, inbound routing, status history, and missed-call work
+- recording callbacks, private media, disclosure state, retention, and deletion
+- OpenAI transcription, speaker segments, structured notes, and human review
 
-## Phase F9: Twilio Communications Acceptance
+### Current Blocker
 
-Goal: Activate Stonegate's dedicated SMS and Voice resources without sharing another business's
-campaign, number, or webhook.
+Stonegate's dedicated A2P campaign failed its initial provider review and requires correction,
+resubmission, approval, and number attachment. Another company's campaign, number, or webhooks must
+not be used.
 
-Work:
+### Remaining SMS Actions
 
-- Complete A2P approval and attach the dedicated SMS number.
-- Configure the dedicated Messaging Service, sender, and signed webhook URLs.
-- Test outbound, delivered, failed, inbound, `STOP`, `START`, `HELP`, and duplicate callbacks.
-- Configure the Voice API key, TwiML App, dedicated Voice number, and browser identity.
-- Test browser registration, outbound, inbound, no-answer, missed-call task, and routing.
-- Confirm company ownership and reassignment of numbers when staff changes.
-- Activate the dedicated communication workflows after provider acceptance testing.
+1. Resubmit the A2P campaign using the current branded URLs and actual consent flow.
+2. Create or select Stonegate's dedicated Messaging Service.
+3. Attach the dedicated approved 10DLC number.
+4. Enter the values in Render.
+5. Configure the signed inbound and status callbacks.
+6. Test outbound, delivered, failed, inbound, STOP, blocked send, START, HELP, and callback replay.
 
-Exit criteria:
+### Remaining Voice Actions
 
-- Controlled SMS and Voice acceptance suites pass.
+1. Use Stonegate's dedicated Voice number.
+2. Create the API key SID and secret for browser tokens.
+3. Create the TwiML App and configure outbound instructions.
+4. Enter Voice values in Render.
+5. Configure inbound, status, dial-result, recording, and disclosure callbacks.
+6. Test browser registration, outbound, inbound, no-answer, missed-call work, and reassignment.
+7. Keep recording disabled until the Owner approves the disclosure and retention behavior.
+8. When approved, test recording, transcription, review, private access, and deletion.
+
+### Exit Criteria
+
+- Dedicated SMS and Voice acceptance suites pass.
 - Every communication attaches to the correct conversation.
-- Opt-outs and suppression cannot be bypassed.
-- Provider failure produces a visible and recoverable task or event.
-- Recording activation is an explicit Owner and provider-configuration decision.
+- Seller thread history survives staff reassignment.
+- Opt-out and provider failures remain visible and enforceable.
+- Recording activation is an explicit separate decision.
 
-## Phase F10: AI Production Pilots And Controlled Automation
+## F10. AI Production Pilots
 
-Goal: Prove each Copilot with Stonegate work before granting any internal or external authority.
+### Already Implemented
 
-Work:
+- one governed AI runtime and shared specialist portfolio
+- eight staff-facing Copilots in existing workspaces
+- versioned prompts, tools, knowledge, policies, and source evidence
+- golden evaluation library and review workflow
+- structured model runner, routing, limits, costs, and shutdown
+- run, tool, knowledge, review, correction, and promotion history
+- draft-only Prospecting, Lead Manager, Acquisitions, Transaction, Disposition, Finance, Tax,
+  Marketing, and Executive assistance
+- external-action contracts and zero-delivery simulations
 
-- Redact real Lead Manager, call, acquisition, transaction, disposition, finance, marketing, and
-  executive examples.
-- Complete AI2 executive and role-owner signoff.
-- Replay approved cases through the production model route.
-- Complete AI3 monitoring, budget, circuit-breaker, and shutdown acceptance.
-- Run separate draft-only pilots for each Copilot.
-- Measure accuracy, evidence coverage, corrections, critical failures, latency, cost, time saved,
-  and business outcomes.
-- Promote only narrow, reversible internal actions after explicit approval.
-- Keep external actions locked until the exact provider, consent, template, canary, monitoring,
-  and rollback gates pass.
+### Remaining Actions
 
-Exit criteria:
+For each Copilot separately:
 
-- Every promoted capability passes its own dataset and supervised pilot.
-- Staff can correct, reject, pause, and audit every output.
-- No Copilot can approve offers, contracts, buyers, payments, compensation, legal conclusions, or
-  suppression overrides.
-- AI10 live delivery, if pursued, is implemented as a separately reviewed release for one exact
-  action at a time.
+1. Redact representative real Stonegate cases.
+2. Review expected outputs and quality thresholds.
+3. Replay cases through the production model route.
+4. Run a supervised draft-only pilot.
+5. Measure factual accuracy, evidence coverage, acceptance, correction, rejection, critical
+   failures, latency, cost, time saved, and business outcome.
+6. Correct prompts, tools, knowledge, or deterministic workflow gaps.
+7. Keep consequential actions human controlled.
+8. Consider only one narrow reversible internal promotion at a time.
 
-## Ordering Rules
+External sends remain locked until the exact provider, audience, consent, template, monitoring,
+canary, automatic pause, and rollback conditions pass a separate release.
 
-- Complete F1 before broad staff onboarding or live AI pilots.
-- F2 can run while A2P approval and provider accounts are pending.
-- F3 does not block later provider integrations.
-- F4 must pass before document-dependent Transaction Copilot automation.
-- F5 prepares buyer operations; live email delivery waits for F8 and SMS delivery waits for F9.
-- F6 requires stable funded-deal reconciliation and F4 private document storage before retaining
-  sensitive accounting evidence. F6A-F6C can begin before live bank or advertising providers.
-- F7 begins as soon as verified outcomes exist and continues permanently.
-- F8 and F9 intentionally follow the internal operating, compliance, document, buyer, finance, and
-  underwriting work.
-- F10 uses the completed deterministic workflows; it does not replace them.
+### Exit Criteria
 
-## Definition Of Finished
+- Every promoted capability passes its own evaluation and supervised pilot.
+- Staff can review, correct, reject, pause, and audit outputs.
+- No Copilot approves offers, contracts, buyers, payments, journals, compensation, legal
+  conclusions, tax conclusions, or suppression overrides.
+- Any autonomy is limited to one explicitly approved capability and tool.
 
-Stonegate is operationally finished for the first Georgia market when:
+## Definition Of Launch-Ready
 
-1. Production can be monitored, restored, and secured.
-2. Every active role can complete its workflow with a restricted account.
-3. SMS, Voice, and Resend email pass controlled production acceptance.
-4. Outreach and recording policies are approved and enforced.
-5. Contracts, documents, signatures, buyers, funding, and reconciliation have passed end-to-end
-   simulations.
-6. Stonegate's internal books have passed a CPA-reviewed month close and bank reconciliation.
-7. Underwriting performance is measured against verified outcomes.
-8. Copilots have passed supervised pilots before receiving any increased authority.
-9. The Owner has a documented daily, weekly, monthly, and emergency operating process.
+Stonegate is ready for controlled first-market operations when:
+
+1. Actual staff accounts and role acceptance are complete.
+2. The production backup, restore, readiness, and access-revocation checks pass.
+3. Resend email passes controlled acceptance.
+4. SignWell and the actual contract package pass remote and iPad acceptance before live signing.
+5. Dedicated Twilio communications pass after A2P approval, or Stonegate launches with those
+   channels deliberately disabled and a documented manual communication process.
+6. One buyer and disposition simulation reaches reconciliation.
+7. The accounting process has an accepted opening and first close plan.
+8. Underwriting outcomes are recorded from the first live analyses onward.
+9. Copilots remain supervised until their own pilots pass.
+10. The Owner has current user, setup, recovery, and escalation instructions.
+
+Launch-ready does not mean autonomous. It means the human operation can run through one controlled,
+auditable system while unaccepted providers and AI actions remain clearly bounded.

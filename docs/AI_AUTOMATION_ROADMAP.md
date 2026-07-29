@@ -184,7 +184,7 @@ Exit criteria:
 
 Implementation status: complete in code. Production dataset signoff, live model replay, external
 error-monitoring configuration, and the first controlled activation remain operator checkpoints.
-See `PHASE_AI3_PRODUCTION_RUNTIME.md`.
+Runtime behavior and controls are summarized in `AI_AGENTS.md` and `SYSTEM_MAP.md`.
 
 Goal: Connect models to Stonegate through narrow, observable, recoverable controls.
 
@@ -216,8 +216,7 @@ Exit criteria:
 ## Phase AI4: Lead Manager Copilot
 
 Implementation status: **complete in code. AI2 signoff, production model replay, activation, and
-the four-week draft-only pilot remain operator checkpoints.** See
-`PHASE_AI4_LEAD_MANAGER_COPILOT.md`.
+the four-week draft-only pilot remain operator checkpoints.**
 
 Goal: Give the Lead Manager a daily assistant without transferring responsibility for leads.
 
@@ -255,7 +254,7 @@ Exit criteria:
 ## Phase AI5: Prospecting Copilot And Call Quality
 
 Implementation status: **complete in code. Evaluation signoff, activation, and measured pre-call
-and coaching pilots remain operator checkpoints.** See `PHASE_AI5_PROSPECTING_COPILOT.md`.
+and coaching pilots remain operator checkpoints.**
 
 Goal: Help VAs work assigned records consistently and hand off better opportunities.
 
@@ -294,8 +293,7 @@ Exit criteria:
 ## Phase AI6: Acquisitions Copilot
 
 Implementation status: **complete in code. Production model replay, activation, and the measured
-draft-only pilot remain operator checkpoints.** See
-`PHASE_AI6_ACQUISITIONS_COPILOT.md`.
+draft-only pilot remain operator checkpoints.**
 
 Goal: Prepare the closer for seller conversations, appointments, underwriting review, and
 negotiation while keeping price authority human.
@@ -340,8 +338,7 @@ Exit criteria:
 
 Implementation status: **provider-independent foundation complete in code. Object storage,
 automated page extraction, e-signature and email reconciliation, approved production templates,
-production replay, and the measured draft-only pilot remain.** See
-`PHASE_AI7_TRANSACTION_COPILOT.md`.
+production replay, and the measured draft-only pilot remain.**
 
 Goal: Help the Transaction Coordinator move executed contracts to closing without missing
 documents, parties, or deadlines.
@@ -383,7 +380,7 @@ Exit criteria:
 ## Phase AI8: Disposition Copilot And Buyer Intelligence
 
 Status: **Provider-independent foundation complete in code. Provider adapters, production replay,
-and a measured pilot remain. See `PHASE_AI8_DISPOSITION_COPILOT.md`.**
+and a measured pilot remain.**
 
 Goal: Help the Disposition specialist place approved contracts quickly and accurately.
 
@@ -423,8 +420,7 @@ Exit criteria:
 
 Status: **Provider-independent foundation and F6F accounting extension complete in code. The
 60-case Finance evaluation dataset, exact evidence controls, and pilot metrics are implemented.
-Production model replay and measured supervised pilots remain. See
-`PHASE_AI9_MANAGEMENT_COPILOTS.md`.**
+Production model replay and measured supervised pilots remain.**
 
 Goal: Give management dependable financial, growth, and operating intelligence.
 

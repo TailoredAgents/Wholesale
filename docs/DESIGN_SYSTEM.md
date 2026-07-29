@@ -2,11 +2,11 @@
 
 Last updated: July 22, 2026
 
-Status: Phase UX2 foundation complete.
+Status: Implemented design-system foundation.
 
 This document defines the visual and interaction foundation for the Stonegate Operating System.
-It applies to internal OS workspaces. The public seller website receives its own conversion-focused
-application of the brand during Phases UX9 and UX10.
+It applies to internal OS workspaces. The public seller website uses its own conversion-focused
+application of the Stonegate brand.
 
 ## Source Files
 
@@ -98,6 +98,5 @@ Integrations, and Settings. The local section navigation is separate from the gl
 
 ## Migration Boundary
 
-Phase UX2 establishes the system but does not restyle every production page. Phases UX3 through UX8
-will migrate the shell and workspaces in operating priority order. New OS UI created before those
-migrations must use these tokens, components, and page contracts.
+The shared shell and workspaces use this foundation. New OS UI must use these tokens, components,
+and page contracts.

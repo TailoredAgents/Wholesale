@@ -1,11 +1,12 @@
 # Stonegate Operating System User Manual
 
-Last updated: July 24, 2026
+Last verified against the application: July 29, 2026
 
 ## Purpose
 
-This manual explains how Stonegate staff use the public seller website and private Operating
-System from initial outreach through funded closing, reconciliation, and management review.
+This is the canonical non-technical guide for using Stonegate. It explains how employees use the
+public seller website and private Operating System from initial outreach through funded closing,
+accounting, and management review.
 
 The live web application is:
 
@@ -15,26 +16,45 @@ The live web application is:
 The legacy Render URL remains a valid fallback. The `oakwell-*` service names are infrastructure
 identifiers for Stonegate, not a second company or workspace.
 
+### How To Use This Manual
+
+- Start with **Roles And Access** and **First Sign-In** when joining Stonegate.
+- Use **Recommended Daily Routine** for the shortest job-specific checklist.
+- Use the numbered workflow sections when performing a task for the first time.
+- Use **Troubleshooting** before creating duplicate records or repeating a provider action.
+- Words shown in **bold** are labels visible in the Stonegate interface.
+- Text shown in `monospace` is a route, identifier, or technical value that should be entered
+  exactly.
+
+This guide describes both available controls and controls waiting on an external provider. A
+visible button does not prove the provider is active. Read its status message before using it.
+
 ## Current Release Boundary
 
-The core manual workflow is available:
+The complete internal workflow is implemented:
 
 - Public seller intake and consent evidence.
 - Campaigns, imports, screening, calling batches, and VA prospecting.
 - Warm handoff, Lead Desk, qualification, tasks, Inbox, and appointments.
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
-- Contract and transaction coordination.
+- Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
 - Buyers, dispositions, buyer offers, selection, reconciliation, and accounting export.
-- Finance, marketing, operating policy, AI copilots, and AI governance.
+- The internal double-entry accounting ledger, vendor bills, bank reconciliation, statements, CPA
+  export, marketing measurement, operating policy, AI Copilots, and AI governance.
+- Resend email sending, receiving, aliases, mailbox routing, attachments, notifications, and
+  response-time tracking.
 
-The following depend on final provider acceptance or later integrations:
+The following still require external configuration, approval, or production acceptance:
 
-- Dedicated Stonegate Twilio SMS cutover and production acceptance.
+- Controlled Resend production mailbox acceptance.
+- Dedicated Stonegate Twilio A2P approval and SMS production acceptance.
 - Twilio browser Voice and inbound routing activation.
 - Call recording until disclosure and retention policy are approved.
-- Resend operational email migration and production acceptance.
-- Live buyer campaign delivery.
-- E-signature, private object storage, and the complete internal Stonegate Accounting Ledger.
+- SignWell, private production object storage, and approved legal document acceptance.
+- DealMachine buyer-data activation near the first contracted deal.
+- Live buyer-package and advertising conversion delivery.
+- CPA acceptance of opening balances and the first Stonegate month close.
+- Real Georgia underwriting calibration and supervised Copilot pilots.
 - Autonomous AI external delivery.
 
 When a provider is unavailable, Stonegate records and manual workflows still operate. Do not
@@ -52,7 +72,68 @@ interpret a provider-disabled message as lost CRM data.
 6. AI output is a draft or recommendation until a person reviews it.
 7. Offers, contracts, buyer selection, funding, commissions, and external automation remain
    human-controlled.
-8. Never bypass consent, suppression, Do Not Contact, recording, or contact-hour controls.
+8. Honor seller opt-outs, explicit Do Not Contact values, company suppression, and provider
+   restrictions.
+9. Do not mark work complete merely because a draft was created or a provider request was sent.
+10. When responsibility changes, reassign the existing record and create the next dated action.
+
+## Interface Basics
+
+### Page Header
+
+Every workspace begins with:
+
+- the page name
+- a short description
+- a status badge or summary when relevant
+- primary actions such as **Compose**, **Refresh**, a reporting period, or a Copilot launcher
+
+Read warning and unavailable messages before entering data. They normally explain a missing role,
+provider, selected record, or prerequisite.
+
+### Lists And Selected Records
+
+Many pages use a list on the left and selected-record details on the right:
+
+1. Select one row or card.
+2. Review the context before acting.
+3. Use the visible primary action for the next workflow step.
+4. Return to the list without creating a second record.
+
+On mobile, the list, record, and details become separate **Inbox**, **Thread**, **Details**, or
+similar views. Use the mobile view buttons rather than expecting all panels at once.
+
+### Tabs And Segmented Controls
+
+Tabs change the section of the same workspace. They do not create or save a record. Finish or save
+the current form before changing tabs when the page warns about unsaved work.
+
+### Status Messages
+
+- **Ready**, **Current**, or green success text means the current prerequisite passed.
+- **Needs review**, **Pending**, or warning text means a person must inspect or decide something.
+- **Blocked**, **Unavailable**, or red error text means the action was not completed.
+- **Draft** means editable, unapproved work.
+- **Approved** means a named person authorized that version.
+- **Sent** means a provider request was accepted; it does not necessarily mean delivered, signed,
+  replied to, paid, or funded.
+- **Archived** means retained outside normal active views.
+
+### Saving And Refreshing
+
+- Wait for **Saved**, **Sent**, **Updated**, or another success message before leaving.
+- A disabled button usually means a required field, permission, provider, or prerequisite is
+  missing.
+- Use **Refresh** after an external callback or another employee updates the same record.
+- Never double-click a send, import, contract, payment-state, or provider action.
+
+### Money And Dates
+
+- Dollar fields are displayed as dollars; the system stores exact cents.
+- Use the seller's or closing document's exact amount, not a rounded estimate, for contracts,
+  offers, reconciliation, and accounting.
+- Verify timezone and date before scheduling, closing, or posting.
+- A missing due date means the work cannot be managed reliably; add the next dated action.
 
 ## Roles And Access
 
@@ -124,6 +205,7 @@ The desktop sidebar and mobile navigation drawer use five groups.
 ### Control
 
 - **My Setup:** Your role manual, workspace test, and manager approval.
+- **Floating Help button:** Ask how to use or set up Stonegate without leaving the current page.
 - **Operating Model:** Company setup, compensation policy, role credits, history, and market
   launches.
 - **AI Control:** Copilots, runtime, automation contracts, evaluations, traces, and governance.
@@ -158,6 +240,70 @@ records without searching again. On mobile, use the menu button to open the navi
 | Operating Model | `/os/operating-model` |
 | AI Control | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
+
+## Dashboard And Global Controls
+
+### Dashboard
+
+The Dashboard is a command center, not a replacement for the detailed workspaces. It summarizes:
+
+- overdue and urgent seller work
+- unassigned or neglected records
+- today's appointments
+- offer and transaction exceptions
+- pipeline movement
+- role-specific workload
+- Executive Copilot analysis for authorized management users
+
+To use it:
+
+1. Read the primary exception and recommended next action.
+2. Select the linked seller, task, appointment, approval, or downstream record.
+3. Complete the work in its detailed workspace.
+4. Return to Dashboard and refresh when reviewing the updated company state.
+
+The Dashboard may differ by role. A Dispositions employee should not expect the same seller and
+finance information as the Owner.
+
+### Global Search
+
+Use the search control in the OS shell to find a known seller, property, or destination.
+
+1. Enter the seller name, phone, email, property, or workspace name.
+2. Select the exact result.
+3. Confirm the property and contact before editing.
+
+Search before creating a new lead, buyer, vendor, or conversation. This is the fastest way to
+avoid duplicates.
+
+### Recent Destinations
+
+Recent destinations are shortcuts to records and workspaces opened during the current work
+session. They do not change ownership or mark anything read.
+
+### Notifications
+
+Open the notification button in the OS shell to review:
+
+- new assignments and handoffs
+- appointments
+- overdue response or task escalation
+- approval work
+- provider or operating exceptions
+
+Select the notification to open its source record. Marking a notification read only clears the
+alert; it does not complete the underlying task.
+
+### Account Menu
+
+Use the account menu to confirm:
+
+- signed-in employee
+- active Stonegate role
+- current workspace access
+
+Sign out before another person uses a shared computer or iPad. Employees may share company
+hardware, but they must not share Stonegate or Clerk credentials.
 
 ## Recommended Daily Routine
 
@@ -214,7 +360,224 @@ records without searching again. On mobile, use the menu button to open the navi
 5. Record buyer engagement and offers.
 6. Present the primary and backup buyer for human approval.
 
+### Finance And Accounting
+
+1. Open **Finance** and review pending revenue, reconciliation, journals, bills, and bank
+   exceptions.
+2. Confirm source evidence before preparing accounting work.
+3. Review due vendor and commission obligations.
+4. Match imported statement activity only to exact posted cash entries.
+5. Work close-readiness blockers before preparing reports.
+
+### Marketing
+
+1. Open **Marketing** and select the reporting period.
+2. Review funnel loss, spend without leads, and leads without outcomes.
+3. Confirm CRM outcomes before preparing conversion events.
+4. Investigate failed or exhausted provider events.
+5. Review recommendations without allowing the Copilot to change budgets or campaigns.
+
+## Operations Administration
+
+**Operations** is the acquisition-management workspace. It is normally used by the Owner,
+Administrator, or Acquisitions Manager rather than a VA or restricted employee.
+
+Its tabs are:
+
+- **Calendar**
+- **Markets & campaigns**
+- **Calling lists**
+- **Team**
+- **Data quality**
+- **Follow-up plans**
+
+### Calendar Tab
+
+Use this summary to review upcoming appointments, unread alerts, saved views, calling progress,
+and duplicate-review count.
+
+- Select **Open** on an alert to perform the underlying work.
+- Select **Mark read** only after understanding the alert.
+- Create a saved view for a repeated appointment, calling-list, lead, or Inbox filter.
+
+### Create A Market
+
+1. Open **Markets & campaigns**.
+2. Under **Create market**, enter a clear name such as `Atlanta Metro`.
+3. Enter a stable lowercase code such as `atlanta-metro`.
+4. Confirm the two-letter state and timezone.
+5. Select **Create market**.
+
+Do not create a second market just to represent a neighborhood or employee. Use territories and
+teams inside the existing market.
+
+### Create A Territory
+
+1. Select the market.
+2. Select the assigned team when known.
+3. Enter a territory name and stable code.
+4. Enter counties and ZIP codes as comma-separated values.
+5. Save the territory.
+
+Territory information supports assignment and closer dispatch. It is not a substitute for
+confirming the actual property address.
+
+### Create An Outreach Campaign
+
+1. Enter the campaign name and stable code.
+2. Select the market and optional territory.
+3. Select the real channel: cold call, cold email, direct mail, paid search, paid social, organic,
+   referral, or other.
+4. Select the accountable owner.
+5. Enter start date and initial budget.
+6. Save the campaign.
+7. Use **Campaigns** for detailed imports, costs, batches, and reporting.
+
+### Add A Prospect Manually
+
+Use manual prospect entry only when a pre-lead record is not coming from a CSV:
+
+1. Select the campaign.
+2. Enter owner name and phone.
+3. Add email when known.
+4. Select the assigned caller or leave unassigned.
+5. Add the source record identifier when one exists.
+6. Select **Add prospect**.
+
+A prospect is not a CRM lead. It becomes a lead only through genuine seller interest and the warm
+handoff workflow.
+
+### Calling Lists
+
+The Operations calling-list tool supports existing CRM leads. The Campaigns and Prospecting
+workflows are preferred for imported cold prospect batches.
+
+1. Create a list and choose its default caller.
+2. Select the list.
+3. Add a seller and optional different caller.
+4. Record the actual disposition and notes after each attempt.
+5. Select a handoff owner only when responsibility is genuinely changing.
+
+### Add A User
+
+Adding a Stonegate user does not create the person's Clerk password. It authorizes the matching
+individual identity after that person signs in.
+
+1. Open **Team**.
+2. Under **Add individual login**, enter the person's real name.
+3. Enter the exact email they will use with Clerk.
+4. Select the minimum job role needed now.
+5. Select **Create user**.
+6. Have the employee sign in with their own Clerk account.
+7. Verify navigation and restricted access.
+
+Use **Deactivate** immediately when a person leaves or should lose access. Reassign their work.
+Use **Reactivate** only after management confirms the person should return.
+
+### Create And Staff A Team
+
+1. Enter the team name.
+2. Select its function.
+3. Select a manager when known.
+4. Create the team.
+5. Add individual active users as **Member** or **Manager**.
+
+Team membership controls workload, mailbox, and notification behavior in supported workflows. It
+does not automatically grant every permission.
+
+### Data Quality
+
+Select **Scan active leads** to prepare possible duplicate candidates.
+
+1. Compare the two sellers, contacts, and properties.
+2. Choose the correct primary record.
+3. Merge only when they represent the same seller opportunity.
+4. Keep both records when identity is uncertain.
+
+A merge archives the secondary record and preserves evidence. Do not use duplicate merge to hide
+bad data or combine unrelated family members.
+
+### Follow-Up Plans
+
+Use a follow-up plan for a repeatable sequence of internal tasks or human-approved message drafts.
+
+1. Create or select the plan.
+2. Review each step, delay, channel, and responsible role.
+3. Enroll the correct lead.
+4. Confirm the enrollment creates the intended work.
+5. Stop or correct the plan when the seller's status changes.
+
+Follow-up plans do not authorize messages that the employee or provider is otherwise prohibited
+from sending.
+
+## My Setup And Role Acceptance
+
+Open **My Setup** after first sign-in, after a role change, or when a manager assigns a new manual.
+This page shows your name, assigned roles, and how many role acceptances are approved.
+
+For each assigned role:
+
+1. Read the displayed role standards.
+2. Open the workspaces used in that job.
+3. Test normal actions with a training record. Examples include opening an assigned lead, reviewing
+   a conversation, creating a follow-up task, or opening a transaction checklist.
+4. Confirm restricted workspaces are not visible. A VA, for example, should not see Finance,
+   contracts, buyer records, or unrelated seller correspondence.
+5. Return to **My Setup**.
+6. In **What did you test?**, describe the pages and actions you verified.
+7. Add any problem or question under **Notes for your manager**.
+8. Select **Submit workspace test**.
+9. Wait for manager approval before working live records in that role.
+
+Possible states are:
+
+- **Pending:** The role has been assigned but the workspace test has not been submitted.
+- **Submitted:** The employee completed the test and a manager must review it.
+- **Approved:** The manager accepted the role setup.
+- **Rejected:** Correct the stated problem, repeat the test, and resubmit.
+
+My Setup does not grant access by itself. The Owner controls the actual user role and permissions
+from **Operations > Team** and assigns role manuals from **Operating Model > Company setup**.
+
+## Stonegate Help
+
+Select the blue chat bubble at the bottom-right of any OS page when you need instructions.
+
+1. Enter a question about a page, button, setup step, role, or workflow.
+2. Select the arrow button or press Enter.
+3. Read the plain-language answer.
+4. Select the source-count button under the answer.
+5. Expand a source to see the exact document, heading, and excerpt.
+6. Use the back arrow to return to the conversation.
+7. Close the panel to continue working on the same page.
+
+Suggested questions change with your role. Help also filters restricted setup, finance,
+underwriting, contract, disposition, and administrative topics by your current Stonegate role.
+It will direct you to the responsible person instead of explaining a restricted action.
+
+Help summarizes approved manuals when OpenAI is available. If OpenAI is unavailable, it returns
+the strongest matching source excerpt. It cannot read a seller's live record, send communications,
+change a stage, approve an offer, post accounting, or perform any other operating action.
+
 ## End-To-End Operating Workflow
+
+The normal deal path and its completion evidence are:
+
+| Stage | Primary workspace | The stage is complete when |
+| --- | --- | --- |
+| Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
+| Warm handoff | Prospecting, Lead Desk | The Lead Manager accepted a sufficiently documented handoff |
+| Qualification | Lead Desk, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
+| Appointment | Calendar, Field Operations | The meeting has an owner, time, location, preparation, and recorded outcome |
+| Underwriting | Lead record, Underwriting | Comps and repairs were human-reviewed, a version was saved, and warnings were understood |
+| Negotiation | Lead record, Approvals | Current offer authority exists and each seller response is recorded |
+| Contract | Field Operations, Transactions | The exact approved agreement is fully signed and the completed PDF is retained |
+| Closing coordination | Transactions | Checklist, parties, dates, title issues, documents, and funding evidence are complete |
+| Buyer placement | Dispositions, Buyers | Package is approved, offers are compared, and primary and backup selections are approved |
+| Funded deal | Transactions, Dispositions, Finance | Cleared revenue, deductions, role credits, commissions, and accounting evidence reconcile |
+
+Do not advance a record merely to make the pipeline look current. Advance it when the completion
+evidence in this table exists.
 
 ## 1. Public Seller Intake
 
@@ -347,9 +710,10 @@ Copilot review does not automatically change lead fields or send the draft.
 
 Open **Inbox**. The three-panel layout is:
 
-- Left: conversation views and seller threads.
-- Middle: one chronological timeline and channel composer.
-- Right: seller, property, assignment, qualification, tasks, notes, and AI summary.
+- Left: conversation and mailbox views.
+- Middle: one chronological timeline and the channel composer.
+- Right: contact or mailbox context, property, qualification, next action, owner, watchers, and
+  handoff.
 
 Conversation views:
 
@@ -360,6 +724,12 @@ Conversation views:
 - **Appointments**
 - **Unread**
 
+Email mailbox groups appear below the general views when the employee can access them:
+
+- **My addresses:** named addresses owned by or granted to the employee.
+- **Team inboxes:** department or team addresses the employee may use.
+- **Restricted:** private addresses such as accounting that require exact access.
+
 Composer modes:
 
 - **SMS**
@@ -367,11 +737,17 @@ Composer modes:
 - **Call**
 - **Note**
 
+The header shows the number of conversations needing replies, overdue, and unread. **Compose**
+starts a new company email. **Email ready** opens sender settings or owner administration.
+**Enable calling** initializes browser Voice when it is configured. **Refresh** reloads
+conversations and provider state.
+
 ### Work A Conversation
 
 1. Select the conversation.
 2. Read the complete timeline before responding.
-3. Confirm the assigned owner, stage, consent, suppression, and next task.
+3. Confirm the people, receiving mailbox, assigned owner, stage, consent, suppression, and next
+   task.
 4. Select the correct composer.
 5. Write or review the message.
 6. Send only when the eligibility indicator allows it.
@@ -382,20 +758,171 @@ Composer modes:
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
 
-For email, select only the Stonegate From address appropriate to the conversation. The system
-shows only addresses authorized for your account and applies that address's approved signature.
-Delivery status and any retained provider failure appear on the timeline message.
+### Understand Response State
 
-Owners can click the email status control to open **Email administration**:
+- **Needs reply** means the newest external communication has not received an appropriate company
+  response.
+- **Due soon** means the configured response target is approaching.
+- **Overdue** means the response target passed.
+- **Waiting on contact** means Stonegate sent the latest message and no team response is currently
+  required.
+- **Unread** is personal notification state; another teammate reading the thread does not
+  necessarily clear it for you.
 
-- **Senders** controls company addresses, owners, teams, signatures, defaults, and direct sender
-  or watcher access.
-- **Routing** lists inbound email that could not be matched safely. Review the sender and subject,
-  select the correct seller conversation, and assign it. Never guess when the correct lead is not
-  clear.
+Assignment, watchers, team membership, and mailbox grants determine who receives notifications.
+When an unanswered thread reaches the owner-escalation threshold, the Owner receives an alert.
+Replying or otherwise resolving the wait state clears the associated response alert.
+
+### Send An Email In An Existing Thread
+
+1. Select the conversation.
+2. Select **Email**.
+3. Choose the appropriate authorized **Stonegate sender**.
+4. Confirm the recipient shown by the readiness message.
+5. Enter the subject.
+6. Select an approved template when useful.
+7. Write and verify the body.
+8. Open email settings to add CC, BCC, confirm the signature, or save the current subject and body
+   as a reusable template.
+9. Attach up to the allowed number and size of files.
+10. Select **Send email** once.
+11. Confirm the timeline shows the outgoing message and provider status.
+
+The system shows only From addresses authorized for the signed-in employee. Selecting an alias
+applies its approved signature. A provider **sent** state does not prove delivery; review delayed,
+delivered, bounced, complained, failed, or suppressed state when shown.
+
+### Compose A New Company Email
+
+Use **Compose** when Stonegate needs to email a closing contact, buyer, vendor, contractor, or
+other person without an existing conversation. Do not create a fake property lead.
+
+1. Select **Compose** in the Inbox header.
+2. Select the correct **From** address.
+3. Enter one or more **To** addresses separated by commas or semicolons.
+4. After entering at least two characters, select a known Stonegate contact suggestion when it
+   matches.
+5. Enter **Contact name** when useful for a new general correspondent.
+6. Add CC or BCC only when the recipients should receive the same business correspondence.
+7. Enter a specific subject.
+8. Apply a template when appropriate.
+9. Write and verify the message.
+10. Add attachments.
+11. Select **Send** once.
+
+Stonegate creates a general company conversation and opens it in Inbox. Future replies should
+return to that thread through the selected receiving alias. General conversations support email
+only until they are deliberately connected to another business context.
+
+### Use Templates And Signatures
+
+- A template supplies reusable subject and body text.
+- A signature belongs to the selected Stonegate sender.
+- Review every template before sending; placeholders are not proof that the current recipient or
+  record is correct.
+- Saving a current draft as a template does not send the draft.
+- Changing a template or signature does not rewrite messages already sent.
+
+### Add An Internal Note
+
+1. Select **Note**.
+2. Write information intended only for authorized Stonegate users.
+3. Select **Log note**.
+
+Do not place secrets, full bank information, tax identifiers, or unrelated private data in an
+internal note. Use the restricted document workflow for sensitive evidence.
+
+### Log An External Call Or SMS
+
+When a provider is not active but an approved employee uses a manual phone:
+
+1. Select **Call** or **SMS**.
+2. Select **Log external** or the correct inbound/outbound direction.
+3. Enter what happened, not a planned script.
+4. Save the communication.
+5. Create the next task.
+
+Logging a communication does not send a message or place a call.
+
+### Use Browser Calling
+
+When Twilio Voice is active:
+
+1. Select **Enable calling** and allow microphone access.
+2. Open the seller conversation.
+3. Select **Call > Browser**.
+4. Confirm the number and Stonegate line.
+5. Select **Call seller**.
+6. Use the call dock to mute or end the call.
+7. For inbound calls, use the answer or decline icons.
+8. Record the outcome and next action.
+
+Recording is a separate setting. A working browser call does not imply recording is enabled.
+
+### Review A Call Recording And AI Notes
+
+When recording and transcription are active:
+
+1. Open the call in the timeline.
+2. Play the recording only when your role permits it.
+3. Compare the transcript and structured notes with the audio.
+4. Review proposed motivation, timeline, condition, occupancy, asking price, commitments, and
+   follow-up.
+5. Select only accurate empty CRM fields to fill.
+6. Accept, correct, or reject the draft.
+7. Keep the human-reviewed decision in the audit history.
+
+Early audio deletion requires a reason. Deleting audio does not erase the call, transcript review,
+or audit evidence.
+
+### Change Ownership Or Add Watchers
+
+The right panel shows the current owner and queue.
+
+To hand off a seller conversation:
+
+1. Select the new owner.
+2. Select the correct queue: VA Prospecting, Qualified, Appointment Set, or Acquisitions
+   Follow-Up.
+3. Enter a clear reason.
+4. Select **Update ownership**.
+5. Confirm the thread remains visible to the correct team.
+
+Watchers receive visibility and notifications but do not become responsible for the next outcome.
+
+### Email Administration For Owners
+
+Authorized owners select **Email ready** and open **Email administration**.
+
+**Senders** controls:
+
+- company address and display name
+- named, department, or contractor type
+- purpose
+- active, reserved, or disabled status
+- owner and assigned team
+- inbound and outbound enablement
+- default sender
+- signature
+- direct sender or watcher grants
+
+Use **sender** access when the person may send from the address. Use **watcher** access when the
+person should receive notifications and visibility without sending authority.
+
+**Routing** contains inbound messages Stonegate could not match safely:
+
+1. Review sender, recipients, subject, time, reason, and candidate threads.
+2. Search existing records separately when needed.
+3. Select the exact conversation only when identity is clear.
+4. Resolve the exception.
+5. The worker places the message into the selected thread.
+
+Never guess. Leave ambiguous correspondence in review until the correct person or business record
+is confirmed.
 
 If SMS, Voice, or email reports that it is not configured, use the approved manual contact process
-and log the communication. Do not put another company's credentials or numbers into Stonegate.
+and log the communication. Do not put another company's credentials, campaign, domain, or numbers
+into Stonegate.
 
 ## 6. Work Queue
 
@@ -566,19 +1093,82 @@ Confirm:
 ### Run Market Analysis
 
 1. Open the lead's **Underwriting** tab.
-2. Validate the property address.
-3. Open the comp analysis control.
-4. Enter optional repair and renovation details that improve the estimate.
-5. Run the market analysis.
-6. Review included and excluded comparables.
-7. Check distance, recency, property similarity, condition, price-per-square-foot support, and
-   outlier reasons.
-8. Review ARV, as-is value, repair range, offer scenarios, confidence, and warnings.
-9. Save a new underwriting version when assumptions change.
-10. Compare versions before requesting approval.
+2. Confirm the property panel contains the correct complete address and known subject facts.
+3. Open **Comp setup**.
+4. Choose **Repair scope**: Light cosmetic, Moderate renovation, Heavy renovation, or Structural /
+   full rebuild.
+5. Choose a remodel estimate method:
+   - **System:** Use Stonegate's size and scope estimate.
+   - **Total:** Enter one expected base remodel amount.
+   - **Itemized:** Enter costs by repair category. After an initial analysis, **Apply preset** can
+     divide the system estimate across common categories for editing.
+6. When using Total or Itemized, set the contingency reserve and explain the estimate source under
+   **Repair details and source notes**.
+7. Apply an existing saved repair estimate when one has already been prepared for this property.
+8. Select **Run complete analysis**.
+
+Stonegate first requests the exact address from RentCast. If that lookup fails or returns the wrong
+property, Stonegate tries normalized address variations and a matching property record. If the
+provider has a matching subject but no AVM, the system can still use its recorded-sale evidence.
+The **Subject match** status and resolved address show which property was used. Stop and correct the
+record if that address is not the subject property.
+
+When controlled public research is enabled, Stonegate may also use bounded internet search to
+corroborate the exact address, property facts, prior sales, permits, and visible condition clues.
+This research:
+
+- Shows its sources and conflicts in **Secondary public evidence**.
+- Cannot provide ARV, repair cost, offer amount, owner identity, or private contact information.
+- Does not replace recorded sales or human comp review.
+- May be unavailable without preventing the primary analysis from running.
+
+### Review The Result
+
+Review the result from top to bottom:
+
+1. Confirm **Subject match** and the resolved address.
+2. Confirm **Core valuation evidence** contains usable recorded sales.
+3. Open **Why this confidence score** and read every factor.
+4. Open **Secondary public evidence** and investigate any conflict.
+5. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
+   ceiling, and opening recommendation.
+6. Read every item under **Resolve before approval**.
+7. Review each comparable:
+   - Confirm it is a real recorded sale.
+   - Compare property type, location, distance, sale date, size, bedrooms, bathrooms, and price per
+     square foot.
+   - Mark **Condition at sale** as As-is, Renovated, or Unknown based on evidence.
+   - Include or exclude it and choose the truthful **Decision reason**.
+   - Adjust **Evidence weight** only when the record deserves more or less influence.
+8. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
+9. Repeat until the included set and assumptions reflect the evidence.
+10. Create a manual underwriting version only when an authorized person must preserve a separate
+    judgment or scenario.
+11. Compare saved versions before requesting offer approval.
 
 The range is decision support, not an appraisal or guaranteed offer. A result remains visible when
 renovation status is unconfirmed, but confidence and warnings should affect judgment.
+
+**Preliminary ARV** means the available recorded sales have not been verified as renovated
+comparables. **Conservative ARV** means renovated recorded-sale evidence supports the range. The
+provider AVM is shown as a screen but is not used as offer math when recorded-sale support is
+insufficient.
+
+### Use The Result In A Seller Meeting
+
+On the iPad, open **Field Operations > Meetings** and select the appointment. Use the market
+evidence view to discuss the property and the reasons behind the range. Keep these numbers
+distinct:
+
+- **ARV:** Supported resale value after the assumed renovation.
+- **Repairs:** The expected renovation budget plus contingency.
+- **Buyer maximum:** What the best modeled investor strategy may support.
+- **Seller contract ceiling:** Stonegate's maximum under the current evidence and economics.
+- **Opening recommendation:** A negotiation starting point, not permission to exceed the approved
+  ceiling.
+
+Record new condition facts from the walkthrough, refresh the analysis when they materially change
+repairs or comp selection, and obtain new approval when the governing underwriting version changes.
 
 ### Reports
 
@@ -590,6 +1180,9 @@ After a completed analysis:
 
 Review every report before printing or sharing. Confirm seller, property, comparable, repair, and
 offer information is current.
+
+The PDF buttons are available even when renovation status is not confirmed. Warnings and
+preliminary labels remain in the report so the reviewer can see what still needs verification.
 
 ### Calibration
 
@@ -664,7 +1257,7 @@ provider status, completed PDF, and audit trail.
 
 Until production SignWell acceptance is complete, use the controlled manual execution workflow.
 Never mark a contract executed merely because a draft was approved or an email was sent.
-See `SIGNWELL_LAUNCH_RUNBOOK.md` for account setup and production acceptance.
+See `SETUP_REFERENCE.md` for SignWell account setup and production acceptance.
 
 ### Closing
 
@@ -728,10 +1321,29 @@ Open **Dispositions** after the seller contract is executed. Tabs are:
 
 ### Buyers
 
-1. Generate ranked matches.
+Use Stonegate's existing Buyer CRM first:
+
+1. Select **Refresh buyer ranking** after the package is approved.
 2. Review market, property, capacity, reliability, proof-of-funds, and evidence.
 3. Exclude ineligible or unsupported buyers.
-4. Record engagement and access activity.
+4. Upload and verify proof of funds when required.
+5. Record inquiries, showings, follow-up, and deposit activity.
+
+When DealMachine is configured, **External buyer intelligence** adds deal-specific candidates:
+
+1. Confirm the provider message says live search is available.
+2. Select **Find investors**.
+3. Review the ranked candidates, observed purchase count, no-mortgage signal, last purchase date,
+   market, property type, and available contact information.
+4. Check only the candidates worth keeping.
+5. Select **Import selected**.
+6. Review the imported buyer in the Buyer CRM and complete missing criteria or proof information.
+7. Refresh the case's buyer ranking.
+
+The search does not send outreach and does not automatically add every result. Candidates remain
+outside the Buyer CRM until a person approves their import. If DealMachine is not configured,
+maintain buyers manually and activate the provider when Stonegate is close to needing live
+disposition coverage.
 
 ### Offers
 
@@ -745,7 +1357,9 @@ Generate draft package guidance, buyer ranking explanation, outreach copy, and o
 Review restricted economics carefully. Accept, correct, or reject the draft. The Copilot does not
 send campaigns, select the buyer, or change deal economics.
 
-Live campaign delivery remains blocked until the approved provider adapter is activated.
+**Approve simulated release** records which approved recipients would receive the package but sends
+no messages. Live campaign delivery remains blocked until the approved provider adapter is
+activated and accepted.
 
 ### Reconciliation
 
@@ -1150,17 +1764,75 @@ Do not override suppression or use another business's Messaging Service.
 
 ### Voice, Recording, Or Email Is Unavailable
 
-These providers require final activation. Log approved manual communication in Inbox until the
-provider passes acceptance. Recording must remain off until disclosure and retention policy are
-approved.
+Read the provider status in the Inbox header first.
+
+- **Email ready** means Resend sending and inbound routing are available.
+- **Email unavailable** or a setup message means an owner must inspect the Resend connection,
+  domain, sender alias, webhook, or recipient route.
+- **Enable calling** means browser voice is not currently active for this user or environment.
+- SMS and voice remain unavailable until their Twilio provider settings and number routing pass
+  acceptance.
+
+Log approved communication manually in Inbox when a provider is unavailable. Recording must remain
+off until disclosure, access, retention, and deletion settings are approved.
+
+### An Email Went To Spam
+
+- Confirm the sender uses the verified `stonegatehb.com` domain.
+- Confirm SPF and DKIM remain verified in Resend and DMARC is published for the domain.
+- Use a real display name, clear subject, normal text, and a complete signature.
+- Avoid test-like content, excessive links, all caps, and repeated identical messages.
+- Ask the recipient to mark a legitimate message as not spam.
+- Review Resend delivery events. Stonegate cannot force a recipient's mailbox provider to place a
+  message in the inbox.
+
+### An Email Reply Is Missing Or In The Wrong Inbox
+
+- Open **Inbox** and check **My addresses**, **Team inboxes**, **Restricted**, **Unread**, and
+  **Needs Reply**.
+- Search by sender address, subject, or contact name.
+- Confirm the recipient replied to the same Stonegate address that sent the message.
+- Owners should open **Senders** and confirm that address has inbound enabled and the intended
+  owner or team.
+- Open **Routing** and verify the inbound rule.
+- Check Resend webhook delivery and API logs before creating another conversation.
+
+### Compose Email Is Unavailable
+
+- Confirm email status is ready.
+- Confirm your role has global email compose permission.
+- Confirm at least one active outbound sender is granted to you or your team.
+- Ask the Owner to inspect **Inbox > Senders** rather than creating a fake property lead.
 
 ### Underwriting Analysis Fails
 
 - Confirm the lead has a complete address.
-- Validate the property.
-- Confirm required subject facts.
+- Confirm the subject facts and property record are correct.
+- Read **Subject match** and any address attempts when a partial result exists.
+- Correct a misspelled street, city, state, or ZIP before retrying.
 - Check RentCast configuration and quota.
-- Review the exact API error before creating another analysis.
+- A missing saved analysis appears as `404` when the page first loads and is normal.
+- A failed provider request may appear as `502`; read the structured warning to distinguish an
+  address-not-found response from quota, credentials, timeout, or provider outage.
+- Do not keep generating analyses for the same incorrect address.
+
+### SignWell Or Contract Controls Are Unavailable
+
+- Confirm an approved contract package exists for the selected transaction.
+- Confirm the exact package version has not been replaced by a newer draft.
+- In **Transactions > Contract**, inspect Account and Webhook status.
+- Owners can use **Connect SignWell** or **Verify connection**.
+- Confirm every recipient has a valid email and the assigned signer role is correct.
+- Use the controlled manual process until provider acceptance is complete. Do not mark a draft as
+  executed.
+
+### DealMachine Buyer Search Is Unavailable
+
+- This is expected until Stonegate purchases and configures DealMachine API access.
+- Continue using the internal Buyer CRM and manually maintained criteria.
+- When configured, confirm the provider panel says live search is enabled before selecting **Find
+  investors**.
+- Provider candidates are not buyers in Stonegate until a person selects and imports them.
 
 ### PDF Buttons Are Missing
 
@@ -1234,19 +1906,50 @@ When a person leaves, deactivate the Stonegate user immediately. Reassign owned 
 tasks, appointments, leads, transactions, and disposition cases. Do not delete the user or their
 history.
 
-## 25. Related Documentation
+## 25. Plain-Language Glossary
+
+| Term | Meaning |
+| --- | --- |
+| Active lead | A seller opportunity that still requires work |
+| ARV | Expected resale value after the assumed renovation |
+| As-is value | Supported value in the property's present condition |
+| Assignment fee | Revenue Stonegate earns by assigning its contract rights to a buyer |
+| Attribution | Evidence showing which source, campaign, or advertisement produced a lead |
+| Buyer maximum | Highest modeled purchase amount a buyer strategy may support |
+| Campaign | A tracked outreach or advertising effort |
+| Closing evidence | Documents or provider records proving the deal actually funded |
+| Comp | A comparable recorded property sale used as market evidence |
+| Conversation owner | Person responsible for the next response or outcome |
+| Copilot | AI assistance that drafts or recommends work for a person to review |
+| Disposition | Selling or assigning the contracted deal to an investor buyer |
+| Evidence weight | How much influence an included comp receives in the calculation |
+| Handoff | Transfer of responsibility while preserving the same record and history |
+| Lead owner | Person accountable for the seller's next outcome |
+| MAO | Maximum allowable offer under the selected underwriting assumptions |
+| Needs Reply | A conversation where Stonegate owes the next external response |
+| Next action | Specific work that must happen next, with an owner and due time |
+| Proof of funds | Evidence that a buyer can fund the proposed purchase |
+| Recorded sale | A completed property transfer used as primary valuation evidence |
+| Seller contract ceiling | Maximum acquisition price supported by current approved economics |
+| Suppression | A company record that blocks prohibited contact |
+| Transaction | The coordinated contract-to-close record |
+| Underwriting version | A saved set of valuation, repair, and offer assumptions |
+| Watcher | Person who follows a conversation without becoming its owner |
+
+## 26. Related Documentation
 
 - `LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for the Lead Manager role.
 - `STAFF_ROLE_MANUALS.md`: plain-language standards for every operating role.
-- `PHASE_F2_COMPANY_SETUP.md`: company setup and role-acceptance workflow.
+- `DOCUMENTATION.md`: documentation authority and source priority.
+- `SYSTEM_MAP.md`: complete as-built product, workflow, data, and integration map.
+- `UI_CONTROL_REFERENCE.md`: every production page's meaningful buttons, fields, effects,
+  prerequisites, disabled states, and expected results.
 - `OPERATING_MODEL.md`: roles, handoffs, compensation, and operating policy.
-- `WORKFLOWS.md`: concise system workflow sequence.
-- `CURRENT_STATE.md`: delivered functionality and known limits.
-- `ROADMAP.md`: completed phases and remaining production checkpoints.
 - `FINISHING_ROADMAP.md`: canonical sequence for production completion and provider activation.
-- `UNDERWRITING.md` and `UNDERWRITING_COMP_METHOD.md`: valuation and offer methodology.
+- `SETUP_REFERENCE.md`: local, production, domain, credential, webhook, and provider setup.
+- `SETUP_MANUAL.md`: nontechnical owner guide for accounts, providers, staff, acceptance, and
+  maintenance.
+- `UNDERWRITING_COMP_METHOD.md`: valuation and offer methodology.
 - `AI_AGENTS.md`: AI architecture and authority.
 - `AI_AUTOMATION_ROADMAP.md`: AI production acceptance sequence.
-- `INTEGRATIONS.md`: provider status and boundaries.
 - `SECURITY_COMPLIANCE.md`: security, consent, communications, and retention controls.
-- `TESTING.md`: release and provider acceptance checks.

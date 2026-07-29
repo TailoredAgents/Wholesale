@@ -261,8 +261,8 @@ rollback, and prohibited-action policy.
 
 Owners can approve the control contract, run deterministic readiness simulations, and pause or
 resume simulations from `/os/ai`. Every attempt explicitly records that no external delivery was
-attempted. There is no activation or delivery endpoint in this release; see
-`PHASE_AI10_CONTROLLED_AUTOMATION.md`.
+attempted. There is no activation or delivery endpoint in this release. The remaining promotion
+sequence is defined in `AI_AUTOMATION_ROADMAP.md`.
 
 ## Evaluation And Promotion
 

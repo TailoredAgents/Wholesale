@@ -1,6 +1,6 @@
 # Stonegate Lead Manager User Manual
 
-Last updated: July 23, 2026
+Last verified: July 29, 2026
 
 ## Who This Guide Is For
 
@@ -9,6 +9,9 @@ seller needs, deciding the correct next step, and scheduling qualified appointme
 
 You do not need technical knowledge to use Stonegate. The instructions below use the same names
 that appear on the screen.
+
+This is the short daily guide for the Lead Manager role. Use `USER_MANUAL.md` for complete Inbox,
+Calendar, administration, provider-status, and troubleshooting instructions.
 
 ## Your Job In One Sentence
 

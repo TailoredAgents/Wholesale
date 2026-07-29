@@ -61,7 +61,7 @@ separate files and should be attached or delivered when applicable.
 2. Create each document type from a controlled Stonegate transaction.
 3. Inspect the generated PDF, populated data, signer names, and signature locations.
 4. Keep `ESIGN_TEST_MODE=true` and complete the acceptance steps in
-   `docs/SIGNWELL_LAUNCH_RUNBOOK.md`.
+   `docs/SETUP_REFERENCE.md`.
 5. Record the exact contract package version used on every transaction.
 
 Never rewrite a package after approval or signing. Create a new package version.

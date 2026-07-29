@@ -12,33 +12,30 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   the Render worker service.
 - `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
 - Clerk authentication and organization-scoped RBAC are live.
-- CRM, shared inbox, underwriting V2.1, reports, transactions, buyers, finance, marketing, and AI
+- CRM, shared inbox, underwriting V2.2, reports, transactions, buyers, finance, marketing, and AI
   control foundations are implemented.
-- The branded web domain is live. Stonegate's dedicated A2P Campaign requires corrected evidence
-  and resubmission; final Twilio SMS sender cutover and Voice acceptance remain pending.
-  Resend F8.1-F8.5 provider-neutral foundation, outbound delivery, signed receiving, durable
-  attachments, recovery, authorized Inbox senders, owner administration, and routing review are
-  complete; provider setup and acceptance remain.
+- The branded web domain is live. Stonegate's dedicated A2P Campaign requires resubmission and
+  approval; final Twilio SMS and Voice acceptance remains pending.
+- Resend sending, receiving, aliases, shared mailboxes, routing, attachments, notifications, and
+  response management are implemented and configured; controlled production acceptance remains.
 
 Start with:
 
+- `docs/DOCUMENTATION.md`: documentation authority, status vocabulary, and maintenance rules.
+- `docs/SYSTEM_MAP.md`: detailed as-built map of every major product surface, workflow, data domain,
+  integration, and remaining production boundary.
+- `docs/UI_CONTROL_REFERENCE.md`: page-by-page reference for buttons, fields, effects,
+  prerequisites, disabled states, and expected results.
 - `docs/USER_MANUAL.md`: detailed role-based instructions for using the public site and private OS.
+- `docs/SETUP_MANUAL.md`: nontechnical account, provider, staff, launch, and maintenance guide.
 - `docs/LEAD_MANAGER_USER_MANUAL.md`: plain-language daily guide for Stonegate Lead Managers.
-- `docs/FINISHING_ROADMAP.md`: canonical remaining sequence from production safety through AI pilots.
-- `docs/PHASE_F8_7_MAILBOX_ROUTING_UPGRADE.md`: staged plan for named, team, restricted, and
-  general-purpose email inside the existing shared Inbox.
+- `docs/SETUP_REFERENCE.md`: consolidated local, Render, domain, credential, webhook, and provider
+  setup reference without secret values.
+- `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
-- `docs/CURRENT_STATE.md`: delivered capabilities, live environment, pending setup, and limits.
-- `docs/PRODUCTION_CREDENTIALS_CHECKLIST.md`: canonical provider-account and Render-variable
-  inventory without secret values.
-- `docs/ROADMAP.md`: ordered development phases after provider setup.
-- `docs/EXPERIENCE_UPGRADE_ROADMAP.md`: ordered OS organization, aesthetics, and public conversion upgrade phases.
-- `docs/UX1_INFORMATION_ARCHITECTURE_AUDIT.md`: approved OS routes, labels, role visibility, and handoffs.
 - `docs/DESIGN_SYSTEM.md`: shared OS tokens, components, states, and responsive page contracts.
-- `docs/UNIFIED_BUILD_PLAN.md`: long-term product scope and quality standard.
 - `docs/AI_AGENTS.md`: agent architecture, portfolio, model routing, tools, memory, and autonomy policy.
 - `docs/AI_AUTOMATION_ROADMAP.md`: ordered path from the current control plane to measured production automation.
-- `docs/INTEGRATIONS.md`: provider status and system boundaries.
 
 ## Prerequisites
 
@@ -163,12 +160,12 @@ API_BASE_URL='https://api.stonegatehb.com' \
 WEB_BASE_URL='https://oakwell-web.onrender.com' npm run ops:smoke
 ```
 
-See `docs/PHASE_1_RELIABILITY.md` before running a restore drill or configuring failure alerts.
+See `docs/SETUP_REFERENCE.md` before running a restore drill or configuring failure alerts.
 
-`npm run lint:web` is not currently part of CI because ESLint hangs locally before diagnostics.
-Next.js web builds currently skip build-time TypeScript validation because Clerk dependency type
-checking stalls locally; API lint, API typecheck, API tests, and the web production compile remain
-the required gates.
+Web lint currently runs as a local release check rather than in CI. Next.js web builds skip
+build-time TypeScript validation because Clerk dependency type checking has stalled in this
+environment; API lint, API typecheck, API tests, web lint, and the web production compile remain
+the working release gates.
 
 ## GitHub
 
@@ -178,8 +175,7 @@ The repository is pushed to:
 https://github.com/TailoredAgents/Wholesale.git
 ```
 
-CI is defined in `.github/workflows/ci.yml`. Branch protection and labels are documented in
-`docs/GITHUB_SETUP.md`.
+CI is defined in `.github/workflows/ci.yml`.
 
 ## Deployment
 
@@ -189,5 +185,5 @@ CI is defined in `.github/workflows/ci.yml`. Branch protection and labels are do
 - API health: https://api.stonegatehb.com/health
 
 The `oakwell-*` names are existing infrastructure identifiers, not a second product. Keep customer
-copy branded as Stonegate Home Buyers. Use `docs/RENDER_DEPLOYMENT.md` and the provider runbooks
-before changing environment variables or callback URLs.
+copy branded as Stonegate Home Buyers. Use `docs/SETUP_REFERENCE.md` before changing environment
+variables, DNS, or callback URLs.

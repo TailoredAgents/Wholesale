@@ -1,0 +1,1143 @@
+# Stonegate Home Buyers System Map
+
+Last verified against the repository: July 29, 2026
+
+## 1. Document Authority
+
+This is the canonical as-built map of the Stonegate Home Buyers platform. It describes what the
+current repository contains, how the major workflows connect, and which external services still
+require production acceptance.
+
+Use `DOCUMENTATION.md` for source priority. Use `FINISHING_ROADMAP.md` for remaining work. Use
+`USER_MANUAL.md` for detailed staff instructions.
+
+## 2. Product Definition
+
+Stonegate is one company platform with two intentionally separate product surfaces:
+
+1. A public seller website that explains the direct-sale service and captures property inquiries.
+2. A private, authenticated operating system for the Stonegate team.
+
+The platform is designed for a real-estate wholesaling company starting in Georgia and later
+expanding by market and territory. It supports the business from prospect acquisition through
+seller qualification, field appointments, underwriting, contracting, disposition, closing,
+accounting, performance measurement, and AI-assisted work.
+
+The public website is not a staff portal. The private OS does not need a public-site navigation
+tab. Staff enter through `/sign-in` or a direct `/os` route and are sent to a role-appropriate
+workspace.
+
+## 3. Current Production Shape
+
+### 3.1 Repository And Deployment
+
+- GitHub repository: `TailoredAgents/Wholesale`
+- Deployment: Render Blueprint from `main`
+- Blueprint file: root `render.yaml`
+- Primary web domain: `https://www.stonegatehb.com`
+- Primary API domain: `https://api.stonegatehb.com`
+- Render web fallback: `https://oakwell-web.onrender.com`
+
+The Render resources retain legacy infrastructure names:
+
+| Resource | Function |
+| --- | --- |
+| `oakwell-web` | Next.js public site and private OS |
+| `oakwell-api` | FastAPI, database migrations, and business API |
+| `oakwell-worker` | Background jobs defined by the API application |
+| `oakwell-postgres` | Primary PostgreSQL database |
+| `oakwell-key-value` | Redis-compatible coordination service |
+
+The `oakwell-*` identifiers do not represent a second company or product. Customer-visible copy
+must use Stonegate Home Buyers.
+
+### 3.2 Runtime Status
+
+| Area | Current status |
+| --- | --- |
+| Public site | Implemented and deployed |
+| Private OS | Implemented and deployed |
+| Clerk authentication | Implemented and active |
+| PostgreSQL data layer | Implemented and active |
+| Resend two-way email | Implemented and configured; controlled production acceptance remains |
+| Twilio SMS | Implemented; dedicated A2P campaign approval and acceptance remain |
+| Twilio Voice | Implemented; dedicated number, credentials, and acceptance remain |
+| RentCast property data | Implemented; provider coverage varies by address |
+| OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
+| SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
+| DealMachine buyer discovery | Implemented adapter; subscription/API activation intentionally deferred |
+| Internal accounting | Implemented; CPA acceptance and first real close remain |
+| Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
+
+“Implemented” does not mean an external provider is active. Provider status is visible separately
+so staff are not misled by a control that exists but lacks production credentials.
+
+## 4. Technical Architecture
+
+### 4.1 Monorepo
+
+| Path | Responsibility |
+| --- | --- |
+| `apps/web` | Next.js 16, React 19, public website, OS interface, Clerk client integration |
+| `apps/api` | FastAPI, SQLAlchemy, Alembic, domain services, provider adapters, PDF generation |
+| `apps/api/app/worker.py` | Deployed background synchronization, transcription, retention, and escalation work |
+| `apps/worker` | Original heartbeat scaffold; not the Render production worker implementation |
+| `scripts` | Backup, restore verification, smoke tests, and operations utilities |
+| `docs` | Canonical product, operating, setup, and user documentation |
+| `render.yaml` | Render service topology and non-secret environment configuration |
+
+### 4.2 Runtime Boundaries
+
+- The browser renders the public site and OS through Next.js.
+- Protected browser requests carry a Clerk bearer token to FastAPI.
+- FastAPI validates identity, resolves the local Stonegate user, organization, roles, and
+  permissions, then executes domain services.
+- PostgreSQL is the operational source of truth.
+- Redis supports coordination and background-work behavior; it is not the system of record.
+- Provider callbacks enter through dedicated signed webhook routes.
+- The production worker executes repeatable background jobs and records heartbeat or failure
+  evidence.
+- External AI and provider outputs never replace source records silently.
+
+### 4.3 Database Evolution
+
+The database has 69 numbered Alembic migrations through `0069_in_person_esign.py`. Migrations are
+run automatically when the Render API starts and manually with `npm run db:migrate` locally.
+
+Schema changes must be additive or explicitly migrated. Production data must never depend on
+dropping and recreating the database.
+
+### 4.4 API Organization
+
+FastAPI routers are grouped by business capability:
+
+- `public`: seller intake and conversion events
+- `me`: current authenticated user and access profile
+- `dashboard`: role-aware summary and Executive Copilot
+- `operations`: users, teams, markets, territories, campaigns, calling lists, saved views,
+  notifications, duplicates, and follow-up plans
+- `campaign-management`: list imports, mappings, campaign costs, and calling batches
+- `prospecting`: VA workbench, scripts, attempts, handoffs, coaching, and quality review
+- `lead-manager`: warm-lead acceptance, qualification, and Lead Manager Copilot
+- `leads`: CRM records, appointments, tasks, communications, underwriting, offers, and archival
+- `tasks`: speed-to-lead and open work queues
+- `inbox`: shared conversations, saved views, unread state, SMS, assignments, and watchers
+- `email`: aliases, grants, templates, compose, delivery, attachments, and routing exceptions
+- `voice`: browser sessions, lines, call intents, recordings, and transcript review
+- `field-operations`: dispatch, briefs, inspections, photos, negotiation, and in-person signing
+- `underwriting`: calibration cases and methodology decisions
+- `approvals`: centralized human decision queue
+- `transactions`: contract packages, e-signature, documents, parties, checklists, and closing
+- `buyers`: buyer CRM and provider-backed discovery
+- `dispositions`: packages, matching, campaigns, offers, selection, and reconciliation
+- `finance`: ledger, banking, vendors, reports, compensation, tax, and Finance Copilot
+- `marketing`: performance, offline conversion delivery, and Marketing Copilot
+- `operating-model`: seats, counterparties, role acceptance, compensation, and market launches
+- `ai`: agents, copilots, runtime, evaluations, traces, promotions, and automation controls
+- `webhooks`: Twilio messaging and Voice callbacks
+- `resend-webhooks`: signed Resend events
+- `esign-webhooks`: SignWell events
+- `health`: liveness and dependency readiness
+
+## 5. Identity, Workspace, And Access
+
+### 5.1 Authentication
+
+Clerk proves who signed in. The API validates the token issuer, signing keys, audience when
+configured, and authorized party. Production does not trust the local development email header.
+
+The Clerk account alone does not grant business access. A matching Stonegate `User` must be active
+inside the organization and have local role assignments.
+
+### 5.2 Organization Scope
+
+Operational records carry an organization ID. Service methods scope reads and writes to the
+authenticated principal's organization. This allows one shared Stonegate workspace without moving
+records between separate employee accounts.
+
+### 5.3 Roles
+
+Supported role keys and intended use:
+
+| Role | Intended responsibility |
+| --- | --- |
+| `owner`, `founder_operator`, `ceo` | Full company authority and cross-role coverage |
+| `administrator` | Broad platform administration without automatic owner-only authority |
+| `acquisition_manager` | Lead Manager, team coordination, qualification, and acquisitions oversight |
+| `acquisition_rep` | Acquisitions closer and seller appointment execution |
+| `prospecting_caller` | Restricted VA calling assigned prospect records |
+| `disposition_manager` | Buyer and disposition management |
+| `disposition_rep` | Assigned disposition execution |
+| `transaction_coordinator` | Contracts, closing milestones, documents, and coordination |
+| `finance_accounting` | Internal books, evidence, banking, compensation, and reports |
+| `marketing_manager` | Campaign and marketing measurement work |
+| `read_only_partner` | Restricted transaction visibility |
+| `restricted_vendor` | Narrow external-party transaction visibility |
+| `ai_service` | Non-human service identity constrained by AI tool policy |
+
+### 5.4 Permission Enforcement
+
+The API uses granular permissions in addition to role-based navigation. Permission groups cover:
+
+- viewing or editing all versus assigned leads
+- underwriting edits and ARV approval
+- offer approval and contract sending or modification
+- buyer viewing, editing, and export
+- financial, compensation, accounting-policy, journal, vendor, evidence, and banking access
+- SMS, email, calls, recordings, conversations, assignments, and bulk communication
+- user, credential, audit, deletion, operating-model, and AI-prompt administration
+- acquisition operations and assigned calling-list work
+
+The frontend hides irrelevant navigation, but API permission checks are authoritative. Hiding a tab
+is not the security boundary.
+
+### 5.5 User Provisioning
+
+Owners create or activate a Stonegate user in Operations and assign the correct role. Each person
+must use an individual Clerk login. Shared employee credentials are not part of the design.
+
+Role-specific default routes include:
+
+- VA Caller: `/os/prospecting`
+- Dispositions: `/os/dispositions`
+- Transaction Coordinator: `/os/transactions`
+- Finance: `/os/finance`
+- Marketing: `/os/marketing`
+- restricted partners or vendors: `/os/transactions`
+- owner and acquisitions roles: `/os`
+
+## 6. Public Seller Website
+
+### 6.1 Public Routes
+
+| Route | Purpose |
+| --- | --- |
+| `/` | Main address-first direct-offer experience |
+| `/get-a-cash-offer` | Multi-step seller inquiry and SMS opt-in |
+| `/how-it-works` | Direct-sale process and expectations |
+| `/about` | Stonegate company information |
+| `/faqs` | Seller questions and tradeoffs |
+| `/sell-house-fast` | Fast-sale situation page |
+| `/sell-house-needs-repairs` | Repair-heavy property page |
+| `/sell-inherited-house` | Inherited-property page |
+| `/privacy-policy` | Privacy and messaging data terms |
+| `/terms` | Service and SMS terms |
+| `/sign-in` and `/sign-up` | Clerk authentication |
+
+### 6.2 Seller Intake
+
+The cash-offer form collects seller identity, contact information, property address, timing,
+condition, occupancy, asking-price and mortgage context, preferred contact method, and consent.
+Optional questions improve qualification without preventing a basic inquiry.
+
+Submission creates or matches:
+
+- contact and contact methods
+- property
+- lead
+- consent evidence
+- form submission evidence
+- attribution touches
+- conversion events
+- speed-to-lead work
+- a shared conversation and initial ownership context
+
+Duplicate active submissions are matched using normalized phone, email, and property address.
+Stonegate keeps the new form, attribution, and consent evidence while avoiding unnecessary
+duplicate active leads.
+
+### 6.3 SMS Consent
+
+SMS consent is a separate unchecked choice. Evidence includes the consent wording version,
+timestamp, source, IP address, and user agent. General permission to contact does not silently
+become consent for recurring automated SMS.
+
+### 6.4 Conversion Measurement
+
+The public site records privacy-safe events for offer starts, form progress, validation friction,
+abandonment, submit attempts, failures, successful submissions, phone clicks, and Core Web Vitals.
+Marketing uses these events to evaluate funnel performance. Public event intake does not grant OS
+access.
+
+## 7. Private OS Navigation
+
+The OS uses five stable navigation groups.
+
+### 7.1 Command
+
+**Dashboard (`/os`)**
+
+- Role-aware daily command center.
+- Shows seller work, intervention counts, meetings, offers, and pipeline health.
+- Hosts the owner-facing Executive Copilot.
+
+**Inbox (`/os/inbox`)**
+
+- Shared three-panel communication workspace.
+- Views include Mine, Unassigned, Team, Needs Reply, Unread, Appointments, My Addresses, team
+  inboxes, and authorized restricted inboxes.
+- Supports lead, buyer, transaction, and general email contexts.
+
+**Work Queue (`/os/tasks`)**
+
+- Speed-to-lead and open task queues.
+- Saved ownership and due-state views.
+- Contextual actions and permission-protected bulk completion.
+
+**Calendar (`/os/calendar`)**
+
+- Internal month, week, day, and agenda views.
+- Combines appointments, field scheduling, and due work without requiring Google Calendar.
+
+### 7.2 Acquisitions
+
+**Operations (`/os/operations`)**
+
+- Owner and manager administration for users, teams, markets, territories, campaigns, lists,
+  saved views, duplicates, and follow-up plans.
+- This is where staff records are created before the matching person signs in with Clerk.
+
+**Campaigns (`/os/campaigns`)**
+
+- CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
+  performance.
+- Cold prospect records remain separate from CRM leads until a valid handoff.
+
+**Prospecting (`/os/prospecting`)**
+
+- VA Caller workbench for assigned records.
+- Shows approved script, one prospect at a time, attempt disposition, callback, qualification,
+  handoff, and Prospecting Copilot guidance.
+
+**Lead Desk (`/os/lead-manager`)**
+
+- Lead Manager workspace for warm handoffs and website inquiries.
+- Supports acceptance, guided qualification, dated next actions, appointments, exceptions,
+  scorecards, and Lead Manager Copilot drafts.
+
+**All Leads (`/os/leads`)**
+
+- Searchable system of record for active leads.
+- Supports owner, stage, and saved-view filters plus direct next actions.
+- Archived records live at `/os/leads/archived`.
+
+**Seller Pipeline (`/os/pipeline`)**
+
+- Stage-family board for inspecting movement and handoff state.
+- Links to qualification, communication, dispatch, underwriting, and the full lead record.
+
+**Field Operations (`/os/field-operations`)**
+
+- Closer dispatch, availability, territory, capacity, appointment preparation, walkthrough,
+  photographs, seller presentation, negotiation, and iPad signing.
+
+### 7.3 Deal Flow
+
+**Underwriting (`/os/underwriting`)**
+
+- Active analysis queue, calibration scorecards, verified outcomes, and methodology decisions.
+- Individual property analysis is performed from the lead record.
+
+**Approvals (`/os/approvals`)**
+
+- Central queue for human decisions such as offer ceilings and contract release.
+- Shows source evidence, deadline, consequence, and decision notes.
+
+**Transactions (`/os/transactions`)**
+
+- Contract-to-closing coordination.
+- Manages contract templates, packages, approvals, signatures, documents, parties, milestones,
+  checklists, closing, and Transaction Copilot drafts.
+
+**Dispositions (`/os/dispositions`)**
+
+- Contract marketing and buyer-selection process.
+- Manages deal packages, matches, campaigns, engagement, offers, proof, selection, reconciliation,
+  and Disposition Copilot drafts.
+
+**Buyers (`/os/buyers`)**
+
+- Investor CRM with criteria, capacity, markets, proof-of-funds status, and provider discovery.
+
+### 7.4 Business
+
+**Finance (`/os/finance`)**
+
+- Revenue, deductions, compensation, double-entry books, vendors, bills, private evidence,
+  statement import, bank reconciliation, financial reports, close workflow, CPA exports, Finance
+  Copilot, and Tax Copilot.
+
+**Marketing (`/os/marketing`)**
+
+- Spend, public funnel performance, unit economics, offline conversion queue, and Marketing
+  Copilot.
+
+### 7.5 Control
+
+**My Setup (`/os/my-setup`)**
+
+- Every staff member can review and accept assigned role expectations.
+
+**Floating Help**
+
+- A blue chat button remains available at the bottom-right of every signed-in OS workspace.
+- Selecting it opens a compact Help conversation without leaving the current work.
+- Retrieves approved Markdown sections through the authenticated API.
+- Filters owner and specialist topics by the employee's current role.
+- Returns document, heading, and source excerpts with every supported answer.
+- Has no access to live seller records and cannot perform operational actions.
+
+**Operating Model (`/os/operating-model`)**
+
+- Owner-controlled seats, counterparties, role acceptance, compensation plans, role credits,
+  disposition mode, and market launch checklists.
+
+**AI Control (`/os/ai`)**
+
+- Owner-controlled agent portfolio, copilots, capability contracts, model runtime, evaluation
+  library, traces, budgets, shutdown controls, promotions, and external automation policy.
+
+## 8. End-To-End Operating Lifecycle
+
+### 8.1 Market And Campaign Setup
+
+1. An owner or manager defines a market and territory.
+2. A campaign records channel, source, dates, budget, and ownership.
+3. Campaign expenses record lists, enrichment, software, ads, mail, and VA labor.
+4. A CSV is validated with a saved mapping before import.
+5. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
+   retained as explicit outcomes.
+6. Valid prospects enter a calling batch and are assigned to VAs.
+
+### 8.2 Prospecting
+
+1. A VA sees only assigned callable prospect records.
+2. The approved script and qualification fields guide the call.
+3. Every attempt records outcome, notes, callback, and script evidence.
+4. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
+5. An interested seller creates a structured handoff.
+6. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
+
+### 8.3 Warm Handoff And Lead Creation
+
+1. A qualified handoff converts the prospect into a CRM lead without losing campaign attribution.
+2. Contact, property, conversation, qualification answers, attempts, and appointment context are
+   preserved.
+3. The lead is assigned to acquisitions; owners can become watchers.
+4. The VA loses broad edit access after handoff but the original activity remains attributable.
+5. Website inquiries enter the same Lead Manager queue through a separate consented intake path.
+
+### 8.4 Lead Management
+
+1. The Lead Manager accepts the work within the configured SLA.
+2. The current approved qualification script captures motivation, condition, timeline, occupancy,
+   price context, title or mortgage issues, and next action.
+3. Missing or conflicting information remains visible instead of being guessed.
+4. The Lead Manager schedules a call, follow-up, or closer appointment.
+5. Overdue handoffs and neglected leads produce tasks or notifications.
+6. The Lead Manager Copilot drafts summaries, questions, replies, and next steps for human review.
+
+### 8.5 Appointment And Dispatch
+
+1. The internal calendar evaluates closer availability, territory, working hours, travel buffer,
+   capacity, and conflicts.
+2. An explainable candidate snapshot is stored when scheduling.
+3. A manager can override a conflict only with a reason.
+4. The closer receives the appointment, seller context, qualification, task state, and meeting
+   preparation needs.
+
+### 8.6 Field Appointment
+
+1. The closer opens the appointment workspace on a phone or iPad.
+2. A meeting brief combines seller facts, property context, qualification, and approved analysis.
+3. The walkthrough records condition, repair scope, notes, and photographs.
+4. The seller presentation exposes selected market evidence but hides Stonegate's internal offer
+   authority, assignment fee, buyer profit, and negotiation history.
+5. Reviewed field evidence creates a new repair estimate and draft underwriting version; it does
+   not overwrite an approved analysis.
+
+### 8.7 Underwriting And Offer
+
+1. Stonegate validates the subject address and canonical property facts.
+2. RentCast supplies the subject record and recorded-sale candidates when available.
+3. Safe address variants may be retried when the provider misses the original string.
+4. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
+   ARV or offer values.
+5. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
+   condition, and material price or price-per-square-foot outliers.
+6. Selected and rejected comps retain scores and reasons.
+7. The engine produces an ARV range, as-is range, repair result, buyer economics, offer scenarios,
+   confidence tier, and review flags.
+8. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
+9. A human creates a negotiation plan tied to one saved underwriting version.
+10. Approval establishes opening, target, stretch, and hard-ceiling authority.
+11. Concessions and price discussions are appended to the negotiation ledger.
+
+### 8.8 Contract And E-Signature
+
+1. An approved, versioned contract template provides the base document.
+2. Stonegate creates a contract package from CRM, property, offer, and party facts.
+3. Missing or conflicting required facts block release rather than being invented.
+4. An authorized person requests approval and then sends through the configured e-sign provider.
+5. SignWell hosts the signing ceremony; Stonegate stores envelope, recipient, event, and completed
+   document evidence.
+6. The same provider flow can be launched on an iPad for an in-person seller signature.
+7. Manual sent and executed states remain available for controlled fallback evidence.
+
+### 8.9 Transaction Coordination
+
+1. The executed acquisition agreement opens the controlled transaction workflow.
+2. Parties, title/closing information, earnest money, inspection or due-diligence dates, closing
+   date, assignment strategy, and documents remain attached to the transaction.
+3. Checklist items and events make blockers and ownership visible.
+4. The Transaction Copilot may identify missing facts and draft coordination work.
+5. It cannot change legal terms, send a contract, or represent legal review.
+
+### 8.10 Buyer And Disposition
+
+1. The disposition case is opened from the contracted transaction.
+2. Staff approve the property package before marketing.
+3. Buyers are matched against markets, property criteria, price, capacity, activity, and proof.
+4. DealMachine can provide external buyer candidates when its adapter is activated.
+5. Candidates are reviewed before import; external data does not overwrite trusted buyer records.
+6. Staff record outreach, engagement, offers, deposits, and proof.
+7. Buyer selection is a human approval.
+8. The Disposition Copilot can rank and explain candidates or draft outreach in review-only mode.
+
+### 8.11 Closing, Reconciliation, And Compensation
+
+1. Closing evidence records the funded transaction.
+2. Reconciliation starts with actual assignment revenue and approved deal deductions.
+3. The active compensation plan and role credits calculate proposed payouts.
+4. Disposition can use the human-led or AI-assisted operating mode defined by the approved plan.
+5. Payout approval and payment status remain human controlled.
+6. Reconciliation feeds source-linked accounting entries and profitability reporting.
+
+### 8.12 Accounting And Management
+
+1. Operational source records create draft accounting work through approved posting rules.
+2. Journal entries must balance before approval or posting.
+3. Posted entries are immutable; corrections use reversals.
+4. Vendors, bills, evidence, bank statements, transaction matches, and reconciliations remain
+   auditable.
+5. Financial reports use posted journals only.
+6. Period close and CPA export expose unresolved blockers.
+7. Finance, Tax, Marketing, and Executive Copilots prepare evidence-linked review drafts without
+   posting, paying, filing, or changing policy.
+
+## 9. CRM And Work Management
+
+### 9.1 Lead Record
+
+The lead record is the complete seller workspace. It combines:
+
+- seller and property facts
+- source and attribution
+- stage, owner, status, and next action
+- qualification and missing questions
+- notes and follow-ups
+- appointments
+- underwriting versions and reports
+- offer authority and negotiation ledger
+- transaction and buyer offers
+- communications and consent
+- recent activity and audit evidence
+
+The canonical internal detail route is `/os/leads/{lead_id}`. The legacy `/leads/{leadId}` route
+exists in the web tree but should not be presented as the primary OS workflow.
+
+### 9.2 Lead Stages
+
+Stages represent business state, not employee ownership. Assignment can change without creating a
+new lead. Pipeline progression is controlled by the actual workflow and may include new, contact,
+qualified, appointment, analysis, offer, contract, transaction, disposition, closed, lost, or
+archived families.
+
+### 9.3 Tasks And Notifications
+
+Tasks carry ownership, due date, completion, and lead context. Notifications communicate events
+such as handoffs, appointments, communication assignment, overdue response, owner escalation, and
+approval needs.
+
+Workers can create escalation evidence, but staff remain responsible for resolving the underlying
+work.
+
+### 9.4 Duplicate Handling
+
+Duplicate scanning is conservative. A reviewed merge preserves evidence, records a merge snapshot,
+and archives the secondary record. Permanent deletion is a separate permission-controlled action.
+
+## 10. Shared Communications
+
+### 10.1 Conversation Model
+
+A conversation is a durable thread, not merely a contact card. It can be linked to a lead,
+transaction, buyer, or general business context. It records:
+
+- channel-neutral timeline
+- structured participants
+- assignment and team
+- source and receiving alias
+- watchers
+- unread state
+- response status and deadlines
+- communication records and dispatch attempts
+- provider events
+- attachments
+- calls, recordings, and transcripts
+- internal notes
+
+### 10.2 Inbox Layout
+
+- Left pane: conversation views, search, filters, and threads.
+- Middle pane: chronological timeline and channel composer.
+- Right pane: context, seller or business summary, assignment, notes, and follow-up state.
+- Mobile: the panes become navigable views instead of being compressed together.
+
+### 10.3 Email
+
+The current provider is Resend. Stonegate supports:
+
+- approved company aliases such as named, offers, buyers, and accounting addresses
+- user and team sender grants
+- restricted mailbox visibility
+- new general email without a fake property lead
+- To, CC, BCC, subject, text, HTML, templates, signatures, and attachments
+- outbound idempotency and visible provider status
+- signed inbound webhooks and retrieval
+- `Message-ID`, `In-Reply-To`, and `References` threading
+- exact reply, provider-thread, participant, alias, and bounded fallback routing
+- owner review of ambiguous routing
+- first-response and next-response deadlines
+- assignee, watcher, team, and owner-escalation notifications
+
+The old Google OAuth implementation remains only as superseded code compatibility. It is not the
+selected operating model and should not be configured.
+
+### 10.4 SMS
+
+The Twilio SMS implementation supports:
+
+- approved Messaging Service or sender number
+- outbound from the shared conversation
+- signed inbound and delivery callbacks
+- provider event idempotency
+- delivery, failure, and inbound state
+- STOP and START processing
+- suppression and consent controls
+- number normalization
+- organization and permission scope
+
+Stonegate's dedicated A2P campaign remains externally pending. Do not use another company's
+Messaging Service, campaign, number, or consent description.
+
+### 10.5 Voice
+
+The Twilio Voice implementation supports:
+
+- company voice lines
+- scoped browser access tokens
+- call intents tied to a conversation
+- outbound and inbound routing
+- call status and dial result callbacks
+- missed-call tasks
+- private recordings
+- disclosure state
+- transcript review
+
+Voice requires the Account SID, Auth Token for webhooks, API key SID and secret for browser tokens,
+TwiML App SID, company number, and callback configuration. A single inbound webhook alone does not
+provide secure browser calling.
+
+### 10.6 Call Intelligence
+
+When recording is deliberately enabled:
+
+1. Twilio reports the completed recording.
+2. The worker retrieves eligible audio.
+3. OpenAI transcription produces speaker-aware transcript evidence.
+4. structured notes identify motivation, condition, timeline, occupancy, price, objections,
+   commitments, and next action.
+5. a human reviews the transcript and notes before critical CRM fields change.
+6. retention and early deletion are tracked.
+
+## 11. Underwriting System
+
+### 11.1 Evidence Hierarchy
+
+Stonegate separates:
+
+- CRM-entered subject facts
+- provider-returned subject facts
+- recorded-sale comparables
+- operator condition and repair evidence
+- cited secondary public evidence
+- verified outcomes such as appraisals, expert reviews, resales, and closed values
+
+Every important fact should retain its source and timestamp. Disagreement lowers confidence or
+requires review; it should not be silently averaged away.
+
+### 11.2 Complete Analysis
+
+The one complete-analysis workflow performs:
+
+1. address normalization and identity validation
+2. provider-safe address retries
+3. subject fact reconciliation
+4. recorded-sale search
+5. candidate screening and scoring
+6. optional bounded public-record research
+7. comparable weighting
+8. ARV and as-is range calculation
+9. repair and contingency math
+10. buyer economics and Stonegate offer scenarios
+11. confidence factors and review flags
+12. immutable analysis storage
+
+### 11.3 Offer Math
+
+The configured baseline uses a low and high percentage of ARV, normally 65% and 70%, then accounts
+for repairs, assignment fee, transaction reserve, and configured buyer costs. The result is a
+scenario and authority range, not a guaranteed appraisal or mandatory seller offer.
+
+The exact method and controls live in `UNDERWRITING_COMP_METHOD.md`.
+
+### 11.4 Report Types
+
+- **Investor PDF:** full comparable evidence, adjustments, repair source and detail, buyer
+  economics, offer framework, confidence, limitations, and audit identifiers.
+- **Client PDF:** seller-appropriate market evidence and explanation without Stonegate's internal
+  assignment fee, buyer profit, hard ceiling, or negotiation strategy.
+
+Reports remain available when renovation status is unconfirmed. Uncertainty must be disclosed
+rather than used to hide the result.
+
+### 11.5 Calibration
+
+Verified outcomes compare prediction with reality by market. Scorecards track ARV bias, absolute
+error, range coverage, repair variance, contract variance, disposition variance, operator
+overrides, and provider failure patterns.
+
+No formula self-adjusts from these results. Method or provider changes require a versioned
+decision, frozen evidence, human notes, and the configured minimum case count.
+
+## 12. Contracts, Documents, And E-Signature
+
+### 12.1 Document Model
+
+Stonegate maintains versioned contract templates, transaction documents, extracted facts,
+packages, recipients, provider events, and immutable completion evidence.
+
+Document storage can use the database or S3-compatible private object storage. Downloads are
+permission checked and can use short-lived links. Retention and malware-scan state are explicit.
+
+### 12.2 Contract Templates
+
+The current Georgia investor purchase agreement is an internal working template pending later
+professional review. Template content must be approved in Stonegate and configured with the
+matching SignWell template ID before automated sending.
+
+AI may populate approved fields and identify missing information. AI must not invent legal terms,
+change approved language, select legal strategy, or send without authority.
+
+### 12.3 In-Person Signing
+
+The closer can start the same SignWell signing ceremony from the field appointment on an iPad.
+The seller signs in the hosted provider flow; Stonegate records the envelope and completed
+document. This does not create a separate contract or signature system.
+
+## 13. Buyers And Dispositions
+
+### 13.1 Buyer CRM
+
+Buyer records can retain:
+
+- identity and contact information
+- active or inactive status
+- preferred markets and property types
+- minimum and maximum price
+- rehab tolerance and strategy
+- proof-of-funds evidence and expiration
+- capacity and recent activity
+- engagement and offer history
+
+### 13.2 Buyer Discovery
+
+DealMachine is the selected first external buyer-data adapter. The workflow:
+
+1. Runs discovery for an active disposition case.
+2. Stores the provider query and raw candidate evidence.
+3. Normalizes, scores, and explains candidates.
+4. Requires a human to review before import.
+5. Links imported records to the existing buyer CRM.
+
+The subscription can remain off until Stonegate is close to having a contract to disposition.
+Provider activation should not require rebuilding the buyer workflow.
+
+### 13.3 Disposition Authority
+
+AI can organize evidence, rank buyers, and draft communication. Humans approve the package,
+campaign release, buyer selection, contract terms, and reconciliation.
+
+## 14. Finance And Accounting
+
+### 14.1 Source Of Truth
+
+Stonegate contains its own double-entry accounting ledger. QuickBooks is not required as the
+operational source of truth. External CPA exports remain available.
+
+### 14.2 Ledger Controls
+
+- Chart of accounts and accounting profile
+- Open, review, close, reopen, and year-end period states
+- Balanced journal preparation
+- Separate approval and posting authority
+- Immutable posted journals
+- Reversal entries instead of edits
+- Source links to deals, revenue, bills, payouts, or evidence
+- Approved posting rules for operational events
+
+### 14.3 Vendors And Evidence
+
+Finance supports vendors and counterparties, coded bills, W-9 status, invoices, receipts, payment
+evidence, closing statements, private documents, and financial obligations. Sensitive data should
+use restricted evidence storage rather than ordinary notes.
+
+### 14.4 Banking
+
+Current banking is import-based:
+
+- store company account labels and optional last four digits
+- preview CSV mapping
+- retain original statement evidence
+- prevent duplicate files and transactions
+- manually match to posted operating-cash journals
+- document ignored non-operating lines
+- reconcile only when all included lines are resolved and balances agree
+
+Stonegate does not initiate payments or bank transfers.
+
+### 14.5 Reports
+
+Posted journals power:
+
+- Profit and Loss
+- Balance Sheet
+- Cash Flow
+- Trial Balance
+- General Ledger
+- receivable and payable schedules
+- commission payable and payment history
+- deal profitability
+- close-readiness checklist
+- CPA ZIP export
+
+### 14.6 Finance And Tax Copilots
+
+The Finance Copilot can suggest classifications, balanced draft entries, transaction matches,
+variance explanations, and close work. The Tax Copilot can identify potential categories,
+missing evidence, and CPA-review questions.
+
+Neither Copilot can post entries, close periods, pay vendors, promise deductibility, file returns,
+or make final tax determinations.
+
+## 15. Marketing Measurement
+
+Marketing combines:
+
+- campaign costs
+- prospect and handoff outcomes
+- public conversion events
+- qualified leads
+- appointments
+- signed contracts
+- funded deals
+- cost per result and deal profitability
+
+Offline conversion adapters exist for Google Data Manager and Meta Conversions API. Contact
+identifiers are normalized and hashed, event keys are stable, and retries are audited. External
+delivery remains disabled until Stonegate configures approved ad accounts, conversion actions,
+credentials, and acceptance tests.
+
+## 16. AI Copilot System
+
+### 16.1 Copilot Versus Agent
+
+A **Copilot** is the staff-facing assistant embedded in the workspace where the person already
+works. It presents a brief, draft, recommendation, warning, or proposed next action.
+
+An **agent** is a backend specialist capability that can analyze information or use an allowed
+tool. Several backend agents can support one staff-facing Copilot.
+
+Employees generally interact with copilots, not a collection of separate chat rooms.
+
+### 16.2 Current Copilots
+
+| Copilot | Location | Current role |
+| --- | --- | --- |
+| Prospecting | Prospecting | Pre-call brief, script guidance, disposition quality, coaching |
+| Lead Manager | Lead Desk | Priority, seller brief, missing facts, reply and task proposals |
+| Acquisitions | Field Operations | Meeting preparation, evidence gaps, negotiation support |
+| Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
+| Disposition | Dispositions | Package gaps, buyer ranking, outreach and offer review |
+| Finance | Finance | Classification, journal, match, variance, and close guidance |
+| Tax | Finance | Evidence and classification questions for professional review |
+| Marketing | Marketing | Funnel, spend, attribution, and campaign recommendations |
+| Executive | Dashboard | Cross-functional exceptions, priorities, and management review |
+
+### 16.3 Control Plane
+
+The AI system records:
+
+- agent and Copilot definitions
+- prompt versions
+- capability contracts
+- data-governance policies
+- knowledge sources and quality rules
+- tool permissions
+- model and capability runtime policies
+- run, tool-call, knowledge-use, and cost logs
+- golden evaluation datasets and cases
+- reviews, comparisons, promotions, and rollbacks
+- external-action policies and attempts
+- orchestrator events and failure evidence
+
+### 16.4 Autonomy
+
+Copilots are enabled but not autonomous. Their normal state is draft-only or approval-gated.
+Consequential actions remain with authorized humans, including:
+
+- offers and ARV approval
+- contract language and sending
+- buyer selection
+- payments and journal posting
+- compensation changes
+- tax or legal conclusions
+- suppression and consent overrides
+- user permissions
+
+Future autonomy is capability-specific. One reversible action may be promoted only after its own
+evaluation, supervised pilot, monitoring, budget, canary, and rollback requirements pass.
+
+## 17. Background Processing And Reliability
+
+The deployed API worker handles recurring operational jobs such as:
+
+- worker heartbeat
+- email synchronization, webhook recovery, and response escalation
+- call recording processing and transcription
+- recording retention
+- overdue handoff and workflow escalation
+- provider retry work where implemented
+
+Background failures are stored as durable operational records. Repeated failures can notify an
+owner-controlled webhook. API readiness can require a fresh worker heartbeat.
+
+Optional Sentry integration exists for web, API, and worker error reporting. It is not required for
+core application behavior.
+
+Database backup, guarded restore verification, deployment smoke tests, and scheduled production
+readiness checks exist as operational tools. A real restore drill remains an owner acceptance
+task.
+
+## 18. Audit, Evidence, And Corrections
+
+Stonegate favors append-only evidence for material decisions:
+
+- activity events describe operational history
+- audit events identify actor, action, target, and before/after context
+- provider events preserve external callbacks
+- assignment events preserve ownership changes
+- AI reviews preserve acceptance, rejection, and correction
+- underwriting versions preserve prior calculations
+- negotiation ledgers preserve price movement
+- posted accounting entries use reversals
+- completed documents retain checksums and provider evidence
+
+Routine corrections should create a new version, review, reversal, event, or status transition
+instead of erasing the old decision.
+
+## 19. Security And Compliance Boundaries
+
+Core boundaries include:
+
+- Clerk authentication plus Stonegate-local RBAC
+- organization-scoped reads and writes
+- individual employee accounts
+- restricted VA, vendor, partner, finance, recording, and mailbox access
+- signed provider webhooks
+- event and dispatch idempotency
+- consent and suppression evidence
+- permission-gated downloads
+- secret values stored in environment configuration, not documentation
+- human approval for consequential financial, contractual, offer, buyer, and AI actions
+
+The platform contains controls, but software does not replace legal, tax, accounting, employment,
+telemarketing, recording, or real-estate advice.
+
+## 20. External Integrations
+
+| Provider | Purpose | Code status | External status |
+| --- | --- | --- | --- |
+| Clerk | Authentication | Implemented | Active |
+| Render | Hosting, Postgres, key value | Implemented | Active |
+| OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
+| RentCast | Subject and recorded-sale data | Implemented | Configured; address coverage varies |
+| Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
+| Twilio | SMS, Voice, recordings | Implemented | Dedicated A2P/number acceptance pending |
+| SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
+| DealMachine | Buyer discovery | Implemented adapter | Subscription/API intentionally deferred |
+| S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
+| ClamAV | Document malware scanning | Implemented option | Disabled |
+| Sentry | Error monitoring | Implemented option | Deferred |
+| Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
+| Meta Conversions API | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
+
+## 21. Data Domain Map
+
+The primary SQLAlchemy model file contains 184 operational model classes. They group into:
+
+### Identity And Organization
+
+`Organization`, `User`, `Role`, `Permission`, `RolePermission`, `RoleAssignment`, `Team`,
+`TeamMembership`.
+
+### Markets, Campaigns, And Prospecting
+
+`Market`, `Territory`, `Campaign`, `Prospect`, import mapping/batch/row records, suppression checks,
+campaign costs, calling batches and entries, script versions, attempts, handoffs, Copilot
+recommendations, reviews, and call quality.
+
+### CRM And Seller Evidence
+
+`Contact`, `ContactMethod`, `Property`, `Lead`, `ConsentRecord`, `SuppressionRecord`,
+`LeadFormSubmission`, `AttributionTouch`, `ConversionEvent`, qualification scripts, cases, and
+sessions.
+
+### Communications
+
+`Conversation`, watchers, assignments, context links, provider events, communication records,
+participants, dispatches, email accounts, aliases, grants, templates, attachments, voice lines,
+call intents, calls, recordings, and transcripts.
+
+### Appointments And Field Acquisitions
+
+`Appointment`, `CalendarEvent`, closer profiles, territory coverage, availability blocks, dispatch
+records, meeting briefs, inspections, photos, negotiation sessions, underwriting transfers, and
+Acquisitions Copilot records.
+
+### Underwriting And Offer Governance
+
+`UnderwritingVersion`, `UnderwritingMarketAnalysis`, calibration cases and decisions,
+`RepairEstimate`, `OfferNegotiationPlan`, `OfferConcession`, and `OfferNegotiationEvent`.
+
+### Contracts And Transactions
+
+`Deal`, `Transaction`, checklist items, contract templates and packages, transaction documents and
+facts, e-sign envelopes, recipients and events, provider configuration, parties, events, and
+Transaction Copilot records.
+
+### Buyers And Dispositions
+
+`Buyer`, criteria, proof documents, discovery runs and candidates, offers, disposition cases,
+matches, campaigns, engagements, Copilot records, reconciliation, payouts, revenue, deductions,
+operating mode, and role credits.
+
+### Company Operations
+
+Compensation plans and roles, market launch checklists, operating seats, counterparties, staff role
+acceptance, compliance policies and records, compensation calculations, and marketing spend.
+
+### Accounting
+
+Accounting profile, accounts, periods, journals, lines, posting rules, source links, obligations,
+vendors, bills, bill lines, finance documents, bank accounts, imports, transactions, matches,
+reconciliations, and offline conversion exports.
+
+### AI Governance
+
+Agent, prompt, tool-permission, Copilot, mapping, capability, governance, knowledge, quality,
+runtime, external-action, orchestrator, run, tool, evaluation, comparison, and promotion records.
+
+### Shared Platform Operations
+
+`ApprovalRequest`, `Task`, `CallingList`, `CallingListEntry`, `SavedView`, `Notification`,
+`DuplicateCandidate`, `LeadMergeEvent`, follow-up plans and enrollments, `ActivityEvent`,
+`AuditEvent`, `WorkerHeartbeat`, and `OperationalFailure`.
+
+## 22. Testing And Quality Gates
+
+Current repository verification includes:
+
+- API unit and integration tests under `apps/api/tests`
+- 52 API test modules
+- Ruff linting
+- MyPy type checking
+- Next.js lint and production build commands
+- Alembic migration execution
+- local synthetic demo seed
+- simulated email and SMS
+- backup and restore verification scripts
+- production smoke checks
+- GitHub Actions CI
+
+Standard commands:
+
+```bash
+npm run lint:api
+npm run typecheck:api
+npm run test:api
+npm run lint:web
+npm run build:web
+```
+
+Provider-backed workflows also require controlled acceptance. Passing unit tests does not prove
+DNS, webhook, carrier, mailbox, signing, data-provider, or advertising account configuration.
+
+## 23. Known Boundaries And Remaining Proof
+
+The major product workflows are implemented. The remaining risk is primarily production
+acceptance and evidence:
+
+- Twilio A2P approval and dedicated SMS/Voice end-to-end tests
+- Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
+- SignWell template, webhook, remote signature, and iPad signature acceptance
+- DealMachine subscription and buyer-data acceptance when deal volume justifies it
+- real Georgia underwriting outcomes and operator calibration
+- first CPA-reviewed opening balances, bank reconciliation, month close, and report package
+- ad-provider credential setup and offline conversion acceptance
+- role acceptance with actual staff accounts
+- supervised Copilot pilots using redacted Stonegate cases
+- real backup restoration and optional monitoring-provider configuration
+
+These are tracked in `FINISHING_ROADMAP.md`.
+
+## 24. Documentation And Help System
+
+`USER_MANUAL.md` is the current **How To Use Stonegate OS** guide. It covers each operating
+workspace, role handoff, provider state, ordinary procedure, and common failure path in
+nontechnical language.
+
+`UI_CONTROL_REFERENCE.md` is the current interface dictionary. It documents the public website
+and every production OS workspace by section, including the purpose and effect of meaningful
+buttons and fields, prerequisites, permission or workflow blockers, disabled states, and the
+result a user should expect. It also defines the answer contract for precise help-assistant
+questions.
+
+`SETUP_MANUAL.md` is **How To Set Up And Maintain Stonegate**. It gives the owner nontechnical
+provider, account, staff, Render, DNS, webhook, acceptance, backup, and maintenance instructions.
+`SETUP_REFERENCE.md` remains the exact technical variable and command inventory.
+
+The floating Help panel is mounted in the authenticated OS shell. The API:
+
+1. reads canonical Markdown from the deployed repository
+2. splits sources by heading
+3. applies document and section role scopes
+4. retrieves the strongest lexical matches
+5. optionally asks the configured OpenAI model to summarize only those sources
+6. falls back to a deterministic source excerpt when OpenAI is unavailable
+7. returns structured document, heading, and excerpt citations
+
+Help does not query live seller, buyer, transaction, communication, or accounting records. It has
+no action tools and is not a substitute for operational Copilots. Future optimization may add
+answer-gap analytics and semantic retrieval after real staff questions justify it.

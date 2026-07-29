@@ -8,9 +8,9 @@ This document is the business operating source of truth for Stonegate Home Buyer
 people, AI agents, software, money, approvals, and records work together from campaign creation
 through funded closing.
 
-Implementation status belongs in `CURRENT_STATE.md`. Build order belongs in `ROADMAP.md`.
-Technical boundaries belong in `ARCHITECTURE.md` and `AI_AGENTS.md`. The ordered path from the
-current control plane to production assistance belongs in `AI_AUTOMATION_ROADMAP.md`.
+Implementation status belongs in `SYSTEM_MAP.md`. Build order belongs in
+`FINISHING_ROADMAP.md`. Technical AI boundaries belong in `AI_AGENTS.md`. The ordered path from
+the current control plane to production assistance belongs in `AI_AUTOMATION_ROADMAP.md`.
 
 ## Business Objective
 

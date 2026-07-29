@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceProfile } from "../lib/api";
 import { StonegateLogo } from "../stonegate-logo";
 import { AuthControls } from "./auth-controls";
+import { HelpBubble } from "./help/help-workspace";
 import {
   defaultRouteForProfile,
   navigationContext,
@@ -70,6 +71,9 @@ export function OsShell({
       : profile ??
         resolvedProfile ??
         (process.env.NODE_ENV === "development" ? developmentProfile : null);
+  const helpProfile =
+    effectiveProfile ??
+    (process.env.NODE_ENV === "development" ? developmentProfile : null);
   const visibleAccessState =
     isLoaded && !isSignedIn ? "error" : effectiveProfile ? "resolved" : accessState;
   const context = navigationContext(pathname);
@@ -421,6 +425,7 @@ export function OsShell({
         <main className={styles.workspace} id="main-content" tabIndex={-1}>
           {children}
         </main>
+        {helpProfile ? <HelpBubble devUserEmail={helpProfile.email} /> : null}
       </div>
     </div>
   );
