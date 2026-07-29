@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   },
   description: "Request a no-obligation, direct cash offer review for a Georgia property. Sell as-is without listing prep or showings.",
   applicationName: siteConfig.name,
+  alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: siteConfig.name,

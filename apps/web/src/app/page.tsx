@@ -44,8 +44,21 @@ export default function PublicHomePage() {
         "@id": `${siteConfig.siteUrl}/#organization`,
         name: siteConfig.name,
         url: siteConfig.siteUrl,
+        logo: {
+          "@type": "ImageObject",
+          url: `${siteConfig.siteUrl}/brand/stonegate-mark.png`,
+          width: 512,
+          height: 512,
+        },
         telephone: "+1-678-541-7725",
         areaServed: { "@type": "State", name: "Georgia" },
+        contactPoint: {
+          "@type": "ContactPoint",
+          telephone: "+1-678-541-7725",
+          contactType: "seller inquiries",
+          areaServed: "US-GA",
+          availableLanguage: "English",
+        },
       },
       {
         "@type": "WebSite",

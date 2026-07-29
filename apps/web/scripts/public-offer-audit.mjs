@@ -73,6 +73,70 @@ async function checkPage(page, viewport, step) {
   if (violations.length) record(viewport, "wcag", { step, violations });
 }
 
+async function auditDiscovery(page, viewport) {
+  if (await page.title() !== "Stonegate Home Buyers | Sell Your Georgia House As-Is") {
+    record(viewport, "metadata", { field: "title", value: await page.title() });
+  }
+  const canonical = await page
+    .locator('link[rel="canonical"]')
+    .getAttribute("href", { timeout: 1_000 })
+    .catch(() => null);
+  if (canonical !== "https://www.stonegatehb.com") {
+    record(viewport, "metadata", { field: "canonical", value: canonical });
+  }
+
+  const structuredData = await page.locator('script[type="application/ld+json"]').first().textContent();
+  try {
+    const graph = JSON.parse(structuredData ?? "{}")["@graph"] ?? [];
+    const organization = graph.find((item) => item["@type"] === "Organization");
+    if (
+      organization?.url !== "https://www.stonegatehb.com" ||
+      organization?.telephone !== "+1-678-541-7725" ||
+      !organization?.logo?.url
+    ) {
+      record(viewport, "structured-data", organization ?? "Organization record missing.");
+    }
+  } catch {
+    record(viewport, "structured-data", "Homepage JSON-LD could not be parsed.");
+  }
+
+  const robotsResponse = await page.context().request.get(`${baseUrl}/robots.txt`);
+  const robots = await robotsResponse.text();
+  for (const route of ["/os", "/sign-in", "/sign-up"]) {
+    if (!robots.includes(`Disallow: ${route}`)) {
+      record(viewport, "robots", `Missing private route: ${route}`);
+    }
+  }
+
+  const sitemapResponse = await page.context().request.get(`${baseUrl}/sitemap.xml`);
+  const sitemap = await sitemapResponse.text();
+  if (!sitemap.includes("https://www.stonegatehb.com/get-a-cash-offer")) {
+    record(viewport, "sitemap", "Cash-offer page is missing.");
+  }
+  for (const route of ["/os", "/sign-in", "/sign-up"]) {
+    if (sitemap.includes(route)) {
+      record(viewport, "sitemap", `Private route was published: ${route}`);
+    }
+  }
+  if (sitemap.includes("<lastmod>")) {
+    record(viewport, "sitemap", "Sitemap contains unverified modification dates.");
+  }
+
+  for (const route of ["/sign-in", "/sign-up"]) {
+    const response = await page.context().request.get(`${baseUrl}${route}`);
+    if (!response.headers()["x-robots-tag"]?.includes("noindex")) {
+      record(viewport, "private-indexing", {
+        route,
+        xRobotsTag: response.headers()["x-robots-tag"] ?? null,
+      });
+    }
+    const html = await response.text();
+    if (!html.includes('name="robots"') || !html.includes("noindex")) {
+      record(viewport, "private-indexing", `${route} is missing noindex metadata.`);
+    }
+  }
+}
+
 async function auditJourney(browser, viewport) {
   const context = await browser.newContext({ reducedMotion: "reduce", viewport });
   const page = await context.newPage();
@@ -90,6 +154,10 @@ async function auditJourney(browser, viewport) {
   await installApiStubs(page, state);
 
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
+  await checkPage(page, viewport.name, "homepage");
+  if (viewport.name === "desktop") {
+    await auditDiscovery(page, viewport.name);
+  }
   await page.getByLabel("Property address").first().fill("123 Main St");
   await page.getByRole("button", { name: "Start My Offer" }).first().click();
   await page.waitForURL(/\/get-a-cash-offer\?address=123\+Main\+St/);
@@ -230,5 +298,5 @@ if (findings.length) {
   console.error(JSON.stringify({ findings }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log("Public offer audit passed: desktop and mobile progressive journeys.");
+  console.log("Public audit passed: discovery, accessibility, and desktop/mobile offer journeys.");
 }

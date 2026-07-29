@@ -21,9 +21,10 @@ When sources disagree, use this order:
 1. **Application code and database migrations** determine what the software actually does.
 2. **`SYSTEM_MAP.md`** describes the current product and its boundaries.
 3. **`FINISHING_ROADMAP.md`** describes unfinished work and external acceptance steps.
-4. **Domain references** define approved operating policy and specialist methods.
-5. **User manuals** explain how staff should perform current workflows.
-6. **Git history** preserves completed phase plans and prior decisions for forensic review only.
+4. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
+5. **Domain references** define approved operating policy and specialist methods.
+6. **User manuals** explain how staff should perform current workflows.
+7. **Git history** preserves completed phase plans and prior decisions for forensic review only.
 
 Never use an old commit, completed phase document, or provider application draft to override the
 current code or canonical documentation.
@@ -34,6 +35,7 @@ current code or canonical documentation.
 | --- | --- | --- |
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
+| `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |
@@ -92,7 +94,8 @@ nontechnical owner procedure while `SETUP_REFERENCE.md` remains the exact mainta
 
 ### Future Work
 
-`FINISHING_ROADMAP.md` and `AI_AUTOMATION_ROADMAP.md` answer:
+`FINISHING_ROADMAP.md`, `PUBLIC_SITE_CONVERSION_ROADMAP.md`, and
+`AI_AUTOMATION_ROADMAP.md` answer:
 
 - What is incomplete?
 - What requires credentials, provider approval, production evidence, or human acceptance?
