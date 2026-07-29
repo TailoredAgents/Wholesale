@@ -2,8 +2,8 @@
 
 Last updated: July 20, 2026
 
-Current status: implementation complete; Stonegate's dedicated A2P Campaign is approved and ready
-for final sender configuration and production acceptance.
+Current status: implementation complete; Stonegate's dedicated A2P Campaign failed review and is
+waiting for corrected branded evidence and resubmission.
 Do not perform the production sender cutover until the Campaign and new number are approved.
 
 Phase 3 uses a Twilio Messaging Service so Stonegate owns the phone numbers, routing, opt-out

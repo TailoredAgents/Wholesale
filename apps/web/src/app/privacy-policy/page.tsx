@@ -70,6 +70,14 @@ export default function PrivacyPolicyPage() {
             law. Those providers may use the information only to provide services to Stonegate Home
             Buyers.
           </p>
+          <p>
+            If you separately opt in, Stonegate Home Buyers may send recurring automated messages
+            about your property inquiry, qualification questions, appointments, cash-offer
+            updates, and related follow-up. Message frequency varies. Message and data rates may
+            apply. Reply STOP to unsubscribe or HELP for help. Text-message consent is not a
+            condition of requesting or accepting an offer. See our{" "}
+            <Link href="/terms">Terms &amp; Conditions</Link> for complete program terms.
+          </p>
         </section>
 
         <section>

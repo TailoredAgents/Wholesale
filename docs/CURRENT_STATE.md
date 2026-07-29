@@ -343,7 +343,7 @@ transactions and human judgment before Stonegate relies on it for offer ceilings
 
 | Area | Status | Next action |
 | --- | --- | --- |
-| A2P 10DLC | Approved | Attach the approved Stonegate SMS number to its dedicated Messaging Service and complete production acceptance |
+| A2P 10DLC | Failed review; correction prepared | Resubmit with subscriber opt-in enabled and the branded form, Privacy Policy, and Terms URLs |
 | Twilio SMS | Code complete; final provider cutover pending | Configure the new Messaging Service SID and new SMS sender, then run STOP/START/inbound/delivery tests |
 | Twilio Voice | Code complete; activation paused | Finish API key, TwiML App, Render variables, outbound test, and inbound webhook on the Voice number |
 | Call recording | Implemented but intentionally disabled | Approve disclosure and retention policy, then test before enabling |

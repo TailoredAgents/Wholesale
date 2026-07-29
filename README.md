@@ -14,8 +14,8 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 - Clerk authentication and organization-scoped RBAC are live.
 - CRM, shared inbox, underwriting V2.1, reports, transactions, buyers, finance, marketing, and AI
   control foundations are implemented.
-- The branded web domain is live. Stonegate's dedicated A2P Campaign is approved; final Twilio SMS
-  sender cutover and Voice acceptance remain pending.
+- The branded web domain is live. Stonegate's dedicated A2P Campaign requires corrected evidence
+  and resubmission; final Twilio SMS sender cutover and Voice acceptance remain pending.
   Resend F8.1-F8.5 provider-neutral foundation, outbound delivery, signed receiving, durable
   attachments, recovery, authorized Inbox senders, owner administration, and routing review are
   complete; provider setup and acceptance remain.

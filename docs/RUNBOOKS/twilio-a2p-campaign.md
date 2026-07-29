@@ -1,12 +1,10 @@
 # Twilio A2P Campaign Registration
 
-Last updated: July 27, 2026
+Last updated: July 29, 2026
 
-Current status: the campaign described below was submitted and is under provider review. Stonegate
-subsequently changed its public domain to `stonegatehb.com`. If the pending campaign still shows
-the retired domain, correct it in Twilio if editing is available or contact Twilio support before
-activating campaign traffic. Keep the consent wording unchanged unless Twilio requests a
-correction.
+Current status: the first submission failed provider review. Edit and resubmit the existing
+Campaign with the branded URLs and corrected consent settings below. Do not delete the failed
+Campaign or activate production traffic while the corrected review is pending.
 
 Use this runbook for Stonegate Home Buyers' separate seller-communications campaign. This campaign
 is limited to people who explicitly consent through Stonegate's public cash-offer form. It does not
@@ -101,6 +99,27 @@ Stonegate's initial opt-in method is the website checkbox only:
 Do not claim keyword opt-in until the new number is configured to recognize the disclosed keywords
 and send the disclosed confirmation. Use Twilio's default or Advanced Opt-Out handling for STOP,
 START, and HELP after the Messaging Service exists.
+
+## Consent And Keyword Fields
+
+- Subscriber opt-in / end-user consent: `Yes`
+- Opt-in keywords: leave blank
+- Opt-in message: leave blank
+- Opt-out keywords: retain Twilio's standard list
+- Opt-out message:
+
+```text
+Stonegate Home Buyers: You have opted out and will receive no further messages. Reply START to
+resubscribe.
+```
+
+- Help keywords: `HELP`, `INFO`
+- Help message:
+
+```text
+Stonegate Home Buyers: For help, call 678-541-7725. Msg & data rates may apply. Reply STOP to
+unsubscribe.
+```
 
 ## Operational Rules
 

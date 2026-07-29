@@ -4,15 +4,15 @@ Last updated: July 29, 2026
 
 ## Current Status
 
-Stonegate's separate Low Volume Mixed Campaign is approved. The remaining work is to attach the
-approved Stonegate number to its dedicated Messaging Service, configure the production values,
-and complete the SMS acceptance checks in this runbook.
+Stonegate's separate Low Volume Mixed Campaign failed provider review. The resubmission must use
+the branded Stonegate URLs, mark subscriber opt-in as enabled, and include the corrected branded
+HELP and STOP responses. Do not activate production SMS until the corrected Campaign is approved.
 
 Submitted public evidence:
 
-- Opt-in form: `https://oakwell-web.onrender.com/get-a-cash-offer`
-- Privacy Policy: `https://oakwell-web.onrender.com/privacy-policy`
-- Terms: `https://oakwell-web.onrender.com/terms`
+- Opt-in form: `https://www.stonegatehb.com/get-a-cash-offer`
+- Privacy Policy: `https://www.stonegatehb.com/privacy-policy`
+- Terms: `https://www.stonegatehb.com/terms`
 
 The public pages were verified live before submission. The form uses a separate, optional,
 unchecked SMS checkbox and the API stores versioned consent evidence.
