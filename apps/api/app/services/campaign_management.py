@@ -1641,6 +1641,10 @@ def create_calling_batch(
     assignee = active_user(db, principal.organization_id, payload.assigned_user_id)
     if assignee is None:
         raise ValueError("Calling batch requires an active workspace user.")
+    if not assignee.calling_enabled:
+        raise ValueError(
+            "Enable cold calling for this workspace user before assigning a calling batch."
+        )
     import_batch = None
     if payload.import_batch_id:
         import_batch = db.scalar(

@@ -44,14 +44,156 @@ def create_user(
     email: str,
     name: str,
     role_key: str,
+    *,
+    calling_enabled: bool = False,
 ) -> dict[str, Any]:
     response = client.post(
         "/api/v1/operations/users",
         headers=headers,
-        json={"email": email, "display_name": name, "role_key": role_key},
+        json={
+            "email": email,
+            "display_name": name,
+            "role_key": role_key,
+            "calling_enabled": calling_enabled,
+        },
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, Any], response.json())
+
+
+def test_cold_calling_can_be_added_to_another_staff_role_without_broadening_access(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    caller_email = "disposition-caller@example.com"
+    other_caller_email = "other-disposition-caller@example.com"
+    disabled_email = "disposition-only@example.com"
+    caller = create_user(
+        client,
+        owner_headers,
+        caller_email,
+        "Disposition Caller",
+        "disposition_rep",
+        calling_enabled=True,
+    )
+    create_user(
+        client,
+        owner_headers,
+        other_caller_email,
+        "Other Disposition Caller",
+        "disposition_rep",
+        calling_enabled=True,
+    )
+    disabled = create_user(
+        client,
+        owner_headers,
+        disabled_email,
+        "Disposition Only",
+        "disposition_rep",
+    )
+    assert caller["calling_enabled"] is True
+    assert disabled["calling_enabled"] is False
+
+    batch = create_prospecting_batch(client, owner_headers, caller["id"])
+    create_approved_script(client, owner_headers)
+    caller_headers = {"X-Dev-User-Email": caller_email}
+    caller_workbench = client.get("/api/v1/prospecting", headers=caller_headers)
+    assert caller_workbench.status_code == 200, caller_workbench.text
+    assert caller_workbench.json()["can_manage"] is False
+    assert len(caller_workbench.json()["queue_entries"]) == 3
+    assert {
+        entry["assigned_user_name"] for entry in caller_workbench.json()["queue_entries"]
+    } == {"Disposition Caller"}
+
+    other_workbench = client.get(
+        "/api/v1/prospecting",
+        headers={"X-Dev-User-Email": other_caller_email},
+    )
+    assert other_workbench.status_code == 200, other_workbench.text
+    assert other_workbench.json()["current_entry"] is None
+    assert other_workbench.json()["queue_entries"] == []
+    assert (
+        client.get(
+            "/api/v1/prospecting",
+            headers={"X-Dev-User-Email": disabled_email},
+        ).status_code
+        == 403
+    )
+    operations = client.get("/api/v1/operations", headers=caller_headers)
+    assert operations.status_code == 200, operations.text
+    assert operations.json()["can_manage"] is False
+    assert [user["id"] for user in operations.json()["users"]] == [caller["id"]]
+    assert client.get("/api/v1/campaign-management", headers=caller_headers).status_code == 403
+
+    start = client.post(
+        f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
+        headers=caller_headers,
+    )
+    assert start.status_code == 200, start.text
+    attempt = db_session.get(
+        ProspectingAttempt,
+        UUID(start.json()["active_attempt"]["id"]),
+    )
+    assert attempt is not None
+    assert str(attempt.caller_user_id) == caller["id"]
+
+    prospect_response = client.post(
+        "/api/v1/operations/prospects",
+        headers=owner_headers,
+        json={
+            "campaign_id": batch["campaign_id"],
+            "legal_name": "Unassigned Seller",
+            "phone": "4045550199",
+        },
+    )
+    assert prospect_response.status_code == 201, prospect_response.text
+    disabled_batch = client.post(
+        "/api/v1/campaign-management/calling-batches",
+        headers=owner_headers,
+        json={
+            "campaign_id": batch["campaign_id"],
+            "assigned_user_id": disabled["id"],
+            "name": "Disabled Caller Batch",
+            "maximum_records": 10,
+        },
+    )
+    assert disabled_batch.status_code == 422
+    assert "Enable cold calling" in disabled_batch.json()["detail"]
+
+    disabled_va_email = "disabled-va@example.com"
+    disabled_va = create_user(
+        client,
+        owner_headers,
+        disabled_va_email,
+        "Temporarily Disabled VA",
+        "prospecting_caller",
+    )
+    assert disabled_va["calling_enabled"] is True
+    disable_response = client.patch(
+        f"/api/v1/operations/users/{disabled_va['id']}",
+        headers=owner_headers,
+        json={
+            "calling_enabled": False,
+            "reason": "Caller is temporarily unavailable for batch assignments.",
+        },
+    )
+    assert disable_response.status_code == 200, disable_response.text
+    assert disable_response.json()["calling_enabled"] is False
+    assert (
+        client.get(
+            "/api/v1/prospecting",
+            headers={"X-Dev-User-Email": disabled_va_email},
+        ).status_code
+        == 403
+    )
 
 
 def create_prospecting_batch(

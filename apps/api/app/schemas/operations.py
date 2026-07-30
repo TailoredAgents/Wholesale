@@ -10,6 +10,7 @@ class OperationsUserRead(BaseModel):
     email: str
     display_name: str
     is_active: bool
+    calling_enabled: bool
     role_keys: list[str]
     open_leads: int
     open_tasks: int
@@ -19,12 +20,14 @@ class OperationsUserCreate(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     display_name: str = Field(min_length=1, max_length=255)
     role_key: str = Field(min_length=1, max_length=120)
+    calling_enabled: bool = False
 
 
 class OperationsUserUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     role_key: str | None = Field(default=None, min_length=1, max_length=120)
     is_active: bool | None = None
+    calling_enabled: bool | None = None
     reason: str = Field(min_length=3, max_length=500)
 
 

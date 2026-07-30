@@ -189,6 +189,11 @@ The API uses granular permissions in addition to role-based navigation. Permissi
 - user, credential, audit, deletion, operating-model, and AI-prompt administration
 - acquisition operations and assigned calling-list work
 
+`User.calling_enabled` is a separate capability switch. When enabled, authentication adds only
+`calling_lists:work_assigned` to that user's effective permissions. This lets a person keep their
+primary Acquisitions, Dispositions, or other staff role while receiving assigned calling batches.
+The Prospecting service still scopes non-managers to their own batch entries.
+
 The frontend hides irrelevant navigation, but API permission checks are authoritative. Hiding a tab
 is not the security boundary.
 
@@ -359,6 +364,7 @@ The OS uses five stable navigation groups.
 - Owner and manager administration for users, teams, markets, territories, campaigns, lists,
   saved views, duplicates, and follow-up plans.
 - This is where staff records are created before the matching person signs in with Clerk.
+- The Team view controls per-user cold-calling eligibility independently of the main job role.
 
 **Campaigns (`/os/campaigns`)**
 
@@ -375,7 +381,7 @@ The OS uses five stable navigation groups.
 
 **Prospecting (`/os/prospecting`)**
 
-- VA Caller workbench for assigned records.
+- Assigned-caller workbench for VAs and any other staff explicitly enabled for cold calling.
 - Shows the complete assigned shift through due, callback, correction, scheduled, waiting, and
   all-assigned queue views while one selected prospect remains the active calling context.
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
@@ -487,11 +493,12 @@ The OS uses five stable navigation groups.
 5. A CSV is validated with a saved mapping before import.
 6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
-7. Valid prospects enter a cohort-linked calling batch and are assigned to VAs.
+7. Valid prospects enter a cohort-linked calling batch and are assigned to an active staff member
+   with cold calling enabled.
 
 ### 8.2 Prospecting
 
-1. A VA sees only assigned callable prospect records.
+1. A non-manager caller sees only assigned callable prospect records.
 2. The approved script and qualification fields guide the call.
 3. Every attempt records outcome, notes, callback, script evidence, cohort, calling method, answer
    class, right-party evidence, interest, permission, and governing timestamps.
@@ -505,7 +512,8 @@ The OS uses five stable navigation groups.
 2. Contact, property, conversation, qualification answers, attempts, and appointment context are
    preserved.
 3. The lead is assigned to acquisitions; owners can become watchers.
-4. The VA loses broad edit access after handoff but the original activity remains attributable.
+4. The original caller loses prospect editing access after handoff but the original activity
+   remains attributable.
 5. Website inquiries enter the same Lead Manager queue through a separate consented intake path.
 6. The Lead Manager accepts, returns for correction, or terminally rejects the handoff with a
    structured decision code.

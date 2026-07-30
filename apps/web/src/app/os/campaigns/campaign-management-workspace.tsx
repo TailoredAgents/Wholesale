@@ -106,9 +106,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     [],
   );
   const activeUsers = data.users.filter((user) => user.is_active);
-  const callers = activeUsers.filter((user) =>
-    user.role_keys.some((role) => ["prospecting_caller", "acquisition_manager", "administrator"].includes(role)),
-  );
+  const callers = activeUsers.filter((user) => user.calling_enabled);
   const selectedImport = data.import_batches.find((item) => item.id === selectedImportId);
   const selectedBatch = data.calling_batches.find((item) => item.id === selectedBatchId);
   const totalActualCost = data.quality.reduce((total, campaign) => total + campaign.actual_cost_cents, 0);

@@ -354,6 +354,7 @@ def ensure_demo_user(
             display_name=display_name,
             external_auth_id=None,
             is_active=True,
+            calling_enabled=role_key == "prospecting_caller",
         )
         db.add(user)
         db.flush()

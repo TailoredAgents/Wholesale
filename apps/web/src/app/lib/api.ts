@@ -73,6 +73,7 @@ export type OperationsUser = {
   email: string;
   display_name: string;
   is_active: boolean;
+  calling_enabled: boolean;
   role_keys: string[];
   open_leads: number;
   open_tasks: number;

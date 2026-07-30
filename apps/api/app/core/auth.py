@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.domain.rbac import PermissionKeys
 from app.models.foundation import Permission, RoleAssignment, RolePermission, User
 
 logger = structlog.get_logger()
@@ -65,7 +66,7 @@ def get_current_principal(
 
 
 def principal_for_user(db: Session, user: User) -> Principal:
-    permission_keys = frozenset(
+    permission_keys = set(
         db.scalars(
             select(distinct(Permission.key))
             .join(RolePermission, RolePermission.permission_id == Permission.id)
@@ -76,11 +77,14 @@ def principal_for_user(db: Session, user: User) -> Principal:
             )
         )
     )
+    permission_keys.discard(PermissionKeys.WORK_ASSIGNED_CALLING_LISTS)
+    if user.calling_enabled:
+        permission_keys.add(PermissionKeys.WORK_ASSIGNED_CALLING_LISTS)
     return Principal(
         user_id=user.id,
         organization_id=user.organization_id,
         email=user.email,
-        permission_keys=permission_keys,
+        permission_keys=frozenset(permission_keys),
     )
 
 

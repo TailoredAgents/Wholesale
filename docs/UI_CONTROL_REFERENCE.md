@@ -370,8 +370,10 @@ Operations contains six tabs: **Calendar**, **Markets & campaigns**, **Calling l
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Deactivate / Reactivate** | Removes or restores OS access without deleting history | Owner or authorized administrator only |
+| **Cold calling** | Allows this user to receive calling batches and opens their assigned Prospecting queue | Does not change the user's main role or grant unrelated pages |
 | Name / Email | Creates the Stonegate-side user identity | Must match the person's Clerk sign-in email |
 | Role | VA, Acquisitions rep/manager, Dispositions rep, or Transaction Coordinator | Choose minimum job access |
+| Allow assigned cold calling | Enables Prospecting when the new person may also cold call | VA Caller accounts are enabled automatically |
 | **Create user** | Creates the individual Stonegate user | Does not create or share a password |
 | Add member | Chooses an active user for a team | Requires a team |
 | Membership role | Member or Manager | Manager role carries team responsibility |
@@ -450,7 +452,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Batch name / Campaign | Names and scopes the batch | Required |
 | Cohort | Restricts records to the selected source cohort and applies its dialing mode | Recommended for controlled comparisons |
 | Import batch | Limits records to one import or any unbatched campaign records | Optional |
-| Assigned caller | Gives the batch to a specific caller | Required |
+| Assigned caller | Gives the batch to a specific active caller | Required; the person must have **Cold calling** enabled in Operations > Team |
 | Maximum records | Caps records added, between 1 and 1,000 | Required |
 | Due by | Sets the batch deadline | Optional but recommended |
 | Notes | Adds manager instructions | Optional |
@@ -476,7 +478,7 @@ Prospecting views are **Work queue**, **Call quality**, **Handoff review** for m
 | Due now / Callbacks / Corrections / Scheduled / Waiting / All assigned | Filters the caller's complete assigned shift without changing ownership | Caller sees only assigned records; managers can review the broader operation |
 | Campaign and batch strip | Shows ready, callback, correction, active, and waiting workload plus dialing connection state | Read-only |
 | Assigned seller row | Loads that seller into the three-panel calling context | Disabled for another row while the caller has an active attempt |
-| One-by-one calling | Confirms the VA calls one assigned owner at a time | External multi-line dialing is intentionally retired |
+| One-by-one calling | Confirms the caller contacts one assigned owner at a time | External multi-line dialing is intentionally retired |
 | Ranked phone and email methods | Shows all validated imported contact methods in source rank order | Based on imported contact evidence |
 | Prior attempt details | Expands notes, callback commitment, and structured qualification answers | Read-only history |
 | Assigned priority row | Selects the current assigned prospect | Caller sees assigned work only |

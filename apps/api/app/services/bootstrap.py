@@ -161,9 +161,12 @@ def ensure_admin_user(
             email=normalized_email,
             display_name=admin_name or normalized_email,
             is_active=True,
+            calling_enabled=True,
         )
         db.add(user)
         db.flush()
+    elif not user.calling_enabled:
+        user.calling_enabled = True
 
     owner_role = db.scalar(
         select(Role).where(Role.organization_id == organization.id, Role.key == "owner")

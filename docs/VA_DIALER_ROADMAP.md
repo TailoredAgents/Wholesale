@@ -4,8 +4,9 @@ Last updated: July 30, 2026
 
 ## Decision
 
-Stonegate will not use BatchDialer, predictive dialing, or multi-line dialing. VAs will call one
-property owner at a time from their assigned Stonegate queues.
+Stonegate will not use BatchDialer, predictive dialing, or multi-line dialing. VAs and any other
+staff members explicitly enabled for cold calling will call one property owner at a time from
+their assigned Stonegate queues.
 
 This file keeps its original name so existing documentation links do not break. It now governs the
 one-by-one VA calling workflow.
@@ -13,7 +14,10 @@ one-by-one VA calling workflow.
 ## Operating Model
 
 - PropStream remains the initial source for prospect lists.
-- Every VA has an individual Stonegate login and sees only assigned records.
+- Every caller has an individual Stonegate login and sees only assigned records unless their main
+  management role already grants broader operational oversight.
+- Cold calling is an explicit per-user capability. Enabling it does not change the person's main
+  role or expose unrelated workspaces.
 - Each call is made one at a time.
 - The VA records the outcome, notes, callback, qualification, and appointment in Stonegate.
 - Interested sellers move through the existing reviewed handoff to the Lead Manager.
@@ -42,7 +46,7 @@ Implemented capabilities retained from the prior phases:
 1. PropStream CSV imports, reusable mappings, validation, duplicate handling, source evidence,
    list refresh, and ranked contact methods.
 2. Campaign cohorts, work sessions, VA labor cost, and accepted-warm-lead measurement.
-3. Restricted VA Caller accounts and assigned calling batches.
+3. Restricted VA Caller accounts plus per-user cold-calling eligibility for staff in other roles.
 4. A focused Prospecting workspace with due calls, callbacks, corrections, scheduled work, and
    complete assigned queues.
 5. Approved scripts, qualification prompts, attempts, outcomes, notes, appointments, and
@@ -54,7 +58,12 @@ Implemented capabilities retained from the prior phases:
 
 ### VC1. One-By-One Calling Acceptance
 
-- Test a complete VA shift using assigned Stonegate records.
+Build status: implemented and covered by synthetic role, assignment, scoping, and attribution
+tests. A real staff shift is still required for operational acceptance.
+
+- In **Operations > Team**, enable **Cold calling** for each person who may receive a batch.
+- In **Campaigns > Calling batches**, assign the batch to any active enabled caller.
+- Test a complete caller shift using assigned Stonegate records.
 - Confirm the VA can move quickly between attempts without losing notes or callbacks.
 - Confirm every outcome is attributed to the correct caller, campaign, and cohort.
 - Confirm restricted pages remain inaccessible.
@@ -80,5 +89,5 @@ Implemented capabilities retained from the prior phases:
 
 ## Next Action
 
-Run VC1 with a small controlled list and one VA account. Improve the one-by-one workspace only
-where the real shift reveals unnecessary steps or missing information.
+Run VC1 with a small controlled list and one enabled staff account. Improve the one-by-one
+workspace only where the real shift reveals unnecessary steps or missing information.

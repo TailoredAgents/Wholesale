@@ -32,7 +32,7 @@ Start with:
 - `docs/SETUP_REFERENCE.md`: consolidated local, Render, domain, credential, webhook, and provider
   setup reference without secret values.
 - `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
-- `docs/VA_DIALER_ROADMAP.md`: hybrid VA multi-line and power-dialer build, pilot, economics, and
+- `docs/VA_DIALER_ROADMAP.md`: one-by-one staff calling workflow, assignment, acceptance, and
   launch sequence.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.
 - `docs/DESIGN_SYSTEM.md`: shared OS tokens, components, states, and responsive page contracts.

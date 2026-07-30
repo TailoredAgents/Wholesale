@@ -115,6 +115,7 @@ export function OperationsWorkspace({
       display_name: formValue(data, "display_name"),
       email: formValue(data, "email"),
       role_key: formValue(data, "role_key"),
+      calling_enabled: data.get("calling_enabled") === "on",
     });
     if (saved) form.reset();
   }
@@ -214,6 +215,15 @@ export function OperationsWorkspace({
       reason: user.is_active
         ? "Workspace access deactivated by an operations manager."
         : "Workspace access restored by an operations manager.",
+    });
+  }
+
+  async function setUserCalling(user: AcquisitionOperations["users"][number]) {
+    await mutate(`/api/v1/operations/users/${user.id}`, "PATCH", {
+      calling_enabled: !user.calling_enabled,
+      reason: user.calling_enabled
+        ? "Cold-calling batch access removed by an operations manager."
+        : "Cold-calling batch access granted by an operations manager.",
     });
   }
 
@@ -541,8 +551,8 @@ export function OperationsWorkspace({
         <div className={styles.twoColumn}>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Access</span><h3>Workspace users</h3></div><strong>{activeUsers.length}</strong></div>
-            <div className={styles.rows}>{operations.users.map((user) => <div className={styles.userRow} key={user.id}><div><strong>{user.display_name}</strong><span>{user.email}</span></div><div><span>{roleLabel(user)}</span><small>{user.open_leads} leads · {user.open_tasks} tasks</small></div><button className={styles.secondaryButton} onClick={() => setUserActive(user)} type="button">{user.is_active ? "Deactivate" : "Reactivate"}</button></div>)}</div>
-            <form className={styles.stackForm} onSubmit={submitUser}><h4>Add individual login</h4><label><span>Name</span><input name="display_name" required /></label><label><span>Email</span><input name="email" required type="email" /></label><label><span>Role</span><select name="role_key"><option value="prospecting_caller">VA caller</option><option value="acquisition_rep">Acquisitions rep</option><option value="acquisition_manager">Acquisitions manager</option><option value="disposition_rep">Dispositions rep</option><option value="transaction_coordinator">Transaction coordinator</option></select></label><button type="submit">Create user</button></form>
+            <div className={styles.rows}>{operations.users.map((user) => <div className={styles.userRow} key={user.id}><div><strong>{user.display_name}</strong><span>{user.email}</span></div><div><span>{roleLabel(user)}</span><small>{user.open_leads} leads · {user.open_tasks} tasks</small></div><div className={styles.inlineActions}><label className={styles.callingToggle}><input checked={user.calling_enabled} onChange={() => void setUserCalling(user)} type="checkbox" /><span>Cold calling</span></label><button className={styles.secondaryButton} onClick={() => setUserActive(user)} type="button">{user.is_active ? "Deactivate" : "Reactivate"}</button></div></div>)}</div>
+            <form className={styles.stackForm} onSubmit={submitUser}><h4>Add individual login</h4><label><span>Name</span><input name="display_name" required /></label><label><span>Email</span><input name="email" required type="email" /></label><label><span>Role</span><select name="role_key"><option value="prospecting_caller">VA caller</option><option value="acquisition_rep">Acquisitions rep</option><option value="acquisition_manager">Acquisitions manager</option><option value="disposition_rep">Dispositions rep</option><option value="transaction_coordinator">Transaction coordinator</option></select></label><label className={styles.callingToggle}><input name="calling_enabled" type="checkbox" /><span>Allow assigned cold calling</span></label><button type="submit">Create user</button></form>
           </div>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Structure</span><h3>Teams</h3></div><strong>{operations.teams.length}</strong></div>

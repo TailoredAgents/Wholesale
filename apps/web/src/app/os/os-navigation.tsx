@@ -235,6 +235,7 @@ export function canSeeNavItem(profile: WorkspaceProfile, item: OsNavItem) {
   const authorized = item.anyPermissions.some((permission) =>
     profile.permissions.includes(permission),
   );
+  if (item.href === "/os/prospecting") return authorized;
   return roleRelevant && authorized;
 }
 

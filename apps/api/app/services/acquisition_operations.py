@@ -650,6 +650,7 @@ def list_users(
                 email=user.email,
                 display_name=user.display_name,
                 is_active=user.is_active,
+                calling_enabled=user.calling_enabled,
                 role_keys=user_role_keys(db, principal.organization_id, user.id),
                 open_leads=open_leads,
                 open_tasks=open_tasks,
@@ -679,6 +680,7 @@ def create_operations_user(
         display_name=payload.display_name.strip(),
         external_auth_id=None,
         is_active=True,
+        calling_enabled=payload.calling_enabled or role.key == "prospecting_caller",
     )
     db.add(user)
     db.flush()
@@ -696,7 +698,12 @@ def create_operations_user(
         entity_type="user",
         entity_id=user.id,
         previous=None,
-        new={"email": normalized_email, "role_key": role.key, "is_active": True},
+        new={
+            "email": normalized_email,
+            "role_key": role.key,
+            "is_active": True,
+            "calling_enabled": user.calling_enabled,
+        },
         reason="Acquisition operations user created",
     )
     db.commit()
@@ -733,6 +740,7 @@ def operations_user_read(db: Session, user: User) -> OperationsUserRead:
         email=user.email,
         display_name=user.display_name,
         is_active=user.is_active,
+        calling_enabled=user.calling_enabled,
         role_keys=user_role_keys(db, user.organization_id, user.id),
         open_leads=open_leads,
         open_tasks=open_tasks,
@@ -758,14 +766,19 @@ def update_operations_user(
     previous = {
         "display_name": user.display_name,
         "is_active": user.is_active,
+        "calling_enabled": user.calling_enabled,
         "role_keys": user_role_keys(db, principal.organization_id, user.id),
     }
     if payload.display_name is not None:
         user.display_name = payload.display_name.strip()
     if payload.is_active is not None:
         user.is_active = payload.is_active
+    if payload.calling_enabled is not None:
+        user.calling_enabled = payload.calling_enabled
     if payload.role_key is not None:
         role = validate_operational_role(db, principal.organization_id, payload.role_key)
+        if role.key == "prospecting_caller" and payload.calling_enabled is None:
+            user.calling_enabled = True
         for assignment in db.scalars(
             select(RoleAssignment).where(
                 RoleAssignment.organization_id == principal.organization_id,
@@ -791,6 +804,7 @@ def update_operations_user(
         new={
             "display_name": user.display_name,
             "is_active": user.is_active,
+            "calling_enabled": user.calling_enabled,
             "role_key": payload.role_key,
         },
         reason=payload.reason,

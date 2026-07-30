@@ -156,6 +156,11 @@ intentional.
 The Owner can see all navigation. Restricted users should see only the pages required for their
 jobs.
 
+Cold calling is also a separate staff capability. An Owner can enable **Cold calling** for a person
+in another role, such as Acquisitions or Dispositions, without changing that person's primary
+role. The person then receives the Prospecting navigation and can work only calling records
+assigned to them unless their primary role already grants management oversight.
+
 ## First Sign-In
 
 1. Open `/os`.
@@ -640,7 +645,7 @@ Open **Campaigns**. The workspace contains:
 11. Record list, labor, phone-number, and voice costs in **Costs**, linked to the cohort when
     applicable.
 12. Create a calling batch using the same cohort and import.
-13. Assign the batch or individual entries to VAs.
+13. Assign the batch to a VA or another active staff member with **Cold calling** enabled.
 
 PropStream refreshes are expected to show matched existing rows. This is not a failed import. It
 means Stonegate recognized the person or property and preserved the existing history. **Import
@@ -650,7 +655,7 @@ cohort. The exact same file cannot be imported twice.
 Blank DNC data does not require review. Explicit Do Not Contact records and seller opt-outs remain
 blocked.
 
-## 3. VA Prospecting
+## 3. Prospecting
 
 Open **Prospecting**. Available views depend on role:
 
@@ -699,9 +704,11 @@ submission with a structured correction type and explanation, or terminally reje
 a structured rejection type and explanation. Only accepted handoffs with complete right-party,
 interest, follow-up-permission, and required-answer evidence count as accepted warm leads.
 
-A VA cannot open another caller's prospect and cannot access underwriting, contracts,
-transactions, buyers, Finance, global email recipients, or email administration. Contact an Owner
-or manager if the assignment itself is wrong; do not share logins.
+An assigned-only caller cannot open another caller's prospect. Enabling **Cold calling** adds the
+Prospecting work permission; it does not grant unrelated tabs or override the permissions from the
+person's main role. A restricted VA still cannot access underwriting, contracts, transactions,
+buyers, Finance, global email recipients, or email administration. Contact an Owner or manager if
+the assignment itself is wrong; do not share logins.
 
 ## 4. Lead Manager Qualification
 
