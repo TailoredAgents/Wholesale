@@ -7,6 +7,8 @@ import styles from "./management-journey.module.css";
 const routeByKey = {
   finance: "/os/finance",
   marketing: "/os/marketing",
+  "team-access": "/os/operations?tab=team",
+  email: "/os/inbox?manage=email",
   "operating-model": "/os/operating-model",
   ai: "/os/ai",
 } as const;
@@ -16,7 +18,7 @@ export type ManagementRouteKey = keyof typeof routeByKey;
 export async function ManagementJourney({ active }: { active: ManagementRouteKey }) {
   const profile = await getWorkspaceProfile();
   const managementItems = osNavGroups
-    .filter((group) => ["Business", "Control"].includes(group.label))
+    .filter((group) => ["Business", "Management"].includes(group.label))
     .flatMap((group) => group.items);
   const visibleItems = profile
     ? managementItems.filter((item) => canSeeNavItem(profile, item))
@@ -25,7 +27,7 @@ export async function ManagementJourney({ active }: { active: ManagementRouteKey
       : managementItems.filter((item) => item.href === routeByKey[active]);
 
   return (
-    <nav aria-label="Business and control workspaces" className={styles.journey}>
+    <nav aria-label="Business and management workspaces" className={styles.journey}>
       {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = item.href === routeByKey[active];

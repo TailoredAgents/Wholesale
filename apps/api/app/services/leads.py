@@ -48,9 +48,12 @@ from app.models.foundation import (
     LeadFormSubmission,
     OfferNegotiationPlan,
     OfflineConversionExport,
+    Permission,
     Property,
     RepairEstimate,
     RevenueRecord,
+    RoleAssignment,
+    RolePermission,
     RoleCredit,
     Task,
     Transaction,
@@ -212,15 +215,58 @@ SELLER_PIPELINE_STAGES = {
 
 
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
+    assigned_user_id = payload.assigned_user_id or principal.user_id
+    assigned_user = db.scalar(
+        select(User).where(
+            User.organization_id == principal.organization_id,
+            User.id == assigned_user_id,
+            User.is_active.is_(True),
+        )
+    )
+    if assigned_user is None:
+        raise ValueError("Select an active Stonegate owner for this lead.")
+    can_own_lead = db.scalar(
+        select(func.count())
+        .select_from(RoleAssignment)
+        .join(RolePermission, RolePermission.role_id == RoleAssignment.role_id)
+        .join(Permission, Permission.id == RolePermission.permission_id)
+        .where(
+            RoleAssignment.organization_id == principal.organization_id,
+            RoleAssignment.user_id == assigned_user.id,
+            Permission.key == PermissionKeys.EDIT_LEADS,
+        )
+    )
+    if not can_own_lead:
+        raise ValueError("Select an active acquisitions or management owner for this lead.")
+
     contact = Contact(
         organization_id=principal.organization_id,
         legal_name=payload.contact.legal_name,
         preferred_name=payload.contact.preferred_name,
         contact_type=payload.contact.contact_type,
-        assigned_user_id=principal.user_id,
+        assigned_user_id=assigned_user.id,
     )
     db.add(contact)
     db.flush()
+    contact_methods = [
+        ("phone", payload.phone, normalize_phone(payload.phone or "")),
+        ("email", payload.email, normalize_email(payload.email or "")),
+    ]
+    has_primary_method = False
+    for method_type, value, normalized_value in contact_methods:
+        if not value or not normalized_value:
+            continue
+        db.add(
+            ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=contact.id,
+                method_type=method_type,
+                value=value.strip(),
+                normalized_value=normalized_value,
+                is_primary=not has_primary_method,
+            )
+        )
+        has_primary_method = True
 
     property_record = Property(
         organization_id=principal.organization_id,
@@ -245,7 +291,7 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         organization_id=principal.organization_id,
         contact_id=contact.id,
         property_id=property_record.id,
-        assigned_user_id=principal.user_id,
+        assigned_user_id=assigned_user.id,
         source=payload.source,
         stage_key=payload.stage_key,
         lead_temperature=payload.lead_temperature,
@@ -272,6 +318,17 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
             summary=f"Lead created for {contact.legal_name}.",
         )
     )
+    if payload.initial_note:
+        db.add(
+            ActivityEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type="lead.note_added",
+                summary=payload.initial_note.strip(),
+            )
+        )
     db.add(
         AuditEvent(
             organization_id=principal.organization_id,
@@ -281,7 +338,13 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
             entity_type="lead",
             entity_id=lead.id,
             previous_value=None,
-            new_value={"source": lead.source, "stage_key": lead.stage_key},
+            new_value={
+                "source": lead.source,
+                "stage_key": lead.stage_key,
+                "assigned_user_id": str(assigned_user.id),
+                "phone_recorded": bool(payload.phone),
+                "email_recorded": bool(payload.email),
+            },
             reason="Manual local lead creation",
         )
     )

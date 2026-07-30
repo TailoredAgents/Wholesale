@@ -3,7 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { Bell, History, Menu, Search, X } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -49,6 +49,7 @@ export function OsShell({
   profile: WorkspaceProfile | null;
 }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -76,7 +77,7 @@ export function OsShell({
     (process.env.NODE_ENV === "development" ? developmentProfile : null);
   const visibleAccessState =
     isLoaded && !isSignedIn ? "error" : effectiveProfile ? "resolved" : accessState;
-  const context = navigationContext(pathname);
+  const context = navigationContext(pathname, searchParams.toString());
   const navGroups = useMemo(
     () => (effectiveProfile ? visibleNavGroups(effectiveProfile) : []),
     [effectiveProfile],
@@ -85,7 +86,9 @@ export function OsShell({
   const searchResults = destinations.filter((item) =>
     `${item.label} ${item.href}`.toLowerCase().includes(query.trim().toLowerCase()),
   );
-  const canOpenOperations = destinations.some((item) => item.href === "/os/operations");
+  const canOpenOperations = destinations.some(
+    (item) => item.href.split("?")[0] === "/os/operations",
+  );
 
   useEffect(() => {
     if (profile || resolvedProfile || !isLoaded || !isSignedIn) return;

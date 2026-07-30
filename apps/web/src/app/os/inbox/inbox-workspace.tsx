@@ -673,10 +673,12 @@ function CallTranscriptPanel({
 export function InboxWorkspace({
   initialFilter = "team",
   initialConversationId = null,
+  initialEmailAdminOpen = false,
   initialLeadId = null,
 }: {
   initialFilter?: InboxFilterKey;
   initialConversationId?: string | null;
+  initialEmailAdminOpen?: boolean;
   initialLeadId?: string | null;
 }) {
   const { getToken } = useAuth();
@@ -697,11 +699,12 @@ export function InboxWorkspace({
   const [emailProviderConfigured, setEmailProviderConfigured] = useState(false);
   const [emailConfigurationBlockers, setEmailConfigurationBlockers] = useState<string[]>([]);
   const [emailSettingsOpen, setEmailSettingsOpen] = useState(false);
-  const [emailAdminOpen, setEmailAdminOpen] = useState(false);
+  const [emailAdminOpen, setEmailAdminOpen] = useState(initialEmailAdminOpen);
   const [emailTemplateName, setEmailTemplateName] = useState("");
   const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
+
   const [globalComposeOpen, setGlobalComposeOpen] = useState(false);
   const [mailboxAliasId, setMailboxAliasId] = useState<string | null>(null);
   const [, setEmailSettingsStatus] = useState<"idle" | "saving" | "saved">("idle");

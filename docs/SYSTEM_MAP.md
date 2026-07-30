@@ -359,13 +359,6 @@ The OS uses five stable navigation groups.
 
 ### 7.2 Acquisitions
 
-**Operations (`/os/operations`)**
-
-- Owner and manager administration for users, teams, markets, territories, campaigns, lists,
-  saved views, duplicates, and follow-up plans.
-- This is where staff records are created before the matching person signs in with Clerk.
-- The Team view controls per-user cold-calling eligibility independently of the main job role.
-
 **Campaigns (`/os/campaigns`)**
 
 - CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
@@ -400,6 +393,9 @@ The OS uses five stable navigation groups.
 **All Leads (`/os/leads`)**
 
 - Searchable system of record for active leads.
+- Authorized staff can create an internal lead for a warm call, referral, networking source, or
+  other genuine opportunity. One submission creates contact methods, property, ownership,
+  source, qualification context, follow-up, conversation, and initial note.
 - Supports owner, stage, and saved-view filters plus direct next actions.
 - Archived records live at `/os/leads/archived`.
 
@@ -456,11 +452,23 @@ The OS uses five stable navigation groups.
 - Controlled homepage CTA experiments, stable variant assignment, device mix, downstream business
   outcomes, stopping thresholds, and recorded human decisions.
 
-### 7.5 Control
+### 7.5 Management
 
 **My Setup (`/os/my-setup`)**
 
 - Every staff member can review and accept assigned role expectations.
+
+**Team & Access (`/os/operations?tab=team`)**
+
+- Owner and manager administration for users, access roles, teams, markets, territories,
+  operational lists, saved views, duplicates, and follow-up plans.
+- This is where staff records are created before the matching person signs in with Clerk.
+- Cold-calling eligibility is controlled independently of the main access role.
+
+**Email Management (`/os/inbox?manage=email`)**
+
+- Opens the existing authenticated email administration panel for senders, routing, signatures,
+  templates, mailbox grants, and unresolved inbound assignments.
 
 **Floating Help**
 
@@ -471,7 +479,7 @@ The OS uses five stable navigation groups.
 - Returns document, heading, and source excerpts with every supported answer.
 - Has no access to live seller records and cannot perform operational actions.
 
-**Operating Model (`/os/operating-model`)**
+**Company & Policy (`/os/operating-model`)**
 
 - Owner-controlled seats, counterparties, role acceptance, compensation plans, role credits,
   disposition mode, and market launch checklists.

@@ -20,6 +20,7 @@ from app.models.foundation import (
     BuyerOffer,
     CommunicationRecord,
     Contact,
+    ContactMethod,
     Deal,
     Lead,
     OfferNegotiationPlan,
@@ -79,11 +80,26 @@ def test_create_and_list_lead(
 ) -> None:
     seed_owner(db_session)
     client = TestClient(app)
+    lead_owner_response = client.post(
+        "/api/v1/operations/users",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "email": "lead-manager@example.com",
+            "display_name": "Lead Manager",
+            "role_key": "acquisition_manager",
+        },
+    )
+    assert lead_owner_response.status_code == 201, lead_owner_response.text
+    payload = lead_payload()
+    payload["phone"] = "(404) 555-0114"
+    payload["email"] = "jane@example.com"
+    payload["assigned_user_id"] = lead_owner_response.json()["id"]
+    payload["initial_note"] = "Seller called the office and requested a same-week follow-up."
 
     create_response = client.post(
         "/api/v1/leads",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json=lead_payload(),
+        json=payload,
     )
 
     assert create_response.status_code == 201
@@ -93,6 +109,7 @@ def test_create_and_list_lead(
     assert created["property_state"] == "GA"
     assert created["property_county"] == "Fulton"
     assert created["source"] == "google_ppc"
+    assert created["assigned_user_email"] == "lead-manager@example.com"
     assert created["motivation"] == "Seller wants a fast close."
     assert created["desired_timeline"] == "30_days"
     assert created["property_condition"] == "needs_repairs"
@@ -107,7 +124,15 @@ def test_create_and_list_lead(
     items = list_response.json()["items"]
     assert len(items) == 1
     assert items[0]["id"] == created["id"]
-    assert int(db_session.scalar(select(func.count()).select_from(ActivityEvent)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(ActivityEvent)) or 0) == 2
+    methods = db_session.scalars(
+        select(ContactMethod).order_by(ContactMethod.method_type)
+    ).all()
+    assert [(method.method_type, method.normalized_value) for method in methods] == [
+        ("email", "jane@example.com"),
+        ("phone", "4045550114"),
+    ]
+    assert sum(method.is_primary for method in methods) == 1
     assert int(
         db_session.scalar(
             select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "lead.create")

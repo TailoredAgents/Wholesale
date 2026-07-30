@@ -108,7 +108,13 @@ def create_seller_lead(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadRead:
-    return create_lead(db, principal, payload)
+    try:
+        return create_lead(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/{lead_id}")

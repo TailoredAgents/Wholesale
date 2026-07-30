@@ -1,11 +1,16 @@
 import { Archive } from "lucide-react";
 import Link from "next/link";
 
-import { getDashboardData } from "../../lib/api";
+import {
+  getAcquisitionOperations,
+  getDashboardData,
+  getWorkspaceProfile,
+} from "../../lib/api";
 import { AcquisitionJourney } from "../_components/acquisition-journey";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
 import { normalizeLeadViewKey } from "../os-utils";
 import { LeadsWorkspace } from "./leads-workspace";
+import { NewLeadControl } from "./new-lead-control";
 
 export const dynamic = "force-dynamic";
 
@@ -15,16 +20,29 @@ export default async function LeadsPage({
   searchParams?: Promise<{ view?: string | string[] }>;
 }) {
   const params = await searchParams;
-  const dashboard = await getDashboardData();
+  const [dashboard, profile, { operations }] = await Promise.all([
+    getDashboardData(),
+    getWorkspaceProfile(),
+    getAcquisitionOperations(),
+  ]);
+  const canCreateLead = Boolean(profile?.permissions.includes("leads:edit"));
 
   return (
     <WorkspacePage>
       <PageHeader
         actions={
-          <Link href="/os/leads/archived">
-            <Archive aria-hidden="true" size={15} />
-            Archived Leads
-          </Link>
+          <>
+            {canCreateLead && profile ? (
+              <NewLeadControl
+                currentUserId={profile.user_id}
+                users={operations?.users ?? []}
+              />
+            ) : null}
+            <Link href="/os/leads/archived">
+              <Archive aria-hidden="true" size={15} />
+              Archived Leads
+            </Link>
+          </>
         }
         description="The complete active seller database, independent of today's queue or pipeline stage."
         eyebrow="Seller system of record"

@@ -35,7 +35,7 @@ export default async function OperatingModelPage() {
         description="Control compensation policy, contribution decisions, and evidence-based market expansion."
         eyebrow="Business / policy control"
         meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Versioned and auditable" : "Operating model unavailable"}</StatusBadge>}
-        title="Operating Model"
+        title="Company & Policy"
       />
       <ManagementJourney active="operating-model" />
       <ManagementSummaryStrip

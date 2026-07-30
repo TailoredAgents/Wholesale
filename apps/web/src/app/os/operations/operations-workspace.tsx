@@ -9,10 +9,10 @@ import type { AcquisitionOperations, LeadListItem } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./operations.module.css";
 
-type Tab = "today" | "structure" | "calling" | "team" | "quality" | "follow-up";
+export type OperationsTab = "today" | "structure" | "calling" | "team" | "quality" | "follow-up";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
-const tabs: Array<{ key: Tab; label: string }> = [
+const tabs: Array<{ key: OperationsTab; label: string }> = [
   { key: "today", label: "Calendar" },
   { key: "structure", label: "Markets & campaigns" },
   { key: "calling", label: "Calling lists" },
@@ -57,18 +57,21 @@ function roleLabel(user: AcquisitionOperations["users"][number]) {
 }
 
 export function OperationsWorkspace({
+  initialTab = "today",
   operations,
   leads,
 }: {
+  initialTab?: OperationsTab;
   operations: AcquisitionOperations;
   leads: LeadListItem[];
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("today");
+  const [activeTab, setActiveTab] = useState<OperationsTab>(initialTab);
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [selectedListId, setSelectedListId] = useState(operations.calling_lists[0]?.id ?? "");
+
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],

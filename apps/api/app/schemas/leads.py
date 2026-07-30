@@ -23,6 +23,9 @@ class PropertyCreate(BaseModel):
 class LeadCreate(BaseModel):
     contact: ContactCreate
     property: PropertyCreate
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=320)
+    assigned_user_id: UUID | None = None
     source: str = Field(default="manual", max_length=120)
     stage_key: str = Field(default="new", max_length=120)
     lead_temperature: str | None = Field(default=None, max_length=80)
@@ -34,6 +37,7 @@ class LeadCreate(BaseModel):
     mortgage_balance: str | None = Field(default=None, max_length=120)
     appointment_status: str | None = Field(default=None, max_length=120)
     next_follow_up_at: datetime | None = None
+    initial_note: str | None = Field(default=None, max_length=500)
 
 
 class PropertyValidationRead(BaseModel):

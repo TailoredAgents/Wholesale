@@ -186,7 +186,6 @@ The desktop sidebar and mobile navigation drawer use five groups.
 
 ### Acquisitions
 
-- **Operations:** Team capacity and acquisition administration.
 - **Campaigns:** Prospect files, screening, costs, and calling batches.
 - **Prospecting:** VA calling workbench and handoff.
 - **Lead Desk:** Warm-lead acceptance, qualification, follow-up, and Lead Manager Copilot.
@@ -207,11 +206,15 @@ The desktop sidebar and mobile navigation drawer use five groups.
 - **Finance:** Revenue, deductions, compensation, margin, and export.
 - **Marketing:** Funnel, attribution, source economics, and conversion exports.
 
-### Control
+### Management
 
 - **My Setup:** Your role manual, workspace test, and manager approval.
+- **Team & Access:** Employee accounts, access roles, teams, operational configuration, and data
+  quality.
+- **Email Management:** Approved company senders, routing, signatures, templates, and mailbox
+  access.
 - **Floating Help button:** Ask how to use or set up Stonegate without leaving the current page.
-- **Operating Model:** Company setup, compensation policy, role credits, history, and market
+- **Company & Policy:** Company setup, compensation policy, role credits, history, and market
   launches.
 - **AI Control:** Copilots, runtime, automation contracts, evaluations, traces, and governance.
 
@@ -226,7 +229,8 @@ records without searching again. On mobile, use the menu button to open the navi
 | Inbox | `/os/inbox` |
 | Work Queue | `/os/tasks` |
 | Calendar | `/os/calendar` |
-| Operations | `/os/operations` |
+| Team & Access | `/os/operations?tab=team` |
+| Email Management | `/os/inbox?manage=email` |
 | Campaigns | `/os/campaigns` |
 | Prospecting | `/os/prospecting` |
 | Lead Desk | `/os/lead-manager` |
@@ -242,7 +246,7 @@ records without searching again. On mobile, use the menu button to open the navi
 | Finance | `/os/finance` |
 | Marketing | `/os/marketing` |
 | My Setup | `/os/my-setup` |
-| Operating Model | `/os/operating-model` |
+| Company & Policy | `/os/operating-model` |
 | AI Control | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
 
@@ -547,7 +551,7 @@ Possible states are:
 - **Rejected:** Correct the stated problem, repeat the test, and resubmit.
 
 My Setup does not grant access by itself. The Owner controls the actual user role and permissions
-from **Operations > Team** and assigns role manuals from **Operating Model > Company setup**.
+from **Team & Access > Team** and assigns role manuals from **Company & Policy > Company setup**.
 
 ## Stonegate Help
 
@@ -1096,11 +1100,20 @@ until the device is returned.
 
 Use **All Leads** to search and administer the seller database.
 
-1. Search by seller, property, phone, email, or source.
-2. Filter by owner, stage, or saved view.
-3. Review status and next action in the local detail drawer.
-4. Open the full seller record when deeper work is required.
-5. Archive a dead or duplicate record only with the required authority and reason.
+1. Select **New Lead** for a warm call, referral, networking contact, or other staff-entered seller.
+2. Enter the seller name and at least one phone number or email.
+3. Enter the complete property address.
+4. Choose the real source, assigned owner, temperature, and next follow-up.
+5. Add known motivation, timeline, condition, occupancy, price context, and an initial note.
+6. Select **Create lead**. Stonegate opens the complete seller record.
+7. Search by seller, property, phone, email, or source.
+8. Filter by owner, stage, or saved view.
+9. Review status and next action in the local detail drawer.
+10. Open the full seller record when deeper work is required.
+11. Archive a dead or duplicate record only with the required authority and reason.
+
+Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
+Prospecting as prospects until the seller expresses interest.
 
 Use **Archived Leads** from All Leads to locate and restore archived records.
 
@@ -1689,9 +1702,9 @@ remove it from the public feed while preserving evidence and audit history.
 Never invent a review, ask AI to write a seller's testimonial, condition a benefit on positive
 sentiment, or publish a company total without a dated calculation.
 
-## 17. Operating Model
+## 17. Company & Policy
 
-The Owner uses **Operating Model**. Tabs are:
+The Owner uses **Company & Policy**. Tabs are:
 
 - **Company setup**
 - **Active policy**
@@ -2006,7 +2019,7 @@ Archive the record or correct it through the approved workflow.
 5. Employee completes training using synthetic records.
 6. Manager verifies the employee can perform normal work and cannot open restricted pages.
 7. Manager reviews consent, suppression, recording, privacy, and escalation rules.
-8. Owner assigns the correct manual in **Operating Model > Company setup**.
+8. Owner assigns the correct manual in **Company & Policy > Company setup**.
 9. Employee opens **My Setup**, reviews the role standards, and submits workspace-test evidence.
 10. Owner approves the submission only after confirming normal access and role restrictions.
 11. Live work is assigned only after role acceptance is approved.

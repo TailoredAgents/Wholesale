@@ -118,6 +118,12 @@
   gap: 5px;
 }
 
+.managementNavGroup {
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(156, 199, 178, 0.16);
+}
+
 .navLabel {
   padding: 0 12px 2px;
   color: #7fa492;

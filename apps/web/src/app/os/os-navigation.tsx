@@ -15,6 +15,7 @@ import {
   Inbox,
   Landmark,
   ListChecks,
+  Mail,
   Megaphone,
   PhoneCall,
   Route,
@@ -34,7 +35,7 @@ export type OsNavItem = {
 };
 
 export type OsNavGroup = {
-  label: "Command" | "Acquisitions" | "Deal Flow" | "Business" | "Control";
+  label: "Command" | "Acquisitions" | "Deal Flow" | "Business" | "Management";
   items: OsNavItem[];
 };
 
@@ -79,13 +80,6 @@ export const osNavGroups: OsNavGroup[] = [
   {
     label: "Acquisitions",
     items: [
-      {
-        href: "/os/operations",
-        label: "Operations",
-        icon: BriefcaseBusiness,
-        roles: [...ownerRoles, "administrator", "acquisition_manager"],
-        anyPermissions: ["operations:view"],
-      },
       {
         href: "/os/campaigns",
         label: "Campaigns",
@@ -197,7 +191,7 @@ export const osNavGroups: OsNavGroup[] = [
     ],
   },
   {
-    label: "Control",
+    label: "Management",
     items: [
       {
         href: "/os/my-setup",
@@ -207,8 +201,22 @@ export const osNavGroups: OsNavGroup[] = [
         anyPermissions: [],
       },
       {
+        href: "/os/operations?tab=team",
+        label: "Team & Access",
+        icon: BriefcaseBusiness,
+        roles: [...ownerRoles, "administrator", "acquisition_manager"],
+        anyPermissions: ["operations:manage"],
+      },
+      {
+        href: "/os/inbox?manage=email",
+        label: "Email Management",
+        icon: Mail,
+        roles: [...ownerRoles, "acquisition_manager"],
+        anyPermissions: ["communications:manage_email_accounts"],
+      },
+      {
         href: "/os/operating-model",
-        label: "Operating Model",
+        label: "Company & Policy",
         icon: Settings2,
         roles: ownerRoles,
         anyPermissions: ["operating_model:manage"],
@@ -262,7 +270,12 @@ export function defaultRouteForProfile(profile: WorkspaceProfile) {
   return "/os";
 }
 
-export function navigationContext(pathname: string) {
+export function navigationContext(pathname: string, query = "") {
+  const requestedHref = query ? `${pathname}?${query}` : pathname;
+  for (const group of osNavGroups) {
+    const exactItem = group.items.find((candidate) => candidate.href === requestedHref);
+    if (exactItem) return { group: group.label, label: exactItem.label };
+  }
   if (pathname === "/os/leads/archived") {
     return { group: "Acquisitions", label: "Archived Leads" };
   }
@@ -271,9 +284,10 @@ export function navigationContext(pathname: string) {
   }
   for (const group of osNavGroups) {
     const item = group.items.find((candidate) =>
-      candidate.href === "/os"
+      candidate.href.split("?")[0] === "/os"
         ? pathname === "/os"
-        : pathname === candidate.href || pathname.startsWith(`${candidate.href}/`),
+        : pathname === candidate.href.split("?")[0] ||
+          pathname.startsWith(`${candidate.href.split("?")[0]}/`),
     );
     if (item) return { group: group.label, label: item.label };
   }

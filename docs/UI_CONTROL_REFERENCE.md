@@ -59,7 +59,7 @@ is relevant and the required permission is present.
 | Inbox | Lead Manager, Acquisitions | `communications:view_conversations` |
 | Work Queue | Administrator, Lead Manager, Acquisitions | `leads:view` |
 | Calendar | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Operations | Administrator, Lead Manager | `operations:view` |
+| Team & Access | Administrator, Lead Manager | `operations:manage` |
 | Campaigns | Lead Manager | `operations:manage` |
 | Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned` |
 | Lead Desk | Lead Manager, Acquisitions | `leads:view` |
@@ -73,7 +73,8 @@ is relevant and the required permission is present.
 | Finance | Finance / Accounting | `financials:view` or `compensation:view` |
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | My Setup | Every signed-in user | Always visible |
-| Operating Model | Owner | `operating_model:manage` |
+| Email Management | Owner, Lead Manager | `communications:manage_email_accounts` |
+| Company & Policy | Owner | `operating_model:manage` |
 | AI Control | Owner | `ai:change_prompts` |
 
 ## Public Website
@@ -262,6 +263,14 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| **New Lead** | Opens internal entry for warm calls, referrals, networking, and staff-entered sellers | Requires `leads:edit` |
+| Seller name / preferred name | Creates the seller identity | Seller name required |
+| Phone / Email | Creates usable contact methods | At least one is required by the form |
+| Property address fields | Creates the property record | Street, city, state, and ZIP required |
+| Source / Assigned owner | Preserves attribution and responsibility | Active owner required |
+| Temperature / Next follow-up | Sets urgency and the first dated commitment | Optional but recommended |
+| Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
+| **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
 | Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid leads | Read-only |
 | Saved lead views | Filters by predefined operating state and updates the URL | Filter only |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
@@ -1287,9 +1296,9 @@ books. Sensitive vendor, banking, tax, and accounting controls are permission-ga
 | Offline export | Downloads conversion data for supported ad-platform workflows | Requires marketing export permission |
 | **Accept / Correct / Reject** on Copilot | Records review of marketing recommendations | Does not change budgets automatically |
 
-## Operating Model
+## Company & Policy
 
-The Operating Model workspace uses **Setup**, **Active**, **Pending**, **History**, and
+The Company & Policy workspace uses **Setup**, **Active**, **Pending**, **History**, and
 **Launches** to manage seats, role acknowledgement, compensation policy, work credit,
 counterparties, and market readiness.
 
