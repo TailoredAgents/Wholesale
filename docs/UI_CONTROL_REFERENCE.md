@@ -1356,16 +1356,19 @@ counterparties, and market readiness.
 | Question | Accepts a software, setup, role, or workflow question | Three to 500 characters |
 | Ask arrow / Enter | Sends the question to authenticated documentation retrieval | Disabled while loading, answering, or when too short |
 | Shift+Enter | Adds a line without submitting | Composer only |
-| Answer | Shows a plain-language source-grounded response | AI summary when available; manual fallback otherwise |
+| Answer | Safely formats paragraphs, numbered steps, bullets, bold control names, inline code, and source numbers | AI summary when available; manual fallback otherwise; model-provided HTML is never rendered |
 | Answer row | Selects which answer's citations appear | Existing conversation only |
+| Inline source number | Opens the matching approved document section used for that statement | Appears when the answer cites a valid returned source number |
 | Source count | Shows how many approved sections support the answer and opens source view | Supported answer |
 | Source summary | Opens the document title and heading path | Available for supported answers |
 | Source disclosure | Expands the exact excerpt used | Citation panel |
 | Back arrow | Returns from citations to the conversation | Source view |
-| **New conversation** | Clears local question and answer history | Does not delete or change business records |
+| Follow-up question | Uses up to six recent turns to understand references such as “that,” “it,” or “the previous step” | Role boundaries are reapplied to the recent topic; conversation text is context, not an approved source |
+| **New conversation** | Clears local question, answer, and follow-up context | Does not delete or change business records |
 
 Help filters documents and sensitive topics by the signed-in role. It cannot read live operating
-records or perform actions.
+records or perform actions. Conversation context remains in the open browser session and is not
+stored as a business record.
 
 ## AI Control
 

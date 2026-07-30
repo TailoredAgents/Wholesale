@@ -1210,6 +1210,17 @@ The floating Help panel is mounted in the authenticated OS shell. The API:
 5. optionally asks the configured OpenAI model to summarize only those sources
 6. falls back to a deterministic source excerpt when OpenAI is unavailable
 7. returns structured document, heading, and excerpt citations
+8. accepts at most six recent local conversation turns for natural follow-up context
+
+Recent Help turns are supplied by the open browser panel and are not stored as business records.
+The API treats them as untrusted context, reapplies the current employee's role boundary across the
+recent topic, and never accepts earlier answer text as an approved factual source. Approved
+role-visible documentation remains the only answer source.
+
+The Help interface safely renders a limited answer format using React elements: paragraphs,
+headings, numbered steps, bullets, bold labels, inline code, and numbered source controls. It does
+not render model-provided HTML. Selecting an inline source number opens the matching approved
+document excerpt.
 
 Help does not query live seller, buyer, transaction, communication, or accounting records. It has
 no action tools and is not a substitute for operational Copilots. Future optimization may add

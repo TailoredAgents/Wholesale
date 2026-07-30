@@ -258,13 +258,89 @@
 }
 
 .question p,
-.response p {
+.answerContent p {
   margin: 0;
   line-height: 1.58;
 }
 
 .question p {
   font-weight: var(--sg-font-weight-medium);
+}
+
+.answerContent {
+  display: grid;
+  gap: var(--sg-space-3);
+}
+
+.answerContent h4 {
+  margin: 0;
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-md);
+  line-height: 1.4;
+}
+
+.answerContent ol,
+.answerContent ul {
+  display: grid;
+  gap: var(--sg-space-2);
+  margin: 0;
+  padding-left: 22px;
+}
+
+.answerContent li {
+  padding-left: var(--sg-space-1);
+  line-height: 1.58;
+}
+
+.answerContent strong {
+  color: var(--sg-color-text);
+  font-weight: var(--sg-font-weight-bold);
+}
+
+.answerContent code {
+  padding: 1px 5px;
+  border-radius: var(--sg-radius-sm);
+  background: var(--sg-color-surface-muted);
+  color: var(--sg-color-text);
+  font-size: 0.92em;
+}
+
+.sourceReference {
+  display: inline-grid;
+  min-width: 20px;
+  height: 20px;
+  margin: 0 2px;
+  padding: 0 5px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--sg-color-info-soft);
+  color: var(--sg-color-info);
+  font: inherit;
+  font-size: 11px;
+  font-weight: var(--sg-font-weight-bold);
+  vertical-align: text-bottom;
+  cursor: pointer;
+}
+
+.sourceReference:hover {
+  background: var(--sg-color-brand-soft);
+  color: var(--sg-color-brand-strong);
+}
+
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: var(--sg-space-2);
+  max-width: 760px;
+  margin: 0 auto var(--sg-space-4);
+  padding: 0 var(--sg-space-4);
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-sm);
+}
+
+.thinking svg {
+  animation: spin 900ms linear infinite;
 }
 
 .citationButton {

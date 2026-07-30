@@ -13,9 +13,10 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "../_components/design-system";
+import { FormattedHelpAnswer } from "./formatted-help-answer";
 import styles from "./help.module.css";
 
 type Citation = {
@@ -71,8 +72,10 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedSourceIndex, setSelectedSourceIndex] = useState(0);
   const [open, setOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  const messagesRef = useRef<HTMLDivElement>(null);
 
   const headers = useCallback(async (includeJson = false) => {
     const result: Record<string, string> = {};
@@ -111,6 +114,14 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
 
   const selected = conversation.find((item) => item.id === selectedId) ?? conversation.at(-1) ?? null;
 
+  useEffect(() => {
+    if (!open || showSources) return;
+    messagesRef.current?.scrollTo({
+      top: messagesRef.current.scrollHeight,
+      behavior: "auto",
+    });
+  }, [busy, conversation.length, open, showSources]);
+
   async function ask(event?: FormEvent) {
     event?.preventDefault();
     const cleanQuestion = question.trim();
@@ -121,7 +132,13 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
       const response = await fetch(`${apiBase}/api/v1/help/ask`, {
         method: "POST",
         headers: await headers(true),
-        body: JSON.stringify({ question: cleanQuestion }),
+        body: JSON.stringify({
+          question: cleanQuestion,
+          history: conversation.slice(-6).map((item) => ({
+            question: item.question,
+            answer: item.answer,
+          })),
+        }),
       });
       if (!response.ok) throw new Error(await errorMessage(response));
       const payload = (await response.json()) as HelpAnswer;
@@ -157,6 +174,7 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
   function reset() {
     setConversation([]);
     setSelectedId(null);
+    setSelectedSourceIndex(0);
     setQuestion("");
     setError(null);
     setShowSources(false);
@@ -215,7 +233,7 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
           ) : null}
         </header>
 
-        <div className={styles.messages} aria-live="polite">
+        <div className={styles.messages} aria-live="polite" ref={messagesRef}>
           {loading ? (
             <div className={styles.loading}>
               <LoaderCircle aria-hidden="true" size={20} />
@@ -234,14 +252,21 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
                 </div>
                 <div className={styles.response}>
                   <span>Stonegate Help</span>
-                  {item.answer.split("\n").filter(Boolean).map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
-                  ))}
+                  <FormattedHelpAnswer
+                    answer={item.answer}
+                    citationCount={item.citations.length}
+                    onCitationSelect={(index) => {
+                      setSelectedId(item.id);
+                      setSelectedSourceIndex(index);
+                      setShowSources(true);
+                    }}
+                  />
                   <button
                     className={styles.citationButton}
                     onClick={(event) => {
                       event.stopPropagation();
                       setSelectedId(item.id);
+                      setSelectedSourceIndex(0);
                       setShowSources(true);
                     }}
                     type="button"
@@ -266,6 +291,12 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
               </div>
             </div>
           )}
+          {busy ? (
+            <div className={styles.thinking} role="status">
+              <LoaderCircle aria-hidden="true" size={15} />
+              <span>Checking the approved manuals…</span>
+            </div>
+          ) : null}
         </div>
 
         {error ? (
@@ -314,7 +345,10 @@ export function HelpBubble({ devUserEmail }: { devUserEmail: string | null }) {
         {selected?.citations.length ? (
           <div className={styles.sourceList}>
             {selected.citations.map((citation, index) => (
-              <details key={`${citation.document}-${citation.heading_path}-${index}`} open={index === 0}>
+              <details
+                key={`${citation.document}-${citation.heading_path}-${index}`}
+                open={index === selectedSourceIndex}
+              >
                 <summary>
                   <span>{index + 1}</span>
                   <div>

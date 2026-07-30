@@ -31,4 +31,5 @@ def create_help_answer(
         principal,
         get_settings(),
         question=payload.question,
+        history=payload.history,
     )

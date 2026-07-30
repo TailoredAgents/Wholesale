@@ -545,19 +545,28 @@ Select the blue chat bubble at the bottom-right of any OS page when you need ins
 
 1. Enter a question about a page, button, setup step, role, or workflow.
 2. Select the arrow button or press Enter.
-3. Read the plain-language answer.
-4. Select the source-count button under the answer.
-5. Expand a source to see the exact document, heading, and excerpt.
-6. Use the back arrow to return to the conversation.
-7. Close the panel to continue working on the same page.
+3. Read the formatted plain-language answer. Bold text identifies exact Stonegate controls;
+   numbered steps show the order; bullets identify real choices.
+4. Ask a short follow-up such as “What if the address does not match?” Help uses the six most
+   recent turns in the open panel to understand what “that” or “it” refers to.
+5. Select a numbered source inside an answer to open that exact approved source, or select the
+   source-count button under the answer.
+6. Expand a source to see the exact document, heading, and excerpt.
+7. Use the back arrow to return to the conversation.
+8. Select **New conversation** when changing subjects or when you do not want the earlier questions
+   used as context.
+9. Close the panel to continue working on the same page.
 
 Suggested questions change with your role. Help also filters restricted setup, finance,
 underwriting, contract, disposition, and administrative topics by your current Stonegate role.
 It will direct you to the responsible person instead of explaining a restricted action.
 
 Help summarizes approved manuals when OpenAI is available. If OpenAI is unavailable, it returns
-the strongest matching source excerpt. It cannot read a seller's live record, send communications,
-change a stage, approve an offer, post accounting, or perform any other operating action.
+the strongest matching source excerpt. Recent conversation context exists only inside the open
+browser panel and is not saved as a CRM or audit record. Earlier messages help interpret a
+follow-up but are not treated as documentation. Help cannot read a seller's live record, send
+communications, change a stage, approve an offer, post accounting, or perform any other operating
+action.
 
 ## End-To-End Operating Workflow
 
