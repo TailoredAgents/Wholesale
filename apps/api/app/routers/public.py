@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, Request
+from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -12,10 +12,21 @@ from app.schemas.public_intake import (
     SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
 )
+from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
 from app.services.public_intake import create_public_seller_lead, enrich_public_seller_lead
+from app.services.trust_proof import get_public_trust_proofs
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+
+@router.get("/trust-proofs")
+def read_public_trust_proofs(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+) -> PublicTrustProofResponse:
+    response.headers["Cache-Control"] = "public, max-age=60, stale-while-revalidate=300"
+    return get_public_trust_proofs(db)
 
 
 @router.post("/seller-leads", status_code=201)

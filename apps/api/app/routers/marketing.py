@@ -22,6 +22,13 @@ from app.schemas.marketing import (
     OfflineConversionGenerateResponse,
     OfflineConversionProcessResponse,
 )
+from app.schemas.trust_proof import (
+    TrustProofAdminOverview,
+    TrustProofAdminRead,
+    TrustProofCreate,
+    TrustProofDecisionRequest,
+    TrustProofUpdate,
+)
 from app.services.management_copilots import (
     analyze_management,
     get_management_copilot_overview,
@@ -32,12 +39,19 @@ from app.services.marketing import (
     get_marketing_overview,
     process_next_marketing_conversion,
 )
+from app.services.trust_proof import (
+    create_trust_proof,
+    decide_trust_proof,
+    list_trust_proofs,
+    update_trust_proof,
+)
 
 router = APIRouter(prefix="/api/v1/marketing", tags=["marketing"])
 view_marketing_dependency = require_any_permission(
     PermissionKeys.VIEW_FINANCIALS,
     PermissionKeys.SEND_BULK_COMMUNICATIONS,
 )
+manage_public_proof_dependency = require_any_permission(PermissionKeys.MANAGE_PUBLIC_PROOF)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -45,6 +59,58 @@ def invalid(exc: ValueError) -> HTTPException:
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=str(exc),
     )
+
+
+@router.get("/trust-proofs")
+def read_trust_proofs(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_marketing_dependency)],
+) -> TrustProofAdminOverview:
+    return list_trust_proofs(db, principal)
+
+
+@router.post("/trust-proofs", status_code=201)
+def create_public_proof(
+    payload: TrustProofCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_public_proof_dependency)],
+) -> TrustProofAdminRead:
+    try:
+        return create_trust_proof(db, principal, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+
+
+@router.patch("/trust-proofs/{record_id}")
+def update_public_proof(
+    record_id: UUID,
+    payload: TrustProofUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_public_proof_dependency)],
+) -> TrustProofAdminRead:
+    try:
+        result = update_trust_proof(db, principal, record_id, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Public proof not found.")
+    return result
+
+
+@router.post("/trust-proofs/{record_id}/decision")
+def decide_public_proof(
+    record_id: UUID,
+    payload: TrustProofDecisionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_public_proof_dependency)],
+) -> TrustProofAdminRead:
+    try:
+        result = decide_trust_proof(db, principal, record_id, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Public proof not found.")
+    return result
 
 
 @router.get("")

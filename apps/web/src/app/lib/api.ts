@@ -2199,6 +2199,65 @@ export type MarketingOverview = {
   }>;
 };
 
+export type TrustProofRecord = {
+  id: string;
+  proof_type: "review" | "seller_story" | "completed_purchase" | "statistic";
+  title: string;
+  content: string | null;
+  attribution_name: string | null;
+  attribution_detail: string | null;
+  location_label: string | null;
+  rating: number | null;
+  metric_label: string | null;
+  metric_value: string | null;
+  methodology: string | null;
+  as_of_date: string | null;
+  source_type: string;
+  source_url: string | null;
+  source_reference: string | null;
+  show_source_link: boolean;
+  permission_status: "pending" | "granted" | "not_required" | "revoked";
+  permission_evidence_notes: string | null;
+  material_connection: string | null;
+  disclosure: string | null;
+  publication_status: "draft" | "in_review" | "published" | "retired";
+  featured: boolean;
+  sort_order: number;
+  created_by_name: string;
+  updated_by_name: string;
+  approved_by_name: string | null;
+  approved_at: string | null;
+  published_at: string | null;
+  retired_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TrustProofOverview = {
+  can_manage: boolean;
+  records: TrustProofRecord[];
+};
+
+export type PublicTrustProof = {
+  id: string;
+  proof_type: "review" | "seller_story" | "completed_purchase" | "statistic";
+  title: string;
+  content: string | null;
+  attribution_name: string | null;
+  attribution_detail: string | null;
+  location_label: string | null;
+  rating: number | null;
+  metric_label: string | null;
+  metric_value: string | null;
+  methodology: string | null;
+  as_of_date: string | null;
+  source_type: string;
+  source_url: string | null;
+  disclosure: string | null;
+  featured: boolean;
+  published_at: string;
+};
+
 export type ApprovalRequestItem = {
   id: string;
   request_type: string;
@@ -3727,6 +3786,42 @@ export async function getMarketingOverview(periodDays?: number): Promise<{
     return { marketing: (await response.json()) as MarketingOverview, apiConnected: true };
   } catch {
     return { marketing: emptyMarketingOverview, apiConnected: false };
+  }
+}
+
+export async function getTrustProofOverview(): Promise<{
+  trustProof: TrustProofOverview;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/marketing/trust-proofs`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      trustProof: (await response.json()) as TrustProofOverview,
+      apiConnected: true,
+    };
+  } catch {
+    return {
+      trustProof: { can_manage: false, records: [] },
+      apiConnected: false,
+    };
+  }
+}
+
+export async function getPublicTrustProof(): Promise<PublicTrustProof[]> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/public/trust-proofs`, {
+      next: { revalidate: 300 },
+    });
+    if (!response.ok) throw new Error("Public proof API returned a non-OK response.");
+    return ((await response.json()) as { records: PublicTrustProof[] }).records;
+  } catch {
+    return [];
   }
 }
 

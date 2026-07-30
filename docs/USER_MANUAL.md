@@ -1565,6 +1565,7 @@ Review:
 - Prepared qualified lead, appointment, signed contract, and funded-deal outcomes.
 - Queued, retried, delivered, blocked, or exhausted conversion events.
 - Marketing Copilot analysis.
+- Public reviews, seller stories, completed purchases, and statistics awaiting review.
 
 Select **Prepare conversion events** after CRM outcomes have been updated. Stonegate creates only
 new records tied to a captured Google or Meta click; selecting it again does not duplicate the same
@@ -1579,6 +1580,36 @@ the provider error before retrying operationally.
 Drill into source records before changing spend. The Marketing Copilot may recommend tests but
 cannot change budgets, audiences, ads, or campaigns. Preparing or delivering outcomes never edits
 the lead, transaction, revenue, accounting, ad budget, campaign, or creative.
+
+### Publishing Public Proof
+
+The public-proof library is below the website funnel section. Published proof can appear on the
+homepage; drafts and review records never do.
+
+1. Select **New proof**.
+2. Choose Review, Seller story, Completed purchase, or Statistic.
+3. Enter the exact approved public wording. For a review or story, use only the name, initials,
+   location, and details the seller allowed Stonegate to publish.
+4. Add the original public source URL or an internal evidence reference such as the signed release,
+   transaction record, funded statement, or dated report.
+5. Set the permission status and explain where permission is recorded. Reviews and stories require
+   **Granted** permission.
+6. If the person has any employee, family, contractor, incentive, or other material connection,
+   record the connection and write the disclosure that sellers will see.
+7. For a statistic, enter the public label, value, as-of date, and a reproducible calculation
+   method.
+8. Select **Create draft** or **Save draft**.
+9. Select **Submit for review**. Stonegate checks for source evidence and blocks sample or
+   placeholder proof.
+10. Verify every public word against the source, then select **Publish**. The homepage can take up
+    to five minutes to refresh.
+
+Select **Unpublish and edit** before correcting live proof. Select **Retire** when permission is
+withdrawn, a statistic becomes stale, or Stonegate should no longer use the record. Both actions
+remove it from the public feed while preserving evidence and audit history.
+
+Never invent a review, ask AI to write a seller's testimonial, condition a benefit on positive
+sentiment, or publish a company total without a dated calculation.
 
 ## 17. Operating Model
 

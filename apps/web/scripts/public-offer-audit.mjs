@@ -173,6 +173,7 @@ async function auditDiscovery(page, viewport) {
   try {
     const graph = JSON.parse(structuredData ?? "{}")["@graph"] ?? [];
     const organization = graph.find((item) => item["@type"] === "Organization");
+    const types = graph.map((item) => item["@type"]);
     if (
       organization?.url !== "https://www.stonegatehb.com" ||
       organization?.telephone !== "+1-678-541-7725" ||
@@ -180,6 +181,13 @@ async function auditDiscovery(page, viewport) {
       !organization?.logo?.url
     ) {
       record(viewport, "structured-data", organization ?? "Organization record missing.");
+    }
+    if (types.includes("Review") || types.includes("AggregateRating")) {
+      record(
+        viewport,
+        "structured-data",
+        "Self-serving Review or AggregateRating schema must not be published.",
+      );
     }
   } catch {
     record(viewport, "structured-data", "Homepage JSON-LD could not be parsed.");
@@ -225,6 +233,29 @@ async function auditDiscovery(page, viewport) {
     if (!html.includes('name="robots"') || !html.includes("noindex")) {
       record(viewport, "private-indexing", `${route} is missing noindex metadata.`);
     }
+  }
+}
+
+async function auditPublicProof(page, viewport) {
+  const proof = page.locator('[data-public-proof="true"]');
+  if ((await proof.count()) === 0) {
+    if (await page.getByText("Verified Stonegate proof", { exact: true }).count()) {
+      record(viewport, "public-proof", "An empty proof heading is visible.");
+    }
+    return;
+  }
+
+  const text = (await proof.innerText()).toLowerCase();
+  if (!text.includes("individual records")) {
+    record(viewport, "public-proof", "The individual-outcome context is missing.");
+  }
+  for (const marker of ["lorem ipsum", "sample testimonial", "placeholder"]) {
+    if (text.includes(marker)) {
+      record(viewport, "public-proof", `Disallowed marker is visible: ${marker}`);
+    }
+  }
+  if ((await proof.locator("article, figure").count()) === 0) {
+    record(viewport, "public-proof", "The proof section has no published records.");
   }
 }
 
@@ -380,6 +411,7 @@ async function auditJourney(browser, viewport) {
 
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await checkPage(page, viewport.name, "homepage");
+  await auditPublicProof(page, viewport.name);
   await checkMobileActionBar(
     page,
     viewport,

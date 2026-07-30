@@ -538,6 +538,26 @@ before it actually clears.
 
 Marketing does not rewrite seller outcomes to make a channel look better.
 
+### Public Reviews And Proof
+
+1. Open **Marketing > Public trust governance**.
+2. Select **New proof** and choose Review, Seller story, Completed purchase, or Statistic.
+3. Enter only text and attribution the seller approved for public use.
+4. Record the original source URL or an internal evidence reference.
+5. Set permission to **Granted** only when the permission evidence is recorded. Use **Not
+   required** only for non-identifying company proof and document why.
+6. Record any employee, family, incentive, or other material connection and add the visible
+   disclosure.
+7. For a statistic, enter the as-of date and reproducible calculation method.
+8. Save the draft, inspect the public wording, and select **Submit for review**.
+9. A permitted reviewer verifies the source and selects **Publish**.
+10. Use **Unpublish and edit** for corrections or **Retire** when consent changes or the proof is
+    no longer current.
+
+Do not write a review on a seller's behalf, use AI-generated testimonial text, condition any
+benefit on a positive review, or publish a review merely because it sounds useful. Public sections
+stay hidden until at least one real record passes the workflow.
+
 ## Cross-Role Handoff Standard
 
 Every handoff should answer:

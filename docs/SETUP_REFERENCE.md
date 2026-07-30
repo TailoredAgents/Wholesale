@@ -561,6 +561,26 @@ Keep delivery disabled until ad accounts and conversion actions are approved. Te
 test modes, verify hashed contact data, confirm event deduplication, and reconcile accepted events
 to CRM outcomes.
 
+## Public Trust Proof Acceptance
+
+The trust-and-proof system is internal and does not require another provider account or secret.
+Authorized Marketing users manage it under **OS > Marketing > Public Trust Governance**.
+
+For the first real production record:
+
+1. Create a draft from a genuine review, seller story, completed purchase, or measured statistic.
+2. Add the public wording, source URL or internal evidence reference, permission evidence, and any
+   required relationship disclosure.
+3. Submit the record for review and publish it only after the evidence and wording are confirmed.
+4. Open the public homepage and confirm the record appears within five minutes with the correct
+   attribution, source link, disclosure, and outcome caveat.
+5. Unpublish the record and confirm it disappears within five minutes, then republish it if the
+   acceptance check passed.
+6. Keep source evidence and permission records available for later correction or retirement.
+
+Never enter sample testimonials or production-looking placeholders for acceptance. Stonegate
+does not publish self-serving Review or AggregateRating structured data.
+
 ## Operations And Recovery
 
 ### Checks
@@ -616,6 +636,7 @@ After a production deployment:
 | --- | --- | --- |
 | Resend controlled production acceptance | Stonegate owner/partner | Now |
 | Search Console and service-area Business Profile acceptance | Stonegate owner/marketing | Before local search launch |
+| First genuine public proof acceptance | Stonegate owner/marketing | After a documented review or outcome exists |
 | Twilio A2P resubmission and approval | Stonegate owner | Provider application |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After A2P approval |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |

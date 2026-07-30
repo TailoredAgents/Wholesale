@@ -3606,6 +3606,70 @@ class MarketingSpend(UuidPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
+class PublicProofRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "public_proof_records"
+    __table_args__ = (
+        CheckConstraint(
+            "proof_type IN ('review', 'seller_story', 'completed_purchase', 'statistic')",
+            name="ck_public_proof_records_type",
+        ),
+        CheckConstraint(
+            "permission_status IN ('pending', 'granted', 'not_required', 'revoked')",
+            name="ck_public_proof_records_permission",
+        ),
+        CheckConstraint(
+            "publication_status IN ('draft', 'in_review', 'published', 'retired')",
+            name="ck_public_proof_records_publication",
+        ),
+        CheckConstraint(
+            "rating IS NULL OR (rating >= 1 AND rating <= 5)",
+            name="ck_public_proof_records_rating",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    proof_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(180), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attribution_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    attribution_detail: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    location_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    metric_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    metric_value: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    methodology: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    as_of_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_type: Mapped[str] = mapped_column(String(60), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    show_source_link: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
+    permission_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="pending"
+    )
+    permission_evidence_notes: Mapped[str | None] = mapped_column(
+        String(2000), nullable=True
+    )
+    material_connection: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    disclosure: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    publication_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="draft", index=True
+    )
+    featured: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class AccountingProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "accounting_profiles"
     __table_args__ = (

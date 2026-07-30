@@ -281,6 +281,24 @@ abandonment, submit attempts, failures, successful submissions, phone clicks, an
 Marketing uses these events to evaluate funnel performance. Public event intake does not grant OS
 access.
 
+### 6.5 Public Trust Proof
+
+Marketing manages `PublicProofRecord` entries for reviews, seller stories, completed purchases,
+and statistics. Each record stores the public content separately from its source URL or internal
+evidence reference, usage-permission status and notes, material connection, visible disclosure,
+calculation method, dates, sort order, and publication decision.
+
+The lifecycle is `draft -> in_review -> published -> retired`. Editing a reviewed or published
+record first returns it to draft, which immediately removes it from the public feed. Publishing
+requires source evidence, permission review, and type-specific fields. Reviews and seller stories
+require affirmative permission; named purchase proof also requires permission; statistics require
+an as-of date and calculation method.
+
+`GET /api/v1/public/trust-proofs` returns only published records with granted or documented
+not-required permission. It omits internal references, permission evidence, staff identities, and
+audit history. The homepage caches the sanitized feed for five minutes and returns no trust-proof
+markup when the feed is empty. No self-serving Review or AggregateRating schema is generated.
+
 ## 7. Private OS Navigation
 
 The OS uses five stable navigation groups.
@@ -880,6 +898,11 @@ Offline conversion adapters exist for Google Data Manager and Meta Conversions A
 identifiers are normalized and hashed, event keys are stable, and retries are audited. External
 delivery remains disabled until Stonegate configures approved ad accounts, conversion actions,
 credentials, and acceptance tests.
+
+Marketing also owns the public trust-proof library. `marketing:manage_public_proof` allows Owner
+and Marketing Manager roles to prepare, review, publish, unpublish, and retire proof. Other
+marketing viewers can inspect status but cannot change public content. Every state transition is
+written to the audit log.
 
 ## 16. AI Copilot System
 

@@ -1239,6 +1239,17 @@ books. Sensitive vendor, banking, tax, and accounting controls are permission-ga
 | Funnel metrics | Shows visits, starts, submissions, leads, appointments, contracts, and revenue | Read-only |
 | Cost metrics | Shows spend, cost per lead, acquisition cost, and return | Depends on linked spend and revenue |
 | Web performance | Shows Core Web Vitals and public-site health | Read-only monitoring |
+| Public proof library | Lists reviews, seller stories, completed purchases, and statistics with publication and permission status | Visible in Marketing; editing requires public-proof management permission |
+| **New proof** | Opens a clean evidence-backed draft | Owner or Marketing Manager |
+| Public content fields | Define the approved title, text, attribution, location, rating, or metric visible to sellers | Only editable while the record is a draft |
+| Source URL / Internal evidence reference | Records where the claim can be verified | At least one is required before review |
+| Permission status / Permission evidence | Records usage consent or why consent is not required | Reviews and seller stories require Granted |
+| Material connection / Visible disclosure | Records and discloses employee, family, incentive, or other relevant relationships | Disclosure blocks publication when the connection is not blank |
+| **Save draft** | Saves corrections without publishing | Draft only |
+| **Submit for review** | Locks the draft and validates basic source evidence | Does not publish |
+| **Publish** | Performs final evidence checks and adds the sanitized record to the public feed | In-review records only; refresh can take five minutes |
+| **Unpublish and edit** | Immediately returns published proof to draft before correction | Removes it from the public feed |
+| **Retire** | Preserves evidence and history while removing proof from public use | Published or in-review records |
 | **Prepare conversion events** | Creates pending attribution processing work | Requires marketing operations permission |
 | **Process next** | Processes the next pending event | Appears only when server-side processing is enabled |
 | Offline export | Downloads conversion data for supported ad-platform workflows | Requires marketing export permission |

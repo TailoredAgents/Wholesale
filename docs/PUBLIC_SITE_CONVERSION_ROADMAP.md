@@ -185,7 +185,23 @@ verification remain external acceptance steps.
 
 ## Phase PC6: Trust And Proof System
 
-Status: **Planned**
+Status: **Implemented**. The public section remains hidden until Stonegate records and publishes
+genuine proof. Real review collection and first-record production acceptance remain operational
+steps.
+
+### Implementation Decisions
+
+- Public proof is managed inside **Marketing**, not in source code.
+- Supported records are reviews, seller stories, completed purchases, and statistics.
+- Every record moves through draft, review, published, and retired states.
+- Publication requires a source URL or internal evidence reference, documented usage permission or
+  a reason permission is not required, and a visible disclosure for any material connection.
+- Reviews and seller stories require affirmative permission. Statistics require a date and
+  documented calculation method.
+- Placeholder, sample, and fabricated proof is blocked before review.
+- The public API strips internal evidence notes and references. The homepage refreshes published
+  proof every five minutes and renders no heading, empty state, or placeholder when none exists.
+- Stonegate does not add self-serving Review or AggregateRating structured data.
 
 ### Work
 
@@ -200,6 +216,7 @@ Status: **Planned**
 - Real proof can be published without a redesign.
 - Every visible claim has a recorded source and approval.
 - Empty proof sections never appear to sellers.
+- Unauthorized staff cannot manage public proof, and all decisions create audit records.
 
 ## Phase PC7: Conversion Measurement And Testing
 

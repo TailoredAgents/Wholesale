@@ -4,6 +4,7 @@ import Link from "next/link";
 import {
   getMarketingCopilotOverview,
   getMarketingOverview,
+  getTrustProofOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
 import { ManagementJourney } from "../_components/management-journey";
@@ -14,6 +15,7 @@ import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporti
 import { StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { OfflineExportButton } from "./offline-export-button";
+import { TrustProofWorkspace } from "./trust-proof-workspace";
 import styles from "../_components/management-workspaces.module.css";
 import marketingStyles from "./marketing.module.css";
 
@@ -64,10 +66,16 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
   const period: ReportingPeriodKey = params.period === "30" || params.period === "90" ? params.period : "all";
   const periodDays = period === "all" ? undefined : Number(period);
   const copilotPeriodDays = periodDays ?? 365;
-  const [{ marketing, apiConnected }, profile, marketingCopilot] = await Promise.all([
+  const [
+    { marketing, apiConnected },
+    profile,
+    marketingCopilot,
+    { trustProof, apiConnected: trustProofConnected },
+  ] = await Promise.all([
     getMarketingOverview(periodDays),
     getWorkspaceProfile(),
     getMarketingCopilotOverview(copilotPeriodDays),
+    getTrustProofOverview(),
   ]);
   const previous = marketing.previous_summary;
   const periodLabel = period === "all" ? "All recorded time" : `Last ${period} days`;
@@ -148,6 +156,11 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
         {marketing.web_vitals.length ? marketing.web_vitals.map((metric) => <article key={metric.metric}><div><strong>{metric.metric} p75</strong><StatusBadge tone={vitalTone(metric.metric, metric.p75_value)}>{vitalValue(metric.metric, metric.p75_value)}</StatusBadge></div><p>{metric.sample_count} real-user samples · {percentage(metric.good_rate_basis_points)} rated good</p></article>) : <p className={styles.empty}>No real-user Core Web Vitals samples have been recorded in this period.</p>}
       </div>
     </section>
+
+    <TrustProofWorkspace
+      apiConnected={trustProofConnected}
+      initialData={trustProof}
+    />
 
     <section className={styles.exceptionBand}>
       <div className={styles.sectionHeading}><div><span>Exception management</span><h2>Source economics requiring attention</h2></div><strong>{exceptions.length} sources</strong></div>

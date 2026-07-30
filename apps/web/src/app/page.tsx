@@ -6,6 +6,7 @@ import { AddressOfferStart } from "./address-offer-start";
 import { PublicConversionTracker } from "./public-conversion-tracker";
 import { PublicSiteFooter } from "./public-site-footer";
 import { PublicSiteHeader } from "./public-site-header";
+import { PublicTrustProof } from "./public-trust-proof";
 import { sellerSituations } from "./seller-situations";
 import { directOfferDisclosure, siteConfig } from "./site-config";
 import styles from "./page.module.css";
@@ -187,6 +188,8 @@ export default function PublicHomePage() {
           })}
         </div>
       </section>
+
+      <PublicTrustProof />
 
       <section className={styles.comparisonSection}>
         <div className={styles.comparisonCopy}>

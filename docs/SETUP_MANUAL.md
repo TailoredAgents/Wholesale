@@ -176,6 +176,15 @@ Stonegate should use one accurate service-area Business Profile for its current 
 Do not create separate profiles for Atlanta-area cities unless Stonegate later operates separate,
 permanently staffed locations that independently qualify.
 
+For review collection, ask real sellers for an honest review without requiring a positive rating
+and without offering payment, discounts, or other benefits. Do not ask employees, family members,
+or contractors to appear independent. A review copied to the Stonegate website must also pass the
+Marketing public-proof workflow and have documented permission for website use.
+
+Review-policy references:
+`https://www.ftc.gov/business-guidance/resources/consumer-reviews-testimonials-rule-questions-answers`
+and `https://support.google.com/contributionpolicy/answer/7400114`.
+
 Google references:
 `https://support.google.com/business/answer/3038177` and
 `https://support.google.com/business/answer/9157481`
