@@ -1,9 +1,10 @@
 import csv
 import hashlib
 import io
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -18,10 +19,12 @@ from app.models.foundation import (
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
+    ProspectContactPoint,
     ProspectHandoff,
     ProspectImportBatch,
     ProspectImportMapping,
     ProspectImportRow,
+    ProspectSourceMembership,
     ProspectSuppressionCheck,
     ProspectingAttempt,
     ProspectingCohort,
@@ -38,6 +41,7 @@ from app.schemas.campaign_management import (
     ProspectCallingBatchCreate,
     ProspectCallingBatchEntryRead,
     ProspectCallingBatchRead,
+    ProspectContactPointRead,
     ProspectImportBatchRead,
     ProspectImportMappingCreate,
     ProspectImportMappingRead,
@@ -45,6 +49,7 @@ from app.schemas.campaign_management import (
     ProspectImportPreviewRow,
     ProspectImportRequest,
     ProspectImportRowRead,
+    ProspectSourceMembershipRead,
     ProspectingCohortCreate,
     ProspectingCohortRead,
     ProspectingWorkSessionCreate,
@@ -64,6 +69,22 @@ from app.services.prospecting_measurement import (
 )
 
 MAX_IMPORT_ROWS = 10_000
+PROPSTREAM_PRESET_NAME = "PropStream Standard Export"
+PROPSTREAM_FIELD_MAPPING = {
+    "source_record_key": "Property ID",
+    "legal_first_name": "Owner 1 First Name",
+    "legal_last_name": "Owner 1 Last Name",
+    "phone": "Phone 1",
+    "phone_2": "Phone 2",
+    "phone_3": "Phone 3",
+    "email": "Email 1",
+    "email_2": "Email 2",
+    "email_3": "Email 3",
+    "street_address": "Property Address",
+    "city": "Property City",
+    "state_code": "Property State",
+    "postal_code": "Property Zip",
+}
 DNC_BLOCKED_VALUES = {
     "1",
     "blocked",
@@ -75,11 +96,24 @@ DNC_BLOCKED_VALUES = {
     "true",
     "yes",
 }
+
+
+@dataclass
+class PreparedContactPoint:
+    contact_type: str
+    value: str
+    normalized_value: str
+    rank: int
+    source_field: str
+
+
 @dataclass
 class PreparedImportRow:
     row_number: int
     raw_data: dict[str, str]
-    normalized_data: dict[str, str | None]
+    normalized_data: dict[str, Any]
+    contact_points: list[PreparedContactPoint]
+    relationship_state: str
     status: str
     validation_errors: list[str]
     eligibility_reasons: list[str]
@@ -99,6 +133,8 @@ def get_campaign_management_overview(
         campaigns=campaigns,
         mappings=list_import_mappings(db, principal),
         import_batches=list_import_batches(db, principal),
+        source_memberships=list_source_memberships(db, principal),
+        contact_points=list_prospect_contact_points(db, principal),
         cohorts=list_prospecting_cohorts(db, principal),
         work_sessions=list_prospecting_work_sessions(db, principal),
         costs=list_campaign_costs(db, principal),
@@ -140,6 +176,31 @@ def create_import_mapping(
     return import_mapping_read(db, mapping)
 
 
+def create_propstream_import_preset(
+    db: Session,
+    principal: Principal,
+) -> ProspectImportMappingRead:
+    existing = db.scalar(
+        select(ProspectImportMapping).where(
+            ProspectImportMapping.organization_id == principal.organization_id,
+            ProspectImportMapping.name == PROPSTREAM_PRESET_NAME,
+            ProspectImportMapping.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return import_mapping_read(db, existing)
+    return create_import_mapping(
+        db,
+        principal,
+        ProspectImportMappingCreate(
+            name=PROPSTREAM_PRESET_NAME,
+            source_name="PropStream",
+            field_mapping=PROPSTREAM_FIELD_MAPPING,
+            default_values={},
+        ),
+    )
+
+
 def list_import_mappings(
     db: Session,
     principal: Principal,
@@ -175,7 +236,7 @@ def validate_prospect_import(
     principal: Principal,
     payload: ProspectImportRequest,
 ) -> ProspectImportPreview:
-    _, mapping, _ = validate_import_context(db, principal, payload)
+    _, mapping, _, _ = validate_import_context(db, principal, payload)
     headers, prepared_rows = prepare_import_rows(db, principal, payload, mapping)
     return import_preview(headers, prepared_rows)
 
@@ -185,7 +246,7 @@ def create_prospect_import(
     principal: Principal,
     payload: ProspectImportRequest,
 ) -> ProspectImportBatchRead:
-    campaign, mapping, assignee = validate_import_context(db, principal, payload)
+    campaign, mapping, assignee, cohort = validate_import_context(db, principal, payload)
     file_sha256 = hashlib.sha256(payload.csv_content.encode("utf-8")).hexdigest()
     previous_batch = db.scalar(
         select(ProspectImportBatch).where(
@@ -207,14 +268,23 @@ def create_prospect_import(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
         mapping_id=mapping.id,
+        cohort_id=cohort.id if cohort else None,
         default_assignee_user_id=assignee.id if assignee else None,
         imported_by_user_id=principal.user_id,
         file_name=payload.file_name.strip(),
         file_sha256=file_sha256,
+        source_name=clean_text(mapping.source_name) or "CSV import",
+        source_profile=payload.source_profile,
+        source_export_id=clean_text(payload.source_export_id),
+        source_list_id=clean_text(payload.source_list_id),
+        source_list_name=clean_text(payload.source_list_name),
+        source_exported_at=payload.source_exported_at,
+        source_filters=payload.source_filters,
         status="processing",
         total_rows=counts["total_rows"],
         valid_rows=counts["valid_rows"],
         imported_rows=0,
+        matched_existing_rows=0,
         invalid_rows=counts["invalid_rows"],
         duplicate_rows=counts["duplicate_rows"],
         suppressed_rows=counts["suppressed_rows"],
@@ -225,6 +295,7 @@ def create_prospect_import(
     db.flush()
 
     imported_rows = 0
+    matched_existing_rows = 0
     for prepared in prepared_rows:
         row_status = prepared.status
         prospect = None
@@ -241,11 +312,18 @@ def create_prospect_import(
             db.flush()
             imported_rows += 1
             row_status = f"imported_{prepared.status}"
+        elif prepared.status == "duplicate" and prepared.duplicate_prospect_id:
+            prospect = db.get(Prospect, prepared.duplicate_prospect_id)
+            if prospect is not None:
+                matched_existing_rows += 1
+                row_status = "matched_existing"
+                refresh_untouched_prospect(prospect, prepared)
         import_row = ProspectImportRow(
             organization_id=principal.organization_id,
             import_batch_id=batch.id,
             prospect_id=prospect.id if prospect else None,
             duplicate_prospect_id=prepared.duplicate_prospect_id,
+            source_membership_id=None,
             row_number=prepared.row_number,
             status=row_status,
             raw_data=prepared.raw_data,
@@ -256,10 +334,30 @@ def create_prospect_import(
         db.add(import_row)
         db.flush()
         if prospect is not None:
+            membership = upsert_source_membership(
+                db,
+                principal,
+                campaign,
+                cohort,
+                batch,
+                prospect,
+                prepared,
+                now,
+            )
+            import_row.source_membership_id = membership.id
+            upsert_prospect_contact_points(
+                db,
+                principal,
+                prospect,
+                membership,
+                prepared,
+                now,
+            )
             add_suppression_checks(db, principal, import_row, prospect, prepared, now)
 
     batch.status = "complete"
     batch.imported_rows = imported_rows
+    batch.matched_existing_rows = matched_existing_rows
     batch.completed_at = now
     add_audit(
         db,
@@ -272,6 +370,11 @@ def create_prospect_import(
             "file_name": batch.file_name,
             "total_rows": batch.total_rows,
             "imported_rows": batch.imported_rows,
+            "matched_existing_rows": batch.matched_existing_rows,
+            "cohort_id": str(batch.cohort_id) if batch.cohort_id else None,
+            "source_name": batch.source_name,
+            "source_export_id": batch.source_export_id,
+            "source_list_id": batch.source_list_id,
             "invalid_rows": batch.invalid_rows,
             "duplicate_rows": batch.duplicate_rows,
             "suppressed_rows": batch.suppressed_rows,
@@ -291,7 +394,7 @@ def validate_import_context(
     db: Session,
     principal: Principal,
     payload: ProspectImportRequest,
-) -> tuple[Campaign, ProspectImportMapping, User | None]:
+) -> tuple[Campaign, ProspectImportMapping, User | None, ProspectingCohort | None]:
     campaign = db.scalar(
         select(Campaign).where(
             Campaign.organization_id == principal.organization_id,
@@ -309,12 +412,23 @@ def validate_import_context(
     )
     if mapping is None:
         raise ValueError("Select an active import mapping.")
+    cohort = None
+    if payload.cohort_id:
+        cohort = db.scalar(
+            select(ProspectingCohort).where(
+                ProspectingCohort.organization_id == principal.organization_id,
+                ProspectingCohort.id == payload.cohort_id,
+                ProspectingCohort.campaign_id == campaign.id,
+            )
+        )
+        if cohort is None:
+            raise ValueError("Import cohort must belong to the selected campaign.")
     assignee = None
     if payload.default_assignee_user_id:
         assignee = active_user(db, principal.organization_id, payload.default_assignee_user_id)
         if assignee is None:
             raise ValueError("The default assignee must be an active workspace user.")
-    return campaign, mapping, assignee
+    return campaign, mapping, assignee, cohort
 
 
 def prepare_import_rows(
@@ -341,6 +455,14 @@ def prepare_import_rows(
         for prospect in existing_prospects
         if prospect.normalized_email
     }
+    contact_points = db.scalars(
+        select(ProspectContactPoint).where(
+            ProspectContactPoint.organization_id == principal.organization_id
+        )
+    ).all()
+    for contact_point in contact_points:
+        target = phone_matches if contact_point.contact_type == "phone" else email_matches
+        target.setdefault(contact_point.normalized_value, contact_point.prospect_id)
     address_matches = {
         prospect.normalized_address_key: prospect.id
         for prospect in existing_prospects
@@ -351,6 +473,18 @@ def prepare_import_rows(
         for prospect in existing_prospects
         if prospect.campaign_id == payload.campaign_id and prospect.source_record_key
     }
+    source_name = clean_text(mapping.source_name) or "CSV import"
+    memberships = db.scalars(
+        select(ProspectSourceMembership).where(
+            ProspectSourceMembership.organization_id == principal.organization_id,
+            ProspectSourceMembership.source_name == source_name,
+            ProspectSourceMembership.source_record_key.is_not(None),
+        )
+    ).all()
+    for membership in memberships:
+        if membership.source_record_key:
+            source_matches.setdefault(membership.source_record_key, membership.prospect_id)
+    relationship_states = prospect_relationship_states(db, existing_prospects)
     active_voice_suppressions = active_company_suppressions(db, principal.organization_id)
     seen_identities: set[str] = set()
     prepared_rows: list[PreparedImportRow] = []
@@ -365,6 +499,7 @@ def prepare_import_rows(
             source_matches,
             active_voice_suppressions,
             seen_identities,
+            relationship_states,
         )
         prepared_rows.append(prepared)
     return headers, prepared_rows
@@ -407,6 +542,7 @@ def prepare_row(
     source_matches: dict[str, UUID],
     active_voice_suppressions: dict[str, SuppressionRecord],
     seen_identities: set[str],
+    relationship_states: dict[UUID, str],
 ) -> PreparedImportRow:
     values = {
         field: clean_text(raw.get(column)) or clean_text(mapping.default_values.get(field))
@@ -416,30 +552,85 @@ def prepare_row(
         values.setdefault(field, clean_text(default))
     errors: list[str] = []
     reasons: list[str] = []
-    legal_name = values.get("legal_name")
+    legal_name = values.get("legal_name") or " ".join(
+        part
+        for part in (
+            values.get("legal_first_name"),
+            values.get("legal_last_name"),
+        )
+        if part
+    ).strip()
     if not legal_name:
         errors.append("Seller or owner name is required.")
     elif len(legal_name) > 255:
         errors.append("Seller or owner name exceeds 255 characters.")
 
-    phone = values.get("phone")
-    normalized_phone = None
-    if phone:
-        if len(phone) > 80:
-            errors.append("Phone number exceeds 80 characters.")
+    contact_points: list[PreparedContactPoint] = []
+    for rank, field in enumerate(("phone", "phone_2", "phone_3"), start=1):
+        phone_value = values.get(field)
+        if not phone_value:
+            continue
+        if len(phone_value) > 80:
+            reasons.append(f"Phone {rank} exceeds 80 characters and was skipped.")
+            continue
         try:
-            normalized_phone = normalize_prospect_phone(phone)
+            normalized_contact = normalize_prospect_phone(phone_value)
         except ValueError:
-            errors.append("Phone number is invalid.")
-    email = values.get("email")
-    normalized_email = email.lower() if email else None
-    if normalized_email and len(normalized_email) > 320:
-        errors.append("Email address exceeds 320 characters.")
-        normalized_email = None
-    elif normalized_email and ("@" not in normalized_email or normalized_email.startswith("@")):
-        errors.append("Email address is invalid.")
-        normalized_email = None
-    if not normalized_phone and not normalized_email:
+            reasons.append(f"Phone {rank} is invalid and was skipped.")
+            continue
+        if normalized_contact and all(
+            point.normalized_value != normalized_contact
+            for point in contact_points
+            if point.contact_type == "phone"
+        ):
+            contact_points.append(
+                PreparedContactPoint(
+                    "phone",
+                    phone_value,
+                    normalized_contact,
+                    rank,
+                    field,
+                )
+            )
+    for rank, field in enumerate(("email", "email_2", "email_3"), start=1):
+        email_value = values.get(field)
+        if not email_value:
+            continue
+        normalized_contact = email_value.lower()
+        if (
+            len(normalized_contact) > 320
+            or "@" not in normalized_contact
+            or normalized_contact.startswith("@")
+        ):
+            reasons.append(f"Email {rank} is invalid and was skipped.")
+            continue
+        if all(
+            point.normalized_value != normalized_contact
+            for point in contact_points
+            if point.contact_type == "email"
+        ):
+            contact_points.append(
+                PreparedContactPoint(
+                    "email",
+                    email_value,
+                    normalized_contact,
+                    rank,
+                    field,
+                )
+            )
+    primary_phone = next(
+        (point for point in contact_points if point.contact_type == "phone"),
+        None,
+    )
+    primary_email = next(
+        (point for point in contact_points if point.contact_type == "email"),
+        None,
+    )
+    phone = primary_phone.value if primary_phone else None
+    normalized_phone = primary_phone.normalized_value if primary_phone else None
+    email = primary_email.value if primary_email else None
+    normalized_email = primary_email.normalized_value if primary_email else None
+    if not contact_points:
         errors.append("A valid phone or email is required.")
 
     street = values.get("street_address")
@@ -467,7 +658,7 @@ def prepare_row(
     if values.get("source_record_key") and len(values.get("source_record_key") or "") > 255:
         errors.append("Source record key exceeds 255 characters.")
 
-    normalized: dict[str, str | None] = {
+    normalized: dict[str, Any] = {
         "source_record_key": values.get("source_record_key"),
         "legal_name": legal_name,
         "phone": phone,
@@ -481,10 +672,21 @@ def prepare_row(
         "normalized_address_key": normalized_address,
         "address_validation_status": address_status,
         "dnc_status": values.get("dnc_status"),
+        "contact_points": [
+            {
+                "contact_type": point.contact_type,
+                "value": point.value,
+                "normalized_value": point.normalized_value,
+                "rank": point.rank,
+                "source_field": point.source_field,
+            }
+            for point in contact_points
+        ],
     }
 
     duplicate_id = find_duplicate(
         normalized,
+        contact_points,
         phone_matches,
         email_matches,
         address_matches,
@@ -493,8 +695,10 @@ def prepare_row(
     identity_keys = {
         value
         for value in (
-            f"phone:{normalized_phone}" if normalized_phone else None,
-            f"email:{normalized_email}" if normalized_email else None,
+            *(
+                f"{point.contact_type}:{point.normalized_value}"
+                for point in contact_points
+            ),
             f"address:{normalized_address}" if normalized_address else None,
             (
                 f"source:{values.get('source_record_key')}"
@@ -537,10 +741,20 @@ def prepare_row(
     else:
         status = "valid"
 
+    relationship_state = (
+        relationship_states.get(duplicate_id, "prior_contact")
+        if duplicate_id
+        else "duplicate_in_file"
+        if within_file_duplicate
+        else "untouched"
+    )
+    normalized["relationship_state"] = relationship_state
     return PreparedImportRow(
         row_number=row_number,
         raw_data=raw,
         normalized_data=normalized,
+        contact_points=contact_points,
+        relationship_state=relationship_state,
         status=status,
         validation_errors=errors,
         eligibility_reasons=reasons,
@@ -552,17 +766,25 @@ def prepare_row(
 
 
 def find_duplicate(
-    normalized: dict[str, str | None],
+    normalized: dict[str, Any],
+    contact_points: list[PreparedContactPoint],
     phone_matches: dict[str, UUID],
     email_matches: dict[str, UUID],
     address_matches: dict[str, UUID],
     source_matches: dict[str, UUID],
 ) -> UUID | None:
-    candidates = (
-        (normalized.get("source_record_key"), source_matches),
-        (normalized.get("normalized_phone"), phone_matches),
-        (normalized.get("normalized_email"), email_matches),
-        (normalized.get("normalized_address_key"), address_matches),
+    candidates: list[tuple[str | None, dict[str, UUID]]] = [
+        (string_value(normalized.get("source_record_key")), source_matches),
+    ]
+    candidates.extend(
+        (
+            point.normalized_value,
+            phone_matches if point.contact_type == "phone" else email_matches,
+        )
+        for point in contact_points
+    )
+    candidates.append(
+        (string_value(normalized.get("normalized_address_key")), address_matches)
     )
     for value, matches in candidates:
         if value and value in matches:
@@ -620,6 +842,209 @@ def prospect_from_import(
     )
 
 
+def prospect_relationship_states(
+    db: Session,
+    prospects: Sequence[Prospect],
+) -> dict[UUID, str]:
+    prospect_ids = [prospect.id for prospect in prospects]
+    entry_rows = (
+        db.execute(
+            select(
+                ProspectCallingBatchEntry.prospect_id,
+                ProspectCallingBatchEntry.status,
+                ProspectCallingBatchEntry.next_attempt_at,
+            ).where(ProspectCallingBatchEntry.prospect_id.in_(prospect_ids))
+        ).all()
+        if prospect_ids
+        else []
+    )
+    entries_by_prospect: dict[UUID, list[tuple[str, datetime | None]]] = {}
+    for prospect_id, status, next_attempt_at in entry_rows:
+        entries_by_prospect.setdefault(prospect_id, []).append((status, next_attempt_at))
+    states: dict[UUID, str] = {}
+    for prospect in prospects:
+        entries = entries_by_prospect.get(prospect.id, [])
+        if prospect.converted_lead_id:
+            state = "existing_lead"
+        elif any(next_attempt_at is not None for _, next_attempt_at in entries):
+            state = "callback_due"
+        elif any(
+            status in {"in_progress", "handoff_pending", "needs_correction"}
+            for status, _ in entries
+        ) or prospect.status in {"warm_handoff", "handoff_correction"}:
+            state = "active_conversation"
+        elif prospect.last_contacted_at is not None or entries:
+            state = "prior_contact"
+        else:
+            state = "untouched"
+        states[prospect.id] = state
+    return states
+
+
+def refresh_untouched_prospect(
+    prospect: Prospect,
+    prepared: PreparedImportRow,
+) -> None:
+    if prepared.relationship_state != "untouched":
+        return
+    data = prepared.normalized_data
+    if not prospect.phone and data.get("normalized_phone"):
+        prospect.phone = string_value(data.get("phone"))
+        prospect.normalized_phone = string_value(data.get("normalized_phone"))
+        prospect.phone_validation_status = "valid"
+        if prospect.call_eligibility == "review_required":
+            prospect.call_eligibility = "eligible"
+    if not prospect.email and data.get("normalized_email"):
+        prospect.email = string_value(data.get("email"))
+        prospect.normalized_email = string_value(data.get("normalized_email"))
+    for field in ("street_address", "city", "state_code", "postal_code"):
+        if not getattr(prospect, field):
+            setattr(prospect, field, string_value(data.get(field)))
+    if not prospect.normalized_address_key:
+        prospect.normalized_address_key = string_value(data.get("normalized_address_key"))
+        prospect.address_validation_status = (
+            string_value(data.get("address_validation_status")) or "missing"
+        )
+
+
+def upsert_source_membership(
+    db: Session,
+    principal: Principal,
+    campaign: Campaign,
+    cohort: ProspectingCohort | None,
+    batch: ProspectImportBatch,
+    prospect: Prospect,
+    prepared: PreparedImportRow,
+    seen_at: datetime,
+) -> ProspectSourceMembership:
+    source_list_key = (
+        batch.source_list_id
+        or normalized_source_list_key(batch.source_list_name)
+        or batch.source_export_id
+        or f"campaign:{campaign.id}"
+    )
+    membership = db.scalar(
+        select(ProspectSourceMembership).where(
+            ProspectSourceMembership.prospect_id == prospect.id,
+            ProspectSourceMembership.source_name == batch.source_name,
+            ProspectSourceMembership.source_list_key == source_list_key,
+        )
+    )
+    source_metadata = {
+        "source_export_id": batch.source_export_id,
+        "source_list_id": batch.source_list_id,
+        "source_list_name": batch.source_list_name,
+        "source_exported_at": (
+            batch.source_exported_at.isoformat() if batch.source_exported_at else None
+        ),
+        "source_filters": batch.source_filters,
+        "latest_file_name": batch.file_name,
+        "latest_row_number": prepared.row_number,
+    }
+    if membership is None:
+        membership = ProspectSourceMembership(
+            organization_id=principal.organization_id,
+            prospect_id=prospect.id,
+            campaign_id=campaign.id,
+            cohort_id=cohort.id if cohort else None,
+            first_import_batch_id=batch.id,
+            latest_import_batch_id=batch.id,
+            source_name=batch.source_name,
+            source_profile=batch.source_profile,
+            source_record_key=string_value(
+                prepared.normalized_data.get("source_record_key")
+            ),
+            source_list_key=source_list_key,
+            source_list_name=batch.source_list_name,
+            first_seen_at=seen_at,
+            last_seen_at=seen_at,
+            appearance_count=1,
+            relationship_state_at_latest_import=prepared.relationship_state,
+            source_metadata=source_metadata,
+        )
+        db.add(membership)
+    else:
+        membership.latest_import_batch_id = batch.id
+        membership.campaign_id = campaign.id
+        membership.cohort_id = cohort.id if cohort else membership.cohort_id
+        membership.source_profile = batch.source_profile
+        membership.source_record_key = (
+            string_value(prepared.normalized_data.get("source_record_key"))
+            or membership.source_record_key
+        )
+        membership.source_list_name = batch.source_list_name or membership.source_list_name
+        membership.last_seen_at = seen_at
+        membership.appearance_count += 1
+        membership.relationship_state_at_latest_import = prepared.relationship_state
+        membership.source_metadata = source_metadata
+    db.flush()
+    return membership
+
+
+def upsert_prospect_contact_points(
+    db: Session,
+    principal: Principal,
+    prospect: Prospect,
+    membership: ProspectSourceMembership,
+    prepared: PreparedImportRow,
+    seen_at: datetime,
+) -> None:
+    existing = {
+        (contact.contact_type, contact.normalized_value): contact
+        for contact in db.scalars(
+            select(ProspectContactPoint).where(
+                ProspectContactPoint.organization_id == principal.organization_id,
+                ProspectContactPoint.prospect_id == prospect.id,
+            )
+        ).all()
+    }
+    for point in prepared.contact_points:
+        key = (point.contact_type, point.normalized_value)
+        is_primary = (
+            prospect.normalized_phone == point.normalized_value
+            if point.contact_type == "phone"
+            else prospect.normalized_email == point.normalized_value
+        )
+        contact = existing.get(key)
+        metadata = {
+            "source_field": point.source_field,
+            "source_name": membership.source_name,
+            "source_list_key": membership.source_list_key,
+        }
+        if contact is None:
+            db.add(
+                ProspectContactPoint(
+                    organization_id=principal.organization_id,
+                    prospect_id=prospect.id,
+                    source_membership_id=membership.id,
+                    contact_type=point.contact_type,
+                    value=point.value,
+                    normalized_value=point.normalized_value,
+                    rank=point.rank,
+                    is_primary=is_primary,
+                    validation_status="valid",
+                    first_seen_at=seen_at,
+                    last_seen_at=seen_at,
+                    contact_metadata=metadata,
+                )
+            )
+        else:
+            contact.source_membership_id = membership.id
+            contact.value = point.value
+            contact.rank = min(contact.rank, point.rank)
+            contact.is_primary = contact.is_primary or is_primary
+            contact.validation_status = "valid"
+            contact.last_seen_at = seen_at
+            contact.contact_metadata = metadata
+
+
+def normalized_source_list_key(value: str | None) -> str | None:
+    cleaned = clean_text(value)
+    if not cleaned:
+        return None
+    return "-".join(cleaned.casefold().split())[:255]
+
+
 def add_suppression_checks(
     db: Session,
     principal: Principal,
@@ -654,7 +1079,11 @@ def import_preview(
         **counts,
         eligible_rows=sum(row.status == "valid" for row in rows),
         can_import=bool(rows)
-        and any(row.status in {"valid", "suppressed", "review_required"} for row in rows),
+        and any(
+            row.status in {"valid", "suppressed", "review_required"}
+            or (row.status == "duplicate" and row.duplicate_prospect_id is not None)
+            for row in rows
+        ),
         rows=[prepared_row_preview(row) for row in rows[:200]],
     )
 
@@ -681,6 +1110,8 @@ def prepared_row_preview(row: PreparedImportRow) -> ProspectImportPreviewRow:
         validation_errors=row.validation_errors,
         eligibility_reasons=row.eligibility_reasons,
         duplicate_prospect_id=row.duplicate_prospect_id,
+        relationship_state=row.relationship_state,
+        contact_point_count=len(row.contact_points),
     )
 
 
@@ -699,6 +1130,7 @@ def list_import_batches(
 
 def import_batch_read(db: Session, batch: ProspectImportBatch) -> ProspectImportBatchRead:
     campaign = db.get(Campaign, batch.campaign_id)
+    cohort = db.get(ProspectingCohort, batch.cohort_id) if batch.cohort_id else None
     mapping = db.get(ProspectImportMapping, batch.mapping_id)
     assignee = (
         db.get(User, batch.default_assignee_user_id) if batch.default_assignee_user_id else None
@@ -714,6 +1146,8 @@ def import_batch_read(db: Session, batch: ProspectImportBatch) -> ProspectImport
         id=batch.id,
         campaign_id=batch.campaign_id,
         campaign_name=campaign.name if campaign else "Unknown campaign",
+        cohort_id=batch.cohort_id,
+        cohort_name=cohort.name if cohort else None,
         mapping_id=batch.mapping_id,
         mapping_name=mapping.name if mapping else "Unknown mapping",
         default_assignee_user_id=batch.default_assignee_user_id,
@@ -722,10 +1156,18 @@ def import_batch_read(db: Session, batch: ProspectImportBatch) -> ProspectImport
         imported_by_name=importer.display_name if importer else "Unknown user",
         file_name=batch.file_name,
         file_sha256=batch.file_sha256,
+        source_name=batch.source_name,
+        source_profile=batch.source_profile,
+        source_export_id=batch.source_export_id,
+        source_list_id=batch.source_list_id,
+        source_list_name=batch.source_list_name,
+        source_exported_at=batch.source_exported_at,
+        source_filters=batch.source_filters,
         status=batch.status,
         total_rows=batch.total_rows,
         valid_rows=batch.valid_rows,
         imported_rows=batch.imported_rows,
+        matched_existing_rows=batch.matched_existing_rows,
         invalid_rows=batch.invalid_rows,
         duplicate_rows=batch.duplicate_rows,
         suppressed_rows=batch.suppressed_rows,
@@ -738,17 +1180,102 @@ def import_batch_read(db: Session, batch: ProspectImportBatch) -> ProspectImport
 
 def import_row_read(row: ProspectImportRow) -> ProspectImportRowRead:
     data = row.normalized_data
+    contact_points = data.get("contact_points")
     return ProspectImportRowRead(
         id=row.id,
         row_number=row.row_number,
         status=row.status,
         prospect_id=row.prospect_id,
         duplicate_prospect_id=row.duplicate_prospect_id,
+        source_membership_id=row.source_membership_id,
+        relationship_state=string_value(data.get("relationship_state")) or "unknown",
+        contact_point_count=len(contact_points) if isinstance(contact_points, list) else 0,
         legal_name=string_value(data.get("legal_name")),
         phone=string_value(data.get("phone")),
         property_address=property_address(data),
         validation_errors=row.validation_errors,
         eligibility_reasons=row.eligibility_reasons,
+    )
+
+
+def list_source_memberships(
+    db: Session,
+    principal: Principal,
+) -> list[ProspectSourceMembershipRead]:
+    memberships = db.scalars(
+        select(ProspectSourceMembership)
+        .where(ProspectSourceMembership.organization_id == principal.organization_id)
+        .order_by(ProspectSourceMembership.last_seen_at.desc())
+        .limit(500)
+    ).all()
+    return [source_membership_read(db, membership) for membership in memberships]
+
+
+def source_membership_read(
+    db: Session,
+    membership: ProspectSourceMembership,
+) -> ProspectSourceMembershipRead:
+    prospect = db.get(Prospect, membership.prospect_id)
+    campaign = db.get(Campaign, membership.campaign_id)
+    cohort = db.get(ProspectingCohort, membership.cohort_id) if membership.cohort_id else None
+    return ProspectSourceMembershipRead(
+        id=membership.id,
+        prospect_id=membership.prospect_id,
+        legal_name=prospect.legal_name if prospect else "Unknown prospect",
+        campaign_id=membership.campaign_id,
+        campaign_name=campaign.name if campaign else "Unknown campaign",
+        cohort_id=membership.cohort_id,
+        cohort_name=cohort.name if cohort else None,
+        source_name=membership.source_name,
+        source_profile=membership.source_profile,
+        source_record_key=membership.source_record_key,
+        source_list_key=membership.source_list_key,
+        source_list_name=membership.source_list_name,
+        first_import_batch_id=membership.first_import_batch_id,
+        latest_import_batch_id=membership.latest_import_batch_id,
+        first_seen_at=membership.first_seen_at,
+        last_seen_at=membership.last_seen_at,
+        appearance_count=membership.appearance_count,
+        relationship_state_at_latest_import=membership.relationship_state_at_latest_import,
+        source_metadata=membership.source_metadata,
+    )
+
+
+def list_prospect_contact_points(
+    db: Session,
+    principal: Principal,
+) -> list[ProspectContactPointRead]:
+    contact_points = db.scalars(
+        select(ProspectContactPoint)
+        .where(ProspectContactPoint.organization_id == principal.organization_id)
+        .order_by(
+            ProspectContactPoint.prospect_id,
+            ProspectContactPoint.contact_type,
+            ProspectContactPoint.rank,
+        )
+        .limit(1000)
+    ).all()
+    return [prospect_contact_point_read(db, contact_point) for contact_point in contact_points]
+
+
+def prospect_contact_point_read(
+    db: Session,
+    contact_point: ProspectContactPoint,
+) -> ProspectContactPointRead:
+    prospect = db.get(Prospect, contact_point.prospect_id)
+    return ProspectContactPointRead(
+        id=contact_point.id,
+        prospect_id=contact_point.prospect_id,
+        legal_name=prospect.legal_name if prospect else "Unknown prospect",
+        source_membership_id=contact_point.source_membership_id,
+        contact_type=contact_point.contact_type,
+        value=contact_point.value,
+        normalized_value=contact_point.normalized_value,
+        rank=contact_point.rank,
+        is_primary=contact_point.is_primary,
+        validation_status=contact_point.validation_status,
+        first_seen_at=contact_point.first_seen_at,
+        last_seen_at=contact_point.last_seen_at,
     )
 
 
@@ -1010,6 +1537,11 @@ def create_campaign_cost(
         )
         if import_batch is None:
             raise ValueError("Import batch must belong to the selected campaign.")
+        if import_batch.cohort_id:
+            import_cohort = db.get(ProspectingCohort, import_batch.cohort_id)
+            if cohort and cohort.id != import_batch.cohort_id:
+                raise ValueError("Import batch and cost cohort must match.")
+            cohort = cohort or import_cohort
     worker = None
     if payload.worker_user_id:
         worker = active_user(db, principal.organization_id, payload.worker_user_id)
@@ -1120,6 +1652,13 @@ def create_calling_batch(
         )
         if import_batch is None:
             raise ValueError("Import batch must belong to the selected campaign.")
+        if import_batch.cohort_id:
+            import_cohort = db.get(ProspectingCohort, import_batch.cohort_id)
+            if cohort and cohort.id != import_batch.cohort_id:
+                raise ValueError("Import batch and calling-batch cohort must match.")
+            cohort = cohort or import_cohort
+            if cohort and cohort.dialer_mode != payload.dialer_mode:
+                raise ValueError("Calling-batch dialer mode must match its cohort.")
 
     already_batched = select(ProspectCallingBatchEntry.prospect_id)
     prospect_statement = (
@@ -1135,7 +1674,17 @@ def create_calling_batch(
         .limit(payload.maximum_records)
     )
     if import_batch:
-        prospect_statement = prospect_statement.where(Prospect.import_batch_id == import_batch.id)
+        import_prospect_ids = select(ProspectImportRow.prospect_id).where(
+            ProspectImportRow.import_batch_id == import_batch.id,
+            ProspectImportRow.prospect_id.is_not(None),
+        )
+        prospect_statement = prospect_statement.where(Prospect.id.in_(import_prospect_ids))
+    if cohort:
+        cohort_prospect_ids = select(ProspectSourceMembership.prospect_id).where(
+            ProspectSourceMembership.organization_id == principal.organization_id,
+            ProspectSourceMembership.cohort_id == cohort.id,
+        )
+        prospect_statement = prospect_statement.where(Prospect.id.in_(cohort_prospect_ids))
     prospects = db.scalars(prospect_statement).all()
     if not prospects:
         raise ValueError("No unbatched, callable prospects match this selection.")

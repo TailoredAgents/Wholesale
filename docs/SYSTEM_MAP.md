@@ -101,7 +101,7 @@ so staff are not misled by a control that exists but lacks production credential
 
 ### 4.3 Database Evolution
 
-The database has 73 numbered Alembic migrations through `0073_va_dialer_metrics`. Migrations are
+The database has 74 numbered Alembic migrations through `0074_propstream_pipeline`. Migrations are
 run automatically when the Render API starts and manually with `npm run db:migrate` locally.
 
 Schema changes must be additive or explicitly migrated. Production data must never depend on
@@ -364,6 +364,10 @@ The OS uses five stable navigation groups.
 
 - CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
   performance.
+- Includes a standard PropStream export preset, source export/list evidence, saved filter
+  evidence, ranked phone and email contact points, and source-list appearance history.
+- Refreshes match existing people, contact methods, properties, and source IDs without resetting
+  prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
 - Prospecting cohorts preserve source, list type, market, script, date range, call window, and
   one-line or multi-line dialer mode.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
@@ -1196,8 +1200,8 @@ acceptance and evidence:
 - ad-provider credential setup and offline conversion acceptance
 - role acceptance with actual staff accounts
 - supervised Copilot pilots using redacted Stonegate cases
-- PropStream production export mapping, source memberships, ranked contact methods, and refresh
-  acceptance before provider-connected dialing
+- PropStream production export acceptance using Stonegate's implemented source membership,
+  ranked-contact, refresh-safe, and deterministic cohort workflow
 - BatchDialer provider adapter, pre-lead call records, hybrid routing, and controlled comparison
   pilot
 - real backup restoration and optional monitoring-provider configuration

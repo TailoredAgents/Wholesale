@@ -11,8 +11,14 @@ DialerMode = Literal["one_line_power", "multi_line_parallel"]
 SUPPORTED_IMPORT_FIELDS = {
     "source_record_key",
     "legal_name",
+    "legal_first_name",
+    "legal_last_name",
     "phone",
+    "phone_2",
+    "phone_3",
     "email",
+    "email_2",
+    "email_3",
     "street_address",
     "city",
     "state_code",
@@ -44,9 +50,21 @@ class ProspectImportMappingCreate(BaseModel):
         unsupported = set(self.field_mapping) - SUPPORTED_IMPORT_FIELDS
         if unsupported:
             raise ValueError(f"Unsupported import fields: {', '.join(sorted(unsupported))}.")
-        if "legal_name" not in self.field_mapping:
-            raise ValueError("Map a seller or owner name column.")
-        if not {"phone", "email"}.intersection(self.field_mapping):
+        has_full_name = "legal_name" in self.field_mapping
+        has_split_name = {
+            "legal_first_name",
+            "legal_last_name",
+        }.issubset(self.field_mapping)
+        if not has_full_name and not has_split_name:
+            raise ValueError("Map an owner name or both owner first and last name columns.")
+        if not {
+            "phone",
+            "phone_2",
+            "phone_3",
+            "email",
+            "email_2",
+            "email_3",
+        }.intersection(self.field_mapping):
             raise ValueError("Map a phone or email column.")
         if len(set(self.field_mapping.values())) != len(self.field_mapping):
             raise ValueError("Each CSV column can map to only one Stonegate field.")
@@ -59,9 +77,26 @@ class ProspectImportMappingCreate(BaseModel):
 class ProspectImportRequest(BaseModel):
     campaign_id: UUID
     mapping_id: UUID
+    cohort_id: UUID | None = None
     default_assignee_user_id: UUID | None = None
     file_name: str = Field(min_length=1, max_length=255)
     csv_content: str = Field(min_length=1, max_length=5_000_000)
+    source_profile: Literal["general_csv", "propstream"] = "general_csv"
+    source_export_id: str | None = Field(default=None, max_length=255)
+    source_list_id: str | None = Field(default=None, max_length=255)
+    source_list_name: str | None = Field(default=None, max_length=255)
+    source_exported_at: datetime | None = None
+    source_filters: dict[str, Any] = Field(default_factory=dict, max_length=50)
+
+    @model_validator(mode="after")
+    def source_evidence_is_coherent(self) -> "ProspectImportRequest":
+        if self.source_profile == "propstream" and not (
+            self.source_export_id or self.source_list_id or self.source_list_name
+        ):
+            raise ValueError(
+                "PropStream imports require an export ID, list ID, or saved list name."
+            )
+        return self
 
 
 class ProspectImportPreviewRow(BaseModel):
@@ -73,6 +108,8 @@ class ProspectImportPreviewRow(BaseModel):
     validation_errors: list[str]
     eligibility_reasons: list[str]
     duplicate_prospect_id: UUID | None
+    relationship_state: str
+    contact_point_count: int
 
 
 class ProspectImportPreview(BaseModel):
@@ -94,6 +131,9 @@ class ProspectImportRowRead(BaseModel):
     status: str
     prospect_id: UUID | None
     duplicate_prospect_id: UUID | None
+    source_membership_id: UUID | None
+    relationship_state: str
+    contact_point_count: int
     legal_name: str | None
     phone: str | None
     property_address: str | None
@@ -105,6 +145,8 @@ class ProspectImportBatchRead(BaseModel):
     id: UUID
     campaign_id: UUID
     campaign_name: str
+    cohort_id: UUID | None
+    cohort_name: str | None
     mapping_id: UUID
     mapping_name: str
     default_assignee_user_id: UUID | None
@@ -113,10 +155,18 @@ class ProspectImportBatchRead(BaseModel):
     imported_by_name: str
     file_name: str
     file_sha256: str
+    source_name: str
+    source_profile: str
+    source_export_id: str | None
+    source_list_id: str | None
+    source_list_name: str | None
+    source_exported_at: datetime | None
+    source_filters: dict[str, Any]
     status: str
     total_rows: int
     valid_rows: int
     imported_rows: int
+    matched_existing_rows: int
     invalid_rows: int
     duplicate_rows: int
     suppressed_rows: int
@@ -124,6 +174,43 @@ class ProspectImportBatchRead(BaseModel):
     completed_at: datetime | None
     created_at: datetime
     rows: list[ProspectImportRowRead]
+
+
+class ProspectSourceMembershipRead(BaseModel):
+    id: UUID
+    prospect_id: UUID
+    legal_name: str
+    campaign_id: UUID
+    campaign_name: str
+    cohort_id: UUID | None
+    cohort_name: str | None
+    source_name: str
+    source_profile: str
+    source_record_key: str | None
+    source_list_key: str
+    source_list_name: str | None
+    first_import_batch_id: UUID
+    latest_import_batch_id: UUID
+    first_seen_at: datetime
+    last_seen_at: datetime
+    appearance_count: int
+    relationship_state_at_latest_import: str
+    source_metadata: dict[str, Any]
+
+
+class ProspectContactPointRead(BaseModel):
+    id: UUID
+    prospect_id: UUID
+    legal_name: str
+    source_membership_id: UUID | None
+    contact_type: str
+    value: str
+    normalized_value: str
+    rank: int
+    is_primary: bool
+    validation_status: str
+    first_seen_at: datetime
+    last_seen_at: datetime
 
 
 class CampaignCostRead(BaseModel):
@@ -357,6 +444,8 @@ class CampaignManagementOverview(BaseModel):
     campaigns: list[CampaignRead]
     mappings: list[ProspectImportMappingRead]
     import_batches: list[ProspectImportBatchRead]
+    source_memberships: list[ProspectSourceMembershipRead]
+    contact_points: list[ProspectContactPointRead]
     cohorts: list[ProspectingCohortRead]
     work_sessions: list[ProspectingWorkSessionRead]
     costs: list[CampaignCostRead]

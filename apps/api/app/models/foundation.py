@@ -254,16 +254,33 @@ class ProspectImportBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     mapping_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("prospect_import_mappings.id"), index=True
     )
+    cohort_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), nullable=True, index=True
+    )
     default_assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id"), index=True
     )
     imported_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_sha256: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    source_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    source_profile: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="general_csv", server_default="general_csv"
+    )
+    source_export_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    source_list_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    source_list_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_exported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_filters: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     total_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     valid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     imported_rows: Mapped[int] = mapped_column(Integer, nullable=False)
+    matched_existing_rows: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     invalid_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     duplicate_rows: Mapped[int] = mapped_column(Integer, nullable=False)
     suppressed_rows: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -289,12 +306,88 @@ class ProspectImportRow(UuidPrimaryKeyMixin, TimestampMixin, Base):
     duplicate_prospect_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("prospects.id"), index=True
     )
+    source_membership_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospect_source_memberships.id"), nullable=True, index=True
+    )
     row_number: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     raw_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     normalized_data: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     validation_errors: Mapped[list[str]] = mapped_column(JSON, nullable=False)
     eligibility_reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+
+
+class ProspectSourceMembership(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospect_source_memberships"
+    __table_args__ = (
+        UniqueConstraint(
+            "prospect_id",
+            "source_name",
+            "source_list_key",
+            name="uq_prospect_source_memberships_prospect_source_list",
+        ),
+        Index(
+            "ix_psm_latest_relationship_state",
+            "relationship_state_at_latest_import",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospects.id"), index=True)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    cohort_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), nullable=True, index=True
+    )
+    first_import_batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_import_batches.id"), index=True
+    )
+    latest_import_batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_import_batches.id"), index=True
+    )
+    source_name: Mapped[str] = mapped_column(String(160), nullable=False, index=True)
+    source_profile: Mapped[str] = mapped_column(String(40), nullable=False)
+    source_record_key: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    source_list_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_list_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    appearance_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    relationship_state_at_latest_import: Mapped[str] = mapped_column(
+        String(40), nullable=False
+    )
+    source_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
+class ProspectContactPoint(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospect_contact_points"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "prospect_id",
+            "contact_type",
+            "normalized_value",
+            name="uq_prospect_contact_points_prospect_value",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("prospects.id"), index=True)
+    source_membership_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospect_source_memberships.id"), nullable=True, index=True
+    )
+    contact_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    value: Mapped[str] = mapped_column(String(320), nullable=False)
+    normalized_value: Mapped[str] = mapped_column(String(320), nullable=False, index=True)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    validation_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    contact_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
 class ProspectSuppressionCheck(UuidPrimaryKeyMixin, TimestampMixin, Base):

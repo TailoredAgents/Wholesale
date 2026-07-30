@@ -9,7 +9,9 @@ from app.main import app
 from app.models.foundation import (
     AuditEvent,
     Prospect,
+    ProspectContactPoint,
     ProspectImportRow,
+    ProspectSourceMembership,
     ProspectSuppressionCheck,
     SuppressionRecord,
 )
@@ -272,6 +274,175 @@ def test_import_mapping_rejects_missing_required_contact_mapping(
         },
     )
     assert response.status_code == 422
+
+
+def test_propstream_refresh_preserves_history_and_cohort_lineage(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    va = create_user(client, headers)
+    campaign = create_campaign(client, headers)
+    cohort_response = client.post(
+        "/api/v1/campaign-management/cohorts",
+        headers=headers,
+        json={
+            "campaign_id": campaign["id"],
+            "name": "Atlanta PropStream Power Cohort",
+            "code": "atl-propstream-power-refresh",
+            "source_name": "PropStream",
+            "list_type": "absentee_high_equity",
+            "market_label": "Atlanta Metro",
+            "dialer_mode": "one_line_power",
+            "call_window_start_hour": 9,
+            "call_window_end_hour": 17,
+            "timezone": "America/New_York",
+            "starts_on": "2026-07-30",
+        },
+    )
+    assert cohort_response.status_code == 201, cohort_response.text
+    cohort = cohort_response.json()
+    preset_response = client.post(
+        "/api/v1/campaign-management/import-mappings/propstream-preset",
+        headers=headers,
+    )
+    assert preset_response.status_code == 201, preset_response.text
+    preset = preset_response.json()
+    assert preset["source_name"] == "PropStream"
+
+    csv_header = (
+        "Property ID,Owner 1 First Name,Owner 1 Last Name,Phone 1,Phone 2,Phone 3,"
+        "Email 1,Email 2,Email 3,Property Address,Property City,Property State,"
+        "Property Zip\n"
+    )
+    first_csv = csv_header + (
+        "PS-100,Avery,Seller,4045550101,4045550102,4045550103,"
+        "avery@example.com,avery.work@example.com,,100 Oak St,Atlanta,GA,30303\n"
+    )
+    base_payload = {
+        "campaign_id": campaign["id"],
+        "mapping_id": preset["id"],
+        "cohort_id": cohort["id"],
+        "default_assignee_user_id": va["id"],
+        "source_profile": "propstream",
+        "source_export_id": "export-001",
+        "source_list_id": "list-absentee-atl",
+        "source_list_name": "Atlanta absentee high equity",
+        "source_exported_at": "2026-07-30T13:00:00Z",
+        "source_filters": {
+            "county": "Fulton",
+            "minimum_equity_percent": "40",
+            "occupancy": "absentee",
+        },
+    }
+    first_response = client.post(
+        "/api/v1/campaign-management/imports",
+        headers=headers,
+        json={
+            **base_payload,
+            "file_name": "propstream-atlanta-001.csv",
+            "csv_content": first_csv,
+        },
+    )
+    assert first_response.status_code == 201, first_response.text
+    assert first_response.json()["imported_rows"] == 1
+    assert first_response.json()["matched_existing_rows"] == 0
+
+    prospect = db_session.scalar(select(Prospect).where(Prospect.source_record_key == "PS-100"))
+    assert prospect is not None
+    original_phone = prospect.phone
+    contacted_at = datetime.now(UTC)
+    prospect.status = "contacted"
+    prospect.last_contacted_at = contacted_at
+    db_session.commit()
+
+    second_csv = csv_header + (
+        "PS-100,Avery,Seller,4045550101,4045550102,4045550199,"
+        "avery@example.com,avery.work@example.com,avery.new@example.com,"
+        "100 Oak St,Atlanta,GA,30303\n"
+    )
+    refresh_payload = {
+        **base_payload,
+        "source_export_id": "export-002",
+        "source_exported_at": "2026-07-31T13:00:00Z",
+        "file_name": "propstream-atlanta-002.csv",
+        "csv_content": second_csv,
+    }
+    preview_response = client.post(
+        "/api/v1/campaign-management/imports/validate",
+        headers=headers,
+        json=refresh_payload,
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview_row = preview_response.json()["rows"][0]
+    assert preview_row["status"] == "duplicate"
+    assert preview_row["relationship_state"] == "prior_contact"
+    assert preview_row["contact_point_count"] == 6
+
+    refresh_response = client.post(
+        "/api/v1/campaign-management/imports",
+        headers=headers,
+        json=refresh_payload,
+    )
+    assert refresh_response.status_code == 201, refresh_response.text
+    refreshed = refresh_response.json()
+    assert refreshed["imported_rows"] == 0
+    assert refreshed["matched_existing_rows"] == 1
+    assert refreshed["rows"][0]["status"] == "matched_existing"
+
+    db_session.refresh(prospect)
+    assert prospect.status == "contacted"
+    assert prospect.last_contacted_at == contacted_at.replace(tzinfo=None)
+    assert prospect.phone == original_phone
+    membership = db_session.scalar(
+        select(ProspectSourceMembership).where(
+            ProspectSourceMembership.prospect_id == prospect.id
+        )
+    )
+    assert membership is not None
+    assert membership.appearance_count == 2
+    assert str(membership.latest_import_batch_id) == refreshed["id"]
+    assert membership.relationship_state_at_latest_import == "prior_contact"
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ProspectContactPoint)
+            .where(ProspectContactPoint.prospect_id == prospect.id)
+        )
+        == 7
+    )
+
+    calling_batch_response = client.post(
+        "/api/v1/campaign-management/calling-batches",
+        headers=headers,
+        json={
+            "campaign_id": campaign["id"],
+            "import_batch_id": refreshed["id"],
+            "cohort_id": cohort["id"],
+            "dialer_mode": "one_line_power",
+            "assigned_user_id": va["id"],
+            "name": "Refreshed PropStream cohort",
+            "maximum_records": 25,
+        },
+    )
+    assert calling_batch_response.status_code == 201, calling_batch_response.text
+    assert [entry["prospect_id"] for entry in calling_batch_response.json()["entries"]] == [
+        str(prospect.id)
+    ]
+
+    replay_response = client.post(
+        "/api/v1/campaign-management/imports",
+        headers=headers,
+        json=refresh_payload,
+    )
+    assert replay_response.status_code == 422
 
 
 def test_prospecting_cohort_and_work_session_measurement_contract(

@@ -287,6 +287,8 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 
 ## VD3. PropStream List Pipeline
 
+**Status:** Implemented July 30, 2026. Production export acceptance remains.
+
 ### Work
 
 1. Preserve the existing CSV preview, mapping, validation, duplicate, and replay behavior.
@@ -299,6 +301,26 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 7. Separate untouched cold prospects from callbacks, active conversations, and existing leads.
 8. Prevent a fresh import from resetting prior outcomes, opt-outs, or callback commitments.
 9. Support deterministic assignment into comparable campaign cohorts.
+
+### Implemented
+
+1. Added a reusable PropStream standard-export preset while preserving custom CSV mappings.
+2. Added source profile, export ID, saved-list ID/name, export time, filter evidence, and cohort
+   attribution to every import batch.
+3. Added durable source-list memberships so repeat appearances update lineage instead of creating
+   another outreach record.
+4. Added up to three ranked phones and three ranked emails per export row without replacing the
+   prospect's established communication history.
+5. Added matching across source IDs, all known phones, all known emails, and normalized property
+   addresses.
+6. Added explicit untouched, prior-contact, callback, active-conversation, and existing-lead
+   relationship states in preview and import history.
+7. Made refresh imports preserve prior outcomes and attach new contact/source evidence to the
+   existing record.
+8. Made calling batches select through import-row and cohort lineage, including records matched
+   during a refreshed export.
+9. Added a PostgreSQL migration and repeatable acceptance coverage for import, refresh,
+   preservation, replay rejection, contact ranking, source appearances, and cohort batching.
 
 ### Exit Criteria
 

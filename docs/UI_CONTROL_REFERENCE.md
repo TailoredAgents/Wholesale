@@ -415,21 +415,26 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | --- | --- | --- |
 | Mapping name | Names a reusable vendor-column mapping | Required |
 | Source or vendor | Identifies the file source | Required |
-| Owner, Phone, Email, Source ID, Street, City, State, ZIP columns | Maps vendor headings to Stonegate fields | Enter the headings exactly as they appear in the CSV |
+| **Add PropStream preset** | Adds or reuses Stonegate's standard PropStream export mapping | Use once before the first standard PropStream import |
+| Owner, Phone 1-3, Email 1-3, Source ID, Street, City, State, ZIP columns | Maps vendor headings to Stonegate fields and preserves ranked contact methods | Enter the headings exactly as they appear in the CSV |
 | Do-not-call flag column | Maps an explicit source flag when present | Optional; blank source data is not treated as an opt-out |
 | **Save mapping** | Saves the reusable column mapping | Required headings must be valid |
 | Campaign | Selects the campaign receiving imported records | Required |
 | Saved mapping | Selects the vendor mapping | Required |
+| Source format | Identifies a PropStream export or a general CSV | PropStream requires an export ID, saved-list ID, or saved-list name |
+| Measurement cohort | Attributes list performance and determines its dialing mode | Recommended for every controlled VA comparison |
 | Default assignee | Applies a caller when the row has no separate assignment | Optional |
+| Export ID / Saved list ID / Saved list name / Exported at | Preserves exact vendor lineage | At least one identity is required for PropStream |
+| Market / County / Distress / Equity / Ownership / Occupancy / Property type | Preserves the filters used to produce the list | Enter the actual export criteria |
 | CSV file | Uploads the prospect file for validation | CSV required |
-| **Validate file** | Previews valid, invalid, duplicate, explicitly suppressed, review, and eligible rows | Does not commit records |
-| **Import reviewed file** | Commits eligible reviewed rows | Disabled when preview says `can_import` is false |
+| **Validate file** | Previews valid, invalid, duplicate, suppressed, review, eligible, prior-contact, callback, active-conversation, and existing-lead states | Does not commit records |
+| **Import reviewed file** | Commits new records and attaches refreshed source/contact evidence to existing matches | Disabled when no row can be imported or matched |
 
 ### Costs
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Campaign / Category | Links cost to list purchase, VA labor, enrichment, mail, ads, software, or other | Required |
+| Campaign / Cohort / Category | Links cost to list purchase, VA labor, enrichment, dialer, phone, voice, mail, ads, software, or other | Campaign and category required |
 | Related import | Links cost to one imported file | Optional |
 | Incurred on | Cost date | Required |
 | Worker / Hours / Hourly rate | Calculates VA labor cost | Used for VA labor |
@@ -443,6 +448,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | --- | --- | --- |
 | Existing batch row | Selects the batch whose records appear below | Requires a batch |
 | Batch name / Campaign | Names and scopes the batch | Required |
+| Cohort | Restricts records to the selected source cohort and applies its dialing mode | Recommended for controlled comparisons |
 | Import batch | Limits records to one import or any unbatched campaign records | Optional |
 | Assigned caller | Gives the batch to a specific caller | Required |
 | Maximum records | Caps records added, between 1 and 1,000 | Required |
@@ -455,8 +461,8 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 
 | Section or control | Purpose and effect | Availability |
 | --- | --- | --- |
-| Committed file row | Selects an import batch | Requires prior import |
-| Row-level results | Shows exactly why each row imported, duplicated, failed, or was excluded | Read-only evidence |
+| Committed file row | Selects an import and shows source/list plus new and matched counts | Requires prior import |
+| Row-level results | Shows exactly why each row imported, matched, failed, or was excluded plus relationship state and contact count | Read-only evidence |
 
 ## Prospecting
 

@@ -628,12 +628,24 @@ Open **Campaigns**. The workspace contains:
 1. Create or select the campaign.
 2. Record the market, list source, channel, budget, dates, and manager.
 3. Go to **Import prospects**.
-4. Upload the CSV and select or create the vendor-column mapping.
-5. Review the preview before saving.
-6. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
-7. Record list and labor costs in **Costs**.
-8. Create a calling batch.
-9. Assign the batch or individual entries to VAs.
+4. For PropStream, select **Add PropStream preset** once, then select that saved mapping.
+5. Choose the campaign and measurement cohort.
+6. Enter the PropStream export or saved-list identity and the filters used to build the list.
+7. Upload the CSV and select the correct vendor-column mapping.
+8. Review the preview before saving. It shows contact count and whether each person is untouched,
+   previously contacted, in an active conversation, due for callback, or already a CRM lead.
+9. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
+10. Select **Import reviewed file**. Existing matches receive new source/contact evidence without
+    losing prior activity.
+11. Record list, labor, dialer, number, and voice costs in **Costs**, linked to the cohort when
+    applicable.
+12. Create a calling batch using the same cohort and import.
+13. Assign the batch or individual entries to VAs.
+
+PropStream refreshes are expected to show matched existing rows. This is not a failed import. It
+means Stonegate recognized the person or property and preserved the existing history. **Import
+history** shows new versus matched counts, relationship state, contact count, source list, and
+cohort. The exact same file cannot be imported twice.
 
 Blank DNC data does not require review. Explicit Do Not Contact records and seller opt-outs remain
 blocked.
