@@ -21,6 +21,17 @@ const tabs: Array<{ key: Tab; label: string }> = [
   { key: "follow-up", label: "Follow-up plans" },
 ];
 
+const accessRoles = [
+  { key: "owner", label: "Owner / full access" },
+  { key: "administrator", label: "Administrator" },
+  { key: "prospecting_caller", label: "VA caller" },
+  { key: "acquisition_rep", label: "Acquisitions rep" },
+  { key: "acquisition_manager", label: "Acquisitions manager" },
+  { key: "disposition_rep", label: "Dispositions rep" },
+  { key: "disposition_manager", label: "Dispositions manager" },
+  { key: "transaction_coordinator", label: "Transaction coordinator" },
+];
+
 function formValue(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
@@ -224,6 +235,16 @@ export function OperationsWorkspace({
       reason: user.calling_enabled
         ? "Cold-calling batch access removed by an operations manager."
         : "Cold-calling batch access granted by an operations manager.",
+    });
+  }
+
+  async function setUserRole(
+    user: AcquisitionOperations["users"][number],
+    roleKey: string,
+  ) {
+    await mutate(`/api/v1/operations/users/${user.id}`, "PATCH", {
+      role_key: roleKey,
+      reason: "Workspace access role changed by an operations manager.",
     });
   }
 
@@ -551,8 +572,8 @@ export function OperationsWorkspace({
         <div className={styles.twoColumn}>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Access</span><h3>Workspace users</h3></div><strong>{activeUsers.length}</strong></div>
-            <div className={styles.rows}>{operations.users.map((user) => <div className={styles.userRow} key={user.id}><div><strong>{user.display_name}</strong><span>{user.email}</span></div><div><span>{roleLabel(user)}</span><small>{user.open_leads} leads · {user.open_tasks} tasks</small></div><div className={styles.inlineActions}><label className={styles.callingToggle}><input checked={user.calling_enabled} onChange={() => void setUserCalling(user)} type="checkbox" /><span>Cold calling</span></label><button className={styles.secondaryButton} onClick={() => setUserActive(user)} type="button">{user.is_active ? "Deactivate" : "Reactivate"}</button></div></div>)}</div>
-            <form className={styles.stackForm} onSubmit={submitUser}><h4>Add individual login</h4><label><span>Name</span><input name="display_name" required /></label><label><span>Email</span><input name="email" required type="email" /></label><label><span>Access role</span><select name="role_key"><option value="prospecting_caller">VA caller</option><option value="acquisition_rep">Acquisitions rep</option><option value="acquisition_manager">Acquisitions manager</option><option value="disposition_rep">Dispositions rep</option><option value="transaction_coordinator">Transaction coordinator</option><option value="owner">Owner / full access</option></select></label><label className={styles.callingToggle}><input name="calling_enabled" type="checkbox" /><span>Allow assigned cold calling</span></label><button type="submit">Create user</button></form>
+            <div className={styles.rows}>{operations.users.map((user) => <div className={styles.userRow} key={user.id}><div><strong>{user.display_name}</strong><span>{user.email}</span></div><div><span>{roleLabel(user)}</span><small>{user.open_leads} leads · {user.open_tasks} tasks</small></div><div className={styles.inlineActions}><select aria-label={`Access role for ${user.display_name}`} className={styles.roleSelect} onChange={(event) => void setUserRole(user, event.target.value)} value={user.role_keys[0] ?? ""}>{accessRoles.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}</select><label className={styles.callingToggle}><input checked={user.calling_enabled} onChange={() => void setUserCalling(user)} type="checkbox" /><span>Cold calling</span></label><button className={styles.secondaryButton} onClick={() => setUserActive(user)} type="button">{user.is_active ? "Deactivate" : "Reactivate"}</button></div></div>)}</div>
+            <form className={styles.stackForm} onSubmit={submitUser}><h4>Add individual login</h4><label><span>Name</span><input name="display_name" required /></label><label><span>Email</span><input name="email" required type="email" /></label><label><span>Access role</span><select name="role_key">{accessRoles.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}</select></label><label className={styles.callingToggle}><input name="calling_enabled" type="checkbox" /><span>Allow assigned cold calling</span></label><button type="submit">Create user</button></form>
           </div>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Structure</span><h3>Teams</h3></div><strong>{operations.teams.length}</strong></div>

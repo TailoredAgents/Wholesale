@@ -370,6 +370,7 @@ Operations contains six tabs: **Calendar**, **Markets & campaigns**, **Calling l
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Deactivate / Reactivate** | Removes or restores OS access without deleting history | Owner or authorized administrator only |
+| Existing user's access-role menu | Changes an existing person's OS role without recreating the login | Selecting Owner / full access grants company-wide access |
 | **Cold calling** | Allows this user to receive calling batches and opens their assigned Prospecting queue | Does not change the user's main role or grant unrelated pages |
 | Name / Email | Creates the Stonegate-side user identity | Must match the person's Clerk sign-in email |
 | Access role | VA, Acquisitions rep/manager, Dispositions rep, Transaction Coordinator, or Owner / full access | Choose Owner only for company-wide access equal to the primary Owner |

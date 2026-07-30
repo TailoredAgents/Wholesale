@@ -481,6 +481,8 @@ individual identity after that person signs in.
 
 Use **Deactivate** immediately when a person leaves or should lose access. Reassign their work.
 Use **Reactivate** only after management confirms the person should return.
+If the user already exists, change the access-role menu on that person's row instead of creating a
+duplicate account.
 
 ### Create And Staff A Team
 
