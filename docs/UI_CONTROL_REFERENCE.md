@@ -372,7 +372,7 @@ Operations contains six tabs: **Calendar**, **Markets & campaigns**, **Calling l
 | **Deactivate / Reactivate** | Removes or restores OS access without deleting history | Owner or authorized administrator only |
 | **Cold calling** | Allows this user to receive calling batches and opens their assigned Prospecting queue | Does not change the user's main role or grant unrelated pages |
 | Name / Email | Creates the Stonegate-side user identity | Must match the person's Clerk sign-in email |
-| Role | VA, Acquisitions rep/manager, Dispositions rep, or Transaction Coordinator | Choose minimum job access |
+| Access role | VA, Acquisitions rep/manager, Dispositions rep, Transaction Coordinator, or Owner / full access | Choose Owner only for company-wide access equal to the primary Owner |
 | Allow assigned cold calling | Enables Prospecting when the new person may also cold call | VA Caller accounts are enabled automatically |
 | **Create user** | Creates the individual Stonegate user | Does not create or share a password |
 | Add member | Chooses an active user for a team | Requires a team |

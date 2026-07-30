@@ -78,6 +78,7 @@ from app.services.leads import get_lead_detail
 from app.services.property_validation import canonical_address_key
 
 OPERATIONAL_ROLE_KEYS = {
+    "owner",
     "administrator",
     "acquisition_manager",
     "acquisition_rep",

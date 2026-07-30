@@ -78,6 +78,26 @@ def create_lead(
     return cast(dict[str, Any], response.json())
 
 
+def test_owner_can_create_another_full_access_owner(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    second_owner_email = "devon@example.com"
+    second_owner = create_user(client, owner_headers, second_owner_email, "owner")
+    assert second_owner["role_keys"] == ["owner"]
+
+    profile = client.get(
+        "/api/v1/me",
+        headers={"X-Dev-User-Email": second_owner_email},
+    )
+    assert profile.status_code == 200, profile.text
+    assert "owner" in profile.json()["role_keys"]
+    assert "integrations:manage_credentials" in profile.json()["permissions"]
+
+
 def test_phase_two_acquisition_workflow(
     db_session: Session,
     api_db_override: None,

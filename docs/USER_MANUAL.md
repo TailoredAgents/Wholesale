@@ -472,6 +472,9 @@ individual identity after that person signs in.
 2. Under **Add individual login**, enter the person's real name.
 3. Enter the exact email they will use with Clerk.
 4. Select the minimum job role needed now.
+   Select **Owner / full access** only when the person should have the same company-wide access as
+   the primary Owner. Their operational position can still be Dispositions, but their OS access
+   role will display as Owner.
 5. Select **Create user**.
 6. Have the employee sign in with their own Clerk account.
 7. Verify navigation and restricted access.
