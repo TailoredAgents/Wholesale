@@ -1,11 +1,13 @@
 .workspace {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
+  min-width: 0;
 }
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   border-block: 1px solid #d9d6cf;
   background: #fff;
 }
@@ -623,6 +625,171 @@
   background: #fff;
 }
 
+.shiftQueue {
+  border-block: 1px solid #d9d6cf;
+  background: #fff;
+}
+
+.shiftQueue > header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-bottom: 1px solid #e2dfd8;
+}
+
+.shiftQueue > header span {
+  color: #6b6d68;
+  font-size: 0.69rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.shiftQueue > header h3 {
+  margin: 4px 0 0;
+  color: #202723;
+  font-size: 1rem;
+}
+
+.shiftQueue nav {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.shiftQueue nav button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: #5e625f;
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.shiftQueue nav button:hover,
+.shiftQueue nav .activeQueueFilter {
+  border-color: #a9c8b5;
+  background: #edf5f0;
+  color: #184b33;
+}
+
+.batchStrip {
+  display: flex;
+  overflow-x: auto;
+  border-bottom: 1px solid #e2dfd8;
+  background: #f6f5f1;
+}
+
+.batchStrip > div {
+  display: grid;
+  flex: 0 0 240px;
+  gap: 3px;
+  padding: 12px 16px;
+  border-right: 1px solid #dedbd4;
+}
+
+.batchStrip span,
+.batchStrip small {
+  overflow: hidden;
+  color: #6b706c;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batchStrip strong {
+  overflow: hidden;
+  color: #28322d;
+  font-size: 0.8rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batchStrip em,
+.providerState strong {
+  margin-top: 4px;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.syncReady {
+  color: #23633f;
+}
+
+.syncPending {
+  color: #8a5b1c;
+}
+
+.queueRows {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  max-height: 290px;
+  overflow: auto;
+}
+
+.queueRows > button {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  padding: 13px 15px;
+  border: 0;
+  border-right: 1px solid #e4e1da;
+  border-bottom: 1px solid #e4e1da;
+  border-left: 3px solid transparent;
+  background: #fff;
+  color: #29312c;
+  text-align: left;
+  cursor: pointer;
+}
+
+.queueRows > button:hover,
+.queueRows > .selectedQueueRow {
+  border-left-color: #27724b;
+  background: #f3f8f5;
+}
+
+.queueRows > button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.queueRows strong,
+.queueRows small,
+.queueRows > button > span,
+.queueRows time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queueRows strong {
+  font-size: 0.84rem;
+}
+
+.queueRows small,
+.queueRows > button > span,
+.queueRows time {
+  color: #6f736f;
+  font-size: 0.7rem;
+}
+
+.queueState {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #27724b !important;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .prospectPanel,
 .scriptPanel,
 .outcomePanel {
@@ -657,6 +824,21 @@
 
 .sellerIdentity {
   padding: 24px 0 18px;
+}
+
+.providerState {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-block: 1px solid #dedbd3;
+}
+
+.providerState > span {
+  color: #666c68;
+  font-size: 0.72rem;
+  font-weight: 750;
 }
 
 .sellerIdentity h3,
@@ -735,7 +917,8 @@
   margin-top: 24px;
 }
 
-.attemptHistory > div {
+.attemptHistory > div,
+.attemptHistory summary {
   display: flex;
   justify-content: space-between;
   gap: 10px;
@@ -744,8 +927,53 @@
   font-size: 0.78rem;
 }
 
-.attemptHistory > div span {
+.attemptHistory > div span,
+.attemptHistory summary span {
   color: #747773;
+}
+
+.attemptHistory details {
+  border-bottom: 1px solid #e2dfd8;
+}
+
+.attemptHistory summary {
+  border: 0;
+  cursor: pointer;
+}
+
+.attemptHistory details > p {
+  margin: 0;
+  padding: 5px 0;
+  color: #626762;
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.attemptHistory details dl {
+  margin: 4px 0 10px;
+}
+
+.attemptHistory details dl div {
+  display: grid;
+  grid-template-columns: minmax(80px, 0.7fr) minmax(0, 1.3fr);
+  gap: 7px;
+  padding: 4px 0;
+  font-size: 0.72rem;
+}
+
+.attemptHistory details dt {
+  color: #747773;
+}
+
+.attemptHistory details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: #343b37;
+}
+
+.attemptHistory > p {
+  color: #747773;
+  font-size: 0.76rem;
 }
 
 .scriptPanel blockquote {
@@ -819,6 +1047,55 @@
   display: grid;
   gap: 13px;
   margin-top: 18px;
+}
+
+.outcomeChoices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.outcomeChoices legend {
+  grid-column: 1 / -1;
+  margin-bottom: 2px;
+  color: #5c625e;
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.outcomeChoices button,
+.callbackControl button {
+  min-height: 36px;
+  padding: 0 9px;
+  border: 1px solid #d4d2cb;
+  border-radius: 3px;
+  background: #fff;
+  color: #4f5651;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.outcomeChoices button:hover,
+.outcomeChoices .selectedOutcome {
+  border-color: #27724b;
+  background: #edf6f0;
+  color: #184b33;
+}
+
+.callbackControl {
+  display: grid;
+  gap: 7px;
+}
+
+.callbackControl > div {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
 }
 
 .outcomePanel label,
@@ -1055,6 +1332,14 @@
 }
 
 @media (max-width: 1120px) {
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .queueRows {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+
   .prepGrid {
     grid-template-columns: minmax(200px, 0.55fr) minmax(0, 1.45fr);
   }
@@ -1092,6 +1377,16 @@
 
   .workbenchGrid {
     grid-template-columns: 1fr;
+  }
+
+  .shiftQueue > header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .queueRows {
+    grid-template-columns: 1fr;
+    max-height: 360px;
   }
 
   .copilotGuard {

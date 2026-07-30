@@ -662,13 +662,24 @@ Open **Prospecting**. Available views depend on role:
 
 ### Work A Record
 
-1. Select the next assigned entry.
-2. Review the campaign, seller, property, phone, prior attempts, and compliance state.
-3. Start the attempt.
-4. Use the exact approved script displayed for the attempt.
-5. Record answers as they are provided. Do not invent missing answers.
-6. Select the accurate outcome.
-7. Save callback timing when applicable.
+1. Open **Due now** for normal shift work. Corrections and due callbacks appear before untouched
+   records.
+2. Use **Callbacks**, **Corrections**, **Scheduled**, **Waiting**, or **All assigned** when you need
+   a specific queue.
+3. Select the seller row. Once a call is started, finish that outcome before opening another row.
+4. Review the campaign, batch, seller, property, ranked contact methods, prior attempts, notes,
+   qualification answers, and next commitment.
+5. Confirm the calling state. **Stonegate direct** means work the record in Stonegate.
+   **Provider not connected** means the future multi-line connection has not been activated yet.
+6. Select **Start prospect**.
+7. Use the exact approved script displayed for the attempt.
+8. Select the accurate outcome. Qualification fields appear for callbacks, follow-up, interested
+   sellers, and appointments.
+9. Record answers exactly as provided. Do not invent missing answers.
+10. For a callback, choose the exact date/time or use the one-hour, tomorrow, or three-day shortcut.
+11. Save notes, appointments, acquisition owner, or escalation facts when the selected outcome
+    requires them.
+12. Select **Save outcome**. The next due assigned record becomes the working context.
 
 Typical outcomes include no answer, voicemail, callback requested, follow-up, interested,
 appointment set, not interested, wrong number, and Do Not Contact.
@@ -687,6 +698,10 @@ appointment, and attribution history. The Lead Manager can accept the handoff, r
 submission with a structured correction type and explanation, or terminally reject a non-lead with
 a structured rejection type and explanation. Only accepted handoffs with complete right-party,
 interest, follow-up-permission, and required-answer evidence count as accepted warm leads.
+
+A VA cannot open another caller's prospect and cannot access underwriting, contracts,
+transactions, buyers, Finance, global email recipients, or email administration. Contact an Owner
+or manager if the assignment itself is wrong; do not share logins.
 
 ## 4. Lead Manager Qualification
 

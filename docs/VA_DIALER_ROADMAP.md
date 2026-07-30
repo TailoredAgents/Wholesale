@@ -330,6 +330,8 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 
 ## VD4. VA Calling Workspace
 
+**Status:** Implemented July 30, 2026. Real-VA desktop acceptance remains.
+
 ### Work
 
 1. Keep `/os/prospecting` as the VA's primary Stonegate workspace.
@@ -342,6 +344,26 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 6. Verify that VAs cannot access unrelated prospects, underwriting, contracts, buyers, finance,
    exports, or restricted mail.
 7. Verify usable desktop behavior for Upwork VAs and responsive manager review.
+
+### Implemented
+
+1. Kept `/os/prospecting` as the single VA shift workspace and extended the existing attempt,
+   handoff, quality, and Copilot records.
+2. Added a complete assigned queue with Due now, Callbacks, Corrections, Scheduled, Waiting, and
+   All assigned views.
+3. Added batch and campaign summaries with ready, callback, correction, active, and handoff counts.
+4. Prioritized active work, returned corrections, and due callbacks ahead of untouched records.
+5. Added ranked phone/email display, callback commitments, assigned caller, prior notes,
+   qualification answers, cohort, dialing mode, and detailed attempt history.
+6. Replaced the long disposition menu with a compact outcome control and added one-hour,
+   next-day, and three-day callback shortcuts.
+7. Kept structured qualification visible only for outcomes where a real seller conversation needs
+   to be retained; warm outcomes still require every approved handoff question.
+8. Added truthful provider state: one-line work shows Stonegate direct, while multi-line work shows
+   Provider not connected until VD5 is completed.
+9. Added API acceptance proving a VA cannot open another VA's prospect or access underwriting,
+   transactions, buyers, finance, global email recipients, or email administration.
+10. Preserved individual caller attribution on every attempt, outcome, handoff, and audit event.
 
 ### Exit Criteria
 

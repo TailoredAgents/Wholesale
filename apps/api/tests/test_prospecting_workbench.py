@@ -35,6 +35,7 @@ from app.services.lead_manager import process_next_escalation
 OWNER_EMAIL = "owner@example.com"
 VA_EMAIL = "va@example.com"
 ACQUISITIONS_EMAIL = "acquisitions@example.com"
+OTHER_VA_EMAIL = "other-va@example.com"
 
 
 def create_user(
@@ -201,6 +202,14 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
     va_headers = {"X-Dev-User-Email": VA_EMAIL}
     va = create_user(client, owner_headers, VA_EMAIL, "VA Caller", "prospecting_caller")
+    create_user(
+        client,
+        owner_headers,
+        OTHER_VA_EMAIL,
+        "Other VA Caller",
+        "prospecting_caller",
+    )
+    other_va_headers = {"X-Dev-User-Email": OTHER_VA_EMAIL}
     acquisitions = create_user(
         client,
         owner_headers,
@@ -241,6 +250,31 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     assert workbench["current_entry"]["legal_name"] == "Interested Seller"
     assert workbench["queue"]["ready"] == 3
     assert workbench["scripts"] == []
+    assert len(workbench["queue_entries"]) == 3
+    assert workbench["queue_entries"][0]["queue_kind"] == "ready"
+    assert workbench["queue_entries"][0]["is_actionable"] is True
+    assert workbench["queue_entries"][0]["provider_sync_status"] == "stonegate_direct"
+    assert workbench["queue_entries"][0]["dialer_mode"] == "one_line_power"
+    assert workbench["queue_entries"][0]["assigned_user_name"] == "VA Caller"
+    assert workbench["queue_entries"][0]["contact_points"][0]["contact_type"] == "phone"
+    assert len(workbench["batch_queues"]) == 1
+    assert workbench["batch_queues"][0]["ready"] == 3
+    assert (
+        client.post(
+            f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
+            headers=other_va_headers,
+        ).status_code
+        == 404
+    )
+    for restricted_path in (
+        "/api/v1/underwriting/calibration",
+        "/api/v1/transactions",
+        "/api/v1/buyers",
+        "/api/v1/finance",
+        "/api/v1/email/recipients",
+        "/api/v1/email/admin/options",
+    ):
+        assert client.get(restricted_path, headers=va_headers).status_code == 403
 
     first_start = client.post(
         f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
@@ -523,6 +557,15 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     assert callback_completion.json()["next_attempt_at"] is not None
 
     final_overview = client.get("/api/v1/prospecting", headers=owner_headers).json()
+    va_final_overview = client.get("/api/v1/prospecting", headers=va_headers).json()
+    scheduled_callback = next(
+        item
+        for item in va_final_overview["queue_entries"]
+        if item["prospect_id"] == callback_completion.json()["prospect_id"]
+    )
+    assert scheduled_callback["queue_kind"] == "callback_scheduled"
+    assert scheduled_callback["is_actionable"] is False
+    assert va_final_overview["queue"]["callbacks_scheduled"] == 1
     scorecard = final_overview["scorecards"][0]
     assert scorecard["attempts"] == 4
     assert scorecard["contacts"] == 4

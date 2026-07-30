@@ -473,6 +473,13 @@ Prospecting views are **Work queue**, **Call quality**, **Handoff review** for m
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| Due now / Callbacks / Corrections / Scheduled / Waiting / All assigned | Filters the caller's complete assigned shift without changing ownership | Caller sees only assigned records; managers can review the broader operation |
+| Campaign and batch strip | Shows ready, callback, correction, active, and waiting workload plus dialing connection state | Read-only |
+| Assigned seller row | Loads that seller into the three-panel calling context | Disabled for another row while the caller has an active attempt |
+| Stonegate direct | Confirms one-line work is handled in the Stonegate workflow | Current one-line mode |
+| Provider not connected | Shows that multi-line provider synchronization is intentionally pending VD5 | Does not require work in a second CRM |
+| Ranked phone and email methods | Shows all validated imported contact methods in source rank order | Based on imported contact evidence |
+| Prior attempt details | Expands notes, callback commitment, and structured qualification answers | Read-only history |
 | Assigned priority row | Selects the current assigned prospect | Caller sees assigned work only |
 | **Generate brief / Refresh brief** | Creates or refreshes a read-only Prospecting Copilot preparation draft | Disabled while saving or when no record is selected |
 | Evidence and risks | Expands source facts, warnings, required questions, and limits | Appears after a brief exists |
@@ -482,8 +489,9 @@ Prospecting views are **Work queue**, **Call quality**, **Handoff review** for m
 | **Reject** | Records that the draft should not be used | Requires a generated recommendation |
 | **Start prospect** | Locks the assigned record to the caller and starts an attempt | Requires an approved active caller script |
 | Qualification questions | Records motivation, timeline, condition, occupancy, price, and mortgage answers | Required questions depend on approved script |
-| Disposition | Records the truthful call outcome | Required |
+| Disposition buttons | Records the truthful call outcome without using a long menu | Required |
 | Callback date and time | Schedules callback work | Required for callback or follow-up outcomes |
+| In 1 hour / Tomorrow / In 3 days | Sets a common callback time quickly | Caller can still enter an exact date and time |
 | Acquisitions owner | Chooses warm handoff recipient | Required for interested or appointment-set outcomes |
 | Appointment date and time | Creates seller appointment | Required for Appointment set |
 | Meeting type / location | Defines property, phone, video, or office appointment | Used for Appointment set |

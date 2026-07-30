@@ -3,7 +3,7 @@ from collections.abc import Mapping
 from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,8 +23,10 @@ from app.models.foundation import (
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
+    ProspectContactPoint,
     ProspectHandoff,
     ProspectingAttempt,
+    ProspectingCohort,
     ProspectingScriptVersion,
     Role,
     RoleAssignment,
@@ -37,6 +39,8 @@ from app.schemas.prospecting import (
     ProspectHandoffRead,
     ProspectingAttemptComplete,
     ProspectingAttemptRead,
+    ProspectingBatchQueueRead,
+    ProspectingContactPointRead,
     ProspectingEntryRead,
     ProspectingQueueSummary,
     ProspectingScorecardRead,
@@ -103,6 +107,7 @@ def get_prospecting_overview(
     manageable = can_manage(principal)
     scripts = list_scripts(db, principal) if manageable else []
     current_entry = get_current_entry(db, principal)
+    queue_entries = list_queue_entries(db, principal, manageable=manageable)
     active_script = get_active_script(db, principal.organization_id)
     if current_entry and current_entry.active_attempt:
         active_script = db.get(
@@ -116,7 +121,9 @@ def get_prospecting_overview(
         active_script=script_read(db, active_script) if active_script else None,
         scripts=scripts,
         current_entry=current_entry,
+        queue_entries=queue_entries,
         queue=queue_summary(db, principal, manageable=manageable),
+        batch_queues=build_batch_queues(queue_entries),
         acquisition_users=list_acquisition_users(db, principal.organization_id),
         pending_handoffs=list_handoffs(
             db,
@@ -894,11 +901,99 @@ def get_current_entry(db: Session, principal: Principal) -> ProspectingEntryRead
             ),
         )
         .order_by(
-            ProspectCallingBatchEntry.next_attempt_at.asc().nulls_first(),
+            case(
+                (ProspectCallingBatchEntry.status == "needs_correction", 0),
+                (ProspectCallingBatchEntry.next_attempt_at.is_not(None), 1),
+                else_=2,
+            ),
+            ProspectCallingBatchEntry.next_attempt_at.asc().nulls_last(),
             ProspectCallingBatchEntry.sequence_number,
         )
     )
     return entry_read(db, entry) if entry else None
+
+
+def list_queue_entries(
+    db: Session,
+    principal: Principal,
+    *,
+    manageable: bool,
+) -> list[ProspectingEntryRead]:
+    now = datetime.now(UTC)
+    statement = (
+        select(ProspectCallingBatchEntry)
+        .join(
+            ProspectCallingBatch,
+            ProspectCallingBatch.id == ProspectCallingBatchEntry.prospect_calling_batch_id,
+        )
+        .join(Prospect, Prospect.id == ProspectCallingBatchEntry.prospect_id)
+        .where(
+            ProspectCallingBatchEntry.organization_id == principal.organization_id,
+            ProspectCallingBatchEntry.status.in_(
+                ("queued", "ready", "needs_correction", "in_progress", "handoff_pending")
+            ),
+        )
+    )
+    if not manageable:
+        statement = statement.where(
+            ProspectCallingBatchEntry.assigned_user_id == principal.user_id,
+            ProspectCallingBatch.assigned_user_id == principal.user_id,
+        )
+    entries = db.scalars(
+        statement.order_by(
+            case(
+                (ProspectCallingBatchEntry.status == "in_progress", 0),
+                (ProspectCallingBatchEntry.status == "needs_correction", 1),
+                (
+                    ProspectCallingBatchEntry.next_attempt_at.is_not(None)
+                    & (ProspectCallingBatchEntry.next_attempt_at <= now),
+                    2,
+                ),
+                (ProspectCallingBatchEntry.status == "handoff_pending", 5),
+                (ProspectCallingBatchEntry.next_attempt_at.is_(None), 3),
+                else_=4,
+            ),
+            ProspectCallingBatchEntry.next_attempt_at.asc().nulls_first(),
+            ProspectCallingBatchEntry.sequence_number,
+        ).limit(250)
+    ).all()
+    return [entry_read(db, entry) for entry in entries]
+
+
+def build_batch_queues(
+    entries: list[ProspectingEntryRead],
+) -> list[ProspectingBatchQueueRead]:
+    grouped: dict[UUID, list[ProspectingEntryRead]] = defaultdict(list)
+    for entry in entries:
+        grouped[entry.batch_id].append(entry)
+    summaries: list[ProspectingBatchQueueRead] = []
+    for batch_entries in grouped.values():
+        first = batch_entries[0]
+        summaries.append(
+            ProspectingBatchQueueRead(
+                batch_id=first.batch_id,
+                batch_name=first.batch_name,
+                campaign_name=first.campaign_name,
+                cohort_name=first.cohort_name,
+                dialer_mode=first.dialer_mode,
+                provider_sync_status=first.provider_sync_status,
+                ready=sum(item.queue_kind == "ready" for item in batch_entries),
+                callbacks_due=sum(
+                    item.queue_kind == "callback_due" for item in batch_entries
+                ),
+                callbacks_scheduled=sum(
+                    item.queue_kind == "callback_scheduled" for item in batch_entries
+                ),
+                corrections=sum(
+                    item.queue_kind == "correction_required" for item in batch_entries
+                ),
+                in_progress=sum(item.queue_kind == "in_progress" for item in batch_entries),
+                handoff_pending=sum(
+                    item.queue_kind == "handoff_pending" for item in batch_entries
+                ),
+            )
+        )
+    return sorted(summaries, key=lambda item: (item.campaign_name, item.batch_name))
 
 
 def scoped_entry(
@@ -919,6 +1014,17 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
     prospect = db.get(Prospect, entry.prospect_id)
     batch = db.get(ProspectCallingBatch, entry.prospect_calling_batch_id)
     campaign = db.get(Campaign, batch.campaign_id) if batch else None
+    cohort = db.get(ProspectingCohort, batch.cohort_id) if batch and batch.cohort_id else None
+    assignee = db.get(User, entry.assigned_user_id)
+    contact_points = db.scalars(
+        select(ProspectContactPoint)
+        .where(ProspectContactPoint.prospect_id == entry.prospect_id)
+        .order_by(
+            ProspectContactPoint.contact_type.desc(),
+            ProspectContactPoint.rank,
+            ProspectContactPoint.created_at,
+        )
+    ).all()
     attempts = db.scalars(
         select(ProspectingAttempt)
         .where(ProspectingAttempt.batch_entry_id == entry.id)
@@ -927,23 +1033,71 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
     active = next((attempt for attempt in attempts if attempt.status == "in_progress"), None)
     if prospect is None or batch is None:
         raise ValueError("The calling-batch entry is incomplete.")
+    now = datetime.now(UTC)
+    queue_kind = entry_queue_kind(entry, now)
     return ProspectingEntryRead(
         id=entry.id,
         batch_id=batch.id,
         batch_name=batch.name,
+        cohort_id=batch.cohort_id,
+        cohort_name=cohort.name if cohort else None,
         campaign_name=campaign.name if campaign else "Unknown campaign",
+        assigned_user_id=entry.assigned_user_id,
+        assigned_user_name=assignee.display_name if assignee else "Unassigned caller",
         prospect_id=prospect.id,
         legal_name=prospect.legal_name,
         phone=prospect.phone,
         email=prospect.email,
+        contact_points=[
+            ProspectingContactPointRead(
+                contact_type=contact.contact_type,
+                value=contact.value,
+                rank=contact.rank,
+                is_primary=contact.is_primary,
+                validation_status=contact.validation_status,
+            )
+            for contact in contact_points
+        ],
         property_address=format_property_address(prospect),
         sequence_number=entry.sequence_number,
         status=entry.status,
+        queue_kind=queue_kind,
+        is_actionable=queue_kind
+        in {"ready", "callback_due", "correction_required", "in_progress"},
+        dialer_mode=batch.dialer_mode,
+        provider_sync_status=provider_sync_status(batch.dialer_mode),
         attempt_count=entry.attempt_count,
         disposition=entry.disposition,
         next_attempt_at=entry.next_attempt_at,
         active_attempt=attempt_read(db, active) if active else None,
         attempts=[attempt_read(db, attempt) for attempt in attempts],
+    )
+
+
+def entry_queue_kind(
+    entry: ProspectCallingBatchEntry,
+    now: datetime,
+) -> str:
+    if entry.status == "in_progress":
+        return "in_progress"
+    if entry.status == "needs_correction":
+        return "correction_required"
+    if entry.status == "handoff_pending":
+        return "handoff_pending"
+    if entry.next_attempt_at is not None:
+        return (
+            "callback_due"
+            if as_utc(entry.next_attempt_at) <= now
+            else "callback_scheduled"
+        )
+    return "ready"
+
+
+def provider_sync_status(dialer_mode: str) -> str:
+    return (
+        "stonegate_direct"
+        if dialer_mode == "one_line_power"
+        else "provider_connection_pending"
     )
 
 
@@ -1144,6 +1298,13 @@ def queue_summary(
             and as_utc(entry.next_attempt_at) <= now
             for entry in entries
         ),
+        callbacks_scheduled=sum(
+            entry.status == "queued"
+            and entry.next_attempt_at is not None
+            and as_utc(entry.next_attempt_at) > now
+            for entry in entries
+        ),
+        corrections=sum(entry.status == "needs_correction" for entry in entries),
         in_progress=sum(entry.status == "in_progress" for entry in entries),
         handoff_pending=sum(entry.status == "handoff_pending" for entry in entries),
         completed=sum(entry.status == "completed" for entry in entries),

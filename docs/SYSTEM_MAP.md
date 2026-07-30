@@ -376,8 +376,13 @@ The OS uses five stable navigation groups.
 **Prospecting (`/os/prospecting`)**
 
 - VA Caller workbench for assigned records.
-- Shows approved script, one prospect at a time, attempt disposition, callback, qualification,
-  handoff, and Prospecting Copilot guidance.
+- Shows the complete assigned shift through due, callback, correction, scheduled, waiting, and
+  all-assigned queue views while one selected prospect remains the active calling context.
+- Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
+  commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
+  guidance.
+- One-line work is labeled Stonegate direct. Multi-line work remains labeled Provider not
+  connected until the VD5 adapter and reconciliation path exist.
 - Current prospect calls open through the device `tel:` handler and the VA records the result in
   Stonegate. Multi-line provider synchronization and prospect-linked recordings are planned in
   `VA_DIALER_ROADMAP.md`.

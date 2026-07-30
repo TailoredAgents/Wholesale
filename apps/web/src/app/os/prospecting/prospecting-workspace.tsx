@@ -2,12 +2,17 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
+  AlertTriangle,
   Brain,
+  CalendarClock,
   CheckCircle2,
+  Clock3,
   FileWarning,
   Pencil,
+  PhoneCall,
   ShieldAlert,
   Sparkles,
+  UserRoundCheck,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
@@ -29,6 +34,7 @@ import styles from "./prospecting.module.css";
 
 type View = "workbench" | "quality" | "handoffs" | "performance" | "scripts";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
+type QueueFilter = "due" | "callbacks" | "corrections" | "scheduled" | "waiting" | "all";
 
 const outcomes = [
   ["no_answer", "No answer"],
@@ -89,6 +95,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const [editingBrief, setEditingBrief] = useState(false);
   const [editedSummary, setEditedSummary] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>("due");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -103,6 +110,12 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   const requiresCallback = ["callback_requested", "follow_up"].includes(outcome);
   const isWarm = ["interested", "appointment_set"].includes(outcome);
   const isAppointment = outcome === "appointment_set";
+  const capturesQualification = [
+    "callback_requested",
+    "follow_up",
+    "interested",
+    "appointment_set",
+  ].includes(outcome);
   const availableViews: Array<{ key: View; label: string; count?: number }> = [
     { key: "workbench", label: "Work queue" },
     {
@@ -189,7 +202,11 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
       },
     );
     if (result) {
-      setEntry(result.status === "queued" && result.next_attempt_at === null ? result : null);
+      setEntry(
+        data.queue_entries.find(
+          (item) => item.id !== result.id && item.is_actionable,
+        ) ?? null,
+      );
       form.reset();
       setOutcome("no_answer");
       router.refresh();
@@ -318,11 +335,12 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   return (
     <div className={styles.workspace}>
       <section className={styles.metrics} aria-label="Prospecting queue summary">
-        <div><span>Ready now</span><strong>{data.queue.ready}</strong></div>
+        <div><span>Due now</span><strong>{data.queue.ready}</strong></div>
         <div><span>Callbacks due</span><strong>{data.queue.callbacks_due}</strong></div>
+        <div><span>Scheduled</span><strong>{data.queue.callbacks_scheduled}</strong></div>
+        <div><span>Corrections</span><strong>{data.queue.corrections}</strong></div>
         <div><span>In progress</span><strong>{data.queue.in_progress}</strong></div>
         <div><span>Handoffs waiting</span><strong>{data.queue.handoff_pending}</strong></div>
-        <div><span>Completed</span><strong>{data.queue.completed}</strong></div>
       </section>
 
       <nav className={styles.viewTabs} aria-label="Prospecting views">
@@ -372,10 +390,24 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
               selectedEntryId={selectedCopilotEntryId}
             />
           </CopilotLauncher>
+          <ShiftQueue
+            activeAttemptId={activeAttempt?.id ?? null}
+            batchQueues={data.batch_queues}
+            entries={data.queue_entries}
+            filter={queueFilter}
+            onFilter={setQueueFilter}
+            onSelect={(selected) => {
+              setEntry(selected);
+              setSelectedCopilotEntryId(selected.id);
+              setLocalRecommendation(null);
+            }}
+            selectedEntryId={entry?.id ?? ""}
+          />
           <WorkbenchView
             activeAttempt={activeAttempt}
             activeScript={data.active_script}
             acquisitionUsers={data.acquisition_users}
+            capturesQualification={capturesQualification}
             entry={entry}
             isAppointment={isAppointment}
             isWarm={isWarm}
@@ -386,6 +418,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
             requiresCallback={requiresCallback}
             returnedHandoffs={data.returned_handoffs}
             saving={status === "saving"}
+            key={entry?.id ?? "empty-queue"}
           />
         </>
       ) : null}
@@ -735,10 +768,115 @@ function CallQualityView({
   );
 }
 
+function ShiftQueue({
+  activeAttemptId,
+  batchQueues,
+  entries,
+  filter,
+  onFilter,
+  onSelect,
+  selectedEntryId,
+}: {
+  activeAttemptId: string | null;
+  batchQueues: ProspectingWorkbenchOverview["batch_queues"];
+  entries: ProspectingEntry[];
+  filter: QueueFilter;
+  onFilter: (filter: QueueFilter) => void;
+  onSelect: (entry: ProspectingEntry) => void;
+  selectedEntryId: string;
+}) {
+  const visibleEntries = entries.filter((item) => {
+    if (filter === "due") return item.is_actionable;
+    if (filter === "callbacks") return item.queue_kind === "callback_due";
+    if (filter === "corrections") return item.queue_kind === "correction_required";
+    if (filter === "scheduled") return item.queue_kind === "callback_scheduled";
+    if (filter === "waiting") return item.queue_kind === "handoff_pending";
+    return true;
+  });
+  const filters: Array<{ key: QueueFilter; label: string }> = [
+    { key: "due", label: "Due now" },
+    { key: "callbacks", label: "Callbacks" },
+    { key: "corrections", label: "Corrections" },
+    { key: "scheduled", label: "Scheduled" },
+    { key: "waiting", label: "Waiting" },
+    { key: "all", label: "All assigned" },
+  ];
+  return (
+    <section className={styles.shiftQueue}>
+      <header>
+        <div><span>Assigned shift</span><h3>Calling queue</h3></div>
+        <nav aria-label="Calling queue filters">
+          {filters.map((item) => (
+            <button
+              aria-pressed={filter === item.key}
+              className={filter === item.key ? styles.activeQueueFilter : undefined}
+              key={item.key}
+              onClick={() => onFilter(item.key)}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </header>
+      <div className={styles.batchStrip}>
+        {batchQueues.map((batch) => (
+          <div key={batch.batch_id}>
+            <span>{batch.campaign_name}</span>
+            <strong>{batch.batch_name}</strong>
+            <small>
+              {batch.callbacks_due} callbacks · {batch.corrections} corrections ·{" "}
+              {batch.ready} ready
+            </small>
+            <em className={batch.provider_sync_status === "stonegate_direct" ? styles.syncReady : styles.syncPending}>
+              {batch.provider_sync_status === "stonegate_direct"
+                ? "Stonegate direct"
+                : "Provider not connected"}
+            </em>
+          </div>
+        ))}
+      </div>
+      <div className={styles.queueRows}>
+        {visibleEntries.map((item) => {
+          const blockedByActiveAttempt = Boolean(
+            activeAttemptId && item.id !== selectedEntryId,
+          );
+          return (
+            <button
+              className={item.id === selectedEntryId ? styles.selectedQueueRow : undefined}
+              disabled={blockedByActiveAttempt}
+              key={item.id}
+              onClick={() => onSelect(item)}
+              type="button"
+            >
+              <span className={styles.queueState}>
+                {item.queue_kind === "callback_due" ? <CalendarClock size={15} /> : null}
+                {item.queue_kind === "correction_required" ? <AlertTriangle size={15} /> : null}
+                {item.queue_kind === "in_progress" ? <PhoneCall size={15} /> : null}
+                {item.queue_kind === "ready" ? <UserRoundCheck size={15} /> : null}
+                {item.queue_kind === "callback_scheduled" ? <Clock3 size={15} /> : null}
+                {labelize(item.queue_kind)}
+              </span>
+              <strong>{item.legal_name}</strong>
+              <small>{item.property_address ?? item.phone ?? "No property details"}</small>
+              <span>{item.campaign_name} · {item.assigned_user_name}</span>
+              <time>{item.next_attempt_at ? formatDateTime(item.next_attempt_at) : `Record ${item.sequence_number}`}</time>
+            </button>
+          );
+        })}
+        {!visibleEntries.length ? (
+          <p className={styles.empty}>No assigned records match this queue view.</p>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
 function WorkbenchView({
   activeAttempt,
   activeScript,
   acquisitionUsers,
+  capturesQualification,
   entry,
   isAppointment,
   isWarm,
@@ -753,6 +891,7 @@ function WorkbenchView({
   activeAttempt: ProspectingEntry["active_attempt"];
   activeScript: ProspectingWorkbenchOverview["active_script"];
   acquisitionUsers: ProspectingWorkbenchOverview["acquisition_users"];
+  capturesQualification: boolean;
   entry: ProspectingEntry | null;
   isAppointment: boolean;
   isWarm: boolean;
@@ -764,6 +903,12 @@ function WorkbenchView({
   returnedHandoffs: ProspectHandoff[];
   saving: boolean;
 }) {
+  const [callbackValue, setCallbackValue] = useState("");
+  function setQuickCallback(hoursFromNow: number) {
+    const target = new Date(Date.now() + hoursFromNow * 60 * 60 * 1000);
+    const localTarget = new Date(target.getTime() - target.getTimezoneOffset() * 60 * 1000);
+    setCallbackValue(localTarget.toISOString().slice(0, 16));
+  }
   if (!activeScript) {
     return <section className={styles.emptyState}><span>Queue paused</span><h3>An approved caller script is required</h3><p>An acquisition manager must approve a script version before assigned prospects can be worked.</p></section>;
   }
@@ -777,20 +922,52 @@ function WorkbenchView({
   return (
     <section className={styles.workbenchGrid}>
       <aside className={styles.prospectPanel}>
-        <div className={styles.queuePosition}><span>{entry.batch_name}</span><strong>Record {entry.sequence_number}</strong></div>
+        <div className={styles.queuePosition}><span>{entry.batch_name}</span><strong>{labelize(entry.queue_kind)}</strong></div>
         <div className={styles.sellerIdentity}><span>{entry.campaign_name}</span><h3>{entry.legal_name}</h3><p>{entry.property_address ?? "Property address unavailable"}</p></div>
+        <div className={styles.providerState}>
+          <span>{labelize(entry.dialer_mode)}</span>
+          <strong className={entry.provider_sync_status === "stonegate_direct" ? styles.syncReady : styles.syncPending}>
+            {entry.provider_sync_status === "stonegate_direct"
+              ? "Stonegate direct"
+              : "Provider not connected"}
+          </strong>
+        </div>
         <dl className={styles.contactList}>
-          <div><dt>Phone</dt><dd>{entry.phone ? <a href={`tel:${entry.phone}`}>{entry.phone}</a> : "Unavailable"}</dd></div>
-          <div><dt>Email</dt><dd>{entry.email ?? "Unavailable"}</dd></div>
+          {(entry.contact_points.length
+            ? entry.contact_points
+            : [
+                ...(entry.phone ? [{ contact_type: "phone", value: entry.phone, rank: 1, is_primary: true, validation_status: "valid" }] : []),
+                ...(entry.email ? [{ contact_type: "email", value: entry.email, rank: 1, is_primary: true, validation_status: "valid" }] : []),
+              ]
+          ).map((contact) => (
+            <div key={`${contact.contact_type}-${contact.value}`}>
+              <dt>{labelize(contact.contact_type)} {contact.rank}{contact.is_primary ? " · Primary" : ""}</dt>
+              <dd>{contact.contact_type === "phone" ? <a href={`tel:${contact.value}`}>{contact.value}</a> : contact.value}</dd>
+            </div>
+          ))}
           <div><dt>Prior attempts</dt><dd>{entry.attempt_count}</dd></div>
           <div><dt>Last outcome</dt><dd>{entry.disposition ? labelize(entry.disposition) : "None"}</dd></div>
+          <div><dt>Next commitment</dt><dd>{formatDateTime(entry.next_attempt_at)}</dd></div>
+          <div><dt>Assigned caller</dt><dd>{entry.assigned_user_name}</dd></div>
         </dl>
         {returned ? <div className={styles.correction}><strong>Correction requested</strong><p>{returned.review_reason}</p></div> : null}
         <div className={styles.attemptHistory}>
           <span>Attempt history</span>
           {entry.attempts.filter((attempt) => attempt.status === "completed").map((attempt) => (
-            <div key={attempt.id}><strong>{attempt.outcome ? labelize(attempt.outcome) : "Attempt"}</strong><span>{formatDateTime(attempt.completed_at)}</span></div>
+            <details key={attempt.id}>
+              <summary><strong>{attempt.outcome ? labelize(attempt.outcome) : "Attempt"}</strong><span>{formatDateTime(attempt.completed_at)}</span></summary>
+              {attempt.callback_at ? <p>Callback: {formatDateTime(attempt.callback_at)}</p> : null}
+              {attempt.notes ? <p>{attempt.notes}</p> : null}
+              {Object.entries(attempt.qualification_answers).length ? (
+                <dl>
+                  {Object.entries(attempt.qualification_answers).map(([key, answer]) => (
+                    <div key={key}><dt>{labelize(key)}</dt><dd>{answer}</dd></div>
+                  ))}
+                </dl>
+              ) : null}
+            </details>
           ))}
+          {!entry.attempts.some((attempt) => attempt.status === "completed") ? <p>No prior attempts.</p> : null}
         </div>
       </aside>
 
@@ -812,11 +989,24 @@ function WorkbenchView({
         <div className={styles.sectionHeader}><div><span>Required record</span><h3>Call outcome</h3></div></div>
         {activeAttempt ? (
           <form onSubmit={onComplete}>
-            {activeScript.qualification_questions.map((question) => (
-              <label key={question.key}><span>{question.label}{question.required_for_handoff ? " *" : ""}</span>{question.answer_type === "choice" ? <select name={question.key} defaultValue={priorAnswers[question.key] ?? ""}><option value="">Select</option>{question.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input defaultValue={priorAnswers[question.key] ?? ""} name={question.key} />}</label>
-            ))}
-            <label><span>Disposition</span><select value={outcome} onChange={(event) => onOutcomeChange(event.target.value)}>{outcomes.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-            {requiresCallback ? <label><span>Callback date and time</span><input name="callback_at" required type="datetime-local" /></label> : null}
+            <fieldset className={styles.outcomeChoices}>
+              <legend>Disposition</legend>
+              {outcomes.map(([key, label]) => (
+                <button
+                  aria-pressed={outcome === key}
+                  className={outcome === key ? styles.selectedOutcome : undefined}
+                  key={key}
+                  onClick={() => onOutcomeChange(key)}
+                  type="button"
+                >
+                  {label}
+                </button>
+              ))}
+            </fieldset>
+            {capturesQualification ? activeScript.qualification_questions.map((question) => (
+              <label key={question.key}><span>{question.label}{question.required_for_handoff && isWarm ? " *" : ""}</span>{question.answer_type === "choice" ? <select name={question.key} defaultValue={priorAnswers[question.key] ?? ""}><option value="">Select</option>{question.choices.map((choice) => <option key={choice}>{choice}</option>)}</select> : <input defaultValue={priorAnswers[question.key] ?? ""} name={question.key} />}</label>
+            )) : null}
+            {requiresCallback ? <div className={styles.callbackControl}><label><span>Callback date and time</span><input name="callback_at" onChange={(event) => setCallbackValue(event.target.value)} required type="datetime-local" value={callbackValue} /></label><div><button onClick={() => setQuickCallback(1)} type="button">In 1 hour</button><button onClick={() => setQuickCallback(24)} type="button">Tomorrow</button><button onClick={() => setQuickCallback(72)} type="button">In 3 days</button></div></div> : null}
             {isWarm ? <label><span>Acquisitions owner</span><select name="handoff_user_id" required><option value="">Select owner</option>{acquisitionUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label> : null}
             {isAppointment ? <><label><span>Appointment date and time</span><input name="appointment_start_at" required type="datetime-local" /></label><label><span>Meeting type</span><select defaultValue="seller_property" name="appointment_location_type"><option value="seller_property">Seller property</option><option value="phone">Phone</option><option value="video">Video</option><option value="office">Office</option></select></label><label><span>Meeting location</span><input name="appointment_location" placeholder="Defaults to the property" /></label></> : null}
             <label><span>Call notes</span><textarea name="notes" placeholder="Objections, commitments, and next action" /></label>

@@ -106,18 +106,35 @@ class ProspectingAttemptRead(BaseModel):
     quality_score_basis_points: int | None
 
 
+class ProspectingContactPointRead(BaseModel):
+    contact_type: str
+    value: str
+    rank: int
+    is_primary: bool
+    validation_status: str
+
+
 class ProspectingEntryRead(BaseModel):
     id: UUID
     batch_id: UUID
     batch_name: str
+    cohort_id: UUID | None
+    cohort_name: str | None
     campaign_name: str
+    assigned_user_id: UUID
+    assigned_user_name: str
     prospect_id: UUID
     legal_name: str
     phone: str | None
     email: str | None
+    contact_points: list[ProspectingContactPointRead]
     property_address: str | None
     sequence_number: int
     status: str
+    queue_kind: str
+    is_actionable: bool
+    dialer_mode: str
+    provider_sync_status: str
     attempt_count: int
     disposition: str | None
     next_attempt_at: datetime | None
@@ -200,9 +217,26 @@ class ProspectHandoffDecision(BaseModel):
 class ProspectingQueueSummary(BaseModel):
     ready: int
     callbacks_due: int
+    callbacks_scheduled: int
+    corrections: int
     in_progress: int
     handoff_pending: int
     completed: int
+
+
+class ProspectingBatchQueueRead(BaseModel):
+    batch_id: UUID
+    batch_name: str
+    campaign_name: str
+    cohort_name: str | None
+    dialer_mode: str
+    provider_sync_status: str
+    ready: int
+    callbacks_due: int
+    callbacks_scheduled: int
+    corrections: int
+    in_progress: int
+    handoff_pending: int
 
 
 class ProspectingScorecardRead(BaseModel):
@@ -388,7 +422,9 @@ class ProspectingWorkbenchOverview(BaseModel):
     active_script: ProspectingScriptRead | None
     scripts: list[ProspectingScriptRead]
     current_entry: ProspectingEntryRead | None
+    queue_entries: list[ProspectingEntryRead]
     queue: ProspectingQueueSummary
+    batch_queues: list[ProspectingBatchQueueRead]
     acquisition_users: list[OperationsUserRead]
     pending_handoffs: list[ProspectHandoffRead]
     returned_handoffs: list[ProspectHandoffRead]
