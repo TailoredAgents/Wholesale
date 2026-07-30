@@ -127,6 +127,8 @@ def get_campaign_management_overview(
     db: Session,
     principal: Principal,
 ) -> CampaignManagementOverview:
+    from app.services.dialer_provider import list_campaign_syncs, provider_configuration
+
     campaigns = list_campaigns(db, principal)
     return CampaignManagementOverview(
         users=list_users(db, principal, manageable=True),
@@ -139,6 +141,8 @@ def get_campaign_management_overview(
         work_sessions=list_prospecting_work_sessions(db, principal),
         costs=list_campaign_costs(db, principal),
         calling_batches=list_calling_batches(db, principal),
+        dialer_provider=provider_configuration(),
+        dialer_syncs=list_campaign_syncs(db, principal),
         quality=[campaign_quality_read(db, campaign.id) for campaign in campaigns],
     )
 

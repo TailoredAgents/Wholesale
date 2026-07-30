@@ -65,6 +65,36 @@ class Settings(BaseSettings):
         default="live",
         validation_alias="COMMUNICATION_PROVIDER_MODE",
     )
+    dialer_provider: Literal["disabled", "batchdialer"] = Field(
+        default="disabled",
+        validation_alias="DIALER_PROVIDER",
+    )
+    dialer_provider_mode: Literal["disabled", "simulate", "live"] = Field(
+        default="disabled",
+        validation_alias="DIALER_PROVIDER_MODE",
+    )
+    batchdialer_api_key: str | None = Field(
+        default=None,
+        validation_alias="BATCHDIALER_API_KEY",
+    )
+    batchdialer_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="BATCHDIALER_API_BASE_URL",
+    )
+    batchdialer_campaign_sync_path: str | None = Field(
+        default=None,
+        validation_alias="BATCHDIALER_CAMPAIGN_SYNC_PATH",
+    )
+    batchdialer_webhook_secret: str | None = Field(
+        default=None,
+        validation_alias="BATCHDIALER_WEBHOOK_SECRET",
+    )
+    batchdialer_request_timeout_seconds: float = Field(
+        default=30,
+        ge=1,
+        le=120,
+        validation_alias="BATCHDIALER_REQUEST_TIMEOUT_SECONDS",
+    )
     worker_readiness_required: bool = Field(
         default=False,
         validation_alias="WORKER_READINESS_REQUIRED",
@@ -575,6 +605,8 @@ class Settings(BaseSettings):
             raise ValueError("COMMUNICATION_PROVIDER_MODE=simulate is forbidden in production.")
         if self.app_env.lower() == "production" and self.esign_provider == "simulate":
             raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
+        if self.app_env.lower() == "production" and self.dialer_provider_mode == "simulate":
+            raise ValueError("DIALER_PROVIDER_MODE=simulate is forbidden in production.")
         if self.app_env.lower() == "production" and self.marketing_conversion_mode == "simulate":
             raise ValueError("MARKETING_CONVERSION_MODE=simulate is forbidden in production.")
         if (
@@ -588,6 +620,29 @@ class Settings(BaseSettings):
     @property
     def communication_simulation_enabled(self) -> bool:
         return self.communication_provider_mode == "simulate"
+
+    @property
+    def dialer_provider_configuration_blockers(self) -> tuple[str, ...]:
+        if self.dialer_provider_mode == "disabled":
+            return ("DIALER_PROVIDER_MODE",)
+        if self.dialer_provider_mode == "simulate":
+            return ()
+        blockers: list[str] = []
+        if self.dialer_provider != "batchdialer":
+            blockers.append("DIALER_PROVIDER=batchdialer")
+        if not self.batchdialer_api_key:
+            blockers.append("BATCHDIALER_API_KEY")
+        if not self.batchdialer_api_base_url:
+            blockers.append("BATCHDIALER_API_BASE_URL")
+        if not self.batchdialer_campaign_sync_path:
+            blockers.append("BATCHDIALER_CAMPAIGN_SYNC_PATH")
+        if not self.batchdialer_webhook_secret:
+            blockers.append("BATCHDIALER_WEBHOOK_SECRET")
+        return tuple(blockers)
+
+    @property
+    def dialer_provider_configured(self) -> bool:
+        return not self.dialer_provider_configuration_blockers
 
     @property
     def api_cors_origins(self) -> list[str]:

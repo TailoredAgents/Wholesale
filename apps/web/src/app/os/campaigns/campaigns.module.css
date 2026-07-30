@@ -1,4 +1,5 @@
 .workspace { display: grid; gap: 16px; }
+.batchWorkspace { display: grid; gap: 16px; }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-tight); }
 .metrics > div { min-width: 0; padding: 17px 19px; display: grid; gap: 7px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }
@@ -68,6 +69,26 @@
 .batchEntries strong { font-size: 11px; }
 .batchEntries small { color: var(--muted); font-size: 10px; }
 .empty { margin: 0; padding: 28px 17px; color: var(--muted); font-size: 12px; text-align: center; }
+.providerPanel { display: grid; gap: 14px; padding: 17px; }
+.providerSummary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.providerSummary > div { min-width: 0; padding: 11px; display: grid; gap: 5px; border-right: 1px solid var(--line-soft); }
+.providerSummary > div:last-child { border-right: 0; }
+.providerSummary span { color: var(--muted); font-size: 9px; font-weight: 850; text-transform: uppercase; }
+.providerSummary strong { overflow-wrap: anywhere; font-size: 11px; }
+.providerNotice, .providerError, .providerHint { margin: 0; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--amber-soft); color: var(--text-soft); font-size: 11px; line-height: 1.45; }
+.providerError { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
+.providerHint { border-color: var(--info); background: var(--info-soft); }
+.providerActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.providerActions button, .providerEvents button { min-height: 36px; padding: 0 12px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
+.providerActions button:disabled, .providerEvents button:disabled { border-color: var(--line); background: var(--surface-muted); color: var(--muted); cursor: not-allowed; }
+.providerEvents { border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.providerEventsHeader { padding: 11px 13px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; background: var(--surface-muted); }
+.providerEventsHeader strong { font-size: 12px; }
+.providerEventsHeader span { color: var(--muted); font-size: 10px; }
+.providerEvents > div:not(.providerEventsHeader) { min-width: 0; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; border-top: 1px solid var(--line-soft); }
+.providerEvents > div > div { min-width: 0; display: grid; gap: 3px; }
+.providerEvents > div strong { font-size: 11px; }
+.providerEvents > div span, .providerEvents > div small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
 @media (max-width: 1180px) { .twoColumn, .historyLayout { grid-template-columns: 1fr; } .section:has(.qualityTable) { overflow-x: auto; } }
-@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
+@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } .providerSummary { grid-template-columns: repeat(3, 1fr); } .providerSummary > div:nth-child(3) { border-right: 0; } .providerSummary > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } }
 @media (max-width: 480px) { .metrics { grid-template-columns: 1fr; } .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); } .metrics > div:last-child { border-bottom: 0; } .previewMetrics { grid-template-columns: repeat(2, 1fr); } .previewMetrics > div:nth-child(2n) { border-right: 0; } .previewMetrics > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } }

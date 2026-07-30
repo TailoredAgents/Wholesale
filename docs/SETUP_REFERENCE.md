@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: July 29, 2026
+Last verified against the repository: July 30, 2026
 
 ## Purpose
 
@@ -40,6 +40,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | Voice | Twilio | Configuration and acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Deferred until an active deal is near contract |
+| Multi-line dialer | BatchDialer adapter | Implemented in simulation; private API mapping/account pending |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
 | Error monitoring | Sentry | Optional/deferred |
 | Ad conversion delivery | Google and Meta | Pending |
@@ -127,6 +128,10 @@ Open:
 
 `COMMUNICATION_PROVIDER_MODE=simulate` keeps simulated SMS and email in the normal conversation
 timeline without contacting external recipients. Production rejects simulated provider delivery.
+
+`DIALER_PROVIDER=batchdialer` with `DIALER_PROVIDER_MODE=simulate` enables the multi-line campaign
+fixture locally. Create a multi-line calling batch, open **Campaigns > Calling batches**, select
+**Send to dialer**, then **Run simulation**. Production rejects dialer simulation.
 
 ## Render Blueprint
 
@@ -374,6 +379,56 @@ Test each approved alias:
 
 Messages reaching spam should be evaluated through SPF, DKIM, DMARC, domain reputation, content,
 and recipient engagement. A successful API response alone does not establish inbox placement.
+
+## BatchDialer Multi-Line Calling
+
+Stonegate's adapter, normalized event contract, retry path, and simulation are implemented.
+BatchDialer's public material confirms API access but does not publish the campaign creation,
+contact mapping, webhook authentication, or event schemas required for live activation.
+
+### Variables
+
+| Variable | Purpose |
+| --- | --- |
+| `DIALER_PROVIDER` | `disabled` until setup; `batchdialer` when testing or live |
+| `DIALER_PROVIDER_MODE` | `disabled`, local-only `simulate`, or `live` |
+| `BATCHDIALER_API_KEY` | Private provider API credential |
+| `BATCHDIALER_API_BASE_URL` | Base URL supplied in the provider's account-specific API documentation |
+| `BATCHDIALER_CAMPAIGN_SYNC_PATH` | Campaign/contact creation path confirmed from the private API |
+| `BATCHDIALER_WEBHOOK_SECRET` | Shared secret used to validate normalized HMAC webhook requests |
+| `BATCHDIALER_REQUEST_TIMEOUT_SECONDS` | Outbound provider timeout; default `30` |
+
+The current live adapter sends one campaign payload and expects a provider campaign ID plus a
+contact mapping for every Stonegate batch-entry ID. Confirm that mapping against the private API
+before changing production to `live`.
+
+### Webhook
+
+```text
+POST https://api.stonegatehb.com/api/v1/webhooks/dialer/{organization_id}
+X-Stonegate-Dialer-Signature: sha256=<HMAC-SHA256 of the raw body>
+```
+
+The normalized body supports `call.completed`, `recording.ready`, and `campaign.error`. A provider
+specific relay or adapter may be required if BatchDialer signs or structures its native webhooks
+differently. Do not weaken signature validation to make an unknown payload pass.
+
+### Acceptance
+
+1. Obtain BatchDialer's private API and webhook documentation during the monthly trial.
+2. Confirm campaign creation, contact external IDs, dispositions, call IDs, agent IDs, recording
+   IDs/URLs, timestamps, retry behavior, and webhook authentication.
+3. Map provider-native payloads to Stonegate's normalized event contract.
+4. Use a controlled multi-line batch with test-owned numbers.
+5. Confirm duplicate delivery creates one attempt.
+6. Confirm unsupported outcomes appear as failed and remain retryable.
+7. Confirm callback, opt-out, recording, and campaign failure history remains visible in
+   Stonegate.
+8. Keep `DIALER_PROVIDER_MODE=disabled` in production until all checks pass.
+
+References:
+[BatchDialer integrations](https://batchdialer.com/integrations) and
+[BatchDialer pricing](https://batchdialer.com/pricing).
 
 ## Twilio SMS
 

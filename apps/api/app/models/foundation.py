@@ -601,6 +601,13 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
             postgresql_where=text("status = 'in_progress'"),
             sqlite_where=text("status = 'in_progress'"),
         ),
+        Index(
+            "uq_prospecting_attempts_provider_call",
+            "organization_id",
+            "provider",
+            "provider_call_id",
+            unique=True,
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -664,6 +671,12 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default="manual_outcome",
         server_default="manual_outcome",
     )
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_recording_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    provider_agent_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     dial_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -685,6 +698,133 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Integer, nullable=False, server_default="0"
     )
     quality_score_basis_points: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class ProspectingProviderCampaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_provider_campaigns"
+    __table_args__ = (
+        UniqueConstraint(
+            "prospect_calling_batch_id",
+            name="uq_prospecting_provider_campaigns_batch",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_campaign_id",
+            name="uq_prospecting_provider_campaigns_external",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    prospect_calling_batch_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_calling_batches.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    provider_campaign_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mode: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    eligible_contact_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    synced_contact_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    failed_contact_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    request_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    response_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reconciled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class ProspectingProviderContact(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_provider_contacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "batch_entry_id",
+            name="uq_prospecting_provider_contacts_entry",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "provider_contact_id",
+            name="uq_prospecting_provider_contacts_external",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    provider_campaign_sync_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_provider_campaigns.id", ondelete="CASCADE"), index=True
+    )
+    batch_entry_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospect_calling_batch_entries.id", ondelete="CASCADE"), index=True
+    )
+    prospect_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospects.id", ondelete="CASCADE"), index=True
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    provider_contact_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    contact_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    provider_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    last_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class ProspectingProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_provider_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider",
+            "external_event_id",
+            name="uq_prospecting_provider_events_external",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    provider_campaign_sync_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_provider_campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider_contact_sync_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_provider_contacts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    batch_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospect_calling_batch_entries.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    attempt_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("prospecting_attempts.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    external_event_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    processing_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    provider_call_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    provider_recording_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class ProspectingCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base):

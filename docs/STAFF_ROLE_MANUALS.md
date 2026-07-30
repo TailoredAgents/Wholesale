@@ -80,6 +80,7 @@ Main page: Prospecting.
 - Record an accurate disposition after every attempt.
 - Create a warm handoff only when the seller shows genuine interest.
 - Preserve opt-outs, wrong numbers, and do-not-contact requests immediately.
+- Read provider status but do not configure, synchronize, retry, or reconcile dialer campaigns.
 - Do not export lists or access underwriting, buyers, contracts, finance, or unrelated leads.
 
 ## Acquisitions Closer
@@ -267,8 +268,12 @@ Each VA has an individual login and sees assigned Prospecting work only.
 1. Open **Prospecting**.
 2. Confirm the correct calling batch.
 3. Read the current script and campaign instructions.
-4. Test the approved call method.
-5. Start the assigned record from Stonegate so it locks correctly.
+4. Confirm the displayed calling state. Stonegate direct is one-line work; provider-ready or
+   reconciled is multi-line work already prepared by a manager.
+5. Report provider attention or failure states to a manager instead of attempting to reconfigure
+   the provider.
+6. Test the approved call method.
+7. Start the assigned record from Stonegate so it locks correctly.
 
 ### After Every Attempt
 

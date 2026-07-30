@@ -79,6 +79,23 @@ function localDateTimeToIso(value: string) {
   return value ? new Date(value).toISOString() : null;
 }
 
+function providerStateLabel(status: string) {
+  const labels: Record<string, string> = {
+    stonegate_direct: "Stonegate direct",
+    provider_connection_pending: "Provider not connected",
+    provider_ready: "Provider ready",
+    provider_reconciled: "Provider reconciled",
+    provider_needs_attention: "Provider needs attention",
+    provider_failed: "Provider failed",
+    provider_syncing: "Provider syncing",
+  };
+  return labels[status] ?? labelize(status);
+}
+
+function providerStateReady(status: string) {
+  return ["stonegate_direct", "provider_ready", "provider_reconciled"].includes(status);
+}
+
 export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverview }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -828,10 +845,8 @@ function ShiftQueue({
               {batch.callbacks_due} callbacks · {batch.corrections} corrections ·{" "}
               {batch.ready} ready
             </small>
-            <em className={batch.provider_sync_status === "stonegate_direct" ? styles.syncReady : styles.syncPending}>
-              {batch.provider_sync_status === "stonegate_direct"
-                ? "Stonegate direct"
-                : "Provider not connected"}
+            <em className={providerStateReady(batch.provider_sync_status) ? styles.syncReady : styles.syncPending}>
+              {providerStateLabel(batch.provider_sync_status)}
             </em>
           </div>
         ))}
@@ -926,10 +941,8 @@ function WorkbenchView({
         <div className={styles.sellerIdentity}><span>{entry.campaign_name}</span><h3>{entry.legal_name}</h3><p>{entry.property_address ?? "Property address unavailable"}</p></div>
         <div className={styles.providerState}>
           <span>{labelize(entry.dialer_mode)}</span>
-          <strong className={entry.provider_sync_status === "stonegate_direct" ? styles.syncReady : styles.syncPending}>
-            {entry.provider_sync_status === "stonegate_direct"
-              ? "Stonegate direct"
-              : "Provider not connected"}
+          <strong className={providerStateReady(entry.provider_sync_status) ? styles.syncReady : styles.syncPending}>
+            {providerStateLabel(entry.provider_sync_status)}
           </strong>
         </div>
         <dl className={styles.contactList}>

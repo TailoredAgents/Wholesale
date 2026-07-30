@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 29, 2026
+Last updated: July 30, 2026
 
 ## Purpose
 
@@ -60,7 +60,8 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
 - `VA_DIALER_ROADMAP.md` owns the hybrid PropStream, multi-line cold-calling, one-line warm
   follow-up, provider integration, accepted-lead economics, and controlled pilot program. VD1
-  through VD4 were implemented on July 30, 2026; VD5 is next.
+  through VD5 were implemented on July 30, 2026; VD6 is next. BatchDialer live mapping and
+  acceptance remain external.
 
 These sub-roadmaps extend the product boundaries above. They do not authorize a parallel CRM,
 communications history, or AI system.

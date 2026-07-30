@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
-import type { CampaignManagementOverview } from "../../lib/api";
+import type { CampaignManagementOverview, DialerCampaignSync } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./campaigns.module.css";
 
@@ -81,6 +81,16 @@ function dateLabel(date: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
+function dateTimeLabel(date: string | null) {
+  if (!date) return "Not yet";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(date));
+}
+
 export function CampaignManagementWorkspace({ data }: { data: CampaignManagementOverview }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -107,6 +117,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   );
   const selectedImport = data.import_batches.find((item) => item.id === selectedImportId);
   const selectedBatch = data.calling_batches.find((item) => item.id === selectedBatchId);
+  const selectedDialerSync = data.dialer_syncs.find((item) => item.batch_id === selectedBatchId);
   const totalActualCost = data.quality.reduce((total, campaign) => total + campaign.actual_cost_cents, 0);
   const totalProspects = data.quality.reduce((total, campaign) => total + campaign.imported_prospects, 0);
   const totalCallable = data.quality.reduce((total, campaign) => total + campaign.callable_prospects, 0);
@@ -273,6 +284,45 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     }
   }
 
+  async function syncSelectedBatch() {
+    if (!selectedBatch) return;
+    const result = await request<DialerCampaignSync>(
+      `/api/v1/campaign-management/calling-batches/${selectedBatch.id}/provider-sync`,
+      "POST",
+      {},
+    );
+    if (result) router.refresh();
+  }
+
+  async function simulateSelectedSync() {
+    if (!selectedDialerSync) return;
+    const result = await request<DialerCampaignSync>(
+      `/api/v1/campaign-management/provider-syncs/${selectedDialerSync.id}/simulate`,
+      "POST",
+      {},
+    );
+    if (result) router.refresh();
+  }
+
+  async function reconcileSelectedSync() {
+    if (!selectedDialerSync) return;
+    const result = await request<DialerCampaignSync>(
+      `/api/v1/campaign-management/provider-syncs/${selectedDialerSync.id}/reconcile`,
+      "POST",
+      {},
+    );
+    if (result) router.refresh();
+  }
+
+  async function retryProviderEvent(eventId: string) {
+    const result = await request(
+      `/api/v1/campaign-management/provider-events/${eventId}/retry`,
+      "POST",
+      {},
+    );
+    if (result) router.refresh();
+  }
+
   return (
     <section className={styles.workspace}>
       <div className={styles.metrics}>
@@ -399,7 +449,8 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       ) : null}
 
       {activeTab === "batches" ? (
-        <div className={styles.twoColumn}>
+        <div className={styles.batchWorkspace}>
+          <div className={styles.twoColumn}>
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Controlled assignments</span><h3>Prospect calling batches</h3></div><strong>{data.calling_batches.length}</strong></div>
             <div className={styles.picker}>{data.calling_batches.map((batch) => <button className={selectedBatchId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedBatchId(batch.id)} type="button"><strong>{batch.name}</strong><span>{batch.assigned_user_name} · {batch.completed_entries}/{batch.total_entries}</span></button>)}</div>
@@ -418,6 +469,57 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>{selectedBatch?.assigned_user_name ?? "No caller selected"}</span><h3>{selectedBatch?.name ?? "Batch records"}</h3></div>{selectedBatch ? <strong>{selectedBatch.total_entries}</strong> : null}</div>
             <div className={styles.batchEntries}>{selectedBatch?.entries.map((entry) => <div key={entry.id}><span>{entry.sequence_number}</span><div><strong>{entry.legal_name}</strong><small>{entry.property_address ?? entry.phone ?? "No address"}</small></div><span className={styles.badge}>{labelize(entry.status)}</span></div>)}{!selectedBatch ? <p className={styles.empty}>Select or create a calling batch.</p> : null}</div>
+          </section>
+          </div>
+          <section className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <div>
+                <span>Multi-line provider connection</span>
+                <h3>{selectedBatch?.name ?? "Select a calling batch"}</h3>
+              </div>
+              <strong>{labelize(selectedDialerSync?.status ?? data.dialer_provider.live_mapping_status)}</strong>
+            </div>
+            <div className={styles.providerPanel}>
+              <div className={styles.providerSummary}>
+                <div><span>Provider</span><strong>{labelize(data.dialer_provider.provider)}</strong></div>
+                <div><span>Mode</span><strong>{labelize(data.dialer_provider.mode)}</strong></div>
+                <div><span>Contacts</span><strong>{selectedDialerSync ? `${selectedDialerSync.synced_contact_count}/${selectedDialerSync.eligible_contact_count}` : "-"}</strong></div>
+                <div><span>Failed</span><strong>{selectedDialerSync?.failed_contact_count ?? 0}</strong></div>
+                <div><span>Needs review</span><strong>{selectedDialerSync?.pending_event_count ?? 0}</strong></div>
+                <div><span>Last checked</span><strong>{dateTimeLabel(selectedDialerSync?.last_reconciled_at ?? selectedDialerSync?.last_synced_at ?? null)}</strong></div>
+              </div>
+              {data.dialer_provider.blockers.length ? (
+                <p className={styles.providerNotice}>
+                  {data.dialer_provider.mode === "disabled"
+                    ? "Multi-line dialing is disabled until the provider trial is configured."
+                    : `Provider setup still needs: ${data.dialer_provider.blockers.join(", ")}.`}
+                </p>
+              ) : null}
+              {selectedDialerSync?.error_message ? <p className={styles.providerError}>{selectedDialerSync.error_message}</p> : null}
+              <div className={styles.providerActions}>
+                <button disabled={!selectedBatch || selectedBatch.dialer_mode !== "multi_line_parallel" || !data.dialer_provider.configured || status === "saving"} onClick={syncSelectedBatch} type="button">
+                  {selectedDialerSync ? "Sync again" : "Send to dialer"}
+                </button>
+                {data.dialer_provider.mode === "simulate" && selectedDialerSync ? <button disabled={status === "saving"} onClick={simulateSelectedSync} type="button">Run simulation</button> : null}
+                {selectedDialerSync ? <button disabled={status === "saving"} onClick={reconcileSelectedSync} type="button">Reconcile events</button> : null}
+              </div>
+              {selectedBatch && selectedBatch.dialer_mode !== "multi_line_parallel" ? <p className={styles.providerHint}>This is a one-line Stonegate batch. Only multi-line batches use the external provider.</p> : null}
+              <div className={styles.providerEvents}>
+                <div className={styles.providerEventsHeader}><strong>Recent provider events</strong><span>Calls, recordings, and errors normalized into Stonegate</span></div>
+                {selectedDialerSync?.recent_events.map((event) => (
+                  <div key={event.id}>
+                    <div>
+                      <strong>{labelize(event.event_type)}</strong>
+                      <span>{dateTimeLabel(event.received_at)}{event.provider_call_id ? ` · ${event.provider_call_id}` : ""}</span>
+                      {event.error_message ? <small>{event.error_message}</small> : null}
+                    </div>
+                    <span className={styles.badge}>{labelize(event.processing_status)}</span>
+                    {event.processing_status === "failed" ? <button disabled={status === "saving"} onClick={() => retryProviderEvent(event.id)} type="button">Retry</button> : null}
+                  </div>
+                ))}
+                {!selectedDialerSync?.recent_events.length ? <p className={styles.empty}>No provider events for this batch yet.</p> : null}
+              </div>
+            </div>
           </section>
         </div>
       ) : null}

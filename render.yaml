@@ -78,6 +78,20 @@ services:
         value: 240
       - key: COMMUNICATION_PROVIDER_MODE
         value: live
+      - key: DIALER_PROVIDER
+        value: disabled
+      - key: DIALER_PROVIDER_MODE
+        value: disabled
+      - key: BATCHDIALER_API_KEY
+        sync: false
+      - key: BATCHDIALER_API_BASE_URL
+        sync: false
+      - key: BATCHDIALER_CAMPAIGN_SYNC_PATH
+        sync: false
+      - key: BATCHDIALER_WEBHOOK_SECRET
+        sync: false
+      - key: BATCHDIALER_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: WORKER_READINESS_REQUIRED
         value: true
       - key: WORKER_STALE_AFTER_SECONDS
@@ -337,6 +351,20 @@ services:
           property: connectionString
       - key: COMMUNICATION_PROVIDER_MODE
         value: live
+      - key: DIALER_PROVIDER
+        value: disabled
+      - key: DIALER_PROVIDER_MODE
+        value: disabled
+      - key: BATCHDIALER_API_KEY
+        sync: false
+      - key: BATCHDIALER_API_BASE_URL
+        sync: false
+      - key: BATCHDIALER_CAMPAIGN_SYNC_PATH
+        sync: false
+      - key: BATCHDIALER_WEBHOOK_SECRET
+        sync: false
+      - key: BATCHDIALER_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: WORKER_HEARTBEAT_INTERVAL_SECONDS
         value: 30
       - key: WORKER_STALE_AFTER_SECONDS

@@ -206,10 +206,10 @@ Research references:
 | --- | --- | --- |
 | VD1 | Existing-system audit | Implemented July 30, 2026 |
 | VD2 | Definitions and measurement contract | Implemented July 30, 2026 |
-| VD3 | PropStream list pipeline | Next |
-| VD4 | VA calling workspace | Planned upgrade |
-| VD5 | Multi-line provider connection | Planned |
-| VD6 | Hybrid dialing and routing | Planned |
+| VD3 | PropStream list pipeline | Implemented July 30, 2026 |
+| VD4 | VA calling workspace | Implemented July 30, 2026 |
+| VD5 | Multi-line provider connection | Implemented July 30, 2026; live provider acceptance pending |
+| VD6 | Hybrid dialing and routing | Next |
 | VD7 | Accepted handoff workflow | Planned upgrade |
 | VD8 | Cost and performance reporting | Planned upgrade |
 | VD9 | Controlled comparison pilot | Externally pending |
@@ -359,8 +359,8 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
    next-day, and three-day callback shortcuts.
 7. Kept structured qualification visible only for outcomes where a real seller conversation needs
    to be retained; warm outcomes still require every approved handoff question.
-8. Added truthful provider state: one-line work shows Stonegate direct, while multi-line work shows
-   Provider not connected until VD5 is completed.
+8. Added truthful provider state for direct, pending, syncing, ready, reconciled, attention, and
+   failed calling batches.
 9. Added API acceptance proving a VA cannot open another VA's prospect or access underwriting,
    transactions, buyers, finance, global email recipients, or email administration.
 10. Preserved individual caller attribution on every attempt, outcome, handoff, and audit event.
@@ -373,6 +373,8 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 
 ## VD5. Multi-Line Provider Connection
 
+**Status:** Implemented July 30, 2026. BatchDialer private API mapping and live acceptance remain.
+
 ### Work
 
 1. Use an adapter boundary so BatchDialer can be replaced without changing Stonegate's domain
@@ -384,6 +386,31 @@ that total divided only by handoffs satisfying the strict accepted-warm-lead con
 6. Normalize provider calls into Stonegate's existing communications and prospect history.
 7. Add signature or authentication validation, idempotency, retries, and reconciliation.
 8. Provide simulation fixtures so the integration can be tested before paid production calling.
+
+### Implemented
+
+1. Added a provider-neutral adapter boundary with BatchDialer configuration and deterministic
+   simulation using the same campaign and event contracts.
+2. Added provider campaign, contact, event, call, recording, agent, status, retry, and
+   reconciliation records through migration `0075_dialer_provider`.
+3. Limited synchronization to approved-script, assigned, eligible, untouched prospects in
+   multi-line calling batches.
+4. Added an authenticated normalized webhook with organization scoping and external-event
+   idempotency.
+5. Normalized provider outcomes into the existing prospect, batch-entry, attempt, callback,
+   suppression, audit, and batch-status history.
+6. Added replay-safe call attempts, recording attachment, unsupported-outcome failures, event
+   retry, campaign reconciliation, and visible failure counts.
+7. Added manager controls in **Campaigns > Calling batches** while keeping provider credentials and
+   controls inaccessible to VA accounts.
+8. Added local simulation coverage for complete campaigns, duplicate replay, recording events,
+   invalid webhook signatures, manager permissions, visible failures, and retries.
+
+BatchDialer publicly advertises API access and integrations but does not publish the campaign and
+webhook field contract needed by this adapter. Live activation therefore requires its account
+specific/private API documentation and a controlled mapping test. References:
+[BatchDialer integrations](https://batchdialer.com/integrations) and
+[BatchDialer pricing](https://batchdialer.com/pricing).
 
 ### Exit Criteria
 
@@ -546,7 +573,6 @@ Codex implementation work includes:
 
 ## Next Action
 
-Begin VD3 by extending the existing import pipeline with a PropStream preset, export and filter
-metadata, multiple ranked contact methods, reusable source memberships, and refresh-safe duplicate
-handling. Keep CSV import as the supported launch path unless PropStream grants Stonegate a private
-partner API.
+Begin VD6 by applying explicit routing reasons and collision prevention across the implemented
+provider and Stonegate queues. Keep live provider mode disabled until BatchDialer supplies the
+private campaign/webhook schema and the simulated mappings pass a controlled real-account test.

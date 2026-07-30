@@ -411,6 +411,82 @@ class ProspectCallingBatchCreate(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
 
 
+class DialerProviderConfigurationRead(BaseModel):
+    provider: str
+    mode: str
+    configured: bool
+    blockers: list[str]
+    live_mapping_status: str
+
+
+class DialerProviderEventCreate(BaseModel):
+    external_event_id: str = Field(min_length=1, max_length=255)
+    event_type: Literal["call.completed", "recording.ready", "campaign.error"]
+    provider_campaign_id: str = Field(min_length=1, max_length=255)
+    provider_contact_id: str | None = Field(default=None, max_length=255)
+    provider_call_id: str | None = Field(default=None, max_length=255)
+    provider_recording_id: str | None = Field(default=None, max_length=255)
+    provider_agent_id: str | None = Field(default=None, max_length=255)
+    occurred_at: datetime
+    outcome: str | None = Field(default=None, max_length=80)
+    started_at: datetime | None = None
+    answered_at: datetime | None = None
+    ended_at: datetime | None = None
+    duration_seconds: int | None = Field(default=None, ge=0, le=86_400)
+    callback_at: datetime | None = None
+    recording_url: str | None = Field(default=None, max_length=2000)
+    error_message: str | None = Field(default=None, max_length=2000)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def event_identifiers_are_coherent(self) -> "DialerProviderEventCreate":
+        if self.event_type == "call.completed" and (
+            not self.provider_contact_id or not self.provider_call_id or not self.outcome
+        ):
+            raise ValueError(
+                "Completed calls require provider contact, call, and outcome identifiers."
+            )
+        if self.event_type == "recording.ready" and (
+            not self.provider_call_id or not self.provider_recording_id
+        ):
+            raise ValueError("Recording events require provider call and recording identifiers.")
+        return self
+
+
+class DialerProviderEventRead(BaseModel):
+    id: UUID
+    external_event_id: str
+    event_type: str
+    processing_status: str
+    provider_call_id: str | None
+    provider_recording_id: str | None
+    attempt_id: UUID | None
+    retry_count: int
+    error_message: str | None
+    received_at: datetime
+    processed_at: datetime | None
+
+
+class DialerCampaignSyncRead(BaseModel):
+    id: UUID
+    batch_id: UUID
+    batch_name: str
+    provider: str
+    provider_campaign_id: str | None
+    mode: str
+    status: str
+    eligible_contact_count: int
+    synced_contact_count: int
+    failed_contact_count: int
+    pending_event_count: int
+    failed_event_count: int
+    retry_count: int
+    error_message: str | None
+    last_synced_at: datetime | None
+    last_reconciled_at: datetime | None
+    recent_events: list[DialerProviderEventRead]
+
+
 class CampaignQualityRead(BaseModel):
     campaign_id: UUID
     campaign_name: str
@@ -450,4 +526,6 @@ class CampaignManagementOverview(BaseModel):
     work_sessions: list[ProspectingWorkSessionRead]
     costs: list[CampaignCostRead]
     calling_batches: list[ProspectCallingBatchRead]
+    dialer_provider: DialerProviderConfigurationRead
+    dialer_syncs: list[DialerCampaignSyncRead]
     quality: list[CampaignQualityRead]

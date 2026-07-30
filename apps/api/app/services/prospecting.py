@@ -27,6 +27,7 @@ from app.models.foundation import (
     ProspectHandoff,
     ProspectingAttempt,
     ProspectingCohort,
+    ProspectingProviderCampaign,
     ProspectingScriptVersion,
     Role,
     RoleAssignment,
@@ -1065,7 +1066,7 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
         is_actionable=queue_kind
         in {"ready", "callback_due", "correction_required", "in_progress"},
         dialer_mode=batch.dialer_mode,
-        provider_sync_status=provider_sync_status(batch.dialer_mode),
+        provider_sync_status=provider_sync_status(db, batch),
         attempt_count=entry.attempt_count,
         disposition=entry.disposition,
         next_attempt_at=entry.next_attempt_at,
@@ -1093,12 +1094,23 @@ def entry_queue_kind(
     return "ready"
 
 
-def provider_sync_status(dialer_mode: str) -> str:
-    return (
-        "stonegate_direct"
-        if dialer_mode == "one_line_power"
-        else "provider_connection_pending"
+def provider_sync_status(db: Session, batch: ProspectCallingBatch) -> str:
+    if batch.dialer_mode == "one_line_power":
+        return "stonegate_direct"
+    sync = db.scalar(
+        select(ProspectingProviderCampaign).where(
+            ProspectingProviderCampaign.prospect_calling_batch_id == batch.id
+        )
     )
+    if sync is None:
+        return "provider_connection_pending"
+    return {
+        "ready": "provider_ready",
+        "reconciled": "provider_reconciled",
+        "needs_attention": "provider_needs_attention",
+        "failed": "provider_failed",
+        "syncing": "provider_syncing",
+    }.get(sync.status, "provider_connection_pending")
 
 
 def attempt_read(db: Session, attempt: ProspectingAttempt) -> ProspectingAttemptRead:
@@ -1117,6 +1129,10 @@ def attempt_read(db: Session, attempt: ProspectingAttempt) -> ProspectingAttempt
         interest_classification=attempt.interest_classification,
         follow_up_permission=attempt.follow_up_permission,
         classification_source=attempt.classification_source,
+        provider=attempt.provider,
+        provider_call_id=attempt.provider_call_id,
+        provider_recording_id=attempt.provider_recording_id,
+        provider_agent_id=attempt.provider_agent_id,
         dial_started_at=attempt.dial_started_at,
         answered_at=attempt.answered_at,
         right_party_confirmed_at=attempt.right_party_confirmed_at,

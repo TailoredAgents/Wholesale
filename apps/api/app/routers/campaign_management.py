@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,6 +11,8 @@ from app.schemas.campaign_management import (
     CampaignCostCreate,
     CampaignCostRead,
     CampaignManagementOverview,
+    DialerCampaignSyncRead,
+    DialerProviderEventRead,
     ProspectCallingBatchCreate,
     ProspectCallingBatchRead,
     ProspectImportBatchRead,
@@ -32,6 +35,12 @@ from app.services.campaign_management import (
     create_prospecting_work_session,
     get_campaign_management_overview,
     validate_prospect_import,
+)
+from app.services.dialer_provider import (
+    reconcile_campaign,
+    retry_provider_event,
+    simulate_campaign,
+    sync_calling_batch,
 )
 
 router = APIRouter(prefix="/api/v1/campaign-management", tags=["campaign-management"])
@@ -151,6 +160,62 @@ def create_workspace_calling_batch(
 ) -> ProspectCallingBatchRead:
     try:
         return create_calling_batch(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/calling-batches/{batch_id}/provider-sync")
+def synchronize_workspace_calling_batch(
+    batch_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> DialerCampaignSyncRead:
+    try:
+        return sync_calling_batch(db, principal, batch_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/provider-syncs/{sync_id}/simulate")
+def simulate_workspace_provider_campaign(
+    sync_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> DialerCampaignSyncRead:
+    try:
+        return simulate_campaign(db, principal, sync_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/provider-syncs/{sync_id}/reconcile")
+def reconcile_workspace_provider_campaign(
+    sync_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> DialerCampaignSyncRead:
+    try:
+        return reconcile_campaign(db, principal, sync_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/provider-events/{event_id}/retry")
+def retry_workspace_provider_event(
+    event_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> DialerProviderEventRead:
+    try:
+        return retry_provider_event(db, principal, event_id)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

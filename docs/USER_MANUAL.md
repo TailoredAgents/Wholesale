@@ -641,6 +641,9 @@ Open **Campaigns**. The workspace contains:
     applicable.
 12. Create a calling batch using the same cohort and import.
 13. Assign the batch or individual entries to VAs.
+14. For a multi-line batch, select it under **Calling batches** and review **Dialer connection**.
+15. Select **Send to dialer** only after the provider is configured. Managers use **Reconcile
+    events** or retry a visible failed event when provider history needs attention.
 
 PropStream refreshes are expected to show matched existing rows. This is not a failed import. It
 means Stonegate recognized the person or property and preserved the existing history. **Import
@@ -669,8 +672,9 @@ Open **Prospecting**. Available views depend on role:
 3. Select the seller row. Once a call is started, finish that outcome before opening another row.
 4. Review the campaign, batch, seller, property, ranked contact methods, prior attempts, notes,
    qualification answers, and next commitment.
-5. Confirm the calling state. **Stonegate direct** means work the record in Stonegate.
-   **Provider not connected** means the future multi-line connection has not been activated yet.
+5. Confirm the calling state. **Stonegate direct** means work the record in Stonegate. A provider
+   state shows whether a multi-line batch is pending, syncing, ready, reconciled, or needs manager
+   attention. The VA does not configure or reconcile the provider.
 6. Select **Start prospect**.
 7. Use the exact approved script displayed for the attempt.
 8. Select the accurate outcome. Qualification fields appear for callbacks, follow-up, interested
