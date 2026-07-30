@@ -413,40 +413,6 @@ export type MyRoleSetup = {
   acceptances: StaffRoleAcceptance[];
 };
 
-export type DialerProviderEvent = {
-  id: string;
-  external_event_id: string;
-  event_type: string;
-  processing_status: string;
-  provider_call_id: string | null;
-  provider_recording_id: string | null;
-  attempt_id: string | null;
-  retry_count: number;
-  error_message: string | null;
-  received_at: string;
-  processed_at: string | null;
-};
-
-export type DialerCampaignSync = {
-  id: string;
-  batch_id: string;
-  batch_name: string;
-  provider: string;
-  provider_campaign_id: string | null;
-  mode: string;
-  status: string;
-  eligible_contact_count: number;
-  synced_contact_count: number;
-  failed_contact_count: number;
-  pending_event_count: number;
-  failed_event_count: number;
-  retry_count: number;
-  error_message: string | null;
-  last_synced_at: string | null;
-  last_reconciled_at: string | null;
-  recent_events: DialerProviderEvent[];
-};
-
 export type CampaignManagementOverview = {
   users: OperationsUser[];
   campaigns: AcquisitionOperations["campaigns"];
@@ -557,7 +523,7 @@ export type CampaignManagementOverview = {
     source_name: string;
     list_type: string;
     market_label: string;
-    dialer_mode: "one_line_power" | "multi_line_parallel";
+    dialer_mode: "one_line_power";
     call_window_start_hour: number;
     call_window_end_hour: number;
     timezone: string;
@@ -634,14 +600,6 @@ export type CampaignManagementOverview = {
       call_eligibility: string;
     }>;
   }>;
-  dialer_provider: {
-    provider: string;
-    mode: string;
-    configured: boolean;
-    blockers: string[];
-    live_mapping_status: string;
-  };
-  dialer_syncs: DialerCampaignSync[];
   quality: Array<{
     campaign_id: string;
     campaign_name: string;
@@ -716,10 +674,6 @@ export type ProspectingAttempt = {
   started_at: string;
   completed_at: string | null;
   quality_score_basis_points: number | null;
-  provider: string | null;
-  provider_call_id: string | null;
-  provider_recording_id: string | null;
-  provider_agent_id: string | null;
 };
 
 export type ProspectingEntry = {

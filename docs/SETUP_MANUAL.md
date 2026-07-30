@@ -17,7 +17,7 @@ do I know it worked?”
 Stonegate setup is split between:
 
 1. **Outside provider accounts**, such as Render, Clerk, Resend, Twilio, SignWell, OpenAI,
-   RentCast, BatchDialer, and DealMachine.
+   RentCast, and DealMachine.
 2. **Stonegate OS**, where the owner creates staff users, teams, sender permissions, templates,
    roles, operating policies, and assignments.
 
@@ -55,11 +55,10 @@ Follow this order for a new environment or a complete production review:
 6. Configure SignWell and contract templates.
 7. Activate Twilio SMS only after A2P approval.
 8. Configure Twilio Voice.
-9. Test BatchDialer monthly when Stonegate is ready for multi-line VA calling.
-10. Activate DealMachine when the first contracted deal is close.
-11. Configure bank, vendor, accounting, and compensation policy.
-12. Test backups and production health.
-13. Train each employee using **My Setup** and the role manuals.
+9. Activate DealMachine when the first contracted deal is close.
+10. Configure bank, vendor, accounting, and compensation policy.
+11. Test backups and production health.
+12. Train each employee using **My Setup** and the role manuals.
 
 The system can operate while some providers remain pending. A provider should be labeled
 configured only after its settings exist, and active only after a real controlled test passes.
@@ -94,7 +93,6 @@ provider account. For example:
 | `TWILIO_AUTH_TOKEN` | Twilio Account Info; it is not the Account SID |
 | `ESIGN_API_KEY` | SignWell API settings |
 | `DEALMACHINE_API_KEY` | DealMachine API access |
-| `BATCHDIALER_API_KEY` | BatchDialer private API access during the trial |
 
 Do not put quotation marks around a value unless the documented value itself requires them.
 Do not add spaces before or after a key.
@@ -446,26 +444,6 @@ Complete one remote test and one iPad test:
 The temporary template is operational draft content until professional review occurs. Stonegate
 must not describe it as attorney-approved when it has not been reviewed.
 
-## BatchDialer Multi-Line Calling
-
-Stonegate is ready to simulate this connection, but do not buy an annual plan or enable live mode
-yet.
-
-1. Start a monthly BatchDialer trial when the VAs and a controlled PropStream list are ready.
-2. Ask BatchDialer support for its private campaign/contact API and webhook documentation.
-3. Give that documentation to the Stonegate developer so the exact provider fields and
-   authentication can be mapped.
-4. Put the confirmed BatchDialer values in Render on **oakwell-api** and **oakwell-worker**.
-5. Keep `DIALER_PROVIDER_MODE=disabled` until a controlled test batch is ready.
-6. In Stonegate, create a multi-line cohort and calling batch.
-7. In **Campaigns > Calling batches**, select the batch and use **Send to dialer**.
-8. Confirm contact counts, calls, recordings, dispositions, retries, opt-outs, and callbacks return
-   to Stonegate.
-9. Only then set live mode for the limited comparison pilot.
-
-The VA continues to work from **Prospecting**. BatchDialer supplies call volume; Stonegate remains
-the history, assignment, handoff, and reporting system.
-
 ## Twilio SMS
 
 ### Do Not Activate Before Approval
@@ -649,7 +627,6 @@ makes failures difficult to identify.
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
 - [ ] Recording after disclosure and retention approval.
-- [ ] BatchDialer monthly pilot after private API mapping and controlled simulation.
 - [ ] DealMachine near the first contracted deal.
 - [ ] Google/Meta conversion delivery after ad-account setup.
 - [ ] S3-compatible private storage as document volume grows.

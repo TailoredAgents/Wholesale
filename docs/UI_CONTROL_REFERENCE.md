@@ -434,7 +434,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Campaign / Cohort / Category | Links cost to list purchase, VA labor, enrichment, dialer, phone, voice, mail, ads, software, or other | Campaign and category required |
+| Campaign / Cohort / Category | Links cost to list purchase, VA labor, enrichment, phone, voice, mail, ads, software, or other | Campaign and category required |
 | Related import | Links cost to one imported file | Optional |
 | Incurred on | Cost date | Required |
 | Worker / Hours / Hourly rate | Calculates VA labor cost | Used for VA labor |
@@ -456,12 +456,6 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Notes | Adds manager instructions | Optional |
 | **Create callable batch** | Creates the batch from eligible unbatched records | Requires eligible records and caller |
 | Batch records | Shows each assigned record and status | Read-only from Campaigns |
-| Dialer connection summary | Shows provider mode, contact sync, failures, review count, and last reconciliation | Manager-only; based on the selected batch |
-| **Send to dialer / Sync again** | Sends only untouched, eligible, assigned records from a multi-line batch | Requires configured provider, approved caller script, and multi-line cohort |
-| **Run simulation** | Generates deterministic call and recording events through the real normalization path | Local simulation only; forbidden in production |
-| **Reconcile events** | Retries failed inbound events and recalculates sync status | Requires a prior provider sync |
-| **Retry** | Reprocesses one visible failed provider event | Failed events only |
-| Recent provider events | Shows calls, recordings, review items, errors, and provider IDs | Read-only evidence except retry |
 
 ### Import History
 
@@ -482,8 +476,7 @@ Prospecting views are **Work queue**, **Call quality**, **Handoff review** for m
 | Due now / Callbacks / Corrections / Scheduled / Waiting / All assigned | Filters the caller's complete assigned shift without changing ownership | Caller sees only assigned records; managers can review the broader operation |
 | Campaign and batch strip | Shows ready, callback, correction, active, and waiting workload plus dialing connection state | Read-only |
 | Assigned seller row | Loads that seller into the three-panel calling context | Disabled for another row while the caller has an active attempt |
-| Stonegate direct | Confirms one-line work is handled in the Stonegate workflow | Current one-line mode |
-| Provider status | Shows pending, syncing, ready, reconciled, attention, or failed multi-line state | Provider management remains in Campaigns, not the VA workspace |
+| One-by-one calling | Confirms the VA calls one assigned owner at a time | External multi-line dialing is intentionally retired |
 | Ranked phone and email methods | Shows all validated imported contact methods in source rank order | Based on imported contact evidence |
 | Prior attempt details | Expands notes, callback commitment, and structured qualification answers | Read-only history |
 | Assigned priority row | Selects the current assigned prospect | Caller sees assigned work only |

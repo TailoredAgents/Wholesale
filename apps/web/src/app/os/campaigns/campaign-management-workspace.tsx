@@ -4,7 +4,7 @@ import { useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
-import type { CampaignManagementOverview, DialerCampaignSync } from "../../lib/api";
+import type { CampaignManagementOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./campaigns.module.css";
 
@@ -81,14 +81,8 @@ function dateLabel(date: string) {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(`${date}T12:00:00`));
 }
 
-function dateTimeLabel(date: string | null) {
-  if (!date) return "Not yet";
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(date));
+function callingModeLabel() {
+  return "One-by-one calling";
 }
 
 export function CampaignManagementWorkspace({ data }: { data: CampaignManagementOverview }) {
@@ -117,7 +111,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   );
   const selectedImport = data.import_batches.find((item) => item.id === selectedImportId);
   const selectedBatch = data.calling_batches.find((item) => item.id === selectedBatchId);
-  const selectedDialerSync = data.dialer_syncs.find((item) => item.batch_id === selectedBatchId);
   const totalActualCost = data.quality.reduce((total, campaign) => total + campaign.actual_cost_cents, 0);
   const totalProspects = data.quality.reduce((total, campaign) => total + campaign.imported_prospects, 0);
   const totalCallable = data.quality.reduce((total, campaign) => total + campaign.callable_prospects, 0);
@@ -284,45 +277,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     }
   }
 
-  async function syncSelectedBatch() {
-    if (!selectedBatch) return;
-    const result = await request<DialerCampaignSync>(
-      `/api/v1/campaign-management/calling-batches/${selectedBatch.id}/provider-sync`,
-      "POST",
-      {},
-    );
-    if (result) router.refresh();
-  }
-
-  async function simulateSelectedSync() {
-    if (!selectedDialerSync) return;
-    const result = await request<DialerCampaignSync>(
-      `/api/v1/campaign-management/provider-syncs/${selectedDialerSync.id}/simulate`,
-      "POST",
-      {},
-    );
-    if (result) router.refresh();
-  }
-
-  async function reconcileSelectedSync() {
-    if (!selectedDialerSync) return;
-    const result = await request<DialerCampaignSync>(
-      `/api/v1/campaign-management/provider-syncs/${selectedDialerSync.id}/reconcile`,
-      "POST",
-      {},
-    );
-    if (result) router.refresh();
-  }
-
-  async function retryProviderEvent(eventId: string) {
-    const result = await request(
-      `/api/v1/campaign-management/provider-events/${eventId}/retry`,
-      "POST",
-      {},
-    );
-    if (result) router.refresh();
-  }
-
   return (
     <section className={styles.workspace}>
       <div className={styles.metrics}>
@@ -394,7 +348,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
               <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
               <label><span>Saved mapping</span><select name="mapping_id" required><option value="">Select mapping</option>{data.mappings.map((mapping) => <option key={mapping.id} value={mapping.id}>{mapping.name}</option>)}</select></label>
               <label><span>Source format</span><select onChange={(event) => setSourceProfile(event.target.value as "general_csv" | "propstream")} value={sourceProfile}><option value="propstream">PropStream export</option><option value="general_csv">General CSV</option></select></label>
-              <label><span>Measurement cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {labelize(cohort.dialer_mode)}</option>)}</select></label>
+              <label><span>Measurement cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
               <label><span>Default assignee</span><select name="default_assignee_user_id"><option value="">Leave unassigned</option>{callers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
               <label><span>PropStream export ID</span><input name="source_export_id" /></label>
               <label><span>Saved list ID</span><input name="source_list_id" /></label>
@@ -436,7 +390,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
             <form className={styles.stackForm} onSubmit={submitCost}>
               <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
               <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select></label>
-              <label><span>Category</span><select name="category" onChange={(event) => setCostCategory(event.target.value)} value={costCategory}><option value="list_purchase">List purchase</option><option value="va_labor">VA labor</option><option value="data_enrichment">Data enrichment</option><option value="dialer_license">Dialer license</option><option value="phone_number">Phone number</option><option value="voice_usage">Voice usage</option><option value="direct_mail">Direct mail</option><option value="ad_spend">Ad spend</option><option value="software">Software</option><option value="other">Other</option></select></label>
+              <label><span>Category</span><select name="category" onChange={(event) => setCostCategory(event.target.value)} value={costCategory}><option value="list_purchase">List purchase</option><option value="va_labor">VA labor</option><option value="data_enrichment">Data enrichment</option><option value="phone_number">Phone number</option><option value="voice_usage">Voice usage</option><option value="direct_mail">Direct mail</option><option value="ad_spend">Ad spend</option><option value="software">Software</option><option value="other">Other</option></select></label>
               <label><span>Related import</span><select name="import_batch_id"><option value="">No import</option>{data.import_batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
               <label><span>Incurred on</span><input defaultValue={new Date().toISOString().slice(0, 10)} name="incurred_on" required type="date" /></label>
               {costCategory === "va_labor" ? <><label><span>Worker</span><select name="worker_user_id" required><option value="">Select worker</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label><label><span>Hours</span><input min="0.01" name="labor_hours" required step="0.01" type="number" /></label><label><span>Hourly rate ($)</span><input defaultValue="8" min="0" name="hourly_rate" required step="0.01" type="number" /></label></> : <label><span>Amount ($)</span><input min="0" name="amount" required step="0.01" type="number" /></label>}
@@ -449,15 +403,14 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       ) : null}
 
       {activeTab === "batches" ? (
-        <div className={styles.batchWorkspace}>
-          <div className={styles.twoColumn}>
+        <div className={styles.twoColumn}>
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Controlled assignments</span><h3>Prospect calling batches</h3></div><strong>{data.calling_batches.length}</strong></div>
             <div className={styles.picker}>{data.calling_batches.map((batch) => <button className={selectedBatchId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedBatchId(batch.id)} type="button"><strong>{batch.name}</strong><span>{batch.assigned_user_name} · {batch.completed_entries}/{batch.total_entries}</span></button>)}</div>
             <form className={styles.stackForm} onSubmit={submitCallingBatch}>
               <label><span>Batch name</span><input name="name" required /></label>
               <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
-              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {labelize(cohort.dialer_mode)}</option>)}</select></label>
+              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
               <label><span>Import batch</span><select name="import_batch_id"><option value="">Any unbatched campaign records</option>{data.import_batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
               <label><span>Assigned caller</span><select name="assigned_user_id" required><option value="">Select caller</option>{callers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
               <label><span>Maximum records</span><input defaultValue="100" max="1000" min="1" name="maximum_records" type="number" /></label>
@@ -469,57 +422,6 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>{selectedBatch?.assigned_user_name ?? "No caller selected"}</span><h3>{selectedBatch?.name ?? "Batch records"}</h3></div>{selectedBatch ? <strong>{selectedBatch.total_entries}</strong> : null}</div>
             <div className={styles.batchEntries}>{selectedBatch?.entries.map((entry) => <div key={entry.id}><span>{entry.sequence_number}</span><div><strong>{entry.legal_name}</strong><small>{entry.property_address ?? entry.phone ?? "No address"}</small></div><span className={styles.badge}>{labelize(entry.status)}</span></div>)}{!selectedBatch ? <p className={styles.empty}>Select or create a calling batch.</p> : null}</div>
-          </section>
-          </div>
-          <section className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <div>
-                <span>Multi-line provider connection</span>
-                <h3>{selectedBatch?.name ?? "Select a calling batch"}</h3>
-              </div>
-              <strong>{labelize(selectedDialerSync?.status ?? data.dialer_provider.live_mapping_status)}</strong>
-            </div>
-            <div className={styles.providerPanel}>
-              <div className={styles.providerSummary}>
-                <div><span>Provider</span><strong>{labelize(data.dialer_provider.provider)}</strong></div>
-                <div><span>Mode</span><strong>{labelize(data.dialer_provider.mode)}</strong></div>
-                <div><span>Contacts</span><strong>{selectedDialerSync ? `${selectedDialerSync.synced_contact_count}/${selectedDialerSync.eligible_contact_count}` : "-"}</strong></div>
-                <div><span>Failed</span><strong>{selectedDialerSync?.failed_contact_count ?? 0}</strong></div>
-                <div><span>Needs review</span><strong>{selectedDialerSync?.pending_event_count ?? 0}</strong></div>
-                <div><span>Last checked</span><strong>{dateTimeLabel(selectedDialerSync?.last_reconciled_at ?? selectedDialerSync?.last_synced_at ?? null)}</strong></div>
-              </div>
-              {data.dialer_provider.blockers.length ? (
-                <p className={styles.providerNotice}>
-                  {data.dialer_provider.mode === "disabled"
-                    ? "Multi-line dialing is disabled until the provider trial is configured."
-                    : `Provider setup still needs: ${data.dialer_provider.blockers.join(", ")}.`}
-                </p>
-              ) : null}
-              {selectedDialerSync?.error_message ? <p className={styles.providerError}>{selectedDialerSync.error_message}</p> : null}
-              <div className={styles.providerActions}>
-                <button disabled={!selectedBatch || selectedBatch.dialer_mode !== "multi_line_parallel" || !data.dialer_provider.configured || status === "saving"} onClick={syncSelectedBatch} type="button">
-                  {selectedDialerSync ? "Sync again" : "Send to dialer"}
-                </button>
-                {data.dialer_provider.mode === "simulate" && selectedDialerSync ? <button disabled={status === "saving"} onClick={simulateSelectedSync} type="button">Run simulation</button> : null}
-                {selectedDialerSync ? <button disabled={status === "saving"} onClick={reconcileSelectedSync} type="button">Reconcile events</button> : null}
-              </div>
-              {selectedBatch && selectedBatch.dialer_mode !== "multi_line_parallel" ? <p className={styles.providerHint}>This is a one-line Stonegate batch. Only multi-line batches use the external provider.</p> : null}
-              <div className={styles.providerEvents}>
-                <div className={styles.providerEventsHeader}><strong>Recent provider events</strong><span>Calls, recordings, and errors normalized into Stonegate</span></div>
-                {selectedDialerSync?.recent_events.map((event) => (
-                  <div key={event.id}>
-                    <div>
-                      <strong>{labelize(event.event_type)}</strong>
-                      <span>{dateTimeLabel(event.received_at)}{event.provider_call_id ? ` · ${event.provider_call_id}` : ""}</span>
-                      {event.error_message ? <small>{event.error_message}</small> : null}
-                    </div>
-                    <span className={styles.badge}>{labelize(event.processing_status)}</span>
-                    {event.processing_status === "failed" ? <button disabled={status === "saving"} onClick={() => retryProviderEvent(event.id)} type="button">Retry</button> : null}
-                  </div>
-                ))}
-                {!selectedDialerSync?.recent_events.length ? <p className={styles.empty}>No provider events for this batch yet.</p> : null}
-              </div>
-            </div>
           </section>
         </div>
       ) : null}

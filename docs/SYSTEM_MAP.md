@@ -368,15 +368,9 @@ The OS uses five stable navigation groups.
   evidence, ranked phone and email contact points, and source-list appearance history.
 - Refreshes match existing people, contact methods, properties, and source IDs without resetting
   prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
-- Prospecting cohorts preserve source, list type, market, script, date range, call window, and
-  one-line or multi-line dialer mode.
+- Prospecting cohorts preserve source, list type, market, script, date range, and call window for
+  one-by-one calling.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
-- Multi-line batches can synchronize through a provider-neutral dialer adapter. Stonegate stores
-  provider campaign/contact mappings, normalized call and recording identifiers, event payloads,
-  failures, retries, and reconciliation status.
-- The manager connection panel can send an eligible batch, run local simulation, reconcile
-  provider events, and retry failed events. Live BatchDialer activation remains disabled until its
-  private API mapping is confirmed.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 
 **Prospecting (`/os/prospecting`)**
@@ -387,11 +381,9 @@ The OS uses five stable navigation groups.
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and
   commitments, structured disposition, callback, qualification, handoff, and Prospecting Copilot
   guidance.
-- One-line work is labeled Stonegate direct. Multi-line batches show pending, syncing, ready,
-  reconciled, needs-attention, or failed provider state.
-- One-line prospect calls open through the device `tel:` handler and the VA records the result in
-  Stonegate. Provider calls normalize into the same prospect attempt history without creating
-  another CRM.
+- All VA prospecting is labeled **One-by-one calling**.
+- Current prospect calls open through the device `tel:` handler and the VA records the result in
+  Stonegate. External multi-line and predictive dialing are intentionally retired.
 
 **Lead Desk (`/os/lead-manager`)**
 
@@ -491,7 +483,7 @@ The OS uses five stable navigation groups.
 2. A campaign records channel, source, dates, budget, and ownership.
 3. Campaign expenses record lists, enrichment, software, ads, mail, and VA labor.
 4. A comparison cohort records source, list type, market, script, calling window, date range, and
-   dialer mode.
+   one-by-one calling method.
 5. A CSV is validated with a saved mapping before import.
 6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
@@ -501,7 +493,7 @@ The OS uses five stable navigation groups.
 
 1. A VA sees only assigned callable prospect records.
 2. The approved script and qualification fields guide the call.
-3. Every attempt records outcome, notes, callback, script evidence, cohort, dialer mode, answer
+3. Every attempt records outcome, notes, callback, script evidence, cohort, calling method, answer
    class, right-party evidence, interest, permission, and governing timestamps.
 4. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
 5. An interested seller creates a structured handoff.
@@ -1213,8 +1205,7 @@ acceptance and evidence:
 - supervised Copilot pilots using redacted Stonegate cases
 - PropStream production export acceptance using Stonegate's implemented source membership,
   ranked-contact, refresh-safe, and deterministic cohort workflow
-- BatchDialer provider adapter, pre-lead call records, hybrid routing, and controlled comparison
-  pilot
+- real-VA acceptance of the one-by-one calling, callback, and warm-handoff workflow
 - real backup restoration and optional monitoring-provider configuration
 
 These are tracked in `FINISHING_ROADMAP.md`.

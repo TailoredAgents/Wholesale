@@ -36,7 +36,7 @@ current code or canonical documentation.
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
-| `VA_DIALER_ROADMAP.md` | Hybrid VA multi-line and power-dialer implementation, pilot, economics, and launch sequence | Owner, prospecting managers, and developers |
+| `VA_DIALER_ROADMAP.md` | One-by-one VA calling workflow, acceptance, handoff, and reporting sequence | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |

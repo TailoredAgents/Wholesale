@@ -637,13 +637,10 @@ Open **Campaigns**. The workspace contains:
 9. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
 10. Select **Import reviewed file**. Existing matches receive new source/contact evidence without
     losing prior activity.
-11. Record list, labor, dialer, number, and voice costs in **Costs**, linked to the cohort when
+11. Record list, labor, phone-number, and voice costs in **Costs**, linked to the cohort when
     applicable.
 12. Create a calling batch using the same cohort and import.
 13. Assign the batch or individual entries to VAs.
-14. For a multi-line batch, select it under **Calling batches** and review **Dialer connection**.
-15. Select **Send to dialer** only after the provider is configured. Managers use **Reconcile
-    events** or retry a visible failed event when provider history needs attention.
 
 PropStream refreshes are expected to show matched existing rows. This is not a failed import. It
 means Stonegate recognized the person or property and preserved the existing history. **Import
@@ -672,9 +669,8 @@ Open **Prospecting**. Available views depend on role:
 3. Select the seller row. Once a call is started, finish that outcome before opening another row.
 4. Review the campaign, batch, seller, property, ranked contact methods, prior attempts, notes,
    qualification answers, and next commitment.
-5. Confirm the calling state. **Stonegate direct** means work the record in Stonegate. A provider
-   state shows whether a multi-line batch is pending, syncing, ready, reconciled, or needs manager
-   attention. The VA does not configure or reconcile the provider.
+5. Confirm the calling state shows **One-by-one calling**. Call only the selected assigned owner
+   and finish that result before moving to another record.
 6. Select **Start prospect**.
 7. Use the exact approved script displayed for the attempt.
 8. Select the accurate outcome. Qualification fields appear for callbacks, follow-up, interested

@@ -127,8 +127,6 @@ def get_campaign_management_overview(
     db: Session,
     principal: Principal,
 ) -> CampaignManagementOverview:
-    from app.services.dialer_provider import list_campaign_syncs, provider_configuration
-
     campaigns = list_campaigns(db, principal)
     return CampaignManagementOverview(
         users=list_users(db, principal, manageable=True),
@@ -141,8 +139,6 @@ def get_campaign_management_overview(
         work_sessions=list_prospecting_work_sessions(db, principal),
         costs=list_campaign_costs(db, principal),
         calling_batches=list_calling_batches(db, principal),
-        dialer_provider=provider_configuration(),
-        dialer_syncs=list_campaign_syncs(db, principal),
         quality=[campaign_quality_read(db, campaign.id) for campaign in campaigns],
     )
 
@@ -1641,7 +1637,7 @@ def create_calling_batch(
         if cohort is None:
             raise ValueError("Calling-batch cohort must belong to the selected campaign.")
         if cohort.dialer_mode != payload.dialer_mode:
-            raise ValueError("Calling-batch dialer mode must match its cohort.")
+            raise ValueError("Calling-batch method must match its cohort.")
     assignee = active_user(db, principal.organization_id, payload.assigned_user_id)
     if assignee is None:
         raise ValueError("Calling batch requires an active workspace user.")
@@ -1662,7 +1658,7 @@ def create_calling_batch(
                 raise ValueError("Import batch and calling-batch cohort must match.")
             cohort = cohort or import_cohort
             if cohort and cohort.dialer_mode != payload.dialer_mode:
-                raise ValueError("Calling-batch dialer mode must match its cohort.")
+                raise ValueError("Calling-batch method must match its cohort.")
 
     already_batched = select(ProspectCallingBatchEntry.prospect_id)
     prospect_statement = (

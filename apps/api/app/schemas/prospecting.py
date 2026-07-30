@@ -93,10 +93,6 @@ class ProspectingAttemptRead(BaseModel):
     interest_classification: str
     follow_up_permission: str
     classification_source: str
-    provider: str | None
-    provider_call_id: str | None
-    provider_recording_id: str | None
-    provider_agent_id: str | None
     dial_started_at: datetime | None
     answered_at: datetime | None
     right_party_confirmed_at: datetime | None

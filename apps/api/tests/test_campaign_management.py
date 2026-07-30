@@ -530,6 +530,24 @@ def test_prospecting_cohort_and_work_session_measurement_contract(
         },
     )
     assert invalid_time.status_code == 422
+    retired_multi_line = client.post(
+        "/api/v1/campaign-management/cohorts",
+        headers=owner_headers,
+        json={
+            "campaign_id": campaign["id"],
+            "name": "Retired Multi-Line",
+            "code": "retired-multi-line",
+            "source_name": "PropStream",
+            "list_type": "test",
+            "market_label": "Atlanta",
+            "dialer_mode": "multi_line_parallel",
+            "call_window_start_hour": 9,
+            "call_window_end_hour": 17,
+            "timezone": "America/New_York",
+            "starts_on": "2026-07-30",
+        },
+    )
+    assert retired_multi_line.status_code == 422
     assert (
         client.post(
             "/api/v1/campaign-management/cohorts",
@@ -541,7 +559,7 @@ def test_prospecting_cohort_and_work_session_measurement_contract(
                 "source_name": "PropStream",
                 "list_type": "test",
                 "market_label": "Atlanta",
-                "dialer_mode": "multi_line_parallel",
+                "dialer_mode": "one_line_power",
                 "call_window_start_hour": 9,
                 "call_window_end_hour": 17,
                 "timezone": "America/New_York",
