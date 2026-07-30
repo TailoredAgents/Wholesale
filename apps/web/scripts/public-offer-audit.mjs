@@ -23,6 +23,18 @@ async function installApiStubs(page, state) {
     state.events.push(route.request().postDataJSON());
     await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: crypto.randomUUID(), event_type: "test" }) });
   });
+  await page.route("**/api/v1/public/seller-leads/enrichment", async (route) => {
+    state.enrichments.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        lead_id: "11111111-2222-4333-8444-555555555555",
+        enriched_at: new Date().toISOString(),
+        message: "Thanks. The additional property details were added to your request.",
+      }),
+    });
+  });
   await page.route("**/api/v1/public/seller-leads", async (route) => {
     state.submissions.push(route.request().postDataJSON());
     if (state.failNextSubmission) {
@@ -44,6 +56,8 @@ async function installApiStubs(page, state) {
         duplicate_status: "created",
         matched_existing_lead: false,
         consent_wording_version: "seller-contact-web-v2",
+        enrichment_token: "test-enrichment-token-that-is-long-enough-for-the-api",
+        enrichment_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
         message: "Thanks. Your information was received.",
       }),
     });
@@ -140,7 +154,7 @@ async function auditDiscovery(page, viewport) {
 async function auditJourney(browser, viewport) {
   const context = await browser.newContext({ reducedMotion: "reduce", viewport });
   const page = await context.newPage();
-  const state = { events: [], submissions: [], failNextSubmission: true };
+  const state = { events: [], submissions: [], enrichments: [], failNextSubmission: true };
   const browserErrors = [];
   page.on("console", (message) => {
     if (
@@ -171,31 +185,13 @@ async function auditJourney(browser, viewport) {
   }
   await page.locator("#property_city").fill("Atlanta");
   await page.locator("#property_postal_code").fill("30303");
-  await page.locator("#property_type").selectOption("single_family");
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await checkPage(page, viewport.name, "situation");
-  if (screenshotDirectory) {
-    await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-situation-${viewport.name}.png` });
-  }
-
-  await page.locator('input[name="property_condition"][value="major_repairs"]').check();
-  await page.locator('input[name="occupancy_status"][value="vacant"]').check();
-  await page.locator("#reason_for_selling").selectOption("repairs_or_condition");
-  await page.locator("#desired_timeline").selectOption("within_30_days");
-  await page.getByRole("button", { name: /Continue/ }).click();
-  await page.locator("#asking_price").fill("200,000");
-  await page.locator("#mortgage_balance").fill("90,000");
-  await page.locator("#comments").fill("Older roof and kitchen updates are likely.");
-  await page.getByRole("button", { name: "Back" }).click();
-  if (!(await page.locator('input[name="property_condition"][value="major_repairs"]').isChecked())) {
-    record(viewport.name, "back-navigation", "Situation answer was not preserved.");
-  }
-  await page.getByRole("button", { name: /Continue/ }).click();
-  if ((await page.locator("#asking_price").inputValue()) !== "200,000") {
-    record(viewport.name, "answer-preservation", "Optional details were not preserved.");
-  }
   await page.getByRole("button", { name: /Continue/ }).click();
   await checkPage(page, viewport.name, "contact");
+  await page.getByRole("button", { name: "Back" }).click();
+  if ((await page.locator("#property_city").inputValue()) !== "Atlanta") {
+    record(viewport.name, "back-navigation", "Property answer was not preserved.");
+  }
+  await page.getByRole("button", { name: /Continue/ }).click();
   if (screenshotDirectory) {
     await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-contact-${viewport.name}.png` });
   }
@@ -244,13 +240,13 @@ async function auditJourney(browser, viewport) {
   if (state.submissions.length !== 2) record(viewport.name, "submission-count", state.submissions.length);
   const payload = state.submissions.at(-1);
   for (const [key, expected] of Object.entries({
-    property_type: "single_family",
-    property_condition: "major_repairs",
-    occupancy_status: "vacant",
-    reason_for_selling: "repairs_or_condition",
-    desired_timeline: "within_30_days",
-    asking_price: "200,000",
-    mortgage_balance: "90,000",
+    property_type: null,
+    property_condition: null,
+    occupancy_status: null,
+    reason_for_selling: null,
+    desired_timeline: null,
+    asking_price: null,
+    mortgage_balance: null,
     preferred_contact_method: "sms",
     consent_to_contact: true,
     sms_consent: true,
@@ -258,6 +254,45 @@ async function auditJourney(browser, viewport) {
     if (payload?.[key] !== expected) record(viewport.name, "payload", { key, expected, actual: payload?.[key] });
   }
   if (!payload?.conversion_session_id) record(viewport.name, "session-link", "Missing conversion_session_id.");
+
+  await page.getByRole("button", { name: "Add property details" }).click();
+  await page.locator("#property_type").selectOption("single_family");
+  await page.locator("#property_condition").selectOption("major_repairs");
+  await page.locator("#occupancy_status").selectOption("vacant");
+  await page.locator("#reason_for_selling").selectOption("repairs_or_condition");
+  await page.locator("#desired_timeline").selectOption("within_30_days");
+  await page.locator("#asking_price").fill("200,000");
+  await page.locator("#mortgage_balance").fill("90,000");
+  await page.locator("#comments").fill("Older roof and kitchen updates are likely.");
+  await checkPage(page, viewport.name, "optional-enrichment");
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/offer-enrichment-${viewport.name}.png`,
+    });
+  }
+  await page.getByRole("button", { name: "Save property details" }).click();
+  await page.getByText("The additional property details were added", { exact: false }).waitFor();
+  if (state.enrichments.length !== 1) {
+    record(viewport.name, "enrichment-count", state.enrichments.length);
+  }
+  const enrichment = state.enrichments.at(-1);
+  for (const [key, expected] of Object.entries({
+    property_type: "single_family",
+    property_condition: "major_repairs",
+    occupancy_status: "vacant",
+    reason_for_selling: "repairs_or_condition",
+    desired_timeline: "within_30_days",
+    asking_price: "200,000",
+    mortgage_balance: "90,000",
+  })) {
+    if (enrichment?.[key] !== expected) {
+      record(viewport.name, "enrichment-payload", { key, expected, actual: enrichment?.[key] });
+    }
+  }
+  if (!enrichment?.enrichment_token || !enrichment?.conversion_session_id) {
+    record(viewport.name, "enrichment-link", "Enrichment was not securely linked to the request.");
+  }
 
   await page.reload({ waitUntil: "networkidle" });
   await page.getByText("Thanks. Stonegate has the property request.").waitFor({ timeout: 8_000 });

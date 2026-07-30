@@ -130,7 +130,7 @@
 
 .progressHeader ol {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   list-style: none;
 }
@@ -202,7 +202,7 @@
 }
 
 .stepIntro > span,
-.confirmation > p {
+.confirmationStatus > p {
   color: #56635c;
   line-height: 1.55;
 }
@@ -257,7 +257,7 @@
 
 .field em,
 .field small {
-  color: #69766f;
+  color: #4f5c55;
   font-size: 10px;
   font-style: normal;
   font-weight: 600;
@@ -439,7 +439,7 @@
 
 .characterCount {
   margin-top: -12px;
-  color: #6d7972;
+  color: #536159;
   font-size: 10px;
   text-align: right;
 }
@@ -641,7 +641,12 @@
   gap: 17px;
 }
 
-.confirmation > svg {
+.confirmationStatus {
+  display: grid;
+  gap: 17px;
+}
+
+.confirmationStatus > svg {
   color: #1d5a3d;
 }
 
@@ -699,6 +704,96 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+}
+
+.enrichmentBand {
+  display: grid;
+  gap: 18px;
+  padding: 18px 0;
+  border-top: 1px solid #dce3df;
+  border-bottom: 1px solid #dce3df;
+  background: #f7f9f8;
+}
+
+.enrichmentBand > div:first-child:not(.enrichmentHeading):not(.gridTwo):not(.enrichmentActions) {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  padding: 0 18px;
+  color: #536159;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.enrichmentBand > div:first-child > svg {
+  color: #1d5a3d;
+}
+
+.enrichmentBand > div:first-child > span {
+  display: grid;
+  gap: 3px;
+}
+
+.enrichmentBand > div:first-child strong {
+  color: #27382f;
+  font-size: 14px;
+}
+
+.enrichmentBand > .secondaryButton {
+  width: fit-content;
+  margin: 0 18px;
+}
+
+.enrichmentForm {
+  display: grid;
+  gap: 16px;
+  padding: 0 18px;
+}
+
+.enrichmentHeading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.enrichmentHeading > span {
+  display: grid;
+  gap: 4px;
+  color: #5b6861;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.enrichmentHeading strong {
+  color: #27382f;
+  font-size: 15px;
+}
+
+.enrichmentHeading .textButton,
+.enrichmentActions .textButton {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.enrichmentActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.enrichmentSuccess {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-left: 3px solid #1d5a3d;
+  background: #edf5f0;
+  color: #17482f;
+  font-size: 12px;
+  font-weight: 750;
 }
 
 @media (max-width: 920px) {
@@ -780,6 +875,18 @@
   .nextSteps div + div {
     border-top: 1px solid #dce3df;
     border-left: 0;
+  }
+
+  .enrichmentHeading,
+  .enrichmentActions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .enrichmentHeading .textButton,
+  .enrichmentActions .textButton,
+  .enrichmentActions .nextButton {
+    width: 100%;
   }
 }
 

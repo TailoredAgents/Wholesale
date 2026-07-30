@@ -8,10 +8,12 @@ from app.schemas.public_intake import (
     ConversionEventCreate,
     ConversionEventResponse,
     SellerIntakeCreate,
+    SellerIntakeEnrichmentCreate,
+    SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
 )
 from app.services.conversion_events import record_public_conversion_event
-from app.services.public_intake import create_public_seller_lead
+from app.services.public_intake import create_public_seller_lead, enrich_public_seller_lead
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
 
@@ -24,6 +26,21 @@ def create_seller_lead_from_public_form(
     user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ) -> SellerIntakeResponse:
     return create_public_seller_lead(
+        db,
+        payload,
+        ip_address=get_ip_address(request),
+        user_agent=user_agent,
+    )
+
+
+@router.post("/seller-leads/enrichment")
+def enrich_seller_lead_from_public_form(
+    payload: SellerIntakeEnrichmentCreate,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
+) -> SellerIntakeEnrichmentResponse:
+    return enrich_public_seller_lead(
         db,
         payload,
         ip_address=get_ip_address(request),

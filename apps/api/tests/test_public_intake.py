@@ -81,6 +81,8 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert payload["message"] == "Thanks. Your information was received."
     assert payload["duplicate_status"] == "created"
     assert payload["matched_existing_lead"] is False
+    assert len(payload["enrichment_token"]) >= 32
+    assert payload["enrichment_expires_at"]
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
@@ -139,6 +141,116 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert conversion_event.medium == "cpc"
     assert conversion_event.event_metadata == {"matched_existing_lead": False}
     assert conversion_event.session_id == "session-intake-123"
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert submission is not None
+    assert submission.enrichment_token_hash
+    assert payload["enrichment_token"] not in str(submission.raw_payload)
+
+
+def test_public_intake_enrichment_updates_same_lead_without_overwriting_staff_values(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    initial = public_payload()
+    for field in (
+        "property_type",
+        "reason_for_selling",
+        "desired_timeline",
+        "property_condition",
+        "occupancy_status",
+        "asking_price",
+        "mortgage_balance",
+        "comments",
+    ):
+        initial[field] = None
+
+    intake_response = client.post("/api/v1/public/seller-leads", json=initial)
+    assert intake_response.status_code == 201
+    token = intake_response.json()["enrichment_token"]
+
+    lead = db_session.scalar(select(Lead))
+    assert lead is not None
+    lead.motivation = "staff_reviewed_motivation"
+    db_session.commit()
+
+    enrichment_response = client.post(
+        "/api/v1/public/seller-leads/enrichment",
+        json={
+            "enrichment_token": token,
+            "property_type": "single_family",
+            "reason_for_selling": "repairs_or_condition",
+            "desired_timeline": "within_30_days",
+            "property_condition": "major_repairs",
+            "occupancy_status": "vacant",
+            "asking_price": "200,000",
+            "mortgage_balance": "90,000",
+            "comments": "Older roof and kitchen updates are likely.",
+            "conversion_session_id": "session-intake-123",
+        },
+        headers={"User-Agent": "pytest-enrichment", "X-Forwarded-For": "203.0.113.12"},
+    )
+
+    assert enrichment_response.status_code == 200
+    assert enrichment_response.json()["lead_id"] == intake_response.json()["lead_id"]
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
+    db_session.refresh(lead)
+    property_record = db_session.scalar(select(Property))
+    submission = db_session.scalar(select(LeadFormSubmission))
+    assert property_record is not None
+    assert submission is not None
+    assert lead.motivation == "staff_reviewed_motivation"
+    assert lead.desired_timeline == "within_30_days"
+    assert lead.property_condition == "major_repairs"
+    assert lead.occupancy_status == "vacant"
+    assert lead.asking_price == "200,000"
+    assert lead.mortgage_balance == "90,000"
+    assert property_record.property_type == "single_family"
+    assert submission.raw_payload["comments"] == "Older roof and kitchen updates are likely."
+    assert submission.enriched_at is not None
+    enrichment_event = db_session.scalar(
+        select(ConversionEvent).where(
+            ConversionEvent.event_type == "form_enrichment_submit"
+        )
+    )
+    assert enrichment_event is not None
+    assert enrichment_event.event_metadata == {
+        "fields_added": [
+            "asking_price",
+            "comments",
+            "desired_timeline",
+            "mortgage_balance",
+            "occupancy_status",
+            "property_condition",
+            "property_type",
+            "reason_for_selling",
+        ]
+    }
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(AuditEvent.action == "lead.public_enrich")
+    )
+    assert audit_event is not None
+
+
+def test_public_intake_enrichment_rejects_unknown_token(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/public/seller-leads/enrichment",
+        json={
+            "enrichment_token": "not-a-real-token-but-long-enough-to-validate",
+            "property_condition": "major_repairs",
+        },
+    )
+
+    assert response.status_code == 404
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
 def test_public_seller_intake_bootstraps_default_organization_when_missing(

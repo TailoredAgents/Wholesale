@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
@@ -95,4 +96,41 @@ class SellerIntakeResponse(BaseModel):
     duplicate_status: str
     matched_existing_lead: bool
     consent_wording_version: str
+    enrichment_token: str
+    enrichment_expires_at: datetime
+    message: str
+
+
+class SellerIntakeEnrichmentCreate(BaseModel):
+    enrichment_token: str = Field(min_length=32, max_length=255)
+    property_type: str | None = Field(default=None, max_length=80)
+    reason_for_selling: str | None = Field(default=None, max_length=500)
+    desired_timeline: str | None = Field(default=None, max_length=120)
+    property_condition: str | None = Field(default=None, max_length=120)
+    occupancy_status: str | None = Field(default=None, max_length=120)
+    asking_price: str | None = Field(default=None, max_length=120)
+    mortgage_balance: str | None = Field(default=None, max_length=120)
+    comments: str | None = Field(default=None, max_length=1000)
+    conversion_session_id: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def require_enrichment_detail(self) -> "SellerIntakeEnrichmentCreate":
+        values = (
+            self.property_type,
+            self.reason_for_selling,
+            self.desired_timeline,
+            self.property_condition,
+            self.occupancy_status,
+            self.asking_price,
+            self.mortgage_balance,
+            self.comments,
+        )
+        if not any(value and value.strip() for value in values):
+            raise ValueError("Add at least one optional property detail.")
+        return self
+
+
+class SellerIntakeEnrichmentResponse(BaseModel):
+    lead_id: UUID
+    enriched_at: datetime
     message: str

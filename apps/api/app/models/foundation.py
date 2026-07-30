@@ -893,6 +893,13 @@ class LeadFormSubmission(UuidPrimaryKeyMixin, TimestampMixin, Base):
     ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    enrichment_token_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
+    )
+    enrichment_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AttributionTouch(UuidPrimaryKeyMixin, TimestampMixin, Base):

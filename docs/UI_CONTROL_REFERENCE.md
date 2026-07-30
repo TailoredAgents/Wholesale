@@ -101,7 +101,7 @@ is relevant and the required permission is present.
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Property / Situation / Details / Contact steps | Shows the four form stages | Future steps remain disabled until preceding required information passes validation |
+| Property / Contact steps | Shows the two required form stages | Contact remains disabled until the property information passes validation |
 | Completed step button | Returns to an earlier completed step without losing the draft | Only current or completed steps can be opened |
 | **Back** | Returns to the prior step | Hidden on the first step |
 | **Continue** | Validates the current step, records step completion, and advances | Validation errors focus the first invalid field |
@@ -115,24 +115,6 @@ is relevant and the required permission is present.
 | Property street address | Identifies the subject street address | Required; at least three characters |
 | City | Identifies the Georgia city | Required |
 | ZIP code | Supports market, duplicate, and property matching | Required; five digits or ZIP+4 |
-| Property type | Single-family, townhouse, condo, multi-family, manufactured, land, or other | Optional |
-
-### Situation Step
-
-| Field | Purpose and accepted value | Requirement |
-| --- | --- | --- |
-| Current condition | Move-in ready, minor repairs, major repairs, full renovation, or not sure | Optional |
-| Occupancy | Owner occupied, tenant occupied, vacant, inherited/estate, or other | Optional |
-| Main reason for considering a sale | Inherited, repairs, relocation, landlord, financial change, vacant, other, or exploring | Optional |
-| Preferred timeline | ASAP, 30 days, 60-90 days, flexible, or exploring | Optional |
-
-### Details Step
-
-| Field | Purpose and accepted value | Requirement |
-| --- | --- | --- |
-| Price you would like to consider | Seller expectation, not a Stonegate valuation | Optional; numbers only |
-| Estimated mortgage balance | Preliminary debt context, not verified payoff | Optional; numbers only |
-| Repairs, access, ownership, or timing details | Context that helps prepare the first conversation | Optional; maximum 1,000 characters |
 
 ### Contact Step
 
@@ -145,12 +127,32 @@ is relevant and the required permission is present.
 | Contact authorization | Authorizes phone or email about this property request | Required to submit |
 | Optional SMS consent | Separately records recurring automated SMS consent and wording version | Requires a phone number; remains optional unless SMS is selected |
 | **Request My Cash Offer** | Submits one seller inquiry, consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
+| **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
 
 The confirmation reference is the first eight characters of the accepted lead ID. A message that
 the request matched an existing record means Stonegate updated one history instead of creating a
 duplicate.
+
+### Optional Property Details
+
+The request is already accepted before this section opens. **Save property details** uses a
+random, short-lived token to add the answers to the same lead. The token cannot display the lead or
+change staff-reviewed information.
+
+| Field or control | Purpose and accepted value | Requirement |
+| --- | --- | --- |
+| Property type | Single-family, townhouse, condo, multi-family, manufactured, land, or other | Optional |
+| Current condition | Move-in ready, minor repairs, major repairs, full renovation, or not sure | Optional |
+| Occupancy | Owner occupied, tenant occupied, vacant, inherited/estate, or other | Optional |
+| Main reason for considering a sale | Inherited, repairs, relocation, landlord, financial change, vacant, other, or exploring | Optional |
+| Preferred timeline | ASAP, 30 days, 60-90 days, flexible, or exploring | Optional |
+| Price you would like to consider | Seller expectation, not a Stonegate valuation | Optional; numbers only |
+| Estimated mortgage balance | Preliminary debt context, not verified payoff | Optional; numbers only |
+| Repairs, access, ownership, or timing details | Context that helps prepare the first conversation | Optional; maximum 1,000 characters |
+| **Skip for now** | Closes the optional section without changing the accepted request | Always available while the section is open |
+| **Save property details** | Adds the entered context to the accepted lead and records an audit/conversion event | At least one optional answer is required |
 
 ## OS Global Shell
 

@@ -18,7 +18,7 @@ offers, guaranteed closing dates, or claims Stonegate cannot consistently fulfil
 The public site already provides:
 
 - a Georgia-specific address-first homepage offer
-- a progressive cash-offer form with optional detail steps
+- a two-step cash-offer form with optional post-submission property details
 - separate contact and SMS consent
 - draft recovery, duplicate handling, and submission recovery
 - phone-click, page-view, offer-start, form-step, abandonment, and submission measurement
@@ -44,7 +44,7 @@ contract, and funded-deal outcomes determine which variation performs best.
 
 ## Phase PC1: Technical Conversion Baseline
 
-Status: **Implemented**. Branded production verification follows the Render deployment.
+Status: **Production verified** on `https://www.stonegatehb.com`.
 
 ### Work
 
@@ -65,7 +65,7 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ## Phase PC2: Lead Form Simplification
 
-Status: **Planned**
+Status: **Implemented**. Branded production verification follows the Render deployment.
 
 ### Work
 
@@ -73,9 +73,11 @@ Status: **Planned**
 - Create the lead as soon as the minimum valid property and contact information is submitted.
 - Move condition, occupancy, repairs, mortgage, motivation, timing, and comments into an optional
   post-submission enrichment step.
+- Issue a random, 24-hour, one-purpose enrichment token whose hash is stored with the intake
+  submission; the token can add optional context to that lead but cannot read or edit other data.
 - Preserve draft recovery, duplicate handling, validation, attribution, failure recovery, and
   separate SMS consent.
-- Add optional address assistance without making submission dependent on a third-party provider.
+- Preserve direct address entry so intake never depends on a third-party address provider.
 
 ### Exit Criteria
 

@@ -213,7 +213,7 @@ Role-specific default routes include:
 | Route | Purpose |
 | --- | --- |
 | `/` | Main address-first direct-offer experience |
-| `/get-a-cash-offer` | Multi-step seller inquiry and SMS opt-in |
+| `/get-a-cash-offer` | Two-step seller inquiry, separate SMS opt-in, and optional follow-up details |
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
@@ -226,9 +226,10 @@ Role-specific default routes include:
 
 ### 6.2 Seller Intake
 
-The cash-offer form collects seller identity, contact information, property address, timing,
-condition, occupancy, asking-price and mortgage context, preferred contact method, and consent.
-Optional questions improve qualification without preventing a basic inquiry.
+The two required steps collect the property address, seller identity, contact information,
+preferred contact method, and consent. The lead is accepted at that point. The confirmation offers
+an optional section for timing, condition, occupancy, asking-price, mortgage, and seller context;
+a random 24-hour token connects those answers to the same lead without exposing CRM access.
 
 Submission creates or matches:
 

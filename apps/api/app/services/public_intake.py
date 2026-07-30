@@ -1,7 +1,10 @@
+import hashlib
+import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -27,6 +30,8 @@ from app.schemas.public_intake import (
     SMS_CONSENT_WORDING,
     SMS_CONSENT_WORDING_VERSION,
     SellerIntakeCreate,
+    SellerIntakeEnrichmentCreate,
+    SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -53,6 +58,7 @@ ACTIVE_LEAD_STAGES = {
     "under_contract",
     "reopened",
 }
+ENRICHMENT_TOKEN_LIFETIME = timedelta(hours=24)
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,9 @@ def create_public_seller_lead(
     ip_address: str | None,
     user_agent: str | None,
 ) -> SellerIntakeResponse:
+    submitted_at = datetime.now(UTC)
+    enrichment_token = secrets.token_urlsafe(32)
+    enrichment_expires_at = submitted_at + ENRICHMENT_TOKEN_LIFETIME
     organization = get_default_organization(db)
     duplicate_match = find_duplicate_match(db, organization, payload)
     contact = duplicate_match.contact or create_contact(db, organization, payload)
@@ -82,7 +91,7 @@ def create_public_seller_lead(
         db,
         organization_id=organization.id,
         lead=lead,
-        submitted_at=datetime.now(UTC),
+        submitted_at=submitted_at,
         sla_minutes=get_settings().speed_to_lead_due_minutes,
     )
     ensure_speed_to_lead_task(db, lead, contact)
@@ -129,6 +138,8 @@ def create_public_seller_lead(
             ip_address=ip_address,
             user_agent=user_agent,
             raw_payload=payload.model_dump(mode="json"),
+            enrichment_token_hash=hash_enrichment_token(enrichment_token),
+            enrichment_expires_at=enrichment_expires_at,
         )
     )
     db.add_all(
@@ -225,11 +236,113 @@ def create_public_seller_lead(
         duplicate_status="matched_existing_lead" if matched_existing_lead else "created",
         matched_existing_lead=matched_existing_lead,
         consent_wording_version=CONSENT_WORDING_VERSION,
+        enrichment_token=enrichment_token,
+        enrichment_expires_at=enrichment_expires_at,
         message=(
             "Thanks. We received your updated information."
             if matched_existing_lead
             else "Thanks. Your information was received."
         ),
+    )
+
+
+def enrich_public_seller_lead(
+    db: Session,
+    payload: SellerIntakeEnrichmentCreate,
+    *,
+    ip_address: str | None,
+    user_agent: str | None,
+) -> SellerIntakeEnrichmentResponse:
+    submission = db.scalar(
+        select(LeadFormSubmission).where(
+            LeadFormSubmission.enrichment_token_hash
+            == hash_enrichment_token(payload.enrichment_token)
+        )
+    )
+    if submission is None or token_has_expired(submission.enrichment_expires_at):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="This optional-details link is no longer available.",
+        )
+
+    lead = db.get(Lead, submission.lead_id)
+    if lead is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The property request could not be found.",
+        )
+    property_record = db.get(Property, lead.property_id)
+    if property_record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The property record could not be found.",
+        )
+
+    optional_values = {
+        "property_type": payload.property_type,
+        "reason_for_selling": payload.reason_for_selling,
+        "desired_timeline": payload.desired_timeline,
+        "property_condition": payload.property_condition,
+        "occupancy_status": payload.occupancy_status,
+        "asking_price": payload.asking_price,
+        "mortgage_balance": payload.mortgage_balance,
+        "comments": payload.comments,
+    }
+    clean_values = {
+        key: value.strip()
+        for key, value in optional_values.items()
+        if value is not None and value.strip()
+    }
+    apply_public_enrichment_context(lead, property_record, clean_values)
+
+    enriched_at = datetime.now(UTC)
+    submission.raw_payload = {**submission.raw_payload, **clean_values}
+    submission.enriched_at = enriched_at
+    db.add(
+        ActivityEvent(
+            organization_id=submission.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.public_form_enriched",
+            summary="Seller added optional property details after submitting the website request.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=submission.organization_id,
+            actor_user_id=None,
+            actor_type="public",
+            action="lead.public_enrich",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=None,
+            new_value={
+                "fields_added": sorted(clean_values),
+                "submission_id": str(submission.id),
+                "ip_address": ip_address,
+                "user_agent": user_agent,
+            },
+            reason="Optional post-submission seller details",
+        )
+    )
+    attribution = SellerIntakeCreate.model_validate(submission.raw_payload).attribution
+    record_conversion_event(
+        db,
+        organization_id=submission.organization_id,
+        lead_id=lead.id,
+        event_type="form_enrichment_submit",
+        attribution=attribution,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        session_id=payload.conversion_session_id,
+        metadata={"fields_added": sorted(clean_values)},
+    )
+    db.commit()
+    return SellerIntakeEnrichmentResponse(
+        lead_id=lead.id,
+        enriched_at=enriched_at,
+        message="Thanks. The additional property details were added to your request.",
     )
 
 
@@ -437,6 +550,42 @@ def apply_public_intake_context(
     for field_name, value in fields.items():
         if value and not getattr(lead, field_name):
             setattr(lead, field_name, value)
+
+
+def apply_public_enrichment_context(
+    lead: Lead,
+    property_record: Property,
+    values: dict[str, str],
+) -> None:
+    """Add seller context while preserving anything staff already reviewed."""
+    property_type = values.get("property_type")
+    if property_type and not property_record.property_type:
+        property_record.property_type = property_type
+
+    lead_fields = {
+        "motivation": values.get("reason_for_selling"),
+        "desired_timeline": values.get("desired_timeline"),
+        "property_condition": values.get("property_condition"),
+        "occupancy_status": values.get("occupancy_status"),
+        "asking_price": values.get("asking_price"),
+        "mortgage_balance": values.get("mortgage_balance"),
+    }
+    for field_name, value in lead_fields.items():
+        if value and not getattr(lead, field_name):
+            setattr(lead, field_name, value)
+
+
+def hash_enrichment_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def token_has_expired(expires_at: datetime | None) -> bool:
+    if expires_at is None:
+        return True
+    comparable_expiration = (
+        expires_at.replace(tzinfo=UTC) if expires_at.tzinfo is None else expires_at
+    )
+    return comparable_expiration <= datetime.now(UTC)
 
 
 def create_attribution_touch(
