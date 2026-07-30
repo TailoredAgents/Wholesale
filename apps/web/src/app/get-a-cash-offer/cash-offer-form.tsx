@@ -495,7 +495,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       Boolean(confirmation.enrichmentToken) &&
       !confirmation.enriched;
     return (
-      <section className={styles.confirmation}>
+      <section className={styles.confirmation} id="cash-offer-form">
         <div className={styles.confirmationStatus} role="status" aria-live="polite">
           <CircleCheck size={34} aria-hidden="true" />
           <p className={styles.eyebrow}>Request received</p>
@@ -576,6 +576,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   return (
     <form
       className={styles.form}
+      id="cash-offer-form"
       noValidate
       onFocusCapture={handleFormStart}
       onSubmit={handleSubmit}

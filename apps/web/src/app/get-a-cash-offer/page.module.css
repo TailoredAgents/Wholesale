@@ -87,6 +87,11 @@
   gap: 22px;
 }
 
+.form :is(input, select, textarea, button),
+.confirmation :is(input, select, textarea, button, a) {
+  scroll-margin-block: 96px;
+}
+
 .progressHeader {
   display: grid;
   gap: 13px;

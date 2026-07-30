@@ -87,6 +87,8 @@ is relevant and the required permission is present.
 | How It Works, Selling Situations, FAQs, About | Opens seller education pages | Navigation only |
 | Displayed phone number | Starts a phone call and records an anonymous call-click conversion event | Requires a device capable of calling |
 | **Get a Cash Offer** | Opens `/get-a-cash-offer` | Always available |
+| Mobile **Call** bar action | Starts a phone call and records the mobile placement and source page | Fixed to the bottom of public pages at 720px wide or below; never appears in the OS |
+| Mobile **Get Offer** bar action | Opens the cash-offer page and records the mobile placement and source page | On the cash-offer page, scrolls to the current form instead of clearing it |
 | Privacy Policy | Opens current data-use terms | Always available |
 | Terms & Conditions | Opens current website and SMS program terms | Always available |
 

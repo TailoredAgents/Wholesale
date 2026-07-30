@@ -8,10 +8,16 @@ import { recordConversionEvent } from "./lib/conversion-events";
 type TrackedPhoneLinkProps = {
   className?: string;
   href: string;
+  metadata?: Record<string, unknown>;
   children: ReactNode;
 };
 
-export function TrackedPhoneLink({ className, href, children }: TrackedPhoneLinkProps) {
+export function TrackedPhoneLink({
+  className,
+  href,
+  metadata,
+  children,
+}: TrackedPhoneLinkProps) {
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -22,7 +28,7 @@ export function TrackedPhoneLink({ className, href, children }: TrackedPhoneLink
       className={className}
       href={href}
       onClick={() => {
-        void recordConversionEvent(apiBaseUrl, "call_click", { href });
+        void recordConversionEvent(apiBaseUrl, "call_click", { href, ...metadata });
       }}
     >
       {children}

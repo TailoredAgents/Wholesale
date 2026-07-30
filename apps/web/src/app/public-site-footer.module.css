@@ -74,6 +74,7 @@
   .footer {
     grid-template-columns: 1fr;
     gap: 32px;
+    padding-bottom: calc(104px + env(safe-area-inset-bottom));
   }
 
   .links {

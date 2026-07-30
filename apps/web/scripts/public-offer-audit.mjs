@@ -87,6 +87,76 @@ async function checkPage(page, viewport, step) {
   if (violations.length) record(viewport, "wcag", { step, violations });
 }
 
+async function checkMobileActionBar(page, viewport, expectedOfferHref, step) {
+  const bar = page.getByRole("navigation", { name: "Quick seller actions" });
+  const shouldBeVisible = viewport.width <= 720;
+  if (!shouldBeVisible) {
+    if (await bar.isVisible()) {
+      record(viewport.name, "mobile-action-bar", `${step}: bar is visible on desktop.`);
+    }
+    return;
+  }
+
+  if (!(await bar.isVisible())) {
+    record(viewport.name, "mobile-action-bar", `${step}: bar is not visible on mobile.`);
+    return;
+  }
+  const call = bar.getByRole("link", { name: "Call" });
+  const offer = bar.getByRole("link", { name: "Get Offer" });
+  const measurements = await bar.evaluate((element) => {
+    const barRect = element.getBoundingClientRect();
+    const targets = [...element.querySelectorAll("a")].map((target) => {
+      const rect = target.getBoundingClientRect();
+      return { height: rect.height, width: rect.width };
+    });
+    return {
+      bar: {
+        bottom: barRect.bottom,
+        left: barRect.left,
+        right: barRect.right,
+      },
+      targets,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  if (
+    Math.abs(measurements.bar.bottom - measurements.viewportHeight) > 1 ||
+    measurements.bar.left < -1 ||
+    measurements.bar.right > measurements.viewportWidth + 1
+  ) {
+    record(viewport.name, "mobile-action-bar", { step, measurements });
+  }
+  if (measurements.targets.some((target) => target.height < 44 || target.width < 44)) {
+    record(viewport.name, "tap-target", { step, targets: measurements.targets });
+  }
+  if ((await call.getAttribute("href")) !== "tel:+16785417725") {
+    record(viewport.name, "mobile-action-bar", `${step}: call destination is incorrect.`);
+  }
+  if ((await offer.getAttribute("href")) !== expectedOfferHref) {
+    record(viewport.name, "mobile-action-bar", {
+      step,
+      expectedOfferHref,
+      actual: await offer.getAttribute("href"),
+    });
+  }
+}
+
+async function checkFocusedControlClearance(page, viewport, locator, step) {
+  if (viewport.width > 720) return;
+  await locator.evaluate((element) => element.scrollIntoView({ block: "center" }));
+  const bar = page.getByRole("navigation", { name: "Quick seller actions" });
+  const [controlBox, barBox] = await Promise.all([locator.boundingBox(), bar.boundingBox()]);
+  if (
+    controlBox &&
+    barBox &&
+    controlBox.y + controlBox.height > barBox.y &&
+    controlBox.y < barBox.y + barBox.height
+  ) {
+    record(viewport.name, "fixed-control-overlap", { step, controlBox, barBox });
+  }
+}
+
 async function auditDiscovery(page, viewport) {
   if (await page.title() !== "Stonegate Home Buyers | Sell Your Georgia House As-Is") {
     record(viewport, "metadata", { field: "title", value: await page.title() });
@@ -169,12 +239,30 @@ async function auditJourney(browser, viewport) {
 
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await checkPage(page, viewport.name, "homepage");
+  await checkMobileActionBar(
+    page,
+    viewport,
+    "/get-a-cash-offer",
+    "homepage",
+  );
   if (viewport.name === "desktop") {
     await auditDiscovery(page, viewport.name);
   }
   await page.getByLabel("Property address").first().fill("123 Main St");
   await page.getByRole("button", { name: "Start My Offer" }).first().click();
   await page.waitForURL(/\/get-a-cash-offer\?address=123\+Main\+St/);
+  await checkMobileActionBar(
+    page,
+    viewport,
+    "#cash-offer-form",
+    "offer-form",
+  );
+  if (viewport.width <= 720) {
+    await page
+      .getByRole("navigation", { name: "Quick seller actions" })
+      .getByRole("link", { name: "Get Offer" })
+      .click();
+  }
   if ((await page.locator("#property_address").inputValue()) !== "123 Main St") {
     record(viewport.name, "address-prefill", "Homepage address was not preserved.");
   }
@@ -209,6 +297,12 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "sms-consent", "Text preference did not require separate SMS consent.");
   }
   await page.locator("#sms_consent").check();
+  await checkFocusedControlClearance(
+    page,
+    viewport,
+    page.getByRole("button", { name: "Request My Cash Offer" }),
+    "offer-submit",
+  );
   await page.waitForTimeout(20);
   const storedDraft = await page.evaluate(() => JSON.parse(sessionStorage.getItem("stonegate_cash_offer_draft_v1") ?? "{}"));
   if (storedDraft.values?.sms_consent || storedDraft.values?.consent_to_contact) {
@@ -313,6 +407,26 @@ async function auditJourney(browser, viewport) {
   if (!state.events.some((event) => event.event_type === "form_validation_error")) {
     record(viewport.name, "measurement", "Validation event was not emitted.");
   }
+  if (
+    viewport.width <= 720 &&
+    !state.events.some(
+      (event) =>
+        event.event_type === "offer_start" &&
+        event.metadata?.entry_point === "mobile_action_bar" &&
+        event.metadata?.device_context === "mobile",
+    )
+  ) {
+    record(viewport.name, "measurement", "Mobile offer action metadata was not emitted.");
+  }
+
+  await page.goto(`${baseUrl}/terms`, { waitUntil: "networkidle" });
+  await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "terms");
+  await checkFocusedControlClearance(
+    page,
+    viewport,
+    page.locator("footer").getByText(/All rights reserved/),
+    "terms-footer",
+  );
   await context.close();
 }
 
@@ -324,6 +438,7 @@ const browser = await chromium.launch({
 
 try {
   await auditJourney(browser, { name: "desktop", width: 1440, height: 1000 });
+  await auditJourney(browser, { name: "tablet", width: 820, height: 1180 });
   await auditJourney(browser, { name: "mobile", width: 390, height: 844 });
 } finally {
   await browser.close();
@@ -333,5 +448,7 @@ if (findings.length) {
   console.error(JSON.stringify({ findings }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log("Public audit passed: discovery, accessibility, and desktop/mobile offer journeys.");
+  console.log(
+    "Public audit passed: discovery, accessibility, and desktop/tablet/mobile offer journeys.",
+  );
 }

@@ -231,6 +231,10 @@ preferred contact method, and consent. The lead is accepted at that point. The c
 an optional section for timing, condition, occupancy, asking-price, mortgage, and seller context;
 a random 24-hour token connects those answers to the same lead without exposing CRM access.
 
+At mobile widths, every public page also provides fixed **Call** and **Get Offer** actions. Their
+conversion events include the mobile placement and source route. This bar belongs to the public
+footer boundary, so it is never mounted in the operating system or authentication pages.
+
 Submission creates or matches:
 
 - contact and contact methods

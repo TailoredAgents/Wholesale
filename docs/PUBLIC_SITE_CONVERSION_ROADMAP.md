@@ -88,7 +88,7 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ## Phase PC3: Mobile Conversion Experience
 
-Status: **Planned**
+Status: **Implemented**. Branded production verification follows the Render deployment.
 
 ### Work
 
@@ -97,12 +97,16 @@ Status: **Planned**
   text, or the operating-system Help bubble.
 - Improve mobile menu and tap-target behavior.
 - Verify phone, tablet, and desktop layouts.
+- Record the action, placement, device context, and source route without delaying navigation.
+- On the cash-offer page, return **Get Offer** to the active form instead of restarting the
+  seller's work.
 
 ### Exit Criteria
 
 - Call and offer actions remain reachable throughout public mobile pages.
 - No control overlaps content at supported viewports.
 - CTA location and device context are measured.
+- The bar is not rendered in `/os`, Clerk authentication, or any other private workspace.
 
 ## Phase PC4: Contact And Local Trust Foundation
 
