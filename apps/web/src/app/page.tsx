@@ -50,11 +50,13 @@ export default function PublicHomePage() {
           width: 512,
           height: 512,
         },
-        telephone: "+1-678-541-7725",
+        email: siteConfig.publicEmail,
+        telephone: siteConfig.phoneE164,
         areaServed: { "@type": "State", name: "Georgia" },
         contactPoint: {
           "@type": "ContactPoint",
-          telephone: "+1-678-541-7725",
+          email: siteConfig.publicEmail,
+          telephone: siteConfig.phoneE164,
           contactType: "seller inquiries",
           areaServed: "US-GA",
           availableLanguage: "English",
@@ -219,8 +221,8 @@ export default function PublicHomePage() {
             reviewing each seller inquiry. We only discuss properties in areas our team can
             responsibly evaluate.
           </p>
-          <Link className={styles.textLink} href="/about">
-            Learn about Stonegate <ArrowRight size={17} aria-hidden="true" />
+          <Link className={styles.textLink} href="/contact">
+            Check our service area <ArrowRight size={17} aria-hidden="true" />
           </Link>
         </div>
       </section>

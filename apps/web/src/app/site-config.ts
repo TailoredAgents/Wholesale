@@ -2,9 +2,14 @@ export const siteConfig = {
   name: "Stonegate Home Buyers",
   shortName: "Stonegate",
   phoneDisplay: "(678) 541-7725",
+  phoneE164: "+1-678-541-7725",
   phoneHref: "tel:+16785417725",
+  publicEmail: "offers@stonegatehb.com",
+  publicEmailHref: "mailto:offers@stonegatehb.com",
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.stonegatehb.com",
   serviceArea: "Georgia, with an initial focus on metro Atlanta and surrounding communities",
+  serviceAreaShort: "Metro Atlanta and surrounding Georgia communities",
+  inquiryAvailability: "Online property requests are accepted 24 hours a day.",
 } as const;
 
 export const directOfferDisclosure =
@@ -15,4 +20,5 @@ export const publicNavigation = [
   { href: "/#selling-situations", label: "Selling Situations" },
   { href: "/about", label: "About" },
   { href: "/faqs", label: "FAQs" },
+  { href: "/contact", label: "Contact" },
 ] as const;

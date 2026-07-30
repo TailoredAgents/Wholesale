@@ -92,6 +92,18 @@ is relevant and the required permission is present.
 | Privacy Policy | Opens current data-use terms | Always available |
 | Terms & Conditions | Opens current website and SMS program terms | Always available |
 
+### Contact And Service Area
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Header **Contact** | Opens `/contact` | Available on every public page |
+| Published phone | Calls the currently configured Stonegate seller number and records the click placement | Requires a calling-capable device |
+| **Email Stonegate** | Opens the device email composer addressed to `offers@stonegatehb.com` and records the click placement | Requires a configured email application |
+| Request availability | Explains that the web form accepts property requests at any time | This is not a promise that staff answer calls 24 hours a day |
+| Initial service area | Explains the Metro Atlanta starting market and address-based coverage confirmation | Exact counties remain unpublished until owner-approved |
+| Property meetings | Explains that in-person reviews occur at the property by appointment | Stonegate does not publish an office location that has not been confirmed |
+| **Request a Property Review** | Opens the two-step cash-offer form | Always available |
+
 ### Home Page Address Start
 
 | Control or field | Purpose and effect | Availability and common blocker |

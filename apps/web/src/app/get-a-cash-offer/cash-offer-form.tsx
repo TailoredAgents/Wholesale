@@ -7,6 +7,7 @@ import {
   Check,
   CircleCheck,
   ClipboardPenLine,
+  Mail,
   RotateCcw,
 } from "lucide-react";
 import Link from "next/link";
@@ -16,6 +17,8 @@ import {
   getConversionSessionId,
   recordConversionEvent,
 } from "../lib/conversion-events";
+import { siteConfig } from "../site-config";
+import { TrackedEmailLink } from "../tracked-email-link";
 import { TrackedPhoneLink } from "../tracked-phone-link";
 import styles from "./page.module.css";
 
@@ -557,9 +560,16 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         ) : null}
 
         <div className={styles.confirmationActions}>
-          <TrackedPhoneLink className={styles.secondaryButton} href="tel:+16785417725">
+          <TrackedPhoneLink className={styles.secondaryButton} href={siteConfig.phoneHref}>
             Call Stonegate
           </TrackedPhoneLink>
+          <TrackedEmailLink
+            className={styles.secondaryButton}
+            href={`${siteConfig.publicEmailHref}?subject=Property%20inquiry%20${confirmation.reference}`}
+            metadata={{ placement: "offer_confirmation" }}
+          >
+            <Mail size={16} aria-hidden="true" /> Email Stonegate
+          </TrackedEmailLink>
           <button className={styles.textButton} type="button" onClick={startAnotherProperty}>
             <RotateCcw size={16} aria-hidden="true" /> Submit another property
           </button>

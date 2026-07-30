@@ -217,6 +217,7 @@ Role-specific default routes include:
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
+| `/contact` | Public phone, email, inquiry availability, service-area confirmation, and property-meeting expectations |
 | `/sell-house-fast` | Fast-sale situation page |
 | `/sell-house-needs-repairs` | Repair-heavy property page |
 | `/sell-inherited-house` | Inherited-property page |
@@ -234,6 +235,11 @@ a random 24-hour token connects those answers to the same lead without exposing 
 At mobile widths, every public page also provides fixed **Call** and **Get Offer** actions. Their
 conversion events include the mobile placement and source route. This bar belongs to the public
 footer boundary, so it is never mounted in the operating system or authentication pages.
+
+Public contact facts are centralized in `apps/web/src/app/site-config.ts`. The contact page,
+homepage structured data, footer, mobile actions, and offer confirmation use those facts. Exact
+staffed hours, county boundaries, an office address, and a numeric response-time promise are not
+published until the owner confirms them.
 
 Submission creates or matches:
 

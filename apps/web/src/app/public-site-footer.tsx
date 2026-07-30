@@ -3,6 +3,7 @@ import Link from "next/link";
 import { directOfferDisclosure, siteConfig } from "./site-config";
 import { MobileConversionBar } from "./mobile-conversion-bar";
 import { StonegateLogo } from "./stonegate-logo";
+import { TrackedEmailLink } from "./tracked-email-link";
 import { TrackedPhoneLink } from "./tracked-phone-link";
 import styles from "./public-site-footer.module.css";
 
@@ -18,6 +19,13 @@ export function PublicSiteFooter() {
           <TrackedPhoneLink className={styles.phone} href={siteConfig.phoneHref}>
             {siteConfig.phoneDisplay}
           </TrackedPhoneLink>
+          <TrackedEmailLink
+            className={styles.email}
+            href={siteConfig.publicEmailHref}
+            metadata={{ placement: "public_footer" }}
+          >
+            {siteConfig.publicEmail}
+          </TrackedEmailLink>
         </div>
         <div className={styles.links}>
           <nav aria-label="Seller information">
@@ -25,6 +33,7 @@ export function PublicSiteFooter() {
             <Link href="/how-it-works">How It Works</Link>
             <Link href="/#selling-situations">Selling Situations</Link>
             <Link href="/faqs">FAQs</Link>
+            <Link href="/contact">Contact &amp; Service Area</Link>
             <Link href="/get-a-cash-offer">Get a Cash Offer</Link>
           </nav>
           <nav aria-label="Company and legal">

@@ -110,28 +110,44 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ## Phase PC4: Contact And Local Trust Foundation
 
-Status: **Planned**
+Status: **Implemented with conservative verified facts**. Branded production verification follows
+the Render deployment. Exact staffed hours, county boundaries, and a numeric response-time promise
+remain unpublished until the owner confirms them.
 
-### Owner Inputs
+### Verified Public Facts
 
-- Confirm the dedicated public Stonegate phone number.
-- Confirm the public email address.
-- Confirm genuinely staffed contact hours.
-- Confirm the initial counties and communities Stonegate can serve.
-- Approve an achievable response-time statement.
+- Current published phone: `(678) 541-7725`.
+- Public seller email: `offers@stonegatehb.com`.
+- Online property requests are accepted 24 hours a day.
+- Initial market language: metro Atlanta and surrounding Georgia communities.
+- Property meetings occur at the property by appointment after the next step is confirmed.
+
+### Pending Owner Confirmation
+
+- Confirm whether the currently published phone remains the permanent dedicated Stonegate number
+  after the new Twilio setup is approved.
+- Confirm genuinely staffed phone hours.
+- Confirm the initial county and community boundaries.
+- Approve an achievable numeric response-time statement.
+
+Until those facts are confirmed, the site must not publish office hours, a guaranteed response
+time, an office address, or a specific county list.
 
 ### Work
 
 - Create a Contact and Service Area page.
-- Display consistent phone, email, hours, response expectations, and service areas.
+- Display consistent phone, email, request availability, response expectations, and service areas.
 - Explain that Stonegate meets sellers at their properties.
 - Update the header, footer, confirmation experience, metadata, and structured data where relevant.
+- Record phone and email clicks with their public placement.
+- Accept web inquiries at any time while describing human follow-up without an unsupported SLA.
 
 ### Exit Criteria
 
 - Every public contact and service-area statement matches the real operation.
 - Sellers can understand who will respond, when to expect contact, and whether Stonegate serves
   their location.
+- Unconfirmed hours, counties, office location, and response guarantees remain unpublished.
 
 ## Phase PC5: Local Search Foundation
 

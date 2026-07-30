@@ -1,0 +1,183 @@
+.contactSection,
+.expectationSection,
+.visitSection {
+  width: min(1120px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 78px 0;
+}
+
+.contactSection {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(420px, 1.2fr);
+  gap: 72px;
+}
+
+.contactSection h2,
+.expectationSection h2,
+.visitSection h2 {
+  margin-top: 10px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 38px;
+  line-height: 1.16;
+}
+
+.contactSection > div:first-child > p:last-child {
+  margin-top: 16px;
+  color: #526058;
+  line-height: 1.7;
+}
+
+.contactMethods {
+  border-top: 1px solid #d4ddd7;
+}
+
+.contactMethod,
+.availability {
+  min-width: 0;
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 20px;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0;
+  border-bottom: 1px solid #d4ddd7;
+}
+
+.contactMethod {
+  color: #1d5a3d;
+}
+
+.contactMethod:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.contactMethod > span,
+.availability > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.contactMethod small,
+.availability small {
+  color: #59665f;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.contactMethod strong,
+.availability strong {
+  overflow-wrap: anywhere;
+  color: #203129;
+  font-size: 17px;
+}
+
+.availability {
+  grid-template-columns: 26px minmax(0, 1fr);
+  color: #1d5a3d;
+}
+
+.availability em {
+  color: #647169;
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.expectationSection {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.72fr) minmax(420px, 1.28fr);
+  gap: 72px;
+}
+
+.expectations {
+  border-top: 1px solid #d4ddd7;
+}
+
+.expectations > div {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 12px;
+  padding: 20px 0;
+  border-bottom: 1px solid #d4ddd7;
+  color: #536159;
+  line-height: 1.55;
+}
+
+.expectations svg {
+  margin-top: 2px;
+  color: #1d5a3d;
+}
+
+.expectations span {
+  display: grid;
+  gap: 4px;
+}
+
+.expectations strong {
+  color: #203129;
+}
+
+.visitSection {
+  border-top: 1px solid #d4ddd7;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+  gap: 72px;
+}
+
+.visitSection > div {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.visitSection svg {
+  margin-top: 3px;
+  color: #1d5a3d;
+}
+
+.visitSection > div:last-child {
+  padding-left: 36px;
+  border-left: 1px solid #d4ddd7;
+  color: #536159;
+  line-height: 1.7;
+}
+
+@media (max-width: 800px) {
+  .contactSection,
+  .expectationSection,
+  .visitSection {
+    grid-template-columns: 1fr;
+    gap: 44px;
+  }
+
+  .visitSection > div:last-child {
+    padding-top: 36px;
+    padding-left: 0;
+    border-top: 1px solid #d4ddd7;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 620px) {
+  .contactSection,
+  .expectationSection,
+  .visitSection {
+    width: calc(100% - 36px);
+    padding: 60px 0;
+  }
+
+  .contactSection h2,
+  .expectationSection h2,
+  .visitSection h2 {
+    font-size: 31px;
+  }
+
+  .contactMethod,
+  .availability {
+    min-height: 78px;
+  }
+}

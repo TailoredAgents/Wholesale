@@ -176,6 +176,7 @@ async function auditDiscovery(page, viewport) {
     if (
       organization?.url !== "https://www.stonegatehb.com" ||
       organization?.telephone !== "+1-678-541-7725" ||
+      organization?.email !== "offers@stonegatehb.com" ||
       !organization?.logo?.url
     ) {
       record(viewport, "structured-data", organization ?? "Organization record missing.");
@@ -196,6 +197,9 @@ async function auditDiscovery(page, viewport) {
   const sitemap = await sitemapResponse.text();
   if (!sitemap.includes("https://www.stonegatehb.com/get-a-cash-offer")) {
     record(viewport, "sitemap", "Cash-offer page is missing.");
+  }
+  if (!sitemap.includes("https://www.stonegatehb.com/contact")) {
+    record(viewport, "sitemap", "Contact and service-area page is missing.");
   }
   for (const route of ["/os", "/sign-in", "/sign-up"]) {
     if (sitemap.includes(route)) {
@@ -218,6 +222,71 @@ async function auditDiscovery(page, viewport) {
     if (!html.includes('name="robots"') || !html.includes("noindex")) {
       record(viewport, "private-indexing", `${route} is missing noindex metadata.`);
     }
+  }
+}
+
+async function auditContactPage(page, viewport) {
+  await page.goto(`${baseUrl}/contact`, { waitUntil: "networkidle" });
+  await checkPage(page, viewport.name, "contact-page");
+  await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "contact-page");
+
+  if (
+    (await page.title()) !==
+    "Contact Stonegate Home Buyers | Metro Atlanta Service Area"
+  ) {
+    record(viewport.name, "metadata", { route: "/contact", title: await page.title() });
+  }
+  const canonical = await page
+    .locator('link[rel="canonical"]')
+    .getAttribute("href", { timeout: 1_000 })
+    .catch(() => null);
+  if (canonical !== "https://www.stonegatehb.com/contact") {
+    record(viewport.name, "metadata", { route: "/contact", canonical });
+  }
+
+  const structuredData = await page.locator('script[type="application/ld+json"]').first().textContent();
+  try {
+    const contactPage = JSON.parse(structuredData ?? "{}");
+    if (
+      contactPage["@type"] !== "ContactPage" ||
+      contactPage.mainEntity?.telephone !== "+1-678-541-7725" ||
+      contactPage.mainEntity?.email !== "offers@stonegatehb.com" ||
+      contactPage.mainEntity?.areaServed?.name !== "Georgia"
+    ) {
+      record(viewport.name, "structured-data", {
+        route: "/contact",
+        value: contactPage,
+      });
+    }
+  } catch {
+    record(viewport.name, "structured-data", "Contact JSON-LD could not be parsed.");
+  }
+
+  const phoneLink = page
+    .locator("main")
+    .getByRole("link", { name: /\(678\) 541-7725/ })
+    .first();
+  const emailLink = page
+    .locator("main")
+    .getByRole("link", { name: /Email Stonegate/ })
+    .first();
+  if ((await phoneLink.getAttribute("href")) !== "tel:+16785417725") {
+    record(viewport.name, "contact-destination", "Contact phone destination is incorrect.");
+  }
+  if (!(await emailLink.getAttribute("href"))?.startsWith("mailto:offers@stonegatehb.com")) {
+    record(viewport.name, "contact-destination", "Contact email destination is incorrect.");
+  }
+  if (!(await page.getByText("Online property requests are accepted 24 hours a day.").isVisible())) {
+    record(viewport.name, "contact-fact", "Request availability is missing.");
+  }
+  if (!(await page.getByText("Metro Atlanta and surrounding Georgia communities").isVisible())) {
+    record(viewport.name, "contact-fact", "Service-area summary is missing.");
+  }
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/contact-${viewport.name}.png`,
+    });
   }
 }
 
@@ -330,6 +399,14 @@ async function auditJourney(browser, viewport) {
     await context.close();
     return;
   }
+  const confirmationEmail = page.getByRole("link", { name: "Email Stonegate" });
+  if (
+    !(await confirmationEmail.getAttribute("href"))?.startsWith(
+      "mailto:offers@stonegatehb.com",
+    )
+  ) {
+    record(viewport.name, "contact-destination", "Confirmation email destination is incorrect.");
+  }
 
   if (state.submissions.length !== 2) record(viewport.name, "submission-count", state.submissions.length);
   const payload = state.submissions.at(-1);
@@ -419,6 +496,7 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "measurement", "Mobile offer action metadata was not emitted.");
   }
 
+  await auditContactPage(page, viewport);
   await page.goto(`${baseUrl}/terms`, { waitUntil: "networkidle" });
   await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "terms");
   await checkFocusedControlClearance(
