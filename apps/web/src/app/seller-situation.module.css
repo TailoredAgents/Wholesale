@@ -155,9 +155,15 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  margin-top: 22px;
   color: #e1be7e;
   font-weight: 850;
+}
+
+.tradeoffLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 24px;
+  margin-top: 22px;
 }
 
 .finalCta {

@@ -52,7 +52,10 @@ export default function PublicHomePage() {
         },
         email: siteConfig.publicEmail,
         telephone: siteConfig.phoneE164,
-        areaServed: { "@type": "State", name: "Georgia" },
+        areaServed: [
+          { "@type": "State", name: "Georgia" },
+          { "@type": "Place", name: "Metro Atlanta, Georgia" },
+        ],
         contactPoint: {
           "@type": "ContactPoint",
           email: siteConfig.publicEmail,
@@ -221,8 +224,8 @@ export default function PublicHomePage() {
             reviewing each seller inquiry. We only discuss properties in areas our team can
             responsibly evaluate.
           </p>
-          <Link className={styles.textLink} href="/contact">
-            Check our service area <ArrowRight size={17} aria-hidden="true" />
+          <Link className={styles.textLink} href="/service-areas/metro-atlanta">
+            Explore the Metro Atlanta service area <ArrowRight size={17} aria-hidden="true" />
           </Link>
         </div>
       </section>

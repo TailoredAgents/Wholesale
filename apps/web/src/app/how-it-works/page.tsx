@@ -73,6 +73,9 @@ export default function HowItWorksPage() {
             retail market. The benefit is an as-is process without Stonegate charging an agent
             commission or requiring showings.
           </p>
+          <Link className={styles.bandLink} href="/service-areas/metro-atlanta">
+            See how Metro Atlanta coverage is confirmed <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
       </section>
 

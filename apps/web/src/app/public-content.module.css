@@ -202,6 +202,24 @@
   margin-top: 16px;
 }
 
+.bandLink,
+.contextLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 850;
+}
+
+.bandLink {
+  margin-top: 22px;
+  color: #e1be7e;
+}
+
+.contextLink {
+  margin-top: 26px;
+  color: #1d5a3d;
+}
+
 .faqSection {
   max-width: 900px;
 }

@@ -201,6 +201,9 @@ async function auditDiscovery(page, viewport) {
   if (!sitemap.includes("https://www.stonegatehb.com/contact")) {
     record(viewport, "sitemap", "Contact and service-area page is missing.");
   }
+  if (!sitemap.includes("https://www.stonegatehb.com/service-areas/metro-atlanta")) {
+    record(viewport, "sitemap", "Metro Atlanta service-area page is missing.");
+  }
   for (const route of ["/os", "/sign-in", "/sign-up"]) {
     if (sitemap.includes(route)) {
       record(viewport, "sitemap", `Private route was published: ${route}`);
@@ -251,7 +254,8 @@ async function auditContactPage(page, viewport) {
       contactPage["@type"] !== "ContactPage" ||
       contactPage.mainEntity?.telephone !== "+1-678-541-7725" ||
       contactPage.mainEntity?.email !== "offers@stonegatehb.com" ||
-      contactPage.mainEntity?.areaServed?.name !== "Georgia"
+      !contactPage.mainEntity?.areaServed?.some?.((area) => area.name === "Georgia") ||
+      !contactPage.mainEntity?.areaServed?.some?.((area) => area.name === "Metro Atlanta, Georgia")
     ) {
       record(viewport.name, "structured-data", {
         route: "/contact",
@@ -286,6 +290,74 @@ async function auditContactPage(page, viewport) {
     await page.screenshot({
       fullPage: true,
       path: `${screenshotDirectory}/contact-${viewport.name}.png`,
+    });
+  }
+}
+
+async function auditServiceAreaPage(page, viewport) {
+  const route = "/service-areas/metro-atlanta";
+  await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+  await checkPage(page, viewport.name, "service-area-page");
+  await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "service-area-page");
+
+  if ((await page.title()) !== "Metro Atlanta Home Buyers | Sell Your House As-Is") {
+    record(viewport.name, "metadata", { route, title: await page.title() });
+  }
+  const canonical = await page
+    .locator('link[rel="canonical"]')
+    .getAttribute("href", { timeout: 1_000 })
+    .catch(() => null);
+  if (canonical !== "https://www.stonegatehb.com/service-areas/metro-atlanta") {
+    record(viewport.name, "metadata", { route, canonical });
+  }
+
+  const structuredData = await page.locator('script[type="application/ld+json"]').first().textContent();
+  try {
+    const graph = JSON.parse(structuredData ?? "{}")["@graph"] ?? [];
+    const types = graph.map((item) => item["@type"]);
+    for (const expectedType of ["WebPage", "Service", "BreadcrumbList"]) {
+      if (!types.includes(expectedType)) {
+        record(viewport.name, "structured-data", {
+          route,
+          missingType: expectedType,
+          types,
+        });
+      }
+    }
+    const service = graph.find((item) => item["@type"] === "Service");
+    if (
+      service?.provider?.["@id"] !== "https://www.stonegatehb.com/#organization" ||
+      service?.areaServed?.name !== "Metro Atlanta, Georgia"
+    ) {
+      record(viewport.name, "structured-data", { route, service });
+    }
+    if (types.includes("LocalBusiness")) {
+      record(viewport.name, "structured-data", {
+        route,
+        detail: "LocalBusiness must remain absent until a qualifying address is confirmed.",
+      });
+    }
+  } catch {
+    record(viewport.name, "structured-data", "Service-area JSON-LD could not be parsed.");
+  }
+
+  for (const href of [
+    "/sell-inherited-house",
+    "/sell-house-needs-repairs",
+    "/sell-house-fast",
+    "/how-it-works",
+  ]) {
+    if (!(await page.locator(`a[href="${href}"]:visible`).first().isVisible())) {
+      record(viewport.name, "internal-link", { route, href });
+    }
+  }
+  if (!(await page.getByText("The address decides whether Stonegate can help.").isVisible())) {
+    record(viewport.name, "service-area-content", "Address-based coverage explanation is missing.");
+  }
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/service-area-${viewport.name}.png`,
     });
   }
 }
@@ -496,6 +568,7 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "measurement", "Mobile offer action metadata was not emitted.");
   }
 
+  await auditServiceAreaPage(page, viewport);
   await auditContactPage(page, viewport);
   await page.goto(`${baseUrl}/terms`, { waitUntil: "networkidle" });
   await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "terms");

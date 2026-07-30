@@ -151,7 +151,21 @@ time, an office address, or a specific county list.
 
 ## Phase PC5: Local Search Foundation
 
-Status: **Planned**
+Status: **Implemented**. Search Console, Google Business Profile, and branded production
+verification remain external acceptance steps.
+
+### Implementation Decisions
+
+- The site publishes one substantive `/service-areas/metro-atlanta` page backed by a reusable
+  service-area content model.
+- Stonegate uses Organization, WebPage, Service, and BreadcrumbList structured data. It does not
+  claim LocalBusiness markup because no staffed customer-facing business address is confirmed.
+- Metro Atlanta is described as the initial focus, while coverage is confirmed from the actual
+  property address.
+- Thin city and county variants are prohibited. A future local page must represent a genuinely
+  served market and contain distinct, useful operational information.
+- The service-area page is linked from the public header, homepage, contact page, seller-situation
+  pages, FAQ page, How It Works page, footer, and sitemap.
 
 ### Work
 
@@ -166,6 +180,8 @@ Status: **Planned**
 - Search engines can understand Stonegate's identity, service area, and public contact details.
 - Only genuinely served markets are published.
 - Structured data passes validation and matches visible page content.
+- The owner verifies the `stonegatehb.com` Search Console domain property, submits the sitemap, and
+  configures one accurate service-area Business Profile.
 
 ## Phase PC6: Trust And Proof System
 

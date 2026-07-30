@@ -101,8 +101,22 @@ is relevant and the required permission is present.
 | **Email Stonegate** | Opens the device email composer addressed to `offers@stonegatehb.com` and records the click placement | Requires a configured email application |
 | Request availability | Explains that the web form accepts property requests at any time | This is not a promise that staff answer calls 24 hours a day |
 | Initial service area | Explains the Metro Atlanta starting market and address-based coverage confirmation | Exact counties remain unpublished until owner-approved |
+| **See how Metro Atlanta coverage works** | Opens the detailed service-area guide | Available from Contact and related seller-education pages |
 | Property meetings | Explains that in-person reviews occur at the property by appointment | Stonegate does not publish an office location that has not been confirmed |
 | **Request a Property Review** | Opens the two-step cash-offer form | Always available |
+
+### Metro Atlanta Service Area
+
+| Control or section | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Breadcrumb **Home** | Returns to the public homepage | Always available |
+| Address start | Carries the entered address into the full cash-offer form | A property address is required |
+| Published phone | Calls Stonegate to ask about coverage | Requires a calling-capable device |
+| How coverage works | Explains that Metro Atlanta is an initial focus and coverage is confirmed by exact address | This is not a promise to buy every property in the region |
+| Local property review | Lists the location, market, repair, resale, title, and seller factors considered together | Informational only; it does not calculate an offer |
+| Inherited property, Major repairs, Flexible timeline | Opens the matching seller-situation guide | Always available |
+| **See the complete process** | Opens How It Works | Always available |
+| Coverage questions | Expands or collapses answers about location, visits, and offer factors | Always available |
 
 ### Home Page Address Start
 

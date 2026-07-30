@@ -8,13 +8,16 @@ import styles from "./address-offer-start.module.css";
 
 type AddressOfferStartProps = {
   compact?: boolean;
+  inputId?: string;
 };
 
-export function AddressOfferStart({ compact = false }: AddressOfferStartProps) {
+export function AddressOfferStart({ compact = false, inputId }: AddressOfferStartProps) {
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
   );
+  const addressInputId =
+    inputId ?? (compact ? "property-address-compact" : "property-address");
 
   return (
     <form
@@ -29,13 +32,11 @@ export function AddressOfferStart({ compact = false }: AddressOfferStartProps) {
         });
       }}
     >
-      <label htmlFor={compact ? "property-address-compact" : "property-address"}>
-        Property address
-      </label>
+      <label htmlFor={addressInputId}>Property address</label>
       <div className={styles.control}>
         <MapPin size={20} aria-hidden="true" />
         <input
-          id={compact ? "property-address-compact" : "property-address"}
+          id={addressInputId}
           name="address"
           autoComplete="street-address"
           placeholder="Enter the property street address"

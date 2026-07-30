@@ -23,6 +23,7 @@ const faqs = [
   { question: "Can you review inherited, tenant-occupied, or damaged property?", answer: "Yes, those are situations Stonegate can discuss. Probate or title status, tenant rights, insurance issues, and property access may affect what is possible and should be reviewed early." },
   { question: "Will Stonegate inspect the property?", answer: "Property access or verification may be needed before closing. The exact review and any related contract rights should be stated in the written purchase agreement." },
   { question: "Could the purchase contract be assigned to another investor?", answer: "Possibly. Stonegate may purchase directly or assign contractual purchase rights when the written agreement permits it. The contract controls the parties' rights, and sellers may seek independent legal advice before signing." },
+  { question: "What parts of Metro Atlanta does Stonegate serve?", answer: "Metro Atlanta is Stonegate's initial operating focus, but coverage is confirmed from the complete property address and current team capacity. Properties outside the immediate area can still be submitted for an honest coverage check." },
   { question: "How will Stonegate contact me?", answer: "We use the phone or email information you provide for the property inquiry. Text messaging is optional and requires separate consent. You can reply STOP to opt out of texts or call Stonegate for help." },
 ];
 
@@ -53,6 +54,9 @@ export default function FaqsPage() {
             </details>
           ))}
         </div>
+        <Link className={styles.contextLink} href="/service-areas/metro-atlanta">
+          Read the Metro Atlanta service-area guide <ArrowRight size={17} aria-hidden="true" />
+        </Link>
       </section>
 
       <section className={styles.finalCta}>

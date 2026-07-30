@@ -33,7 +33,8 @@ export function PublicSiteFooter() {
             <Link href="/how-it-works">How It Works</Link>
             <Link href="/#selling-situations">Selling Situations</Link>
             <Link href="/faqs">FAQs</Link>
-            <Link href="/contact">Contact &amp; Service Area</Link>
+            <Link href="/service-areas/metro-atlanta">Metro Atlanta Service Area</Link>
+            <Link href="/contact">Contact Stonegate</Link>
             <Link href="/get-a-cash-offer">Get a Cash Offer</Link>
           </nav>
           <nav aria-label="Company and legal">

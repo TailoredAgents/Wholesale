@@ -135,6 +135,61 @@ If the OS says access is being verified and API logs show
 `clerk_authorized_party_invalid`, add the exact current website origin to
 `CLERK_AUTHORIZED_PARTIES` on **oakwell-api**, save, and redeploy.
 
+## Google Search And Local Presence
+
+### Search Console
+
+Search Console shows whether Google can discover and index Stonegate's public pages. Use a domain
+property so the root domain, `www`, and any future public subdomains are covered together.
+
+1. Open Google Search Console and add the domain property `stonegatehb.com`.
+2. Copy Google's TXT verification record into the DNS provider for `stonegatehb.com`.
+3. Wait for DNS propagation, then select **Verify** in Search Console.
+4. Submit `https://www.stonegatehb.com/sitemap.xml` under **Sitemaps**.
+5. Use **URL Inspection** for:
+   - `https://www.stonegatehb.com/`
+   - `https://www.stonegatehb.com/service-areas/metro-atlanta`
+   - `https://www.stonegatehb.com/contact`
+   - `https://www.stonegatehb.com/get-a-cash-offer`
+6. Request indexing only after each URL loads on the canonical branded domain.
+7. Review indexing, performance, mobile usability, and enhancement reports monthly.
+
+Google reference:
+`https://support.google.com/webmasters/answer/9008080`
+
+### Google Business Profile
+
+Stonegate should use one accurate service-area Business Profile for its current operation.
+
+1. Use the real-world business name **Stonegate Home Buyers**.
+2. Choose the closest accurate primary category available for the actual business.
+3. Use the permanent dedicated Stonegate phone only after it is confirmed.
+4. Set the website to `https://www.stonegatehb.com`.
+5. If sellers do not visit a staffed Stonegate office during stated hours, hide the address and
+   configure the profile as a service-area business.
+6. Add only owner-approved cities, ZIP codes, or named service areas Stonegate can genuinely serve.
+7. Keep the overall area operationally realistic; do not add locations merely for ranking.
+8. Do not use a virtual office, mailbox, or unstaffed address as a storefront.
+9. Publish staffed hours only after they are confirmed.
+10. Use real Stonegate photos and request genuine reviews without incentives or fabricated text.
+
+Do not create separate profiles for Atlanta-area cities unless Stonegate later operates separate,
+permanently staffed locations that independently qualify.
+
+Google references:
+`https://support.google.com/business/answer/3038177` and
+`https://support.google.com/business/answer/9157481`
+
+### Structured Data Acceptance
+
+1. Test the homepage and Metro Atlanta page with Google's Rich Results Test.
+2. Test the JSON-LD with Schema.org Validator.
+3. Confirm the visible name, phone, email, service area, page description, and structured data all
+   agree.
+4. Keep Organization markup until a qualifying staffed address exists. Do not add a false address
+   just to qualify for LocalBusiness markup.
+5. Confirm the production sitemap contains the Metro Atlanta page and no private OS routes.
+
 ## Clerk: Employee Sign-In
 
 ### What Clerk Does
@@ -531,6 +586,8 @@ makes failures difficult to identify.
 ### Required For Initial Operations
 
 - [ ] Public website and cash-offer form work on `stonegatehb.com`.
+- [ ] Search Console domain verification and sitemap submission are complete.
+- [ ] One accurate service-area Google Business Profile is verified or in review.
 - [ ] Owner and staff can sign in with individual accounts.
 - [ ] Each role sees only the correct workspaces.
 - [ ] OpenAI Copilots and Help work in advisory mode.

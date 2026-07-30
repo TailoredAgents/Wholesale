@@ -18,6 +18,7 @@ export const directOfferDisclosure =
 export const publicNavigation = [
   { href: "/how-it-works", label: "How It Works" },
   { href: "/#selling-situations", label: "Selling Situations" },
+  { href: "/service-areas/metro-atlanta", label: "Service Area" },
   { href: "/about", label: "About" },
   { href: "/faqs", label: "FAQs" },
   { href: "/contact", label: "Contact" },

@@ -179,6 +179,38 @@ Domain acceptance:
 5. Clerk redirect URLs point back to the branded OS.
 6. Provider webhooks use the branded API URL.
 
+## Google Search And Local Presence
+
+Canonical public search values:
+
+```text
+Search Console property: stonegatehb.com
+Sitemap: https://www.stonegatehb.com/sitemap.xml
+Initial service-area page: https://www.stonegatehb.com/service-areas/metro-atlanta
+Business Profile type: service-area business unless a qualifying staffed storefront is confirmed
+```
+
+Acceptance:
+
+1. Verify the Search Console domain property using Google's DNS TXT record.
+2. Submit the canonical sitemap and inspect the homepage, service-area, contact, and offer URLs.
+3. Create or claim one Stonegate Business Profile using the real business name and permanent
+   company contact facts.
+4. Hide the business address if customers are not served at a staffed Stonegate location.
+5. Add only approved service areas Stonegate can genuinely serve; do not use a virtual office.
+6. Validate homepage Organization data and service-area WebPage, Service, and BreadcrumbList data.
+7. Do not add LocalBusiness structured data until a qualifying public address is confirmed.
+8. Do not generate repetitive city or county pages.
+
+Official references:
+
+- `https://support.google.com/webmasters/answer/9008080`
+- `https://support.google.com/business/answer/3038177`
+- `https://support.google.com/business/answer/9157481`
+- `https://developers.google.com/search/docs/appearance/structured-data/organization`
+- `https://developers.google.com/search/docs/appearance/structured-data/local-business`
+- `https://developers.google.com/search/docs/essentials/spam-policies`
+
 ## Core Runtime Variables
 
 ### Application And Data
@@ -583,6 +615,7 @@ After a production deployment:
 | Work | Owner | Trigger |
 | --- | --- | --- |
 | Resend controlled production acceptance | Stonegate owner/partner | Now |
+| Search Console and service-area Business Profile acceptance | Stonegate owner/marketing | Before local search launch |
 | Twilio A2P resubmission and approval | Stonegate owner | Provider application |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After A2P approval |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |

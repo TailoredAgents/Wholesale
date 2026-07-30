@@ -85,9 +85,14 @@ export function SellerSituationPage({ situation }: SellerSituationPageProps) {
             expected repairs, transaction risk, and resale costs. You can compare any written
             offer with an agent&apos;s opinion, an appraisal, or your own repair-and-list plan.
           </p>
-          <Link href="/how-it-works">
-            See how offers are reviewed <ArrowRight size={17} aria-hidden="true" />
-          </Link>
+          <div className={styles.tradeoffLinks}>
+            <Link href="/how-it-works">
+              See how offers are reviewed <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+            <Link href="/service-areas/metro-atlanta">
+              Confirm the initial service area <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+          </div>
         </div>
       </section>
 

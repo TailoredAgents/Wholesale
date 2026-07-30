@@ -54,7 +54,10 @@ export default function ContactPage() {
       url: siteConfig.siteUrl,
       email: siteConfig.publicEmail,
       telephone: siteConfig.phoneE164,
-      areaServed: { "@type": "State", name: "Georgia" },
+      areaServed: [
+        { "@type": "State", name: "Georgia" },
+        { "@type": "Place", name: "Metro Atlanta, Georgia" },
+      ],
       contactPoint: {
         "@type": "ContactPoint",
         contactType: "seller inquiries",
@@ -162,6 +165,9 @@ export default function ContactPage() {
             Outside the immediate area? You can still submit the property. We will tell you whether
             Stonegate can evaluate it instead of implying coverage we have not confirmed.
           </p>
+          <Link className={contentStyles.bandLink} href="/service-areas/metro-atlanta">
+            See how Metro Atlanta coverage works <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
       </section>
 

@@ -218,6 +218,7 @@ Role-specific default routes include:
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
 | `/contact` | Public phone, email, inquiry availability, service-area confirmation, and property-meeting expectations |
+| `/service-areas/metro-atlanta` | Initial market coverage, address confirmation, local review factors, seller situations, and service-area questions |
 | `/sell-house-fast` | Fast-sale situation page |
 | `/sell-house-needs-repairs` | Repair-heavy property page |
 | `/sell-inherited-house` | Inherited-property page |
@@ -240,6 +241,16 @@ Public contact facts are centralized in `apps/web/src/app/site-config.ts`. The c
 homepage structured data, footer, mobile actions, and offer confirmation use those facts. Exact
 staffed hours, county boundaries, an office address, and a numeric response-time promise are not
 published until the owner confirms them.
+
+Service-area content is centralized in `apps/web/src/app/service-areas.ts` and rendered through the
+dynamic `/service-areas/[slug]` route. The initial Metro Atlanta page is the only published local
+page. New entries require a genuinely served market and distinct useful content; the architecture
+must not be used to generate repetitive city or county pages.
+
+The homepage publishes Organization and WebSite structured data. The service-area page publishes
+WebPage, Service, and BreadcrumbList data linked to the same organization identity. LocalBusiness
+markup remains intentionally absent until Stonegate confirms a real staffed address that meets the
+provider and search-engine requirements.
 
 Submission creates or matches:
 
