@@ -554,9 +554,21 @@ export type ProspectingAttempt = {
   id: string;
   script_version_id: string;
   script_version_number: number;
+  cohort_id: string | null;
+  dialer_mode: string;
   status: string;
   outcome: string | null;
   contact_made: boolean | null;
+  answer_classification: string;
+  party_classification: string;
+  interest_classification: string;
+  follow_up_permission: string;
+  classification_source: string;
+  dial_started_at: string | null;
+  answered_at: string | null;
+  right_party_confirmed_at: string | null;
+  interest_confirmed_at: string | null;
+  measurement_metadata: Record<string, unknown>;
   qualification_answers: Record<string, string>;
   notes: string | null;
   callback_at: string | null;
@@ -601,6 +613,7 @@ export type ProspectHandoff = {
   submitted_at: string;
   reviewed_by_name: string | null;
   reviewed_at: string | null;
+  decision_code: string | null;
   review_reason: string | null;
 };
 

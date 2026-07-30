@@ -17,6 +17,23 @@ ProspectingOutcome = Literal[
     "wrong_number",
     "do_not_call",
 ]
+HandoffDecisionCode = Literal[
+    "accepted_interested",
+    "accepted_appointment_set",
+    "correction_decision_maker",
+    "correction_property_details",
+    "correction_interest_evidence",
+    "correction_follow_up_permission",
+    "correction_qualification",
+    "correction_other",
+    "rejected_not_interested",
+    "rejected_wrong_party",
+    "rejected_duplicate",
+    "rejected_already_sold",
+    "rejected_invalid_property",
+    "rejected_no_follow_up_permission",
+    "rejected_other",
+]
 
 
 class ScriptQuestion(BaseModel):
@@ -66,9 +83,21 @@ class ProspectingAttemptRead(BaseModel):
     id: UUID
     script_version_id: UUID
     script_version_number: int
+    cohort_id: UUID | None
+    dialer_mode: str
     status: str
     outcome: str | None
     contact_made: bool | None
+    answer_classification: str
+    party_classification: str
+    interest_classification: str
+    follow_up_permission: str
+    classification_source: str
+    dial_started_at: datetime | None
+    answered_at: datetime | None
+    right_party_confirmed_at: datetime | None
+    interest_confirmed_at: datetime | None
+    measurement_metadata: dict[str, Any]
     qualification_answers: dict[str, Any]
     notes: str | None
     callback_at: datetime | None
@@ -144,17 +173,27 @@ class ProspectHandoffRead(BaseModel):
     submitted_at: datetime
     reviewed_by_name: str | None
     reviewed_at: datetime | None
+    decision_code: str | None
     review_reason: str | None
 
 
 class ProspectHandoffDecision(BaseModel):
-    decision: Literal["accepted", "needs_correction"]
+    decision: Literal["accepted", "needs_correction", "rejected"]
+    reason_code: HandoffDecisionCode | None = None
     reason: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
-    def correction_requires_reason(self) -> "ProspectHandoffDecision":
-        if self.decision == "needs_correction" and not (self.reason or "").strip():
-            raise ValueError("Returning a handoff requires a clear correction reason.")
+    def decision_reason_is_coherent(self) -> "ProspectHandoffDecision":
+        if self.decision in {"needs_correction", "rejected"} and not (self.reason or "").strip():
+            raise ValueError("Returning or rejecting a handoff requires a clear reason.")
+        if self.reason_code and not self.reason_code.startswith(
+            {
+                "accepted": "accepted_",
+                "needs_correction": "correction_",
+                "rejected": "rejected_",
+            }[self.decision]
+        ):
+            raise ValueError("Handoff reason code must match the selected decision.")
         return self
 
 

@@ -197,10 +197,15 @@ def sync_case_handoff_decision(
         case.accepted_at = reviewed_at
         case.accepted_by_user_id = reviewer_user_id
         case.qualification_started_at = case.qualification_started_at or reviewed_at
-    else:
+    elif decision == "needs_correction":
         case.status = "correction_requested"
         case.accepted_at = None
         case.accepted_by_user_id = None
+    else:
+        case.status = "closed"
+        case.accepted_at = None
+        case.accepted_by_user_id = None
+        case.closed_at = reviewed_at
 
 
 def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:

@@ -671,8 +671,10 @@ appointment set, not interested, wrong number, and Do Not Contact.
 5. Submit the handoff.
 
 The system creates one CRM lead and retains the campaign, attempt, qualification, conversation,
-appointment, and attribution history. The Lead Manager can accept the handoff or return it with a
-correction reason.
+appointment, and attribution history. The Lead Manager can accept the handoff, return a fixable
+submission with a structured correction type and explanation, or terminally reject a non-lead with
+a structured rejection type and explanation. Only accepted handoffs with complete right-party,
+interest, follow-up-permission, and required-answer evidence count as accepted warm leads.
 
 ## 4. Lead Manager Qualification
 
@@ -692,6 +694,8 @@ Open **Lead Desk**. Its views are:
 4. Accept the case.
 5. If information is materially wrong, return the handoff from the prospecting review flow with a
    specific correction reason.
+6. If the person or property is not a valid warm lead, select a rejection type and record the
+   specific reason instead of returning it for more VA work.
 
 ### Complete Qualification
 

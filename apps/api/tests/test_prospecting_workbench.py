@@ -546,6 +546,77 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     } <= actions
 
 
+def test_terminal_handoff_rejection_uses_structured_reason_and_does_not_count_as_warm(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    va_headers = {"X-Dev-User-Email": VA_EMAIL}
+    va = create_user(client, owner_headers, VA_EMAIL, "VA Caller", "prospecting_caller")
+    acquisitions = create_user(
+        client,
+        owner_headers,
+        ACQUISITIONS_EMAIL,
+        "Lead Manager",
+        "acquisition_manager",
+    )
+    batch = create_prospecting_batch(client, owner_headers, va["id"])
+    create_approved_script(client, owner_headers)
+    started = client.post(
+        f"/api/v1/prospecting/entries/{batch['entries'][0]['id']}/start",
+        headers=va_headers,
+    )
+    attempt_id = started.json()["active_attempt"]["id"]
+    completed = client.post(
+        f"/api/v1/prospecting/attempts/{attempt_id}/complete",
+        headers=va_headers,
+        json={
+            "outcome": "interested",
+            "handoff_user_id": acquisitions["id"],
+            "qualification_answers": {
+                "motivation": "Considering an offer",
+                "timeline": "Within 60 days",
+                "property_condition": "Needs updates",
+                "occupancy": "Vacant",
+            },
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    handoff = client.get("/api/v1/prospecting", headers=owner_headers).json()[
+        "pending_handoffs"
+    ][0]
+    rejected = client.post(
+        f"/api/v1/prospecting/handoffs/{handoff['id']}/decision",
+        headers=owner_headers,
+        json={
+            "decision": "rejected",
+            "reason_code": "rejected_wrong_party",
+            "reason": "Caller reached a tenant who cannot authorize a sale.",
+        },
+    )
+    assert rejected.status_code == 200, rejected.text
+    assert rejected.json()["status"] == "rejected"
+    assert rejected.json()["decision_code"] == "rejected_wrong_party"
+
+    lead = db_session.get(Lead, UUID(handoff["lead_id"]))
+    lead_case = db_session.scalar(
+        select(LeadManagementCase).where(LeadManagementCase.handoff_id == UUID(handoff["id"]))
+    )
+    assert lead is not None and lead.stage_key == "disqualified"
+    assert lead_case is not None and lead_case.status == "closed"
+    quality = client.get("/api/v1/campaign-management", headers=owner_headers).json()["quality"][0]
+    assert quality["submitted_handoffs"] == 1
+    assert quality["rejected_handoffs"] == 1
+    assert quality["accepted_warm_leads"] == 0
+
+
 def test_prospecting_copilot_is_draft_only_and_call_coaching_requires_review(
     db_session: Session,
     api_db_override: None,

@@ -492,8 +492,12 @@ Prospecting views are **Work queue**, **Call quality**, **Handoff review** for m
 | Warm seller handoff | Shows source attempt and qualification answers | Manager view only |
 | Acceptance note | Optional manager context | Optional |
 | **Accept handoff** | Accepts responsibility into acquisition workflow | Requires sufficient evidence |
+| Correction type | Classifies the missing evidence for reporting and coaching | Required when returning |
 | Required correction | States exactly what the caller must fix | Required when returning |
 | **Return for correction** | Preserves the same handoff and creates correction work | Requires a correction reason |
+| Rejection type | Classifies why the submission is not a warm lead | Required for terminal rejection |
+| Rejection reason | Records specific manager evidence for the rejection | Required for terminal rejection |
+| **Reject handoff** | Closes the prospecting entry, disqualifies the generated lead, and excludes the handoff from accepted-warm-lead metrics | Manager view only |
 
 ### Call Quality
 

@@ -17,18 +17,52 @@ from app.schemas.campaign_management import (
     ProspectImportMappingRead,
     ProspectImportPreview,
     ProspectImportRequest,
+    ProspectingCohortCreate,
+    ProspectingCohortRead,
+    ProspectingWorkSessionCreate,
+    ProspectingWorkSessionRead,
 )
 from app.services.campaign_management import (
     create_calling_batch,
     create_campaign_cost,
     create_import_mapping,
     create_prospect_import,
+    create_prospecting_cohort,
+    create_prospecting_work_session,
     get_campaign_management_overview,
     validate_prospect_import,
 )
 
 router = APIRouter(prefix="/api/v1/campaign-management", tags=["campaign-management"])
 manage_campaigns_dependency = require_permission(PermissionKeys.MANAGE_ACQUISITION_OPERATIONS)
+
+
+@router.post("/cohorts", status_code=201)
+def create_workspace_prospecting_cohort(
+    payload: ProspectingCohortCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> ProspectingCohortRead:
+    try:
+        return create_prospecting_cohort(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/work-sessions", status_code=201)
+def create_workspace_prospecting_work_session(
+    payload: ProspectingWorkSessionCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> ProspectingWorkSessionRead:
+    try:
+        return create_prospecting_work_session(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 @router.get("")

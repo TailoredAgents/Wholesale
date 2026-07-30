@@ -274,6 +274,113 @@ def test_import_mapping_rejects_missing_required_contact_mapping(
     assert response.status_code == 422
 
 
+def test_prospecting_cohort_and_work_session_measurement_contract(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    va_headers = {"X-Dev-User-Email": VA_EMAIL}
+    va = create_user(client, owner_headers)
+    campaign = create_campaign(client, owner_headers)
+
+    cohort_response = client.post(
+        "/api/v1/campaign-management/cohorts",
+        headers=owner_headers,
+        json={
+            "campaign_id": campaign["id"],
+            "name": "Atlanta Absentee Power Pilot",
+            "code": "atl-absentee-power-2026-07",
+            "source_name": "PropStream",
+            "list_type": "absentee_high_equity",
+            "market_label": "Atlanta Metro",
+            "dialer_mode": "one_line_power",
+            "call_window_start_hour": 9,
+            "call_window_end_hour": 17,
+            "timezone": "America/New_York",
+            "starts_on": "2026-07-30",
+            "cohort_metadata": {
+                "county": "Fulton",
+                "minimum_equity_percent": 40,
+            },
+        },
+    )
+    assert cohort_response.status_code == 201, cohort_response.text
+    cohort = cohort_response.json()
+    assert cohort["dialer_mode"] == "one_line_power"
+    assert cohort["source_name"] == "PropStream"
+
+    session_response = client.post(
+        "/api/v1/campaign-management/work-sessions",
+        headers=owner_headers,
+        json={
+            "campaign_id": campaign["id"],
+            "cohort_id": cohort["id"],
+            "caller_user_id": va["id"],
+            "work_date": "2026-07-30",
+            "paid_minutes": 120,
+            "productive_calling_minutes": 90,
+            "hourly_rate_cents": 800,
+            "source": "manual",
+        },
+    )
+    assert session_response.status_code == 201, session_response.text
+    session = session_response.json()
+    assert session["labor_cost_cents"] == 1600
+    assert session["utilization_rate_basis_points"] == 7500
+
+    overview_response = client.get("/api/v1/campaign-management", headers=owner_headers)
+    assert overview_response.status_code == 200, overview_response.text
+    overview = overview_response.json()
+    assert overview["cohorts"][0]["id"] == cohort["id"]
+    assert overview["work_sessions"][0]["id"] == session["id"]
+    assert overview["costs"][0]["cohort_id"] == cohort["id"]
+    assert overview["quality"][0]["actual_cost_cents"] == 1600
+    assert overview["quality"][0]["accepted_warm_leads"] == 0
+    assert overview["quality"][0]["cost_per_accepted_warm_lead_cents"] is None
+
+    invalid_time = client.post(
+        "/api/v1/campaign-management/work-sessions",
+        headers=owner_headers,
+        json={
+            "campaign_id": campaign["id"],
+            "cohort_id": cohort["id"],
+            "caller_user_id": va["id"],
+            "work_date": "2026-07-30",
+            "paid_minutes": 30,
+            "productive_calling_minutes": 45,
+            "hourly_rate_cents": 800,
+        },
+    )
+    assert invalid_time.status_code == 422
+    assert (
+        client.post(
+            "/api/v1/campaign-management/cohorts",
+            headers=va_headers,
+            json={
+                "campaign_id": campaign["id"],
+                "name": "Unauthorized",
+                "code": "unauthorized-cohort",
+                "source_name": "PropStream",
+                "list_type": "test",
+                "market_label": "Atlanta",
+                "dialer_mode": "multi_line_parallel",
+                "call_window_start_hour": 9,
+                "call_window_end_hour": 17,
+                "timezone": "America/New_York",
+                "starts_on": "2026-07-30",
+            },
+        ).status_code
+        == 403
+    )
+
+
 def test_import_rejects_missing_mapped_headers(
     db_session: Session,
     api_db_override: None,

@@ -67,7 +67,7 @@ role, but each role contribution remains separately attributed.
 
 ### VA Prospecting
 
-Two initial VAs work assigned cold-outreach queues for $7 per hour. Their labor is part of the
+Two initial VAs work assigned cold-outreach queues for $8 per hour. Their labor is part of the
 acquisition and outreach cost, not the commission pool. They identify interest, record a controlled
 disposition, schedule permitted callbacks, and hand warm opportunities to the Lead Manager.
 
@@ -125,6 +125,11 @@ An interested prospect becomes a warm lead. The Lead Manager becomes owner, the 
 watcher, and the source, calls, transcript, notes, consent, property, and attribution remain on the
 same record. A response task and due time are created automatically. The VA becomes read-only after
 finalizing the handoff disposition.
+
+For measurement, a handoff counts as an accepted warm lead only after the Lead Manager accepts it
+and Stonegate has evidence of the right party, genuine interest, permission to follow up, and every
+required qualification answer. Submitted, returned, and rejected handoffs remain visible but do not
+count as accepted warm leads.
 
 ### 4. Qualification And Nurture
 
@@ -322,7 +327,8 @@ one due time, a last-contact timestamp, and a complete activity history.
 - List and campaign cost.
 - Attempts, contacts, meaningful conversations, and interested-seller rate.
 - DNC, complaint, bad-data, and duplicate rate.
-- Cost per warm lead, held appointment, contract, and funded deal.
+- Paid hours, productive calling hours, and utilization by VA and cohort.
+- Cost per Lead Manager-accepted warm lead, held appointment, contract, and funded deal.
 
 ### Lead Management
 

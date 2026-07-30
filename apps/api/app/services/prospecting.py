@@ -53,6 +53,12 @@ from app.services.acquisition_operations import (
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
 from app.services.property_validation import canonical_address_key
+from app.services.prospecting_measurement import (
+    apply_outcome_measurement,
+    default_handoff_decision_code,
+    has_accepted_warm_evidence,
+    is_accepted_warm_lead,
+)
 
 ACQUISITION_ROLE_KEYS = {
     "owner",
@@ -256,6 +262,9 @@ def start_attempt(
     script = get_active_script(db, principal.organization_id)
     if script is None:
         raise ValueError("An owner must approve a caller script before prospecting begins.")
+    batch = db.get(ProspectCallingBatch, entry.prospect_calling_batch_id)
+    if batch is None:
+        raise ValueError("The prospect calling batch is unavailable.")
     now = datetime.now(UTC)
     attempt = ProspectingAttempt(
         organization_id=principal.organization_id,
@@ -264,9 +273,21 @@ def start_attempt(
         caller_user_id=principal.user_id,
         script_version_id=script.id,
         call_record_id=None,
+        cohort_id=batch.cohort_id,
         status="in_progress",
         outcome=None,
         contact_made=None,
+        dialer_mode=batch.dialer_mode,
+        answer_classification="unknown",
+        party_classification="unknown",
+        interest_classification="not_assessed",
+        follow_up_permission="not_recorded",
+        classification_source="manual_outcome",
+        dial_started_at=now,
+        answered_at=None,
+        right_party_confirmed_at=None,
+        interest_confirmed_at=None,
+        measurement_metadata={},
         qualification_answers={},
         notes=None,
         callback_at=None,
@@ -354,6 +375,7 @@ def complete_attempt(
     attempt.required_answer_count = len(required_keys)
     attempt.answered_required_count = answered_required
     attempt.quality_score_basis_points = rate_basis_points(answered_required, len(required_keys))
+    apply_outcome_measurement(attempt, outcome=payload.outcome, completed_at=now)
     entry.attempt_count += 1
     entry.disposition = payload.outcome
     entry.last_attempt_at = now
@@ -437,9 +459,22 @@ def decide_handoff(
     if entry is None or lead is None or prospect is None:
         raise ValueError("The handoff record is incomplete.")
     now = datetime.now(UTC)
+    attempt = db.get(ProspectingAttempt, handoff.attempt_id)
+    decision_code = payload.reason_code or default_handoff_decision_code(
+        payload.decision,
+        attempt.outcome if attempt else None,
+    )
+    if payload.decision == "accepted" and (
+        attempt is None or not has_accepted_warm_evidence(attempt)
+    ):
+        raise ValueError(
+            "This handoff lacks the required right-party, interest, permission, "
+            "or qualification evidence."
+        )
     handoff.status = payload.decision
     handoff.reviewed_by_user_id = principal.user_id
     handoff.reviewed_at = now
+    handoff.decision_code = decision_code
     handoff.review_reason = clean_text(payload.reason)
     if payload.decision == "accepted":
         has_appointment = db.scalar(
@@ -453,11 +488,17 @@ def decide_handoff(
         entry.status = "completed"
         entry.completed_at = now
         prospect.status = "converted"
-    else:
+    elif payload.decision == "needs_correction":
         lead.stage_key = "qualification_in_progress"
         entry.status = "needs_correction"
         entry.completed_at = None
         prospect.status = "handoff_correction"
+    else:
+        lead.stage_key = "disqualified"
+        lead.next_follow_up_at = None
+        entry.status = "completed"
+        entry.completed_at = now
+        prospect.status = "handoff_rejected"
     sync_case_handoff_decision(
         db,
         handoff_id=handoff.id,
@@ -473,12 +514,20 @@ def decide_handoff(
         title=(
             "Warm handoff accepted"
             if payload.decision == "accepted"
-            else "Handoff needs correction"
+            else (
+                "Handoff needs correction"
+                if payload.decision == "needs_correction"
+                else "Warm handoff rejected"
+            )
         ),
         body=(
             "The acquisitions team accepted the seller handoff."
             if payload.decision == "accepted"
-            else f"Review requested: {handoff.review_reason}"
+            else (
+                f"Review requested: {handoff.review_reason}"
+                if payload.decision == "needs_correction"
+                else f"Rejected: {handoff.review_reason}"
+            )
         ),
         entity_type="prospect_handoff",
         entity_id=handoff.id,
@@ -492,10 +541,13 @@ def decide_handoff(
         entity_type="prospect_handoff",
         entity_id=handoff.id,
         previous={"status": "pending"},
-        new={"status": handoff.status, "reason": handoff.review_reason},
+        new={
+            "status": handoff.status,
+            "decision_code": handoff.decision_code,
+            "reason": handoff.review_reason,
+        },
         reason="Acquisitions reviewed the VA warm-lead handoff",
     )
-    attempt = db.get(ProspectingAttempt, handoff.attempt_id)
     if attempt is not None:
         from app.services.prospecting_copilot import ensure_call_quality_review
 
@@ -543,6 +595,7 @@ def create_warm_handoff(
         status="pending",
         submitted_at=now,
         reviewed_at=None,
+        decision_code=None,
         review_reason=None,
     )
     db.add(handoff)
@@ -900,9 +953,21 @@ def attempt_read(db: Session, attempt: ProspectingAttempt) -> ProspectingAttempt
         id=attempt.id,
         script_version_id=attempt.script_version_id,
         script_version_number=script.version_number if script else 0,
+        cohort_id=attempt.cohort_id,
+        dialer_mode=attempt.dialer_mode,
         status=attempt.status,
         outcome=attempt.outcome,
         contact_made=attempt.contact_made,
+        answer_classification=attempt.answer_classification,
+        party_classification=attempt.party_classification,
+        interest_classification=attempt.interest_classification,
+        follow_up_permission=attempt.follow_up_permission,
+        classification_source=attempt.classification_source,
+        dial_started_at=attempt.dial_started_at,
+        answered_at=attempt.answered_at,
+        right_party_confirmed_at=attempt.right_party_confirmed_at,
+        interest_confirmed_at=attempt.interest_confirmed_at,
+        measurement_metadata=attempt.measurement_metadata,
         qualification_answers=attempt.qualification_answers,
         notes=attempt.notes,
         callback_at=attempt.callback_at,
@@ -1044,6 +1109,7 @@ def handoff_read(db: Session, handoff: ProspectHandoff) -> ProspectHandoffRead:
         submitted_at=handoff.submitted_at,
         reviewed_by_name=reviewer.display_name if reviewer else None,
         reviewed_at=handoff.reviewed_at,
+        decision_code=handoff.decision_code,
         review_reason=handoff.review_reason,
     )
 
@@ -1117,7 +1183,7 @@ def build_scorecards(
         callback_count = sum(row.outcome in CALLBACK_OUTCOMES for row in rows)
         handoff_count = sum(row.id in handoff_by_attempt for row in rows)
         accepted_count = sum(
-            handoff_by_attempt[row.id].status == "accepted"
+            is_accepted_warm_lead(row, handoff_by_attempt[row.id])
             for row in rows
             if row.id in handoff_by_attempt
         )

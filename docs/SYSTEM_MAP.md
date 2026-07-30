@@ -101,7 +101,7 @@ so staff are not misled by a control that exists but lacks production credential
 
 ### 4.3 Database Evolution
 
-The database has 69 numbered Alembic migrations through `0069_in_person_esign.py`. Migrations are
+The database has 73 numbered Alembic migrations through `0073_va_dialer_metrics`. Migrations are
 run automatically when the Render API starts and manually with `npm run db:migrate` locally.
 
 Schema changes must be additive or explicitly migrated. Production data must never depend on
@@ -116,7 +116,8 @@ FastAPI routers are grouped by business capability:
 - `dashboard`: role-aware summary and Executive Copilot
 - `operations`: users, teams, markets, territories, campaigns, calling lists, saved views,
   notifications, duplicates, and follow-up plans
-- `campaign-management`: list imports, mappings, campaign costs, and calling batches
+- `campaign-management`: list imports, mappings, cohorts, work sessions, campaign costs, and
+  calling batches
 - `prospecting`: VA workbench, scripts, attempts, handoffs, coaching, and quality review
 - `lead-manager`: warm-lead acceptance, qualification, and Lead Manager Copilot
 - `leads`: CRM records, appointments, tasks, communications, underwriting, offers, and archival
@@ -363,6 +364,9 @@ The OS uses five stable navigation groups.
 
 - CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
   performance.
+- Prospecting cohorts preserve source, list type, market, script, date range, call window, and
+  one-line or multi-line dialer mode.
+- Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 
 **Prospecting (`/os/prospecting`)**
@@ -370,6 +374,9 @@ The OS uses five stable navigation groups.
 - VA Caller workbench for assigned records.
 - Shows approved script, one prospect at a time, attempt disposition, callback, qualification,
   handoff, and Prospecting Copilot guidance.
+- Current prospect calls open through the device `tel:` handler and the VA records the result in
+  Stonegate. Multi-line provider synchronization and prospect-linked recordings are planned in
+  `VA_DIALER_ROADMAP.md`.
 
 **Lead Desk (`/os/lead-manager`)**
 
@@ -468,28 +475,35 @@ The OS uses five stable navigation groups.
 1. An owner or manager defines a market and territory.
 2. A campaign records channel, source, dates, budget, and ownership.
 3. Campaign expenses record lists, enrichment, software, ads, mail, and VA labor.
-4. A CSV is validated with a saved mapping before import.
-5. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
+4. A comparison cohort records source, list type, market, script, calling window, date range, and
+   dialer mode.
+5. A CSV is validated with a saved mapping before import.
+6. Exact file replay, invalid rows, duplicate prospects, and imported suppression flags are
    retained as explicit outcomes.
-6. Valid prospects enter a calling batch and are assigned to VAs.
+7. Valid prospects enter a cohort-linked calling batch and are assigned to VAs.
 
 ### 8.2 Prospecting
 
 1. A VA sees only assigned callable prospect records.
 2. The approved script and qualification fields guide the call.
-3. Every attempt records outcome, notes, callback, and script evidence.
+3. Every attempt records outcome, notes, callback, script evidence, cohort, dialer mode, answer
+   class, right-party evidence, interest, permission, and governing timestamps.
 4. Wrong numbers and explicit opt-outs stop inappropriate follow-up.
 5. An interested seller creates a structured handoff.
 6. The Prospecting Copilot can prepare a brief and coaching; it does not place autonomous calls.
 
 ### 8.3 Warm Handoff And Lead Creation
 
-1. A qualified handoff converts the prospect into a CRM lead without losing campaign attribution.
+1. A submitted handoff converts the prospect into a CRM lead without losing campaign attribution.
 2. Contact, property, conversation, qualification answers, attempts, and appointment context are
    preserved.
 3. The lead is assigned to acquisitions; owners can become watchers.
 4. The VA loses broad edit access after handoff but the original activity remains attributable.
 5. Website inquiries enter the same Lead Manager queue through a separate consented intake path.
+6. The Lead Manager accepts, returns for correction, or terminally rejects the handoff with a
+   structured decision code.
+7. A handoff counts as an accepted warm lead only after accepted status, right-party contact,
+   interest, follow-up permission, and every required qualification answer are all recorded.
 
 ### 8.4 Lead Management
 
@@ -1068,7 +1082,7 @@ telemarketing, recording, or real-estate advice.
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 184 operational model classes. They group into:
+The primary SQLAlchemy model file contains 189 operational model classes. They group into:
 
 ### Identity And Organization
 
@@ -1078,7 +1092,8 @@ The primary SQLAlchemy model file contains 184 operational model classes. They g
 ### Markets, Campaigns, And Prospecting
 
 `Market`, `Territory`, `Campaign`, `Prospect`, import mapping/batch/row records, suppression checks,
-campaign costs, calling batches and entries, script versions, attempts, handoffs, Copilot
+prospecting cohorts, paid/productive work sessions, cohort-attributed campaign costs, calling
+batches and entries, script versions, evidence-classified attempts, structured handoffs, Copilot
 recommendations, reviews, and call quality.
 
 ### CRM And Seller Evidence
@@ -1181,6 +1196,10 @@ acceptance and evidence:
 - ad-provider credential setup and offline conversion acceptance
 - role acceptance with actual staff accounts
 - supervised Copilot pilots using redacted Stonegate cases
+- PropStream production export mapping, source memberships, ranked contact methods, and refresh
+  acceptance before provider-connected dialing
+- BatchDialer provider adapter, pre-lead call records, hybrid routing, and controlled comparison
+  pilot
 - real backup restoration and optional monitoring-provider configuration
 
 These are tracked in `FINISHING_ROADMAP.md`.

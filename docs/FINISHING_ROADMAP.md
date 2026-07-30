@@ -54,6 +54,17 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
+## Active Sub-Roadmaps
+
+- `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
+- `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
+- `VA_DIALER_ROADMAP.md` owns the hybrid PropStream, multi-line cold-calling, one-line warm
+  follow-up, provider integration, accepted-lead economics, and controlled pilot program. VD1 and
+  VD2 were implemented on July 30, 2026; VD3 is next.
+
+These sub-roadmaps extend the product boundaries above. They do not authorize a parallel CRM,
+communications history, or AI system.
+
 ## Recommended Order
 
 The practical order from the current state is:

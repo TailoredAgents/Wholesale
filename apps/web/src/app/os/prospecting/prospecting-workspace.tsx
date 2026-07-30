@@ -199,7 +199,7 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
   async function reviewHandoff(
     event: FormEvent<HTMLFormElement>,
     handoff: ProspectHandoff,
-    decision: "accepted" | "needs_correction",
+    decision: "accepted" | "needs_correction" | "rejected",
   ) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -207,7 +207,11 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
     const result = await request(
       `/api/v1/prospecting/handoffs/${handoff.id}/decision`,
       "POST",
-      { decision, reason: value(formData, "reason") || null },
+      {
+        decision,
+        reason_code: value(formData, "reason_code") || null,
+        reason: value(formData, "reason") || null,
+      },
     );
     if (result) router.refresh();
   }
@@ -436,8 +440,38 @@ export function ProspectingWorkspace({ data }: { data: ProspectingWorkbenchOverv
                     className={styles.reviewForm}
                     onSubmit={(event) => reviewHandoff(event, handoff, "needs_correction")}
                   >
+                    <label>
+                      <span>Correction type</span>
+                      <select name="reason_code" defaultValue="correction_qualification" required>
+                        <option value="correction_decision_maker">Decision maker</option>
+                        <option value="correction_property_details">Property details</option>
+                        <option value="correction_interest_evidence">Interest evidence</option>
+                        <option value="correction_follow_up_permission">Follow-up permission</option>
+                        <option value="correction_qualification">Qualification answers</option>
+                        <option value="correction_other">Other correction</option>
+                      </select>
+                    </label>
                     <label><span>Required correction</span><input name="reason" placeholder="Tell the caller exactly what is missing" required /></label>
                     <button className={styles.secondaryButton} type="submit">Return for correction</button>
+                  </form>
+                  <form
+                    className={styles.reviewForm}
+                    onSubmit={(event) => reviewHandoff(event, handoff, "rejected")}
+                  >
+                    <label>
+                      <span>Rejection type</span>
+                      <select name="reason_code" defaultValue="rejected_not_interested" required>
+                        <option value="rejected_not_interested">Not interested</option>
+                        <option value="rejected_wrong_party">Wrong party</option>
+                        <option value="rejected_duplicate">Duplicate</option>
+                        <option value="rejected_already_sold">Already sold</option>
+                        <option value="rejected_invalid_property">Invalid property</option>
+                        <option value="rejected_no_follow_up_permission">No follow-up permission</option>
+                        <option value="rejected_other">Other rejection</option>
+                      </select>
+                    </label>
+                    <label><span>Rejection reason</span><input name="reason" placeholder="Explain why this is not a warm lead" required /></label>
+                    <button className={styles.dangerButton} type="submit">Reject handoff</button>
                   </form>
                 </div>
               </article>

@@ -318,6 +318,41 @@ class ProspectSuppressionCheck(UuidPrimaryKeyMixin, TimestampMixin, Base):
     checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class ProspectingCohort(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_cohorts"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "code",
+            name="uq_prospecting_cohorts_org_code",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    script_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_script_versions.id"), nullable=True, index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    code: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="active", server_default="active", index=True
+    )
+    source_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    list_type: Mapped[str] = mapped_column(String(160), nullable=False)
+    market_label: Mapped[str] = mapped_column(String(160), nullable=False)
+    dialer_mode: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    call_window_start_hour: Mapped[int] = mapped_column(Integer, nullable=False)
+    call_window_end_hour: Mapped[int] = mapped_column(Integer, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(80), nullable=False)
+    starts_on: Mapped[date] = mapped_column(nullable=False, index=True)
+    ends_on: Mapped[date | None] = mapped_column(nullable=True)
+    cohort_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+
+
 class CampaignCost(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "campaign_costs"
 
@@ -325,6 +360,9 @@ class CampaignCost(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("organizations.id"), index=True
     )
     campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    cohort_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), nullable=True, index=True
+    )
     import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("prospect_import_batches.id"), index=True
     )
@@ -341,6 +379,31 @@ class CampaignCost(UuidPrimaryKeyMixin, TimestampMixin, Base):
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
 
 
+class ProspectingWorkSession(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "prospecting_work_sessions"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    cohort_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), index=True
+    )
+    caller_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
+    campaign_cost_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("campaign_costs.id"), unique=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    work_date: Mapped[date] = mapped_column(nullable=False, index=True)
+    paid_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    productive_calling_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
+    hourly_rate_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    labor_cost_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source: Mapped[str] = mapped_column(String(40), nullable=False)
+    provider_session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
 class ProspectCallingBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prospect_calling_batches"
     __table_args__ = (
@@ -354,10 +417,20 @@ class ProspectCallingBatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("prospect_import_batches.id"), index=True
     )
+    cohort_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), nullable=True, index=True
+    )
     assigned_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    dialer_mode: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="one_line_power",
+        server_default="one_line_power",
+        index=True,
+    )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
@@ -451,9 +524,64 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
     call_record_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("call_records.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    cohort_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("prospecting_cohorts.id"), nullable=True, index=True
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     outcome: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     contact_made: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    dialer_mode: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="one_line_power",
+        server_default="one_line_power",
+        index=True,
+    )
+    answer_classification: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+        index=True,
+    )
+    party_classification: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="unknown",
+        server_default="unknown",
+        index=True,
+    )
+    interest_classification: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="not_assessed",
+        server_default="not_assessed",
+        index=True,
+    )
+    follow_up_permission: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="not_recorded",
+        server_default="not_recorded",
+        index=True,
+    )
+    classification_source: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="manual_outcome",
+        server_default="manual_outcome",
+    )
+    dial_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    right_party_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    interest_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    measurement_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     qualification_answers: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     callback_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -600,6 +728,7 @@ class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decision_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     review_reason: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 

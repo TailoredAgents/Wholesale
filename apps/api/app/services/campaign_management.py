@@ -18,10 +18,15 @@ from app.models.foundation import (
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
+    ProspectHandoff,
     ProspectImportBatch,
     ProspectImportMapping,
     ProspectImportRow,
     ProspectSuppressionCheck,
+    ProspectingAttempt,
+    ProspectingCohort,
+    ProspectingScriptVersion,
+    ProspectingWorkSession,
     SuppressionRecord,
     User,
 )
@@ -40,6 +45,10 @@ from app.schemas.campaign_management import (
     ProspectImportPreviewRow,
     ProspectImportRequest,
     ProspectImportRowRead,
+    ProspectingCohortCreate,
+    ProspectingCohortRead,
+    ProspectingWorkSessionCreate,
+    ProspectingWorkSessionRead,
 )
 from app.services.acquisition_operations import (
     list_campaigns,
@@ -47,6 +56,12 @@ from app.services.acquisition_operations import (
     normalize_prospect_phone,
 )
 from app.services.property_validation import canonical_address_key
+from app.services.prospecting_measurement import (
+    ProspectingCostBreakdown,
+    cost_per_accepted_warm_lead_cents,
+    is_accepted_warm_lead,
+    labor_cost_cents,
+)
 
 MAX_IMPORT_ROWS = 10_000
 DNC_BLOCKED_VALUES = {
@@ -84,6 +99,8 @@ def get_campaign_management_overview(
         campaigns=campaigns,
         mappings=list_import_mappings(db, principal),
         import_batches=list_import_batches(db, principal),
+        cohorts=list_prospecting_cohorts(db, principal),
+        work_sessions=list_prospecting_work_sessions(db, principal),
         costs=list_campaign_costs(db, principal),
         calling_batches=list_calling_batches(db, principal),
         quality=[campaign_quality_read(db, campaign.id) for campaign in campaigns],
@@ -735,6 +752,234 @@ def import_row_read(row: ProspectImportRow) -> ProspectImportRowRead:
     )
 
 
+def create_prospecting_cohort(
+    db: Session,
+    principal: Principal,
+    payload: ProspectingCohortCreate,
+) -> ProspectingCohortRead:
+    campaign = scoped_campaign(db, principal.organization_id, payload.campaign_id)
+    if campaign is None:
+        raise ValueError("Select a Stonegate campaign.")
+    script = None
+    if payload.script_version_id:
+        script = db.scalar(
+            select(ProspectingScriptVersion).where(
+                ProspectingScriptVersion.organization_id == principal.organization_id,
+                ProspectingScriptVersion.id == payload.script_version_id,
+            )
+        )
+        if script is None:
+            raise ValueError("Selected caller script does not belong to this workspace.")
+    cohort = ProspectingCohort(
+        organization_id=principal.organization_id,
+        campaign_id=campaign.id,
+        script_version_id=script.id if script else None,
+        created_by_user_id=principal.user_id,
+        name=payload.name.strip(),
+        code=payload.code.strip().lower(),
+        status="active",
+        source_name=payload.source_name.strip(),
+        list_type=payload.list_type.strip(),
+        market_label=payload.market_label.strip(),
+        dialer_mode=payload.dialer_mode,
+        call_window_start_hour=payload.call_window_start_hour,
+        call_window_end_hour=payload.call_window_end_hour,
+        timezone=payload.timezone.strip(),
+        starts_on=payload.starts_on,
+        ends_on=payload.ends_on,
+        cohort_metadata=payload.cohort_metadata,
+    )
+    db.add(cohort)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("A prospecting cohort with this code already exists.") from exc
+    add_audit(
+        db,
+        principal,
+        action="campaign_management.prospecting_cohort_create",
+        entity_type="prospecting_cohort",
+        entity_id=cohort.id,
+        new={
+            "campaign_id": str(campaign.id),
+            "code": cohort.code,
+            "dialer_mode": cohort.dialer_mode,
+            "source_name": cohort.source_name,
+            "list_type": cohort.list_type,
+        },
+        reason="Comparable prospecting cohort defined",
+    )
+    db.commit()
+    return prospecting_cohort_read(db, cohort)
+
+
+def list_prospecting_cohorts(
+    db: Session,
+    principal: Principal,
+) -> list[ProspectingCohortRead]:
+    cohorts = db.scalars(
+        select(ProspectingCohort)
+        .where(ProspectingCohort.organization_id == principal.organization_id)
+        .order_by(ProspectingCohort.starts_on.desc(), ProspectingCohort.created_at.desc())
+    ).all()
+    return [prospecting_cohort_read(db, cohort) for cohort in cohorts]
+
+
+def prospecting_cohort_read(
+    db: Session,
+    cohort: ProspectingCohort,
+) -> ProspectingCohortRead:
+    campaign = db.get(Campaign, cohort.campaign_id)
+    creator = db.get(User, cohort.created_by_user_id)
+    return ProspectingCohortRead(
+        id=cohort.id,
+        campaign_id=cohort.campaign_id,
+        campaign_name=campaign.name if campaign else "Unknown campaign",
+        script_version_id=cohort.script_version_id,
+        created_by_user_id=cohort.created_by_user_id,
+        created_by_name=creator.display_name if creator else "Unknown user",
+        name=cohort.name,
+        code=cohort.code,
+        status=cohort.status,
+        source_name=cohort.source_name,
+        list_type=cohort.list_type,
+        market_label=cohort.market_label,
+        dialer_mode=cohort.dialer_mode,
+        call_window_start_hour=cohort.call_window_start_hour,
+        call_window_end_hour=cohort.call_window_end_hour,
+        timezone=cohort.timezone,
+        starts_on=cohort.starts_on,
+        ends_on=cohort.ends_on,
+        cohort_metadata=cohort.cohort_metadata,
+        created_at=cohort.created_at,
+    )
+
+
+def create_prospecting_work_session(
+    db: Session,
+    principal: Principal,
+    payload: ProspectingWorkSessionCreate,
+) -> ProspectingWorkSessionRead:
+    campaign = scoped_campaign(db, principal.organization_id, payload.campaign_id)
+    if campaign is None:
+        raise ValueError("Select a Stonegate campaign.")
+    cohort = db.scalar(
+        select(ProspectingCohort).where(
+            ProspectingCohort.organization_id == principal.organization_id,
+            ProspectingCohort.id == payload.cohort_id,
+            ProspectingCohort.campaign_id == campaign.id,
+        )
+    )
+    if cohort is None:
+        raise ValueError("Work session cohort must belong to the selected campaign.")
+    caller = active_user(db, principal.organization_id, payload.caller_user_id)
+    if caller is None:
+        raise ValueError("Work session requires an active workspace user.")
+    labor_cost = labor_cost_cents(payload.paid_minutes, payload.hourly_rate_cents)
+    cost = CampaignCost(
+        organization_id=principal.organization_id,
+        campaign_id=campaign.id,
+        cohort_id=cohort.id,
+        import_batch_id=None,
+        worker_user_id=caller.id,
+        category="va_labor",
+        vendor_name=None,
+        amount_cents=labor_cost,
+        labor_minutes=payload.paid_minutes,
+        hourly_rate_cents=payload.hourly_rate_cents,
+        incurred_on=payload.work_date,
+        notes=clean_text(payload.notes),
+        created_by_user_id=principal.user_id,
+    )
+    db.add(cost)
+    db.flush()
+    work_session = ProspectingWorkSession(
+        organization_id=principal.organization_id,
+        campaign_id=campaign.id,
+        cohort_id=cohort.id,
+        caller_user_id=caller.id,
+        campaign_cost_id=cost.id,
+        created_by_user_id=principal.user_id,
+        work_date=payload.work_date,
+        paid_minutes=payload.paid_minutes,
+        productive_calling_minutes=payload.productive_calling_minutes,
+        hourly_rate_cents=payload.hourly_rate_cents,
+        labor_cost_cents=labor_cost,
+        source=payload.source,
+        provider_session_id=clean_text(payload.provider_session_id),
+        notes=clean_text(payload.notes),
+    )
+    db.add(work_session)
+    db.flush()
+    add_audit(
+        db,
+        principal,
+        action="campaign_management.prospecting_work_session_create",
+        entity_type="prospecting_work_session",
+        entity_id=work_session.id,
+        new={
+            "campaign_id": str(campaign.id),
+            "cohort_id": str(cohort.id),
+            "caller_user_id": str(caller.id),
+            "paid_minutes": work_session.paid_minutes,
+            "productive_calling_minutes": work_session.productive_calling_minutes,
+            "labor_cost_cents": labor_cost,
+        },
+        reason="Prospecting paid time and productive time recorded",
+    )
+    db.commit()
+    return prospecting_work_session_read(db, work_session)
+
+
+def list_prospecting_work_sessions(
+    db: Session,
+    principal: Principal,
+) -> list[ProspectingWorkSessionRead]:
+    sessions = db.scalars(
+        select(ProspectingWorkSession)
+        .where(ProspectingWorkSession.organization_id == principal.organization_id)
+        .order_by(
+            ProspectingWorkSession.work_date.desc(),
+            ProspectingWorkSession.created_at.desc(),
+        )
+        .limit(500)
+    ).all()
+    return [prospecting_work_session_read(db, session) for session in sessions]
+
+
+def prospecting_work_session_read(
+    db: Session,
+    session: ProspectingWorkSession,
+) -> ProspectingWorkSessionRead:
+    campaign = db.get(Campaign, session.campaign_id)
+    cohort = db.get(ProspectingCohort, session.cohort_id)
+    caller = db.get(User, session.caller_user_id)
+    return ProspectingWorkSessionRead(
+        id=session.id,
+        campaign_id=session.campaign_id,
+        campaign_name=campaign.name if campaign else "Unknown campaign",
+        cohort_id=session.cohort_id,
+        cohort_name=cohort.name if cohort else "Unknown cohort",
+        caller_user_id=session.caller_user_id,
+        caller_name=caller.display_name if caller else "Unknown user",
+        campaign_cost_id=session.campaign_cost_id,
+        work_date=session.work_date,
+        paid_minutes=session.paid_minutes,
+        productive_calling_minutes=session.productive_calling_minutes,
+        utilization_rate_basis_points=rate_basis_points(
+            session.productive_calling_minutes,
+            session.paid_minutes,
+        ),
+        hourly_rate_cents=session.hourly_rate_cents,
+        labor_cost_cents=session.labor_cost_cents,
+        source=session.source,
+        provider_session_id=session.provider_session_id,
+        notes=session.notes,
+        created_at=session.created_at,
+    )
+
+
 def create_campaign_cost(
     db: Session,
     principal: Principal,
@@ -743,6 +988,17 @@ def create_campaign_cost(
     campaign = scoped_campaign(db, principal.organization_id, payload.campaign_id)
     if campaign is None:
         raise ValueError("Select a Stonegate campaign.")
+    cohort = None
+    if payload.cohort_id:
+        cohort = db.scalar(
+            select(ProspectingCohort).where(
+                ProspectingCohort.organization_id == principal.organization_id,
+                ProspectingCohort.id == payload.cohort_id,
+                ProspectingCohort.campaign_id == campaign.id,
+            )
+        )
+        if cohort is None:
+            raise ValueError("Cost cohort must belong to the selected campaign.")
     import_batch = None
     if payload.import_batch_id:
         import_batch = db.scalar(
@@ -762,6 +1018,7 @@ def create_campaign_cost(
     cost = CampaignCost(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
+        cohort_id=cohort.id if cohort else None,
         import_batch_id=import_batch.id if import_batch else None,
         worker_user_id=worker.id if worker else None,
         category=payload.category,
@@ -783,6 +1040,7 @@ def create_campaign_cost(
         entity_id=cost.id,
         new={
             "campaign_id": str(campaign.id),
+            "cohort_id": str(cohort.id) if cohort else None,
             "category": cost.category,
             "amount_cents": cost.amount_cents,
             "worker_user_id": str(worker.id) if worker else None,
@@ -805,11 +1063,14 @@ def list_campaign_costs(db: Session, principal: Principal) -> list[CampaignCostR
 
 def campaign_cost_read(db: Session, cost: CampaignCost) -> CampaignCostRead:
     campaign = db.get(Campaign, cost.campaign_id)
+    cohort = db.get(ProspectingCohort, cost.cohort_id) if cost.cohort_id else None
     worker = db.get(User, cost.worker_user_id) if cost.worker_user_id else None
     return CampaignCostRead(
         id=cost.id,
         campaign_id=cost.campaign_id,
         campaign_name=campaign.name if campaign else "Unknown campaign",
+        cohort_id=cost.cohort_id,
+        cohort_name=cohort.name if cohort else None,
         import_batch_id=cost.import_batch_id,
         worker_user_id=cost.worker_user_id,
         worker_name=worker.display_name if worker else None,
@@ -832,6 +1093,19 @@ def create_calling_batch(
     campaign = scoped_campaign(db, principal.organization_id, payload.campaign_id)
     if campaign is None:
         raise ValueError("Select a Stonegate campaign.")
+    cohort = None
+    if payload.cohort_id:
+        cohort = db.scalar(
+            select(ProspectingCohort).where(
+                ProspectingCohort.organization_id == principal.organization_id,
+                ProspectingCohort.id == payload.cohort_id,
+                ProspectingCohort.campaign_id == campaign.id,
+            )
+        )
+        if cohort is None:
+            raise ValueError("Calling-batch cohort must belong to the selected campaign.")
+        if cohort.dialer_mode != payload.dialer_mode:
+            raise ValueError("Calling-batch dialer mode must match its cohort.")
     assignee = active_user(db, principal.organization_id, payload.assigned_user_id)
     if assignee is None:
         raise ValueError("Calling batch requires an active workspace user.")
@@ -870,10 +1144,12 @@ def create_calling_batch(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
         import_batch_id=import_batch.id if import_batch else None,
+        cohort_id=cohort.id if cohort else None,
         assigned_user_id=assignee.id,
         created_by_user_id=principal.user_id,
         name=payload.name.strip(),
         status="ready",
+        dialer_mode=payload.dialer_mode,
         due_at=payload.due_at,
         notes=clean_text(payload.notes),
     )
@@ -907,6 +1183,8 @@ def create_calling_batch(
         new={
             "campaign_id": str(campaign.id),
             "assigned_user_id": str(assignee.id),
+            "cohort_id": str(cohort.id) if cohort else None,
+            "dialer_mode": batch.dialer_mode,
             "record_count": len(prospects),
         },
         reason="Callable prospects assigned as a controlled batch",
@@ -930,6 +1208,7 @@ def list_calling_batches(
 
 def calling_batch_read(db: Session, batch: ProspectCallingBatch) -> ProspectCallingBatchRead:
     campaign = db.get(Campaign, batch.campaign_id)
+    cohort = db.get(ProspectingCohort, batch.cohort_id) if batch.cohort_id else None
     assignee = db.get(User, batch.assigned_user_id)
     entries = db.scalars(
         select(ProspectCallingBatchEntry)
@@ -941,6 +1220,9 @@ def calling_batch_read(db: Session, batch: ProspectCallingBatch) -> ProspectCall
         campaign_id=batch.campaign_id,
         campaign_name=campaign.name if campaign else "Unknown campaign",
         import_batch_id=batch.import_batch_id,
+        cohort_id=batch.cohort_id,
+        cohort_name=cohort.name if cohort else None,
+        dialer_mode=batch.dialer_mode,
         assigned_user_id=batch.assigned_user_id,
         assigned_user_name=assignee.display_name if assignee else "Unknown user",
         name=batch.name,
@@ -1009,14 +1291,46 @@ def campaign_quality_read(db: Session, campaign_id: UUID) -> CampaignQualityRead
         )
         or 0
     )
-    actual_cost = int(
-        db.scalar(
-            select(func.coalesce(func.sum(CampaignCost.amount_cents), 0)).where(
-                CampaignCost.campaign_id == campaign.id
-            )
-        )
-        or 0
+    cost_rows = list(
+        db.scalars(select(CampaignCost).where(CampaignCost.campaign_id == campaign.id)).all()
     )
+    actual_cost = sum(cost.amount_cents for cost in cost_rows)
+    categorized_costs = {
+        category: sum(cost.amount_cents for cost in cost_rows if cost.category == category)
+        for category in {
+            "va_labor",
+            "list_purchase",
+            "dialer_license",
+            "phone_number",
+            "voice_usage",
+        }
+    }
+    known_cost = sum(categorized_costs.values())
+    cost_breakdown = ProspectingCostBreakdown(
+        labor_cents=categorized_costs["va_labor"],
+        list_cents=categorized_costs["list_purchase"],
+        dialer_license_cents=categorized_costs["dialer_license"],
+        phone_number_cents=categorized_costs["phone_number"],
+        voice_usage_cents=categorized_costs["voice_usage"],
+        other_attributable_cents=actual_cost - known_cost,
+    )
+    handoff_rows = db.execute(
+        select(ProspectHandoff, ProspectingAttempt)
+        .join(ProspectingAttempt, ProspectingAttempt.id == ProspectHandoff.attempt_id)
+        .join(
+            ProspectCallingBatchEntry,
+            ProspectCallingBatchEntry.id == ProspectingAttempt.batch_entry_id,
+        )
+        .join(
+            ProspectCallingBatch,
+            ProspectCallingBatch.id == ProspectCallingBatchEntry.prospect_calling_batch_id,
+        )
+        .where(ProspectCallingBatch.campaign_id == campaign.id)
+    ).all()
+    accepted_warm_leads = sum(
+        is_accepted_warm_lead(attempt, handoff) for handoff, attempt in handoff_rows
+    )
+    rejected_handoffs = sum(handoff.status == "rejected" for handoff, _ in handoff_rows)
     calling_total = int(
         db.scalar(
             select(func.count())
@@ -1058,6 +1372,9 @@ def campaign_quality_read(db: Session, campaign_id: UUID) -> CampaignQualityRead
         review_required_prospects=review_count,
         blocked_prospects=blocked_count,
         converted_prospects=converted,
+        submitted_handoffs=len(handoff_rows),
+        accepted_warm_leads=accepted_warm_leads,
+        rejected_handoffs=rejected_handoffs,
         invalid_rows=invalid_rows,
         duplicate_rows=duplicate_rows,
         suppressed_rows=suppressed_rows,
@@ -1067,6 +1384,10 @@ def campaign_quality_read(db: Session, campaign_id: UUID) -> CampaignQualityRead
         cost_per_imported_prospect_cents=(round(actual_cost / imported) if imported else None),
         cost_per_callable_prospect_cents=(
             round(actual_cost / callable_count) if callable_count else None
+        ),
+        cost_per_accepted_warm_lead_cents=cost_per_accepted_warm_lead_cents(
+            cost_breakdown,
+            accepted_warm_leads,
         ),
         calling_batch_entries=calling_total,
         calling_batch_completed=calling_completed,
