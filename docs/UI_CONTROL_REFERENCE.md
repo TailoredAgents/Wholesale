@@ -427,9 +427,11 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | --- | --- | --- |
 | Mapping name | Names a reusable vendor-column mapping | Required |
 | Source or vendor | Identifies the file source | Required |
-| **Add PropStream preset** | Adds or reuses Stonegate's standard PropStream export mapping | Use once before the first standard PropStream import |
-| Owner, Phone 1-3, Email 1-3, Source ID, Street, City, State, ZIP columns | Maps vendor headings to Stonegate fields and preserves ranked contact methods | Enter the headings exactly as they appear in the CSV |
-| Do-not-call flag column | Maps an explicit source flag when present | Optional; blank source data is not treated as an opt-out |
+| **Add contact export preset** | Adds or reuses the PropStream layout with First/Last/Company Name, Phone 1-5, and Email 1-4 | Use for Stonegate's current downloaded contact export |
+| **Add standard preset** | Adds or reuses the alternate PropStream layout with Property ID and Owner 1 fields | Use only when those exact headings exist |
+| Owner/company, first/last name, Phone 1-5 with type, Email 1-4, Source ID, Street, City, State, ZIP columns | Maps vendor headings and preserves ranked contact methods plus Cell/Landline evidence | Enter headings exactly as they appear in the CSV |
+| Phone-specific DNC columns | Retains each source-marked number but excludes only that number from calling | A clear alternate number remains callable |
+| Record-wide do-not-call column | Maps a single explicit source flag when the vendor provides one | Optional; do not use it for phone-specific flags |
 | **Save mapping** | Saves the reusable column mapping | Required headings must be valid |
 | Campaign | Selects the campaign receiving imported records | Required |
 | Saved mapping | Selects the vendor mapping | Required |
@@ -439,6 +441,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Export ID / Saved list ID / Saved list name / Exported at | Preserves exact vendor lineage | At least one identity is required for PropStream |
 | Market / County / Distress / Equity / Ownership / Occupancy / Property type | Preserves the filters used to produce the list | Enter the actual export criteria |
 | CSV file | Uploads the prospect file for validation | CSV required |
+| Property states and campaign-state warning | Shows state totals and identifies rows outside the selected campaign market | Warning only; does not block import |
 | **Validate file** | Previews valid, invalid, duplicate, suppressed, review, eligible, prior-contact, callback, active-conversation, and existing-lead states | Does not commit records |
 | **Import reviewed file** | Commits new records and attaches refreshed source/contact evidence to existing matches | Disabled when no row can be imported or matched |
 

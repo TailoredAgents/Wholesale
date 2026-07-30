@@ -16,9 +16,22 @@ SUPPORTED_IMPORT_FIELDS = {
     "phone",
     "phone_2",
     "phone_3",
+    "phone_4",
+    "phone_5",
+    "phone_type",
+    "phone_2_type",
+    "phone_3_type",
+    "phone_4_type",
+    "phone_5_type",
+    "phone_dnc",
+    "phone_2_dnc",
+    "phone_3_dnc",
+    "phone_4_dnc",
+    "phone_5_dnc",
     "email",
     "email_2",
     "email_3",
+    "email_4",
     "street_address",
     "city",
     "state_code",
@@ -42,8 +55,8 @@ class ProspectImportMappingRead(BaseModel):
 class ProspectImportMappingCreate(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     source_name: str | None = Field(default=None, max_length=160)
-    field_mapping: dict[str, str] = Field(min_length=2, max_length=20)
-    default_values: dict[str, str] = Field(default_factory=dict, max_length=20)
+    field_mapping: dict[str, str] = Field(min_length=2, max_length=32)
+    default_values: dict[str, str] = Field(default_factory=dict, max_length=32)
 
     @model_validator(mode="after")
     def mapping_is_supported(self) -> "ProspectImportMappingCreate":
@@ -61,9 +74,12 @@ class ProspectImportMappingCreate(BaseModel):
             "phone",
             "phone_2",
             "phone_3",
+            "phone_4",
+            "phone_5",
             "email",
             "email_2",
             "email_3",
+            "email_4",
         }.intersection(self.field_mapping):
             raise ValueError("Map a phone or email column.")
         if len(set(self.field_mapping.values())) != len(self.field_mapping):
@@ -114,6 +130,9 @@ class ProspectImportPreviewRow(BaseModel):
 
 class ProspectImportPreview(BaseModel):
     headers: list[str]
+    state_counts: dict[str, int]
+    campaign_state_code: str | None
+    outside_campaign_state_rows: int
     total_rows: int
     valid_rows: int
     invalid_rows: int
@@ -209,6 +228,7 @@ class ProspectContactPointRead(BaseModel):
     rank: int
     is_primary: bool
     validation_status: str
+    contact_metadata: dict[str, Any]
     first_seen_at: datetime
     last_seen_at: datetime
 

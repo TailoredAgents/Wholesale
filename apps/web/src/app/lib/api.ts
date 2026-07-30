@@ -508,6 +508,7 @@ export type CampaignManagementOverview = {
     rank: number;
     is_primary: boolean;
     validation_status: string;
+    contact_metadata: Record<string, unknown>;
     first_seen_at: string;
     last_seen_at: string;
   }>;

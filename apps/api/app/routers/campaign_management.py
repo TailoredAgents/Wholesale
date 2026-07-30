@@ -26,6 +26,7 @@ from app.services.campaign_management import (
     create_calling_batch,
     create_campaign_cost,
     create_import_mapping,
+    create_propstream_contact_import_preset,
     create_propstream_import_preset,
     create_prospect_import,
     create_prospecting_cohort,
@@ -95,6 +96,19 @@ def create_workspace_propstream_import_preset(
 ) -> ProspectImportMappingRead:
     try:
         return create_propstream_import_preset(db, principal)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.post("/import-mappings/propstream-contact-preset", status_code=201)
+def create_workspace_propstream_contact_import_preset(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_campaigns_dependency)],
+) -> ProspectImportMappingRead:
+    try:
+        return create_propstream_contact_import_preset(db, principal)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)

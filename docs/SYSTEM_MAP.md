@@ -363,8 +363,10 @@ The OS uses five stable navigation groups.
 
 - CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
   performance.
-- Includes a standard PropStream export preset, source export/list evidence, saved filter
-  evidence, ranked phone and email contact points, and source-list appearance history.
+- Includes standard and contact-export PropStream presets, trust/company-to-person name fallback,
+  five ranked phones with Cell/Landline evidence, four ranked emails, phone-specific DNC evidence,
+  source export/list evidence, saved filter evidence, mixed-state preview warnings, and source-list
+  appearance history.
 - Refreshes match existing people, contact methods, properties, and source IDs without resetting
   prior outreach, callbacks, opt-outs, handoffs, or CRM leads.
 - Prospecting cohorts preserve source, list type, market, script, date range, and call window for

@@ -12,6 +12,9 @@ type Tab = "performance" | "import" | "costs" | "batches" | "history";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 type ImportPreview = {
   headers: string[];
+  state_counts: Record<string, number>;
+  campaign_state_code: string | null;
+  outside_campaign_state_rows: number;
   total_rows: number;
   valid_rows: number;
   invalid_rows: number;
@@ -146,7 +149,36 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     const form = event.currentTarget;
     const formData = new FormData(form);
     const fieldMapping = Object.fromEntries(
-      ["source_record_key", "legal_name", "legal_first_name", "legal_last_name", "phone", "phone_2", "phone_3", "email", "email_2", "email_3", "street_address", "city", "state_code", "postal_code", "dnc_status"]
+      [
+        "source_record_key",
+        "legal_name",
+        "legal_first_name",
+        "legal_last_name",
+        "phone",
+        "phone_2",
+        "phone_3",
+        "phone_4",
+        "phone_5",
+        "phone_type",
+        "phone_2_type",
+        "phone_3_type",
+        "phone_4_type",
+        "phone_5_type",
+        "phone_dnc",
+        "phone_2_dnc",
+        "phone_3_dnc",
+        "phone_4_dnc",
+        "phone_5_dnc",
+        "email",
+        "email_2",
+        "email_3",
+        "email_4",
+        "street_address",
+        "city",
+        "state_code",
+        "postal_code",
+        "dnc_status",
+      ]
         .map((key) => [key, value(formData, key)])
         .filter(([, column]) => Boolean(column)),
     );
@@ -165,6 +197,15 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   async function addPropStreamPreset() {
     const result = await request(
       "/api/v1/campaign-management/import-mappings/propstream-preset",
+      "POST",
+      {},
+    );
+    if (result) router.refresh();
+  }
+
+  async function addPropStreamContactPreset() {
+    const result = await request(
+      "/api/v1/campaign-management/import-mappings/propstream-contact-preset",
       "POST",
       {},
     );
@@ -319,24 +360,45 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       {activeTab === "import" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>Step 1</span><h3>Reusable vendor mapping</h3></div><button onClick={addPropStreamPreset} type="button">Add PropStream preset</button></div>
+            <div className={styles.sectionHeader}>
+              <div><span>Step 1</span><h3>Reusable vendor mapping</h3></div>
+              <div className={styles.presetActions}>
+                <button onClick={addPropStreamContactPreset} type="button">Add contact export preset</button>
+                <button onClick={addPropStreamPreset} type="button">Add standard preset</button>
+              </div>
+            </div>
             <form className={styles.mappingForm} onSubmit={submitMapping}>
               <label><span>Mapping name</span><input name="name" placeholder="BatchData owner export" required /></label>
               <label><span>Source or vendor</span><input name="source_name" placeholder="Vendor name" /></label>
               <p className={styles.formNote}>Enter each CSV header exactly as it appears in the source file.</p>
-              <label><span>Owner name column</span><input defaultValue="Owner" name="legal_name" required /></label>
+              <label><span>Owner or company column</span><input defaultValue="Owner" name="legal_name" /></label>
+              <label><span>Owner first name column</span><input name="legal_first_name" /></label>
+              <label><span>Owner last name column</span><input name="legal_last_name" /></label>
               <label><span>Phone column</span><input defaultValue="Phone" name="phone" /></label>
               <label><span>Phone 2 column</span><input name="phone_2" /></label>
               <label><span>Phone 3 column</span><input name="phone_3" /></label>
+              <label><span>Phone 4 column</span><input name="phone_4" /></label>
+              <label><span>Phone 5 column</span><input name="phone_5" /></label>
+              <label><span>Phone 1 type column</span><input name="phone_type" /></label>
+              <label><span>Phone 2 type column</span><input name="phone_2_type" /></label>
+              <label><span>Phone 3 type column</span><input name="phone_3_type" /></label>
+              <label><span>Phone 4 type column</span><input name="phone_4_type" /></label>
+              <label><span>Phone 5 type column</span><input name="phone_5_type" /></label>
+              <label><span>Phone 1 DNC column</span><input name="phone_dnc" /></label>
+              <label><span>Phone 2 DNC column</span><input name="phone_2_dnc" /></label>
+              <label><span>Phone 3 DNC column</span><input name="phone_3_dnc" /></label>
+              <label><span>Phone 4 DNC column</span><input name="phone_4_dnc" /></label>
+              <label><span>Phone 5 DNC column</span><input name="phone_5_dnc" /></label>
               <label><span>Email column</span><input defaultValue="Email" name="email" /></label>
               <label><span>Email 2 column</span><input name="email_2" /></label>
               <label><span>Email 3 column</span><input name="email_3" /></label>
+              <label><span>Email 4 column</span><input name="email_4" /></label>
               <label><span>Source ID column</span><input defaultValue="Record ID" name="source_record_key" /></label>
               <label><span>Street column</span><input defaultValue="Property Address" name="street_address" /></label>
               <label><span>City column</span><input defaultValue="City" name="city" /></label>
               <label><span>State column</span><input defaultValue="State" name="state_code" /></label>
               <label><span>ZIP column</span><input defaultValue="ZIP" name="postal_code" /></label>
-              <label><span>Do-not-call flag column (optional)</span><input defaultValue="DNC" name="dnc_status" /></label>
+              <label><span>Record-wide do-not-call column</span><input name="dnc_status" /></label>
               <button type="submit">Save mapping</button>
             </form>
           </section>
@@ -367,6 +429,20 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
                 <div className={styles.previewMetrics}>
                   <div><span>Rows</span><strong>{preview.total_rows}</strong></div><div><span>Callable</span><strong>{preview.eligible_rows}</strong></div><div><span>Review</span><strong>{preview.review_required_rows}</strong></div><div><span>Blocked</span><strong>{preview.suppressed_rows}</strong></div><div><span>Invalid</span><strong>{preview.invalid_rows}</strong></div><div><span>Duplicates</span><strong>{preview.duplicate_rows}</strong></div>
                 </div>
+                <div className={styles.stateSummary}>
+                  <strong>Property states</strong>
+                  <span>
+                    {Object.entries(preview.state_counts)
+                      .sort(([first], [second]) => first.localeCompare(second))
+                      .map(([state, count]) => `${state} ${count.toLocaleString()}`)
+                      .join(" · ") || "No complete state values"}
+                  </span>
+                </div>
+                {preview.outside_campaign_state_rows > 0 ? (
+                  <p className={styles.previewWarning}>
+                    {preview.outside_campaign_state_rows.toLocaleString()} row(s) are outside this campaign&apos;s {preview.campaign_state_code} market. Stonegate will allow the import, but separate state-specific campaigns are recommended.
+                  </p>
+                ) : null}
                 <div className={styles.previewRows}>
                   {preview.rows.map((row) => <div key={row.row_number}><span>{row.row_number}</span><div><strong>{row.legal_name ?? "Missing owner"}</strong><small>{row.property_address ?? row.phone ?? "No property or phone"} · {row.contact_point_count} contacts · {labelize(row.relationship_state)}</small></div><span className={`${styles.badge} ${styles[row.status]}`}>{labelize(row.status)}</span><p>{[...row.validation_errors, ...row.eligibility_reasons].join(" ") || (row.status === "duplicate" ? "Matches an existing Stonegate record; history will be preserved." : "Ready to call after import.")}</p></div>)}
                 </div>

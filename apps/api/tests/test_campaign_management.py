@@ -276,6 +276,185 @@ def test_import_mapping_rejects_missing_required_contact_mapping(
     assert response.status_code == 422
 
 
+def test_propstream_contact_export_preserves_all_contacts_and_mixed_state_warning(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    campaign = create_campaign(client, headers)
+    preset_response = client.post(
+        "/api/v1/campaign-management/import-mappings/propstream-contact-preset",
+        headers=headers,
+    )
+    assert preset_response.status_code == 201, preset_response.text
+    preset = preset_response.json()
+    assert preset["field_mapping"]["legal_name"] == "Company Name"
+    assert preset["field_mapping"]["phone_5"] == "Phone 5"
+    assert preset["field_mapping"]["phone_5_type"] == "Phone 5 Type"
+    assert preset["field_mapping"]["email_4"] == "Email 4"
+
+    export_headers = [
+        "First Name",
+        "Last Name",
+        "Litigator",
+        "Company Name",
+        "Type",
+        "Status",
+        "Street Address",
+        "City",
+        "State",
+        "Zip",
+        "Mail Street Address",
+        "Mail City",
+        "Mail State",
+        "Mail Zip",
+        "Mail Address Same",
+        "Phone 1",
+        "Phone 1 Type",
+        "Phone 1 DNC",
+        "Phone 2",
+        "Phone 2 Type",
+        "Phone 2 DNC",
+        "Phone 3",
+        "Phone 3 Type",
+        "Phone 3 DNC",
+        "Phone 4",
+        "Phone 4 Type",
+        "Phone 4 DNC",
+        "Phone 5",
+        "Phone 5 Type",
+        "Phone 5 DNC",
+        "Email 1",
+        "Email 2",
+        "Email 3",
+        "Email 4",
+    ]
+
+    def export_row(values: dict[str, str]) -> str:
+        return "\t".join(values.get(header, "") for header in export_headers)
+
+    csv_content = "\n".join(
+        [
+            "\t".join(export_headers),
+            export_row(
+                {
+                    "Company Name": "1182 Test Trust",
+                    "Type": "Owner",
+                    "Status": "New",
+                    "Street Address": "1182 Test Lane",
+                    "City": "Atlanta",
+                    "State": "GA",
+                    "Zip": "30303",
+                    "Phone 1": "4045550101",
+                    "Phone 1 Type": "Cell",
+                    "Phone 1 DNC": "Public DNC",
+                    "Phone 2": "4045550102",
+                    "Phone 2 Type": "Cell",
+                    "Phone 3": "4045550103",
+                    "Phone 3 Type": "Cell",
+                    "Phone 4": "4045550104",
+                    "Phone 4 Type": "Landline",
+                    "Phone 5": "4045550105",
+                    "Phone 5 Type": "Landline",
+                    "Phone 5 DNC": "Public DNC",
+                    "Email 1": "trust-one@example.com",
+                    "Email 2": "trust-two@example.com",
+                    "Email 3": "trust-three@example.com",
+                    "Email 4": "trust-four@example.com",
+                }
+            ),
+            export_row(
+                {
+                    "First Name": "Avery",
+                    "Last Name": "Seller",
+                    "Type": "Owner",
+                    "Status": "New",
+                    "Street Address": "200 Test Street",
+                    "City": "Clarksville",
+                    "State": "TN",
+                    "Zip": "37040",
+                    "Phone 1": "9315550101",
+                    "Phone 1 Type": "Cell",
+                    "Email 1": "avery@example.com",
+                }
+            ),
+            export_row(
+                {
+                    "First Name": "No",
+                    "Last Name": "Contact",
+                    "Type": "Owner",
+                    "Status": "New",
+                    "Street Address": "300 Test Street",
+                    "City": "Anniston",
+                    "State": "AL",
+                    "Zip": "36206",
+                }
+            ),
+        ]
+    )
+    payload = {
+        "campaign_id": campaign["id"],
+        "mapping_id": preset["id"],
+        "file_name": "propstream-contact-export.tsv",
+        "csv_content": csv_content,
+        "source_profile": "propstream",
+        "source_list_name": "Test contact export",
+    }
+    preview_response = client.post(
+        "/api/v1/campaign-management/imports/validate",
+        headers=headers,
+        json=payload,
+    )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert preview["total_rows"] == 3
+    assert preview["eligible_rows"] == 2
+    assert preview["invalid_rows"] == 1
+    assert preview["suppressed_rows"] == 0
+    assert preview["campaign_state_code"] == "GA"
+    assert preview["state_counts"] == {"GA": 1, "TN": 1, "AL": 1}
+    assert preview["outside_campaign_state_rows"] == 2
+    company_row = preview["rows"][0]
+    assert company_row["legal_name"] == "1182 Test Trust"
+    assert company_row["phone"] == "4045550102"
+    assert company_row["contact_point_count"] == 9
+    assert "2 source-marked phone number(s)" in company_row["eligibility_reasons"][0]
+    assert preview["rows"][1]["legal_name"] == "Avery Seller"
+
+    import_response = client.post(
+        "/api/v1/campaign-management/imports",
+        headers=headers,
+        json=payload,
+    )
+    assert import_response.status_code == 201, import_response.text
+    assert import_response.json()["imported_rows"] == 2
+    company = db_session.scalar(
+        select(Prospect).where(Prospect.legal_name == "1182 Test Trust")
+    )
+    assert company is not None
+    assert company.phone == "4045550102"
+    contact_points = db_session.scalars(
+        select(ProspectContactPoint).where(
+            ProspectContactPoint.prospect_id == company.id
+        )
+    ).all()
+    assert len(contact_points) == 9
+    assert sum(point.validation_status == "source_dnc" for point in contact_points) == 2
+    assert sum(point.is_primary for point in contact_points) == 2
+    assert {
+        point.contact_metadata.get("source_phone_type")
+        for point in contact_points
+        if point.contact_type == "phone"
+    } == {"Cell", "Landline"}
+
+
 def test_propstream_refresh_preserves_history_and_cohort_lineage(
     db_session: Session,
     api_db_override: None,

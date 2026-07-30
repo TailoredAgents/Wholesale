@@ -33,12 +33,17 @@
 .mappingForm button, .importForm button, .stackForm button, .preview > button { min-height: 38px; width: fit-content; padding: 0 13px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
 .mappingForm button, .formNote, .fileField, .full { grid-column: 1 / -1; }
 .formNote { margin: 0; padding: 9px 10px; border-left: 3px solid var(--info); background: var(--info-soft); color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.sectionHeader > .presetActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
+.presetActions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-soft); font: inherit; font-size: 10px; font-weight: 850; cursor: pointer; }
 .fileField input { padding: 7px; background: var(--surface-soft); }
 .preview { border-top: 1px solid var(--line); padding: 16px; display: grid; gap: 14px; background: var(--surface-soft); }
 .previewMetrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
 .previewMetrics > div { padding: 10px; display: grid; gap: 4px; border-right: 1px solid var(--line-soft); }
 .previewMetrics > div:last-child { border-right: 0; }
 .previewMetrics strong { font-size: 17px; }
+.stateSummary { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 11px; }
+.stateSummary span { color: var(--text-soft); text-align: right; }
+.previewWarning { margin: 0; padding: 10px 12px; border-left: 3px solid var(--amber); background: var(--amber-soft); color: var(--text-soft); font-size: 11px; line-height: 1.5; }
 .previewRows, .historyRows, .batchEntries, .rows, .picker { display: grid; }
 .previewRows { max-height: 460px; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
 .previewRows > div, .historyRows > div { min-width: 0; padding: 10px 12px; display: grid; grid-template-columns: 34px minmax(150px, .8fr) 95px minmax(210px, 1.2fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); }
@@ -69,5 +74,5 @@
 .batchEntries small { color: var(--muted); font-size: 10px; }
 .empty { margin: 0; padding: 28px 17px; color: var(--muted); font-size: 12px; text-align: center; }
 @media (max-width: 1180px) { .twoColumn, .historyLayout { grid-template-columns: 1fr; } .section:has(.qualityTable) { overflow-x: auto; } }
-@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
+@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .sectionHeader > .presetActions { width: 100%; justify-content: flex-start; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .stateSummary { align-items: flex-start; flex-direction: column; } .stateSummary span { text-align: left; } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
 @media (max-width: 480px) { .metrics { grid-template-columns: 1fr; } .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); } .metrics > div:last-child { border-bottom: 0; } .previewMetrics { grid-template-columns: repeat(2, 1fr); } .previewMetrics > div:nth-child(2n) { border-right: 0; } .previewMetrics > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } }

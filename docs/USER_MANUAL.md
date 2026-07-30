@@ -642,12 +642,16 @@ Open **Campaigns**. The workspace contains:
 1. Create or select the campaign.
 2. Record the market, list source, channel, budget, dates, and manager.
 3. Go to **Import prospects**.
-4. For PropStream, select **Add PropStream preset** once, then select that saved mapping.
+4. For the PropStream contact export containing **First Name**, **Last Name**, **Company Name**,
+   **Phone 1-5**, and **Email 1-4**, select **Add contact export preset** once. Use **Add standard
+   preset** only for the other PropStream layout containing **Property ID** and
+   **Owner 1 First Name**.
 5. Choose the campaign and measurement cohort.
 6. Enter the PropStream export or saved-list identity and the filters used to build the list.
 7. Upload the CSV and select the correct vendor-column mapping.
-8. Review the preview before saving. It shows contact count and whether each person is untouched,
-   previously contacted, in an active conversation, due for callback, or already a CRM lead.
+8. Review the preview before saving. It shows contact count, property totals by state, rows outside
+   the selected campaign state, and whether each person is untouched, previously contacted, in an
+   active conversation, due for callback, or already a CRM lead.
 9. Confirm invalid, duplicate, and explicitly suppressed rows are separated from eligible rows.
 10. Select **Import reviewed file**. Existing matches receive new source/contact evidence without
     losing prior activity.
@@ -655,6 +659,16 @@ Open **Campaigns**. The workspace contains:
     applicable.
 12. Create a calling batch using the same cohort and import.
 13. Assign the batch to a VA or another active staff member with **Cold calling** enabled.
+
+The contact-export preset uses **Company Name** for trusts and companies, then falls back to
+**First Name + Last Name** for individuals. It retains up to five ranked phone numbers and four
+ranked email addresses, including each phone's Cell or Landline type. A source-marked DNC phone
+remains attached as evidence but is not selected for calling; Stonegate uses the first remaining
+callable number. One DNC phone does not block the other clear numbers on the same owner record.
+
+Mixed-state files are allowed, but the preview displays a warning. Use separate state-specific
+campaigns whenever practical so assignments, performance, scripts, and expansion reporting stay
+accurate.
 
 PropStream refreshes are expected to show matched existing rows. This is not a failed import. It
 means Stonegate recognized the person or property and preserved the existing history. **Import

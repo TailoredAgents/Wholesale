@@ -16,6 +16,7 @@ from app.models.foundation import (
     AuditEvent,
     Campaign,
     CampaignCost,
+    Market,
     Prospect,
     ProspectCallingBatch,
     ProspectCallingBatchEntry,
@@ -70,6 +71,7 @@ from app.services.prospecting_measurement import (
 
 MAX_IMPORT_ROWS = 10_000
 PROPSTREAM_PRESET_NAME = "PropStream Standard Export"
+PROPSTREAM_CONTACT_PRESET_NAME = "PropStream Contact Export"
 PROPSTREAM_FIELD_MAPPING = {
     "source_record_key": "Property ID",
     "legal_first_name": "Owner 1 First Name",
@@ -85,6 +87,34 @@ PROPSTREAM_FIELD_MAPPING = {
     "state_code": "Property State",
     "postal_code": "Property Zip",
 }
+PROPSTREAM_CONTACT_FIELD_MAPPING = {
+    "legal_name": "Company Name",
+    "legal_first_name": "First Name",
+    "legal_last_name": "Last Name",
+    "phone": "Phone 1",
+    "phone_2": "Phone 2",
+    "phone_3": "Phone 3",
+    "phone_4": "Phone 4",
+    "phone_5": "Phone 5",
+    "phone_type": "Phone 1 Type",
+    "phone_2_type": "Phone 2 Type",
+    "phone_3_type": "Phone 3 Type",
+    "phone_4_type": "Phone 4 Type",
+    "phone_5_type": "Phone 5 Type",
+    "phone_dnc": "Phone 1 DNC",
+    "phone_2_dnc": "Phone 2 DNC",
+    "phone_3_dnc": "Phone 3 DNC",
+    "phone_4_dnc": "Phone 4 DNC",
+    "phone_5_dnc": "Phone 5 DNC",
+    "email": "Email 1",
+    "email_2": "Email 2",
+    "email_3": "Email 3",
+    "email_4": "Email 4",
+    "street_address": "Street Address",
+    "city": "City",
+    "state_code": "State",
+    "postal_code": "Zip",
+}
 DNC_BLOCKED_VALUES = {
     "1",
     "blocked",
@@ -92,6 +122,7 @@ DNC_BLOCKED_VALUES = {
     "do not call",
     "do_not_call",
     "listed",
+    "public dnc",
     "registered",
     "true",
     "yes",
@@ -105,6 +136,9 @@ class PreparedContactPoint:
     normalized_value: str
     rank: int
     source_field: str
+    source_phone_type: str | None = None
+    source_dnc: bool = False
+    source_dnc_value: str | None = None
 
 
 @dataclass
@@ -201,6 +235,31 @@ def create_propstream_import_preset(
     )
 
 
+def create_propstream_contact_import_preset(
+    db: Session,
+    principal: Principal,
+) -> ProspectImportMappingRead:
+    existing = db.scalar(
+        select(ProspectImportMapping).where(
+            ProspectImportMapping.organization_id == principal.organization_id,
+            ProspectImportMapping.name == PROPSTREAM_CONTACT_PRESET_NAME,
+            ProspectImportMapping.is_active.is_(True),
+        )
+    )
+    if existing is not None:
+        return import_mapping_read(db, existing)
+    return create_import_mapping(
+        db,
+        principal,
+        ProspectImportMappingCreate(
+            name=PROPSTREAM_CONTACT_PRESET_NAME,
+            source_name="PropStream",
+            field_mapping=PROPSTREAM_CONTACT_FIELD_MAPPING,
+            default_values={},
+        ),
+    )
+
+
 def list_import_mappings(
     db: Session,
     principal: Principal,
@@ -236,9 +295,14 @@ def validate_prospect_import(
     principal: Principal,
     payload: ProspectImportRequest,
 ) -> ProspectImportPreview:
-    _, mapping, _, _ = validate_import_context(db, principal, payload)
+    campaign, mapping, _, _ = validate_import_context(db, principal, payload)
     headers, prepared_rows = prepare_import_rows(db, principal, payload, mapping)
-    return import_preview(headers, prepared_rows)
+    market = db.get(Market, campaign.market_id)
+    return import_preview(
+        headers,
+        prepared_rows,
+        campaign_state_code=market.state_code if market else None,
+    )
 
 
 def create_prospect_import(
@@ -566,7 +630,14 @@ def prepare_row(
         errors.append("Seller or owner name exceeds 255 characters.")
 
     contact_points: list[PreparedContactPoint] = []
-    for rank, field in enumerate(("phone", "phone_2", "phone_3"), start=1):
+    phone_fields = (
+        ("phone", "phone_type", "phone_dnc"),
+        ("phone_2", "phone_2_type", "phone_2_dnc"),
+        ("phone_3", "phone_3_type", "phone_3_dnc"),
+        ("phone_4", "phone_4_type", "phone_4_dnc"),
+        ("phone_5", "phone_5_type", "phone_5_dnc"),
+    )
+    for rank, (field, type_field, dnc_field) in enumerate(phone_fields, start=1):
         phone_value = values.get(field)
         if not phone_value:
             continue
@@ -583,6 +654,9 @@ def prepare_row(
             for point in contact_points
             if point.contact_type == "phone"
         ):
+            source_dnc_value = values.get(dnc_field)
+            if field == "phone" and not source_dnc_value:
+                source_dnc_value = values.get("dnc_status")
             contact_points.append(
                 PreparedContactPoint(
                     "phone",
@@ -590,9 +664,13 @@ def prepare_row(
                     normalized_contact,
                     rank,
                     field,
+                    source_phone_type=values.get(type_field),
+                    source_dnc=(source_dnc_value or "").strip().casefold()
+                    in DNC_BLOCKED_VALUES,
+                    source_dnc_value=source_dnc_value,
                 )
             )
-    for rank, field in enumerate(("email", "email_2", "email_3"), start=1):
+    for rank, field in enumerate(("email", "email_2", "email_3", "email_4"), start=1):
         email_value = values.get(field)
         if not email_value:
             continue
@@ -618,8 +696,14 @@ def prepare_row(
                     field,
                 )
             )
+    phone_points = [point for point in contact_points if point.contact_type == "phone"]
+    source_dnc_points = [point for point in phone_points if point.source_dnc]
     primary_phone = next(
-        (point for point in contact_points if point.contact_type == "phone"),
+        (
+            point
+            for point in phone_points
+            if not point.source_dnc
+        ),
         None,
     )
     primary_email = next(
@@ -632,6 +716,11 @@ def prepare_row(
     normalized_email = primary_email.normalized_value if primary_email else None
     if not contact_points:
         errors.append("A valid phone or email is required.")
+    if source_dnc_points and primary_phone:
+        reasons.append(
+            f"{len(source_dnc_points)} source-marked phone number(s) were retained "
+            "but excluded from calling."
+        )
 
     street = values.get("street_address")
     city = values.get("city")
@@ -679,6 +768,9 @@ def prepare_row(
                 "normalized_value": point.normalized_value,
                 "rank": point.rank,
                 "source_field": point.source_field,
+                "source_phone_type": point.source_phone_type,
+                "source_dnc": point.source_dnc,
+                "source_dnc_value": point.source_dnc_value,
             }
             for point in contact_points
         ],
@@ -719,8 +811,13 @@ def prepare_row(
         "suppression_record_id": str(company_record.id) if company_record else None,
         "reason": company_record.reason if company_record else None,
     }
-    dnc_raw = (values.get("dnc_status") or "").strip().casefold()
-    dnc_status = "blocked" if dnc_raw in DNC_BLOCKED_VALUES else "clear"
+    dnc_status = (
+        "blocked"
+        if source_dnc_points and len(source_dnc_points) == len(phone_points)
+        else "partial"
+        if source_dnc_points
+        else "clear"
+    )
 
     if errors:
         status = "invalid"
@@ -734,7 +831,7 @@ def prepare_row(
         if company_status == "blocked":
             reasons.append("Phone matches Stonegate's active company suppression list.")
         if dnc_status == "blocked":
-            reasons.append("Imported source identifies the phone as Do Not Call.")
+            reasons.append("All imported phone numbers are source-marked Do Not Call.")
     elif not normalized_phone:
         status = "review_required"
         reasons.append("No valid phone is available for calling.")
@@ -998,6 +1095,12 @@ def upsert_prospect_contact_points(
             )
         ).all()
     }
+    for contact in existing.values():
+        contact.is_primary = (
+            prospect.normalized_phone == contact.normalized_value
+            if contact.contact_type == "phone"
+            else prospect.normalized_email == contact.normalized_value
+        )
     for point in prepared.contact_points:
         key = (point.contact_type, point.normalized_value)
         is_primary = (
@@ -1008,9 +1111,13 @@ def upsert_prospect_contact_points(
         contact = existing.get(key)
         metadata = {
             "source_field": point.source_field,
+            "source_phone_type": point.source_phone_type,
             "source_name": membership.source_name,
             "source_list_key": membership.source_list_key,
+            "source_dnc": point.source_dnc,
+            "source_dnc_value": point.source_dnc_value,
         }
+        validation_status = "source_dnc" if point.source_dnc else "valid"
         if contact is None:
             db.add(
                 ProspectContactPoint(
@@ -1022,7 +1129,7 @@ def upsert_prospect_contact_points(
                     normalized_value=point.normalized_value,
                     rank=point.rank,
                     is_primary=is_primary,
-                    validation_status="valid",
+                    validation_status=validation_status,
                     first_seen_at=seen_at,
                     last_seen_at=seen_at,
                     contact_metadata=metadata,
@@ -1032,8 +1139,8 @@ def upsert_prospect_contact_points(
             contact.source_membership_id = membership.id
             contact.value = point.value
             contact.rank = min(contact.rank, point.rank)
-            contact.is_primary = contact.is_primary or is_primary
-            contact.validation_status = "valid"
+            contact.is_primary = is_primary
+            contact.validation_status = validation_status
             contact.last_seen_at = seen_at
             contact.contact_metadata = metadata
 
@@ -1072,10 +1179,26 @@ def add_suppression_checks(
 def import_preview(
     headers: list[str],
     rows: list[PreparedImportRow],
+    *,
+    campaign_state_code: str | None = None,
 ) -> ProspectImportPreview:
     counts = import_counts(rows)
+    state_counts: dict[str, int] = {}
+    for row in rows:
+        state_code = string_value(row.normalized_data.get("state_code"))
+        if state_code:
+            normalized_state = state_code.upper()
+            state_counts[normalized_state] = state_counts.get(normalized_state, 0) + 1
+    normalized_campaign_state = campaign_state_code.upper() if campaign_state_code else None
     return ProspectImportPreview(
         headers=headers,
+        state_counts=state_counts,
+        campaign_state_code=normalized_campaign_state,
+        outside_campaign_state_rows=sum(
+            count
+            for state, count in state_counts.items()
+            if normalized_campaign_state and state != normalized_campaign_state
+        ),
         **counts,
         eligible_rows=sum(row.status == "valid" for row in rows),
         can_import=bool(rows)
@@ -1274,6 +1397,7 @@ def prospect_contact_point_read(
         rank=contact_point.rank,
         is_primary=contact_point.is_primary,
         validation_status=contact_point.validation_status,
+        contact_metadata=contact_point.contact_metadata,
         first_seen_at=contact_point.first_seen_at,
         last_seen_at=contact_point.last_seen_at,
     )
