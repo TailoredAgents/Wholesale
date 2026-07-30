@@ -1,6 +1,6 @@
 # Stonegate Public Site Conversion Roadmap
 
-Last updated: July 29, 2026
+Last updated: July 30, 2026
 
 ## Purpose
 
@@ -259,7 +259,10 @@ remain operational steps.
 
 ## Phase PC8: Team Identity And Photography
 
-Status: **Planned**
+Status: **Implemented and awaiting owner content**. The company-story upgrade, publication-gated
+team model, responsive homepage and About-page layouts, structured data, and automated audits are
+complete. Final publication and production verification require the approved people, photographs,
+titles, and biographies listed below.
 
 ### Owner Inputs
 
@@ -276,6 +279,24 @@ Status: **Planned**
 - Add accurate alt text and update public company data.
 - Perform the final visual, accessibility, speed, and conversion audit.
 
+### Implementation Decisions
+
+- Team content is centralized in `apps/web/src/app/public-team.ts`; approved photographs live in
+  `apps/web/public/images/team/`.
+- Homepage and About-page team sections return no markup when the approved list is empty.
+- A complete approved person record automatically appears on the About page. The single featured
+  person appears on the homepage; only the separately confirmed founder appears in Organization
+  founder data.
+- Duplicate slugs, incomplete content, multiple featured people, unsupported image formats, and
+  placeholder language fail the build.
+- The current About page explains the actual direct-purchase model, seller accountability
+  sequence, Georgia starting market, and operating principles without inventing a company history.
+- `docs/PUBLIC_TEAM_CONTENT.md` defines the approval packet, photography standard, file preparation,
+  publication behavior, and final acceptance procedure.
+- The public browser audit checks the homepage and About page for placeholder language, missing or
+  broken photographs, inadequate image dimensions, missing alt text, layout overflow, and serious
+  accessibility findings.
+
 ### Exit Criteria
 
 - The site clearly identifies the real people behind Stonegate.
@@ -285,6 +306,6 @@ Status: **Planned**
 
 ## Recommended Order
 
-Complete PC1 through PC7 in order. Collect real company facts, proof, reviews, and transaction
-evidence while those phases are underway. Complete PC8 only when the approved team photographs and
-public biographies are ready.
+PC1 through PC7 are implemented. PC8's publication path is implemented but intentionally remains
+visually gated until approved real team photographs and biographies are added. Follow
+`docs/PUBLIC_TEAM_CONTENT.md` to complete the owner-content handoff and production acceptance.

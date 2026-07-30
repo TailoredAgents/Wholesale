@@ -252,6 +252,16 @@ WebPage, Service, and BreadcrumbList data linked to the same organization identi
 markup remains intentionally absent until Stonegate confirms a real staffed address that meets the
 provider and search-engine requirements.
 
+Public team identity is centralized in `apps/web/src/app/public-team.ts`. Only complete,
+owner-approved active team records belong in that file, and their photographs live in
+`apps/web/public/images/team/`. An empty list produces no public team markup. When records exist,
+the single featured person appears in the homepage identity section, every approved person appears
+on the About page, and matching Person records are linked to the Organization structured data.
+Founder identity is a separate explicit field so homepage prominence cannot mislabel a salesperson.
+Build-time validation blocks incomplete content, duplicate slugs, multiple featured people,
+unsupported image formats, and common placeholder language. The approval and photograph workflow
+is documented in `PUBLIC_TEAM_CONTENT.md`.
+
 Submission creates or matches:
 
 - contact and contact methods

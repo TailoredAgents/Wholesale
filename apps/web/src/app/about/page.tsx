@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { PublicSiteFooter } from "../public-site-footer";
 import { PublicSiteHeader } from "../public-site-header";
+import { PublicTeamIdentity } from "../public-team-identity";
 import { directOfferDisclosure, siteConfig } from "../site-config";
 import styles from "../public-content.module.css";
 
@@ -20,22 +21,68 @@ const principles = [
   { title: "Preserve accountability", detail: "Seller details, conversations, appointments, assumptions, and decisions are retained in one operating record." },
 ];
 
+const responsibilities = [
+  {
+    number: "01",
+    title: "Seller conversation",
+    detail:
+      "A Stonegate team member listens to the situation, confirms the property facts, and documents what matters to the owner.",
+  },
+  {
+    number: "02",
+    title: "Property decision",
+    detail:
+      "Stonegate reviews condition, comparable sales, repairs, title considerations, timing, and buyer demand before discussing an offer.",
+  },
+  {
+    number: "03",
+    title: "Written follow-through",
+    detail:
+      "If both sides choose to proceed, the agreement, title work, communication, and closing steps remain connected to one accountable record.",
+  },
+];
+
 export default function AboutPage() {
   return (
     <main className={styles.page}>
       <PublicSiteHeader />
       <section className={styles.hero}>
         <p className={styles.eyebrow}>About Stonegate</p>
-        <h1>A Georgia home-buying company built around clear decisions.</h1>
+        <h1>A Georgia-focused home-buying company accountable for the whole decision.</h1>
         <p>
-          Stonegate Home Buyers provides a direct sale option for owners who value an as-is
-          process, fewer listing steps, and a timeline defined in writing.
+          Stonegate gives property owners a direct sale option and a clear explanation of the
+          tradeoffs. The same operating record follows an inquiry from the first conversation
+          through property review and, when both sides agree, closing.
         </p>
         <div className={styles.heroActions}>
           <Link className={styles.primaryAction} href="/get-a-cash-offer">Request an Offer <ArrowRight size={17} aria-hidden="true" /></Link>
           <a className={styles.secondaryAction} href={siteConfig.phoneHref}><Phone size={17} aria-hidden="true" /> {siteConfig.phoneDisplay}</a>
         </div>
       </section>
+
+      <section className={styles.storySection}>
+        <div className={styles.sectionHeading}>
+          <p className={styles.eyebrow}>Why Stonegate exists</p>
+          <h2>A simpler sale should still be an informed sale.</h2>
+          <p>
+            Some owners value a higher potential retail price and are prepared for repairs,
+            showings, commissions, and an uncertain timeline. Others value an as-is direct sale.
+            Stonegate exists to evaluate the second option honestly, put the terms in writing, and
+            let the seller decide without pressure.
+          </p>
+        </div>
+        <div className={styles.responsibilityGrid}>
+          {responsibilities.map((responsibility) => (
+            <article key={responsibility.number}>
+              <span>{responsibility.number}</span>
+              <h3>{responsibility.title}</h3>
+              <p>{responsibility.detail}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <PublicTeamIdentity variant="about" />
 
       <section className={styles.identitySection}>
         <div>

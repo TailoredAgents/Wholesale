@@ -287,6 +287,77 @@ async function auditPublicProof(page, viewport) {
   }
 }
 
+async function auditTeamIdentity(page, viewport, route) {
+  const teamSection = page.locator('[data-public-team="true"]');
+  const teamCount = await teamSection.count();
+  const pageText = (await page.locator("main").innerText()).toLowerCase();
+
+  for (const marker of ["coming soon", "lorem ipsum", "placeholder", "sample bio"]) {
+    if (pageText.includes(marker)) {
+      record(viewport, "public-team", { route, detail: `Disallowed marker is visible: ${marker}` });
+    }
+  }
+
+  if (teamCount === 0) return;
+
+  const images = teamSection.locator("img");
+  if ((await images.count()) === 0) {
+    record(viewport, "public-team", { route, detail: "Published team content has no photograph." });
+    return;
+  }
+
+  for (let index = 0; index < (await images.count()); index += 1) {
+    const image = images.nth(index);
+    const imageState = await image.evaluate((element) => ({
+      alt: element.getAttribute("alt")?.trim() ?? "",
+      complete: element.complete,
+      naturalWidth: element.naturalWidth,
+      naturalHeight: element.naturalHeight,
+    }));
+    if (
+      imageState.alt.length < 8 ||
+      !imageState.complete ||
+      imageState.naturalWidth < 250 ||
+      imageState.naturalHeight < 250
+    ) {
+      record(viewport, "public-team-image", { route, index, imageState });
+    }
+  }
+}
+
+async function auditAboutPage(page, viewport) {
+  const route = "/about";
+  await page.goto(`${baseUrl}${route}`, { waitUntil: "networkidle" });
+  await checkPage(page, viewport.name, "about-page");
+  await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "about-page");
+  await auditTeamIdentity(page, viewport.name, route);
+
+  if ((await page.title()) !== "About Stonegate Home Buyers | Georgia") {
+    record(viewport.name, "metadata", { route, title: await page.title() });
+  }
+  const canonical = await page
+    .locator('link[rel="canonical"]')
+    .getAttribute("href", { timeout: 1_000 })
+    .catch(() => null);
+  if (canonical !== "https://www.stonegatehb.com/about") {
+    record(viewport.name, "metadata", { route, canonical });
+  }
+  if (!(await page.getByText("A simpler sale should still be an informed sale.").isVisible())) {
+    record(viewport.name, "about-content", "The company-story section is missing.");
+  }
+  for (const heading of ["Seller conversation", "Property decision", "Written follow-through"]) {
+    if (!(await page.getByText(heading, { exact: true }).isVisible())) {
+      record(viewport.name, "about-content", `The accountability step is missing: ${heading}`);
+    }
+  }
+  if (screenshotDirectory) {
+    await page.screenshot({
+      fullPage: true,
+      path: `${screenshotDirectory}/about-${viewport.name}.png`,
+    });
+  }
+}
+
 async function auditContactPage(page, viewport) {
   await page.goto(`${baseUrl}/contact`, { waitUntil: "networkidle" });
   await checkPage(page, viewport.name, "contact-page");
@@ -440,6 +511,7 @@ async function auditJourney(browser, viewport) {
   await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await checkPage(page, viewport.name, "homepage");
   await auditPublicProof(page, viewport.name);
+  await auditTeamIdentity(page, viewport.name, "/");
   await checkMobileActionBar(
     page,
     viewport,
@@ -657,7 +729,8 @@ async function auditJourney(browser, viewport) {
 
   await auditServiceAreaPage(page, viewport);
   await auditContactPage(page, viewport);
-  await page.goto(`${baseUrl}/terms`, { waitUntil: "networkidle" });
+  await auditAboutPage(page, viewport);
+  await page.goto(`${baseUrl}/terms`, { waitUntil: "load" });
   await checkMobileActionBar(page, viewport, "/get-a-cash-offer", "terms");
   await checkFocusedControlClearance(
     page,
@@ -687,6 +760,6 @@ if (findings.length) {
   process.exitCode = 1;
 } else {
   console.log(
-    "Public audit passed: discovery, accessibility, and desktop/tablet/mobile offer journeys.",
+    "Public audit passed: discovery, accessibility, team identity, and desktop/tablet/mobile offer journeys.",
   );
 }

@@ -6,6 +6,8 @@ import { AddressOfferStart } from "./address-offer-start";
 import { PublicConversionTracker } from "./public-conversion-tracker";
 import { PublicSiteFooter } from "./public-site-footer";
 import { PublicSiteHeader } from "./public-site-header";
+import { PublicTeamIdentity } from "./public-team-identity";
+import { getPublicOrganizationFounder, getPublicTeamMembers } from "./public-team";
 import { PublicTrustProof } from "./public-trust-proof";
 import { sellerSituations } from "./seller-situations";
 import { directOfferDisclosure, siteConfig } from "./site-config";
@@ -37,6 +39,8 @@ const comparisonRows = [
 ];
 
 export default function PublicHomePage() {
+  const publicTeam = getPublicTeamMembers();
+  const organizationFounder = getPublicOrganizationFounder();
   const structuredData = {
     "@context": "https://schema.org",
     "@graph": [
@@ -65,6 +69,9 @@ export default function PublicHomePage() {
           areaServed: "US-GA",
           availableLanguage: "English",
         },
+        ...(organizationFounder
+          ? { founder: { "@id": `${siteConfig.siteUrl}/about#${organizationFounder.slug}` } }
+          : {}),
       },
       {
         "@type": "WebSite",
@@ -73,6 +80,14 @@ export default function PublicHomePage() {
         name: siteConfig.name,
         publisher: { "@id": `${siteConfig.siteUrl}/#organization` },
       },
+      ...publicTeam.map((member) => ({
+        "@type": "Person",
+        "@id": `${siteConfig.siteUrl}/about#${member.slug}`,
+        name: member.name,
+        jobTitle: member.publicTitle,
+        image: `${siteConfig.siteUrl}${member.imageSrc}`,
+        worksFor: { "@id": `${siteConfig.siteUrl}/#organization` },
+      })),
     ],
   };
 
@@ -144,6 +159,8 @@ export default function PublicHomePage() {
           </Link>
         </div>
       </section>
+
+      <PublicTeamIdentity variant="homepage" />
 
       <section className={styles.processSection}>
         <div className={styles.sectionHeading}>

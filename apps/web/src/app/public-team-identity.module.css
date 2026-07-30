@@ -1,0 +1,157 @@
+.homeSection {
+  padding: 84px max(24px, calc((100% - 1120px) / 2));
+  display: grid;
+  grid-template-columns: minmax(320px, 0.86fr) minmax(0, 1.14fr);
+  gap: 68px;
+  align-items: center;
+  background: #e8eeea;
+}
+
+.portrait {
+  position: relative;
+  min-height: 520px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #d4ded7;
+}
+
+.portrait img,
+.memberPortrait img {
+  object-fit: cover;
+}
+
+.homeCopy {
+  max-width: 620px;
+}
+
+.eyebrow {
+  color: #1d5a3d;
+  font-size: 12px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.homeCopy h2,
+.sectionHeading h2 {
+  margin-top: 11px;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 40px;
+  line-height: 1.14;
+  letter-spacing: 0;
+}
+
+.role {
+  margin-top: 12px;
+  color: #1d5a3d;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.biography {
+  margin-top: 18px;
+  color: #4f5d55;
+  font-size: 16px;
+  line-height: 1.72;
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 24px;
+  color: #1d5a3d;
+  font-weight: 850;
+}
+
+.aboutSection {
+  padding: 78px max(24px, calc((100% - 1120px) / 2));
+  background: #f3f6f4;
+}
+
+.sectionHeading {
+  max-width: 760px;
+}
+
+.sectionHeading > p:last-child {
+  margin-top: 16px;
+  color: #526058;
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.teamGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 38px;
+}
+
+.member {
+  overflow: hidden;
+  border: 1px solid #d5ded8;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.memberPortrait {
+  position: relative;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  background: #d4ded7;
+}
+
+.memberCopy {
+  padding: 24px;
+}
+
+.memberCopy h3 {
+  font-size: 22px;
+  line-height: 1.2;
+}
+
+.memberCopy .biography {
+  font-size: 14px;
+}
+
+@media (max-width: 900px) {
+  .homeSection {
+    grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.2fr);
+    gap: 42px;
+  }
+
+  .portrait {
+    min-height: 440px;
+  }
+
+  .teamGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .homeSection {
+    padding-top: 64px;
+    padding-bottom: 64px;
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+
+  .portrait {
+    min-height: 0;
+    aspect-ratio: 4 / 5;
+  }
+
+  .homeCopy h2,
+  .sectionHeading h2 {
+    font-size: 33px;
+  }
+
+  .aboutSection {
+    padding-top: 60px;
+    padding-bottom: 60px;
+  }
+
+  .teamGrid {
+    grid-template-columns: 1fr;
+  }
+}

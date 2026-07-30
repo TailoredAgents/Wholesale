@@ -173,6 +173,20 @@ Stonegate should use one accurate service-area Business Profile for its current 
 9. Publish staffed hours only after they are confirmed.
 10. Use real Stonegate photos and request genuine reviews without incentives or fabricated text.
 
+### Public Team Photographs
+
+The website team layouts are already built, but they remain hidden until approved real content is
+added. Follow `docs/PUBLIC_TEAM_CONTENT.md` rather than adding a temporary portrait or biography.
+For each active person, collect the approved public name, title, biography, portrait, permission,
+display order, and homepage-feature decision. Add the optimized portrait to
+`apps/web/public/images/team/` and the complete record to
+`apps/web/src/app/public-team.ts`.
+
+No environment variable or provider account is required. The build rejects incomplete or
+placeholder records. After publication, verify both the homepage and About page on desktop and a
+physical phone, then confirm the same real-world identity is used consistently in the Business
+Profile.
+
 Do not create separate profiles for Atlanta-area cities unless Stonegate later operates separate,
 permanently staffed locations that independently qualify.
 
@@ -597,6 +611,7 @@ makes failures difficult to identify.
 - [ ] Public website and cash-offer form work on `stonegatehb.com`.
 - [ ] Search Console domain verification and sitemap submission are complete.
 - [ ] One accurate service-area Google Business Profile is verified or in review.
+- [ ] Approved active team photographs and biographies pass the PC8 public-site audit.
 - [ ] Owner and staff can sign in with individual accounts.
 - [ ] Each role sees only the correct workspaces.
 - [ ] OpenAI Copilots and Help work in advisory mode.

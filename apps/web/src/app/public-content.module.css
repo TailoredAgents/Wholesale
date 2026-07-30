@@ -72,7 +72,8 @@
 .faqSection,
 .preparation,
 .principles,
-.identitySection {
+.identitySection,
+.storySection {
   width: min(1120px, calc(100% - 48px));
   margin: 0 auto;
   padding: 78px 0;
@@ -99,6 +100,50 @@
   color: #526058;
   font-size: 16px;
   line-height: 1.7;
+}
+
+.storySection .sectionHeading {
+  max-width: 820px;
+}
+
+.storySection .sectionHeading > p:last-child {
+  margin-top: 18px;
+  color: #526058;
+  font-size: 17px;
+  line-height: 1.72;
+}
+
+.responsibilityGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 42px;
+  border-top: 1px solid #d4ddd7;
+}
+
+.responsibilityGrid article {
+  padding: 30px 30px 8px 0;
+}
+
+.responsibilityGrid article + article {
+  padding-left: 30px;
+  border-left: 1px solid #d4ddd7;
+}
+
+.responsibilityGrid span {
+  color: #1d5a3d;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.responsibilityGrid h3 {
+  margin-top: 14px;
+  font-size: 21px;
+}
+
+.responsibilityGrid p {
+  margin-top: 10px;
+  color: #59655f;
+  line-height: 1.65;
 }
 
 .processGrid,
@@ -285,6 +330,16 @@
     border-top: 1px solid #d9e0dc;
     border-left: 0;
   }
+
+  .responsibilityGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .responsibilityGrid article + article {
+    padding-left: 0;
+    border-top: 1px solid #d4ddd7;
+    border-left: 0;
+  }
 }
 
 @media (max-width: 620px) {
@@ -304,6 +359,11 @@
   .preparation,
   .principles,
   .identitySection {
+    width: calc(100% - 36px);
+    padding: 60px 0;
+  }
+
+  .storySection {
     width: calc(100% - 36px);
     padding: 60px 0;
   }

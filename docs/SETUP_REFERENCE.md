@@ -659,6 +659,7 @@ After a production deployment:
 | Search Console and service-area Business Profile acceptance | Stonegate owner/marketing | Before local search launch |
 | First genuine public proof acceptance | Stonegate owner/marketing | After a documented review or outcome exists |
 | First controlled homepage experiment acceptance | Stonegate owner/marketing | After a stable production baseline exists |
+| Approved public team content and photography | Stonegate owner/marketing | Before PC8 production acceptance |
 | Twilio A2P resubmission and approval | Stonegate owner | Provider application |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After A2P approval |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
