@@ -1,9 +1,12 @@
 "use client";
 
 import { ArrowRight, MapPin } from "lucide-react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { recordConversionEvent } from "./lib/conversion-events";
+import {
+  getConversionExperimentContext,
+  recordConversionEvent,
+} from "./lib/conversion-events";
 import styles from "./address-offer-start.module.css";
 
 type AddressOfferStartProps = {
@@ -18,6 +21,16 @@ export function AddressOfferStart({ compact = false, inputId }: AddressOfferStar
   );
   const addressInputId =
     inputId ?? (compact ? "property-address-compact" : "property-address");
+  const [ctaLabel, setCtaLabel] = useState("Start My Offer");
+
+  useEffect(() => {
+    if (compact) return;
+    void getConversionExperimentContext(apiBaseUrl).then((experiment) => {
+      if (experiment?.surface_key === "homepage_offer_cta") {
+        setCtaLabel(experiment.cta_label);
+      }
+    });
+  }, [apiBaseUrl, compact]);
 
   return (
     <form
@@ -43,7 +56,7 @@ export function AddressOfferStart({ compact = false, inputId }: AddressOfferStar
           required
         />
         <button type="submit">
-          <span>Start My Offer</span>
+          <span>{ctaLabel}</span>
           <ArrowRight size={18} aria-hidden="true" />
         </button>
       </div>

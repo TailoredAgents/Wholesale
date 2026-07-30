@@ -2199,6 +2199,78 @@ export type MarketingOverview = {
   }>;
 };
 
+export type MarketingExperimentVariant = {
+  key: string;
+  label: string;
+  weight_basis_points: number;
+  cta_label: string;
+};
+
+export type MarketingExperimentPerformance = {
+  key: string;
+  label: string;
+  cta_label: string;
+  assigned_sessions: number;
+  desktop_sessions: number;
+  tablet_sessions: number;
+  mobile_sessions: number;
+  form_starts: number;
+  form_submits: number;
+  leads_created: number;
+  qualified_leads: number;
+  appointments_scheduled: number;
+  contracts_signed: number;
+  funded_deals: number;
+  collected_revenue_cents: number;
+  primary_outcomes: number;
+  primary_rate_basis_points: number | null;
+  source_breakdown: Array<{
+    source: string;
+    medium: string;
+    campaign: string;
+    assigned_sessions: number;
+    leads_created: number;
+    qualified_leads: number;
+    contracts_signed: number;
+    funded_deals: number;
+    collected_revenue_cents: number;
+  }>;
+};
+
+export type MarketingExperiment = {
+  id: string;
+  experiment_key: string;
+  name: string;
+  hypothesis: string;
+  surface_key: string;
+  primary_metric:
+    | "form_submit"
+    | "qualified_lead"
+    | "appointment_scheduled"
+    | "contract_signed"
+    | "funded_deal";
+  variants: MarketingExperimentVariant[];
+  minimum_sessions_per_variant: number;
+  minimum_runtime_days: number;
+  decision_rule: string;
+  status: "draft" | "running" | "paused" | "completed";
+  started_at: string | null;
+  paused_at: string | null;
+  completed_at: string | null;
+  decision_notes: string | null;
+  runtime_days: number;
+  decision_status: string;
+  decision_blockers: string[];
+  performance: MarketingExperimentPerformance[];
+  created_at: string;
+  updated_at: string;
+};
+
+export type MarketingExperimentOverview = {
+  can_manage: boolean;
+  experiments: MarketingExperiment[];
+};
+
 export type TrustProofRecord = {
   id: string;
   proof_type: "review" | "seller_story" | "completed_purchase" | "statistic";
@@ -3786,6 +3858,29 @@ export async function getMarketingOverview(periodDays?: number): Promise<{
     return { marketing: (await response.json()) as MarketingOverview, apiConnected: true };
   } catch {
     return { marketing: emptyMarketingOverview, apiConnected: false };
+  }
+}
+
+export async function getMarketingExperimentOverview(): Promise<{
+  experimentOverview: MarketingExperimentOverview;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/marketing/experiments`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      experimentOverview: (await response.json()) as MarketingExperimentOverview,
+      apiConnected: true,
+    };
+  } catch {
+    return {
+      experimentOverview: { can_manage: false, experiments: [] },
+      apiConnected: false,
+    };
   }
 }
 

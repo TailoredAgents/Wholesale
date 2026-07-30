@@ -22,6 +22,13 @@ from app.schemas.marketing import (
     OfflineConversionGenerateResponse,
     OfflineConversionProcessResponse,
 )
+from app.schemas.marketing_experiments import (
+    MarketingExperimentCreate,
+    MarketingExperimentDecisionRequest,
+    MarketingExperimentOverview,
+    MarketingExperimentRead,
+    MarketingExperimentUpdate,
+)
 from app.schemas.trust_proof import (
     TrustProofAdminOverview,
     TrustProofAdminRead,
@@ -39,6 +46,12 @@ from app.services.marketing import (
     get_marketing_overview,
     process_next_marketing_conversion,
 )
+from app.services.marketing_experiments import (
+    create_marketing_experiment,
+    decide_marketing_experiment,
+    list_marketing_experiments,
+    update_marketing_experiment,
+)
 from app.services.trust_proof import (
     create_trust_proof,
     decide_trust_proof,
@@ -52,6 +65,9 @@ view_marketing_dependency = require_any_permission(
     PermissionKeys.SEND_BULK_COMMUNICATIONS,
 )
 manage_public_proof_dependency = require_any_permission(PermissionKeys.MANAGE_PUBLIC_PROOF)
+manage_experiments_dependency = require_any_permission(
+    PermissionKeys.MANAGE_MARKETING_EXPERIMENTS
+)
 
 
 def invalid(exc: ValueError) -> HTTPException:
@@ -59,6 +75,58 @@ def invalid(exc: ValueError) -> HTTPException:
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=str(exc),
     )
+
+
+@router.get("/experiments")
+def read_marketing_experiments(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_marketing_dependency)],
+) -> MarketingExperimentOverview:
+    return list_marketing_experiments(db, principal)
+
+
+@router.post("/experiments", status_code=201)
+def create_conversion_experiment(
+    payload: MarketingExperimentCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_experiments_dependency)],
+) -> MarketingExperimentRead:
+    try:
+        return create_marketing_experiment(db, principal, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+
+
+@router.put("/experiments/{experiment_id}")
+def update_conversion_experiment(
+    experiment_id: UUID,
+    payload: MarketingExperimentUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_experiments_dependency)],
+) -> MarketingExperimentRead:
+    try:
+        result = update_marketing_experiment(db, principal, experiment_id, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Marketing experiment not found.")
+    return result
+
+
+@router.post("/experiments/{experiment_id}/decision")
+def decide_conversion_experiment(
+    experiment_id: UUID,
+    payload: MarketingExperimentDecisionRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_experiments_dependency)],
+) -> MarketingExperimentRead:
+    try:
+        result = decide_marketing_experiment(db, principal, experiment_id, payload)
+    except (PermissionError, ValueError) as exc:
+        raise invalid(ValueError(str(exc))) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Marketing experiment not found.")
+    return result
 
 
 @router.get("/trust-proofs")

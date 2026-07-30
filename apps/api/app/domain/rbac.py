@@ -45,6 +45,7 @@ class PermissionKeys:
     VIEW_AUDIT_LOGS = "audit:view"
     MANAGE_API_CREDENTIALS = "integrations:manage_credentials"
     MANAGE_PUBLIC_PROOF = "marketing:manage_public_proof"
+    MANAGE_MARKETING_EXPERIMENTS = "marketing:manage_experiments"
     VIEW_BUYERS = "buyers:view"
     EDIT_BUYERS = "buyers:edit"
     VIEW_DEALS = "deals:view"
@@ -253,6 +254,11 @@ PERMISSIONS: tuple[PermissionDefinition, ...] = (
         "Manage public proof",
         "Prepare, review, publish, and retire evidence-backed public trust content.",
     ),
+    PermissionDefinition(
+        PermissionKeys.MANAGE_MARKETING_EXPERIMENTS,
+        "Manage marketing experiments",
+        "Prepare, launch, pause, and conclude controlled public-site experiments.",
+    ),
     PermissionDefinition(PermissionKeys.VIEW_BUYERS, "View buyers", "View buyer records."),
     PermissionDefinition(PermissionKeys.EDIT_BUYERS, "Edit buyers", "Create and update buyers."),
     PermissionDefinition(PermissionKeys.VIEW_DEALS, "View deals", "View deal records."),
@@ -382,6 +388,7 @@ ROLES: tuple[RoleDefinition, ...] = (
             PermissionKeys.VIEW_LEADS,
             PermissionKeys.SEND_BULK_COMMUNICATIONS,
             PermissionKeys.MANAGE_PUBLIC_PROOF,
+            PermissionKeys.MANAGE_MARKETING_EXPERIMENTS,
         ),
     ),
     RoleDefinition(

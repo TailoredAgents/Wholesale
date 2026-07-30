@@ -14,7 +14,9 @@ import Link from "next/link";
 
 import {
   getConversionAttribution,
+  getConversionExperimentContext,
   getConversionSessionId,
+  getDeviceCategory,
   recordConversionEvent,
 } from "../lib/conversion-events";
 import { siteConfig } from "../site-config";
@@ -309,6 +311,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       completed_steps: steps.length,
     });
 
+    const experiment = await getConversionExperimentContext(apiBaseUrl);
     const payload = {
       property_address: values.property_address.trim(),
       property_city: values.property_city.trim(),
@@ -331,6 +334,9 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       sms_consent: values.sms_consent,
       sms_consent_wording_version: "seller-sms-web-v2",
       conversion_session_id: getConversionSessionId(),
+      experiment_key: experiment?.experiment_key ?? null,
+      experiment_variant: experiment?.experiment_variant ?? null,
+      device_category: getDeviceCategory(),
       attribution: getConversionAttribution(),
     };
 

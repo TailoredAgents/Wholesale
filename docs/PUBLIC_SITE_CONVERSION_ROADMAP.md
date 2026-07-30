@@ -220,7 +220,26 @@ steps.
 
 ## Phase PC7: Conversion Measurement And Testing
 
-Status: **Planned**
+Status: **Implemented**. Production baseline collection and the first deliberately approved test
+remain operational steps.
+
+### Implementation Decisions
+
+- PC7 extends Stonegate's existing first-party conversion and CRM attribution system rather than
+  adding another analytics product.
+- Marketing can run one experiment at a time on the homepage offer CTA. The first supported test
+  changes CTA wording only, which keeps the causal question understandable.
+- A persistent anonymous browser identifier assigns a visitor deterministically to a 50/50
+  control or treatment. The assignment cannot change within the seller journey.
+- Conversion events record device category without storing seller field values. When a seller
+  submits, the assignment links to the resulting lead and follows qualification, appointments,
+  signed contracts, collected revenue, source, and campaign.
+- Every experiment requires a hypothesis, primary business outcome, at least 20 sessions per
+  version, at least seven active runtime days, and a written decision rule before launch.
+- Thresholds produce **Ready for human review**, never an automatic winner. Marketing records the
+  final decision and supporting business evidence.
+- Only one running experiment may affect a public surface. Pausing stops new assignments while
+  preserving all existing records and accumulated active runtime.
 
 ### Work
 
@@ -235,6 +254,8 @@ Status: **Planned**
 - A variation can be tied to downstream CRM outcomes without exposing seller details.
 - Decisions are based on qualified appointments, contracts, cost per contract, and funded margin.
 - Experiments do not run without enough traffic or a named decision rule.
+- Stable assignment, downstream lead linkage, permission controls, and experiment decisions are
+  covered by automated acceptance tests.
 
 ## Phase PC8: Team Identity And Photography
 

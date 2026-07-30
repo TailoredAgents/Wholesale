@@ -1239,6 +1239,18 @@ books. Sensitive vendor, banking, tax, and accounting controls are permission-ga
 | Funnel metrics | Shows visits, starts, submissions, leads, appointments, contracts, and revenue | Read-only |
 | Cost metrics | Shows spend, cost per lead, acquisition cost, and return | Depends on linked spend and revenue |
 | Web performance | Shows Core Web Vitals and public-site health | Read-only monitoring |
+| Experiment ledger | Lists draft, running, paused, and completed homepage CTA tests | Visible to Marketing reporting roles |
+| **New test** | Opens a controlled two-version CTA experiment draft | Owner or Marketing Manager |
+| Experiment key / Name / Hypothesis | Identifies the test and states why the change should affect the selected outcome | Required before creation |
+| Primary business outcome | Selects submitted lead, qualified lead, appointment, signed contract, or funded deal as the planned decision metric | Select before launch; qualified lead is the default |
+| Current CTA / Test CTA | Defines the only public difference in the first experiment surface | Both versions receive 50% stable assignment |
+| Sessions per version / Minimum runtime | Defines when the report can become ready for human review | At least 20 sessions per version and seven active days |
+| Decision rule | States in advance how downstream evidence will be weighed | Required before launch |
+| **Create draft / Save draft** | Saves the experiment without affecting the public site | Draft only |
+| **Start test** | Opens the test to new homepage assignments | Blocked when another test is running on the same surface |
+| **Pause / Resume** | Stops or restarts new assignments while preserving active runtime and evidence | Running or paused test |
+| **Complete test** | Stops the test and records the owner's final evidence-based decision | Does not automatically rewrite the permanent CTA |
+| Variant report | Compares device mix, sessions, leads, qualification, appointments, contracts, funded deals, revenue, and primary rate | Read-only; never auto-declares a winner |
 | Public proof library | Lists reviews, seller stories, completed purchases, and statistics with publication and permission status | Visible in Marketing; editing requires public-proof management permission |
 | **New proof** | Opens a clean evidence-backed draft | Owner or Marketing Manager |
 | Public content fields | Define the approved title, text, attribution, location, rating, or metric visible to sellers | Only editable while the record is a draft |

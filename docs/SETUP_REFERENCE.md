@@ -581,6 +581,27 @@ For the first real production record:
 Never enter sample testimonials or production-looking placeholders for acceptance. Stonegate
 does not publish self-serving Review or AggregateRating structured data.
 
+## Conversion Experiment Acceptance
+
+The PC7 experiment system is first-party and requires no external account or credential.
+Authorized users operate it under **OS > Marketing > Conversion experiments**.
+
+Before the first live test:
+
+1. Record the existing homepage funnel baseline for at least one normal reporting period.
+2. Create a draft using the current CTA as Control and one wording-only Test CTA.
+3. Choose a primary business outcome and write the stopping and decision rule before launch.
+4. Start the experiment and open the public homepage in a private browser.
+5. Confirm one approved CTA appears, the complete cash-offer journey succeeds, and the submitted
+   lead is created normally.
+6. Confirm Marketing shows the assigned session under exactly one version with the correct device
+   category and linked lead.
+7. Pause and resume once to verify active runtime stops while paused and no evidence is deleted.
+8. Leave the test running only after this acceptance passes.
+
+Do not use production seller submissions as synthetic acceptance records. Do not run overlapping
+homepage CTA tests or change only one version through an unrelated deployment.
+
 ## Operations And Recovery
 
 ### Checks
@@ -637,6 +658,7 @@ After a production deployment:
 | Resend controlled production acceptance | Stonegate owner/partner | Now |
 | Search Console and service-area Business Profile acceptance | Stonegate owner/marketing | Before local search launch |
 | First genuine public proof acceptance | Stonegate owner/marketing | After a documented review or outcome exists |
+| First controlled homepage experiment acceptance | Stonegate owner/marketing | After a stable production baseline exists |
 | Twilio A2P resubmission and approval | Stonegate owner | Provider application |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After A2P approval |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |

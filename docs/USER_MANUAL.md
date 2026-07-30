@@ -1581,6 +1581,32 @@ Drill into source records before changing spend. The Marketing Copilot may recom
 cannot change budgets, audiences, ads, or campaigns. Preparing or delivering outcomes never edits
 the lead, transaction, revenue, accounting, ad budget, campaign, or creative.
 
+### Run A Controlled Homepage Test
+
+Use this workflow only when Stonegate has enough live website traffic to compare one CTA wording
+change. It does not require another provider account.
+
+1. Open **Marketing > Conversion experiments**.
+2. Select **New test**.
+3. Enter a stable lowercase experiment key, a plain-language name, and one testable hypothesis.
+4. Choose the primary outcome. **Qualified lead** is the normal starting point because it filters
+   out low-quality submissions without waiting as long as a funded deal.
+5. Leave the current CTA as Control and enter one Test CTA. Do not change other homepage content
+   during the test unless the same change applies to both versions.
+6. Set the minimum sessions per version, minimum runtime, and decision rule. The system enforces a
+   minimum of 20 sessions per version and seven active days.
+7. Select **Create draft**, reopen the draft, verify every field, and select **Start test**.
+8. While it runs, review assigned sessions, device mix, submissions, qualified leads,
+   appointments, contracts, funded deals, and collected revenue.
+9. Select **Pause** if a version is misleading, broken, or creating a seller-experience problem.
+   Existing evidence remains intact.
+10. When the report says **Ready for human review**, apply the written rule. Select **Complete
+    test** and record what Stonegate decided and why.
+
+Assignment is anonymous until a seller submits. At submission, the experiment follows the lead
+through the CRM. The system prevents one browser session from changing versions and never
+automatically declares or publishes a winner.
+
 ### Publishing Public Proof
 
 The public-proof library is below the website funnel section. Published proof can appear on the

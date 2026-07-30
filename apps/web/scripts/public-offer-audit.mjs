@@ -19,6 +19,34 @@ function record(viewport, type, detail) {
 }
 
 async function installApiStubs(page, state) {
+  await page.route("**/api/v1/public/experiments", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        experiments: [
+          {
+            experiment_key: "audit_homepage_cta",
+            surface_key: "homepage_offer_cta",
+            variants: [
+              {
+                key: "control",
+                label: "Current CTA",
+                weight_basis_points: 5000,
+                cta_label: "Start My Offer",
+              },
+              {
+                key: "treatment",
+                label: "Test CTA",
+                weight_basis_points: 5000,
+                cta_label: "Get My Cash Offer",
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  });
   await page.route("**/api/v1/public/conversion-events", async (route) => {
     state.events.push(route.request().postDataJSON());
     await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: crypto.randomUUID(), event_type: "test" }) });
@@ -422,7 +450,7 @@ async function auditJourney(browser, viewport) {
     await auditDiscovery(page, viewport.name);
   }
   await page.getByLabel("Property address").first().fill("123 Main St");
-  await page.getByRole("button", { name: "Start My Offer" }).first().click();
+  await page.getByRole("button", { name: /Start My Offer|Get My Cash Offer/ }).first().click();
   await page.waitForURL(/\/get-a-cash-offer\?address=123\+Main\+St/);
   await checkMobileActionBar(
     page,
@@ -529,6 +557,23 @@ async function auditJourney(browser, viewport) {
     if (payload?.[key] !== expected) record(viewport.name, "payload", { key, expected, actual: payload?.[key] });
   }
   if (!payload?.conversion_session_id) record(viewport.name, "session-link", "Missing conversion_session_id.");
+  if (
+    payload?.experiment_key !== "audit_homepage_cta" ||
+    !["control", "treatment"].includes(payload?.experiment_variant)
+  ) {
+    record(viewport.name, "experiment-link", {
+      experimentKey: payload?.experiment_key,
+      variant: payload?.experiment_variant,
+    });
+  }
+  const expectedDevice =
+    viewport.width <= 720 ? "mobile" : viewport.width <= 1024 ? "tablet" : "desktop";
+  if (payload?.device_category !== expectedDevice) {
+    record(viewport.name, "device-category", {
+      expected: expectedDevice,
+      actual: payload?.device_category,
+    });
+  }
 
   await page.getByRole("button", { name: "Add property details" }).click();
   await page.locator("#property_type").selectOption("single_family");
@@ -587,6 +632,16 @@ async function auditJourney(browser, viewport) {
   }
   if (!state.events.some((event) => event.event_type === "form_validation_error")) {
     record(viewport.name, "measurement", "Validation event was not emitted.");
+  }
+  const attributedEvents = state.events.filter(
+    (event) => event.experiment_key === "audit_homepage_cta",
+  );
+  if (!attributedEvents.length) {
+    record(viewport.name, "measurement", "Experiment assignment was not emitted.");
+  } else if (
+    new Set(attributedEvents.map((event) => event.experiment_variant)).size !== 1
+  ) {
+    record(viewport.name, "measurement", "Experiment assignment changed within one journey.");
   }
   if (
     viewport.width <= 720 &&

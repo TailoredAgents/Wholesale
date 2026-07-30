@@ -921,6 +921,86 @@ class AttributionTouch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     referrer: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
 
+class MarketingExperiment(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "marketing_experiments"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "experiment_key",
+            name="uq_marketing_experiments_org_key",
+        ),
+        CheckConstraint(
+            "status IN ('draft', 'running', 'paused', 'completed')",
+            name="ck_marketing_experiments_status",
+        ),
+        CheckConstraint(
+            "primary_metric IN "
+            "('form_submit', 'qualified_lead', 'appointment_scheduled', "
+            "'contract_signed', 'funded_deal')",
+            name="ck_marketing_experiments_primary_metric",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    experiment_key: Mapped[str] = mapped_column(String(80), nullable=False)
+    name: Mapped[str] = mapped_column(String(180), nullable=False)
+    hypothesis: Mapped[str] = mapped_column(String(1000), nullable=False)
+    surface_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    primary_metric: Mapped[str] = mapped_column(String(80), nullable=False)
+    variants: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    minimum_sessions_per_variant: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="50"
+    )
+    minimum_runtime_days: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="14"
+    )
+    decision_rule: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="draft", index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    updated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    active_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    accumulated_runtime_seconds: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decision_notes: Mapped[str | None] = mapped_column(String(2000))
+
+
+class MarketingExperimentAssignment(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "marketing_experiment_assignments"
+    __table_args__ = (
+        UniqueConstraint(
+            "experiment_id",
+            "session_id",
+            name="uq_marketing_experiment_assignments_session",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    experiment_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("marketing_experiments.id"), index=True
+    )
+    session_id: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
+    variant_key: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    device_category: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="unknown"
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id"), index=True
+    )
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
 class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "conversion_events"
 
@@ -939,6 +1019,15 @@ class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     gclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fbclid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     session_id: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    experiment_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("marketing_experiments.id"), nullable=True, index=True
+    )
+    experiment_variant: Mapped[str | None] = mapped_column(
+        String(80), nullable=True, index=True
+    )
+    device_category: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="unknown", index=True
+    )
     ip_address: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
     event_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)

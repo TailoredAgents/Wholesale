@@ -281,6 +281,18 @@ abandonment, submit attempts, failures, successful submissions, phone clicks, an
 Marketing uses these events to evaluate funnel performance. Public event intake does not grant OS
 access.
 
+PC7 adds governed `MarketingExperiment` and `MarketingExperimentAssignment` records. A running
+homepage CTA experiment is exposed through a read-only public endpoint. The browser makes a stable
+anonymous 50/50 assignment and includes the experiment key, variant, session, and desktop/tablet/
+mobile category with conversion events and seller intake. The API validates the running
+experiment, prevents a session from switching variants, and links the assignment to the created
+lead.
+
+Marketing reports each version through assigned sessions, form starts, submissions, qualified
+leads, appointments, executed contracts, funded deals, and collected revenue. Runtime and
+per-version traffic thresholds control when the result becomes ready for human review; the system
+does not choose a winner or change the public site autonomously.
+
 ### 6.5 Public Trust Proof
 
 Marketing manages `PublicProofRecord` entries for reviews, seller stories, completed purchases,
@@ -411,6 +423,8 @@ The OS uses five stable navigation groups.
 
 - Spend, public funnel performance, unit economics, offline conversion queue, and Marketing
   Copilot.
+- Controlled homepage CTA experiments, stable variant assignment, device mix, downstream business
+  outcomes, stopping thresholds, and recorded human decisions.
 
 ### 7.5 Control
 
@@ -903,6 +917,10 @@ Marketing also owns the public trust-proof library. `marketing:manage_public_pro
 and Marketing Manager roles to prepare, review, publish, unpublish, and retire proof. Other
 marketing viewers can inspect status but cannot change public content. Every state transition is
 written to the audit log.
+
+`marketing:manage_experiments` allows Owner and Marketing Manager roles to prepare, start, pause,
+resume, and complete controlled public-site tests. Only one running test may use the same surface.
+Every lifecycle decision is written to the audit ledger.
 
 ## 16. AI Copilot System
 

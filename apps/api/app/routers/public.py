@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.schemas.marketing_experiments import PublicExperimentResponse
 from app.schemas.public_intake import (
     ConversionEventCreate,
     ConversionEventResponse,
@@ -14,10 +15,20 @@ from app.schemas.public_intake import (
 )
 from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
+from app.services.marketing_experiments import list_public_experiments
 from app.services.public_intake import create_public_seller_lead, enrich_public_seller_lead
 from app.services.trust_proof import get_public_trust_proofs
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+
+@router.get("/experiments")
+def read_public_experiments(
+    response: Response,
+    db: Annotated[Session, Depends(get_db)],
+) -> PublicExperimentResponse:
+    response.headers["Cache-Control"] = "no-store"
+    return list_public_experiments(db)
 
 
 @router.get("/trust-proofs")

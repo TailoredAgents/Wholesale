@@ -527,6 +527,25 @@ before it actually clears.
 6. Use Marketing Copilot for evidence-linked observations.
 7. Record accepted, corrected, or rejected recommendations.
 
+### Controlled Website Test
+
+1. Open **Marketing > Conversion experiments**.
+2. Select **New test** and write one specific hypothesis.
+3. Keep the current homepage CTA as Control and enter one alternative CTA as Test.
+4. Select the business outcome that should guide the decision. Use **Qualified lead** unless the
+   owner deliberately chooses a deeper outcome.
+5. Set the minimum traffic, active runtime, and written decision rule before launch.
+6. Start only when no other experiment is running on the homepage CTA.
+7. Do not edit the versions, campaign treatment, or decision rule after launch.
+8. Review device balance and downstream qualification, appointments, contracts, and funded
+   revenue. Do not judge the test from submissions alone.
+9. Wait for **Ready for human review** unless a technical or seller-experience problem requires an
+   early pause.
+10. Select **Complete test** and record the final decision and supporting evidence.
+
+The report does not automatically change the permanent website. A completed result is an evidence
+record for the owner and Marketing team.
+
 ### Campaign Setup
 
 1. Create the market and territory first.

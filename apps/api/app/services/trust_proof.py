@@ -329,8 +329,9 @@ def validate_required_values(values: dict[str, object]) -> None:
         ("title", "Public title"),
         ("source_type", "Source type"),
     ):
+        current = values.get(key)
         if key in values and not (
-            isinstance(values[key], str) and values[key].strip()
+            isinstance(current, str) and current.strip()
         ):
             raise ValueError(f"{label} cannot be empty.")
 

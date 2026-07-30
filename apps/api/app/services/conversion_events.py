@@ -4,7 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.foundation import ConversionEvent, Organization
+from app.models.foundation import (
+    ConversionEvent,
+    MarketingExperiment,
+    MarketingExperimentAssignment,
+    Organization,
+)
 from app.schemas.public_intake import ConversionEventCreate, SellerIntakeAttribution
 
 
@@ -24,6 +29,9 @@ def record_public_conversion_event(
         ip_address=ip_address,
         user_agent=user_agent,
         session_id=payload.session_id,
+        experiment_key=payload.experiment_key,
+        experiment_variant=payload.experiment_variant,
+        device_category=payload.device_category,
         metadata=payload.metadata,
     )
     db.commit()
@@ -41,8 +49,20 @@ def record_conversion_event(
     user_agent: str | None,
     lead_id: uuid.UUID | None = None,
     session_id: str | None = None,
+    experiment_key: str | None = None,
+    experiment_variant: str | None = None,
+    device_category: str = "unknown",
     metadata: dict[str, object] | None = None,
 ) -> ConversionEvent:
+    experiment_id, assigned_variant = resolve_experiment_assignment(
+        db,
+        organization_id=organization_id,
+        session_id=session_id,
+        experiment_key=experiment_key,
+        experiment_variant=experiment_variant,
+        device_category=device_category,
+        lead_id=lead_id,
+    )
     event = ConversionEvent(
         organization_id=organization_id,
         lead_id=lead_id,
@@ -57,6 +77,9 @@ def record_conversion_event(
         gclid=attribution.gclid,
         fbclid=attribution.fbclid,
         session_id=session_id,
+        experiment_id=experiment_id,
+        experiment_variant=assigned_variant,
+        device_category=normalize_device_category(device_category),
         ip_address=ip_address,
         user_agent=user_agent,
         event_metadata=metadata,
@@ -64,6 +87,60 @@ def record_conversion_event(
     db.add(event)
     db.flush()
     return event
+
+
+def resolve_experiment_assignment(
+    db: Session,
+    *,
+    organization_id: uuid.UUID,
+    session_id: str | None,
+    experiment_key: str | None,
+    experiment_variant: str | None,
+    device_category: str,
+    lead_id: uuid.UUID | None,
+) -> tuple[uuid.UUID | None, str | None]:
+    if not session_id or not experiment_key or not experiment_variant:
+        return None, None
+    experiment = db.scalar(
+        select(MarketingExperiment).where(
+            MarketingExperiment.organization_id == organization_id,
+            MarketingExperiment.experiment_key == experiment_key,
+        )
+    )
+    if experiment is None:
+        return None, None
+    valid_variants = {
+        str(variant.get("key"))
+        for variant in experiment.variants
+        if isinstance(variant, dict) and variant.get("key")
+    }
+    assignment = db.scalar(
+        select(MarketingExperimentAssignment).where(
+            MarketingExperimentAssignment.experiment_id == experiment.id,
+            MarketingExperimentAssignment.session_id == session_id,
+        )
+    )
+    if assignment is not None:
+        if lead_id is not None and assignment.lead_id is None:
+            assignment.lead_id = lead_id
+        return experiment.id, assignment.variant_key
+    if experiment.status != "running" or experiment_variant not in valid_variants:
+        return None, None
+    assignment = MarketingExperimentAssignment(
+        organization_id=organization_id,
+        experiment_id=experiment.id,
+        session_id=session_id,
+        variant_key=experiment_variant,
+        device_category=normalize_device_category(device_category),
+        lead_id=lead_id,
+    )
+    db.add(assignment)
+    db.flush()
+    return experiment.id, experiment_variant
+
+
+def normalize_device_category(value: str) -> str:
+    return value if value in {"desktop", "tablet", "mobile"} else "unknown"
 
 
 def get_default_organization(db: Session) -> Organization:

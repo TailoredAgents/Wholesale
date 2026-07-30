@@ -157,6 +157,9 @@ def create_public_seller_lead(
         ip_address=ip_address,
         user_agent=user_agent,
         session_id=payload.conversion_session_id,
+        experiment_key=payload.experiment_key,
+        experiment_variant=payload.experiment_variant,
+        device_category=payload.device_category,
         metadata={"matched_existing_lead": matched_existing_lead},
     )
     db.add(

@@ -35,6 +35,9 @@ class SellerIntakeAttribution(BaseModel):
 class ConversionEventCreate(BaseModel):
     event_type: str = Field(min_length=1, max_length=80)
     session_id: str | None = Field(default=None, max_length=120)
+    experiment_key: str | None = Field(default=None, max_length=80)
+    experiment_variant: str | None = Field(default=None, max_length=80)
+    device_category: str = Field(default="unknown", max_length=20)
     metadata: dict[str, object] | None = None
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
 
@@ -70,6 +73,9 @@ class SellerIntakeCreate(BaseModel):
         max_length=80,
     )
     conversion_session_id: str | None = Field(default=None, max_length=120)
+    experiment_key: str | None = Field(default=None, max_length=80)
+    experiment_variant: str | None = Field(default=None, max_length=80)
+    device_category: str = Field(default="unknown", max_length=20)
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
 
     @model_validator(mode="after")

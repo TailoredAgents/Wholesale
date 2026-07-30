@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import {
   getMarketingCopilotOverview,
+  getMarketingExperimentOverview,
   getMarketingOverview,
   getTrustProofOverview,
   getWorkspaceProfile,
@@ -15,6 +16,7 @@ import { ReportingPeriod, type ReportingPeriodKey } from "../_components/reporti
 import { StatusBadge } from "../_components/design-system";
 import { labelize } from "../os-utils";
 import { OfflineExportButton } from "./offline-export-button";
+import { ExperimentWorkspace } from "./experiment-workspace";
 import { TrustProofWorkspace } from "./trust-proof-workspace";
 import styles from "../_components/management-workspaces.module.css";
 import marketingStyles from "./marketing.module.css";
@@ -70,11 +72,13 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
     { marketing, apiConnected },
     profile,
     marketingCopilot,
+    { experimentOverview, apiConnected: experimentsConnected },
     { trustProof, apiConnected: trustProofConnected },
   ] = await Promise.all([
     getMarketingOverview(periodDays),
     getWorkspaceProfile(),
     getMarketingCopilotOverview(copilotPeriodDays),
+    getMarketingExperimentOverview(),
     getTrustProofOverview(),
   ]);
   const previous = marketing.previous_summary;
@@ -156,6 +160,11 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
         {marketing.web_vitals.length ? marketing.web_vitals.map((metric) => <article key={metric.metric}><div><strong>{metric.metric} p75</strong><StatusBadge tone={vitalTone(metric.metric, metric.p75_value)}>{vitalValue(metric.metric, metric.p75_value)}</StatusBadge></div><p>{metric.sample_count} real-user samples · {percentage(metric.good_rate_basis_points)} rated good</p></article>) : <p className={styles.empty}>No real-user Core Web Vitals samples have been recorded in this period.</p>}
       </div>
     </section>
+
+    <ExperimentWorkspace
+      apiConnected={experimentsConnected}
+      initialData={experimentOverview}
+    />
 
     <TrustProofWorkspace
       apiConnected={trustProofConnected}
