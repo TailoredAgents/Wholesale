@@ -212,7 +212,7 @@ export default async function Home() {
           <strong>{overdueTasks.length}</strong>
           <small>Follow-up past due</small>
         </Link>
-        <Link className={styles.warningMetric} href="/os/lead-manager">
+        <Link className={styles.warningMetric} href="/os/leads?view=queue">
           <span><UserRoundCheck aria-hidden="true" size={16} />Qualification</span>
           <strong>{needsQualification.length}</strong>
           <small>Seller records incomplete</small>
@@ -222,7 +222,7 @@ export default async function Home() {
           <strong>{todayAppointments}</strong>
           <small>{appointmentQueue.length} awaiting appointment work</small>
         </Link>
-        <Link className={styles.brandMetric} href="/os/underwriting">
+        <Link className={styles.brandMetric} href="/os/leads?view=underwriting">
           <span><CheckCircle2 aria-hidden="true" size={16} />Offer prep</span>
           <strong>{offerQueue.length}</strong>
           <small>Underwriting or approval</small>
@@ -303,11 +303,11 @@ export default async function Home() {
             <p>Pipeline pulse</p>
             <h2 id="pipeline-heading">Active seller stages</h2>
           </div>
-          <Link href="/os/pipeline">Open Seller Pipeline <ArrowRight aria-hidden="true" size={15} /></Link>
+          <Link href="/os/leads?display=board">Open Seller Pipeline <ArrowRight aria-hidden="true" size={15} /></Link>
         </header>
         <div>
           {pipelineStages.slice(0, 8).map((stage) => (
-            <Link href={`/os/pipeline?stage=${stage.key}`} key={stage.key}>
+            <Link href={`/os/leads?display=board&stage=${stage.key}`} key={stage.key}>
               <span>{stage.label}</span>
               <strong>{getPipelineStageCount(stage, pipelineCounts)}</strong>
             </Link>

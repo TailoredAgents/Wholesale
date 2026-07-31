@@ -949,7 +949,7 @@ Exit criteria:
 
 ## IA5. Seller Leads Consolidation
 
-Status: **Planned**
+Status: **Implemented July 30, 2026**
 
 Scope:
 
@@ -1466,5 +1466,42 @@ second campaign model.
 
 ### 22.5 Next Phase
 
-IA5 consolidates Lead Desk, the lead list, pipeline, and active underwriting queue as local Seller
-Leads views while preserving every seller record and deep link.
+IA5 is complete. IA6 moves field meeting execution into Calendar while preserving appointment
+deep links and the iPad workflow.
+
+## 23. IA5 Seller Leads Consolidation Implementation
+
+### 23.1 One Seller Workspace
+
+`/os/leads` is the canonical seller workspace. Its local views are:
+
+- **Lead Queue** for SLA-aware warm handoffs, qualification, follow-up, performance, standards,
+  and Lead Manager Copilot work.
+- **All Leads** for saved views, search, ownership, stage filters, manual creation, archive access,
+  and seller preview.
+- **Pipeline** for the same filtered seller set displayed as a board.
+- **Underwriting** for the active valuation and offer-preparation queue.
+
+Table/board choice, saved view, search, owner, stage, and selected seller are represented in URL
+state so context survives display changes and links can be shared.
+
+### 23.2 Seller Record
+
+The seller record now has stable **Summary**, **Activity**, **Property**, **Valuation & Offer**,
+**Appointments**, **Contract & Deal**, and **Files** sections. Activity combines communication,
+appointment, consent, attribution, and material workflow history without deleting source evidence.
+Old `overview`, `communications`, `history`, `underwriting`, and `deal` tab links are normalized to
+their new sections.
+
+### 23.3 Configuration Boundary
+
+The active underwriting queue remains in Seller Leads. Provider scorecards, formula-governance
+decisions, verified outcome history, and calibration metrics now live in **Settings > Data &
+Quality**, where authorized managers configure and audit valuation quality.
+
+### 23.4 Compatibility
+
+- `/os/lead-manager?lead=...` redirects to `/os/leads?view=queue&lead=...`.
+- `/os/pipeline?stage=...` redirects to `/os/leads?display=board&stage=...`.
+- `/os/underwriting?lead=...` redirects to `/os/leads?view=underwriting&lead=...`.
+- Existing `/os/leads/[leadId]` links remain valid.

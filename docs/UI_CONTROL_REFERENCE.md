@@ -204,15 +204,15 @@ change staff-reviewed information.
 | **Calendar** | Opens the company field calendar | Navigation only |
 | Executive Copilot launcher | Opens evidence-backed management analysis | Visible when the Executive Copilot is installed |
 | Overdue metric | Opens overdue tasks | Count is scoped to the signed-in user's visibility |
-| Qualification metric | Opens Lead Desk | Shows seller records needing qualification |
+| Qualification metric | Opens Seller Leads > Lead Queue | Shows seller records needing qualification |
 | Meetings today metric | Opens Calendar | Includes today's scheduled appointments |
-| Offer prep metric | Opens Underwriting | Includes underwriting and approval work |
+| Offer prep metric | Opens Seller Leads > Underwriting | Includes underwriting and approval work |
 | Priority title or arrow | Opens the record or workspace for that item | Navigation only |
 | Task completion check | Completes the attached task | Visible only with lead-edit permission; use only after doing the work |
 | **Open full queue** | Opens Tasks | Navigation only |
 | Needs intervention links | Open unread conversations, unassigned leads, unscheduled tasks, or approvals | Team-wide exceptions are hidden from narrowly scoped roles |
-| Pipeline stage | Opens Seller Pipeline filtered to that stage | Navigation only |
-| **Open Seller Pipeline** | Opens the unfiltered pipeline | Navigation only |
+| Pipeline stage | Opens Seller Leads in Board mode filtered to that stage | Navigation only |
+| **Open Seller Pipeline** | Opens Seller Leads in Board mode | Navigation only |
 
 An **API fallback view** warning means counts are empty fallback data, not proof that no work exists.
 
@@ -256,7 +256,7 @@ If a bulk request partially fails, completed tasks disappear and failed tasks re
 
 Calendar loading or availability errors do not delete appointments. Refresh after API recovery.
 
-## All Leads
+## Seller Leads
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -269,14 +269,16 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
 | **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
 | Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid leads | Read-only |
+| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Seller Leads work without changing records | Underwriting requires underwriting access |
 | Saved lead views | Filters by predefined operating state and updates the URL | Filter only |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
 | Stage filter | Shows one normalized pipeline stage | Filter only |
+| Table / Board | Changes display while preserving saved view, search, owner, stage, and selected seller | Display only |
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Lead Desk, Inbox, Dispatch, Underwriting, Negotiation, or full record based on status | Navigation only |
 | **Conversation** | Opens Inbox on this seller | Requires conversation access |
-| **Full record** | Opens the five-tab lead record | Requires lead access |
+| **Full record** | Opens the seven-section seller record | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
 | Archived Leads link | Opens archived seller records | Requires lifecycle visibility |
@@ -293,7 +295,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | **Archive lead** | Removes an active lead from normal queues while retaining history | Confirmation required |
 | **Cancel** | Closes an archive or deletion dialog without changing the record | Dialog only |
 
-## Seller Pipeline
+### Pipeline Display
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -566,9 +568,9 @@ Within My Calls, views are **Work queue**, **Call quality**, **Handoff review** 
 | **Approve** | Makes that draft the approved caller script | Manager only |
 | Caller script history | Shows version, status, and question count | Read-only |
 
-## Lead Desk
+## Seller Leads Lead Queue
 
-Lead Desk views are **Copilot**, **Today**, **Qualification**, **Performance**, and **Standards**.
+Lead Queue views are **Copilot**, **Today**, **Qualification**, **Performance**, and **Standards**.
 
 ### Copilot
 
@@ -870,11 +872,11 @@ and **Outcome**. Focus mode reduces navigation distractions during a seller meet
 
 ## Seller Record
 
-The seller record uses **Overview**, **Communications**, **Underwriting**, **Deal**, and
-**History** tabs. Every tab acts on the same lead; changing ownership or stage does not
-create a second record.
+The seller record uses **Summary**, **Activity**, **Property**, **Valuation & Offer**,
+**Appointments**, **Contract & Deal**, and **Files** sections. Every section acts on the same lead;
+changing ownership or stage does not create a second record.
 
-### Header And Overview
+### Header And Summary
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -918,7 +920,7 @@ create a second record.
 | Appointment outcome | Records completed, canceled, no-show, or rescheduled result | Existing appointment required |
 | **Save outcome** | Persists appointment outcome and notes | Does not automatically close the lead |
 
-### Communications Tab
+### Activity
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -928,7 +930,7 @@ create a second record.
 | **Log communication** | Adds the event to the seller timeline | Does not send an external message |
 | Timeline row | Shows calls, messages, emails, notes, transcripts, and provider status | Read-only |
 
-### History Tab
+The Activity section also includes:
 
 | Section | Purpose | Availability |
 | --- | --- | --- |
@@ -938,11 +940,12 @@ create a second record.
 | Consent and attribution | Shows source, consent, and campaign evidence | Read-only to normal staff |
 | Audit events | Shows who changed important fields and when | Visibility depends on role |
 
-## Underwriting Workspace
+## Valuation And Offer
 
-The lead's Underwriting tab is the working valuation area. The separate Underwriting
-page is the management queue and calibration area. A market analysis is decision support,
-not an appraisal or permission to promise a seller a price.
+The seller record's Valuation & Offer section is the working valuation area. **Seller Leads >
+Underwriting** is the active queue, while **Settings > Data & Quality** owns calibration,
+provider scorecards, and methodology decisions. A market analysis is decision support, not an
+appraisal or permission to promise a seller a price.
 
 ### Repair Inputs
 

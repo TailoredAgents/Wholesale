@@ -34,10 +34,10 @@ function statusTone(status: string): "danger" | "warning" | "info" | "success" |
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
   const status = getLeadOperatingStatus(lead, tasks);
   if (status === "Overdue follow-up") return { href: `/os/inbox?lead=${lead.id}`, label: "Reply now" };
-  if (status === "Needs qualification") return { href: `/os/lead-manager?lead=${lead.id}`, label: "Qualify" };
+  if (status === "Needs qualification") return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Qualify" };
   if (status === "Appointment work") return { href: `/os/field-operations?view=dispatch&lead=${lead.id}`, label: "Schedule" };
-  if (status === "Offer prep") return { href: `/os/leads/${lead.id}#underwriting`, label: "Prepare offer" };
-  if (status === "Negotiation") return { href: `/os/leads/${lead.id}#negotiation`, label: "Negotiate" };
+  if (status === "Offer prep") return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
+  if (status === "Negotiation") return { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Negotiate" };
   if (status === "Nurture") return { href: `/os/inbox?lead=${lead.id}`, label: "Follow up" };
   return { href: `/os/leads/${lead.id}`, label: "Open record" };
 }
@@ -76,7 +76,12 @@ export function PipelineWorkspace({
   function chooseStage(value: string) {
     setStage(value);
     setSelectedId("");
-    router.replace(value === "all" ? "/os/pipeline" : `/os/pipeline?stage=${value}`, { scroll: false });
+    router.replace(
+      value === "all"
+        ? "/os/leads?display=board"
+        : `/os/leads?display=board&stage=${value}`,
+      { scroll: false },
+    );
   }
 
   return (

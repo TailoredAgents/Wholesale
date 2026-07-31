@@ -1299,7 +1299,7 @@ function InPersonContractPanel({
                 Prepare exact agreement
               </Link>
             ) : (
-              <Link href={`${workspace.appointment.lead_url}?tab=deal`} rel="noreferrer" target="_blank">
+              <Link href={`${workspace.appointment.lead_url}?tab=contract`} rel="noreferrer" target="_blank">
                 Open lead deal
               </Link>
             )}
@@ -1459,7 +1459,7 @@ function NegotiationForm({
         <section className={styles.fieldAuthority}>
           <header>
             <div><span>Live offer authority</span><strong>Use a documented step before raising the offer</strong></div>
-            <Link href={`/os/leads/${workspace.appointment.lead_id}?tab=underwriting#negotiation-governance`}>Full ledger</Link>
+            <Link href={`/os/leads/${workspace.appointment.lead_id}?tab=valuation#negotiation-governance`}>Full ledger</Link>
           </header>
           <dl>
             <div><dt>Opening</dt><dd>{money(ledger.active_plan.opening_offer_cents)}</dd></div>

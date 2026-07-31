@@ -362,8 +362,8 @@ reaches feature parity.
 ### 7.2 Operations And Acquisition Tools
 
 The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaign
-management is now a local Prospecting view. Lead Desk, Seller Pipeline, Field Operations, and
-Underwriting remain compatibility tools and deep links over the same underlying records.
+management is a local Prospecting view. Lead Queue, Pipeline, and active Underwriting are local
+Seller Leads views. Field Operations remains a compatibility tool and appointment deep link.
 
 **Prospecting > Campaigns (`/os/prospecting?view=campaigns`)**
 
@@ -397,25 +397,20 @@ Underwriting remain compatibility tools and deep links over the same underlying 
 - Current prospect calls open through the device `tel:` handler and the VA records the result in
   Stonegate. External multi-line and predictive dialing are intentionally retired.
 
-**Lead Desk (`/os/lead-manager`)**
-
-- Lead Manager workspace for warm handoffs and website inquiries.
-- Supports acceptance, guided qualification, dated next actions, appointments, exceptions,
-  scorecards, and Lead Manager Copilot drafts.
-
 **Seller Leads (`/os/leads`)**
 
-- Searchable system of record for active leads.
+- Canonical seller workspace with Lead Queue, All Leads, Pipeline, and Underwriting local views.
+- Lead Queue supports acceptance, guided qualification, dated next actions, appointments,
+  exceptions, scorecards, and Lead Manager Copilot drafts.
 - Authorized staff can create an internal lead for a warm call, referral, networking source, or
   other genuine opportunity. One submission creates contact methods, property, ownership,
   source, qualification context, follow-up, conversation, and initial note.
-- Supports owner, stage, and saved-view filters plus direct next actions.
+- All Leads supports owner, stage, search, saved views, seller preview, and direct next actions.
+- Table and board modes operate on the same filtered records and preserve URL state.
+- Underwriting shows the active valuation queue; detailed comp work remains on the seller record.
 - Archived records live at `/os/leads/archived`.
-
-**Seller Pipeline (`/os/pipeline`)**
-
-- Stage-family board for inspecting movement and handoff state.
-- Links to qualification, communication, dispatch, underwriting, and the full lead record.
+- `/os/lead-manager`, `/os/pipeline`, and `/os/underwriting` preserve old links by redirecting to
+  the corresponding Seller Leads view.
 
 **Field Operations (`/os/field-operations`)**
 
@@ -430,10 +425,10 @@ Underwriting remain compatibility tools and deep links over the same underlying 
 - Aggregates existing Transaction, Disposition, and Approval counts without duplicating records.
 - Links to the current detailed tools until IA8 delivers one local deal workspace.
 
-**Underwriting (`/os/underwriting`)**
+**Valuation Quality (`/os/settings/data-quality`)**
 
-- Active analysis queue, calibration scorecards, verified outcomes, and methodology decisions.
-- Individual property analysis is performed from the lead record.
+- Calibration scorecards, verified outcomes, provider adequacy, and methodology decisions.
+- Restricted to users with data-quality or underwriting authority.
 
 **Approvals (`/os/approvals`)**
 

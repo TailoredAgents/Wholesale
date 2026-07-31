@@ -5,7 +5,7 @@ import { canSeeNavItem, compatibilityNavGroups, osNavGroups } from "../os-naviga
 import styles from "./deal-journey.module.css";
 
 const routeByKey = {
-  underwriting: "/os/underwriting",
+  underwriting: "/os/leads?view=underwriting",
   approvals: "/os/approvals",
   transactions: "/os/transactions",
   dispositions: "/os/dispositions",
@@ -18,7 +18,7 @@ export async function DealJourney({ active }: { active: DealRouteKey }) {
   const profile = await getWorkspaceProfile();
   const dealItems = [
     ...(compatibilityNavGroups.find((group) => group.label === "Acquisitions")?.items.filter(
-      (item) => item.href === "/os/underwriting",
+      (item) => item.href === "/os/leads?view=underwriting",
     ) ?? []),
     ...(compatibilityNavGroups.find((group) => group.label === "Deal tools")?.items ?? []),
     ...(osNavGroups.find((group) => group.label === "Operations")?.items.filter(

@@ -20,11 +20,13 @@ import { UnderwritingVersionComparison } from "./underwriting-version-comparison
 import styles from "./page.module.css";
 
 const tabs = [
-  ["overview", "Overview"],
-  ["communications", "Communications"],
-  ["underwriting", "Underwriting"],
-  ["deal", "Deal"],
-  ["history", "History"],
+  ["summary", "Summary"],
+  ["activity", "Activity"],
+  ["property", "Property"],
+  ["valuation", "Valuation & Offer"],
+  ["appointments", "Appointments"],
+  ["contract", "Contract & Deal"],
+  ["files", "Files"],
 ] as const;
 
 type LeadTab = (typeof tabs)[number][0];
@@ -68,7 +70,15 @@ function countLabel(count: number, singular: string, plural = `${singular}s`) {
 
 function normalizeTab(value: string | string[] | undefined): LeadTab {
   const candidate = Array.isArray(value) ? value[0] : value;
-  return tabs.some(([key]) => key === candidate) ? (candidate as LeadTab) : "overview";
+  const aliases: Record<string, LeadTab> = {
+    overview: "summary",
+    communications: "activity",
+    history: "activity",
+    underwriting: "valuation",
+    deal: "contract",
+  };
+  const normalized = candidate ? aliases[candidate] ?? candidate : "summary";
+  return tabs.some(([key]) => key === normalized) ? (normalized as LeadTab) : "summary";
 }
 
 function uniqueBy<T>(items: T[], keyFor: (item: T) => string) {
@@ -242,7 +252,7 @@ function OverviewTab({
 }) {
   const appointmentWorkspaceHref = activeAppointment
     ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
-    : `/os/leads/${lead.id}?tab=communications`;
+    : `/os/leads/${lead.id}?tab=appointments`;
   return (
     <div className={styles.overviewGrid}>
       <div className={styles.mainColumn}>
@@ -489,6 +499,118 @@ function HistoryTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
+function ActivityTab({ lead }: { lead: LeadDetail }) {
+  return (
+    <div className={styles.activityWorkspace}>
+      <CommunicationsTab lead={lead} />
+      <HistoryTab lead={lead} />
+    </div>
+  );
+}
+
+function PropertyTab({ lead }: { lead: LeadDetail }) {
+  return (
+    <div className={styles.tabGrid}>
+      <div className={styles.mainColumn}>
+        <PropertyPanel lead={lead} />
+        <section className={styles.sectionPanel}>
+          <SectionHeader title="Edit seller and property details" />
+          <div className={styles.sectionBody}><LeadEditForm lead={lead} /></div>
+        </section>
+      </div>
+      <aside className={styles.sideColumn}>
+        <ContactPanel lead={lead} />
+        <QualificationPanel lead={lead} />
+      </aside>
+    </div>
+  );
+}
+
+function AppointmentsTab({ lead }: { lead: LeadDetail }) {
+  return (
+    <div className={styles.tabGrid}>
+      <section className={styles.sectionPanel}>
+        <SectionHeader title="Seller appointments" meta={countLabel(lead.appointments.length, "appointment")} />
+        <div className={styles.recordList}>
+          {!lead.appointments.length ? <p className={styles.emptyState}>No appointment scheduled.</p> : null}
+          {lead.appointments.map((appointment) => (
+            <article key={appointment.id}>
+              <div className={styles.recordTitle}>
+                <strong>{labelize(appointment.appointment_type)}</strong>
+                <span>{labelize(appointment.status)}</span>
+              </div>
+              <p>{formatDate(appointment.scheduled_start_at)} / {labelize(appointment.location_type)}</p>
+              <small>{appointment.outcome ? `Outcome: ${labelize(appointment.outcome)}` : appointment.notes ?? "No outcome recorded"}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+      <aside className={styles.sideColumn}>
+        <section className={styles.sectionPanel}>
+          <SectionHeader title="Appointment actions" />
+          <ActionDisclosure label="Schedule appointment">
+            <AppointmentForm leadId={lead.id} />
+          </ActionDisclosure>
+          <ActionDisclosure label="Record appointment outcome">
+            <AppointmentOutcomeForm appointments={lead.appointments} leadId={lead.id} />
+          </ActionDisclosure>
+        </section>
+        <TasksPanel lead={lead} />
+      </aside>
+    </div>
+  );
+}
+
+function FilesTab({ lead }: { lead: LeadDetail }) {
+  return (
+    <div className={styles.tabGrid}>
+      <section className={styles.sectionPanel}>
+        <SectionHeader title="Reports and deal documents" />
+        <div className={styles.recordList}>
+          {lead.underwriting_versions.map((version) => (
+            <article key={version.id}>
+              <div className={styles.recordTitle}>
+                <strong>Valuation report version {version.version_number}</strong>
+                <span>{labelize(version.report_stage)}</span>
+              </div>
+              <p>{formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)} ARV</p>
+              <Link className={styles.transactionWorkspaceLink} href={`/os/leads/${lead.id}?tab=valuation`}>
+                Open report and PDF controls
+              </Link>
+            </article>
+          ))}
+          {lead.transactions.map((transaction) => (
+            <article key={transaction.id}>
+              <div className={styles.recordTitle}>
+                <strong>{labelize(transaction.contract_type)}</strong>
+                <span>{labelize(transaction.status)}</span>
+              </div>
+              <p>{transaction.title_company ?? "Title company not assigned"}</p>
+              <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
+                Open contracts and closing files
+              </Link>
+            </article>
+          ))}
+          {!lead.underwriting_versions.length && !lead.transactions.length ? (
+            <p className={styles.emptyState}>Reports and transaction documents will appear here after they are created.</p>
+          ) : null}
+        </div>
+      </section>
+      <aside className={styles.sideColumn}>
+        <section className={styles.sectionPanel}>
+          <SectionHeader title="Where files are created" />
+          <div className={styles.sectionBody}>
+            <p className={styles.emptyState}>
+              Investor and client PDFs are generated in Valuation & Offer. Contracts, signatures,
+              title files, and closing documents are managed in the transaction workspace.
+            </p>
+          </div>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
 export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const [{ leadId }, query] = await Promise.all([params, searchParams]);
   const activeTab = normalizeTab(query?.tab);
@@ -514,7 +636,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   );
   const appointmentWorkspaceHref = activeAppointment
     ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
-    : tabHref("communications");
+    : tabHref("appointments");
 
   return (
     <div className={styles.page}>
@@ -534,8 +656,8 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           {phone ? <a className={styles.primaryCommand} href={`tel:${phone}`}>Call seller</a> : null}
           {phone ? <a href={`sms:${phone}`}>Text</a> : null}
           {email ? <a href={`mailto:${email}`}>Email</a> : null}
-          <Link href={tabHref("communications")}>Log contact</Link>
-          <Link href={tabHref("underwriting")}>Run comps</Link>
+          <Link href={tabHref("activity")}>Log contact</Link>
+          <Link href={tabHref("valuation")}>Run comps</Link>
           <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
             {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
           </Link>
@@ -572,13 +694,15 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </nav>
 
           <section className={styles.tabContent}>
-            {activeTab === "overview" ? (
+            {activeTab === "summary" ? (
               <OverviewTab activeAppointment={activeAppointment} lead={lead} />
             ) : null}
-            {activeTab === "communications" ? <CommunicationsTab lead={lead} /> : null}
-            {activeTab === "underwriting" ? <UnderwritingTab lead={lead} /> : null}
-            {activeTab === "deal" ? <DealTab buyers={buyers} lead={lead} /> : null}
-            {activeTab === "history" ? <HistoryTab lead={lead} /> : null}
+            {activeTab === "activity" ? <ActivityTab lead={lead} /> : null}
+            {activeTab === "property" ? <PropertyTab lead={lead} /> : null}
+            {activeTab === "valuation" ? <UnderwritingTab lead={lead} /> : null}
+            {activeTab === "appointments" ? <AppointmentsTab lead={lead} /> : null}
+            {activeTab === "contract" ? <DealTab buyers={buyers} lead={lead} /> : null}
+            {activeTab === "files" ? <FilesTab lead={lead} /> : null}
           </section>
         </>
       )}

@@ -125,7 +125,7 @@ export default async function ApprovalsPage({
         </section>
       </section>
 
-      {sellerOffers.length ? <section className={styles.section}><header><div><span>Seller offers</span><h3>Deals approaching approval</h3></div><strong>{sellerOffers.length} deals</strong></header><div className={approvalStyles.offerGrid}>{sellerOffers.map((lead) => <Link href={`/os/leads/${lead.id}#underwriting`} key={lead.id}><div><strong>{lead.seller_name}</strong><StatusBadge tone="info">{labelize(lead.stage_key)}</StatusBadge></div><span>{lead.property_address}</span><small>{lead.asking_price ? `Seller asks ${lead.asking_price}` : "Seller asking price missing"}</small></Link>)}</div></section> : null}
+      {sellerOffers.length ? <section className={styles.section}><header><div><span>Seller offers</span><h3>Deals approaching approval</h3></div><strong>{sellerOffers.length} deals</strong></header><div className={approvalStyles.offerGrid}>{sellerOffers.map((lead) => <Link href={`/os/leads/${lead.id}?tab=valuation`} key={lead.id}><div><strong>{lead.seller_name}</strong><StatusBadge tone="info">{labelize(lead.stage_key)}</StatusBadge></div><span>{lead.property_address}</span><small>{lead.asking_price ? `Seller asks ${lead.asking_price}` : "Seller asking price missing"}</small></Link>)}</div></section> : null}
     </WorkspacePage>
   );
 }

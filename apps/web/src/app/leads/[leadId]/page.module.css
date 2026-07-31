@@ -281,6 +281,12 @@
   padding-top: 16px;
 }
 
+.activityWorkspace {
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+
 .overviewGrid,
 .tabGrid {
   display: grid;

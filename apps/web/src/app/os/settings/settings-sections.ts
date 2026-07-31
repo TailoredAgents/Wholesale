@@ -59,8 +59,14 @@ export const settingsSections: SettingsSection[] = [
     key: "data-quality",
     label: "Data & Quality",
     href: "/os/settings/data-quality",
-    description: "Duplicate review, record quality, and data stewardship.",
-    permissions: ["operations:manage", "records:delete_or_archive", "audit:view"],
+    description: "Duplicate review, record quality, and valuation calibration.",
+    permissions: [
+      "operations:manage",
+      "records:delete_or_archive",
+      "audit:view",
+      "underwriting:edit",
+      "underwriting:approve_arv",
+    ],
   },
   {
     key: "finance-policy",
@@ -92,4 +98,3 @@ export function canAccessSettingsSection(
 export function visibleSettingsSections(profile: WorkspaceProfile | null) {
   return settingsSections.filter((section) => canAccessSettingsSection(profile, section));
 }
-

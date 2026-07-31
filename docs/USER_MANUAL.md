@@ -237,11 +237,11 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Legacy Campaigns redirect | `/os/campaigns` |
 | Legacy Team & Access redirect | `/os/operations?tab=team` |
 | Legacy Email Management redirect | `/os/inbox?manage=email` |
-| Lead Desk | `/os/lead-manager` |
+| Seller Leads: Lead Queue | `/os/leads?view=queue` |
 | Archived Leads | `/os/leads/archived` |
-| Seller Pipeline | `/os/pipeline` |
+| Seller Leads: Pipeline | `/os/leads?display=board` |
 | Field Operations | `/os/field-operations` |
-| Underwriting | `/os/underwriting` |
+| Seller Leads: Underwriting | `/os/leads?view=underwriting` |
 | Approvals | `/os/approvals` |
 | Transactions | `/os/transactions` |
 | Dispositions | `/os/dispositions` |
@@ -736,7 +736,7 @@ the assignment itself is wrong; do not share logins.
 
 ## 4. Lead Manager Qualification
 
-Open **Lead Desk**. Its views are:
+Open **Seller Leads > Lead Queue**. Its views are:
 
 - **Copilot**
 - **Today**
@@ -1109,11 +1109,12 @@ Use **Resume signing** if the session was interrupted. Do not create another pac
 request for the same approved agreement. The seller handoff screen hides the Stonegate workspace
 until the device is returned.
 
-## 9. All Leads, Pipeline, And Lead Record
+## 9. Seller Leads And Seller Record
 
-### All Leads
+### Seller Leads
 
-Use **All Leads** to search and administer the seller database.
+Use **Seller Leads** to work from one seller database. Its local views are **Lead Queue**, **All
+Leads**, **Pipeline**, and **Underwriting**.
 
 1. Select **New Lead** for a warm call, referral, networking contact, or other staff-entered seller.
 2. Enter the seller name and at least one phone number or email.
@@ -1130,35 +1131,37 @@ Use **All Leads** to search and administer the seller database.
 Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
 Prospecting as prospects until the seller expresses interest.
 
-Use **Archived Leads** from All Leads to locate and restore archived records.
+Use **Archived** from Seller Leads to locate and restore archived records.
 
 ### Seller Pipeline
 
-Use **Seller Pipeline** to view stage distribution and bottlenecks. Select a card to inspect seller
-context. Use the recommended next action to open Inbox, Lead Desk, Field Operations, Underwriting,
-Negotiation, or the complete record.
+Select **Pipeline** to switch the same filtered records to a stage board. Search, owner, stage,
+selected seller, and display mode stay in the URL. Use the recommended next action to open Inbox,
+Lead Queue, Field Operations, Valuation & Offer, Contract & Deal, or the complete record.
 
 Move a stage only when the corresponding real-world event occurred. Stage movement does not
 replace qualification, approvals, or evidence.
 
 ### Lead Record
 
-The full lead record has five tabs:
+The full lead record has seven sections:
 
-- **Overview:** Tasks, qualification, recent activity, contact, property, and record controls.
-- **Communications:** Unified timeline, appointments, notes, and manual logs.
-- **Underwriting:** Property validation, comp analysis, repairs, versions, reports, and offer
-  authority.
-- **Deal:** Contracts, transactions, and buyer offers.
-- **History:** Consent evidence, attribution, and retained history.
+- **Summary:** Primary next action, tasks, qualification, recent activity, contact, and controls.
+- **Activity:** Unified communication, appointment, consent, attribution, and workflow history.
+- **Property:** Address validation, seller/property facts, and qualification editing.
+- **Valuation & Offer:** Comps, repairs, versions, PDFs, offer authority, and negotiation.
+- **Appointments:** Appointment history, scheduling, outcomes, and related tasks.
+- **Contract & Deal:** Transactions, contracts, and buyer offers.
+- **Files:** Links to generated valuation reports and transaction document workspaces.
 
 Use the lead record when you need the complete evidence chain. Use focused workspaces for daily
 queue execution.
 
 ## 10. Underwriting And Comp Analysis
 
-Open **Underwriting** to choose a lead, review valuation accuracy, or inspect calibration. Detailed
-analysis is completed in the lead's **Underwriting** tab.
+Open **Seller Leads > Underwriting** to choose an active valuation case. Detailed analysis is
+completed in the seller record's **Valuation & Offer** section. Calibration and provider-quality
+controls are in **Settings > Data & Quality**.
 
 ### Before Analysis
 
@@ -1172,7 +1175,7 @@ Confirm:
 
 ### Run Market Analysis
 
-1. Open the lead's **Underwriting** tab.
+1. Open the seller record's **Valuation & Offer** section.
 2. Confirm the property panel contains the correct complete address and known subject facts.
 3. Open **Comp setup**.
 4. Choose **Repair scope**: Light cosmetic, Moderate renovation, Heavy renovation, or Structural /

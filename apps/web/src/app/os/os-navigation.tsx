@@ -233,14 +233,14 @@ export const compatibilityNavGroups: CompatibilityNavGroup[] = [
         anyPermissions: ["operations:manage"],
       },
       {
-        href: "/os/lead-manager",
+        href: "/os/leads?view=queue",
         label: "Lead Desk",
         icon: ContactRound,
         roles: acquisitionRoles,
         anyPermissions: ["leads:view"],
       },
       {
-        href: "/os/pipeline",
+        href: "/os/leads?display=board",
         label: "Seller Pipeline",
         icon: Route,
         roles: ["administrator", ...acquisitionRoles],
@@ -254,7 +254,7 @@ export const compatibilityNavGroups: CompatibilityNavGroup[] = [
         anyPermissions: ["underwriting:edit", "operations:manage"],
       },
       {
-        href: "/os/underwriting",
+        href: "/os/leads?view=underwriting",
         label: "Underwriting",
         icon: ChartNoAxesCombined,
         roles: acquisitionRoles,

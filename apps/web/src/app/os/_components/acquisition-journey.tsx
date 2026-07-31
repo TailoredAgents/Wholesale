@@ -8,9 +8,9 @@ const routeByKey = {
   operations: "/os/operations",
   campaigns: "/os/prospecting?view=campaigns",
   prospecting: "/os/prospecting?view=my-calls",
-  "lead-manager": "/os/lead-manager",
+  "lead-manager": "/os/leads?view=queue",
   leads: "/os/leads",
-  pipeline: "/os/pipeline",
+  pipeline: "/os/leads?display=board",
   "field-operations": "/os/field-operations",
 } as const;
 

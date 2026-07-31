@@ -509,7 +509,7 @@ export function OperationsWorkspace({
             <div className={styles.rows}>
               {operations.appointments.length === 0 ? <p className={styles.empty}>No upcoming appointments.</p> : null}
               {operations.appointments.map((appointment) => (
-                <Link className={styles.appointmentRow} href={`/os/leads/${appointment.lead_id}?tab=communications`} key={appointment.id}>
+                <Link className={styles.appointmentRow} href={`/os/leads/${appointment.lead_id}?tab=appointments`} key={appointment.id}>
                   <time>{formatDate(appointment.scheduled_start_at)}</time>
                   <div><strong>{appointment.seller_name}</strong><span>{appointment.property_address}</span></div>
                   <div className={styles.rowMeta}><span>{appointment.owner_name ?? "Unassigned"}</span><span className={styles.badge}>{labelize(appointment.status)}</span></div>

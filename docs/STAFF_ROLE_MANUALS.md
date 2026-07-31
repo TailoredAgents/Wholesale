@@ -66,8 +66,8 @@ Access, Approvals, and AI Control while those detailed workspaces are being cons
 
 ## Lead Manager
 
-Main pages: Home, Inbox, Tasks, Calendar, and Seller Leads. Use Tools for Lead Desk and Seller
-Pipeline until IA5 consolidates those views.
+Main pages: Home, Inbox, Tasks, Calendar, and Seller Leads. Lead Queue, All Leads, Pipeline, and
+Underwriting are local Seller Leads views.
 
 - Accept warm leads, qualify the seller, and schedule appropriate appointments.
 - Keep an owner, next action, and due date on every active lead.
@@ -87,8 +87,8 @@ Main page: **Prospecting > My Calls**. Caller-only accounts open this view direc
 
 ## Acquisitions Closer
 
-Main pages: Home, Inbox, Calendar, Seller Leads, and Deals. Use Tools for Field Operations and
-Underwriting until their guided views move into Calendar and Seller Leads.
+Main pages: Home, Inbox, Calendar, Seller Leads, and Deals. Use Seller Leads > Underwriting for the
+active value queue and the seller record's Valuation & Offer section for detailed comp work.
 
 - Review the meeting brief and unresolved questions before the appointment.
 - Confirm condition, occupancy, decision-makers, access, and material property facts.
@@ -220,7 +220,7 @@ Devon initially covers this seat. Michael is expected to take it later.
 
 ### Start Of Day
 
-1. Open **Lead Desk > Today**.
+1. Open **Seller Leads > Lead Queue > Today**.
 2. Accept new warm handoffs.
 3. Handle overdue qualification and follow-up.
 4. Open **Inbox > Needs Reply**.

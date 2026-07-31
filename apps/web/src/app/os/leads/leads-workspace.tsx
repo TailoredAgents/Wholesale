@@ -3,14 +3,15 @@
 import {
   ArrowRight,
   CalendarDays,
+  Columns3,
   ExternalLink,
   Inbox,
   Search,
+  Table2,
   UserRound,
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
@@ -48,16 +49,16 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
     return { href: `/os/inbox?lead=${lead.id}`, label: "Continue conversation" };
   }
   if (status === "Needs qualification") {
-    return { href: `/os/lead-manager?lead=${lead.id}`, label: "Open in Lead Desk" };
+    return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Open qualification queue" };
   }
   if (status === "Appointment work") {
     return { href: `/os/field-operations?view=dispatch&lead=${lead.id}`, label: "Open dispatch" };
   }
   if (status === "Offer prep") {
-    return { href: `/os/leads/${lead.id}#underwriting`, label: "Prepare offer" };
+    return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
   }
   if (status === "Negotiation") {
-    return { href: `/os/leads/${lead.id}#negotiation`, label: "Continue negotiation" };
+    return { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Continue negotiation" };
   }
   if (status === "Nurture") {
     return { href: `/os/inbox?lead=${lead.id}`, label: "Open follow-up" };
@@ -66,22 +67,32 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
 }
 
 export function LeadsWorkspace({
+  initialDisplay,
+  initialLeadId,
+  initialOwner,
+  initialQuery,
+  initialStage,
   initialView,
   leads,
   newPaidLeadCount,
   tasks,
 }: {
+  initialDisplay: "table" | "board";
+  initialLeadId: string;
+  initialOwner: string;
+  initialQuery: string;
+  initialStage: string;
   initialView: SavedLeadViewKey;
   leads: LeadListItem[];
   newPaidLeadCount: number;
   tasks: SpeedToLeadTask[];
 }) {
-  const router = useRouter();
   const [view, setView] = useState<SavedLeadViewKey>(initialView);
-  const [query, setQuery] = useState("");
-  const [owner, setOwner] = useState("all");
-  const [stage, setStage] = useState("all");
-  const [selectedLeadId, setSelectedLeadId] = useState("");
+  const [display, setDisplay] = useState<"table" | "board">(initialDisplay);
+  const [query, setQuery] = useState(initialQuery);
+  const [owner, setOwner] = useState(initialOwner);
+  const [stage, setStage] = useState(initialStage);
+  const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const viewCounts = useMemo(() => getSavedLeadViewCounts(leads, tasks), [leads, tasks]);
   const owners = useMemo(
@@ -112,6 +123,10 @@ export function LeadsWorkspace({
     visibleLeads.find((lead) => lead.id === selectedLeadId) ?? visibleLeads[0] ?? null;
   const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
   const selectedAction = selectedLead ? nextAction(selectedLead, tasks) : null;
+  const visibleStages =
+    stage === "all"
+      ? pipelineStages
+      : pipelineStages.filter((item) => item.key === stage);
   const newLeadCount = leads.filter((lead) => lead.stage_key === "new").length;
   const qualifiedCount = leads.filter((lead) =>
     [
@@ -130,15 +145,47 @@ export function LeadsWorkspace({
     (lead) => !lead.next_follow_up_at && !["dead", "disqualified", "under_contract"].includes(lead.stage_key),
   ).length;
 
+  function replaceLocation(overrides: {
+    display?: "table" | "board";
+    leadId?: string;
+    owner?: string;
+    query?: string;
+    stage?: string;
+    view?: SavedLeadViewKey;
+  } = {}) {
+    const next = {
+      display: overrides.display ?? display,
+      leadId: overrides.leadId ?? selectedLeadId,
+      owner: overrides.owner ?? owner,
+      query: overrides.query ?? query,
+      stage: overrides.stage ?? stage,
+      view: overrides.view ?? view,
+    };
+    const params = new URLSearchParams();
+    if (next.view !== "all") params.set("view", next.view);
+    if (next.display === "board") params.set("display", "board");
+    if (next.query.trim()) params.set("q", next.query.trim());
+    if (next.owner !== "all") params.set("owner", next.owner);
+    if (next.stage !== "all") params.set("stage", next.stage);
+    if (next.leadId) params.set("lead", next.leadId);
+    const suffix = params.toString();
+    window.history.replaceState(null, "", suffix ? `/os/leads?${suffix}` : "/os/leads");
+  }
+
   function chooseView(nextView: SavedLeadViewKey) {
     setView(nextView);
-    setSelectedLeadId("");
-    router.replace(nextView === "all" ? "/os/leads" : `/os/leads?view=${nextView}`, { scroll: false });
+    replaceLocation({ view: nextView });
+  }
+
+  function chooseDisplay(nextDisplay: "table" | "board") {
+    setDisplay(nextDisplay);
+    replaceLocation({ display: nextDisplay });
   }
 
   function selectLead(leadId: string) {
     setSelectedLeadId(leadId);
     setMobileDetailOpen(true);
+    replaceLocation({ leadId });
   }
 
   return (
@@ -171,7 +218,10 @@ export function LeadsWorkspace({
             <Search aria-hidden="true" size={16} />
             <input
               aria-label="Search active leads"
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                replaceLocation({ query: event.target.value });
+              }}
               placeholder="Search seller, property, source, or owner"
               type="search"
               value={query}
@@ -179,7 +229,10 @@ export function LeadsWorkspace({
           </label>
           <label>
             <span>Owner</span>
-            <select onChange={(event) => setOwner(event.target.value)} value={owner}>
+            <select onChange={(event) => {
+              setOwner(event.target.value);
+              replaceLocation({ owner: event.target.value });
+            }} value={owner}>
               <option value="all">All owners</option>
               <option value="unassigned">Unassigned</option>
               {owners.map((email) => <option key={email} value={email}>{ownerLabel(email)}</option>)}
@@ -187,16 +240,23 @@ export function LeadsWorkspace({
           </label>
           <label>
             <span>Stage</span>
-            <select onChange={(event) => setStage(event.target.value)} value={stage}>
+            <select onChange={(event) => {
+              setStage(event.target.value);
+              replaceLocation({ stage: event.target.value });
+            }} value={stage}>
               <option value="all">All stages</option>
               {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
           </label>
+          <div aria-label="Lead display" className={styles.displayControl}>
+            <button aria-pressed={display === "table"} onClick={() => chooseDisplay("table")} title="Table view" type="button"><Table2 aria-hidden="true" size={15} /><span>Table</span></button>
+            <button aria-pressed={display === "board"} onClick={() => chooseDisplay("board")} title="Board view" type="button"><Columns3 aria-hidden="true" size={15} /><span>Board</span></button>
+          </div>
           <strong>{visibleLeads.length} shown</strong>
         </div>
 
-        <div className={styles.content}>
-          <div className={styles.list}>
+        <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
+          {display === "table" ? <div className={styles.list}>
             <div className={styles.listHeader}>
               <span>Seller</span><span>Status</span><span>Owner</span><span>Next action</span>
             </div>
@@ -226,7 +286,42 @@ export function LeadsWorkspace({
             {!visibleLeads.length ? (
               <div className={styles.empty}><strong>No leads match this view</strong><span>Change the view, owner, stage, or search.</span></div>
             ) : null}
-          </div>
+          </div> : (
+            <div className={styles.board}>
+              {visibleStages.map((pipelineStage) => {
+                const stageLeads = visibleLeads.filter(
+                  (lead) => getPipelineStage(lead.stage_key)?.key === pipelineStage.key,
+                );
+                return (
+                  <section className={styles.boardColumn} key={pipelineStage.key}>
+                    <header><h2>{pipelineStage.label}</h2><strong>{stageLeads.length}</strong></header>
+                    <div>
+                      {stageLeads.map((lead) => {
+                        const operatingStatus = getLeadOperatingStatus(lead, tasks);
+                        const action = nextAction(lead, tasks);
+                        return (
+                          <button
+                            aria-current={selectedLead?.id === lead.id ? "true" : undefined}
+                            className={selectedLead?.id === lead.id ? styles.selectedCard : undefined}
+                            key={lead.id}
+                            onClick={() => selectLead(lead.id)}
+                            type="button"
+                          >
+                            <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.lead_temperature)}</em></span>
+                            <span className={styles.cardAddress}>{lead.property_address}</span>
+                            <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
+                            <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.next_follow_up_at)}</span></span>
+                            <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
+                          </button>
+                        );
+                      })}
+                      {!stageLeads.length ? <p>No leads</p> : null}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
 
           <aside className={`${styles.preview} ${mobileDetailOpen ? styles.previewOpen : ""}`}>
             {selectedLead && selectedStatus && selectedAction ? (
