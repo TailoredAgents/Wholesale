@@ -1,0 +1,1289 @@
+# Stonegate CRM Information Architecture Roadmap
+
+Last updated: July 30, 2026
+
+## 1. Purpose And Authority
+
+This roadmap defines the planned reorganization of the private Stonegate Operating System. Its
+goal is to make the existing platform easier to understand and operate without creating a second
+CRM, replacing working domain models, or removing specialist workflows.
+
+Until an information-architecture phase is implemented:
+
+- `SYSTEM_MAP.md` remains authoritative for current routes and behavior.
+- `UI_CONTROL_REFERENCE.md` remains authoritative for current controls.
+- `USER_MANUAL.md` and the role manuals remain authoritative for current staff procedures.
+- This file describes the approved target and implementation order only.
+
+Update the current-state documents in the same commit that changes a route, control, role
+experience, or workflow. Do not document a planned destination as live before it exists.
+
+## 2. Decision
+
+Stonegate will keep its existing normalized business records and reorganize the employee
+experience around a small number of task-centered workspaces.
+
+The owner currently sees 22 primary sidebar destinations across five groups. Several destinations
+are different views of the same records, administrative controls are mixed with daily work, and
+horizontal journey navigation repeats the sidebar. The target reduces the owner experience to 11
+primary destinations:
+
+| Group | Destination |
+| --- | --- |
+| Work | Home |
+| Work | Inbox |
+| Work | Tasks |
+| Work | Calendar |
+| Operations | Prospecting |
+| Operations | Seller Leads |
+| Operations | Deals |
+| Operations | Buyers |
+| Business | Finance |
+| Business | Marketing |
+| Bottom utility | Settings |
+
+Each employee sees only the destinations permitted by their combined roles. The architecture is
+capability-based: one person covering several seats receives the union of those workspaces through
+one account.
+
+## 3. What Is Correct Today
+
+The upgrade must preserve these existing strengths:
+
+- Cold prospects remain separate from interested seller leads.
+- A seller lead remains linked to its contact, property, source, communications, qualification,
+  appointments, underwriting, offer, and audit evidence.
+- Contract preparation creates the existing Deal and Transaction records rather than a duplicate
+  replacement record.
+- Disposition cases and buyer records remain distinct but associated with the deal.
+- Conversations can represent seller, buyer, transaction, or general business communication.
+- PostgreSQL remains the source of truth.
+- Current role and permission checks remain authoritative.
+- Provider adapters, audit records, approval gates, AI traces, and immutable evidence remain in
+  place.
+- Existing external URLs and bookmarked internal records remain usable through redirects or
+  compatibility routes.
+
+This is primarily a frontend composition and navigation program. Some aggregate API responses and
+workflow fields may be added where a unified workspace needs them, but existing records must not
+be copied into parallel tables merely to support the new interface.
+
+## 4. Problems To Solve
+
+### 4.1 Navigation Mirrors Implementation
+
+The interface currently exposes many internal subsystems as top-level destinations. Staff must
+know whether a task belongs to Campaigns, Prospecting, Lead Desk, All Leads, Seller Pipeline,
+Field Operations, Underwriting, Approvals, Transactions, or Dispositions before they can act.
+
+### 4.2 Competing Views Of The Same Work
+
+Lead Desk, All Leads, and Seller Pipeline present the same seller opportunities through different
+routes. Table, board, queue, and saved-filter presentations should be views of one Seller Leads
+workspace, not competing destinations.
+
+### 4.3 Setup Is Scattered
+
+Campaign creation currently lives under Team & Access while campaign import lives under
+Campaigns. Email administration is entered through Inbox. Company policy and AI controls are
+separate management destinations. Staff cannot predict where setup belongs.
+
+### 4.4 Linear Navigation Misrepresents Parallel Work
+
+The numbered Deal Journey implies that Underwriting, Approvals, Transactions, Dispositions, and
+Buyers are one linear sequence. Buyers are a permanent relationship database, approvals occur at
+multiple stages, and transaction coordination can run in parallel with disposition.
+
+### 4.5 Record Context Is Lost
+
+Opening separate workspaces for communication, appointments, underwriting, contracts, and buyer
+work can force staff to re-establish which seller, property, or deal they are handling. Related
+actions should launch from the canonical record and preserve return context.
+
+### 4.6 Administrative Depth Is Visible To Everyone
+
+Owners need comprehensive controls, but ordinary employees should not learn the complete
+administrative architecture to perform their jobs. Role restrictions must reduce both access and
+visible complexity.
+
+## 5. Design Principles
+
+1. **Navigation is not a sitemap.** Show stable work areas, not every page or data type.
+2. **One canonical record per business concept.** Views may differ; records do not duplicate.
+3. **One workspace per employee goal.** Configuration, queue work, and record work have different
+   page patterns.
+4. **One primary next action.** Every active seller lead and deal must clearly identify one
+   responsible owner, one primary action, and one due date. Supporting tasks remain available.
+5. **Views are not destinations.** Table, board, calendar, and saved filters operate on the same
+   underlying records.
+6. **Actions stay in context.** Communication, appointments, underwriting, contracting, and buyer
+   matching launch from the record they affect.
+7. **Progressive disclosure.** Default screens show decisions and next work. Detailed evidence,
+   history, configuration, and audit information remain available without dominating the page.
+8. **Role-aware, not person-specific.** Navigation is defined by capabilities and operating seats,
+   never hard-coded employee names.
+9. **Stable deep links.** Every record, saved view, tab, and selected item should have a shareable
+   URL.
+10. **No giant client page.** Consolidated workspaces use nested routes or independently loaded
+    views. Visual consolidation must not require loading every subsystem at once.
+11. **AI appears where judgment occurs.** Copilots use contextual drawers and embedded drafts, not
+    permanent banners that compete with normal work.
+12. **Mobile and iPad are first-class.** Queue panels become drawers on small screens. Seller
+    appointments use a focused tablet workflow.
+
+## 6. Canonical Business Records
+
+### 6.1 Prospect
+
+A cold outreach record imported or added for a campaign. It may contain source contact data,
+ranked contact methods, suppression evidence, attempts, callbacks, and a handoff. It is not a
+seller CRM lead until Stonegate records genuine interest and performs the approved handoff.
+
+### 6.2 Seller Lead
+
+An interested seller opportunity tied to a contact and property. It owns qualification, seller
+communications, appointments, valuation, negotiation, follow-up, and pre-contract work.
+
+The employee-facing label is **Seller Lead**. The top-level workspace label is **Seller Leads**.
+This distinguishes the record from cold prospects without introducing unfamiliar terminology.
+
+### 6.3 Deal
+
+The employee-facing aggregate for contract preparation through funded closing. The existing Deal,
+Transaction, Contract Package, Disposition Case, reconciliation, and related records remain
+separate underneath it.
+
+A Deal may first appear in **Contract preparation** before execution. The interface must state
+clearly whether Stonegate is:
+
+- preparing a contract
+- awaiting signature
+- under contract
+- marketing to buyers
+- closing
+- funded
+- cancelled
+
+An unsigned package must never be reported as an executed contract.
+
+### 6.4 Buyer
+
+A permanent investor relationship with criteria, markets, activity, proof, capacity, offers,
+purchase history, communication, and restrictions. A buyer is associated with many potential or
+completed deals and must not be embedded as a disposable contact inside one disposition case.
+
+### 6.5 Campaign
+
+An attributable outreach effort with market, territory, channel, source, owner, dates, budget,
+imports, prospects, calling batches, costs, and results.
+
+### 6.6 Conversation
+
+A durable communication thread linked to a seller lead, buyer, deal, or general business context.
+Its activity can appear in the global Inbox and the associated record timeline without creating a
+second message record.
+
+### 6.7 Task And Primary Next Action
+
+Tasks are supporting work items. The primary next action is the single required decision or
+activity that moves an active seller lead or deal forward.
+
+The target contract for primary work is:
+
+- responsible user
+- action type
+- short action label
+- due date and time
+- source record
+- completion state
+- outcome or decision
+- next action created after completion when the record remains active
+
+The implementation may extend the current Lead Management next-action fields and Task model. It
+must not create unrelated task systems per department.
+
+## 7. Global Navigation And Controls
+
+### 7.1 Sidebar
+
+The sidebar uses the target 11 destinations. Section labels remain short and stable. An item is
+hidden when the signed-in user has neither the role nor permission required to use it.
+
+Do not add integration providers, individual employees, saved filters, or pipeline stages to the
+primary sidebar.
+
+### 7.2 Global Header
+
+The global header provides:
+
+- categorized search across seller leads, prospects, properties, deals, buyers, campaigns, and
+  destinations
+- a permission-aware **New** menu for common record creation
+- notifications
+- approvals count for authorized reviewers
+- recent records
+- account menu
+
+Suggested **New** menu actions:
+
+- Seller lead
+- Task
+- Appointment
+- Email
+- Buyer
+- Campaign, only when opened from a prospecting-capable role
+
+Campaign import remains contextual to a selected campaign and is not a global creation action.
+
+### 7.3 Account Menu
+
+Move **My Setup** into the account menu with:
+
+- signed-in identity
+- active roles and permissions summary
+- role acceptance and workspace test
+- personal sender and signature defaults
+- notification preferences when implemented
+- sign out
+
+### 7.4 Floating Utilities
+
+- The blue Stonegate Help bubble remains globally available.
+- A contextual Copilot control may appear beside records or in the page header.
+- Help and Copilot remain separate products: Help explains Stonegate; Copilot analyzes authorized
+  operational context and prepares drafts.
+
+### 7.5 Context Preservation
+
+List, queue, and board workspaces must preserve:
+
+- selected saved view
+- filters
+- sort
+- display mode
+- selected record
+- scroll or pagination position where practical
+
+Opening and closing a preview must not reset the employee's queue.
+
+## 8. Target Workspace Specifications
+
+### 8.1 Home
+
+Home replaces the label **Dashboard** while retaining `/os` as the canonical route.
+
+Home is role-aware and answers:
+
+1. What requires my attention now?
+2. What is overdue or blocked?
+3. What meetings or deadlines occur today?
+4. What changed since I last worked?
+5. What should I open next?
+
+Home is not a substitute for detailed records. It links into saved views and selected records.
+
+Owner mode includes:
+
+- company exceptions
+- unassigned work
+- approval queue
+- seller and deal movement
+- today's appointments
+- cash and closing exceptions
+- role coverage
+- small performance indicators
+
+Specialist modes prioritize the signed-in user's assigned work. An owner may switch between
+personal and company views without impersonating another employee.
+
+### 8.2 Inbox
+
+Inbox remains a top-level three-panel workspace.
+
+Left:
+
+- Mine
+- Needs Reply
+- Unread
+- Unassigned
+- Team inboxes
+- authorized department inboxes
+- saved views
+
+Middle:
+
+- one chronological timeline for email, SMS, calls, recordings, transcripts, notes, and system
+  delivery events
+- composer mode changes channel without hiding the shared history
+
+Right:
+
+- associated seller, buyer, deal, or general-business context
+- owner, stage, next action, appointment, and pinned notes
+- contextual Copilot summary when authorized
+
+Email Management moves to Settings. The Inbox may link to those settings for authorized users but
+must not render provider administration as a normal mailbox view.
+
+### 8.3 Tasks
+
+Tasks replaces the label **Work Queue** and absorbs the global Approvals destination.
+
+Views:
+
+- My Tasks
+- Due Today
+- Overdue
+- Upcoming
+- Unscheduled
+- Team, for managers
+- Approvals, for authorized decision-makers
+- Completed
+
+The page distinguishes:
+
+- primary next actions
+- supporting tasks
+- approval decisions
+- automated exception alerts
+
+Completing a primary next action must require an outcome and, when the source record remains
+active, a replacement next action or an explicit workflow transition.
+
+Approvals remain their own API records and authority checks. They are aggregated into Tasks for
+navigation only and remain visible on the affected Seller Lead, Deal, Finance, or AI record.
+
+### 8.4 Calendar
+
+Calendar remains the canonical schedule and gains appointment execution entry points.
+
+Views:
+
+- Month
+- Week
+- Day
+- Agenda
+- Team capacity, for authorized managers
+
+Selecting an ordinary event opens its context. Selecting a seller appointment opens a focused
+appointment workspace with:
+
+- Brief
+- Walkthrough
+- Photos and property evidence
+- Seller presentation
+- Negotiation
+- Outcome
+- In-person signing when approved
+
+The old Field Operations route remains a compatibility deep link during migration. Field
+Operations is no longer a primary sidebar destination after Calendar reaches feature parity.
+
+On iPad, the meeting workspace uses a full-width guided layout, stable sticky actions, large touch
+targets, and no squeezed three-column desktop layout.
+
+### 8.5 Prospecting
+
+Prospecting combines the current Campaigns and Prospecting destinations.
+
+Manager views:
+
+- Overview
+- Campaigns
+- Imports
+- Calling Batches
+- Handoffs
+- Results
+
+Caller views:
+
+- My Calls
+- Callbacks
+- Handoffs
+
+Campaign creation lives at:
+
+`Prospecting > Campaigns > New Campaign`
+
+A selected campaign contains:
+
+- Summary
+- Prospects
+- Imports
+- Assignments
+- Costs And Results
+- Settings
+
+The import flow begins inside a selected campaign so staff never encounter an unexplained
+campaign picker. The importer may offer **Create campaign** as an authorized escape hatch without
+moving the user to Team & Access.
+
+Market and territory definitions move to Settings. Campaign selection, list import, caller
+assignment, and campaign results remain operational Prospecting work.
+
+VAs keep the focused one-by-one calling interface. They do not receive manager campaign,
+financial, export, buyer, underwriting, contract, or company settings views.
+
+### 8.6 Seller Leads
+
+Seller Leads combines:
+
+- Lead Desk
+- All Leads
+- Seller Pipeline
+- active Underwriting queue
+
+These become views of one seller dataset rather than separate destinations.
+
+Default saved views:
+
+- Mine
+- New
+- Needs Qualification
+- Needs Follow-Up
+- Appointments
+- Needs Underwriting
+- Offer And Negotiation
+- Nurture
+- Unassigned
+- All
+- Archived
+
+Display modes:
+
+- Table
+- Board
+
+The board and table use the same filters and records. Changing display mode must not change the
+meaning of the selected saved view.
+
+Primary actions:
+
+- New Seller Lead
+- Assign
+- Schedule
+- Contact
+- Run Analysis
+- Update Stage
+- Set Next Action
+
+### Seller Lead Record
+
+Persistent header:
+
+- seller name
+- property address
+- stage
+- owner
+- priority or temperature
+- primary next action and due date
+- next appointment
+- call, text, email, schedule, and more actions
+
+Stable record sections:
+
+1. **Summary**
+   - qualification
+   - missing or conflicting facts
+   - seller and property snapshot
+   - next action
+   - open tasks
+   - Copilot draft
+2. **Activity**
+   - communications
+   - calls and transcripts
+   - internal notes
+   - task and appointment events
+   - stage, document, provider, and audit events
+3. **Property**
+   - canonical facts
+   - ownership
+   - condition
+   - repairs
+   - photographs
+   - field evidence
+4. **Valuation And Offer**
+   - subject match
+   - comps and evidence
+   - repair assumptions
+   - ARV and as-is ranges
+   - buyer-demand evidence
+   - reports
+   - offer authority
+   - negotiation ledger
+5. **Appointments**
+   - scheduled and historical meetings
+   - preparation
+   - outcomes
+6. **Contract And Deal**
+   - contract preparation
+   - approval
+   - signature
+   - associated Deal after creation
+7. **Files**
+   - seller and property documents
+   - generated reports
+   - signed records appropriate to the user's role
+
+The current Communications and History tabs are consolidated into Activity. Sensitive internal
+economics remain hidden from seller presentation mode.
+
+### Seller Acquisition Stage Families
+
+Use understandable stage families while retaining detailed internal statuses:
+
+- New
+- Contacting
+- Qualifying
+- Qualified
+- Appointment
+- Underwriting
+- Offer And Negotiation
+- Nurture
+- Contract Preparation
+- Converted To Deal
+- Lost
+
+Stage, owner, task, and next action are separate concepts. Reassigning a record must not move its
+stage.
+
+### 8.7 Deals
+
+Deals combines the employee experience currently split between Transactions and Dispositions.
+The underlying Deal, Transaction, Disposition Case, Buyer Offer, Contract Package, document,
+checklist, accounting, and reconciliation records remain separate.
+
+Default saved views:
+
+- My Deals
+- Contract Preparation
+- Awaiting Signature
+- Contracted
+- Closing Exceptions
+- Ready For Disposition
+- Marketing To Buyers
+- Buyer Selected
+- Closing Scheduled
+- Funded
+- Cancelled
+
+Display modes:
+
+- Table
+- Board based on the next critical milestone
+
+Because closing and disposition can run in parallel, the Deal record shows independent status:
+
+- Contract
+- Transaction and title
+- Disposition
+- Financial reconciliation
+
+The board must not claim these parallel processes form a perfect linear sequence.
+
+### Deal Record
+
+Persistent header:
+
+- property
+- seller
+- contract status
+- purchase price
+- expected or actual assignment revenue
+- closing date
+- transaction coordinator
+- disposition owner
+- primary next action
+- blockers
+
+Stable sections:
+
+1. **Summary**
+2. **Contract**
+3. **Closing**
+4. **Disposition**
+5. **Financials**
+6. **Activity**
+7. **Files**
+
+Disposition includes package readiness, buyer matches, marketing, engagement, offers, proof,
+deposits, primary buyer, and backup buyer. Buyer matching may be previewed during Seller Lead
+underwriting, but outbound buyer marketing remains gated by the approved deal workflow.
+
+Transactions and Dispositions may retain nested compatibility routes during development. They
+must not remain competing top-level sidebar destinations after the Deal workspace passes role
+acceptance.
+
+### 8.8 Buyers
+
+Buyers remains a top-level long-lived relationship database.
+
+Saved views:
+
+- Active
+- Needs Verification
+- By Market
+- Recently Engaged
+- Proof Expiring
+- Restricted Or Opted Out
+- All
+
+Buyer record sections:
+
+- Summary
+- Criteria And Markets
+- Activity
+- Offers And Purchases
+- Proof And Capacity
+- Files
+
+Deal-specific matching and outreach occur from the Deal record and link back to the same Buyer.
+Provider candidates remain reviewable before import and never overwrite trusted evidence.
+
+### 8.9 Finance
+
+Finance remains a separate permission-protected business workspace because its users, evidence,
+and authority differ materially from seller acquisition work.
+
+Its local navigation may be reorganized, but the IA program must preserve:
+
+- operational source records
+- posting and payment control
+- double-entry ledger
+- vendors and bills
+- bank statements and reconciliation
+- compensation
+- reports and close
+- CPA export
+- Finance and Tax Copilots
+
+Deal financial summaries link to Finance source records without exposing restricted company books
+to acquisitions or disposition roles.
+
+### 8.10 Marketing
+
+Marketing remains a separate owner or marketing workspace for:
+
+- funnel performance
+- source and campaign economics
+- website conversion
+- controlled experiments
+- public trust proof
+- offline conversion delivery
+- marketing recommendations
+
+Campaign execution and list operations live in Prospecting. Marketing reads the same Campaign,
+cost, lead, contract, and funded-outcome records for performance analysis.
+
+### 8.11 Settings
+
+Settings replaces the current collection of Team & Access, Email Management, Company & Policy,
+and AI Control destinations.
+
+Use a stable left-side settings navigation with these sections:
+
+1. **Company**
+   - legal and display identity
+   - brand and public contact defaults
+   - service standards
+2. **Markets And Territories**
+   - markets
+   - territories
+   - team coverage
+   - launch readiness
+3. **People And Access**
+   - users
+   - roles
+   - teams
+   - operating seats
+   - activation and deactivation
+4. **Communications**
+   - Resend senders and routing
+   - signatures and templates
+   - mailbox grants
+   - Twilio numbers and routing
+   - channel availability and consent settings
+5. **Integrations**
+   - provider connection status
+   - required configuration names
+   - webhook readiness
+   - acceptance status
+   - no displayed secret values
+6. **Workflows**
+   - stage definitions
+   - qualification scripts
+   - follow-up plans
+   - appointment policies
+   - assignment rules
+7. **Data And Quality**
+   - duplicates
+   - merge review
+   - import mappings
+   - archives
+   - audit and retention controls
+8. **Finance Policy**
+   - operating plan
+   - compensation
+   - contribution credits
+   - disposition mode
+9. **AI And Automation**
+   - copilots
+   - models
+   - capability contracts
+   - evaluations
+   - traces
+   - budgets
+   - autonomy and shutdown controls
+
+Settings sections remain permission-filtered. Consolidating navigation does not broaden access.
+
+## 9. Role Experiences
+
+| Role or seat | Default destination | Normal visible workspaces |
+| --- | --- | --- |
+| Owner and CEO | Home, company view | All target destinations |
+| Lead Manager | Seller Leads, New or Needs Qualification | Home, Inbox, Tasks, Calendar, Seller Leads |
+| Acquisitions Closer | Calendar, today's appointments | Home, Inbox, Tasks, Calendar, Seller Leads, Deals when assigned |
+| VA Caller | Prospecting, My Calls | Prospecting and account setup only |
+| Transaction Coordinator | Deals, Closing Exceptions | Home, Inbox, Tasks, Calendar, Deals |
+| Dispositions | Deals, Ready For Disposition | Home, Inbox, Tasks, Calendar, Deals, Buyers |
+| Finance and bookkeeping | Finance | Home, Inbox when granted, Tasks, Calendar when needed, Deals summary, Finance |
+| Marketing | Marketing | Home, Prospecting summary when granted, Marketing |
+
+When one person covers multiple seats, Stonegate combines the authorized destinations and saved
+views. It does not create multiple accounts or force a workspace switch for each title.
+
+## 10. Copilot And Help Placement
+
+### 10.1 Contextual Copilots
+
+Replace large permanent Copilot areas with:
+
+- a named Copilot button in the relevant header
+- a right-side drawer containing summary, evidence, recommendation, and draft actions
+- embedded recommendation cards beside the record or decision they concern
+- explicit review, accept, correct, and reject controls
+
+Copilot context follows the selected record. Opening a Copilot must not navigate away or hide the
+source evidence.
+
+### 10.2 AI Control
+
+The current AI Control capability moves to `Settings > AI And Automation`. It remains visible only
+to authorized owners. Runtime governance is configuration, not daily employee navigation.
+
+### 10.3 Stonegate Help
+
+The Help bubble remains a non-operational documentation assistant. It must be updated after each
+phase so it answers using the current interface, not the final planned roadmap.
+
+## 11. Route And Compatibility Plan
+
+| Current route | Target canonical destination | Compatibility behavior |
+| --- | --- | --- |
+| `/os` | `/os` Home | Keep |
+| `/os/inbox` | `/os/inbox` | Keep |
+| `/os/tasks` | `/os/tasks` Tasks | Keep and rename display label |
+| `/os/calendar` | `/os/calendar` | Keep |
+| `/os/campaigns` | `/os/prospecting/campaigns` | Redirect after parity |
+| `/os/prospecting` | `/os/prospecting` | Keep as workspace root |
+| `/os/lead-manager` | `/os/leads?view=needs-qualification` | Redirect after parity |
+| `/os/leads` | `/os/leads` Seller Leads | Keep |
+| `/os/pipeline` | `/os/leads?display=board` | Redirect after parity |
+| `/os/field-operations` | `/os/calendar` or selected appointment | Preserve deep links, then redirect list view |
+| `/os/underwriting` | `/os/leads?view=needs-underwriting` | Redirect queue; move calibration to Settings |
+| `/os/approvals` | `/os/tasks?view=approvals` | Redirect after parity |
+| `/os/transactions` | `/os/deals?view=closing` | Preserve selected transaction during redirect |
+| `/os/dispositions` | `/os/deals?view=disposition` | Preserve selected disposition case during redirect |
+| `/os/buyers` | `/os/buyers` | Keep |
+| `/os/finance` | `/os/finance` | Keep |
+| `/os/marketing` | `/os/marketing` | Keep |
+| `/os/my-setup` | account menu setup panel | Preserve direct route for onboarding links |
+| `/os/operations` | `/os/settings/...` | Redirect each tab to its new owner |
+| `/os/inbox?manage=email` | `/os/settings/communications/email` | Redirect after parity |
+| `/os/operating-model` | `/os/settings/finance-policy` | Redirect after parity |
+| `/os/ai` | `/os/settings/ai` | Redirect after parity |
+| `/os/leads/{lead_id}` | `/os/leads/{lead_id}` | Keep |
+
+Do not replace working routes with redirects until:
+
+1. the target has feature parity
+2. role and permission tests pass
+3. documentation is updated
+4. deep-link parameters are preserved
+5. production smoke tests pass
+
+## 12. Shared Page Patterns
+
+### 12.1 Queue Pattern
+
+Use for Prospecting, Seller Leads, Tasks, and Deals:
+
+- local saved views and counts
+- search, filters, sort, and display controls
+- stable list or board
+- selected-record preview
+- contextual actions
+- optional right context rail on wide screens
+
+### 12.2 Record Pattern
+
+Use for Seller Lead, Deal, Buyer, and Campaign:
+
+- breadcrumb
+- persistent record header
+- key status and next action
+- short, stable local navigation
+- read-first summary
+- edit controls only where needed
+- one chronological activity timeline
+- related records and files
+- contextual Copilot drawer
+
+### 12.3 Guided Process Pattern
+
+Use for:
+
+- CSV import
+- one-by-one calling
+- seller qualification
+- field appointment
+- contract release
+- reconciliation
+
+A guided process shows progress and required decisions. It does not become a permanent top-level
+destination merely because it is complex.
+
+### 12.4 Settings Pattern
+
+Use a fixed settings subnavigation and independently loaded sections. Settings forms should not be
+nested inside operational cards or Inbox panels.
+
+## 13. Implementation Phases
+
+## IA1. Architecture Contract And Baseline
+
+Status: **Implemented**
+
+Scope:
+
+- approve this roadmap as the target
+- create a durable architecture decision record
+- inventory every current route, link, permission, query parameter, and help reference
+- define analytics or test evidence for navigation usage
+- capture desktop, tablet, and mobile baseline screenshots
+- define canonical vocabulary and route ownership
+
+Exit criteria:
+
+- every current destination maps to one target workspace or an intentional retained route
+- no current control is unaccounted for
+- role visibility matrix is executable as tests
+- old and new terminology is documented
+
+## IA2. Shell, Navigation, And Global Controls
+
+Status: **Planned**
+
+Scope:
+
+- implement the target sidebar
+- rename Dashboard to Home and Work Queue to Tasks
+- create placeholders or compatibility links for consolidated destinations
+- remove duplicated horizontal journey navigation only where local replacement navigation exists
+- standardize global search, New menu, notifications, approvals count, recent records, and account
+  menu placement
+- preserve current URLs during transition
+
+Exit criteria:
+
+- owner sees no more than 11 primary destinations
+- each role sees only authorized destinations
+- every existing page remains reachable
+- active-route highlighting works for nested and compatibility routes
+- desktop and mobile navigation pass visual checks
+
+## IA3. Settings Consolidation
+
+Status: **Planned**
+
+Scope:
+
+- create the Settings shell and permission-filtered subnavigation
+- move users, teams, seats, markets, territories, email administration, operating policy, and AI
+  controls into their target sections
+- move duplicate review, follow-up configuration, and import mappings to Data And Quality or
+  Workflows
+- keep campaign creation out of Settings
+- add provider status without displaying secrets
+
+Exit criteria:
+
+- administrative configuration has one predictable entry point
+- each current Operations tab has one documented new owner
+- Email, Company Policy, and AI retain feature parity
+- unauthorized roles cannot load restricted sections directly
+- old management links route to the correct settings section
+
+## IA4. Prospecting Consolidation
+
+Status: **Planned**
+
+Scope:
+
+- place campaign list and creation inside Prospecting
+- make selected campaigns own imports, assignments, costs, and results
+- retain the specialized caller workbench
+- add manager and caller local views
+- make the PropStream importer begin with selected campaign context
+- preserve one-by-one calling, callbacks, handoffs, attribution, and caller restrictions
+
+Exit criteria:
+
+- an authorized owner can create a campaign in two navigation decisions or fewer
+- a file can be imported without leaving Prospecting
+- a caller opens directly to assigned calling work
+- imported prospects remain separate from seller leads
+- campaign costs and outcomes remain attributable
+- `/os/campaigns` compatibility works
+
+## IA5. Seller Leads Consolidation
+
+Status: **Planned**
+
+Scope:
+
+- unify Lead Desk, lead list, and pipeline as views of Seller Leads
+- add table and board display switching
+- standardize saved views
+- incorporate the active underwriting queue
+- refactor the seller record to the target stable sections
+- merge Communications and History into Activity
+- retain manual lead creation, archive, lifecycle, qualification, communication, underwriting,
+  reports, appointments, negotiation, and contract preparation
+
+Exit criteria:
+
+- staff never choose between Lead Desk, All Leads, and Seller Pipeline to find the same seller
+- filters and selected records survive table or board switching
+- Lead Manager workflow remains SLA-aware
+- a seller record exposes one owner, one primary next action, and one due date
+- all current lead controls have an accounted-for target
+- existing lead deep links remain valid
+
+## IA6. Calendar And Appointment Execution
+
+Status: **Planned**
+
+Scope:
+
+- launch field meeting execution from Calendar
+- combine appointment preparation, walkthrough, photos, presentation, negotiation, outcome, and
+  approved in-person signing
+- move capacity and availability management into Calendar or Settings as appropriate
+- optimize appointment mode for iPad
+- preserve existing appointment deep links
+
+Exit criteria:
+
+- a closer reaches today's meeting workspace from Calendar in one selection
+- appointment context does not require a separate sidebar destination
+- seller presentation still hides internal economics
+- iPad viewport passes screenshot, touch-target, and overflow checks
+- existing Field Operations capabilities retain parity
+
+## IA7. Tasks, Approvals, And Primary Next Actions
+
+Status: **Planned**
+
+Scope:
+
+- aggregate tasks, approvals, and operational exceptions in Tasks
+- formalize one primary next action for active seller leads and deals
+- require outcome and successor action or terminal transition
+- add manager team views
+- retain permission-specific approval decisions and source evidence
+
+Exit criteria:
+
+- every active seller lead and deal can answer who, what, and when
+- overdue and unassigned work is visible without inspecting every pipeline
+- approvals remain permission-protected and auditable
+- completing a task does not silently strand an active record
+- Home and record headers use the same next-action truth
+
+## IA8. Unified Deals
+
+Status: **Planned**
+
+Scope:
+
+- create the Deal queue, table, board, saved views, and record shell
+- compose Transaction and Disposition data through one Deal record
+- show independent contract, closing, disposition, and finance status
+- place buyer matches and offers inside Disposition
+- preserve role-specific access to economics, documents, proof, and accounting
+- redirect existing transaction and disposition list routes only after parity
+
+Exit criteria:
+
+- one contracted property has one employee-facing Deal record
+- transaction and disposition staff can work simultaneously without overwriting status
+- contract, title, buyer, closing, and financial blockers remain independently visible
+- current transaction and disposition controls have target locations
+- role tests confirm no restricted economics leak
+
+## IA9. Record Standards, Contextual AI, And Responsive Quality
+
+Status: **Planned**
+
+Scope:
+
+- standardize Seller Lead, Deal, Buyer, and Campaign headers and local navigation
+- standardize activity timelines and related-record links
+- replace permanent Copilot areas with contextual launchers, drawers, and embedded drafts
+- preserve the Help bubble as a separate utility
+- implement list preview and return-context behavior
+- verify desktop, mobile, and iPad layouts
+- load only the active nested view and required record data
+
+Exit criteria:
+
+- comparable record types behave consistently
+- Copilot never hides source evidence or changes records without the existing review flow
+- no horizontal journey duplicates the sidebar
+- mobile panels become usable drawers
+- target pages do not load every subsystem eagerly
+
+## IA10. Compatibility, Documentation, And Role Acceptance
+
+Status: **Planned**
+
+Scope:
+
+- add final compatibility redirects
+- remove obsolete navigation components and unreachable duplicate UI
+- update System Map, User Manual, UI Control Reference, role manuals, setup manuals, screenshots,
+  and Help ingestion
+- run automated route, permission, API, lint, type, and build checks
+- run role acceptance with Owner, Lead Manager, Closer, VA, Transaction, Disposition, and Finance
+  accounts
+- run controlled production smoke tests
+
+Exit criteria:
+
+- no obsolete documentation instructs staff to use retired navigation
+- old bookmarks reach the correct target with record and selected-view context
+- each role completes its daily routine without owner-level navigation knowledge
+- no required feature or record history is lost
+- production passes desktop, mobile, and iPad acceptance
+
+## 14. Cross-Phase Acceptance Standards
+
+### 14.1 Findability
+
+An authorized user can:
+
+- create a campaign from Prospecting in two navigation decisions or fewer
+- import prospects from the selected campaign
+- create a manual seller lead from Seller Leads or the global New menu
+- find a seller from global search
+- open today's appointment from Calendar
+- run valuation from the Seller Lead
+- find an executed contract from the Seller Lead or Deal
+- open buyer matching from the Deal
+- add an employee from Settings
+- find provider configuration from Settings
+
+### 14.2 Role Simplicity
+
+- Owner: no more than 11 primary destinations
+- VA: Prospecting plus personal account setup only
+- Lead Manager: normal work does not require Settings, Deals, Buyers, Finance, or AI Control
+- Closer: normal appointment work begins in Calendar
+- Transaction Coordinator: normal closing work begins in Deals
+- Dispositions: normal buyer placement work begins in Deals
+- Finance: company books remain isolated from acquisition roles
+
+### 14.3 Record Integrity
+
+- no duplicate prospect, seller lead, deal, buyer, message, or accounting system is introduced
+- route consolidation never changes organization scoping
+- stage changes, assignments, approvals, and audit events remain attributable
+- imported source and consent evidence remain intact
+- unsigned contracts remain visibly unsigned
+- posted journals remain immutable
+
+### 14.4 Interaction Quality
+
+- lists retain filters and selected context
+- table and board modes represent the same record set
+- empty states name the next permitted action
+- disabled controls explain the prerequisite
+- page and tab labels use employee language
+- settings use forms; operational pages prioritize reading and action
+- record headers do not shift when status or buttons change
+- no text, controls, or panels overlap at supported viewports
+
+### 14.5 Performance
+
+- consolidated navigation does not create monolithic data requests
+- nested views fetch only their required data
+- large tables paginate or virtualize when volume requires it
+- activity timelines paginate
+- images and documents load on demand
+- role navigation does not repeatedly fetch the same profile within one request when avoidable
+
+## 15. Non-Goals
+
+This roadmap does not authorize:
+
+- rebuilding the API or database from scratch
+- combining prospects and seller leads
+- combining buyers and sellers
+- replacing the internal accounting system
+- changing approved underwriting formulas
+- weakening role permissions or approval gates
+- activating provider credentials
+- granting AI new autonomy
+- redesigning the public seller website
+- organizing navigation around current employee names
+- deleting current routes before compatibility is proven
+
+## 16. Risks And Mitigations
+
+| Risk | Mitigation |
+| --- | --- |
+| A consolidated page becomes too large | Use nested routes, independent loaders, and stable local navigation |
+| Controls disappear during relocation | Maintain a route-to-control inventory and parity checklist |
+| Old bookmarks break | Preserve compatibility routes and query parameters until IA10 |
+| Role access broadens accidentally | Test both visible navigation and direct API/URL access for every role |
+| Staff relearn the system repeatedly | Release complete workspace slices and update Help in the same deployment |
+| Pipeline stages are confused with task ownership | Display stage, owner, and primary next action as separate fields |
+| Deal work is forced into a false linear flow | Show independent contract, closing, disposition, and financial status |
+| AI becomes more visually prominent than work | Use contextual drawers and embedded drafts only |
+| Navigation consolidation hurts performance | Load active views independently and enforce performance checks |
+
+## 17. Research Basis
+
+The target incorporates these product and design patterns:
+
+- GOV.UK service-navigation guidance: primary navigation should expose the most important
+  top-level sections and should not serve as a complete sitemap.
+  - https://design-system.service.gov.uk/patterns/navigate-a-service/
+- HubSpot Sales Workspace: records, tasks, suggested actions, and schedule remain accessible from a
+  unified work context.
+  - https://knowledge.hubspot.com/sales-workspace/manage-sales-activities-in-the-updated-sales-workspace
+- Salesforce console: split list and record views reduce context switching while preserving access
+  to related records.
+  - https://trailhead.salesforce.com/content/learn/modules/lightning-experience-for-salesforce-classic-users/work-with-your-data
+- InvestorFuse: one primary action per opportunity gives a real-estate acquisitions team a clear
+  daily queue while allowing supporting tasks.
+  - https://www.investorfuse.com/features/core/action-based-system
+- REsimpli: seller details, communication history, notes, tasks, and appointments are organized
+  around the lead profile.
+  - https://help.resimpli.com/en/articles/11046029-what-is-lead-details-first-tab-lead-profile
+- Left Main REI: valuation, market evidence, and buyer intelligence are most useful in the
+  opportunity and transaction context.
+  - https://docs.leftmainrei.co/docs/disposignals-frequently-asked-questions
+
+These sources provide pattern evidence, not proof that any vendor's complete product should be
+copied. Stonegate's operating model, roles, record boundaries, and actual usability acceptance
+remain authoritative.
+
+## 18. Documentation Update Matrix
+
+Every implementation phase updates:
+
+| Change | Required documentation |
+| --- | --- |
+| Current navigation or route changes | `SYSTEM_MAP.md`, `USER_MANUAL.md`, `UI_CONTROL_REFERENCE.md` |
+| Role default or visible destination changes | `STAFF_ROLE_MANUALS.md`, `LEAD_MANAGER_USER_MANUAL.md` when applicable |
+| Setup control moves | `SETUP_MANUAL.md`, `SETUP_REFERENCE.md` when provider instructions change |
+| Data or workflow contract changes | `SYSTEM_MAP.md`, relevant domain reference, migration notes |
+| AI placement or authority changes | `AI_AGENTS.md`, `AI_AUTOMATION_ROADMAP.md`, `SECURITY_COMPLIANCE.md` |
+| Remaining phase status changes | this roadmap and `FINISHING_ROADMAP.md` |
+| Help-visible workflow changes | approved Help source documents and retrieval verification |
+
+Mark a phase **Implemented** only after its code, automated checks, role acceptance, compatibility,
+and current-state documentation are all updated.
+
+## 19. IA1 Architecture Baseline
+
+IA1 was implemented on July 30, 2026. It establishes the migration contract without changing the
+current employee interface.
+
+### 19.1 Accepted Decision
+
+`DECISIONS/0003-task-centered-os-information-architecture.md` accepts the 11-destination target,
+preserves the existing business-record boundaries, and requires compatibility until each target
+workspace reaches parity.
+
+### 19.2 Executable Inventory
+
+`../apps/web/scripts/os-ia-contract.mjs` records:
+
+- all 24 current `/os` App Router pages, including the dynamic Seller Record and development-only
+  Design System
+- all 22 current primary navigation items and their target workspace
+- current consumed query parameters and two known emitted-but-unhandled parameters
+- all 52 API permission keys and all 15 role keys
+- the target role experience for every current role
+- old-to-new employee vocabulary
+- every level-two section in `UI_CONTROL_REFERENCE.md` and its future owner
+- the canonical Help source set and visual evidence commands
+
+The two known query issues are preserved as explicit migration work instead of being lost:
+
+- Marketing emits `/os/leads?q=...`, but the current All Leads page does not consume `q`.
+- the header notification control emits `/os/operations?view=notifications`, but Operations does
+  not consume `view`.
+
+### 19.3 Automated Contract
+
+Run:
+
+```bash
+npm --prefix apps/web run audit:ia
+```
+
+The check fails when:
+
+- an `/os` page is added or removed without a migration owner
+- a current sidebar item is omitted from the contract
+- a static internal OS link or query key has no route owner
+- an API role or permission changes without an IA review
+- a Help control-reference section is added or removed without a future owner
+- the target exceeds 11 destinations or violates the explicit VA and AI-service boundaries
+
+CI runs this contract before the web production build.
+
+### 19.4 Visual Baseline
+
+Run against a working local web server:
+
+```bash
+npm --prefix apps/web run baseline:ia
+```
+
+The runner captures each current non-dynamic OS destination at:
+
+- mobile: 390 by 844
+- tablet: 1024 by 1366
+- desktop: 1440 by 900
+
+Screenshots and `manifest.json` are written to `.artifacts/os-ia-baseline/`. The artifacts are local
+verification evidence and are intentionally excluded from Git. A capture fails when the route
+returns an error, redirects to sign-in, raises a browser exception, renders the application error
+boundary, logs an unexpected browser error, lacks an H1, or renders materially blank. The runner
+records but ignores the expected keyless-Clerk 401 produced by an unsigned local screenshot
+session; role visibility is enforced separately by the executable role contract.
+
+The July 30, 2026 baseline contains 66 captures across 22 routes and three viewports. It completed
+with zero failed captures, error boundaries, fatal browser errors, or document-level horizontal
+overflow against the current web/API code and local database migration `0077`.
+
+### 19.5 Next Phase
+
+IA2 is next. It changes the shell and global navigation while keeping every route in the IA1
+inventory reachable. Current manuals remain authoritative until the live navigation changes.

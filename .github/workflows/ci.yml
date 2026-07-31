@@ -62,5 +62,8 @@ jobs:
       - name: Install dependencies
         run: npm ci --workspaces=false
 
+      - name: Check OS information architecture contract
+        run: npm run audit:ia
+
       - name: Build
         run: npm run build

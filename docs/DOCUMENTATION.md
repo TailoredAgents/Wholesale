@@ -21,10 +21,12 @@ When sources disagree, use this order:
 1. **Application code and database migrations** determine what the software actually does.
 2. **`SYSTEM_MAP.md`** describes the current product and its boundaries.
 3. **`FINISHING_ROADMAP.md`** describes unfinished work and external acceptance steps.
-4. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
-5. **Domain references** define approved operating policy and specialist methods.
-6. **User manuals** explain how staff should perform current workflows.
-7. **Git history** preserves completed phase plans and prior decisions for forensic review only.
+4. **`CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`** describes the approved private-OS
+   reorganization target and migration sequence.
+5. **`PUBLIC_SITE_CONVERSION_ROADMAP.md`** describes the active seller-site conversion program.
+6. **Domain references** define approved operating policy and specialist methods.
+7. **User manuals** explain how staff should perform current workflows.
+8. **Git history** preserves completed phase plans and prior decisions for forensic review only.
 
 Never use an old commit, completed phase document, or provider application draft to override the
 current code or canonical documentation.
@@ -35,6 +37,7 @@ current code or canonical documentation.
 | --- | --- | --- |
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
+| `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Approved target navigation, workspace consolidation, route migration, role experience, and IA phase plan | Owner, managers, and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `VA_DIALER_ROADMAP.md` | One-by-one VA calling workflow, acceptance, handoff, and reporting sequence | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
@@ -51,7 +54,7 @@ current code or canonical documentation.
 | `DESIGN_SYSTEM.md` | Frontend visual and interaction standards | Developers |
 | `GEORGIA_CONTRACT_PACKET.md` | Current Georgia contract packet content and limits | Owner and transaction staff |
 | `SIGNWELL_COUNSEL_BRIEF.md` | Questions and evidence for later legal review of e-signature documents | Owner and counsel |
-| `DECISIONS/` | Durable architecture decisions that still explain the current system | Developers |
+| `DECISIONS/` | Durable architecture decisions, including the accepted task-centered OS information architecture | Developers |
 
 `../apps/web/AGENTS.md` and `../apps/web/CLAUDE.md` are repository tool instructions. They are not
 employee help content and must not be ingested into the staff help assistant.
@@ -95,7 +98,8 @@ nontechnical owner procedure while `SETUP_REFERENCE.md` remains the exact mainta
 
 ### Future Work
 
-`FINISHING_ROADMAP.md`, `PUBLIC_SITE_CONVERSION_ROADMAP.md`, `VA_DIALER_ROADMAP.md`, and
+`FINISHING_ROADMAP.md`, `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`,
+`PUBLIC_SITE_CONVERSION_ROADMAP.md`, `VA_DIALER_ROADMAP.md`, and
 `AI_AUTOMATION_ROADMAP.md` answer:
 
 - What is incomplete?

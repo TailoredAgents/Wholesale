@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 29, 2026
+Last updated: July 30, 2026
 
 ## Purpose
 
@@ -43,6 +43,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 
 | Phase | Current state | Remaining proof |
 | --- | --- | --- |
+| IA private-OS organization | IA1 contract, route/role inventory, tests, and visual baseline implemented | Implement IA2 through IA10 with route compatibility and role acceptance |
 | F1 Production reliability | Reliability tooling implemented | Restore, revocation, readiness, and optional monitoring acceptance |
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
@@ -56,6 +57,9 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 
 ## Active Sub-Roadmaps
 
+- `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` owns the planned private-OS navigation, workspace
+  consolidation, record-layout, route-compatibility, and role-acceptance program. It reorganizes
+  the existing platform without authorizing a second CRM or duplicate business records.
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
 - `VA_DIALER_ROADMAP.md` now owns the one-by-one VA calling workflow. External multi-line dialing
@@ -68,16 +72,17 @@ communications history, or AI system.
 
 The practical order from the current state is:
 
-1. Finish F8 Resend controlled acceptance.
-2. Complete F2 actual staff setup as people join.
-3. Finish F4 SignWell and contract acceptance before the first live seller agreement.
-4. Resume F9 immediately after A2P approval.
-5. Run F5 buyer and disposition acceptance as the first contract approaches.
-6. Run F1 restore and access-revocation checks before broad employee use.
-7. Begin F7 outcome collection with every reviewed analysis.
-8. Complete F6 accounting acceptance before relying on the first closed period.
-9. Review F3 outreach and recording policy before broad campaigns or recording activation.
-10. Run F10 Copilot pilots after the underlying human workflows have real operating volume.
+1. Execute the CRM information-architecture roadmap while preserving current route compatibility.
+2. Finish F8 Resend controlled acceptance.
+3. Complete F2 actual staff setup as people join.
+4. Finish F4 SignWell and contract acceptance before the first live seller agreement.
+5. Resume F9 immediately after A2P approval.
+6. Run F5 buyer and disposition acceptance as the first contract approaches.
+7. Run F1 restore and access-revocation checks before broad employee use.
+8. Begin F7 outcome collection with every reviewed analysis.
+9. Complete F6 accounting acceptance before relying on the first closed period.
+10. Review F3 outreach and recording policy before broad campaigns or recording activation.
+11. Run F10 Copilot pilots after the underlying human workflows have real operating volume.
 
 Some phases overlap. Their exit criteria remain independent.
 
