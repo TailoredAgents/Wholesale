@@ -5,6 +5,15 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CalibrationOutcomeForm } from "./calibration-outcome-form";
+import {
+  ComparableReviewWorkbench,
+  COMPARABLE_EXCLUDED_REASONS,
+  COMPARABLE_INCLUDED_REASONS,
+  type CompCondition,
+  type CompReviewDraft,
+  type MarketComparable,
+  type SubjectProperty,
+} from "./comparable-review-workbench";
 import { ManualCompControl } from "./manual-comp-control";
 import {
   RepairEstimate,
@@ -13,7 +22,6 @@ import {
 } from "./repair-estimate-control";
 import styles from "./page.module.css";
 
-type CompCondition = "unknown" | "as_is" | "renovated";
 type RepairEntryMode = "system" | "total" | "itemized";
 type VerificationStatus =
   | "preliminary"
@@ -59,49 +67,6 @@ type PreMeetingInputs = {
   repair_estimate_contractor_name?: string | null;
   repair_estimate_date?: string | null;
   repair_estimate_reference?: string | null;
-};
-
-type MarketComparable = {
-  provider_id: string | null;
-  formatted_address: string | null;
-  status: string | null;
-  property_type: string | null;
-  price_cents: number | null;
-  bedrooms: number | null;
-  bathrooms: number | null;
-  square_footage: number | null;
-  year_built: number | null;
-  distance_miles: number | null;
-  days_old: number | null;
-  sale_date?: string | null;
-  price_source?: string | null;
-  verification_status?: string | null;
-  condition_classification?: CompCondition | null;
-  condition_evidence?: string | null;
-  adjusted_value_cents?: number | null;
-  price_per_square_foot_cents?: number | null;
-  weight?: number | null;
-  selection_status?: string;
-  selection_reason?: string;
-  score?: number;
-  review_decision?: "included" | "excluded" | null;
-  review_reason?: string | null;
-  manual_weight_percentage?: number | null;
-  subdivision?: string | null;
-  subdivision_match?: boolean | null;
-  search_level?: "preferred" | "expanded" | "extended" | "manual" | null;
-  comp_grade?: "A" | "B" | "C" | "D" | null;
-  search_warnings?: string[];
-  evidence_source?: string | null;
-  source_reference?: string | null;
-  source_url?: string | null;
-  verification_notes?: string | null;
-};
-
-type CompReviewDraft = {
-  included: boolean;
-  reason: string;
-  weight_percentage: number;
 };
 
 type ConfidenceFactor = {
@@ -205,6 +170,7 @@ type MarketValueEstimate = {
   id?: string;
   provider: string;
   requested_address: string;
+  subject_property?: SubjectProperty;
   methodology_version?: string;
   estimated_value_cents: number | null;
   estimated_value_low_cents: number | null;
@@ -343,23 +309,6 @@ const REPAIR_CONTINGENCY: Record<string, number> = {
   structural: 25,
 };
 
-const INCLUDED_REASONS = [
-  "Strong subject match",
-  "Best available nearby sale",
-  "Verified renovated sale",
-  "Verified as-is sale",
-  "Condition-adjusted match",
-];
-
-const EXCLUDED_REASONS = [
-  "Different condition",
-  "Location not comparable",
-  "Size or design mismatch",
-  "Sale too old",
-  "Price outlier",
-  "Data quality concern",
-];
-
 function emptyRepairAmounts() {
   return Object.fromEntries(
     REPAIR_CATEGORIES.map(({ key }) => [key, ""]),
@@ -379,30 +328,6 @@ function formatMoney(cents: number | null | undefined) {
 
 function formatNumber(value: number | null) {
   return value === null ? "Unknown" : new Intl.NumberFormat("en-US").format(value);
-}
-
-function formatDate(value: string | null | undefined) {
-  if (!value) {
-    return "Date unavailable";
-  }
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.valueOf())
-    ? value
-    : new Intl.DateTimeFormat("en-US", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      }).format(parsed);
-}
-
-function conditionLabel(value: CompCondition) {
-  if (value === "as_is") {
-    return "As-is at sale";
-  }
-  if (value === "renovated") {
-    return "Renovated at sale";
-  }
-  return "Not verified";
 }
 
 function reportStageLabel(value: VerificationStatus | undefined) {
@@ -505,7 +430,9 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           included,
           reason:
             comp.review_reason ??
-            (included ? INCLUDED_REASONS[0] : EXCLUDED_REASONS[0]),
+            (included
+              ? COMPARABLE_INCLUDED_REASONS[0]
+              : COMPARABLE_EXCLUDED_REASONS[0]),
           weight_percentage: comp.manual_weight_percentage ?? 100,
         };
       }
@@ -728,6 +655,42 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
   }
 
+  function updateCompReview(compKey: string, decision: CompReviewDraft) {
+    setCompReview((current) => ({ ...current, [compKey]: decision }));
+    markInputsReviewed();
+  }
+
+  function updateCompCondition(compKey: string, condition: CompCondition) {
+    setConditionOverrides((current) => ({ ...current, [compKey]: condition }));
+    markInputsReviewed();
+  }
+
+  function restoreSystemCompSet() {
+    if (!estimate) {
+      return;
+    }
+    const allComps = [
+      ...(estimate.selected_comps ?? estimate.comparables ?? []),
+      ...(estimate.rejected_comps ?? []),
+    ];
+    const restored: Record<string, CompReviewDraft> = {};
+    allComps.forEach((comp, index) => {
+      const compKey = comp.provider_id ?? comp.formatted_address ?? `comp-${index}`;
+      const included = comp.engine_selection_status
+        ? comp.engine_selection_status === "selected"
+        : comp.selection_status !== "rejected";
+      restored[compKey] = {
+        included,
+        reason: included
+          ? COMPARABLE_INCLUDED_REASONS[0]
+          : COMPARABLE_EXCLUDED_REASONS[0],
+        weight_percentage: 100,
+      };
+    });
+    setCompReview(restored);
+    markInputsReviewed();
+  }
+
   async function applyCompReview() {
     if (!estimate?.id) {
       return;
@@ -803,9 +766,6 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
   const selectedComps = estimate?.selected_comps ?? estimate?.comparables ?? [];
   const reviewComps = [...selectedComps, ...(estimate?.rejected_comps ?? [])];
-  const reviewIncludedCount = Object.values(compReview).filter(
-    (decision) => decision.included,
-  ).length;
   const reviewItems = [
     ...(estimate?.review_reasons ?? []),
     ...(estimate?.data_disagreements ?? []),
@@ -1433,193 +1393,23 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
           {estimate.id ? <CalibrationOutcomeForm analysisId={estimate.id} /> : null}
 
-          <div className={styles.compSectionHeader}>
-            <div>
-              <strong>Comparable review</strong>
-              <span>Recorded sales, condition evidence, and reviewer judgment</span>
-            </div>
-            <span>
-              {reviewIncludedCount} included / {reviewComps.length - reviewIncludedCount}{" "}
-              excluded
-            </span>
-          </div>
-          <div className={styles.compList}>
-            {reviewComps.map((comp, index) => {
-              const compKey = comp.provider_id ?? comp.formatted_address ?? `comp-${index}`;
-              const condition = conditionOverrides[compKey] ?? "unknown";
-              const decision = compReview[compKey] ?? {
-                included: comp.selection_status !== "rejected",
-                reason:
-                  comp.selection_status === "rejected"
-                    ? EXCLUDED_REASONS[0]
-                    : INCLUDED_REASONS[0],
-                weight_percentage: 100,
-              };
-              const reasonOptions = decision.included ? INCLUDED_REASONS : EXCLUDED_REASONS;
-              return (
-                <article
-                  className={decision.included ? styles.compIncluded : styles.compExcluded}
-                  key={compKey}
-                >
-                  <div>
-                    <div className={styles.compIdentity}>
-                      <input
-                        aria-label={`${decision.included ? "Exclude" : "Include"} ${
-                          comp.formatted_address ?? "comparable"
-                        }`}
-                        checked={decision.included}
-                        onChange={(event) => {
-                          const included = event.target.checked;
-                          setCompReview((current) => ({
-                            ...current,
-                            [compKey]: {
-                              ...decision,
-                              included,
-                              reason: included ? INCLUDED_REASONS[0] : EXCLUDED_REASONS[0],
-                            },
-                          }));
-                          markInputsReviewed();
-                        }}
-                        type="checkbox"
-                      />
-                      <strong>{comp.formatted_address ?? "Unknown address"}</strong>
-                      <span className={styles.compDecisionBadge}>
-                        {decision.included ? "Included" : "Excluded"}
-                      </span>
-                    </div>
-                    <span>{formatMoney(comp.price_cents)}</span>
-                  </div>
-                  <small>
-                    Recorded {formatDate(comp.sale_date)} / {comp.distance_miles ?? "?"} mi /{" "}
-                    {formatNumber(comp.square_footage)} sqft / {comp.bedrooms ?? "?"} bd{" "}
-                    {comp.bathrooms ?? "?"} ba
-                  </small>
-                  <small>
-                    {formatMoney(comp.price_per_square_foot_cents)} per sqft / Subject-size
-                    indicator {formatMoney(comp.adjusted_value_cents)}
-                  </small>
-                  <small>
-                    Match score {comp.score ?? "?"}/100. {comp.selection_reason}
-                  </small>
-                  <small>
-                    Grade {comp.comp_grade ?? "--"} /{" "}
-                    {(comp.search_level ?? "legacy").replaceAll("_", " ")} search
-                    {comp.subdivision ? ` / ${comp.subdivision}` : ""}
-                  </small>
-                  {comp.evidence_source ? (
-                    <small>
-                      Source: {comp.evidence_source.replaceAll("_", " ")}
-                      {comp.source_reference ? ` / ${comp.source_reference}` : ""}
-                      {comp.source_url ? (
-                        <>
-                          {" / "}
-                          <a href={comp.source_url} rel="noreferrer" target="_blank">
-                            Open source
-                          </a>
-                        </>
-                      ) : null}
-                    </small>
-                  ) : null}
-                  {comp.search_level === "manual" && comp.verification_notes ? (
-                    <small>
-                      Verification: {comp.verification_notes}
-                      {comp.condition_evidence
-                        ? ` Condition evidence: ${comp.condition_evidence}`
-                        : ""}
-                    </small>
-                  ) : null}
-                  {comp.search_warnings?.length ? (
-                    <small>{comp.search_warnings.join(" ")}</small>
-                  ) : null}
-                  <div className={styles.compReviewControls}>
-                    <label>
-                      <span>Condition at sale</span>
-                      <select
-                        aria-label={`Condition at sale for ${comp.formatted_address ?? "comparable"}`}
-                        onChange={(event) => {
-                          setConditionOverrides((current) => ({
-                            ...current,
-                            [compKey]: event.target.value as CompCondition,
-                          }));
-                          markInputsReviewed();
-                        }}
-                        value={condition}
-                      >
-                        {(["unknown", "as_is", "renovated"] as CompCondition[]).map(
-                          (value) => (
-                            <option key={value} value={value}>
-                              {conditionLabel(value)}
-                            </option>
-                          ),
-                        )}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Decision reason</span>
-                      <select
-                        aria-label={`Decision reason for ${comp.formatted_address ?? "comparable"}`}
-                        onChange={(event) => {
-                          setCompReview((current) => ({
-                            ...current,
-                            [compKey]: { ...decision, reason: event.target.value },
-                          }));
-                          markInputsReviewed();
-                        }}
-                        value={decision.reason}
-                      >
-                        {!reasonOptions.includes(decision.reason) ? (
-                          <option value={decision.reason}>{decision.reason}</option>
-                        ) : null}
-                        {reasonOptions.map((reason) => (
-                          <option key={reason} value={reason}>
-                            {reason}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      <span>Evidence weight</span>
-                      <div className={styles.weightInput}>
-                        <input
-                          aria-label={`Evidence weight for ${comp.formatted_address ?? "comparable"}`}
-                          disabled={!decision.included}
-                          max="150"
-                          min="50"
-                          onChange={(event) => {
-                            setCompReview((current) => ({
-                              ...current,
-                              [compKey]: {
-                                ...decision,
-                                weight_percentage: Number(event.target.value),
-                              },
-                            }));
-                            markInputsReviewed();
-                          }}
-                          step="5"
-                          type="number"
-                          value={decision.weight_percentage}
-                        />
-                        <span>%</span>
-                      </div>
-                    </label>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          <div className={styles.compReviewFooter}>
-            <div>
-              <strong>Review version</strong>
-              <span>Applying creates a new saved analysis and keeps this version unchanged.</span>
-            </div>
-            <button
-              disabled={reviewSaving || isLoading || !reviewComps.length}
-              onClick={applyCompReview}
-              type="button"
-            >
-              {reviewSaving ? "Applying..." : "Apply review and recalculate"}
-            </button>
-          </div>
+          <ComparableReviewWorkbench
+            comparables={reviewComps}
+            conditionOverrides={conditionOverrides}
+            disabled={isLoading}
+            onApply={applyCompReview}
+            onConditionChange={updateCompCondition}
+            onRestoreRecommendation={restoreSystemCompSet}
+            onReviewChange={updateCompReview}
+            requestedAddress={estimate.requested_address}
+            review={compReview}
+            saving={reviewSaving}
+            subject={{
+              ...estimate.subject_property,
+              squareFootage:
+                estimate.subject_property?.squareFootage ?? estimate.subject_square_feet,
+            }}
+          />
           <p>{estimate.source_note}</p>
         </div>
       ) : null}

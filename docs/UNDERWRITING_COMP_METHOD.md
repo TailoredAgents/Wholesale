@@ -3,7 +3,7 @@
 ## Version Status
 
 - **Current implemented method:** Underwriting V2.2 calculations with `adaptive_v1` closed-sale
-  discovery plus implemented U3.1-U3.3 evidence controls.
+  discovery plus implemented U3.1-U3.4 evidence and review controls.
 - **Approved target:** Underwriting V3, planned as an in-place upgrade to V2.2.
 - **Current operating authority:** V2.2 formulas remain live. Implemented evidence and workflow
   phases may improve the inputs and explanations without activating unfinished V3 formulas.
@@ -739,7 +739,7 @@ Implementation record:
 
 #### U3.4: Comparable Review Workbench
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026.
 
 - Recompose the current comp table into a side-by-side subject and candidate review workspace.
 - Show grade, search level, raw sale, adjusted indication, distance, direction, sale date, physical
@@ -750,6 +750,36 @@ Implementation record:
 
 **Exit:** Austin can identify, verify, and explain the final comp set without moving among unrelated
 pages or decoding provider fields.
+
+Implementation record:
+
+- The existing immutable comp-review endpoint remains the only review path. The workbench is a new
+  operator interface over that versioned calculation and audit behavior, not a second valuation
+  engine or parallel comp record.
+- The API returns the saved canonical subject facts with the analysis. Provider sales retain
+  coordinates when supplied, a calculated eight-point direction from the subject, and the engine's
+  original selected/rejected status and rationale even after a reviewer changes the decision.
+- A persistent subject band anchors the address, property type, subdivision, beds, baths, living
+  area, year, and lot evidence. Every candidate shows raw closed price, subject-size indication,
+  price per square foot, sale date, distance/direction, grade, search level, and a side-by-side
+  physical comparison.
+- All, Included, Excluded, grade, search-level, address/subdivision, and sort controls narrow the
+  working set without removing any candidate from the decision payload.
+- System Pick and System Excluded labels preserve the engine recommendation. Reviewer Changed
+  identifies an inclusion override. Restore System Set returns inclusion decisions and weights to
+  that recommendation without overwriting condition evidence.
+- Include/exclude, truthful decision reason, condition classification, and 50-150% evidence weight
+  remain reviewer-controlled. Applying still requires a decision for every source candidate and
+  creates a new immutable analysis.
+- Advanced rationale, warnings, condition evidence, verification notes, and source links remain
+  collapsed until requested. The included/excluded/change summary and recalculation action remain
+  visible in the workbench.
+- The Location view plots provider-coordinate sales relative to the subject without adding a map
+  vendor or claiming parcel/neighborhood boundaries. Sales without coordinates remain in the
+  location evidence list with their available distance/direction.
+- Desktop, 1024-pixel tablet, and 768-pixel layouts were checked without horizontal overflow. The
+  lead detail workspace now moves its supporting sidebar below the primary work area at tablet
+  widths so valuation evidence is not compressed.
 
 #### U3.5: Market-Supported Adjustment Engine
 

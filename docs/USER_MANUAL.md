@@ -1271,6 +1271,10 @@ Review the result from top to bottom:
    ceiling, and opening recommendation.
 9. Read every item under **Resolve before approval**.
 10. Review each comparable:
+   - Keep the **Subject property** band visible as the comparison baseline. Correct the lead or run
+     a new analysis if its physical facts are wrong.
+   - Use **All**, **Included**, **Excluded**, grade, search-level, address/subdivision, and sort
+     filters to focus the list. Filters never remove a sale from the saved review decision set.
    - Confirm it is a real recorded sale.
    - Compare property type, location, distance, sale date, size, bedrooms, bathrooms, and price per
      square foot.
@@ -1279,9 +1283,17 @@ Review the result from top to bottom:
    - For a Manual sale, open the source and read the reference, verification notes, and condition
      evidence. Source verification proves the closing record, not that it is a suitable comp.
    - Investigate subdivision and extended-search warnings instead of ignoring them.
+   - **System pick** and **System excluded** show the engine's original recommendation. **Reviewer
+     changed** means the draft inclusion choice differs from that recommendation.
    - Mark **Condition at sale** as As-is, Renovated, or Unknown based on evidence.
    - Include or exclude it and choose the truthful **Decision reason**.
    - Adjust **Evidence weight** only when the record deserves more or less influence.
+   - Open **Evidence and rationale** for the engine reason, condition support, warnings,
+     verification notes, and source link.
+   - Use **Location** to compare relative coordinate position and available distance/direction. It
+     is not a parcel, school-boundary, or neighborhood-boundary map.
+   - Use **Restore system set** only to return inclusion choices and weights to the engine's saved
+     recommendation; it does not erase condition classifications.
 11. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
 12. Repeat until the included set and assumptions reflect the evidence.
 13. Create a manual underwriting version only when an authorized person must preserve a separate

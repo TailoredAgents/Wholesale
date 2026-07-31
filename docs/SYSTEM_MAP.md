@@ -878,19 +878,26 @@ The one complete-analysis workflow performs:
 3. subject fact reconciliation
 4. adaptive preferred, expanded, and extended recorded-sale search
 5. sale deduplication, subdivision comparison, A-D grading, screening, and scoring
-6. optional bounded public-record research
-7. comparable weighting
-8. ARV and as-is range calculation
-9. repair and contingency math
-10. buyer economics and Stonegate offer scenarios
-11. confidence factors and review flags
-12. immutable analysis storage
+6. subject-versus-candidate review data, engine recommendation, and location direction
+7. optional bounded public-record research
+8. comparable weighting
+9. ARV and as-is range calculation
+10. repair and contingency math
+11. buyer economics and Stonegate offer scenarios
+12. confidence factors and review flags
+13. immutable analysis storage
 
 The search stops when at least three screened closed sales satisfy available market-area evidence.
 If the complete provider search remains thin, the result is labeled `manual`, records the exact
 shortage and next action, and preserves every suitable sale found. Repair-only reruns and comp
 reviews reuse this immutable provider snapshot unless the operator explicitly refreshes market
 data.
+
+The Comparable Review workbench consumes the saved subject snapshot and complete candidate set.
+Filters and sorting affect only the display. Every apply request still carries one include/exclude
+decision, reason, and weight for every candidate in the source analysis. The engine's original
+recommendation remains attached to each sale so a later reviewer decision cannot rewrite what the
+system originally suggested. Applying creates another immutable analysis and audit event.
 
 ### 11.3 Offer Math
 

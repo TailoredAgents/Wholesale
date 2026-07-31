@@ -3577,6 +3577,7 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         underwriting_version_id=analysis.underwriting_version_id,
         provider=analysis.provider,
         requested_address=analysis.requested_address,
+        subject_property=analysis.subject_property,
         estimated_value_cents=analysis.estimated_value_cents,
         estimated_value_low_cents=analysis.estimated_value_low_cents,
         estimated_value_high_cents=analysis.estimated_value_high_cents,

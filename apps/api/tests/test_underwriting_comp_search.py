@@ -165,6 +165,29 @@ def test_subdivision_evidence_forces_controlled_expansion() -> None:
     assert any(comp.subdivision_match is False for comp in selected)
 
 
+def test_selected_sale_preserves_engine_recommendation_and_compass_direction() -> None:
+    north_sale = sale("comp-1")
+    north_sale.update(
+        {
+            "latitude": 34.2468,
+            "longitude": -84.4908,
+        }
+    )
+
+    selected, rejected = analyze_recorded_sales(
+        subject(),
+        [north_sale],
+        condition_overrides={},
+    )
+
+    assert rejected == []
+    assert selected[0].latitude == 34.2468
+    assert selected[0].longitude == -84.4908
+    assert selected[0].direction_from_subject == "N"
+    assert selected[0].engine_selection_status == "selected"
+    assert selected[0].engine_selection_reason == selected[0].selection_reason
+
+
 def test_later_provider_failure_keeps_earlier_evidence_and_explains_gap() -> None:
     class FailingExpandedClient(ProfileClient):
         def get_recent_sales(self, **kwargs: Any) -> list[dict[str, Any]]:

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import asin, cos, radians, sin, sqrt
+from math import asin, atan2, cos, degrees, radians, sin, sqrt
 from statistics import median
 from typing import Any
 
@@ -395,25 +395,44 @@ def analyze_recorded_sales(
     eligible = [comp for comp in scored if comp.selection_status != "rejected"]
     selected = sorted(eligible, key=lambda comp: comp.score, reverse=True)[:5]
     selected_keys = {comp_key(comp) for comp in selected}
-    rejected = []
+    rejected: list[MarketAnalysisCompRead] = []
     for comp in scored:
         if comp_key(comp) in selected_keys:
             continue
         if comp.selection_status == "rejected":
-            rejected.append(comp)
+            rejected.append(
+                comp.model_copy(
+                    update={
+                        "engine_selection_status": "rejected",
+                        "engine_selection_reason": comp.selection_reason,
+                    }
+                )
+            )
         else:
+            engine_reason = (
+                "Eligible recorded sale, but ranked below the five strongest matches."
+            )
             rejected.append(
                 comp.model_copy(
                     update={
                         "selection_status": "rejected",
-                        "selection_reason": (
-                            "Eligible recorded sale, but ranked below the five strongest matches."
-                        ),
+                        "selection_reason": engine_reason,
+                        "engine_selection_status": "rejected",
+                        "engine_selection_reason": engine_reason,
                     }
                 )
             )
     return (
-        [comp.model_copy(update={"selection_status": "selected"}) for comp in selected],
+        [
+            comp.model_copy(
+                update={
+                    "selection_status": "selected",
+                    "engine_selection_status": "selected",
+                    "engine_selection_reason": comp.selection_reason,
+                }
+            )
+            for comp in selected
+        ],
         [comp.model_copy(update={"selection_status": "rejected"}) for comp in rejected],
     )
 
@@ -476,6 +495,9 @@ def score_recorded_sale(
         "square_footage": integer(record.get("squareFootage")),
         "year_built": integer(record.get("yearBuilt")),
         "distance_miles": record_distance(subject, record),
+        "latitude": number(record.get("latitude")),
+        "longitude": number(record.get("longitude")),
+        "direction_from_subject": direction_from_subject(subject, record),
         "days_old": days_since(sale_date),
         "correlation": None,
         "listed_date": None,
@@ -1229,6 +1251,33 @@ def record_distance(subject: dict[str, Any], record: dict[str, Any]) -> float | 
     ):
         return None
     return round(haversine_miles(subject_lat, subject_lng, comp_lat, comp_lng), 3)
+
+
+def direction_from_subject(
+    subject: dict[str, Any],
+    record: dict[str, Any],
+) -> str | None:
+    subject_latitude = number(subject.get("latitude"))
+    subject_longitude = number(subject.get("longitude"))
+    comp_latitude = number(record.get("latitude"))
+    comp_longitude = number(record.get("longitude"))
+    if (
+        subject_latitude is None
+        or subject_longitude is None
+        or comp_latitude is None
+        or comp_longitude is None
+    ):
+        return None
+    longitude_delta = radians(comp_longitude - subject_longitude)
+    origin_latitude = radians(subject_latitude)
+    destination_latitude = radians(comp_latitude)
+    x_axis = sin(longitude_delta) * cos(destination_latitude)
+    y_axis = cos(origin_latitude) * sin(destination_latitude) - sin(
+        origin_latitude
+    ) * cos(destination_latitude) * cos(longitude_delta)
+    bearing = (degrees(atan2(x_axis, y_axis)) + 360) % 360
+    directions = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+    return directions[round(bearing / 45) % len(directions)]
 
 
 def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

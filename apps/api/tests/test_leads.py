@@ -1512,6 +1512,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     payload = response.json()
     assert payload["provider"] == "rentcast"
     assert payload["methodology_version"] == "v2.2"
+    assert payload["subject_property"]["formattedAddress"] == (
+        "123 Peachtree St, Atlanta, GA 30303"
+    )
     assert payload["methodology_control"] == {
         "requested_version": "v2.2",
         "active_version": "v2.2",
@@ -1601,6 +1604,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["selected_comps"][0]["adjusted_value_cents"] is not None
     assert payload["selected_comps"][0]["search_level"] == "preferred"
     assert payload["selected_comps"][0]["comp_grade"] in {"A", "B"}
+    assert payload["selected_comps"][0]["engine_selection_status"] == "selected"
+    assert payload["selected_comps"][0]["engine_selection_reason"]
     price_outlier = next(
         comp
         for comp in payload["rejected_comps"]

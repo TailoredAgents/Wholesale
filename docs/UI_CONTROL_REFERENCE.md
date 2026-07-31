@@ -1015,7 +1015,15 @@ appraisal or permission to promise a seller a price.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Comparable row | Shows address, sale date, distance, size, beds/baths, price, price per square foot, evidence source, A-D fit grade, search level, and subdivision when available | Read-only source facts |
+| Subject property band | Anchors the saved address, type/subdivision, beds, baths, living area, year, and lot used by the analysis | Read-only snapshot; correct source facts and create a new analysis when wrong |
+| Compare / Location | Switches between side-by-side candidate review and relative coordinate position | Location is not a parcel or neighborhood-boundary map; unavailable coordinates are listed but not plotted |
+| Included / Excluded / Draft changes | Keeps the complete draft decision count visible | Draft changes include inclusion, weight, or condition changes from the loaded analysis |
+| **Restore system set** | Restores the engine's original included/excluded recommendation and 100% reviewer weights | Does not erase condition classifications or change the source analysis |
+| Search / decision / grade / level filters | Narrows the visible workbench without dropping hidden candidates from the review payload | Display-only filters |
+| Sort | Orders by best fit, nearest, most recent, or highest subject-size indication | Display-only; does not alter weight |
+| Comparable candidate | Shows raw closed price, adjusted indication, price per square foot, sale date, distance/direction, physical comparison, source, A-D grade, search level, and subdivision | Read-only source facts |
+| System pick / System excluded | Preserves the engine's original recommendation | Remains visible after human overrides |
+| Reviewer changed | Shows that the draft include/exclude choice differs from the engine recommendation | Reviewer retains authority and must supply a reason |
 | Comp grade | Summarizes physical, location, recency, and market-area fit; Extended-only records cannot receive A or B | A grade does not prove renovated condition |
 | Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, Extended, or Manual evidence step | Wider-query duplicates retain their earliest level; Manual identifies operator-entered evidence |
 | Evidence source / **Open source** | Shows provider or manual verification origin and opens a retained source link | Manual reference is always retained; link appears when supplied |
@@ -1023,7 +1031,8 @@ appraisal or permission to promise a seller a price.
 | Condition | Marks renovated, average, distressed, unknown, or other supported state | Unconfirmed renovation reduces confidence but does not block results |
 | Exclusion reason | Explains why a comp should not be used | Required by review workflow when excluded |
 | Weight | Adjusts a comp's influence within allowed bounds | Should reflect similarity and evidence, not desired outcome |
-| **Recalculate** | Rebuilds the analysis from reviewed comp choices | Requires at least enough usable evidence for a range |
+| Evidence and rationale | Opens engine rationale, condition evidence, warnings, verification notes, and retained source | Advanced evidence is collapsed by default |
+| **Apply review and recalculate** | Rebuilds the analysis from every reviewed comp choice and creates a new immutable version | At least one included sale; every candidate receives one decision |
 | Outlier result | Shows whether distance, price range, size, property type, or price-per-square-foot rules reduced or removed a comp | Read-only explanation |
 
 ### Offer Plan And Approval

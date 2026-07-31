@@ -195,6 +195,9 @@ class MarketComparableRead(BaseModel):
     square_footage: int | None
     year_built: int | None
     distance_miles: float | None
+    latitude: float | None = None
+    longitude: float | None = None
+    direction_from_subject: str | None = None
     days_old: int | None
     correlation: float | None
     listed_date: str | None
@@ -239,6 +242,8 @@ class MarketAnalysisCompRead(MarketComparableRead):
     selection_status: str
     selection_reason: str
     score: int
+    engine_selection_status: Literal["selected", "rejected"] | None = None
+    engine_selection_reason: str | None = None
     review_decision: Literal["included", "excluded"] | None = None
     review_reason: str | None = None
     manual_weight_percentage: int | None = None
@@ -546,6 +551,7 @@ class LeadMarketAnalysisRead(BaseModel):
     underwriting_version_id: UUID | None
     provider: str
     requested_address: str
+    subject_property: dict[str, Any] = Field(default_factory=dict)
     estimated_value_cents: int | None
     estimated_value_low_cents: int | None
     estimated_value_high_cents: int | None
