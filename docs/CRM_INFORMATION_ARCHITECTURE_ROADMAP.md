@@ -1014,7 +1014,7 @@ Exit criteria:
 
 ## IA8. Unified Deals
 
-Status: **Planned**
+Status: **Implemented July 31, 2026**
 
 Scope:
 
@@ -1032,6 +1032,11 @@ Exit criteria:
 - contract, title, buyer, closing, and financial blockers remain independently visible
 - current transaction and disposition controls have target locations
 - role tests confirm no restricted economics leak
+
+Implementation note: `/os/transactions` and `/os/dispositions` remain authorized compatibility
+routes. The unified record has parity for established transaction and disposition cases, while a
+new disposition case is still opened through the specialist setup route. Redirecting that route
+before setup parity would remove a working control, so final redirects remain an IA10 decision.
 
 ## IA9. Record Standards, Contextual AI, And Responsive Quality
 
@@ -1601,3 +1606,43 @@ to the originating workspace before a decision is recorded.
   pass.
 - TypeScript and ESLint pass.
 - Mobile, iPad, and desktop checks show no document-level horizontal overflow.
+
+## 26. IA8 Unified Deals Implementation
+
+### 26.1 One Deal Index
+
+`/os/deals` is now the canonical contract-to-funding workspace. It reads the existing Deal and
+related domain records through a purpose-built aggregate API. Its saved views are **Active**,
+**Closing Exceptions**, **Ready for Disposition**, **Buyer Needed**, **Finance Review**, and
+**Completed**. Queue, table, and board displays operate on the same records and preserve view,
+display, selected deal, and selected tab in the URL.
+
+### 26.2 One Deal Record
+
+The Deal record has **Summary**, **Contract**, **Closing**, **Documents**, **Parties**,
+**Disposition**, **Finance**, and **Timeline** sections. Transaction and Disposition workspaces
+support embedded record mode, so the canonical Deal record uses their existing APIs, permissions,
+approval rules, documents, checklists, buyer matching, offers, and reconciliation controls rather
+than reproducing them.
+
+Contract, Closing, Disposition, and Finance remain independent statuses. The aggregate read model
+also exposes domain-specific blockers, the shared primary next action, evidence counts, closing
+deadline, buyer outcome, and stable related-record IDs.
+
+### 26.3 Access And Compatibility
+
+The Deal API requires `deals:view`. Assignment fee, company profit, and company margin are only
+returned when the principal has financial or compensation visibility. Contract price remains an
+operational term available to deal roles, matching the existing transaction workflow.
+
+`/os/transactions` remains a compatibility route for specialist setup and bookmarks.
+`/os/dispositions` remains the setup route for creating the first disposition case. Existing cases
+are worked inside Deals. Final redirects are deferred until new-case setup has canonical parity.
+
+### 26.4 Verification
+
+- Unified overview and organization-scoped detail endpoints have API coverage.
+- Existing transaction and disposition suites pass against the new router and embedded modes.
+- Next.js production build passes with the canonical Deals workspace.
+- Desktop and 390px mobile captures confirm the queue and record remain readable without
+  document-level horizontal overflow.

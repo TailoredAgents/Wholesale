@@ -1321,7 +1321,19 @@ requires funding evidence.
 
 ## 13. Contracts And Transactions
 
-When an approved seller agreement exists, open or update the transaction.
+When a seller is ready for an agreement, open **Deals** and select the property. Deals is the
+normal employee workspace from contract preparation through funding.
+
+Use the saved views to find the correct work: **Active**, **Closing Exceptions**, **Ready for
+Disposition**, **Buyer Needed**, **Finance Review**, or **Completed**. Use the queue for daily
+work, the table for comparison, and the board for a milestone overview. Selecting a deal opens one
+record with separate Contract, Closing, Disposition, and Finance status so parallel work does not
+overwrite another department's progress.
+
+The record's **Summary** section shows the one primary next action, its owner and due date, all
+active blockers, closing evidence counts, buyer status, and only the economics your role may see.
+Use the remaining record sections for the actual work. The old Transactions route remains an
+authorized compatibility tool, not a second record system.
 
 The Transactions workspace has:
 
@@ -1402,12 +1414,17 @@ Expired or missing proof of funds should reduce selection confidence.
 
 ### Disposition Case
 
-Open **Dispositions** after the seller contract is executed. Tabs are:
+Open the property in **Deals**, then select **Disposition** after the seller contract is executed.
+For an existing case, the embedded tabs are:
 
 - **Package**
 - **Buyers**
 - **Offers**
 - **Reconciliation**
+
+If the record says disposition has not started, use **Open disposition setup**. This opens the
+specialist setup route where an authorized user creates the first case. Return to Deals afterward;
+the new case will appear in the same Deal record.
 
 ### Package
 

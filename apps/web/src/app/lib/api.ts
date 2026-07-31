@@ -3151,6 +3151,65 @@ export type TransactionQueueItem = {
   risk_flags: string[];
 };
 
+export type DealQueueItem = {
+  id: string;
+  lead_id: string;
+  transaction_id: string;
+  disposition_case_id: string | null;
+  seller_name: string;
+  property_address: string;
+  property_type: string | null;
+  stage_key: string;
+  contract_status: string;
+  closing_status: string;
+  disposition_status: string;
+  finance_status: string;
+  owner_name: string | null;
+  coordinator_name: string | null;
+  disposition_owner_name: string | null;
+  closing_date: string | null;
+  next_deadline: string | null;
+  checklist_complete: number;
+  checklist_total: number;
+  document_count: number;
+  buyer_match_count: number;
+  buyer_offer_count: number;
+  selected_buyer_name: string | null;
+  contract_price_cents: number;
+  assignment_fee_cents: number | null;
+  company_profit_cents: number | null;
+  company_margin_basis_points: number | null;
+  primary_next_action: null | {
+    task_id: string;
+    title: string;
+    action_type: string;
+    due_at: string | null;
+    responsible_user_id: string | null;
+    responsible_user_email: string | null;
+    due_status: string;
+  };
+  blockers: Array<{
+    key: string;
+    domain: string;
+    label: string;
+    severity: string;
+  }>;
+  created_at: string;
+};
+
+export type DealOverview = {
+  can_view_economics: boolean;
+  metrics: {
+    active: number;
+    closing_exceptions: number;
+    ready_for_disposition: number;
+    buyer_needed: number;
+    finance_review: number;
+    completed: number;
+  };
+  items: DealQueueItem[];
+};
+
 export type TransactionOverview = {
   metrics: {
     active: number;
@@ -4305,6 +4364,26 @@ export async function getTransactionOverview(): Promise<{
     };
   } catch {
     return { transactions: null, apiConnected: false };
+  }
+}
+
+export async function getDealOverview(): Promise<{
+  deals: DealOverview | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/deals`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      deals: (await response.json()) as DealOverview,
+      apiConnected: true,
+    };
+  } catch {
+    return { deals: null, apiConnected: false };
   }
 }
 

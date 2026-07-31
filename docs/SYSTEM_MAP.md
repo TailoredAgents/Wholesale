@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: July 29, 2026
+Last verified against the repository: July 31, 2026
 
 ## 1. Document Authority
 
@@ -429,9 +429,17 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 
 **Deals (`/os/deals`)**
 
-- Primary entry point for contract-to-close, disposition, and controlled approval work.
-- Aggregates existing Transaction, Disposition, and Approval counts without duplicating records.
-- Links to the current detailed tools until IA8 delivers one local deal workspace.
+- Canonical employee workspace for contract preparation through funded closing.
+- Reads the existing Deal, Transaction, Contract Package, Disposition Case, Buyer Offer,
+  reconciliation, task, document, and checklist records without duplicating them.
+- Provides Active, Closing Exceptions, Ready for Disposition, Buyer Needed, Finance Review, and
+  Completed saved views with queue, table, and board displays.
+- Preserves the selected view, display, deal, and record tab in the URL.
+- Shows Contract, Closing, Disposition, and Finance as independent parallel states.
+- Provides Summary, Contract, Closing, Documents, Parties, Disposition, Finance, and Timeline
+  record sections. The specialist sections embed the existing server-governed controls.
+- Hides assignment fee, company profit, and company margin unless the user has financial or
+  compensation visibility. Operational contract price remains visible to deal roles.
 
 **Valuation Quality (`/os/settings/data-quality`)**
 
@@ -446,13 +454,15 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 
 **Transactions (`/os/transactions`)**
 
-- Contract-to-closing coordination.
+- Compatibility and specialist setup route for contract-to-closing coordination. Normal daily
+  work begins in Deals.
 - Manages contract templates, packages, approvals, signatures, documents, parties, milestones,
   checklists, closing, and Transaction Copilot drafts.
 
 **Dispositions (`/os/dispositions`)**
 
-- Contract marketing and buyer-selection process.
+- Compatibility and specialist setup route for opening a new disposition case. Existing cases
+  are worked from the Disposition and Finance sections of Deals.
 - Manages deal packages, matches, campaigns, engagement, offers, proof, selection, reconciliation,
   and Disposition Copilot drafts.
 

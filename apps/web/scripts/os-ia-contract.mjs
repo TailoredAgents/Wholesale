@@ -777,6 +777,7 @@ export const controlReferenceSections = [
   { heading: "Seller Record", owner: "seller-leads" },
   { heading: "Valuation And Offer", owner: "seller-leads" },
   { heading: "Approvals In Tasks", owner: "tasks" },
+  { heading: "Deals", owner: "deals" },
   { heading: "Transactions", owner: "deals" },
   { heading: "Buyers", owner: "buyers" },
   { heading: "Dispositions", owner: "deals" },

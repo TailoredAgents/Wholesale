@@ -1,4 +1,6 @@
 .workspace { display: grid; gap: 14px; }
+.embeddedWorkspace { gap: 0; }
+.embeddedBody { min-height: 0; grid-template-columns: minmax(0, 1fr); border: 0; }
 .metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); background: var(--surface); }
 .metrics > div { min-height: 76px; padding: 14px; display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 8px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }

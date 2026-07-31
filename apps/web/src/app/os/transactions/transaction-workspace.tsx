@@ -53,10 +53,12 @@ function date(value: string | null) {
 }
 
 export function TransactionWorkspace({
+  embedded = false,
   initialData,
   initialTab = "closing",
   initialTransactionId,
 }: {
+  embedded?: boolean;
   initialData: TransactionOverview;
   initialTab?: Tab;
   initialTransactionId?: string;
@@ -317,12 +319,12 @@ export function TransactionWorkspace({
   const primarySignerRole = signatureDocumentType === "assignment_contract" ? "Assignee" : "Seller";
 
   return (
-    <div className={styles.workspace}>
-      <section className={styles.metrics} aria-label="Transaction summary">
+    <div className={`${styles.workspace} ${embedded ? styles.embeddedWorkspace : ""}`}>
+      {!embedded ? <section className={styles.metrics} aria-label="Transaction summary">
         {[{ label: "Active", value: overview.metrics.active, icon: Landmark }, { label: "Approval", value: overview.metrics.pending_approval, icon: FileCheck2 }, { label: "Due in 7 days", value: overview.metrics.due_next_seven_days, icon: Clock3 }, { label: "Overdue", value: overview.metrics.overdue, icon: AlertTriangle }, { label: "Ready to close", value: overview.metrics.ready_to_close, icon: CircleDollarSign }].map((item) => <div key={item.label}><item.icon size={18} /><span>{item.label}</span><strong>{item.value}</strong></div>)}
-      </section>
-      <div className={styles.body}>
-        <aside className={styles.queue}>
+      </section> : null}
+      <div className={`${styles.body} ${embedded ? styles.embeddedBody : ""}`}>
+        {!embedded ? <aside className={styles.queue}>
           <div className={styles.queueHeader}><div><span>Closing queue</span><strong>{overview.items.length} active</strong></div></div>
           {overview.items.length === 0 ? <p className={styles.empty}>Open a transaction from a lead&apos;s Deal tab.</p> : overview.items.map((item) => (
             <button className={selectedId === item.id ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => { setDetail(null); setCopilot(null); setSelectedId(item.id); }} type="button">
@@ -331,10 +333,10 @@ export function TransactionWorkspace({
               {item.risk_flags[0] ? <small><AlertTriangle size={13} />{item.risk_flags[0]}</small> : <small className={styles.clear}><Check size={13} />On track</small>}
             </button>
           ))}
-        </aside>
+        </aside> : null}
         <section aria-label="Transaction detail" className={styles.detail}>
           {!selectedId ? <div className={styles.emptyState}><FileText size={24} /><h3>No active transactions</h3><p>Open one from the Deal tab on a qualified lead.</p></div> : !detail ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={22} /> Loading transaction</div> : <>
-            <header className={styles.dealHeader}><div><span>{labelize(detail.status)}</span><h3>{detail.seller_name}</h3><p>{detail.property_address}</p></div><div><span>Purchase</span><strong>{money(detail.purchase_price_cents)}</strong></div></header>
+            {!embedded ? <><header className={styles.dealHeader}><div><span>{labelize(detail.status)}</span><h3>{detail.seller_name}</h3><p>{detail.property_address}</p></div><div><span>Purchase</span><strong>{money(detail.purchase_price_cents)}</strong></div></header>
             <div className={styles.controlStrip}>
               <DealControlStrip
                 authority={{ label: "Authority", value: pendingPackage ? "Owner approval" : "Coordinator controls", detail: pendingPackage ? "Contract remains blocked" : detail.coordinator_name ?? "Coordinator unassigned", tone: pendingPackage ? "warning" : "info" }}
@@ -343,8 +345,8 @@ export function TransactionWorkspace({
                 evidence={{ label: "Evidence", value: `${detail.documents.length} documents`, detail: `${detail.checklist.filter((item) => item.status === "complete").length}/${detail.checklist.length} checklist complete`, tone: detail.documents.length ? "success" : "warning" }}
                 nextAction={{ label: "Authorized next step", value: pendingPackage ? "Resolve contract approval" : requiredOpen[0]?.title ?? (detail.status === "funded" ? "Closing complete" : "Confirm funding"), detail: "Server gates remain enforced", tone: detail.status === "funded" ? "success" : "info" }}
               />
-            </div>
-            {copilot ? (
+            </div></> : null}
+            {!embedded && copilot ? (
               <CopilotLauncher
                 attentionCount={copilot.readiness_gaps.length + copilot.deadline_risks.length}
                 description="Reviews closing evidence, missing documents, and deadlines without changing the transaction."
@@ -360,7 +362,7 @@ export function TransactionWorkspace({
                 />
               </CopilotLauncher>
             ) : null}
-            <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav>
+            {!embedded ? <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav> : null}
             {message ? <div className={message === "Saved." || message.startsWith("SignWell connected") ? styles.success : styles.notice}>{message}</div> : null}
 
             {tab === "closing" ? <>

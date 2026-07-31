@@ -1038,6 +1038,44 @@ appraisal or permission to promise a seller a price.
 | Review-at-source state | Directs the approver to decide in the originating workspace | Used when inline approval would omit required context |
 | Legacy `/os/approvals` route | Redirects to Tasks > Approvals and preserves a selected approval | Compatibility only |
 
+## Deals
+
+Deals is the normal contract-to-funding workspace. It presents existing transaction,
+disposition, buyer, task, document, and reconciliation records through one employee-facing deal.
+
+### Deal Index
+
+| Control or item | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Active | Shows non-funded, non-cancelled deals | Default saved view |
+| Closing Exceptions | Shows active deals with an overdue closing item or unassigned coordinator | Requires a closing blocker |
+| Ready for Disposition | Shows executed transactions without a disposition case | Opens the correct handoff queue |
+| Buyer Needed | Shows active disposition cases without an approved selected buyer | Requires an open disposition case |
+| Finance Review | Shows deals ready for or requiring reconciliation | Detailed economics still require financial access |
+| Completed | Shows funded or cancelled deals | Historical operational view |
+| Queue icon | Shows compact status and next-action rows | Default display |
+| Table icon | Shows a dense comparison table | Horizontally scrolls on narrow screens |
+| Board icon | Groups deals by the next critical work area | Parallel statuses remain visible inside the record |
+| Deal row/card | Opens the selected Deal record | Preserves view, display, deal, and tab in the URL |
+
+### Deal Record
+
+| Control or item | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Seller Lead | Opens the source seller record | Requires seller-lead access |
+| Contract, Closing, Disposition, Finance strip | Shows independent status for each workstream | Read-only aggregate state |
+| Summary | Shows the primary next action, blockers, evidence counts, selected buyer, and authorized economics | Default record section |
+| Contract | Embeds agreement packages, SignWell, signatures, and version controls | Uses existing contract permissions and server gates |
+| Closing | Embeds checklist, dates, title, funding, and closing controls | Uses existing deal edit permission |
+| Documents | Embeds the transaction file room and evidence controls | Document access remains role controlled |
+| Parties | Embeds closing-party records | Uses transaction edit permission |
+| Disposition | Embeds Package, Buyers, Offers, and Reconciliation for an existing case | A new case is opened from the compatibility setup route |
+| Finance | Opens the disposition reconciliation view in deal context | Economics are redacted from the aggregate unless authorized |
+| Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
+
+The Transactions and Dispositions routes below remain compatibility and setup tools. Employees
+should begin ordinary active-deal work in Deals.
+
 ## Transactions
 
 The transaction record uses **Closing**, **Contract**, **Documents**, **Parties**, and

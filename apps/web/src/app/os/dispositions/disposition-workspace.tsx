@@ -49,7 +49,17 @@ function cents(value: FormDataEntryValue | null) {
   return Math.round(Number(String(value ?? "").replace(/[$,]/g, "")) * 100);
 }
 
-export function DispositionWorkspace({ initialCaseId, initialData }: { initialCaseId?: string; initialData: DispositionOverview }) {
+export function DispositionWorkspace({
+  embedded = false,
+  initialCaseId,
+  initialData,
+  initialTab = "package",
+}: {
+  embedded?: boolean;
+  initialCaseId?: string;
+  initialData: DispositionOverview;
+  initialTab?: Tab;
+}) {
   const { getToken } = useAuth();
   const [data, setData] = useState(initialData);
   const [selectedId, setSelectedId] = useState(
@@ -57,7 +67,7 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
       ? initialCaseId ?? null
       : initialData.cases[0]?.id ?? null,
   );
-  const [tab, setTab] = useState<Tab>("package");
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
   const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
   const [buyerProvider, setBuyerProvider] = useState<BuyerDataProvider | null>(null);
@@ -420,19 +430,19 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
   const post = (path: string) => request(path, { method: "POST", body: "{}" });
 
   return (
-    <section aria-label="Disposition management" className={styles.workspace}>
-      <section className={styles.metrics}>
+    <section aria-label="Disposition management" className={`${styles.workspace} ${embedded ? styles.embeddedWorkspace : ""}`}>
+      {!embedded ? <section className={styles.metrics}>
         <div><Megaphone size={18} /><span>Active cases</span><strong>{data.metrics.active_cases}</strong></div>
         <div><FileCheck2 size={18} /><span>Packages pending</span><strong>{data.metrics.packages_pending}</strong></div>
         <div><UsersRound size={18} /><span>Buyer selected</span><strong>{data.metrics.buyer_selected}</strong></div>
         <div><BadgeDollarSign size={18} /><span>Reconcile</span><strong>{data.metrics.reconciliation_pending}</strong></div>
         <div><ShieldCheck size={18} /><span>Below 30% target</span><strong>{data.metrics.below_margin_target}</strong></div>
-      </section>
+      </section> : null}
 
       {message ? <p className={message.includes("Unable") || message.includes("required") ? styles.notice : styles.success}>{message}</p> : null}
 
-      <section className={styles.body}>
-        <aside className={styles.queue}>
+      <section className={`${styles.body} ${embedded ? styles.embeddedBody : ""}`}>
+        {!embedded ? <aside className={styles.queue}>
           <div className={styles.queueHeader}><div><span>Disposition queue</span><strong>{data.cases.length} cases</strong></div></div>
           {data.cases.map((item) => (
             <button className={item.id === selectedId ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => setSelectedId(item.id)} type="button">
@@ -452,12 +462,12 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
               <button disabled={busy} type="submit">Open case</button>
             </form>
           ) : null}
-        </aside>
+        </aside> : null}
 
         <div className={styles.detail}>
           {!selected ? <div className={styles.empty}><UsersRound size={30} /><h3>No disposition cases</h3><p>Executed transactions will appear here when ready for buyer placement.</p></div> : (
             <>
-              <header className={styles.dealHeader}><div><span>{labelize(selected.strategy)} · {selected.operating_mode_label}</span><h3>{selected.property_address}</h3><p>{selected.seller_name} · {selected.compensation_plan_label}</p></div><div><span>Approved floor</span><strong>{money(selected.minimum_acceptable_cents)}</strong></div></header>
+              {!embedded ? <><header className={styles.dealHeader}><div><span>{labelize(selected.strategy)} · {selected.operating_mode_label}</span><h3>{selected.property_address}</h3><p>{selected.seller_name} · {selected.compensation_plan_label}</p></div><div><span>Approved floor</span><strong>{money(selected.minimum_acceptable_cents)}</strong></div></header>
               <div className={styles.controlStrip}>
                 <DealControlStrip
                   authority={{ label: "Authority", value: selected.selected_buyer_id ? "Selection approved" : "Human approval required", detail: selected.operating_mode_label, tone: selected.selected_buyer_id ? "success" : "warning" }}
@@ -466,8 +476,8 @@ export function DispositionWorkspace({ initialCaseId, initialData }: { initialCa
                   evidence={{ label: "Buyer evidence", value: `${selected.matches.filter((item) => item.latest_proof_document_id).length}/${selected.matches.length} POF verified`, detail: `${selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified matches`, tone: selected.matches.some((item) => item.latest_proof_document_id) ? "success" : "warning" }}
                   nextAction={{ label: "Authorized next step", value: selected.package_status !== "approved" ? "Approve investor package" : !selected.matches.length ? "Generate buyer ranking" : !selected.offers.length ? "Record buyer offers" : !selected.selected_buyer_id ? "Approve buyer selection" : "Reconcile closing", detail: `Floor ${money(selected.minimum_acceptable_cents)}`, tone: "info" }}
                 />
-              </div>
-              {copilot && copilotCaseId === selected.id ? (
+              </div></> : null}
+              {!embedded && copilot && copilotCaseId === selected.id ? (
                 <CopilotLauncher
                   attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}
                   description="Reviews buyer fit, package evidence, offers, and placement risks without contacting buyers or selecting an offer."
