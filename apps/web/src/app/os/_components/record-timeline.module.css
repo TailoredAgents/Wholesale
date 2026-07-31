@@ -1,0 +1,66 @@
+.timeline {
+  display: grid;
+}
+
+.timeline article {
+  position: relative;
+  min-width: 0;
+  padding: 11px 14px 11px 34px;
+  border-bottom: 1px solid var(--sg-color-border-soft, var(--line-soft, #e7e4de));
+}
+
+.timeline article:last-child {
+  border-bottom: 0;
+}
+
+.timeline article > span {
+  position: absolute;
+  top: 17px;
+  left: 15px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--sg-color-surface, var(--surface, #fff));
+  border-radius: 50%;
+  background: var(--sg-color-brand, var(--brand, #2f6f4e));
+  box-shadow: 0 0 0 1px var(--sg-color-brand, var(--brand, #2f6f4e));
+}
+
+.timeline article:not(:last-child)::before {
+  position: absolute;
+  top: 26px;
+  bottom: -7px;
+  left: 18px;
+  width: 1px;
+  background: var(--sg-color-border, var(--line, #d8d3c8));
+  content: "";
+}
+
+.timeline article > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.timeline strong {
+  color: var(--sg-color-text, var(--text, #161a1d));
+  font-size: 11px;
+}
+
+.timeline p {
+  margin: 0;
+  color: var(--sg-color-text-soft, var(--text-soft, #4f5658));
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.timeline small,
+.empty {
+  color: var(--sg-color-text-muted, var(--muted, #687073));
+  font-size: 9px;
+}
+
+.empty {
+  margin: 0;
+  padding: 22px 14px;
+}

@@ -10,11 +10,17 @@ export default async function DealsPage({
 }: {
   searchParams: Promise<{ deal?: string; display?: string; tab?: string; view?: string }>;
 }) {
-  const [dealResult, transactionResult, dispositionResult, params] = await Promise.all([
+  const params = await searchParams;
+  const transactionTabs = new Set(["contract", "closing", "documents", "parties", "timeline"]);
+  const dispositionTabs = new Set(["disposition", "finance"]);
+  const [dealResult, transactionResult, dispositionResult] = await Promise.all([
     getDealOverview(),
-    getTransactionOverview(),
-    getDispositionOverview(),
-    searchParams,
+    transactionTabs.has(params.tab ?? "")
+      ? getTransactionOverview()
+      : Promise.resolve({ transactions: null, apiConnected: true }),
+    dispositionTabs.has(params.tab ?? "")
+      ? getDispositionOverview()
+      : Promise.resolve({ dispositions: null, apiConnected: true }),
   ]);
   const connected = dealResult.apiConnected && transactionResult.apiConnected && dispositionResult.apiConnected;
 
@@ -26,7 +32,7 @@ export default async function DealsPage({
         meta={<StatusBadge tone={connected ? "success" : "danger"}>{connected ? "Deal queue current" : "Deal data unavailable"}</StatusBadge>}
         title="Deals"
       />
-      {dealResult.deals && transactionResult.transactions && dispositionResult.dispositions ? (
+      {dealResult.deals ? (
         <DealsWorkspace
           initialDealId={params.deal}
           initialDisplay={params.display}

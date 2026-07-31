@@ -3,6 +3,7 @@ import Link from "next/link";
 import { CompleteTaskButton } from "../../complete-task-button";
 import { getBuyers, getLeadDetail, type LeadDetail } from "../../lib/api";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
+import { RecordTimeline } from "../../os/_components/record-timeline";
 import { AppointmentForm } from "./appointment-form";
 import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
@@ -33,8 +34,13 @@ type LeadTab = (typeof tabs)[number][0];
 
 type LeadPageProps = {
   params: Promise<{ leadId: string }>;
-  searchParams?: Promise<{ tab?: string | string[] }>;
+  searchParams?: Promise<{ returnTo?: string | string[]; tab?: string | string[] }>;
 };
+
+function internalReturnPath(value: string | string[] | undefined) {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate?.startsWith("/os/") && !candidate.startsWith("//") ? candidate : "/os/leads";
+}
 
 function labelize(value: string | null) {
   if (!value) return "Unknown";
@@ -230,19 +236,12 @@ function RecentActivityPanel({ lead, limit = 6 }: { lead: LeadDetail; limit?: nu
   return (
     <section className={styles.sectionPanel}>
       <SectionHeader title="Recent activity" />
-      <div className={styles.activityTimeline}>
-        {activity.length === 0 ? <p className={styles.emptyState}>No activity recorded.</p> : null}
-        {activity.map((item) => (
-          <div key={`${item.event_type}-${item.created_at}`}>
-            <span className={styles.timelineMarker} aria-hidden="true" />
-            <div>
-              <strong>{labelize(item.event_type)}</strong>
-              <p>{item.summary}</p>
-              <small>{formatDate(item.created_at)}</small>
-            </div>
-          </div>
-        ))}
-      </div>
+      <RecordTimeline items={activity.map((item) => ({
+        description: item.summary,
+        id: `${item.event_type}-${item.created_at}`,
+        meta: formatDate(item.created_at),
+        title: labelize(item.event_type),
+      }))} />
     </section>
   );
 }
@@ -620,12 +619,19 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
 export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const [{ leadId }, query] = await Promise.all([params, searchParams]);
   const activeTab = normalizeTab(query?.tab);
-  const [{ lead, apiConnected }, { buyers }] = await Promise.all([getLeadDetail(leadId), getBuyers()]);
+  const returnTo = internalReturnPath(query?.returnTo);
+  const [{ lead, apiConnected }, buyerResult] = await Promise.all([
+    getLeadDetail(leadId),
+    activeTab === "contract"
+      ? getBuyers()
+      : Promise.resolve({ buyers: [], apiConnected: true }),
+  ]);
+  const buyers = buyerResult.buyers;
 
   if (!lead) {
     return (
       <div className={styles.page}>
-        <Link className={styles.backLink} href="/os/leads">Back to leads</Link>
+        <Link className={styles.backLink} href={returnTo}>Back to previous view</Link>
         <section className={styles.empty}><p>{apiConnected ? "Lead not found." : "API unavailable."}</p></section>
       </div>
     );
@@ -634,7 +640,11 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const phone = lead.contact_methods.find((method) => method.method_type === "phone")?.value;
   const email = lead.contact_methods.find((method) => method.method_type === "email")?.value;
   const lastContact = lead.communications[0]?.occurred_at ?? null;
-  const tabHref = (tab: LeadTab) => `/os/leads/${lead.id}?tab=${tab}`;
+  const tabHref = (tab: LeadTab) => {
+    const values = new URLSearchParams({ tab });
+    if (returnTo !== "/os/leads") values.set("returnTo", returnTo);
+    return `/os/leads/${lead.id}?${values.toString()}`;
+  };
   const activeAppointment = lead.appointments.find(
     (appointment) =>
       ["scheduled", "rescheduled"].includes(appointment.status)
@@ -646,7 +656,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
 
   return (
     <div className={styles.page}>
-      <div className={styles.breadcrumb}><Link href="/os/leads">Leads</Link><span>/</span><span>{lead.seller_name}</span></div>
+      <div className={styles.breadcrumb}><Link href={returnTo}>Back</Link><span>/</span><span>{lead.seller_name}</span></div>
       <header className={styles.commandHeader}>
         <div className={styles.identity}>
           <p className={styles.eyebrow}>Seller lead</p>

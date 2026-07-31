@@ -386,6 +386,8 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Cold prospect records remain separate from CRM leads until a valid handoff.
 - The selected campaign, local section, and deep-link context are preserved with `campaign`,
   `campaignView`, and `view` query parameters.
+- Campaign management and My Calls load independently; opening one does not eagerly load the
+  other subsystem.
 - The former `/os/campaigns` route redirects to this view.
 
 **Prospecting > My Calls (`/os/prospecting?view=my-calls`)**
@@ -411,6 +413,10 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
   source, qualification context, follow-up, conversation, and initial note.
 - All Leads supports owner, stage, search, saved views, seller preview, and direct next actions.
 - Table and board modes operate on the same filtered records and preserve URL state.
+- Opening a full seller record preserves the originating list, board, filter, and selected-seller
+  context so **Back** returns to the same working view.
+- Seller and transaction histories use the same chronological activity pattern for event title,
+  supporting context, actor, and timestamp.
 - Underwriting shows the active valuation queue; detailed comp work remains on the seller record.
 - Archived records live at `/os/leads/archived`.
 - `/os/lead-manager`, `/os/pipeline`, and `/os/underwriting` preserve old links by redirecting to
@@ -438,6 +444,9 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Shows Contract, Closing, Disposition, and Finance as independent parallel states.
 - Provides Summary, Contract, Closing, Documents, Parties, Disposition, Finance, and Timeline
   record sections. The specialist sections embed the existing server-governed controls.
+- Loads transaction or disposition data only when its corresponding record section is active.
+- Transaction and Disposition Copilots open as contextual drawers inside the Deal record and retain
+  their existing draft, evidence, and human-review rules.
 - Hides assignment fee, company profit, and company margin unless the user has financial or
   compensation visibility. Operational contract price remains visible to deal roles.
 
@@ -469,6 +478,9 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 **Buyers (`/os/buyers`)**
 
 - Investor CRM with criteria, capacity, markets, proof-of-funds status, and provider discovery.
+- Buyer selection and Summary, Criteria & Markets, Active Deals, and Proof & Capacity sections are
+  URL-addressable. Buyer details open as a drawer on phone layouts, and related seller links return
+  to the same buyer section.
 
 ### 7.4 Business
 

@@ -194,6 +194,12 @@ export function LeadsWorkspace({
     replaceLocation({ leadId });
   }
 
+  function fullRecordHref(leadId: string) {
+    const values = new URLSearchParams({ display, lead: leadId, owner, stage, view });
+    if (query) values.set("q", query);
+    return `/os/leads/${leadId}?returnTo=${encodeURIComponent(`/os/leads?${values.toString()}`)}`;
+  }
+
   return (
     <div className={styles.workspace}>
       <section className={styles.metrics} aria-label="Lead database summary" tabIndex={0}>
@@ -359,7 +365,7 @@ export function LeadsWorkspace({
                 <div className={styles.previewActions}>
                   <Link className={styles.primaryAction} href={selectedAction.href}>{selectedAction.label}<ArrowRight size={15} /></Link>
                   <Link href={`/os/inbox?lead=${selectedLead.id}`}><Inbox size={15} />Conversation</Link>
-                  <Link href={`/os/leads/${selectedLead.id}`}><ExternalLink size={15} />Full record</Link>
+                  <Link href={fullRecordHref(selectedLead.id)}><ExternalLink size={15} />Full record</Link>
                   {selectedLead.appointment_status ? <Link href={`/os/calendar`}><CalendarDays size={15} />Calendar</Link> : null}
                 </div>
               </>

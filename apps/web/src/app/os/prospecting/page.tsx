@@ -7,7 +7,6 @@ import {
   getProspectingWorkbench,
   getWorkspaceProfile,
 } from "../../lib/api";
-import { AcquisitionJourney } from "../_components/acquisition-journey";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { CampaignManagementWorkspace } from "../campaigns/campaign-management-workspace";
 import { ProspectingWorkspace } from "./prospecting-workspace";
@@ -41,11 +40,13 @@ export default async function ProspectingPage({
     : params?.campaignView;
   const [{ prospecting, apiConnected }, campaignResult, operationsResult] =
     await Promise.all([
-      getProspectingWorkbench(),
-      canManage
+      view === "my-calls"
+        ? getProspectingWorkbench()
+        : Promise.resolve({ prospecting: null, apiConnected: true }),
+      canManage && view === "campaigns"
         ? getCampaignManagementOverview()
         : Promise.resolve({ campaignManagement: null, apiConnected: true }),
-      canManage
+      canManage && view === "campaigns"
         ? getAcquisitionOperations()
         : Promise.resolve({ operations: null, apiConnected: true }),
     ]);
@@ -66,8 +67,6 @@ export default async function ProspectingPage({
         meta={connected ? (canManage ? "Campaigns and assigned calls" : "Assigned records only") : "API unavailable"}
         title="Prospecting"
       />
-      <AcquisitionJourney active={view === "campaigns" ? "campaigns" : "prospecting"} />
-
       <nav aria-label="Prospecting views" className={styles.hubNavigation}>
         {canManage ? (
           <Link

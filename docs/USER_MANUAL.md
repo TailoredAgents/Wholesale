@@ -1139,6 +1139,9 @@ Leads**, **Pipeline**, and **Underwriting**.
 10. Open the full seller record when deeper work is required.
 11. Archive a dead or duplicate record only with the required authority and reason.
 
+When you open **Full record** from a filtered list or Pipeline view, Stonegate remembers that exact
+view. Select **Back** in the seller record to return to the same filters and selected seller.
+
 Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
 Prospecting as prospects until the seller expresses interest.
 
@@ -1394,11 +1397,19 @@ Generate a draft to identify missing documents, deadline risk, party gaps, and p
 coordination messages. Accept, correct, or reject it. Review does not send email, alter deadlines,
 complete checklist items, or mark closing funded.
 
+In the canonical Deal record, open the Transaction Copilot from Contract, Closing, Documents,
+Parties, or Timeline. It opens in a drawer so the source evidence remains available after you close
+the assistant.
+
 ## 14. Buyers And Dispositions
 
 ### Buyer CRM
 
 Open **Buyers**.
+
+Select a buyer, then use **Summary**, **Criteria & Markets**, **Active Deals**, or **Proof &
+Capacity**. The selected buyer and section stay in the page URL. On a phone, selecting a buyer
+opens the record as a full-height drawer; use the close button to return to the buyer list.
 
 For each buyer, maintain:
 
@@ -1470,6 +1481,9 @@ disposition coverage.
 Generate draft package guidance, buyer ranking explanation, outreach copy, and offer comparison.
 Review restricted economics carefully. Accept, correct, or reject the draft. The Copilot does not
 send campaigns, select the buyer, or change deal economics.
+
+For an existing case, open the Copilot from the Deal record's **Disposition** or **Finance**
+section. It uses the same reviewed recommendation record as the specialist compatibility route.
 
 **Approve simulated release** records which approved recipients would receive the package but sends
 no messages. Live campaign delivery remains blocked until the approved provider adapter is

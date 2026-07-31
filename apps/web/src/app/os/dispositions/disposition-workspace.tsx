@@ -477,7 +477,7 @@ export function DispositionWorkspace({
                   nextAction={{ label: "Authorized next step", value: selected.package_status !== "approved" ? "Approve investor package" : !selected.matches.length ? "Generate buyer ranking" : !selected.offers.length ? "Record buyer offers" : !selected.selected_buyer_id ? "Approve buyer selection" : "Reconcile closing", detail: `Floor ${money(selected.minimum_acceptable_cents)}`, tone: "info" }}
                 />
               </div></> : null}
-              {!embedded && copilot && copilotCaseId === selected.id ? (
+              {copilot && copilotCaseId === selected.id ? (
                 <CopilotLauncher
                   attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}
                   description="Reviews buyer fit, package evidence, offers, and placement risks without contacting buyers or selecting an offer."

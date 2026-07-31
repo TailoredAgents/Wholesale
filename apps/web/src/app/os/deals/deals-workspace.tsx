@@ -105,12 +105,12 @@ export function DealsWorkspace({
   transactions,
 }: {
   deals: DealOverview;
-  dispositions: DispositionOverview;
+  dispositions: DispositionOverview | null;
   initialDealId?: string;
   initialDisplay?: string;
   initialTab?: string;
   initialView?: string;
-  transactions: TransactionOverview;
+  transactions: TransactionOverview | null;
 }) {
   const view = views.some((item) => item.key === initialView) ? initialView as DealView : "all";
   const display = ["queue", "table", "board"].includes(initialDisplay ?? "") ? initialDisplay as Display : "queue";
@@ -151,7 +151,7 @@ export function DealsWorkspace({
       {selected ? <section className={styles.record}>
         <header className={styles.recordHeader}>
           <div><span>{labelize(selected.stage_key)}</span><h2>{selected.property_address}</h2><p>{selected.seller_name} · {labelize(selected.property_type ?? "property type not recorded")}</p></div>
-          <div className={styles.recordLinks}><Link href={`/os/leads/${selected.lead_id}`}>Seller lead</Link><strong>{money(selected.contract_price_cents)}</strong><span>Contract price</span></div>
+          <div className={styles.recordLinks}><Link href={`/os/leads/${selected.lead_id}?returnTo=${encodeURIComponent(hrefFor(current, {}))}`}>Seller lead</Link><strong>{money(selected.contract_price_cents)}</strong><span>Contract price</span></div>
         </header>
         <div className={styles.statusStrip}>
           <Status label="Contract" value={selected.contract_status} />
@@ -162,14 +162,20 @@ export function DealsWorkspace({
         <nav aria-label="Deal record sections" className={styles.tabs}>{tabs.map((item) => <Link className={tab === item.key ? styles.activeTab : ""} href={hrefFor(current, { tab: item.key })} key={item.key}>{item.label}</Link>)}</nav>
         <div className={styles.recordBody}>
           {tab === "summary" ? <DealSummary canViewEconomics={deals.can_view_economics} deal={selected} /> : null}
-          {["contract", "closing", "documents", "parties", "timeline"].includes(tab) ? <TransactionWorkspace embedded initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
-          {tab === "disposition" && selected.disposition_case_id ? <DispositionWorkspace embedded initialCaseId={selected.disposition_case_id} initialData={dispositions} key={selected.disposition_case_id} /> : null}
-          {tab === "finance" && selected.disposition_case_id ? <DispositionWorkspace embedded initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
+          {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && transactions ? <TransactionWorkspace embedded initialData={transactions} initialTab={tab as "contract" | "closing" | "documents" | "parties" | "timeline"} initialTransactionId={selected.transaction_id} key={`${selected.transaction_id}-${tab}`} /> : null}
+          {["contract", "closing", "documents", "parties", "timeline"].includes(tab) && !transactions ? <SubsystemUnavailable label="Transaction details" /> : null}
+          {tab === "disposition" && selected.disposition_case_id && dispositions ? <DispositionWorkspace embedded initialCaseId={selected.disposition_case_id} initialData={dispositions} key={selected.disposition_case_id} /> : null}
+          {tab === "finance" && selected.disposition_case_id && dispositions ? <DispositionWorkspace embedded initialCaseId={selected.disposition_case_id} initialData={dispositions} initialTab="reconciliation" key={`${selected.disposition_case_id}-finance`} /> : null}
+          {(tab === "disposition" || tab === "finance") && selected.disposition_case_id && !dispositions ? <SubsystemUnavailable label="Disposition details" /> : null}
           {(tab === "disposition" || tab === "finance") && !selected.disposition_case_id ? <div className={styles.contextEmpty}><UsersRound size={24} /><strong>Disposition has not started</strong><p>Open a disposition case after the purchase agreement is executed. The existing transaction remains the source record.</p><Link href={`/os/dispositions`}>Open disposition setup <ArrowRight size={15} /></Link></div> : null}
         </div>
       </section> : null}
     </div>
   );
+}
+
+function SubsystemUnavailable({ label }: { label: string }) {
+  return <div className={styles.contextEmpty}><AlertTriangle size={24} /><strong>{label} unavailable</strong><p>The active record could not be loaded. Refresh the page or check the API connection.</p></div>;
 }
 
 function DealSummary({ canViewEconomics, deal }: { canViewEconomics: boolean; deal: DealQueueItem }) {

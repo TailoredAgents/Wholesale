@@ -324,7 +324,10 @@ export const currentRouteInventory = [
     targetWorkspace: "seller-leads",
     targetCanonical: "/os/leads/[leadId]",
     migration: "keep-and-recompose",
-    queryParameters: [{ name: "tab", status: "consumed" }],
+    queryParameters: [
+      { name: "returnTo", status: "consumed" },
+      { name: "tab", status: "consumed" },
+    ],
     helpSections: ["Seller Record", "Valuation And Offer"],
   },
   {
@@ -377,7 +380,12 @@ export const currentRouteInventory = [
     targetWorkspace: "deals",
     targetCanonical: "/os/deals",
     migration: "ia2-compatibility-hub",
-    queryParameters: [],
+    queryParameters: [
+      { name: "deal", status: "consumed" },
+      { name: "display", status: "consumed" },
+      { name: "tab", status: "consumed" },
+      { name: "view", status: "consumed" },
+    ],
     helpSections: ["Transactions", "Dispositions", "Approvals In Tasks"],
     baselinePath: "/os/deals",
   },
@@ -410,7 +418,10 @@ export const currentRouteInventory = [
     targetWorkspace: "buyers",
     targetCanonical: "/os/buyers",
     migration: "keep",
-    queryParameters: [],
+    queryParameters: [
+      { name: "buyer", status: "consumed" },
+      { name: "tab", status: "consumed" },
+    ],
     helpSections: ["Buyers"],
     baselinePath: "/os/buyers",
   },

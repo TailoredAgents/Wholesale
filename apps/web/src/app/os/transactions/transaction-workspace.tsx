@@ -31,6 +31,7 @@ import type {
   TransactionOverview,
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
+import { RecordTimeline } from "../_components/record-timeline";
 import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import { TransactionCopilotPanel } from "./transaction-copilot-panel";
@@ -346,7 +347,7 @@ export function TransactionWorkspace({
                 nextAction={{ label: "Authorized next step", value: pendingPackage ? "Resolve contract approval" : requiredOpen[0]?.title ?? (detail.status === "funded" ? "Closing complete" : "Confirm funding"), detail: "Server gates remain enforced", tone: detail.status === "funded" ? "success" : "info" }}
               />
             </div></> : null}
-            {!embedded && copilot ? (
+            {copilot ? (
               <CopilotLauncher
                 attentionCount={copilot.readiness_gaps.length + copilot.deadline_risks.length}
                 description="Reviews closing evidence, missing documents, and deadlines without changing the transaction."
@@ -422,7 +423,7 @@ export function TransactionWorkspace({
 
             {tab === "parties" ? <div className={styles.sectionGrid}><section className={styles.section}><div className={styles.sectionTitle}><div><span>Closing team</span><h4>Parties and contacts</h4></div><UsersRound size={18} /></div><div className={styles.partyList}>{detail.parties.length === 0 ? <p className={styles.empty}>No closing parties added.</p> : detail.parties.map((party) => <div key={party.id}><UserRound size={18} /><div><strong>{party.name}</strong><span>{labelize(party.party_type)}{party.company_name ? ` · ${party.company_name}` : ""}</span><small>{party.email ?? party.phone ?? "No contact method"}</small></div></div>)}</div></section><form className={styles.form} onSubmit={(event) => void addParty(event)}><div className={styles.sectionTitle}><div><span>New contact</span><h4>Add closing party</h4></div></div><label><span>Role</span><select name="party_type"><option value="closing_attorney">Closing attorney</option><option value="title_company">Title company</option><option value="seller">Seller</option><option value="buyer">Buyer</option><option value="lender">Lender</option><option value="other">Other</option></select></label><label><span>Name</span><input name="name" required /></label><label><span>Company</span><input name="company_name" /></label><div className={styles.twoFields}><label><span>Email</span><input name="email" type="email" /></label><label><span>Phone</span><input name="phone" /></label></div><button disabled={busy} type="submit"><Plus size={16} />Add party</button></form></div> : null}
 
-            {tab === "timeline" ? <div className={styles.sectionGrid}><section className={styles.section}><div className={styles.sectionTitle}><div><span>Immutable history</span><h4>Transaction timeline</h4></div><History size={18} /></div><div className={styles.timeline}>{detail.events.map((event) => <div key={event.id}><span /><div><strong>{event.summary}</strong><small>{labelize(event.event_type)} · {event.actor_name ?? "System"} · {new Date(event.occurred_at).toLocaleString()}</small></div></div>)}</div></section><form className={styles.form} onSubmit={(event) => void addNote(event)}><div className={styles.sectionTitle}><div><span>Record context</span><h4>Add timeline note</h4></div></div><label><span>Note</span><textarea name="summary" required rows={5} /></label><button disabled={busy} type="submit"><Plus size={16} />Add note</button></form></div> : null}
+            {tab === "timeline" ? <div className={styles.sectionGrid}><section className={styles.section}><div className={styles.sectionTitle}><div><span>Immutable history</span><h4>Transaction timeline</h4></div><History size={18} /></div><RecordTimeline items={detail.events.map((event) => ({ id: event.id, meta: `${labelize(event.event_type)} · ${event.actor_name ?? "System"} · ${new Date(event.occurred_at).toLocaleString()}`, title: event.summary }))} /></section><form className={styles.form} onSubmit={(event) => void addNote(event)}><div className={styles.sectionTitle}><div><span>Record context</span><h4>Add timeline note</h4></div></div><label><span>Note</span><textarea name="summary" required rows={5} /></label><button disabled={busy} type="submit"><Plus size={16} />Add note</button></form></div> : null}
           </>}
         </section>
       </div>

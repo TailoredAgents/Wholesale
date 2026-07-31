@@ -211,6 +211,46 @@ test("all static OS links and their declared query keys have a route owner", () 
   assert.deepEqual(unaccountedQueryKeys, []);
 });
 
+test("IA9 canonical records preserve context and load only active specialist data", () => {
+  const dealsPage = readFileSync(resolve(osSourceRoot, "deals/page.tsx"), "utf8");
+  const dealWorkspace = readFileSync(resolve(osSourceRoot, "deals/deals-workspace.tsx"), "utf8");
+  const transactionWorkspace = readFileSync(
+    resolve(osSourceRoot, "transactions/transaction-workspace.tsx"),
+    "utf8",
+  );
+  const dispositionWorkspace = readFileSync(
+    resolve(osSourceRoot, "dispositions/disposition-workspace.tsx"),
+    "utf8",
+  );
+  const leadRecord = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+  const buyerPage = readFileSync(resolve(osSourceRoot, "buyers/page.tsx"), "utf8");
+  const buyerWorkspace = readFileSync(
+    resolve(osSourceRoot, "buyers/buyers-workspace.tsx"),
+    "utf8",
+  );
+  const prospectingPage = readFileSync(resolve(osSourceRoot, "prospecting/page.tsx"), "utf8");
+
+  assert.match(dealsPage, /transactionTabs\.has\(params\.tab/);
+  assert.match(dealsPage, /dispositionTabs\.has\(params\.tab/);
+  assert.match(dealWorkspace, /returnTo=/);
+  assert.doesNotMatch(transactionWorkspace, /!embedded && copilot/);
+  assert.doesNotMatch(dispositionWorkspace, /!embedded && copilot/);
+  assert.match(leadRecord, /activeTab === "contract"\s*\? getBuyers\(\)/);
+  assert.match(leadRecord, /internalReturnPath/);
+  assert.match(buyerPage, /initialBuyerId=\{params\?\.buyer\}/);
+  assert.match(buyerWorkspace, /window\.history\.replaceState\(null, "", `\/os\/buyers\?/);
+  assert.match(buyerWorkspace, /styles\.detailOpen/);
+  assert.match(leadRecord, /RecordTimeline/);
+  assert.match(transactionWorkspace, /RecordTimeline/);
+  assert.doesNotMatch(buyerPage, /DealJourney/);
+  assert.doesNotMatch(prospectingPage, /AcquisitionJourney/);
+  assert.match(prospectingPage, /view === "my-calls"\s*\? getProspectingWorkbench\(\)/);
+  assert.match(prospectingPage, /canManage && view === "campaigns"/);
+});
+
 test("RBAC permission and role inventories remain synchronized with the API", () => {
   const source = readFileSync(resolve(repositoryRoot, "apps/api/app/domain/rbac.py"), "utf8");
   const permissionClass = source.slice(

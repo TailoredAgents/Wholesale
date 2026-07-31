@@ -290,7 +290,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Lead Desk, Inbox, Dispatch, Underwriting, Negotiation, or full record based on status | Navigation only |
 | **Conversation** | Opens Inbox on this seller | Requires conversation access |
-| **Full record** | Opens the seven-section seller record | Requires lead access |
+| **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
 | Archived Leads link | Opens archived seller records | Requires lifecycle visibility |
@@ -1072,6 +1072,7 @@ disposition, buyer, task, document, and reconciliation records through one emplo
 | Disposition | Embeds Package, Buyers, Offers, and Reconciliation for an existing case | A new case is opened from the compatibility setup route |
 | Finance | Opens the disposition reconciliation view in deal context | Economics are redacted from the aggregate unless authorized |
 | Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
+| Transaction / Disposition Copilot | Opens the active domain assistant in a drawer | Draft and review only; does not hide or replace source evidence |
 
 The Transactions and Dispositions routes below remain compatibility and setup tools. Employees
 should begin ordinary active-deal work in Deals.
@@ -1154,6 +1155,8 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | --- | --- | --- |
 | Search | Finds buyers by name, company, market, contact, or criteria | Searches visible buyer records |
 | Buyer row | Opens the buyer profile | Requires buyer access |
+| Summary / Criteria & Markets / Active Deals / Proof & Capacity | Changes the selected buyer section and updates the URL | Navigation only |
+| Close buyer details | Returns to the buyer list | Phone layout only |
 | **Add buyer** | Opens the new-buyer drawer | Requires buyer edit permission |
 | Name / Company | Identifies the investor or organization | Name required |
 | Phone / Email | Stores contact methods | At least one useful method recommended |

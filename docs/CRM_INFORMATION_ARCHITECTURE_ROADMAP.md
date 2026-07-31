@@ -1040,7 +1040,7 @@ before setup parity would remove a working control, so final redirects remain an
 
 ## IA9. Record Standards, Contextual AI, And Responsive Quality
 
-Status: **Planned**
+Status: **Implemented July 31, 2026**
 
 Scope:
 
@@ -1059,6 +1059,15 @@ Exit criteria:
 - no horizontal journey duplicates the sidebar
 - mobile panels become usable drawers
 - target pages do not load every subsystem eagerly
+
+Implementation note: Seller Lead, Deal, Buyer, and Campaign records now preserve selected-record
+and local-tab context in their URLs. Seller and Buyer related-record links preserve the originating
+list view. Buyer detail becomes a drawer on phone layouts. Canonical Deals loads Transaction or
+Disposition data only for the active section and exposes their existing review-gated Copilots in
+context. Seller records load the buyer dataset only for Contract & Deal, and Prospecting loads only
+Campaigns or My Calls data for the selected view. Duplicate acquisition and deal journey strips
+were removed from the canonical Prospecting and Buyers pages; the separate Help bubble remains
+unchanged.
 
 ## IA10. Compatibility, Documentation, And Role Acceptance
 
