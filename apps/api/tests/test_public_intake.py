@@ -503,11 +503,21 @@ def test_speed_to_lead_queue_and_completion(
     complete_response = client.patch(
         f"/api/v1/tasks/{queue[0]['task_id']}/complete",
         headers={"X-Dev-User-Email": "owner@example.com"},
-        json={"reason": "Seller contacted by phone."},
+        json={
+            "outcome": "seller_contacted",
+            "completion_notes": "Seller contacted by phone.",
+            "successor": {
+                "title": "Complete seller qualification",
+                "task_type": "qualification",
+                "due_at": "2026-07-17T14:00:00Z",
+                "priority": "high",
+            },
+        },
     )
 
     assert complete_response.status_code == 200
     assert complete_response.json()["status"] == "completed"
+    assert complete_response.json()["successor_task_id"] is not None
     assert int(
         db_session.scalar(
             select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "task.complete")

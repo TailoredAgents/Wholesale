@@ -5523,18 +5523,68 @@ class AiCapabilityPromotion(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class Task(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "tasks"
+    __table_args__ = (
+        Index(
+            "uq_tasks_active_primary_lead",
+            "organization_id",
+            "lead_id",
+            unique=True,
+            postgresql_where=text(
+                "work_kind = 'primary_next_action' "
+                "AND status IN ('open', 'in_progress') "
+                "AND lead_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "work_kind = 'primary_next_action' "
+                "AND status IN ('open', 'in_progress') "
+                "AND lead_id IS NOT NULL"
+            ),
+        ),
+        Index(
+            "uq_tasks_active_primary_deal",
+            "organization_id",
+            "deal_id",
+            unique=True,
+            postgresql_where=text(
+                "work_kind = 'primary_next_action' "
+                "AND status IN ('open', 'in_progress') "
+                "AND deal_id IS NOT NULL"
+            ),
+            sqlite_where=text(
+                "work_kind = 'primary_next_action' "
+                "AND status IN ('open', 'in_progress') "
+                "AND deal_id IS NOT NULL"
+            ),
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
     lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
     responsible_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     task_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    work_kind: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        default="supporting",
+        server_default="supporting",
+        index=True,
+    )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     priority: Mapped[str] = mapped_column(String(80), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    outcome: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    completion_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    successor_task_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("tasks.id"), nullable=True
+    )
 
 
 class CallingList(UuidPrimaryKeyMixin, TimestampMixin, Base):

@@ -6,7 +6,7 @@ import styles from "./deal-journey.module.css";
 
 const routeByKey = {
   underwriting: "/os/leads?view=underwriting",
-  approvals: "/os/approvals",
+  approvals: "/os/tasks?view=approvals",
   transactions: "/os/transactions",
   dispositions: "/os/dispositions",
   buyers: "/os/buyers",

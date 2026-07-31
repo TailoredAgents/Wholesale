@@ -141,7 +141,7 @@ export default async function DealsPage() {
                 {pendingApprovals.length} pending
               </StatusBadge>
             </header>
-            <Link className={styles.primaryRow} href="/os/approvals">
+            <Link className={styles.primaryRow} href="/os/tasks?view=approvals">
               <div>
                 <strong>Open approval queue</strong>
                 <span>Decisions remain attached to their source records and audit history</span>

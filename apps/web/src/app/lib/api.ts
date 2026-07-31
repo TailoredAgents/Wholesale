@@ -74,6 +74,15 @@ export type LeadListItem = {
   mortgage_balance: string | null;
   appointment_status: string | null;
   next_follow_up_at: string | null;
+  primary_next_action: {
+    task_id: string;
+    title: string;
+    action_type: string;
+    due_at: string | null;
+    responsible_user_id: string | null;
+    responsible_user_email: string | null;
+    due_status: string;
+  } | null;
   archived_at: string | null;
   created_at: string;
 };
@@ -1366,6 +1375,7 @@ export type LeadDetail = LeadListItem & {
   open_tasks: Array<{
     id: string;
     task_type: string;
+    work_kind: string;
     title: string;
     status: string;
     priority: string;
@@ -3043,19 +3053,63 @@ export type UnderwritingCalibration = {
 
 export type SpeedToLeadTask = {
   task_id: string;
-  lead_id: string;
+  lead_id: string | null;
+  deal_id: string | null;
   task_type: string;
+  work_kind: string;
   title: string;
-  seller_name: string;
-  property_address: string;
-  source: string;
-  stage_key: string;
+  seller_name: string | null;
+  property_address: string | null;
+  source: string | null;
+  stage_key: string | null;
   priority: string;
   status: string;
   due_at: string | null;
   created_at: string;
+  completed_at: string | null;
+  assigned_user_id: string | null;
   assigned_user_email: string | null;
   due_status: string;
+};
+
+export type TaskWorkspaceItem = {
+  id: string;
+  item_type: "task" | "approval";
+  work_kind: "primary_next_action" | "supporting" | "operational_exception" | "approval";
+  source_record_type: string;
+  source_record_id: string | null;
+  source_record_label: string;
+  source_record_detail: string | null;
+  source_url: string | null;
+  task_id: string | null;
+  approval_id: string | null;
+  task_type: string;
+  title: string;
+  summary: string | null;
+  status: string;
+  priority: string;
+  due_at: string | null;
+  due_status: "overdue" | "today" | "upcoming" | "unscheduled" | "completed";
+  created_at: string;
+  completed_at: string | null;
+  assigned_user_id: string | null;
+  assigned_user_name: string | null;
+  assigned_user_email: string | null;
+  outcome: string | null;
+  completion_notes: string | null;
+  attention_flags: string[];
+  can_complete: boolean;
+  can_decide: boolean;
+  review_url: string | null;
+  approval_metadata: Record<string, unknown>;
+};
+
+export type TaskWorkspace = {
+  items: TaskWorkspaceItem[];
+  can_manage_team: boolean;
+  can_decide_approvals: boolean;
+  current_user_id: string;
+  current_user_email: string;
 };
 
 type LeadListResponse = {
@@ -3479,6 +3533,27 @@ export async function getDashboardData(): Promise<DashboardData> {
       openTaskQueue: [],
       apiConnected: false,
     };
+  }
+}
+
+export async function getTaskWorkspace(): Promise<{
+  workspace: TaskWorkspace | null;
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/tasks/workspace`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      workspace: (await response.json()) as TaskWorkspace,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate task workspace request failed.", error);
+    return { workspace: null, apiConnected: false };
   }
 }
 

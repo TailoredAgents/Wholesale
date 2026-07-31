@@ -34,7 +34,10 @@ export function CompleteTaskButton({ taskId }: { taskId: string }) {
       const response = await fetch(`${apiBaseUrl}/api/v1/tasks/${taskId}/complete`, {
         method: "PATCH",
         headers,
-        body: JSON.stringify({ reason: "Completed from dashboard speed-to-lead queue." }),
+        body: JSON.stringify({
+          outcome: "completed",
+          completion_notes: "Completed from dashboard.",
+        }),
       });
 
       if (!response.ok) {

@@ -64,8 +64,8 @@ function taskPriority(task: SpeedToLeadTask): PriorityItem {
     id: `task-${task.task_id}`,
     category: labelize(task.task_type),
     title: task.title,
-    detail: `${task.seller_name} · ${formatDateTime(task.due_at)}`,
-    href: `/os/inbox?lead=${task.lead_id}`,
+    detail: `${task.seller_name ?? "Operational work"} · ${formatDateTime(task.due_at)}`,
+    href: `/os/tasks?item=task:${task.task_id}`,
     status: isOverdue ? "Overdue" : "Due next",
     tone: isOverdue ? "danger" : "warning",
     task,
@@ -128,7 +128,7 @@ export default async function Home() {
     if (seenTaskIds.has(task.task_id)) continue;
     priorities.push(taskPriority(task));
     seenTaskIds.add(task.task_id);
-    seenLeadIds.add(task.lead_id);
+    if (task.lead_id) seenLeadIds.add(task.lead_id);
   }
   for (const appointment of scopedAppointments) {
     if (seenLeadIds.has(appointment.lead_id)) continue;
@@ -250,7 +250,9 @@ export default async function Home() {
                 <Link aria-label={`Open ${item.title}`} className={styles.openPriority} href={item.href}>
                   <ArrowRight aria-hidden="true" size={16} />
                 </Link>
-                {item.task && profile?.permissions.includes("leads:edit") ? (
+                {item.task &&
+                item.task.work_kind !== "primary_next_action" &&
+                profile?.permissions.includes("leads:edit") ? (
                   <CompleteTaskButton taskId={item.task.task_id} />
                 ) : null}
               </article>
@@ -285,7 +287,7 @@ export default async function Home() {
               <span>Tasks without due dates</span>
               <strong>{scopedTasks.filter((task) => task.due_status === "unscheduled").length}</strong>
             </Link>
-            <Link href="/os/approvals">
+            <Link href="/os/tasks?view=approvals">
               <span>Offers pending approval</span>
               <strong>{dashboard.summary.offers_pending}</strong>
             </Link>

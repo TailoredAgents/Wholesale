@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.schemas.tasks import PrimaryNextActionRead
+
 
 class ContactCreate(BaseModel):
     legal_name: str = Field(min_length=1, max_length=255)
@@ -78,6 +80,7 @@ class LeadRead(BaseModel):
     mortgage_balance: str | None
     appointment_status: str | None
     next_follow_up_at: datetime | None
+    primary_next_action: PrimaryNextActionRead | None
     archived_at: datetime | None
     created_at: datetime
 
@@ -124,6 +127,7 @@ class ActivityEventRead(BaseModel):
 class LeadTaskRead(BaseModel):
     id: UUID
     task_type: str
+    work_kind: str
     title: str
     status: str
     priority: str
@@ -526,7 +530,7 @@ class LeadNoteCreate(BaseModel):
 
 class LeadFollowUpTaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
-    due_at: datetime | None = None
+    due_at: datetime
     priority: str = Field(default="normal", max_length=80)
 
 

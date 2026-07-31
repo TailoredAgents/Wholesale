@@ -350,9 +350,13 @@ reaches feature parity.
 
 **Tasks (`/os/tasks`)**
 
-- Speed-to-lead and open task queues.
-- Saved ownership and due-state views.
-- Contextual actions and permission-protected bulk completion.
+- Unified daily work center for primary next actions, supporting tasks, governed approvals, and
+  operational exceptions.
+- Saved views include My Tasks, Due Today, Overdue, Upcoming, Unscheduled, Team, Approvals,
+  Exceptions, and Completed, with role-aware visibility.
+- Completing a primary action requires an outcome and a successor when its seller lead or deal
+  remains active.
+- Home, Seller Leads, seller records, and Tasks read the same primary next-action record.
 
 **Calendar (`/os/calendar`)**
 
@@ -434,10 +438,11 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Calibration scorecards, verified outcomes, provider adequacy, and methodology decisions.
 - Restricted to users with data-quality or underwriting authority.
 
-**Approvals (`/os/approvals`)**
+**Approvals (`/os/tasks?view=approvals`)**
 
-- Central queue for human decisions such as offer ceilings and contract release.
-- Shows source evidence, deadline, consequence, and decision notes.
+- Permission-filtered Tasks view for human decisions such as offer ceilings and contract release.
+- Approval records keep their domain-specific authority, evidence, decision, and audit rules.
+- `/os/approvals` is a compatibility redirect to this Tasks view.
 
 **Transactions (`/os/transactions`)**
 
@@ -699,12 +704,15 @@ archived families.
 
 ### 9.3 Tasks And Notifications
 
-Tasks carry ownership, due date, completion, and lead context. Notifications communicate events
-such as handoffs, appointments, communication assignment, overdue response, owner escalation, and
+Tasks carry ownership, due date, completion, lead and optional deal context. `work_kind`
+distinguishes the single primary next action from supporting work and operational exceptions.
+Primary completion records an outcome and completion notes and links the replacement action; an
+active source cannot be silently left without a successor. Notifications communicate events such
+as handoffs, appointments, communication assignment, overdue response, owner escalation, and
 approval needs.
 
 Workers can create escalation evidence, but staff remain responsible for resolving the underlying
-work.
+work. Approvals are aggregated into Tasks for discovery but remain separate governed records.
 
 ### 9.4 Duplicate Handling
 

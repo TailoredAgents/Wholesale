@@ -122,6 +122,12 @@ from app.services.property_validation import (
     validate_provider_record,
 )
 from app.services.repair_estimates import get_repair_estimate
+from app.services.tasks import (
+    create_deal_next_action,
+    create_initial_lead_next_action,
+    get_primary_next_action,
+    supersede_open_primary_tasks,
+)
 from app.services.underwriting_v2 import (
     METHODOLOGY_VERSION,
     UnderwritingV2Result,
@@ -307,6 +313,11 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
+    create_initial_lead_next_action(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+    )
 
     db.add(
         ActivityEvent(
@@ -559,6 +570,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             LeadTaskRead(
                 id=task.id,
                 task_type=task.task_type,
+                work_kind=task.work_kind,
                 title=task.title,
                 status=task.status,
                 priority=task.priority,
@@ -1005,11 +1017,14 @@ def create_lead_follow_up_task(
     if lead is None:
         return None
 
+    supersede_open_primary_tasks(db, lead_id=lead.id)
     task = Task(
         organization_id=principal.organization_id,
         lead_id=lead.id,
+        deal_id=None,
         responsible_user_id=lead.assigned_user_id or principal.user_id,
         task_type="follow_up",
+        work_kind="primary_next_action",
         title=payload.title,
         status="open",
         priority=payload.priority,
@@ -2119,6 +2134,14 @@ def create_lead_transaction(
     )
     db.add(transaction)
     db.flush()
+    create_deal_next_action(
+        db,
+        deal=deal,
+        lead=lead,
+        responsible_user_id=transaction.coordinator_user_id or transaction.owner_user_id,
+        title="Prepare and send the purchase agreement",
+        due_at=transaction.due_diligence_deadline or transaction.closing_date,
+    )
     prior_item: TransactionChecklistItem | None = None
     for index, (item_key, category, title, description) in enumerate(
         default_transaction_checklist_specs(), start=1
@@ -3633,6 +3656,11 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         mortgage_balance=lead.mortgage_balance,
         appointment_status=lead.appointment_status,
         next_follow_up_at=lead.next_follow_up_at,
+        primary_next_action=get_primary_next_action(
+            db,
+            organization_id=lead.organization_id,
+            lead_id=lead.id,
+        ),
         archived_at=lead.archived_at,
         created_at=lead.created_at,
     )

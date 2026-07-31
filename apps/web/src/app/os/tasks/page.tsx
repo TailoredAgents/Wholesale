@@ -1,43 +1,71 @@
-import { getDashboardData, getWorkspaceProfile } from "../../lib/api";
-import { PageHeader, WorkspacePage } from "../_components/page-contracts";
+import { getTaskWorkspace, getWorkspaceProfile } from "../../lib/api";
+import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
 import { primaryRoleLabel } from "../os-navigation";
-import { WorkQueueWorkspace, type QueueView } from "./work-queue-workspace";
+import { TasksWorkspace, type TaskView } from "./tasks-workspace";
 
 export const dynamic = "force-dynamic";
 
-const queueViews = new Set<QueueView>(["all", "mine", "overdue", "due", "unscheduled"]);
+type SearchValue = string | string[] | undefined;
+
+const taskViews = new Set<TaskView>([
+  "mine",
+  "today",
+  "overdue",
+  "upcoming",
+  "unscheduled",
+  "team",
+  "approvals",
+  "exceptions",
+  "completed",
+]);
+
+function first(value: SearchValue) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 export default async function TasksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ view?: string }>;
+  searchParams?: Promise<Record<string, SearchValue>>;
 }) {
-  const params = await searchParams;
-  const [dashboard, profile] = await Promise.all([getDashboardData(), getWorkspaceProfile()]);
-  const isIndividualContributor = profile?.role_keys.includes("acquisition_rep") ?? false;
-  const requestedView = params.view as QueueView | undefined;
-  const initialView = requestedView && queueViews.has(requestedView)
-    ? requestedView
-    : isIndividualContributor
-      ? "mine"
-      : "all";
-  const canComplete =
-    profile?.permissions.includes("leads:edit") ?? process.env.NODE_ENV === "development";
+  const params = (await searchParams) ?? {};
+  const [{ workspace, apiConnected }, profile] = await Promise.all([
+    getTaskWorkspace(),
+    getWorkspaceProfile(),
+  ]);
+  const requestedView = first(params.view) as TaskView;
+  let initialView = taskViews.has(requestedView) ? requestedView : "mine";
+  if (initialView === "team" && !workspace?.can_manage_team) initialView = "mine";
+  if (initialView === "approvals" && !workspace?.can_decide_approvals) initialView = "mine";
 
   return (
     <WorkspacePage>
       <PageHeader
-        description="Triage assigned follow-up, due work, and seller next actions without losing record context."
+        description="See the responsible person, required action, deadline, approvals, and exceptions in one work center."
         eyebrow="Daily execution"
-        meta={profile ? `${primaryRoleLabel(profile)} · ${dashboard.openTaskQueue.length} open` : null}
+        meta={
+          profile
+            ? `${primaryRoleLabel(profile)} · ${workspace?.items.filter((item) => item.due_status !== "completed").length ?? 0} open`
+            : apiConnected
+              ? "Workspace current"
+              : "API unavailable"
+        }
         title="Tasks"
       />
-      <WorkQueueWorkspace
-        canComplete={canComplete}
-        currentUserEmail={profile?.email ?? null}
-        initialTasks={dashboard.openTaskQueue}
-        initialView={initialView}
-      />
+      {workspace ? (
+        <TasksWorkspace
+          initialItemId={first(params.item)}
+          initialView={initialView}
+          initialWorkspace={workspace}
+        />
+      ) : (
+        <SectionPanel
+          description="Task access requires an operating role with seller, deal, finance, or operations visibility."
+          title="Tasks unavailable"
+        >
+          <div />
+        </SectionPanel>
+      )}
     </WorkspacePage>
   );
 }

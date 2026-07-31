@@ -44,6 +44,12 @@ function operatingTone(status: string): "danger" | "warning" | "info" | "success
 }
 
 function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
+  if (lead.primary_next_action) {
+    return {
+      href: `/os/tasks?item=task:${lead.primary_next_action.task_id}`,
+      label: lead.primary_next_action.title,
+    };
+  }
   const status = getLeadOperatingStatus(lead, tasks);
   if (status === "Overdue follow-up") {
     return { href: `/os/inbox?lead=${lead.id}`, label: "Continue conversation" };
@@ -278,7 +284,7 @@ export function LeadsWorkspace({
                   <StatusBadge tone={operatingTone(status)}>{status}</StatusBadge>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
                   <span className={styles.next}>
-                    <strong>{action.label}</strong><small>{formatDateTime(lead.next_follow_up_at)}</small>
+                    <strong>{action.label}</strong><small>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</small>
                   </span>
                 </button>
               );
@@ -310,7 +316,7 @@ export function LeadsWorkspace({
                             <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.lead_temperature)}</em></span>
                             <span className={styles.cardAddress}>{lead.property_address}</span>
                             <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
-                            <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.next_follow_up_at)}</span></span>
+                            <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
                             <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>
                           </button>
                         );
@@ -338,7 +344,9 @@ export function LeadsWorkspace({
                   <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                   <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>
                   <div><dt>Created</dt><dd>{formatDateTime(selectedLead.created_at)}</dd></div>
-                  <div><dt>Next follow-up</dt><dd>{formatDateTime(selectedLead.next_follow_up_at)}</dd></div>
+                  <div><dt>Primary action</dt><dd>{selectedLead.primary_next_action?.title ?? "Not set"}</dd></div>
+                  <div><dt>Action owner</dt><dd>{ownerLabel(selectedLead.primary_next_action?.responsible_user_email ?? null)}</dd></div>
+                  <div><dt>Due</dt><dd>{formatDateTime(selectedLead.primary_next_action?.due_at ?? selectedLead.next_follow_up_at)}</dd></div>
                   <div><dt>Qualification</dt><dd>{qualificationFieldCount(selectedLead)}/{qualificationFieldTarget}</dd></div>
                   <div><dt>Appointment</dt><dd>{labelize(selectedLead.appointment_status)}</dd></div>
                 </dl>

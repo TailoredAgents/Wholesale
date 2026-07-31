@@ -122,7 +122,7 @@ export function LeadActionForm({ leadId }: { leadId: string }) {
         <div className={styles.taskGrid}>
           <label>
             <span>Due</span>
-            <input name="due_at" type="datetime-local" />
+            <input name="due_at" required type="datetime-local" />
           </label>
           <label>
             <span>Priority</span>

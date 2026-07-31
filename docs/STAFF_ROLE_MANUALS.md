@@ -55,8 +55,9 @@ two jobs.
 
 ## Owner
 
-Main pages: Home, Deals, Finance, Marketing, and Settings. Use Tools for Company & Policy, Team &
-Access, Approvals, and AI Control while those detailed workspaces are being consolidated.
+Main pages: Home, Tasks, Deals, Finance, Marketing, and Settings. Governed decisions are in
+**Tasks > Approvals**. Use Tools for Company & Policy, Team & Access, and AI Control while those
+detailed workspaces are being consolidated.
 
 - Set policy, staffing, market, compensation, and approval authority.
 - Cover open operational seats without hiding which job was performed.
@@ -102,7 +103,8 @@ active value queue and the seller record's Valuation & Offer section for detaile
 
 ## Transaction Coordinator
 
-Main pages: Home, Inbox, Tasks, Calendar, and Deals. Use Tools for Transactions and Approvals.
+Main pages: Home, Inbox, Tasks, Calendar, and Deals. Use **Tasks > Approvals** for authorized
+decisions and Tools for the detailed Transactions workspace.
 
 - Own deadlines and evidence from signed seller contract through funded closing.
 - Track earnest money, title, payoff, due diligence, assignments, and closing requirements.
@@ -168,10 +170,10 @@ to change advertising.
 
 ### Start Of Day
 
-1. Open **Dashboard**.
+1. Open **Home**.
 2. Review overdue work, unaccepted warm leads, appointments, offer preparation, and operational
    exceptions.
-3. Open **Approvals** and decide only requests whose source evidence has been reviewed.
+3. Open **Tasks > Approvals** and decide only requests whose source evidence has been reviewed.
 4. Confirm the Lead Manager and VA queues have coverage.
 5. Review today's closer appointments in **Calendar**.
 6. Cover a seat only when its assigned person is unavailable, and preserve the role credit.
@@ -224,7 +226,7 @@ Devon initially covers this seat. Michael is expected to take it later.
 2. Accept new warm handoffs.
 3. Handle overdue qualification and follow-up.
 4. Open **Inbox > Needs Reply**.
-5. Open **Work Queue > My work**.
+5. Open **Tasks > My Tasks**.
 6. Check **Calendar** before offering appointment times.
 
 ### For Every New Warm Lead

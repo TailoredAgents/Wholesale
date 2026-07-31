@@ -174,6 +174,7 @@ export function getWorkspaceQueues(leads: LeadListItem[], openTasks: SpeedToLead
 
 export function getTaskCountsByLead(openTasks: SpeedToLeadTask[]) {
   return openTasks.reduce((counts, task) => {
+    if (!task.lead_id) return counts;
     counts.set(task.lead_id, (counts.get(task.lead_id) ?? 0) + 1);
     return counts;
   }, new Map<string, number>());

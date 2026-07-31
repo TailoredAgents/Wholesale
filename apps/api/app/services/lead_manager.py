@@ -44,6 +44,7 @@ from app.services.acquisition_operations import (
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.tasks import supersede_open_primary_tasks
 
 DEFAULT_COMPLETION_RULES = {
     "require_all_required_questions": True,
@@ -553,6 +554,7 @@ def apply_next_action(
     now: datetime,
 ) -> None:
     if payload.next_action_type == "disqualify":
+        supersede_open_primary_tasks(db, lead_id=lead.id)
         case.status = "closed"
         case.closed_at = now
         lead.stage_key = "disqualified"
@@ -570,12 +572,19 @@ def apply_next_action(
             Task.status == "open",
         )
     )
+    supersede_open_primary_tasks(
+        db,
+        lead_id=lead.id,
+        excluding_task_id=task.id if task else None,
+    )
     if task is None:
         task = Task(
             organization_id=case.organization_id,
             lead_id=lead.id,
+            deal_id=None,
             responsible_user_id=case.assigned_user_id,
             task_type="lead_manager_next_action",
+            work_kind="primary_next_action",
             title=title,
             status="open",
             priority="high" if payload.next_action_type == "appointment" else "normal",
@@ -584,6 +593,7 @@ def apply_next_action(
         )
         db.add(task)
     else:
+        task.work_kind = "primary_next_action"
         task.responsible_user_id = case.assigned_user_id
         task.title = title
         task.due_at = payload.next_action_due_at

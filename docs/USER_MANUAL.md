@@ -202,7 +202,7 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use **Tools** for
-Lead Desk, Seller Pipeline, Underwriting, Approvals, Transactions,
+Lead Desk, Seller Pipeline, Underwriting, Transactions,
 Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control while
 those workspaces are consolidated. Global search finds both primary workspaces and authorized
 Tools. Recent destinations return to recently opened OS pages. On mobile, use the menu button to
@@ -242,7 +242,8 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Seller Leads: Pipeline | `/os/leads?display=board` |
 | Calendar: Appointment | `/os/calendar?view=appointment` |
 | Seller Leads: Underwriting | `/os/leads?view=underwriting` |
-| Approvals | `/os/approvals` |
+| Tasks: Approvals | `/os/tasks?view=approvals` |
+| Legacy Approvals redirect | `/os/approvals` |
 | Transactions | `/os/transactions` |
 | Dispositions | `/os/dispositions` |
 | My Setup | `/os/my-setup` |
@@ -320,13 +321,13 @@ hardware, but they must not share Stonegate or Clerk credentials.
 2. Open **Inbox > Needs reply** and confirm no qualified seller is waiting.
 3. Open **Tasks > Overdue** and assign or escalate blocked work.
 4. Open **Calendar** and confirm closer capacity and appointment coverage.
-5. Open **Approvals** and make only evidence-supported decisions.
+5. Open **Tasks > Approvals** and make only evidence-supported decisions.
 6. Review exceptions in **Transactions**, **Dispositions**, and **Finance**.
 7. Review **Marketing** source economics at least weekly.
 
 ### Lead Manager
 
-1. Open **Lead Desk > Copilot** for priority and neglected-lead signals.
+1. Open **Seller Leads > Lead Queue** for priority and neglected-lead signals.
 2. Open **Today** and accept new warm handoffs before the SLA expires.
 3. Complete **Qualification** using the approved questions.
 4. Work **Inbox > Needs reply**.
@@ -999,17 +1000,27 @@ into Stonegate.
 
 Open **Tasks**. Saved views are:
 
-- **All work**
-- **My work**
+- **My Tasks**
+- **Due Today**
 - **Overdue**
-- **Due next**
+- **Upcoming**
 - **Unscheduled**
+- **Team** for authorized managers
+- **Approvals** for authorized reviewers
+- **Exceptions**
+- **Completed**
 
-Use owner and seller filters to narrow the queue. Open the contextual action to go directly to the
-conversation, calendar, or lead. Complete a task only after the work is actually done. Bulk
-completion requires confirmation and should be used only for a genuinely completed set.
+Use search and the owner filter to narrow the queue. Select a row to see its source, owner,
+deadline, work type, warnings, and permitted action. **Open source** takes you to the seller,
+deal, conversation, calendar, or governed review that created the work.
 
-Every active lead should have an owner and a next dated action.
+Supporting tasks can be marked complete after the work is done. For a **Primary action**, select
+**Complete and continue**, record what happened, then name and schedule the next action. Stonegate
+will not close a primary action without a successor while the seller lead or deal is active. Use
+the terminal checkbox only when the source is already closed; the API verifies that state.
+
+Every active seller lead and deal must have one owner, one primary action, and one due date. Team,
+Approvals, and some decision controls appear only when the signed-in role has authority.
 
 ## 7. Calendar And Scheduling
 
@@ -1279,7 +1290,7 @@ real-deal calibration is acceptable.
 2. Create the offer plan with opening, target, stretch, and seller ceiling amounts.
 3. Provide the rationale and seller context.
 4. Submit for approval.
-5. The authorized reviewer opens **Approvals** or the lead's Underwriting tab.
+5. The authorized reviewer opens **Tasks > Approvals** or the lead's Underwriting tab.
 6. The reviewer confirms the version is current and evidence supports the ceiling.
 7. Approve or reject with decision notes.
 8. Record every price discussion and seller counter.
@@ -1289,18 +1300,21 @@ real-deal calibration is acceptable.
 A newer underwriting version makes older authority stale. Generate a new offer plan instead of
 reusing stale approval.
 
-## 12. Approvals
+## 12. Approvals In Tasks
 
-Open **Approvals** for pending and completed governed decisions.
+Open **Tasks > Approvals** for governed decisions visible to your role. The old `/os/approvals`
+address redirects here.
 
 1. Select the request.
 2. Read the title, summary, due state, source record, and consequences.
-3. Follow the review link to inspect evidence.
+3. Select **Open source** to inspect required evidence.
 4. Approve, reject, or cancel only if your role has authority.
 5. Add specific decision notes.
 
 Typical requests include offer ceilings, concessions, contract sends, call-note reviews, and AI
 capability promotions. Call-note review is completed with the recording and transcript in Inbox.
+Some requests can be decided directly in Tasks. When complete source evidence is required, Tasks
+intentionally sends you to the originating workspace for the decision.
 
 An approval does not prove the underlying real-world event happened. For example, funding still
 requires funding evidence.

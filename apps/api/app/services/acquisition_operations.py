@@ -76,6 +76,7 @@ from app.schemas.operations import (
 from app.services.inbox import ensure_primary_conversation, handoff_conversation
 from app.services.leads import get_lead_detail
 from app.services.property_validation import canonical_address_key
+from app.services.tasks import supersede_open_primary_tasks
 
 OPERATIONAL_ROLE_KEYS = {
     "owner",
@@ -1885,12 +1886,15 @@ def update_appointment(
     elif payload.status in {"cancelled", "no_show"}:
         lead.stage_key = "qualification_in_progress" if payload.status == "no_show" else "qualified"
         lead.next_follow_up_at = payload.next_follow_up_at or datetime.now(UTC) + timedelta(days=1)
+        supersede_open_primary_tasks(db, lead_id=lead.id)
         db.add(
             Task(
                 organization_id=principal.organization_id,
                 lead_id=lead.id,
+                deal_id=None,
                 responsible_user_id=appointment.owner_user_id,
                 task_type="appointment_recovery",
+                work_kind="primary_next_action",
                 title=f"Follow up after {payload.status.replace('_', ' ')} appointment",
                 status="open",
                 priority="high",

@@ -189,7 +189,7 @@ change staff-reviewed information.
 | **New** | Opens direct Seller lead and Email actions | Each action appears only with its required permission |
 | **Tools** | Opens authorized compatibility workspaces removed from the primary sidebar | Contents vary by role and permission |
 | **Recent destinations** | Shows up to five recently visited OS destinations stored in this browser | Empty until pages have been visited |
-| Approvals shortcut | Opens the approval queue and shows the pending count | Visible only to authorized reviewers |
+| Approvals shortcut | Opens **Tasks > Approvals** and shows the pending count | Visible only to authorized reviewers |
 | Notifications bell | Opens Operations notification work | Visible to users allowed into Operations |
 | Notification count | Shows unread operational notification count, capped visually at 99 | Updates from the user profile |
 | Account control | Shows signed-in Clerk identity and sign-out controls | Requires a completed Clerk session |
@@ -220,22 +220,34 @@ An **API fallback view** warning means counts are empty fallback data, not proof
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| All work | Shows every visible open task | Visibility remains role-scoped |
-| My work | Shows tasks assigned to the signed-in user | Requires an assigned user match |
+| Primary actions metric | Counts visible open primary next actions | Read-only |
+| Overdue metric | Counts visible open work past due | Read-only |
+| Approvals metric | Counts visible pending governed decisions | Permission scoped |
+| Exceptions metric | Counts visible work with assignment, schedule, or workflow warnings | Read-only |
+| My Tasks | Shows open work assigned to the signed-in user | Requires an assigned user match |
+| Due Today | Shows work due today | Filter only |
 | Overdue | Shows tasks past their due time | Filter only |
-| Due next | Shows tasks currently due | Filter only |
+| Upcoming | Shows future dated work | Filter only |
 | Unscheduled | Shows tasks missing a due date | Filter only |
-| Search open tasks | Filters title, seller, property, and task type | Does not search completed tasks |
-| Owner | Filters all, unassigned, or a named owner | Filter only |
-| Row checkbox | Selects a task for bulk completion | Visible only when the user can complete tasks |
-| Select all visible tasks | Selects the currently filtered rows | Does not select hidden rows |
-| **Complete selected** | Confirms and completes selected tasks | Disabled while saving or when nothing is selected |
-| Row completion icon | Completes one task | Disabled while another completion request is saving |
-| Open conversation | Opens communication work for communication tasks | Navigation only |
-| Open calendar | Opens Calendar for appointment tasks | Navigation only |
-| Open lead | Opens the full lead for other task types | Navigation only |
+| Team | Shows visible team tasks | Authorized managers only |
+| Approvals | Shows governed decisions in the same queue | Authorized reviewers only |
+| Exceptions | Shows work with attention flags | Filter only |
+| Completed | Shows completed work and recorded outcomes | Visibility remains role scoped |
+| Search work | Filters title, seller, property, deal, and task type | Applies to the selected view |
+| All owners | Filters all, unassigned, or a named owner | Managers only |
+| Work row | Selects an item and preserves it in the URL | Does not change the source |
+| **Open source** | Opens the seller, deal, conversation, calendar, or governed review | Navigation only |
+| **Mark complete** | Completes a supporting task | Visible only with completion authority |
+| **Complete and continue** | Opens the outcome and successor dialog for a primary action | A successor is required while the source is active |
+| Outcome | Records what happened on the completed primary action | Required |
+| Completion notes | Preserves useful handoff context | Optional but recommended |
+| Next action | Names the replacement primary action | Required for an active source |
+| Action type / Due / Priority | Classifies and schedules the replacement action | Due is required for an active source |
+| Source already closed | Requests completion without a successor | API rejects this unless the source is terminal |
+| Approve / Reject | Records a direct governed decision | Only shown when the approval can be safely decided in Tasks |
 
-If a bulk request partially fails, completed tasks disappear and failed tasks remain selected.
+Approvals that require full source evidence show **Open source** instead of inline decision
+buttons. The originating workspace remains authoritative for that decision.
 
 ## Calendar
 
@@ -1013,18 +1025,18 @@ appraisal or permission to promise a seller a price.
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |
 
-## Approval Center
+## Approvals In Tasks
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Approval type filter | Limits the queue by offer, contract, disposition, finance, AI, or other governed request | Visible types depend on role |
-| Approval row | Shows requester, source, amount/action, evidence, and status | Requires approval permission for that domain |
+| Tasks > Approvals view | Limits the unified work queue to governed requests | Visible only to authorized reviewers |
+| Approval row | Shows source, deadline, owner, status, and warnings | Requires approval permission for that domain |
 | Source link | Opens the underlying lead, transaction, finance record, or AI review | Used when the decision needs full context |
-| Evidence summary | Shows the facts and warnings attached to the request | Read-only |
 | Decision note | Records reasoning for approval or rejection | Required by some approval types |
 | **Approve** | Authorizes the requested governed action | Only authorized approvers; may be blocked if source review is required |
 | **Reject** | Rejects the request and records the reason | Only authorized approvers |
 | Review-at-source state | Directs the approver to decide in the originating workspace | Used when inline approval would omit required context |
+| Legacy `/os/approvals` route | Redirects to Tasks > Approvals and preserves a selected approval | Compatibility only |
 
 ## Transactions
 

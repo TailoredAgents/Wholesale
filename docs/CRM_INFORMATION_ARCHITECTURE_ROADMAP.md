@@ -994,7 +994,7 @@ Exit criteria:
 
 ## IA7. Tasks, Approvals, And Primary Next Actions
 
-Status: **Planned**
+Status: **Implemented July 30, 2026**
 
 Scope:
 
@@ -1542,3 +1542,62 @@ selected appointment or lead.
 No appointment, closer profile, availability block, brief, inspection, photo, negotiation,
 underwriting transfer, signature envelope, or outcome model was duplicated. IA6 recomposes the
 existing field workflow under Calendar and keeps the same permission and API boundaries.
+
+## 25. IA7 Tasks, Approvals, And Primary Next Actions Implementation
+
+### 25.1 One Work Center
+
+`/os/tasks` now aggregates ordinary tasks, primary next actions, governed approvals, and
+operational exceptions without copying their source records. Its permission-aware saved views are:
+
+- **My Tasks**
+- **Due Today**
+- **Overdue**
+- **Upcoming**
+- **Unscheduled**
+- **Team** for authorized managers
+- **Approvals** for authorized decision-makers
+- **Exceptions**
+- **Completed**
+
+Search, owner filtering, selected work, and source links operate inside the same work center.
+`/os/approvals` remains a compatibility route and redirects to `/os/tasks?view=approvals`.
+
+### 25.2 Primary Next-Action Contract
+
+The Task record now distinguishes `primary_next_action`, `supporting`, `approval`, and
+`operational_exception` work. It can retain lead and deal context, completion outcome and notes,
+the completing user, and the successor task.
+
+Every active seller lead or deal has one visible primary action with:
+
+- one responsible owner
+- one specific action
+- one due date
+
+Completing a primary action requires an outcome. If its seller lead or deal is still active, the
+same operation must create the successor primary action. The API rejects completion without a
+successor unless it verifies that the source record is terminal. New seller leads, qualified
+handoffs, appointment-recovery paths, follow-ups, and newly opened deals all create or replace the
+primary action through the shared task service.
+
+### 25.3 Shared Truth
+
+Home, Seller Leads, the seller record, and Tasks read the same primary action. Deal-linked primary
+work supersedes the pre-contract seller action while retaining both record references. Supporting
+tasks can still be completed directly and do not replace the primary action.
+
+Approvals remain their existing governed records with their existing permission and audit checks.
+Tasks only aggregates them for discovery. Requests that require source evidence send the reviewer
+to the originating workspace before a decision is recorded.
+
+### 25.4 Verification
+
+- Alembic migration `0078_tasks_primary_actions.py` applied to local PostgreSQL.
+- Existing active seller leads received a primary action during migration when one was missing.
+- Task lifecycle, successor enforcement, lead-detail synchronization, and approval aggregation
+  have API coverage.
+- Adjacent lead, public intake, acquisition, field operations, transaction, and prospecting tests
+  pass.
+- TypeScript and ESLint pass.
+- Mobile, iPad, and desktop checks show no document-level horizontal overflow.

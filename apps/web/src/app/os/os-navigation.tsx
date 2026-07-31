@@ -6,7 +6,6 @@ import {
   Building2,
   CalendarDays,
   ChartNoAxesCombined,
-  CheckCheck,
   ContactRound,
   FileCheck2,
   Gauge,
@@ -257,13 +256,6 @@ export const compatibilityNavGroups: CompatibilityNavGroup[] = [
   {
     label: "Deal tools",
     items: [
-      {
-        href: "/os/approvals",
-        label: "Approvals",
-        icon: CheckCheck,
-        roles: ["acquisition_manager", "transaction_coordinator"],
-        anyPermissions: ["offers:approve", "contracts:send"],
-      },
       {
         href: "/os/transactions",
         label: "Transactions",

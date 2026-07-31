@@ -558,7 +558,7 @@ export function OsShell({
               <Link
                 aria-label={`${pendingApprovalCount} pending approvals`}
                 className={styles.headerIconButton}
-                href="/os/approvals"
+                href="/os/tasks?view=approvals"
                 title="Approvals"
               >
                 <CheckCheck aria-hidden="true" size={18} />

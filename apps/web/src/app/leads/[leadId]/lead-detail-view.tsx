@@ -178,7 +178,11 @@ function TasksPanel({ lead }: { lead: LeadDetail }) {
               <strong>{task.title}</strong>
               <span>{labelize(task.priority)} / {formatOptionalDate(task.due_at)}</span>
             </div>
-            <CompleteTaskButton taskId={task.id} />
+            {task.work_kind === "primary_next_action" ? (
+              <Link href={`/os/tasks?item=task:${task.id}`}>Record outcome</Link>
+            ) : (
+              <CompleteTaskButton taskId={task.id} />
+            )}
           </div>
         ))}
       </div>
@@ -267,7 +271,9 @@ function OverviewTab({
           <SectionHeader title="Record controls" />
           <dl className={styles.compactFacts}>
             <div><dt>Stage</dt><dd>{labelize(lead.stage_key)}</dd></div>
-            <div><dt>Next follow-up</dt><dd>{formatOptionalDate(lead.next_follow_up_at)}</dd></div>
+            <div><dt>Primary action</dt><dd>{lead.primary_next_action?.title ?? "Not set"}</dd></div>
+            <div><dt>Action owner</dt><dd>{lead.primary_next_action?.responsible_user_email ?? "Unassigned"}</dd></div>
+            <div><dt>Due</dt><dd>{formatOptionalDate(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</dd></div>
             <div><dt>Appointment</dt><dd>{labelize(lead.appointment_status)}</dd></div>
           </dl>
           <ActionDisclosure label="Change pipeline stage">
