@@ -2353,6 +2353,47 @@ class UnderwritingMarketAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class UnderwritingManualComparable(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_manual_comparables"
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="active", server_default="active", index=True
+    )
+    street_address: Mapped[str] = mapped_column(String(255), nullable=False)
+    city: Mapped[str] = mapped_column(String(120), nullable=False)
+    state: Mapped[str] = mapped_column(String(2), nullable=False)
+    postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
+    formatted_address: Mapped[str] = mapped_column(String(500), nullable=False)
+    normalized_address_key: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    sale_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    sale_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    property_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    bathrooms_hundredths: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    square_footage: Mapped[int] = mapped_column(Integer, nullable=False)
+    year_built: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    lot_size: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    distance_hundredths: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subdivision: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    condition_classification: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="unknown", server_default="unknown"
+    )
+    condition_evidence: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_reference: Mapped[str] = mapped_column(String(1000), nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    verification_notes: Mapped[str] = mapped_column(String(2000), nullable=False)
+    voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "underwriting_calibration_cases"
     __table_args__ = (

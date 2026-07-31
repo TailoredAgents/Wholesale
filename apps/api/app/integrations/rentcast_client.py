@@ -180,6 +180,65 @@ class RentCastClient:
             )
         return self._get_property_records(params, operation="recent sales")
 
+    def get_sale_listings(
+        self,
+        *,
+        address: str,
+        property_type: str | None,
+        bedrooms: float | None,
+        bathrooms: float | None,
+        square_footage: int | None,
+        radius: float = 1,
+        days_old: int = 180,
+        limit: int = 12,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, str | int | float | bool] = {
+            "address": address,
+            "radius": radius,
+            "status": "Active",
+            "daysOld": f"1:{days_old}",
+            "limit": limit,
+        }
+        mapped_property_type = map_property_type(property_type)
+        if mapped_property_type:
+            params["propertyType"] = mapped_property_type
+        if bedrooms is not None:
+            params["bedrooms"] = numeric_range(bedrooms - 1, bedrooms + 1)
+        if bathrooms is not None:
+            params["bathrooms"] = numeric_range(bathrooms - 1, bathrooms + 1)
+        if square_footage is not None and square_footage > 0:
+            params["squareFootage"] = numeric_range(
+                round(square_footage * 0.75),
+                round(square_footage * 1.25),
+            )
+        payload = self._get_json_value(
+            "/listings/sale",
+            params,
+            operation="supporting sale listings",
+        )
+        if not isinstance(payload, list):
+            raise RentCastClientError(
+                "RentCast supporting sale listings returned an unexpected response shape.",
+                operation="supporting sale listings",
+            )
+        return [record for record in payload if isinstance(record, dict)]
+
+    def get_market_statistics(
+        self,
+        *,
+        postal_code: str,
+        history_months: int = 12,
+    ) -> dict[str, Any]:
+        return self._get_json(
+            "/markets",
+            {
+                "zipCode": postal_code,
+                "dataType": "Sale",
+                "historyRange": history_months,
+            },
+            operation="sale market statistics",
+        )
+
     def get_rent_estimate(
         self,
         *,

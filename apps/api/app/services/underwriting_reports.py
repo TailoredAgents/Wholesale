@@ -485,6 +485,8 @@ def build_investor_story(
         ),
         Spacer(1, 0.06 * inch),
         investor_comp_table(analysis.rejected_comps, styles),
+        Spacer(1, 0.18 * inch),
+        *supporting_market_story(context, styles, include_listings=True),
         PageBreak(),
         section_heading("Subject property and diligence", styles),
         subject_property_table(context, styles),
@@ -669,6 +671,8 @@ def build_client_story(
         ),
         Spacer(1, 0.08 * inch),
         client_comp_table(analysis.selected_comps, styles),
+        Spacer(1, 0.18 * inch),
+        *supporting_market_story(context, styles, include_listings=True),
         PageBreak(),
         section_heading("How to use this review", styles),
         numbered_steps(
@@ -763,7 +767,15 @@ def evidence_audit_story(
     address_evidence = dict_value(metadata.get("address_evidence"))
     secondary_evidence = dict_value(metadata.get("secondary_evidence"))
     comp_search = dict_value(metadata.get("comp_search_summary"))
+    supporting_evidence = dict_value(metadata.get("supporting_evidence"))
     sources = list_of_dicts(secondary_evidence.get("sources"))
+    manual_sources = [
+        comp
+        for comp in [*context.analysis.selected_comps, *context.analysis.rejected_comps]
+        if isinstance(comp, dict)
+        and safe_string(comp.get("search_level")) == "manual"
+        and first_string(comp, ("source_url",))
+    ]
     factors = list_of_dicts(metadata.get("confidence_factors"))
     search_attempts = list_of_dicts(comp_search.get("attempts"))
     provider_search_passes = len(
@@ -821,7 +833,30 @@ def evidence_audit_story(
                     or safe_string(comp_search.get("market_area_warning"))
                     or "Closed-sale evidence threshold met.",
                 ),
+                (
+                    "Manual verified sales",
+                    (
+                        f"{optional_int(comp_search.get('manual_verified_sale_count')) or 0} "
+                        "included; "
+                        f"{optional_int(comp_search.get('manual_duplicate_count')) or 0} "
+                        "provider duplicate(s) suppressed"
+                    ),
+                ),
             ]
+        )
+    if supporting_evidence:
+        supporting_listings = list_of_dicts(supporting_evidence.get("sale_listings"))
+        market_context = dict_value(supporting_evidence.get("market_context"))
+        evidence_rows.append(
+            (
+                "Supporting market context",
+                (
+                    f"{labelize(safe_string(supporting_evidence.get('status')))}; "
+                    f"{len(supporting_listings)} active listing(s); ZIP "
+                    f"{safe_string(market_context.get('zip_code')) or 'unavailable'}; "
+                    "excluded from valuation math"
+                ),
+            )
         )
     story: list[Flowable] = [
         section_heading("Evidence and confidence record", styles),
@@ -864,6 +899,129 @@ def evidence_audit_story(
                 )
             )
         story.append(Spacer(1, 0.14 * inch))
+    if manual_sources:
+        story.append(
+            body_paragraph(
+                "Operator-entered closed sales retain their verification reference and source "
+                "link in the saved audit record.",
+                styles,
+            )
+        )
+        for comp in manual_sources[:8]:
+            url = first_string(comp, ("source_url",)) or ""
+            reference = first_string(comp, ("source_reference",)) or "Manual source"
+            story.append(
+                Paragraph(
+                    (
+                        f'<link href="{escape_attribute(url)}" '
+                        f'color="#245F43">{escape(reference)}</link><br/>'
+                        f'<font size="6.6" color="#68716D">{escape(url)}</font>'
+                    ),
+                    styles["small"],
+                )
+            )
+        story.append(Spacer(1, 0.14 * inch))
+    return story
+
+
+def supporting_market_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+    *,
+    include_listings: bool,
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    evidence = dict_value(metadata.get("supporting_evidence"))
+    market = dict_value(evidence.get("market_context"))
+    listings = list_of_dicts(evidence.get("sale_listings"))
+    if not evidence or (not market and not listings):
+        return []
+
+    story: list[Flowable] = [
+        section_heading("Supporting market context", styles),
+        body_paragraph(
+            "Active asking prices and ZIP-level listing statistics provide negotiation and "
+            "market context only. They are not closed sales and are excluded from ARV and "
+            "offer calculations.",
+            styles,
+        ),
+        Spacer(1, 0.06 * inch),
+    ]
+    if market:
+        story.extend(
+            [
+                key_value_table(
+                    [
+                        ("ZIP", safe_string(market.get("zip_code")) or "Unavailable"),
+                        (
+                            "Median asking price",
+                            format_money(optional_int(market.get("median_list_price_cents"))),
+                        ),
+                        (
+                            "Median asking price / sqft",
+                            format_ppsf_cents(
+                                optional_int(
+                                    market.get("median_price_per_square_foot_cents")
+                                )
+                            ),
+                        ),
+                        (
+                            "Average days on market",
+                            safe_string(market.get("average_days_on_market")) or "Unavailable",
+                        ),
+                        (
+                            "Observed listings",
+                            safe_string(market.get("total_listings")) or "Unavailable",
+                        ),
+                        (
+                            "Market data updated",
+                            format_sale_date(market.get("last_updated_date")),
+                        ),
+                    ],
+                    styles,
+                ),
+                Spacer(1, 0.1 * inch),
+            ]
+        )
+    if include_listings and listings:
+        headings = ["Active property", "Asking", "Sqft", "DOM", "Status"]
+        rows: list[list[Paragraph]] = [
+            [Paragraph(heading, styles["table_header"]) for heading in headings]
+        ]
+        for listing in listings[:8]:
+            rows.append(
+                [
+                    Paragraph(
+                        escape(safe_string(listing.get("formatted_address"))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(
+                            format_money(optional_int(listing.get("asking_price_cents")))
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(format_number(optional_int(listing.get("square_footage")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(safe_string(listing.get("days_on_market")) or "--"),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(safe_string(listing.get("status"))),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        table = LongTable(
+            rows,
+            colWidths=[3.2 * inch, 1.15 * inch, 0.8 * inch, 0.75 * inch, 1.5 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(table)
+        story.extend([table, Spacer(1, 0.12 * inch)])
     return story
 
 
@@ -1242,6 +1400,8 @@ def investor_comp_table(
         price_per_square_foot = format_ppsf_cents(
             optional_int(comp.get("price_per_square_foot_cents"))
         )
+        evidence_source = first_string(comp, ("evidence_source",))
+        source_reference = first_string(comp, ("source_reference",))
         comp_evidence_label = " / ".join(
             value
             for value in (
@@ -1252,6 +1412,8 @@ def investor_comp_table(
                 ),
                 labelize(safe_string(comp.get("search_level"))),
                 safe_string(comp.get("subdivision")),
+                labelize(evidence_source) if evidence_source else "",
+                source_reference,
             )
             if value
         )

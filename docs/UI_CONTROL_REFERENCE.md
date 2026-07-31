@@ -974,6 +974,23 @@ appraisal or permission to promise a seller a price.
 | Evidence/source | Links photos, walkthrough facts, contractor input, or staff observation | Improves reviewability |
 | **Save repair estimate** | Saves the current version used by underwriting | Disabled while saving |
 
+### Verified Manual Sales
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| **Verified manual sales** | Opens the saved manual closed-sale records for this seller lead | Requires full lead visibility; caller-only roles do not see underwriting |
+| Include checkbox | Chooses whether the saved manual sale enters the next analysis | Selection affects only the next saved analysis |
+| Street / City / State / ZIP | Identifies the closed property and supports subject/duplicate checks | Complete address required; subject property rejected |
+| Closed date / Closed price | Records the verified transaction fact | Future date and invalid amount rejected |
+| Property type / Square feet | Supplies the minimum physical facts needed for screening | Required; the scorer may still reject a poor match |
+| Bedrooms / Bathrooms / Year / Lot / Distance / Subdivision | Supplies optional physical and location evidence | Missing facts reduce reviewability; they are never invented |
+| Condition at sale | Classifies Unknown, As-is, or Renovated | As-is or Renovated requires condition evidence |
+| Verification source | Identifies county record, MLS record, closing document, broker confirmation, or another verified source | Required |
+| Source reference / Source link | Preserves the exact record, identifier, or page used | Reference required; link optional and must use HTTP/HTTPS |
+| Verification notes | Explains how closing price/date and relevant facts were confirmed | At least 10 characters required |
+| **Save verified sale** | Creates an audited immutable evidence record and selects it for the next run | Duplicate manual/provider sale, subject, future date, or missing evidence rejected |
+| **Remove** | Voids the record for future analyses | Prior analyses remain unchanged; create a corrected record instead of editing history |
+
 ### Market Analysis
 
 | Control or result | Purpose and effect | Availability and common blocker |
@@ -986,6 +1003,8 @@ appraisal or permission to promise a seller a price.
 | Provider evidence | Shows market-data source, retrieval result, and matching details | Read-only |
 | Closed-sale search summary | Shows the final Preferred, Expanded, Extended, or Manual evidence level, unique and duplicate counts, subdivision support, shortage, and next action | Read-only; Manual means the controlled provider search remained insufficient, not that the analysis disappeared |
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
+| Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
+| Supporting listings and ZIP market context | Shows active asking prices, size, days on market, ZIP median asking price, asking price per square foot, inventory, and market timing | Supporting-only; asking prices are not closed comps |
 | Public evidence | Shows controlled secondary evidence and source links when used | Must be verified before relying on a material fact |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
@@ -998,7 +1017,8 @@ appraisal or permission to promise a seller a price.
 | --- | --- | --- |
 | Comparable row | Shows address, sale date, distance, size, beds/baths, price, price per square foot, evidence source, A-D fit grade, search level, and subdivision when available | Read-only source facts |
 | Comp grade | Summarizes physical, location, recency, and market-area fit; Extended-only records cannot receive A or B | A grade does not prove renovated condition |
-| Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, or Extended query | Wider-query duplicates retain their earliest level |
+| Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, Extended, or Manual evidence step | Wider-query duplicates retain their earliest level; Manual identifies operator-entered evidence |
+| Evidence source / **Open source** | Shows provider or manual verification origin and opens a retained source link | Manual reference is always retained; link appears when supplied |
 | Include | Allows a comparable to contribute to the estimate | Staff judgment; exclusion reason recommended when changed |
 | Condition | Marks renovated, average, distressed, unknown, or other supported state | Unconfirmed renovation reduces confidence but does not block results |
 | Exclusion reason | Explains why a comp should not be used | Required by review workflow when excluded |

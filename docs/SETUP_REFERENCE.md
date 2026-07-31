@@ -298,13 +298,26 @@ control until the corresponding roadmap phase marks the runner available and its
 passes. The API intentionally rejects premature V3 activation instead of silently using unfinished
 math.
 
+Fresh analysis may use these RentCast endpoints:
+
+- `/properties` and `/avm/value` for subject identity, recorded sales, and the benchmark AVM
+- `/avm/rent/long-term` for rental exit support
+- `/listings/sale` for active asking-price context only
+- `/markets` for ZIP-level sale-listing context only
+
+The active-listing and market-statistics calls consume provider requests and are cached with the
+analysis. Repair changes and comp review reuse that snapshot unless **Refresh complete analysis** is
+selected. Neither endpoint supplies closed-sale evidence to ARV or offer math.
+
 Acceptance:
 
 1. Analyze several known Georgia addresses.
 2. Confirm subject identity before relying on returned records.
 3. Review selected and excluded comparables.
-4. Confirm investor and client PDFs.
-5. Record provider failures and verified outcomes.
+4. Confirm active listings and ZIP statistics appear only under supporting context.
+5. Add one source-verified manual closed sale, rerun, then confirm its source remains visible.
+6. Confirm investor and client PDFs.
+7. Record provider failures and verified outcomes.
 
 A RentCast 404 is a data-coverage result, not proof that the Stonegate API is down. The
 underwriting workflow can continue from verified subject facts and recorded sales when permitted

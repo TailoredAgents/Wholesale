@@ -241,3 +241,79 @@ def test_recent_sales_applies_adaptive_search_tolerances(
     assert params["bathrooms"] == "2:3"
     assert params["squareFootage"] == "2040:2760"
     assert params["yearBuilt"] == "1987:2017"
+
+
+def test_supporting_sale_listings_are_requested_as_active_context(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict[str, object]]:
+            return [{"id": "listing-1", "status": "Active", "price": 325000}]
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        captured["url"] = url
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    listings = RentCastClient(api_key="test-key").get_sale_listings(
+        address="123 Peachtree St, Atlanta, GA 30303",
+        property_type="single_family",
+        bedrooms=3,
+        bathrooms=2,
+        square_footage=1800,
+    )
+
+    assert listings[0]["status"] == "Active"
+    assert captured["url"] == "https://api.rentcast.io/v1/listings/sale"
+    assert captured["params"] == {
+        "address": "123 Peachtree St, Atlanta, GA 30303",
+        "radius": 1,
+        "status": "Active",
+        "daysOld": "1:180",
+        "limit": 12,
+        "propertyType": "Single Family",
+        "bedrooms": "2:4",
+        "bathrooms": "1:3",
+        "squareFootage": "1350:2250",
+    }
+
+
+def test_sale_market_statistics_request_uses_zip_and_history(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {"zipCode": "30303", "saleData": {"medianPrice": 310000}}
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        captured["url"] = url
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    payload = RentCastClient(api_key="test-key").get_market_statistics(
+        postal_code="30303",
+    )
+
+    assert payload["zipCode"] == "30303"
+    assert captured["url"] == "https://api.rentcast.io/v1/markets"
+    assert captured["params"] == {
+        "zipCode": "30303",
+        "dataType": "Sale",
+        "historyRange": 12,
+    }

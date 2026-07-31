@@ -1214,7 +1214,12 @@ Confirm:
 6. When using Total or Itemized, set the contingency reserve and explain the estimate source under
    **Repair details and source notes**.
 7. Apply an existing saved repair estimate when one has already been prepared for this property.
-8. Select **Run complete analysis**.
+8. Open **Verified manual sales** only when you know a legitimate closing that RentCast missed.
+   Enter the complete address, closed date and price, property type, square footage, verification
+   source and reference, and clear verification notes. Add condition evidence before calling a sale
+   As-is or Renovated. Save the record and leave its checkbox selected when it should enter the next
+   analysis.
+9. Select **Run complete analysis**.
 
 Stonegate first requests the exact address from RentCast. If that lookup fails or returns the wrong
 property, Stonegate tries normalized address variations and a matching property record. If the
@@ -1227,9 +1232,9 @@ Stonegate searches closed sales in controlled levels:
 1. **Preferred:** Tight physical match within 0.5 mile and 180 days.
 2. **Expanded:** Up to 1 mile and 365 days using the normal V2.2 physical limits.
 3. **Extended:** Up to 3 miles and 730 days with bounded additional size and age tolerance.
-4. **Manual:** The provider search ended without enough market-area support. Stonegate keeps the
-   best suitable sales and states what evidence is missing; it does not insert a listing or AVM as
-   a fake closed comp.
+4. **Manual:** The controlled provider search ended without enough market-area support or verified
+   operator-entered closed sales supplemented the result. Stonegate states exactly what was added
+   or remains missing; it does not insert a listing or AVM as a fake closed comp.
 
 The search stops when at least three screened sales meet the available market-area check. When the
 subject subdivision and comparable subdivision data are available, Stonegate also seeks at least
@@ -1244,6 +1249,10 @@ This research:
 - Does not replace recorded sales or human comp review.
 - May be unavailable without preventing the primary analysis from running.
 
+Stonegate also saves nearby active asking prices and ZIP listing statistics under **Supporting
+listings and ZIP market context**. Use them to understand current competition and seller questions,
+not as proof of a closed value. They never enter ARV, buyer-maximum, or offer calculations.
+
 ### Review The Result
 
 Review the result from top to bottom:
@@ -1252,28 +1261,35 @@ Review the result from top to bottom:
 2. Confirm **Core valuation evidence** contains usable recorded sales.
 3. Open **Closed-sale search**. Confirm where the search stopped, which levels ran, how many unique
    sales remained, and whether subdivision or market-area warnings exist.
-4. When the final level is **Manual**, read the evidence shortage and next action. Treat the result
-   as the best available preliminary evidence until the missing closed sale can be verified.
+4. When the final level is **Manual**, read the manual verified count, evidence shortage, and next
+   action. Open each manual comp's source link/reference and verify the closing and condition.
 5. Open **Why this confidence score** and read every factor.
 6. Open **Secondary public evidence** and investigate any conflict.
-7. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
+7. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
+   prices and supporting-only evidence.
+8. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
    ceiling, and opening recommendation.
-8. Read every item under **Resolve before approval**.
-9. Review each comparable:
+9. Read every item under **Resolve before approval**.
+10. Review each comparable:
    - Confirm it is a real recorded sale.
    - Compare property type, location, distance, sale date, size, bedrooms, bathrooms, and price per
      square foot.
-   - Read its A-D grade and Preferred, Expanded, or Extended search label. A grade describes fit,
-     not whether the property was renovated.
+   - Read its A-D grade and Preferred, Expanded, Extended, or Manual search label. A grade describes
+     fit, not whether the property was renovated. Manual sales cannot receive an A or B grade.
+   - For a Manual sale, open the source and read the reference, verification notes, and condition
+     evidence. Source verification proves the closing record, not that it is a suitable comp.
    - Investigate subdivision and extended-search warnings instead of ignoring them.
    - Mark **Condition at sale** as As-is, Renovated, or Unknown based on evidence.
    - Include or exclude it and choose the truthful **Decision reason**.
    - Adjust **Evidence weight** only when the record deserves more or less influence.
-10. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
-11. Repeat until the included set and assumptions reflect the evidence.
-12. Create a manual underwriting version only when an authorized person must preserve a separate
+11. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
+12. Repeat until the included set and assumptions reflect the evidence.
+13. Create a manual underwriting version only when an authorized person must preserve a separate
     judgment or scenario.
-13. Compare saved versions before requesting offer approval.
+14. Compare saved versions before requesting offer approval.
+
+To correct a saved manual sale, select **Remove** and create a new verified record. Removal voids it
+for future analyses; it does not alter an analysis or PDF that was already saved.
 
 The range is decision support, not an appraisal or guaranteed offer. A result remains visible when
 renovation status is unconfirmed, but confidence and warnings should affect judgment.

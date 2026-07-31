@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -214,6 +214,11 @@ class MarketComparableRead(BaseModel):
     search_level: Literal["preferred", "expanded", "extended", "manual"] | None = None
     comp_grade: Literal["A", "B", "C", "D"] | None = None
     search_warnings: list[str] = Field(default_factory=list)
+    evidence_role: str = "core_closed_sale"
+    evidence_source: str | None = None
+    source_reference: str | None = None
+    source_url: str | None = None
+    verification_notes: str | None = None
 
 
 class LeadMarketValueEstimateRead(BaseModel):
@@ -313,6 +318,69 @@ class RepairEstimateRead(BaseModel):
     created_at: datetime
 
 
+ManualComparableSource = Literal[
+    "county_record",
+    "mls_record",
+    "closing_document",
+    "broker_confirmation",
+    "other_verified",
+]
+
+
+class UnderwritingManualComparableCreate(BaseModel):
+    street_address: str = Field(min_length=3, max_length=255)
+    city: str = Field(min_length=2, max_length=120)
+    state: str = Field(min_length=2, max_length=2)
+    postal_code: str = Field(min_length=5, max_length=20)
+    sale_date: date
+    sale_price_cents: int = Field(ge=100_000, le=100_000_000_000)
+    property_type: str = Field(min_length=2, max_length=80)
+    bedrooms: int | None = Field(default=None, ge=0, le=30)
+    bathrooms: float | None = Field(default=None, ge=0, le=30)
+    square_footage: int = Field(ge=100, le=100_000)
+    year_built: int | None = Field(default=None, ge=1700, le=2200)
+    lot_size: int | None = Field(default=None, ge=0, le=100_000_000)
+    distance_miles: float | None = Field(default=None, ge=0, le=100)
+    subdivision: str | None = Field(default=None, max_length=255)
+    condition_classification: Literal["unknown", "as_is", "renovated"] = "unknown"
+    condition_evidence: str | None = Field(default=None, max_length=1000)
+    source_type: ManualComparableSource
+    source_reference: str = Field(min_length=3, max_length=1000)
+    source_url: str | None = Field(
+        default=None,
+        max_length=1000,
+        pattern=r"^https?://",
+    )
+    verification_notes: str = Field(min_length=10, max_length=2000)
+
+
+class UnderwritingManualComparableRead(BaseModel):
+    id: UUID
+    lead_id: UUID
+    property_id: UUID
+    status: Literal["active", "voided"]
+    formatted_address: str
+    sale_date: date
+    sale_price_cents: int
+    property_type: str
+    bedrooms: int | None
+    bathrooms: float | None
+    square_footage: int
+    year_built: int | None
+    lot_size: int | None
+    distance_miles: float | None
+    subdivision: str | None
+    condition_classification: Literal["unknown", "as_is", "renovated"]
+    condition_evidence: str | None
+    source_type: ManualComparableSource
+    source_reference: str
+    source_url: str | None
+    verification_notes: str
+    created_by_user_id: UUID | None
+    created_at: datetime
+    voided_at: datetime | None
+
+
 class UnderwritingPreMeetingInputsRead(BaseModel):
     verification_status: str
     report_stage: str
@@ -357,6 +425,7 @@ class LeadMarketAnalysisCreate(BaseModel):
         default_factory=list,
         max_length=50,
     )
+    manual_comp_ids: list[UUID] | None = Field(default=None, max_length=12)
     refresh_market_data: bool = False
 
 
@@ -418,7 +487,56 @@ class UnderwritingCompSearchSummaryRead(BaseModel):
     market_area_warning: str | None = None
     evidence_shortage_reason: str | None = None
     next_action: str | None = None
+    manual_verified_sale_count: int = Field(default=0, ge=0)
+    manual_duplicate_count: int = Field(default=0, ge=0)
     attempts: list[UnderwritingCompSearchAttemptRead] = Field(default_factory=list)
+
+
+class UnderwritingSupportingSaleListingRead(BaseModel):
+    provider_id: str | None
+    formatted_address: str | None
+    status: str
+    listing_type: str | None
+    property_type: str | None
+    asking_price_cents: int | None
+    bedrooms: float | None
+    bathrooms: float | None
+    square_footage: int | None
+    year_built: int | None
+    distance_miles: float | None
+    listed_date: str | None
+    last_seen_date: str | None
+    days_on_market: int | None
+    source: str
+    evidence_role: Literal["supporting_only"]
+
+
+class UnderwritingMarketContextRead(BaseModel):
+    zip_code: str | None
+    last_updated_date: str | None
+    median_list_price_cents: int | None
+    average_list_price_cents: int | None
+    median_price_per_square_foot_cents: int | None
+    average_days_on_market: float | None
+    median_days_on_market: float | None
+    total_listings: int | None
+    new_listings: int | None
+    median_list_price_change_percentage: float | None
+    history_months_returned: int
+    source: str
+    evidence_role: Literal["supporting_only"]
+
+
+class UnderwritingSupportingEvidenceRead(BaseModel):
+    version: str
+    status: Literal["completed", "partial", "unavailable"]
+    provider: str
+    evidence_role: Literal["supporting_only"]
+    valuation_use: Literal["excluded_from_arv_and_offer_math"]
+    sale_listings: list[UnderwritingSupportingSaleListingRead] = Field(default_factory=list)
+    market_context: UnderwritingMarketContextRead | None = None
+    errors: list[str] = Field(default_factory=list)
+    collected_at: datetime | None = None
 
 
 class LeadMarketAnalysisRead(BaseModel):
@@ -476,6 +594,8 @@ class LeadMarketAnalysisRead(BaseModel):
     methodology_control: UnderwritingMethodologyControlRead | None = None
     execution_metrics: UnderwritingExecutionMetricsRead | None = None
     comp_search_summary: UnderwritingCompSearchSummaryRead | None = None
+    supporting_evidence: UnderwritingSupportingEvidenceRead | None = None
+    manual_comp_ids: list[UUID] = Field(default_factory=list)
 
 
 class TransactionChecklistItemRead(BaseModel):

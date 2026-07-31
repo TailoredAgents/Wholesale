@@ -112,6 +112,7 @@ from app.schemas.leads import (
     UnderwritingExecutionMetricsRead,
     UnderwritingMethodologyControlRead,
     UnderwritingPreMeetingInputsRead,
+    UnderwritingSupportingEvidenceRead,
     UnderwritingVersionRead,
 )
 from app.services.inbox import (
@@ -142,7 +143,15 @@ from app.services.underwriting_evidence import (
     secondary_conflict_warnings,
     unavailable_secondary_evidence,
 )
+from app.services.underwriting_manual_comps import (
+    merge_verified_manual_sales,
+    resolve_manual_comparable_records,
+)
 from app.services.underwriting_methodology import resolve_underwriting_methodology
+from app.services.underwriting_supporting_evidence import (
+    collect_supporting_market_evidence,
+    unavailable_supporting_evidence,
+)
 from app.services.underwriting_v2 import (
     METHODOLOGY_VERSION,
     UnderwritingV2Result,
@@ -1599,6 +1608,9 @@ def create_lead_market_analysis(
     secondary_evidence = unavailable_secondary_evidence(
         "No fresh market-data research was requested."
     )
+    supporting_evidence = unavailable_supporting_evidence(
+        "No fresh supporting market evidence was requested."
+    )
     avm_error: str | None = None
     comp_search_summary: dict[str, Any] | None = None
     provider_returned_comp_count = 0
@@ -1613,6 +1625,9 @@ def create_lead_market_analysis(
         cached_secondary_evidence = (
             cached_raw.get("secondary_evidence") if cached_raw else None
         )
+        cached_supporting_evidence = (
+            cached_raw.get("supporting_evidence") if cached_raw else None
+        )
         cached_avm_error = cached_raw.get("avm_error") if cached_raw else None
         cached_property_record_error = (
             cached_raw.get("property_record_error") if cached_raw else None
@@ -1626,6 +1641,11 @@ def create_lead_market_analysis(
             cached_secondary_evidence
             if isinstance(cached_secondary_evidence, dict)
             else secondary_evidence
+        )
+        supporting_evidence = (
+            cached_supporting_evidence
+            if isinstance(cached_supporting_evidence, dict)
+            else supporting_evidence
         )
         avm_error = (
             cached_avm_error
@@ -1773,6 +1793,13 @@ def create_lead_market_analysis(
             subject_facts=subject_facts,
         )
         provider_warnings.extend(secondary_conflict_warnings(secondary_evidence))
+        supporting_evidence = collect_supporting_market_evidence(
+            client,
+            address=resolved_address,
+            postal_code=property_record.postal_code,
+            subject_facts=subject_facts,
+            local_property_type=property_record.property_type,
+        )
 
     if subject_record:
         validate_provider_record(property_record, subject_record)
@@ -1780,6 +1807,18 @@ def create_lead_market_analysis(
             **(property_record.address_validation_metadata or {}),
             "resolution": address_evidence,
         }
+    provider_sale_records = sale_records
+    manual_sale_records, manual_comp_ids = resolve_manual_comparable_records(
+        db,
+        principal,
+        lead,
+        payload.manual_comp_ids,
+        source_analysis=cached_analysis,
+    )
+    sale_records, duplicate_manual_comp_ids = merge_verified_manual_sales(
+        provider_sale_records,
+        manual_sale_records,
+    )
     result = analyze_underwriting_v2(
         estimate=estimate,
         subject_record=subject_record,
@@ -1822,6 +1861,7 @@ def create_lead_market_analysis(
             payload.repair_estimate_id,
             payload.comp_condition_overrides,
             payload.comp_review_decisions,
+            manual_comp_ids,
         )
     )
     report_stage = payload.input_verification_status
@@ -1906,6 +1946,13 @@ def create_lead_market_analysis(
             selected_count=len(result.selected_comps),
             rejected_count=len(result.rejected_comps),
         )
+    comp_search_summary = add_manual_evidence_to_search_summary(
+        comp_search_summary,
+        manual_sale_count=len(manual_sale_records),
+        duplicate_count=len(duplicate_manual_comp_ids),
+        selected_comps=result.selected_comps,
+        rejected_comps=result.rejected_comps,
+    )
     analysis_metadata = {
         "methodology_version": METHODOLOGY_VERSION,
         "methodology_control": methodology_control.as_dict(),
@@ -1934,6 +1981,9 @@ def create_lead_market_analysis(
         ),
         "address_evidence": address_evidence,
         "secondary_evidence": secondary_evidence,
+        "supporting_evidence": supporting_evidence,
+        "manual_comp_ids": [str(record_id) for record_id in manual_comp_ids],
+        "manual_duplicate_comp_ids": duplicate_manual_comp_ids,
         "confidence_tier": result.confidence_tier,
         "confidence_factors": result.confidence_factors,
         "comp_review": comp_review,
@@ -2026,12 +2076,14 @@ def create_lead_market_analysis(
         raw_response={
             "avm": estimate.raw_response,
             "subject_record": subject_record,
-            "recorded_sales": sale_records,
+            "recorded_sales": provider_sale_records,
+            "manual_recorded_sales": manual_sale_records,
             "rent": rent_estimate.raw_response if rent_estimate else None,
             "property_record_error": property_record_error,
             "avm_error": avm_error,
             "address_evidence": address_evidence,
             "secondary_evidence": secondary_evidence,
+            "supporting_evidence": supporting_evidence,
         },
         analysis_metadata=analysis_metadata,
     )
@@ -2063,6 +2115,11 @@ def create_lead_market_analysis(
                     else (
                         "Underwriting V2.2 created with "
                         f"{len(result.selected_comps)} recorded-sale comps"
+                        + (
+                            f", including {len(manual_comp_ids)} verified manual sale(s)"
+                            if manual_comp_ids
+                            else ""
+                        )
                     )
                 )
                 + f" and {result.confidence_score}% confidence."
@@ -3618,6 +3675,14 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             if isinstance(metadata.get("comp_search_summary"), dict)
             else None
         ),
+        supporting_evidence=(
+            UnderwritingSupportingEvidenceRead.model_validate(
+                metadata.get("supporting_evidence")
+            )
+            if isinstance(metadata.get("supporting_evidence"), dict)
+            else None
+        ),
+        manual_comp_ids=uuid_list(metadata.get("manual_comp_ids")),
     )
 
 
@@ -3638,6 +3703,83 @@ def count_comp_review_overrides(
         decision.included != (decision.comp_key in source_included)
         for decision in decisions
     )
+
+
+def add_manual_evidence_to_search_summary(
+    summary: dict[str, Any],
+    *,
+    manual_sale_count: int,
+    duplicate_count: int,
+    selected_comps: Sequence[MarketAnalysisCompRead],
+    rejected_comps: Sequence[MarketAnalysisCompRead],
+) -> dict[str, Any]:
+    updated = dict(summary)
+    accepted_count = max(0, manual_sale_count - duplicate_count)
+    updated["manual_verified_sale_count"] = accepted_count
+    updated["manual_duplicate_count"] = duplicate_count
+    if not manual_sale_count:
+        return updated
+
+    manual_comps = [
+        comp
+        for comp in (*selected_comps, *rejected_comps)
+        if comp.search_level == "manual"
+    ]
+    usable_manual_count = sum(comp.score > 0 for comp in manual_comps)
+    usable_closed_sale_count = sum(
+        comp.score > 0 for comp in (*selected_comps, *rejected_comps)
+    )
+    minimum = optional_int(updated.get("minimum_closed_sales")) or 3
+    was_sufficient = bool(updated.get("sufficient_closed_sales"))
+    is_sufficient = usable_closed_sale_count >= minimum
+    updated["sufficient_closed_sales"] = is_sufficient
+    updated["total_unique_sales"] = (
+        (optional_int(updated.get("total_unique_sales")) or 0) + accepted_count
+    )
+    if accepted_count and not was_sufficient:
+        updated["final_level"] = "manual"
+    attempts = list_of_dicts(updated.get("attempts"))
+    attempts.append(
+        {
+            "level": "manual",
+            "radius_miles": None,
+            "days_old": None,
+            "bedroom_tolerance": None,
+            "bathroom_tolerance": None,
+            "square_footage_tolerance_percentage": None,
+            "year_built_tolerance_years": None,
+            "returned_count": manual_sale_count,
+            "unique_added_count": accepted_count,
+            "duplicate_count": duplicate_count,
+            "cumulative_unique_count": optional_int(updated.get("total_unique_sales")) or 0,
+            "selected_count": usable_manual_count,
+            "rejected_count": max(0, accepted_count - usable_manual_count),
+            "same_subdivision_count": sum(
+                comp.subdivision_match is True for comp in manual_comps if comp.score > 0
+            ),
+            "expansion_reason": (
+                "Verified operator-entered sales supplemented provider closed-sale evidence."
+            ),
+            "provider_error": None,
+        }
+    )
+    updated["attempts"] = attempts
+    if is_sufficient:
+        updated["evidence_shortage_reason"] = None
+        updated["next_action"] = (
+            "Review source references and condition evidence, then approve or revise the "
+            "recommended closed-sale set."
+        )
+    else:
+        updated["evidence_shortage_reason"] = (
+            f"Only {usable_closed_sale_count} usable closed sale(s) remain after provider and "
+            f"manual evidence screening; {minimum} are preferred."
+        )
+        updated["next_action"] = (
+            "Add another source-verified closed sale or document the evidence shortage before "
+            "approving the offer."
+        )
+    return updated
 
 
 def legacy_comp_search_summary(
@@ -3694,6 +3836,18 @@ def string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def uuid_list(value: Any) -> list[UUID]:
+    if not isinstance(value, list):
+        return []
+    identifiers: list[UUID] = []
+    for item in value:
+        try:
+            identifiers.append(UUID(str(item)))
+        except (TypeError, ValueError):
+            continue
+    return identifiers
 
 
 def list_of_dicts(value: Any) -> list[dict[str, Any]]:

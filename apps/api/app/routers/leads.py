@@ -39,6 +39,8 @@ from app.schemas.leads import (
     PropertyValidationRead,
     RepairEstimateCreate,
     RepairEstimateRead,
+    UnderwritingManualComparableCreate,
+    UnderwritingManualComparableRead,
 )
 from app.services.acquisition_operations import update_appointment
 from app.services.leads import (
@@ -73,6 +75,11 @@ from app.services.offer_concessions import (
     present_concession,
 )
 from app.services.repair_estimates import create_repair_estimate, list_repair_estimates
+from app.services.underwriting_manual_comps import (
+    create_manual_comparable,
+    list_manual_comparables,
+    void_manual_comparable,
+)
 from app.services.underwriting_reports import build_market_analysis_pdf
 
 router = APIRouter(prefix="/api/v1/leads", tags=["leads"])
@@ -257,6 +264,55 @@ def record_repair_estimate(
     if estimate is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return estimate
+
+
+@router.get("/{lead_id}/underwriting/manual-comps")
+def read_underwriting_manual_comparables(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> list[UnderwritingManualComparableRead]:
+    comparables = list_manual_comparables(db, principal, lead_id)
+    if comparables is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return comparables
+
+
+@router.post("/{lead_id}/underwriting/manual-comps", status_code=201)
+def record_underwriting_manual_comparable(
+    lead_id: UUID,
+    payload: UnderwritingManualComparableCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> UnderwritingManualComparableRead:
+    try:
+        comparable = create_manual_comparable(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if comparable is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return comparable
+
+
+@router.delete(
+    "/{lead_id}/underwriting/manual-comps/{comparable_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def remove_underwriting_manual_comparable(
+    lead_id: UUID,
+    comparable_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> Response:
+    removed = void_manual_comparable(db, principal, lead_id, comparable_id)
+    if removed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    if removed is False:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Manual comparable not found.",
+        )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{lead_id}/underwriting/offer-plans")

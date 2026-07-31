@@ -644,18 +644,23 @@ redirect to their new owners.
 4. Wider-query duplicates are removed, and every unique sale retains its earliest search level,
    fit grade, subdivision relationship, score, and screening reason.
 5. Safe address variants may be retried when the provider misses the original string.
-6. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
+6. Authorized staff can add a known closed sale with its verification source, reference, condition
+   evidence, and notes. Subject, duplicate, future-dated, voided, and provider-duplicate records are
+   rejected or suppressed; accepted records pass through the existing comp scorer.
+7. RentCast active sale listings and ZIP-level listing statistics are saved as supporting context.
+   They are explicitly excluded from ARV and offer math.
+8. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
    ARV or offer values.
-7. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
+9. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
    condition, and material price or price-per-square-foot outliers.
-8. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
+10. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
    exact shortage and manual-evidence next action; unsuitable properties are not substituted.
-9. The engine produces an ARV range, as-is range, repair result, buyer economics, offer scenarios,
+11. The engine produces an ARV range, as-is range, repair result, buyer economics, offer scenarios,
    confidence tier, and review flags.
-10. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
-11. A human creates a negotiation plan tied to one saved underwriting version.
-12. Approval establishes opening, target, stretch, and hard-ceiling authority.
-13. Concessions and price discussions are appended to the negotiation ledger.
+12. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
+13. A human creates a negotiation plan tied to one saved underwriting version.
+14. Approval establishes opening, target, stretch, and hard-ceiling authority.
+15. Concessions and price discussions are appended to the negotiation ledger.
 
 ### 8.8 Contract And E-Signature
 
@@ -1197,7 +1202,7 @@ telemarketing, recording, or real-estate advice.
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 189 operational model classes. They group into:
+The primary SQLAlchemy model file contains 192 operational model classes. They group into:
 
 ### Identity And Organization
 
@@ -1231,12 +1236,15 @@ Acquisitions Copilot records.
 
 ### Underwriting And Offer Governance
 
-`UnderwritingVersion`, `UnderwritingMarketAnalysis`, calibration cases and decisions,
-`RepairEstimate`, `OfferNegotiationPlan`, `OfferConcession`, and `OfferNegotiationEvent`.
+`UnderwritingVersion`, `UnderwritingMarketAnalysis`, `UnderwritingManualComparable`, calibration
+cases and decisions, `RepairEstimate`, `OfferNegotiationPlan`, `OfferConcession`, and
+`OfferNegotiationEvent`.
 
 `UnderwritingMarketAnalysis.metadata` remains the additive compatibility boundary for methodology
-control, execution metrics, and comparable-search summaries. This avoids a duplicate analysis table
-and keeps older V2.2 records readable when newer optional fields are absent.
+control, execution metrics, comparable-search summaries, selected manual-sale IDs, and normalized
+supporting market evidence. Provider closed sales remain separate in the raw snapshot. This avoids
+a duplicate analysis table and keeps older V2.2 records readable when newer optional fields are
+absent.
 
 ### Contracts And Transactions
 

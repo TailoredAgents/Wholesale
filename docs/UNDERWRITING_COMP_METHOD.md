@@ -3,7 +3,7 @@
 ## Version Status
 
 - **Current implemented method:** Underwriting V2.2 calculations with `adaptive_v1` closed-sale
-  discovery.
+  discovery plus implemented U3.1-U3.3 evidence controls.
 - **Approved target:** Underwriting V3, planned as an in-place upgrade to V2.2.
 - **Current operating authority:** V2.2 formulas remain live. Implemented evidence and workflow
   phases may improve the inputs and explanations without activating unfinished V3 formulas.
@@ -689,7 +689,7 @@ Implementation record:
 
 #### U3.3: Supporting Evidence And Manual Comps
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026.
 
 - Add RentCast active/pending sale listings as separately labeled support.
 - Add ZIP/market trend evidence for context and candidate time-adjustment research.
@@ -699,6 +699,43 @@ Implementation record:
 
 **Exit:** The operator can finish a defensible review when RentCast misses a known sale without
 turning active listings, internet claims, or AVMs into fake closed comps.
+
+Implementation record:
+
+- Fresh provider runs collect nearby active sale listings from `/listings/sale` and ZIP-level sale
+  market statistics from `/markets`. Both are normalized behind a provider-neutral supporting
+  evidence contract and cached with the immutable analysis.
+- RentCast currently documents `Active` and `Inactive` listing states, not a distinct pending
+  search state. Stonegate retrieves active inventory and will preserve a provider-supplied pending
+  label if a future approved adapter supports one; it does not relabel inactive inventory as
+  pending.
+- Supporting listings retain asking price, status, list date, days on market, physical facts, and
+  source. ZIP context retains asking-price, price-per-square-foot, inventory, days-on-market, and
+  history fields when supplied. These records are explicitly marked `supporting_only` and
+  `excluded_from_arv_and_offer_math`.
+- `UnderwritingManualComparable` stores one organization- and lead-scoped closed sale with address,
+  closing date and price, physical facts, condition classification/evidence, verification source,
+  source reference/link, verification notes, creator, status, and audit timestamps.
+- Authorized users add or void manual sales from the existing lead Valuation & Offer workspace and
+  choose which active records participate in the next analysis. Voiding affects future analyses;
+  prior saved analyses remain immutable.
+- Manual entry rejects the subject property, future closing dates, duplicate active manual sales,
+  and sales already present in the latest provider evidence. Analysis-time deduplication also
+  prefers the provider record if a later provider refresh returns the same address and closing
+  date.
+- Included manual sales enter the existing recorded-sale scorer as `manual_verified` core evidence.
+  They use the same physical and outlier screening, carry a Manual search label and source warning,
+  and cannot receive an A or B grade. A source-verified record is not automatically a good comp.
+- Active listings, ZIP statistics, public research, and AVM output never enter the comparable list
+  or offer formulas. They appear in a separate OS section and separate PDF section with the same
+  limitation.
+- Cached repair changes and comparable reviews reuse provider evidence but re-resolve selected
+  manual records from the database. This prevents stale or voided evidence from being silently
+  copied into a new analysis.
+- API acceptance coverage proves sparse provider evidence can be supplemented by verified manual
+  closings while an active listing remains outside the comp set. It also covers persistence,
+  source retention, duplicate rejection, report output, removal, provider requests, and normalized
+  market context.
 
 #### U3.4: Comparable Review Workbench
 

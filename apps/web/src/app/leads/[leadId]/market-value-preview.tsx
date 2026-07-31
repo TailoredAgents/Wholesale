@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CalibrationOutcomeForm } from "./calibration-outcome-form";
+import { ManualCompControl } from "./manual-comp-control";
 import {
   RepairEstimate,
   RepairEstimateControl,
@@ -76,6 +77,7 @@ type MarketComparable = {
   price_source?: string | null;
   verification_status?: string | null;
   condition_classification?: CompCondition | null;
+  condition_evidence?: string | null;
   adjusted_value_cents?: number | null;
   price_per_square_foot_cents?: number | null;
   weight?: number | null;
@@ -90,6 +92,10 @@ type MarketComparable = {
   search_level?: "preferred" | "expanded" | "extended" | "manual" | null;
   comp_grade?: "A" | "B" | "C" | "D" | null;
   search_warnings?: string[];
+  evidence_source?: string | null;
+  source_reference?: string | null;
+  source_url?: string | null;
+  verification_notes?: string | null;
 };
 
 type CompReviewDraft = {
@@ -159,7 +165,40 @@ type CompSearchSummary = {
   market_area_warning: string | null;
   evidence_shortage_reason: string | null;
   next_action: string | null;
+  manual_verified_sale_count: number;
+  manual_duplicate_count: number;
   attempts: CompSearchAttempt[];
+};
+
+type SupportingEvidence = {
+  status: "completed" | "partial" | "unavailable";
+  evidence_role: "supporting_only";
+  valuation_use: "excluded_from_arv_and_offer_math";
+  sale_listings: Array<{
+    provider_id: string | null;
+    formatted_address: string | null;
+    status: string;
+    listing_type: string | null;
+    asking_price_cents: number | null;
+    bedrooms: number | null;
+    bathrooms: number | null;
+    square_footage: number | null;
+    listed_date: string | null;
+    days_on_market: number | null;
+  }>;
+  market_context: {
+    zip_code: string | null;
+    last_updated_date: string | null;
+    median_list_price_cents: number | null;
+    average_list_price_cents: number | null;
+    median_price_per_square_foot_cents: number | null;
+    average_days_on_market: number | null;
+    median_days_on_market: number | null;
+    total_listings: number | null;
+    new_listings: number | null;
+    median_list_price_change_percentage: number | null;
+  } | null;
+  errors: string[];
 };
 
 type MarketValueEstimate = {
@@ -211,6 +250,8 @@ type MarketValueEstimate = {
   rejected_comps?: MarketComparable[];
   subject_square_feet?: number | null;
   comp_search_summary?: CompSearchSummary | null;
+  supporting_evidence?: SupportingEvidence | null;
+  manual_comp_ids?: string[];
   source_note: string;
 };
 
@@ -426,6 +467,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   );
   const [compReview, setCompReview] = useState<Record<string, CompReviewDraft>>({});
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [selectedManualCompIds, setSelectedManualCompIds] = useState<string[] | null>(null);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -470,6 +512,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
     setConditionOverrides(nextOverrides);
     setCompReview(nextReview);
+    setSelectedManualCompIds(nextEstimate.manual_comp_ids ?? []);
     const savedRepairLevel = nextEstimate.assumptions?.repair_level;
     if (typeof savedRepairLevel === "string") {
       setRepairLevel(savedRepairLevel);
@@ -651,6 +694,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       holding_period_months: 6,
       repair_notes: repairNotes.trim() || null,
       comp_condition_overrides: conditionOverrides,
+      manual_comp_ids: selectedManualCompIds,
     };
   }
 
@@ -1002,6 +1046,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         </div>
       </details>
 
+      <ManualCompControl
+        leadId={leadId}
+        onEvidenceChanged={markInputsReviewed}
+        onSelectedIdsChange={setSelectedManualCompIds}
+        selectedIds={selectedManualCompIds}
+      />
+
       {estimate ? (
         <div className={styles.marketValueResult}>
           {!isV2 ? (
@@ -1057,6 +1108,15 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 {estimate.secondary_evidence?.sources?.length ?? 0} cited public sources
               </small>
             </div>
+            <div>
+              <span>Supporting market context</span>
+              <strong>
+                {(estimate.supporting_evidence?.status ?? "unavailable").replaceAll("_", " ")}
+              </strong>
+              <small>
+                {estimate.supporting_evidence?.sale_listings.length ?? 0} active listing(s) · ZIP {estimate.supporting_evidence?.market_context?.zip_code ?? "--"}
+              </small>
+            </div>
           </div>
 
           {estimate.comp_search_summary ? (
@@ -1108,6 +1168,66 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 ) : null}
                 {estimate.comp_search_summary.next_action ? (
                   <p><strong>Next action:</strong> {estimate.comp_search_summary.next_action}</p>
+                ) : null}
+              </div>
+            </details>
+          ) : null}
+
+          {estimate.supporting_evidence ? (
+            <details className={styles.evidenceDetails}>
+              <summary>Supporting listings and ZIP market context</summary>
+              <div className={styles.supportingMarketContext}>
+                <div className={styles.supportingMarketMetrics}>
+                  <div>
+                    <span>Median asking price</span>
+                    <strong>
+                      {formatMoney(
+                        estimate.supporting_evidence.market_context?.median_list_price_cents,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Median asking price / sqft</span>
+                    <strong>
+                      {formatMoney(
+                        estimate.supporting_evidence.market_context
+                          ?.median_price_per_square_foot_cents,
+                      )}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Average days on market</span>
+                    <strong>
+                      {estimate.supporting_evidence.market_context?.average_days_on_market ?? "--"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Observed listings</span>
+                    <strong>
+                      {estimate.supporting_evidence.market_context?.total_listings ?? "--"}
+                    </strong>
+                  </div>
+                </div>
+                {estimate.supporting_evidence.sale_listings.length ? (
+                  <div className={styles.supportingListingList}>
+                    {estimate.supporting_evidence.sale_listings.map((listing, index) => (
+                      <article key={listing.provider_id ?? `${listing.formatted_address}-${index}`}>
+                        <div>
+                          <strong>{listing.formatted_address ?? "Unknown address"}</strong>
+                          <span>{formatMoney(listing.asking_price_cents)}</span>
+                        </div>
+                        <small>
+                          {listing.status} asking price · {formatNumber(listing.square_footage)} sqft · {listing.days_on_market ?? "--"} days on market
+                        </small>
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
+                <small>
+                  Active listings and ZIP statistics are context only. They are never treated as closed sales or used directly in ARV or offer math.
+                </small>
+                {estimate.supporting_evidence.errors.length ? (
+                  <small>{estimate.supporting_evidence.errors.join(" ")}</small>
                 ) : null}
               </div>
             </details>
@@ -1386,6 +1506,28 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                     {(comp.search_level ?? "legacy").replaceAll("_", " ")} search
                     {comp.subdivision ? ` / ${comp.subdivision}` : ""}
                   </small>
+                  {comp.evidence_source ? (
+                    <small>
+                      Source: {comp.evidence_source.replaceAll("_", " ")}
+                      {comp.source_reference ? ` / ${comp.source_reference}` : ""}
+                      {comp.source_url ? (
+                        <>
+                          {" / "}
+                          <a href={comp.source_url} rel="noreferrer" target="_blank">
+                            Open source
+                          </a>
+                        </>
+                      ) : null}
+                    </small>
+                  ) : null}
+                  {comp.search_level === "manual" && comp.verification_notes ? (
+                    <small>
+                      Verification: {comp.verification_notes}
+                      {comp.condition_evidence
+                        ? ` Condition evidence: ${comp.condition_evidence}`
+                        : ""}
+                    </small>
+                  ) : null}
                   {comp.search_warnings?.length ? (
                     <small>{comp.search_warnings.join(" ")}</small>
                   ) : null}

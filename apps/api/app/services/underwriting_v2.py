@@ -448,6 +448,7 @@ def score_recorded_sale(
     condition = normalize_condition_override(
         condition_overrides.get(provider_id or "")
         or condition_overrides.get(address or "")
+        or string(record.get("_stonegateConditionClassification"))
     )
     subject_subdivision = string(subject.get("subdivision"))
     subdivision = string(record.get("subdivision"))
@@ -462,11 +463,12 @@ def score_recorded_sale(
         subdivision=subdivision,
         subdivision_match=subdivision_match,
     )
+    is_manual = search_level == "manual"
     base: dict[str, Any] = {
         "provider_id": provider_id,
         "formatted_address": address,
-        "status": "Recorded sale",
-        "listing_type": "Property record",
+        "status": "Verified manual sale" if is_manual else "Recorded sale",
+        "listing_type": "Manual evidence" if is_manual else "Property record",
         "property_type": string(record.get("propertyType")),
         "price_cents": dollars_to_cents(sale_price),
         "bedrooms": number(record.get("bedrooms")),
@@ -481,10 +483,14 @@ def score_recorded_sale(
         "last_seen_date": None,
         "sale_date": sale_date,
         "price_source": "recorded_sale",
-        "verification_status": "recorded",
+        "verification_status": (
+            string(record.get("_stonegateVerificationStatus"))
+            or ("manual_verified" if is_manual else "recorded")
+        ),
         "condition_classification": condition,
         "condition_evidence": (
-            "human_classification" if condition != "unknown" else "not_provided"
+            string(record.get("_stonegateConditionEvidence"))
+            or ("human_classification" if condition != "unknown" else "not_provided")
         ),
         "lot_size": integer(record.get("lotSize")),
         "adjusted_value_cents": subject_size_value_cents,
@@ -495,6 +501,14 @@ def score_recorded_sale(
         "search_level": search_level,
         "comp_grade": "D",
         "search_warnings": search_warnings,
+        "evidence_role": "core_closed_sale",
+        "evidence_source": (
+            string(record.get("_stonegateEvidenceSource"))
+            or ("manual_verified_source" if is_manual else "rentcast_property_record")
+        ),
+        "source_reference": string(record.get("_stonegateSourceReference")),
+        "source_url": string(record.get("_stonegateSourceUrl")),
+        "verification_notes": string(record.get("_stonegateVerificationNotes")),
     }
     rejection = recorded_sale_rejection_reason(
         subject,
@@ -517,10 +531,10 @@ def score_recorded_sale(
     if distance is None:
         score -= 12
         reasons.append("distance unavailable")
-    elif search_level == "extended" and distance > 2:
+    elif search_level in {"extended", "manual"} and distance > 2:
         score -= 20
         reasons.append("more than 2 miles from the subject")
-    elif search_level == "extended" and distance > 1:
+    elif search_level in {"extended", "manual"} and distance > 1:
         score -= 14
         reasons.append("more than 1 mile from the subject")
     elif distance > 0.5:
@@ -530,10 +544,10 @@ def score_recorded_sale(
     if days_old is None:
         score -= 10
         reasons.append("sale recency unavailable")
-    elif search_level == "extended" and days_old > 545:
+    elif search_level in {"extended", "manual"} and days_old > 545:
         score -= 18
         reasons.append("older than 18 months")
-    elif search_level == "extended" and days_old > 365:
+    elif search_level in {"extended", "manual"} and days_old > 365:
         score -= 14
         reasons.append("older than one year")
     elif days_old > 180:
@@ -601,7 +615,7 @@ def recorded_sale_rejection_reason(
         integer(subject.get("squareFootage")),
         integer(record.get("squareFootage")),
     )
-    size_limit = 0.25 if search_level == "extended" else 0.20
+    size_limit = 0.25 if search_level in {"extended", "manual"} else 0.20
     if size_difference is not None and size_difference > size_limit:
         return f"Living area differs by more than {round(size_limit * 100)}%."
     bed_difference = absolute_difference(
@@ -620,7 +634,7 @@ def recorded_sale_rejection_reason(
         integer(subject.get("yearBuilt")),
         integer(record.get("yearBuilt")),
     )
-    year_limit = 35 if search_level == "extended" else 25
+    year_limit = 35 if search_level in {"extended", "manual"} else 25
     if year_difference is not None and year_difference > year_limit:
         return f"Year built differs by more than {year_limit} years."
     return None
@@ -628,7 +642,11 @@ def recorded_sale_rejection_reason(
 
 def normalize_search_level(value: object) -> str | None:
     normalized = normalize_key(string(value))
-    return normalized if normalized in {"preferred", "expanded", "extended"} else None
+    return (
+        normalized
+        if normalized in {"preferred", "expanded", "extended", "manual"}
+        else None
+    )
 
 
 def comp_search_warnings(
@@ -643,6 +661,10 @@ def comp_search_warnings(
         warnings.append("Found after expanding beyond the preferred search area or recency.")
     elif search_level == "extended":
         warnings.append("Found only in the extended distance, recency, or physical-fit search.")
+    elif search_level == "manual":
+        warnings.append(
+            "Entered and source-verified by Stonegate; not independently returned by RentCast."
+        )
     if subdivision_match is False:
         warnings.append(
             f"Recorded subdivision {subdivision} differs from subject subdivision "
@@ -660,7 +682,7 @@ def grade_for_comp(score: int, search_level: str | None) -> str:
         grade = "C"
     else:
         grade = "D"
-    if search_level == "extended" and grade in {"A", "B"}:
+    if search_level in {"extended", "manual"} and grade in {"A", "B"}:
         return "C"
     return grade
 

@@ -1542,6 +1542,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         "next_action": (
             "Verify comp condition and approve or revise the recommended closed-sale set."
         ),
+        "manual_verified_sale_count": 0,
+        "manual_duplicate_count": 0,
         "attempts": [
             {
                 "level": "preferred",
@@ -2315,6 +2317,253 @@ def test_offer_ceiling_approval_uses_immutable_negotiation_plan(
     )
     assert stale_decision.status_code == 422
     assert "newer underwriting version" in stale_decision.json()["detail"]
+
+
+def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    get_settings.cache_clear()
+
+    class SparseRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            subject = {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "addressLine1": "123 Peachtree St",
+                "city": "Atlanta",
+                "state": "GA",
+                "zipCode": "30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "lotSize": 8000,
+            }
+            return RentCastValueEstimate(
+                price=300000,
+                price_range_low=280000,
+                price_range_high=320000,
+                subject_property=subject,
+                comparables=[],
+                raw_response={
+                    "price": 300000,
+                    "priceRangeLow": 280000,
+                    "priceRangeHigh": 320000,
+                    "subjectProperty": subject,
+                    "comparables": [],
+                },
+            )
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            return {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "addressLine1": "123 Peachtree St",
+                "city": "Atlanta",
+                "state": "GA",
+                "zipCode": "30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "lotSize": 8000,
+            }
+
+        def get_recent_sales(self, **_: object) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": "provider-comp-1",
+                    "formattedAddress": "125 Peachtree St, Atlanta, GA 30303",
+                    "addressLine1": "125 Peachtree St",
+                    "city": "Atlanta",
+                    "state": "GA",
+                    "zipCode": "30303",
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 290000,
+                    "lastSaleDate": "2026-05-01T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1750,
+                    "yearBuilt": 1981,
+                    "lotSize": 7800,
+                    "distance": 0.2,
+                }
+            ]
+
+        def get_rent_estimate(self, **_: object) -> RentCastRentEstimate:
+            return RentCastRentEstimate(
+                rent=2400,
+                rent_range_low=2200,
+                rent_range_high=2600,
+                comparables=[],
+                raw_response={"rent": 2400},
+            )
+
+        def get_sale_listings(self, **_: object) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": "active-listing-1",
+                    "formattedAddress": "140 Peachtree St, Atlanta, GA 30303",
+                    "status": "Active",
+                    "listingType": "Standard",
+                    "propertyType": "Single Family",
+                    "price": 340000,
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1825,
+                    "daysOnMarket": 14,
+                }
+            ]
+
+        def get_market_statistics(self, **_: object) -> dict[str, object]:
+            return {
+                "zipCode": "30303",
+                "saleData": {
+                    "lastUpdatedDate": "2026-07-30T00:00:00Z",
+                    "medianPrice": 315000,
+                    "medianPricePerSquareFoot": 180,
+                    "averageDaysOnMarket": 24,
+                    "totalListings": 42,
+                },
+            }
+
+    monkeypatch.setattr("app.services.leads.RentCastClient", SparseRentCastClient)
+    client = TestClient(app)
+    lead_id = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    ).json()["id"]
+
+    manual_payloads = [
+        {
+            "street_address": "127 Peachtree St",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "sale_date": "2026-04-15",
+            "sale_price_cents": 30000000,
+            "property_type": "Single Family",
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "square_footage": 1800,
+            "year_built": 1980,
+            "lot_size": 8000,
+            "distance_miles": 0.3,
+            "condition_classification": "renovated",
+            "condition_evidence": "MLS photos show a renovated kitchen, baths, and flooring.",
+            "source_type": "mls_record",
+            "source_reference": "FMLS 7500123",
+            "source_url": "https://example.com/fmls/7500123",
+            "verification_notes": "Closing price and date checked against the MLS record.",
+        },
+        {
+            "street_address": "129 Peachtree St",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "sale_date": "2026-03-20",
+            "sale_price_cents": 31000000,
+            "property_type": "Single Family",
+            "bedrooms": 3,
+            "bathrooms": 2,
+            "square_footage": 1850,
+            "year_built": 1979,
+            "lot_size": 8200,
+            "distance_miles": 0.4,
+            "condition_classification": "renovated",
+            "condition_evidence": "Broker listing archive shows complete interior renovation.",
+            "source_type": "broker_confirmation",
+            "source_reference": "Broker email 2026-07-30",
+            "verification_notes": "Broker confirmed the closing amount and renovation scope.",
+        },
+    ]
+    manual_records = []
+    for payload in manual_payloads:
+        response = client.post(
+            f"/api/v1/leads/{lead_id}/underwriting/manual-comps",
+            headers={"X-Dev-User-Email": OWNER_EMAIL},
+            json=payload,
+        )
+        assert response.status_code == 201, response.text
+        manual_records.append(response.json())
+
+    duplicate_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/manual-comps",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=manual_payloads[0],
+    )
+    assert duplicate_response.status_code == 422
+    assert "already saved" in duplicate_response.json()["detail"]
+
+    analysis_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "repair_level": "moderate",
+            "manual_comp_ids": [record["id"] for record in manual_records],
+            "comp_condition_overrides": {"provider-comp-1": "renovated"},
+        },
+    )
+    assert analysis_response.status_code == 201, analysis_response.text
+    analysis = analysis_response.json()
+    assert analysis["comp_search_summary"]["final_level"] == "manual"
+    assert analysis["comp_search_summary"]["sufficient_closed_sales"] is True
+    assert analysis["comp_search_summary"]["manual_verified_sale_count"] == 2
+    assert analysis["manual_comp_ids"] == [record["id"] for record in manual_records]
+    manual_comps = [
+        comp for comp in analysis["selected_comps"] if comp["search_level"] == "manual"
+    ]
+    assert len(manual_comps) == 2
+    assert manual_comps[0]["verification_status"] == "manual_verified"
+    assert manual_comps[0]["source_reference"] in {
+        "FMLS 7500123",
+        "Broker email 2026-07-30",
+    }
+    assert analysis["supporting_evidence"]["status"] == "completed"
+    assert analysis["supporting_evidence"]["valuation_use"] == (
+        "excluded_from_arv_and_offer_math"
+    )
+    assert analysis["supporting_evidence"]["sale_listings"][0][
+        "asking_price_cents"
+    ] == 34000000
+    assert all(
+        comp["provider_id"] != "active-listing-1"
+        for comp in [*analysis["selected_comps"], *analysis["rejected_comps"]]
+    )
+
+    report_response = client.get(
+        (
+            f"/api/v1/leads/{lead_id}/underwriting/market-analysis/"
+            f"{analysis['id']}/report.pdf"
+        ),
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert report_response.status_code == 200
+    assert b"Supporting market context" in report_response.content
+    assert b"FMLS 7500123" in report_response.content
+
+    removed_response = client.delete(
+        f"/api/v1/leads/{lead_id}/underwriting/manual-comps/{manual_records[0]['id']}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert removed_response.status_code == 204
+    remaining = client.get(
+        f"/api/v1/leads/{lead_id}/underwriting/manual-comps",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()
+    assert [record["id"] for record in remaining] == [manual_records[1]["id"]]
+    get_settings.cache_clear()
 
 
 def test_create_lead_requires_permission(api_db_override: None) -> None:
