@@ -16,6 +16,7 @@ export default async function InboxPage({
 }: {
   searchParams: Promise<{
     conversation?: string;
+    compose?: string;
     lead?: string;
     manage?: string;
     view?: string;
@@ -29,8 +30,15 @@ export default async function InboxPage({
       initialFilter={requestedFilter && inboxFilters.has(requestedFilter) ? requestedFilter : "team"}
       initialConversationId={params.conversation ?? null}
       initialEmailAdminOpen={params.manage === "email"}
+      initialGlobalComposeOpen={params.compose === "email"}
       initialLeadId={params.lead ?? null}
-      key={params.manage === "email" ? "email-management" : "inbox"}
+      key={
+        params.manage === "email"
+          ? "email-management"
+          : params.compose === "email"
+            ? "compose-email"
+            : "inbox"
+      }
     />
   );
 }

@@ -15,14 +15,16 @@ function value(data: FormData, key: string) {
 
 export function NewLeadControl({
   currentUserId,
+  initialOpen = false,
   users,
 }: {
   currentUserId: string;
+  initialOpen?: boolean;
   users: OperationsUser[];
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const apiBaseUrl = useMemo(

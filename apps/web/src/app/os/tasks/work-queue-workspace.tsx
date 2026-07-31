@@ -123,7 +123,7 @@ export function WorkQueueWorkspace({
             const response = await fetch(`${apiBaseUrl}/api/v1/tasks/${taskId}/complete`, {
               method: "PATCH",
               headers,
-              body: JSON.stringify({ reason: "Completed from the Stonegate Work Queue." }),
+              body: JSON.stringify({ reason: "Completed from Stonegate Tasks." }),
             });
             return { completed: response.ok, taskId };
           } catch {

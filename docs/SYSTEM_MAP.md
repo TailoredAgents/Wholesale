@@ -329,11 +329,13 @@ markup when the feed is empty. No self-serving Review or AggregateRating schema 
 
 ## 7. Private OS Navigation
 
-The OS uses five stable navigation groups.
+The live OS sidebar uses four stable groups and 11 owner destinations. Authorized legacy
+workspaces remain available through the global **Tools** menu until their consolidation phase
+reaches feature parity.
 
-### 7.1 Command
+### 7.1 Work
 
-**Dashboard (`/os`)**
+**Home (`/os`)**
 
 - Role-aware daily command center.
 - Shows seller work, intervention counts, meetings, offers, and pipeline health.
@@ -346,7 +348,7 @@ The OS uses five stable navigation groups.
   inboxes, and authorized restricted inboxes.
 - Supports lead, buyer, transaction, and general email contexts.
 
-**Work Queue (`/os/tasks`)**
+**Tasks (`/os/tasks`)**
 
 - Speed-to-lead and open task queues.
 - Saved ownership and due-state views.
@@ -357,7 +359,11 @@ The OS uses five stable navigation groups.
 - Internal month, week, day, and agenda views.
 - Combines appointments, field scheduling, and due work without requiring Google Calendar.
 
-### 7.2 Acquisitions
+### 7.2 Operations And Acquisition Tools
+
+The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaigns,
+Lead Desk, Seller Pipeline, Field Operations, and Underwriting are compatibility tools and deep
+links over the same underlying records.
 
 **Campaigns (`/os/campaigns`)**
 
@@ -392,7 +398,7 @@ The OS uses five stable navigation groups.
 - Supports acceptance, guided qualification, dated next actions, appointments, exceptions,
   scorecards, and Lead Manager Copilot drafts.
 
-**All Leads (`/os/leads`)**
+**Seller Leads (`/os/leads`)**
 
 - Searchable system of record for active leads.
 - Authorized staff can create an internal lead for a warm call, referral, networking source, or
@@ -411,7 +417,13 @@ The OS uses five stable navigation groups.
 - Closer dispatch, availability, territory, capacity, appointment preparation, walkthrough,
   photographs, seller presentation, negotiation, and iPad signing.
 
-### 7.3 Deal Flow
+### 7.3 Deals And Deal Tools
+
+**Deals (`/os/deals`)**
+
+- Primary entry point for contract-to-close, disposition, and controlled approval work.
+- Aggregates existing Transaction, Disposition, and Approval counts without duplicating records.
+- Links to the current detailed tools until IA8 delivers one local deal workspace.
 
 **Underwriting (`/os/underwriting`)**
 
@@ -454,7 +466,13 @@ The OS uses five stable navigation groups.
 - Controlled homepage CTA experiments, stable variant assignment, device mix, downstream business
   outcomes, stopping thresholds, and recorded human decisions.
 
-### 7.5 Management
+### 7.5 Administration And Management Tools
+
+**Settings (`/os/settings`)**
+
+- Primary administration entry point.
+- Shows only personal, people, communications, policy, and AI sections allowed by permission.
+- Links to the existing management tools until IA3 consolidates their local navigation.
 
 **My Setup (`/os/my-setup`)**
 

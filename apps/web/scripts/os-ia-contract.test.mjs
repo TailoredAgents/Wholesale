@@ -7,9 +7,9 @@ import { fileURLToPath } from "node:url";
 import {
   canonicalHelpDocuments,
   controlReferenceSections,
-  currentNavigation,
   currentRouteInventory,
   evidenceContract,
+  legacyNavigation,
   permissionInventory,
   roleInventory,
   targetDestinations,
@@ -150,15 +150,40 @@ test("every current App Router page is represented in the migration inventory", 
   }
 });
 
-test("every current primary navigation item maps to an approved target workspace", () => {
+test("live primary navigation matches the approved 11-destination target", () => {
   const source = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
-  const sourceItems = [...source.matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g)]
+  const primarySource = source.slice(
+    source.indexOf("export const osNavGroups"),
+    source.indexOf("export const compatibilityNavGroups"),
+  );
+  const sourceItems = [...primarySource.matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g)]
     .map((match) => `${match[1]}|${match[2]}`);
-  const contractItems = currentNavigation.map((item) => `${item.href}|${item.label}`);
+  const contractItems = targetDestinations.map(
+    (item) => `${item.canonicalRoute}|${item.label}`,
+  );
   assert.deepEqual(sorted(contractItems), sorted(sourceItems));
-  const destinationIds = new Set(targetDestinations.map((destination) => destination.id));
-  for (const item of currentNavigation) {
-    assert.ok(destinationIds.has(item.targetWorkspace), `${item.label} is not mapped`);
+  for (const item of targetDestinations) {
+    assert.ok(routeInventoryForPath(item.canonicalRoute), `${item.canonicalRoute} has no route owner`);
+  }
+});
+
+test("compatibility tools preserve authorized access to legacy destinations", () => {
+  const source = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
+  const compatibilitySource = source.slice(
+    source.indexOf("export const compatibilityNavGroups"),
+    source.indexOf("export function isOwnerProfile"),
+  );
+  const sourceItems = [
+    ...compatibilitySource.matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g),
+  ].map((match) => ({ href: match[1], label: match[2] }));
+  assert.ok(sourceItems.length > 0);
+  for (const item of sourceItems) {
+    assert.ok(
+      legacyNavigation.some(
+        (legacy) => legacy.href === item.href && legacy.label === item.label,
+      ),
+      `${item.label} is not part of the legacy inventory`,
+    );
     assert.ok(routeInventoryForPath(item.href), `${item.href} has no route owner`);
   }
 });
@@ -242,7 +267,7 @@ test("canonical Help sources and baseline evidence commands are present", () => 
 
 test("old and new employee vocabulary is explicit and non-duplicative", () => {
   assert.ok(unique(vocabulary.map((term) => term.current)));
-  const currentLabels = new Set(currentNavigation.map((item) => item.label));
+  const currentLabels = new Set(legacyNavigation.map((item) => item.label));
   for (const term of vocabulary) {
     assert.ok(currentLabels.has(term.current), `${term.current} is not a current navigation term`);
     assert.notEqual(term.current, term.target);

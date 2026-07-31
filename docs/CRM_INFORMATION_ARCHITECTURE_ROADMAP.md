@@ -23,9 +23,9 @@ experience, or workflow. Do not document a planned destination as live before it
 Stonegate will keep its existing normalized business records and reorganize the employee
 experience around a small number of task-centered workspaces.
 
-The owner currently sees 22 primary sidebar destinations across five groups. Several destinations
-are different views of the same records, administrative controls are mixed with daily work, and
-horizontal journey navigation repeats the sidebar. The target reduces the owner experience to 11
+Before IA2, the owner saw 22 primary sidebar destinations across five groups. Several destinations
+were different views of the same records, administrative controls were mixed with daily work, and
+horizontal journey navigation repeated the sidebar. IA2 reduced the live owner experience to 11
 primary destinations:
 
 | Group | Destination |
@@ -883,7 +883,7 @@ Exit criteria:
 
 ## IA2. Shell, Navigation, And Global Controls
 
-Status: **Planned**
+Status: **Implemented**
 
 Scope:
 
@@ -1283,7 +1283,68 @@ The July 30, 2026 baseline contains 66 captures across 22 routes and three viewp
 with zero failed captures, error boundaries, fatal browser errors, or document-level horizontal
 overflow against the current web/API code and local database migration `0077`.
 
-### 19.5 Next Phase
+### 19.5 IA2 Handoff
 
-IA2 is next. It changes the shell and global navigation while keeping every route in the IA1
-inventory reachable. Current manuals remain authoritative until the live navigation changes.
+IA2 was the next phase after this baseline. Section 20 records its implementation and verification.
+
+## 20. IA2 Shell And Navigation
+
+IA2 was implemented on July 30, 2026.
+
+### 20.1 Live Navigation
+
+The owner sidebar now contains exactly 11 destinations:
+
+- Work: Home, Inbox, Tasks, Calendar
+- Operations: Prospecting, Seller Leads, Deals, Buyers
+- Business: Finance, Marketing
+- Administration: Settings
+
+Non-owner navigation is filtered by both operating role and API permission. AI service users
+receive no employee navigation. The focused VA Caller experience retains only Prospecting.
+
+### 20.2 Compatibility
+
+No previous workspace was removed. The global **Tools** menu exposes authorized Campaigns, Lead
+Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions, Dispositions, My
+Setup, Team & Access, Email Management, Company & Policy, and AI Control routes while later
+consolidation phases are completed.
+
+The new Deals and Settings routes are working compatibility hubs over existing records and
+workspaces. They do not create parallel business data.
+
+Legacy routes activate the correct primary destination:
+
+- Campaigns activates Prospecting.
+- Lead Desk, Seller Pipeline, Underwriting, and Seller records activate Seller Leads.
+- Field Operations activates Calendar.
+- Approvals activates Tasks.
+- Transactions and Dispositions activate Deals.
+- My Setup, Operations, Company & Policy, and AI Control activate Settings.
+
+### 20.3 Global Controls
+
+- **New** opens direct actions for a seller lead and company email when permitted.
+- Search covers both primary destinations and authorized compatibility tools.
+- Recent destinations remain in a fixed header location.
+- Approvals have a fixed header shortcut and pending count for authorized reviewers.
+- Notifications now open the consumed Operations `today` tab instead of emitting an unsupported
+  query parameter.
+- Clerk account controls remain the rightmost header action.
+
+The direct New links consume `/os/leads?new=lead` and `/os/inbox?compose=email`.
+
+### 20.4 Verification
+
+- IA contract: 10 tests passed.
+- TypeScript: passed after production route generation.
+- ESLint: passed.
+- Next.js production build: passed with `/os/deals` and `/os/settings`.
+- Visual baseline: 72 captures across mobile, tablet, and desktop; zero failed routes, error
+  boundaries, fatal browser errors, or document-level horizontal overflow.
+- Manual review covered Home, Deals, Settings, and the mobile global header.
+
+### 20.5 Next Phase
+
+IA3 is next. It consolidates the compatibility Settings destinations behind permission-filtered
+local settings navigation while preserving the old URLs.

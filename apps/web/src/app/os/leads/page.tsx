@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ view?: string | string[] }>;
+  searchParams?: Promise<{ new?: string | string[]; view?: string | string[] }>;
 }) {
   const params = await searchParams;
   const [dashboard, profile, { operations }] = await Promise.all([
@@ -35,6 +35,7 @@ export default async function LeadsPage({
             {canCreateLead && profile ? (
               <NewLeadControl
                 currentUserId={profile.user_id}
+                initialOpen={params?.new === "lead"}
                 users={operations?.users ?? []}
               />
             ) : null}

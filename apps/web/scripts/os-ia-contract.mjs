@@ -204,7 +204,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os",
     migration: "keep",
     queryParameters: [],
-    helpSections: ["Dashboard"],
+    helpSections: ["Home"],
     baselinePath: "/os",
   },
   {
@@ -214,6 +214,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/inbox",
     migration: "keep",
     queryParameters: [
+      { name: "compose", status: "consumed" },
       { name: "conversation", status: "consumed" },
       { name: "lead", status: "consumed" },
       { name: "manage", status: "consumed" },
@@ -229,7 +230,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/tasks",
     migration: "keep-and-rename",
     queryParameters: [{ name: "view", status: "consumed" }],
-    helpSections: ["Work Queue"],
+    helpSections: ["Tasks"],
     baselinePath: "/os/tasks",
   },
   {
@@ -279,6 +280,7 @@ export const currentRouteInventory = [
     targetCanonical: "/os/leads",
     migration: "keep-and-expand",
     queryParameters: [
+      { name: "new", status: "consumed" },
       { name: "view", status: "consumed" },
       {
         name: "q",
@@ -353,6 +355,16 @@ export const currentRouteInventory = [
     baselinePath: "/os/approvals",
   },
   {
+    routePattern: "/os/deals",
+    source: "src/app/os/deals/page.tsx",
+    targetWorkspace: "deals",
+    targetCanonical: "/os/deals",
+    migration: "ia2-compatibility-hub",
+    queryParameters: [],
+    helpSections: ["Transactions", "Dispositions", "Approval Center"],
+    baselinePath: "/os/deals",
+  },
+  {
     routePattern: "/os/transactions",
     source: "src/app/os/transactions/page.tsx",
     targetWorkspace: "deals",
@@ -410,6 +422,16 @@ export const currentRouteInventory = [
     baselinePath: "/os/marketing?period=30",
   },
   {
+    routePattern: "/os/settings",
+    source: "src/app/os/settings/page.tsx",
+    targetWorkspace: "settings",
+    targetCanonical: "/os/settings",
+    migration: "ia2-compatibility-hub",
+    queryParameters: [],
+    helpSections: ["My Setup", "Operations", "Company & Policy", "AI Control"],
+    baselinePath: "/os/settings",
+  },
+  {
     routePattern: "/os/my-setup",
     source: "src/app/os/my-setup/page.tsx",
     targetWorkspace: "settings",
@@ -425,14 +447,7 @@ export const currentRouteInventory = [
     targetWorkspace: "settings",
     targetCanonical: "/os/settings",
     migration: "split-tabs-after-parity",
-    queryParameters: [
-      { name: "tab", status: "consumed" },
-      {
-        name: "view",
-        status: "emitted-not-consumed",
-        note: "The header notification link emits this key; IA2 must give notifications a real owner.",
-      },
-    ],
+    queryParameters: [{ name: "tab", status: "consumed" }],
     helpSections: ["Operations"],
     baselinePath: "/os/operations",
   },
@@ -467,7 +482,7 @@ export const currentRouteInventory = [
   },
 ];
 
-export const currentNavigation = [
+export const legacyNavigation = [
   { group: "Command", label: "Dashboard", href: "/os", targetWorkspace: "home" },
   { group: "Command", label: "Inbox", href: "/os/inbox", targetWorkspace: "inbox" },
   { group: "Command", label: "Work Queue", href: "/os/tasks", targetWorkspace: "tasks" },
@@ -654,8 +669,8 @@ export const controlReferenceSections = [
   { heading: "Page Access Reference", owner: "global" },
   { heading: "Public Website", owner: "public" },
   { heading: "OS Global Shell", owner: "global" },
-  { heading: "Dashboard", owner: "home" },
-  { heading: "Work Queue", owner: "tasks" },
+  { heading: "Home", owner: "home" },
+  { heading: "Tasks", owner: "tasks" },
   { heading: "Calendar", owner: "calendar" },
   { heading: "All Leads", owner: "seller-leads" },
   { heading: "Archived Leads", owner: "seller-leads" },
@@ -707,4 +722,3 @@ export const evidenceContract = {
     "os_compatibility_route_used",
   ],
 };
-

@@ -1,7 +1,19 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Bell, History, Menu, Search, X } from "lucide-react";
+import {
+  Bell,
+  CheckCheck,
+  ChevronDown,
+  History,
+  MailPlus,
+  Menu,
+  Plus,
+  Search,
+  UserRoundPlus,
+  Wrench,
+  X,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
@@ -15,6 +27,7 @@ import {
   defaultRouteForProfile,
   navigationContext,
   primaryRoleLabel,
+  visibleCompatibilityGroups,
   visibleNavGroups,
 } from "./os-navigation";
 import { OsNav } from "./os-nav";
@@ -43,13 +56,16 @@ const developmentProfile: WorkspaceProfile = {
 
 export function OsShell({
   children,
+  pendingApprovalCount = 0,
   profile,
 }: {
   children: ReactNode;
+  pendingApprovalCount?: number;
   profile: WorkspaceProfile | null;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const searchQuery = searchParams.toString();
   const router = useRouter();
   const { getToken, isLoaded, isSignedIn } = useAuth();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -57,6 +73,8 @@ export function OsShell({
   const sidebarRef = useRef<HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<RecentDestination[]>([]);
@@ -77,18 +95,44 @@ export function OsShell({
     (process.env.NODE_ENV === "development" ? developmentProfile : null);
   const visibleAccessState =
     isLoaded && !isSignedIn ? "error" : effectiveProfile ? "resolved" : accessState;
-  const context = navigationContext(pathname, searchParams.toString());
+  const context = navigationContext(pathname, searchQuery);
   const navGroups = useMemo(
     () => (effectiveProfile ? visibleNavGroups(effectiveProfile) : []),
     [effectiveProfile],
   );
+  const compatibilityGroups = useMemo(
+    () => (effectiveProfile ? visibleCompatibilityGroups(effectiveProfile) : []),
+    [effectiveProfile],
+  );
   const destinations = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
-  const searchResults = destinations.filter((item) =>
-    `${item.label} ${item.href}`.toLowerCase().includes(query.trim().toLowerCase()),
+  const compatibilityDestinations = useMemo(
+    () => compatibilityGroups.flatMap((group) => group.items),
+    [compatibilityGroups],
   );
-  const canOpenOperations = destinations.some(
-    (item) => item.href.split("?")[0] === "/os/operations",
-  );
+  const searchResults = [...destinations, ...compatibilityDestinations]
+    .filter(
+      (item, index, items) =>
+        items.findIndex((candidate) => candidate.href === item.href) === index,
+    )
+    .filter((item) =>
+      `${item.label} ${item.href}`.toLowerCase().includes(query.trim().toLowerCase()),
+    );
+  const hasPermission = (permission: string) =>
+    Boolean(
+      effectiveProfile &&
+        (effectiveProfile.role_keys.some((role) =>
+          ["owner", "founder_operator", "ceo"].includes(role),
+        ) ||
+          effectiveProfile.permissions.includes(permission)),
+    );
+  const canCreateLead = hasPermission("leads:edit");
+  const canComposeEmail =
+    hasPermission("communications:send_email") ||
+    hasPermission("communications:send_assigned_email");
+  const canOpenApprovals =
+    hasPermission("offers:approve") || hasPermission("contracts:send");
+  const canOpenNotifications =
+    hasPermission("operations:view") || hasPermission("operations:manage");
 
   useEffect(() => {
     if (profile || resolvedProfile || !isLoaded || !isSignedIn) return;
@@ -163,11 +207,14 @@ export function OsShell({
     const frame = window.requestAnimationFrame(() => {
       setDrawerOpen(false);
       setSearchOpen(false);
+      setNewOpen(false);
+      setToolsOpen(false);
       setRecentOpen(false);
       setQuery("");
 
-      const current = navigationContext(pathname);
-      const nextEntry = { href: pathname, label: current.label, group: current.group };
+      const current = navigationContext(pathname, searchQuery);
+      const currentHref = searchQuery ? `${pathname}?${searchQuery}` : pathname;
+      const nextEntry = { href: currentHref, label: current.label, group: current.group };
       let existing: RecentDestination[] = [];
       try {
         existing = JSON.parse(
@@ -176,18 +223,20 @@ export function OsShell({
       } catch {
         existing = [];
       }
-      const next = [nextEntry, ...existing.filter((item) => item.href !== pathname)].slice(0, 5);
+      const next = [nextEntry, ...existing.filter((item) => item.href !== currentHref)].slice(0, 5);
       setRecent(next);
       window.localStorage.setItem(recentStorageKey, JSON.stringify(next));
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [pathname]);
+  }, [pathname, searchQuery]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setDrawerOpen(false);
         setSearchOpen(false);
+        setNewOpen(false);
+        setToolsOpen(false);
         setRecentOpen(false);
       }
       if (
@@ -246,6 +295,8 @@ export function OsShell({
   function closeTransientUi() {
     setDrawerOpen(false);
     setSearchOpen(false);
+    setNewOpen(false);
+    setToolsOpen(false);
     setRecentOpen(false);
   }
 
@@ -356,10 +407,14 @@ export function OsShell({
                   onChange={(event) => {
                     setQuery(event.target.value);
                     setSearchOpen(true);
+                    setNewOpen(false);
+                    setToolsOpen(false);
                     setRecentOpen(false);
                   }}
                   onFocus={() => {
                     setSearchOpen(true);
+                    setNewOpen(false);
+                    setToolsOpen(false);
                     setRecentOpen(false);
                   }}
                   placeholder="Search workspaces"
@@ -381,7 +436,97 @@ export function OsShell({
               ) : null}
             </div>
 
-            <div className={styles.headerMenuWrap}>
+            {canCreateLead || canComposeEmail ? (
+              <div
+                className={styles.headerMenuWrap}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setNewOpen(false);
+                }}
+              >
+                <button
+                  aria-expanded={newOpen}
+                  aria-label="Create new"
+                  className={styles.newMenuButton}
+                  onClick={() => {
+                    setNewOpen((current) => !current);
+                    setSearchOpen(false);
+                    setToolsOpen(false);
+                    setRecentOpen(false);
+                  }}
+                  type="button"
+                >
+                  <Plus aria-hidden="true" size={17} />
+                  <span>New</span>
+                  <ChevronDown aria-hidden="true" size={14} />
+                </button>
+                {newOpen ? (
+                  <div className={`${styles.headerDropdown} ${styles.newMenu}`}>
+                    <span>Create</span>
+                    {canCreateLead ? (
+                      <Link href="/os/leads?new=lead" onClick={closeTransientUi}>
+                        <UserRoundPlus aria-hidden="true" size={16} />
+                        <div>
+                          <strong>Seller lead</strong>
+                          <small>Enter a warm or referred opportunity</small>
+                        </div>
+                      </Link>
+                    ) : null}
+                    {canComposeEmail ? (
+                      <Link href="/os/inbox?compose=email" onClick={closeTransientUi}>
+                        <MailPlus aria-hidden="true" size={16} />
+                        <div>
+                          <strong>Email</strong>
+                          <small>Start a company conversation</small>
+                        </div>
+                      </Link>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {compatibilityGroups.length ? (
+              <div
+                className={styles.headerMenuWrap}
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setToolsOpen(false);
+                }}
+              >
+                <button
+                  aria-expanded={toolsOpen}
+                  aria-label="Open additional tools"
+                  className={styles.toolsMenuButton}
+                  onClick={() => {
+                    setToolsOpen((current) => !current);
+                    setSearchOpen(false);
+                    setNewOpen(false);
+                    setRecentOpen(false);
+                  }}
+                  type="button"
+                >
+                  <Wrench aria-hidden="true" size={17} />
+                  <span>Tools</span>
+                  <ChevronDown aria-hidden="true" size={14} />
+                </button>
+                {toolsOpen ? (
+                  <div className={`${styles.headerDropdown} ${styles.toolsMenu}`}>
+                    {compatibilityGroups.map((group) => (
+                      <section key={group.label}>
+                        <span>{group.label}</span>
+                        {group.items.map((item) => (
+                          <Link href={item.href} key={item.href} onClick={closeTransientUi}>
+                            <item.icon aria-hidden="true" size={16} />
+                            <strong>{item.label}</strong>
+                          </Link>
+                        ))}
+                      </section>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className={`${styles.headerMenuWrap} ${styles.recentMenuWrap}`}>
               <button
                 aria-expanded={recentOpen}
                 aria-label="Recent destinations"
@@ -389,6 +534,8 @@ export function OsShell({
                 onClick={() => {
                   setRecentOpen((current) => !current);
                   setSearchOpen(false);
+                  setNewOpen(false);
+                  setToolsOpen(false);
                 }}
                 type="button"
               >
@@ -407,11 +554,25 @@ export function OsShell({
               ) : null}
             </div>
 
-            {canOpenOperations ? (
+            {canOpenApprovals ? (
+              <Link
+                aria-label={`${pendingApprovalCount} pending approvals`}
+                className={styles.headerIconButton}
+                href="/os/approvals"
+                title="Approvals"
+              >
+                <CheckCheck aria-hidden="true" size={18} />
+                {pendingApprovalCount ? (
+                  <span>{Math.min(pendingApprovalCount, 99)}</span>
+                ) : null}
+              </Link>
+            ) : null}
+
+            {canOpenNotifications ? (
               <Link
                 aria-label={`${effectiveProfile?.unread_notification_count ?? 0} unread notifications`}
                 className={styles.headerIconButton}
-                href="/os/operations?view=notifications"
+                href="/os/operations?tab=today"
                 title="Notifications"
               >
                 <Bell aria-hidden="true" size={18} />

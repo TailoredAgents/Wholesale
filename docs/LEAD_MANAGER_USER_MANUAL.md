@@ -54,22 +54,23 @@ If one of these is missing, the lead can be forgotten.
 
 | Page | What you use it for |
 | --- | --- |
-| **Dashboard** | See urgent work, appointments, and exceptions |
-| **Lead Desk** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
+| **Home** | See urgent work, appointments, and exceptions |
+| **Tools > Lead Desk** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
 | **Inbox** | Read and record seller conversations |
-| **Work Queue** | Complete assigned and overdue tasks |
+| **Tasks** | Complete assigned and overdue tasks |
 | **Calendar** | Review scheduled appointments |
-| **Field Operations** | Choose a closer and schedule an appointment |
-| **All Leads** | Search for any active seller |
-| **Seller Pipeline** | See where sellers are in the process |
+| **Tools > Field Operations** | Choose a closer and schedule an appointment |
+| **Seller Leads** | Search for any active seller |
+| **Tools > Seller Pipeline** | See where sellers are in the process |
 
-Your main page is **Lead Desk**.
+Your primary sidebar page is **Seller Leads**. Use **Tools > Lead Desk** for the current guided
+qualification queue until that queue is merged into Seller Leads.
 
 ## Starting Your Day
 
 Follow this order every workday:
 
-1. Open **Lead Desk**.
+1. Open **Tools > Lead Desk**.
 2. Look at the numbers across the top.
 3. Open **Daily queue**.
 4. Accept every new warm handoff assigned to you.
@@ -77,7 +78,7 @@ Follow this order every workday:
 6. Review today's appointments.
 7. Resolve neglected leads.
 8. Open **Inbox > Needs reply**.
-9. Open **Work Queue > My work**.
+9. Open **Tasks > My work**.
 10. Check **Calendar** before offering appointment times.
 
 Work new warm leads before routine follow-up. Fast response matters.
@@ -107,7 +108,7 @@ The Lead Desk contains these tabs:
 
 When a VA, public form, campaign, or team member creates a warm handoff:
 
-1. Open **Lead Desk**.
+1. Open **Tools > Lead Desk**.
 2. Select **Daily queue**.
 3. Find **Accept warm handoffs**.
 4. Review the seller name, property, source, assigned person, and acceptance deadline.
@@ -343,9 +344,9 @@ For each conversation:
 5. Update assignment when responsibility changes.
 6. Create a dated follow-up before leaving the conversation.
 
-## Working The Work Queue
+## Working Tasks
 
-Open **Work Queue** and use:
+Open **Tasks** and use:
 
 - **My work:** Tasks assigned to you.
 - **Overdue:** Tasks already late.
@@ -506,7 +507,7 @@ closer > Dispatch appointment > Calendar**
 
 ### Overdue work
 
-**Work Queue > Overdue > Open action > Finish work > Mark complete**
+**Tasks > Overdue > Open action > Finish work > Mark complete**
 
 ### Copilot assistance
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
-import { getWorkspaceProfile } from "../lib/api";
+import { getApprovalRequests, getWorkspaceProfile } from "../lib/api";
 import { OsShell } from "./os-shell";
 
 export const metadata: Metadata = {
@@ -20,10 +20,18 @@ export const metadata: Metadata = {
 };
 
 export default async function OsLayout({ children }: { children: ReactNode }) {
-  const profile = await getWorkspaceProfile();
+  const [profile, approvalResult] = await Promise.all([
+    getWorkspaceProfile(),
+    getApprovalRequests(),
+  ]);
+  const pendingApprovalCount = approvalResult.approvals.filter(
+    (approval) => approval.status === "pending",
+  ).length;
   return (
     <Suspense fallback={null}>
-      <OsShell profile={profile}>{children}</OsShell>
+      <OsShell pendingApprovalCount={pendingApprovalCount} profile={profile}>
+        {children}
+      </OsShell>
     </Suspense>
   );
 }

@@ -1,7 +1,11 @@
 import Link from "next/link";
 
 import { getWorkspaceProfile } from "../../lib/api";
-import { canSeeNavItem, osNavGroups } from "../os-navigation";
+import {
+  canSeeNavItem,
+  compatibilityNavGroups,
+  osNavGroups,
+} from "../os-navigation";
 import styles from "./management-journey.module.css";
 
 const routeByKey = {
@@ -18,8 +22,11 @@ export type ManagementRouteKey = keyof typeof routeByKey;
 export async function ManagementJourney({ active }: { active: ManagementRouteKey }) {
   const profile = await getWorkspaceProfile();
   const managementItems = osNavGroups
-    .filter((group) => ["Business", "Management"].includes(group.label))
-    .flatMap((group) => group.items);
+    .filter((group) => group.label === "Business")
+    .flatMap((group) => group.items)
+    .concat(
+      compatibilityNavGroups.find((group) => group.label === "Management")?.items ?? [],
+    );
   const visibleItems = profile
     ? managementItems.filter((item) => canSeeNavItem(profile, item))
     : process.env.NODE_ENV === "development"

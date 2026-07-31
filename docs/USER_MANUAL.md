@@ -142,16 +142,16 @@ intentional.
 
 | Role | Normal starting workspace | Primary responsibilities |
 | --- | --- | --- |
-| Owner / Founder / CEO | Dashboard | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
-| Administrator | Dashboard | User support, records, audit, and acquisition administration |
-| Lead Manager | Dashboard or Lead Desk | Warm response, qualification, nurture, and appointment setting |
-| Acquisitions Closer | Dashboard or Field Operations | Meeting preparation, property visit, underwriting review, negotiation, and contract |
+| Owner / Founder / CEO | Home | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
+| Administrator | Home | User support, records, audit, and acquisition administration |
+| Lead Manager | Home or Tools > Lead Desk | Warm response, qualification, nurture, and appointment setting |
+| Acquisitions Closer | Calendar or Tools > Field Operations | Meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
-| Dispositions Manager / Rep | Dispositions | Buyer matching, package release preparation, offers, buyer outcome, and backup |
-| Transaction Coordinator | Transactions | Contract-to-close checklist, parties, documents, dates, funding, and closing evidence |
+| Dispositions Manager / Rep | Deals | Buyer matching, package release preparation, offers, buyer outcome, and backup |
+| Transaction Coordinator | Deals | Contract-to-close checklist, parties, documents, dates, funding, and closing evidence |
 | Finance / Accounting | Finance | Revenue, reconciliation, compensation, payment state, and export |
 | Marketing Manager | Marketing | Attribution, funnel, source economics, and conversion exports |
-| Read-only Partner / Vendor | Transactions | Limited deal records needed for the approved engagement |
+| Read-only Partner / Vendor | Deals | Limited deal records needed for the approved engagement |
 
 The Owner can see all navigation. Restricted users should see only the pages required for their
 jobs.
@@ -175,30 +175,21 @@ is present in Clerk authorized parties and API CORS configuration.
 
 ## Navigation
 
-The desktop sidebar and mobile navigation drawer use five groups.
+The desktop sidebar and mobile navigation drawer use four groups and no more than 11 destinations.
+The exact list is reduced by role and permission.
 
-### Command
+### Work
 
-- **Dashboard:** Today's priorities, exceptions, meetings, pipeline pulse, and Executive Copilot.
+- **Home:** Today's priorities, exceptions, meetings, pipeline pulse, and Executive Copilot.
 - **Inbox:** Seller communication timeline and follow-up.
-- **Work Queue:** Assigned and overdue actions.
+- **Tasks:** Assigned and overdue actions.
 - **Calendar:** Month, week, day, and agenda commitments.
 
-### Acquisitions
+### Operations
 
-- **Campaigns:** Prospect files, screening, costs, and calling batches.
-- **Prospecting:** VA calling workbench and handoff.
-- **Lead Desk:** Warm-lead acceptance, qualification, follow-up, and Lead Manager Copilot.
-- **All Leads:** Searchable seller system of record.
-- **Seller Pipeline:** Stage-based acquisition board.
-- **Field Operations:** Dispatch, field calendar, meetings, inspections, and closer capacity.
-
-### Deal Flow
-
-- **Underwriting:** Valuation queue, evidence, accuracy, and verified outcomes.
-- **Approvals:** Human decisions for governed actions.
-- **Transactions:** Seller contract through funded closing.
-- **Dispositions:** Deal package, buyers, offers, and reconciliation.
+- **Prospecting:** Campaign preparation, prospect imports, calling work, and warm handoff.
+- **Seller Leads:** Warm-lead qualification, seller records, pipeline, follow-up, and underwriting.
+- **Deals:** Contract, approval, closing, and disposition entry point.
 - **Buyers:** Buyer CRM, criteria, proof of funds, and reliability.
 
 ### Business
@@ -206,35 +197,36 @@ The desktop sidebar and mobile navigation drawer use five groups.
 - **Finance:** Revenue, deductions, compensation, margin, and export.
 - **Marketing:** Funnel, attribution, source economics, and conversion exports.
 
-### Management
+### Administration
 
-- **My Setup:** Your role manual, workspace test, and manager approval.
-- **Team & Access:** Employee accounts, access roles, teams, operational configuration, and data
-  quality.
-- **Email Management:** Approved company senders, routing, signatures, templates, and mailbox
-  access.
-- **Floating Help button:** Ask how to use or set up Stonegate without leaving the current page.
-- **Company & Policy:** Company setup, compensation policy, role credits, history, and market
-  launches.
-- **AI Control:** Copilots, runtime, automation contracts, evaluations, traces, and governance.
+- **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
-Use the global search for a seller, property, or record. Recent destinations let you return to
-records without searching again. On mobile, use the menu button to open the navigation drawer.
+Use **New** to enter a seller lead or compose a company email when authorized. Use **Tools** for
+Campaigns, Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
+Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control while
+those workspaces are consolidated. Global search finds both primary workspaces and authorized
+Tools. Recent destinations return to recently opened OS pages. On mobile, use the menu button to
+open the navigation drawer. The floating Help button remains at the bottom-right.
 
 ### Route Reference
 
 | Workspace | Route |
 | --- | --- |
-| Dashboard | `/os` |
+| Home | `/os` |
 | Inbox | `/os/inbox` |
-| Work Queue | `/os/tasks` |
+| Tasks | `/os/tasks` |
 | Calendar | `/os/calendar` |
+| Prospecting | `/os/prospecting` |
+| Seller Leads | `/os/leads` |
+| Deals | `/os/deals` |
+| Buyers | `/os/buyers` |
+| Finance | `/os/finance` |
+| Marketing | `/os/marketing` |
+| Settings | `/os/settings` |
+| Compatibility: Campaigns | `/os/campaigns` |
 | Team & Access | `/os/operations?tab=team` |
 | Email Management | `/os/inbox?manage=email` |
-| Campaigns | `/os/campaigns` |
-| Prospecting | `/os/prospecting` |
 | Lead Desk | `/os/lead-manager` |
-| All Leads | `/os/leads` |
 | Archived Leads | `/os/leads/archived` |
 | Seller Pipeline | `/os/pipeline` |
 | Field Operations | `/os/field-operations` |
@@ -242,19 +234,16 @@ records without searching again. On mobile, use the menu button to open the navi
 | Approvals | `/os/approvals` |
 | Transactions | `/os/transactions` |
 | Dispositions | `/os/dispositions` |
-| Buyers | `/os/buyers` |
-| Finance | `/os/finance` |
-| Marketing | `/os/marketing` |
 | My Setup | `/os/my-setup` |
 | Company & Policy | `/os/operating-model` |
 | AI Control | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
 
-## Dashboard And Global Controls
+## Home And Global Controls
 
-### Dashboard
+### Home
 
-The Dashboard is a command center, not a replacement for the detailed workspaces. It summarizes:
+Home is a command center, not a replacement for the detailed workspaces. It summarizes:
 
 - overdue and urgent seller work
 - unassigned or neglected records
@@ -269,21 +258,18 @@ To use it:
 1. Read the primary exception and recommended next action.
 2. Select the linked seller, task, appointment, approval, or downstream record.
 3. Complete the work in its detailed workspace.
-4. Return to Dashboard and refresh when reviewing the updated company state.
+4. Return to Home and refresh when reviewing the updated company state.
 
-The Dashboard may differ by role. A Dispositions employee should not expect the same seller and
+Home may differ by role. A Dispositions employee should not expect the same seller and
 finance information as the Owner.
 
 ### Global Search
 
-Use the search control in the OS shell to find a known seller, property, or destination.
+Use the search control in the OS shell to find an authorized workspace or compatibility tool.
 
-1. Enter the seller name, phone, email, property, or workspace name.
+1. Enter a workspace or tool name.
 2. Select the exact result.
-3. Confirm the property and contact before editing.
-
-Search before creating a new lead, buyer, vendor, or conversation. This is the fastest way to
-avoid duplicates.
+3. Use the destination's own record search to find a seller, property, buyer, or deal.
 
 ### Recent Destinations
 
@@ -318,10 +304,10 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Owner
 
-1. Open **Dashboard** and review overdue work, unassigned leads, today's appointments, approvals,
+1. Open **Home** and review overdue work, unassigned leads, today's appointments, approvals,
    and the Executive Copilot health summary.
 2. Open **Inbox > Needs reply** and confirm no qualified seller is waiting.
-3. Open **Work Queue > Overdue** and assign or escalate blocked work.
+3. Open **Tasks > Overdue** and assign or escalate blocked work.
 4. Open **Calendar** and confirm closer capacity and appointment coverage.
 5. Open **Approvals** and make only evidence-supported decisions.
 6. Review exceptions in **Transactions**, **Dispositions**, and **Finance**.
@@ -994,9 +980,9 @@ If SMS, Voice, or email reports that it is not configured, use the approved manu
 and log the communication. Do not put another company's credentials, campaign, domain, or numbers
 into Stonegate.
 
-## 6. Work Queue
+## 6. Tasks
 
-Open **Work Queue**. Saved views are:
+Open **Tasks**. Saved views are:
 
 - **All work**
 - **My work**
@@ -1992,7 +1978,7 @@ Archive the record or correct it through the approved workflow.
 
 ### Daily
 
-- Review Dashboard exceptions.
+- Review Home exceptions.
 - Review overdue seller responses and tasks.
 - Review today's appointments.
 - Review pending approvals.

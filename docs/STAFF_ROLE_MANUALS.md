@@ -55,7 +55,8 @@ two jobs.
 
 ## Owner
 
-Main pages: Dashboard, Operating Model, Operations, Approvals, Finance, Marketing, and AI Control.
+Main pages: Home, Deals, Finance, Marketing, and Settings. Use Tools for Company & Policy, Team &
+Access, Approvals, and AI Control while those detailed workspaces are being consolidated.
 
 - Set policy, staffing, market, compensation, and approval authority.
 - Cover open operational seats without hiding which job was performed.
@@ -65,7 +66,8 @@ Main pages: Dashboard, Operating Model, Operations, Approvals, Finance, Marketin
 
 ## Lead Manager
 
-Main pages: Lead Desk, Inbox, Work Queue, Calendar, and Seller Pipeline.
+Main pages: Home, Inbox, Tasks, Calendar, and Seller Leads. Use Tools for Lead Desk and Seller
+Pipeline until IA5 consolidates those views.
 
 - Accept warm leads, qualify the seller, and schedule appropriate appointments.
 - Keep an owner, next action, and due date on every active lead.
@@ -85,7 +87,8 @@ Main page: Prospecting.
 
 ## Acquisitions Closer
 
-Main pages: Calendar, Field Operations, Underwriting, Inbox, and the assigned Lead Record.
+Main pages: Home, Inbox, Calendar, Seller Leads, and Deals. Use Tools for Field Operations and
+Underwriting until their guided views move into Calendar and Seller Leads.
 
 - Review the meeting brief and unresolved questions before the appointment.
 - Confirm condition, occupancy, decision-makers, access, and material property facts.
@@ -99,7 +102,7 @@ Main pages: Calendar, Field Operations, Underwriting, Inbox, and the assigned Le
 
 ## Transaction Coordinator
 
-Main pages: Transactions, Approvals, Inbox, and Calendar.
+Main pages: Home, Inbox, Tasks, Calendar, and Deals. Use Tools for Transactions and Approvals.
 
 - Own deadlines and evidence from signed seller contract through funded closing.
 - Track earnest money, title, payoff, due diligence, assignments, and closing requirements.

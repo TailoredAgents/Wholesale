@@ -55,27 +55,21 @@ is relevant and the required permission is present.
 
 | Workspace | Typical authorized roles | Permission signal |
 | --- | --- | --- |
-| Dashboard | Administrator, Lead Manager, Acquisitions | `leads:view` |
+| Home | Administrator, Lead Manager, Acquisitions, Dispositions, Finance, Marketing | Relevant role permission |
 | Inbox | Lead Manager, Acquisitions | `communications:view_conversations` |
-| Work Queue | Administrator, Lead Manager, Acquisitions | `leads:view` |
+| Tasks | Administrator, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
 | Calendar | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Team & Access | Administrator, Lead Manager | `operations:manage` |
-| Campaigns | Lead Manager | `operations:manage` |
 | Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned` |
-| Lead Desk | Lead Manager, Acquisitions | `leads:view` |
-| All Leads / Pipeline | Administrator, Lead Manager, Acquisitions | `leads:view` |
-| Field Operations | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
-| Underwriting | Lead Manager, Acquisitions | `underwriting:edit` |
-| Approvals | Lead Manager, Transaction Coordinator | `offers:approve` or `contracts:send` |
-| Transactions | Acquisitions, Dispositions, TC, approved partner/vendor | `deals:view` |
-| Dispositions | Dispositions, Transaction Coordinator | `deals:view` |
+| Seller Leads | Administrator, Lead Manager, Acquisitions | `leads:view` |
+| Deals | Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
 | Buyers | Dispositions | `buyers:view` |
 | Finance | Finance / Accounting | `financials:view` or `compensation:view` |
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
-| My Setup | Every signed-in user | Always visible |
-| Email Management | Owner, Lead Manager | `communications:manage_email_accounts` |
-| Company & Policy | Owner | `operating_model:manage` |
-| AI Control | Owner | `ai:change_prompts` |
+| Settings | Owner, Administrator | At least one administration permission |
+
+Campaigns, Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
+Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control remain
+available as permission-filtered compatibility tools.
 
 ## Public Website
 
@@ -192,18 +186,21 @@ change staff-reviewed information.
 | **Retry access** | Re-requests the signed-in Stonegate profile | Appears only after access verification fails |
 | Search workspaces | Filters workspaces the user is allowed to open | It searches navigation, not sellers or records |
 | `/` keyboard key | Focuses workspace search | Does not activate while typing in another field |
+| **New** | Opens direct Seller lead and Email actions | Each action appears only with its required permission |
+| **Tools** | Opens authorized compatibility workspaces removed from the primary sidebar | Contents vary by role and permission |
 | **Recent destinations** | Shows up to five recently visited OS destinations stored in this browser | Empty until pages have been visited |
+| Approvals shortcut | Opens the approval queue and shows the pending count | Visible only to authorized reviewers |
 | Notifications bell | Opens Operations notification work | Visible to users allowed into Operations |
 | Notification count | Shows unread operational notification count, capped visually at 99 | Updates from the user profile |
 | Account control | Shows signed-in Clerk identity and sign-out controls | Requires a completed Clerk session |
 | Escape key | Closes search, recent menu, or mobile navigation | Browser keyboard control |
 
-## Dashboard
+## Home
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Inbox** | Opens seller communications | Navigation only |
-| **Work Queue** | Opens assigned and overdue tasks | Navigation only |
+| **Tasks** | Opens assigned and overdue tasks | Navigation only |
 | **Calendar** | Opens the company field calendar | Navigation only |
 | Executive Copilot launcher | Opens evidence-backed management analysis | Visible when the Executive Copilot is installed |
 | Overdue metric | Opens overdue tasks | Count is scoped to the signed-in user's visibility |
@@ -212,14 +209,14 @@ change staff-reviewed information.
 | Offer prep metric | Opens Underwriting | Includes underwriting and approval work |
 | Priority title or arrow | Opens the record or workspace for that item | Navigation only |
 | Task completion check | Completes the attached task | Visible only with lead-edit permission; use only after doing the work |
-| **Open full queue** | Opens Work Queue | Navigation only |
+| **Open full queue** | Opens Tasks | Navigation only |
 | Needs intervention links | Open unread conversations, unassigned leads, unscheduled tasks, or approvals | Team-wide exceptions are hidden from narrowly scoped roles |
 | Pipeline stage | Opens Seller Pipeline filtered to that stage | Navigation only |
 | **Open Seller Pipeline** | Opens the unfiltered pipeline | Navigation only |
 
 An **API fallback view** warning means counts are empty fallback data, not proof that no work exists.
 
-## Work Queue
+## Tasks
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |

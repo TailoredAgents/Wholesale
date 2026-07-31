@@ -12,6 +12,7 @@ import {
   FileCheck2,
   Gauge,
   Handshake,
+  Home,
   Inbox,
   Landmark,
   ListChecks,
@@ -32,10 +33,18 @@ export type OsNavItem = {
   icon: LucideIcon;
   roles: string[];
   anyPermissions: string[];
+  activeHrefs?: string[];
+  activePaths?: string[];
+  alwaysVisible?: boolean;
 };
 
 export type OsNavGroup = {
-  label: "Command" | "Acquisitions" | "Deal Flow" | "Business" | "Management";
+  label: "Work" | "Operations" | "Business" | "Administration";
+  items: OsNavItem[];
+};
+
+export type CompatibilityNavGroup = {
+  label: "Acquisitions" | "Deal tools" | "Management";
   items: OsNavItem[];
 };
 
@@ -43,130 +52,124 @@ export const ownerRoles = ["owner", "founder_operator", "ceo"];
 const acquisitionRoles = ["acquisition_manager", "acquisition_rep"];
 const dispositionRoles = ["disposition_manager", "disposition_rep"];
 
+const homeRoles = [
+  "administrator",
+  ...acquisitionRoles,
+  ...dispositionRoles,
+  "transaction_coordinator",
+  "marketing_manager",
+  "finance_accounting",
+];
+const workRoles = [
+  "administrator",
+  ...acquisitionRoles,
+  ...dispositionRoles,
+  "transaction_coordinator",
+  "finance_accounting",
+];
+
 export const osNavGroups: OsNavGroup[] = [
   {
-    label: "Command",
+    label: "Work",
     items: [
       {
         href: "/os",
-        label: "Dashboard",
-        icon: Gauge,
-        roles: [...ownerRoles, "administrator", ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
+        label: "Home",
+        icon: Home,
+        roles: homeRoles,
+        anyPermissions: [
+          "leads:view",
+          "leads:view_assigned",
+          "deals:view",
+          "financials:view",
+          "operations:view",
+          "communications:send_bulk",
+        ],
       },
       {
         href: "/os/inbox",
         label: "Inbox",
         icon: Inbox,
-        roles: [...ownerRoles, ...acquisitionRoles],
-        anyPermissions: ["communications:view_conversations"],
+        roles: workRoles,
+        anyPermissions: [
+          "communications:view_conversations",
+          "communications:view_assigned_conversations",
+        ],
       },
       {
         href: "/os/tasks",
-        label: "Work Queue",
+        label: "Tasks",
         icon: ListChecks,
-        roles: [...ownerRoles, "administrator", ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
+        roles: workRoles,
+        anyPermissions: [
+          "leads:view",
+          "leads:view_assigned",
+          "deals:view",
+          "financials:view",
+          "operations:view",
+        ],
+        activePaths: ["/os/approvals"],
       },
       {
         href: "/os/calendar",
         label: "Calendar",
         icon: CalendarDays,
-        roles: [...ownerRoles, ...acquisitionRoles],
-        anyPermissions: ["underwriting:edit", "operations:manage"],
+        roles: workRoles,
+        anyPermissions: [
+          "appointments:schedule_assigned",
+          "underwriting:edit",
+          "deals:view",
+          "financials:view",
+          "operations:manage",
+        ],
+        activePaths: ["/os/field-operations"],
       },
     ],
   },
   {
-    label: "Acquisitions",
+    label: "Operations",
     items: [
-      {
-        href: "/os/campaigns",
-        label: "Campaigns",
-        icon: Megaphone,
-        roles: [...ownerRoles, "acquisition_manager"],
-        anyPermissions: ["operations:manage"],
-      },
       {
         href: "/os/prospecting",
         label: "Prospecting",
         icon: PhoneCall,
-        roles: [...ownerRoles, "acquisition_manager", "prospecting_caller"],
-        anyPermissions: ["operations:manage", "calling_lists:work_assigned"],
-      },
-      {
-        href: "/os/lead-manager",
-        label: "Lead Desk",
-        icon: ContactRound,
-        roles: [...ownerRoles, ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
+        roles: ["administrator", "acquisition_manager", "prospecting_caller", "marketing_manager"],
+        anyPermissions: [
+          "operations:manage",
+          "calling_lists:work_assigned",
+          "communications:send_bulk",
+        ],
+        activePaths: ["/os/campaigns"],
       },
       {
         href: "/os/leads",
-        label: "All Leads",
+        label: "Seller Leads",
         icon: UsersRound,
-        roles: [...ownerRoles, "administrator", ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
+        roles: ["administrator", ...acquisitionRoles],
+        anyPermissions: ["leads:view", "leads:view_assigned"],
+        activePaths: ["/os/lead-manager", "/os/pipeline", "/os/underwriting"],
       },
       {
-        href: "/os/pipeline",
-        label: "Seller Pipeline",
-        icon: Route,
-        roles: [...ownerRoles, "administrator", ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
-      },
-      {
-        href: "/os/field-operations",
-        label: "Field Operations",
-        icon: ClipboardCheck,
-        roles: [...ownerRoles, ...acquisitionRoles],
-        anyPermissions: ["underwriting:edit", "operations:manage"],
-      },
-    ],
-  },
-  {
-    label: "Deal Flow",
-    items: [
-      {
-        href: "/os/underwriting",
-        label: "Underwriting",
-        icon: ChartNoAxesCombined,
-        roles: [...ownerRoles, ...acquisitionRoles],
-        anyPermissions: ["underwriting:edit"],
-      },
-      {
-        href: "/os/approvals",
-        label: "Approvals",
-        icon: CheckCheck,
-        roles: [...ownerRoles, "acquisition_manager", "transaction_coordinator"],
-        anyPermissions: ["offers:approve", "contracts:send"],
-      },
-      {
-        href: "/os/transactions",
-        label: "Transactions",
-        icon: FileCheck2,
+        href: "/os/deals",
+        label: "Deals",
+        icon: Handshake,
         roles: [
-          ...ownerRoles,
-          ...acquisitionRoles,
+          "administrator",
+          "acquisition_rep",
           ...dispositionRoles,
           "transaction_coordinator",
+          "finance_accounting",
           "read_only_partner",
           "restricted_vendor",
         ],
         anyPermissions: ["deals:view"],
-      },
-      {
-        href: "/os/dispositions",
-        label: "Dispositions",
-        icon: Handshake,
-        roles: [...ownerRoles, ...dispositionRoles, "transaction_coordinator"],
-        anyPermissions: ["deals:view"],
+        activePaths: ["/os/transactions", "/os/dispositions"],
       },
       {
         href: "/os/buyers",
         label: "Buyers",
         icon: Building2,
-        roles: [...ownerRoles, ...dispositionRoles],
+        roles: ["administrator", ...dispositionRoles],
         anyPermissions: ["buyers:view"],
       },
     ],
@@ -178,15 +181,118 @@ export const osNavGroups: OsNavGroup[] = [
         href: "/os/finance",
         label: "Finance",
         icon: Landmark,
-        roles: [...ownerRoles, "finance_accounting"],
+        roles: ["finance_accounting"],
         anyPermissions: ["financials:view", "compensation:view"],
       },
       {
         href: "/os/marketing",
         label: "Marketing",
         icon: BarChart3,
-        roles: [...ownerRoles, "marketing_manager"],
-        anyPermissions: ["financials:view", "communications:send_bulk"],
+        roles: ["administrator", "marketing_manager"],
+        anyPermissions: [
+          "financials:view",
+          "communications:send_bulk",
+          "marketing:manage_public_proof",
+          "marketing:manage_experiments",
+        ],
+      },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      {
+        href: "/os/settings",
+        label: "Settings",
+        icon: Settings2,
+        roles: ["administrator"],
+        anyPermissions: [
+          "users:manage",
+          "operations:manage",
+          "communications:manage_email_accounts",
+          "communications:manage_voice_lines",
+          "integrations:manage_credentials",
+          "operating_model:manage",
+          "ai:change_prompts",
+        ],
+        activeHrefs: ["/os/inbox?manage=email"],
+        activePaths: ["/os/my-setup", "/os/operations", "/os/operating-model", "/os/ai"],
+      },
+    ],
+  },
+];
+
+export const compatibilityNavGroups: CompatibilityNavGroup[] = [
+  {
+    label: "Acquisitions",
+    items: [
+      {
+        href: "/os/campaigns",
+        label: "Campaigns",
+        icon: Megaphone,
+        roles: ["administrator", "acquisition_manager"],
+        anyPermissions: ["operations:manage"],
+      },
+      {
+        href: "/os/lead-manager",
+        label: "Lead Desk",
+        icon: ContactRound,
+        roles: acquisitionRoles,
+        anyPermissions: ["leads:view"],
+      },
+      {
+        href: "/os/pipeline",
+        label: "Seller Pipeline",
+        icon: Route,
+        roles: ["administrator", ...acquisitionRoles],
+        anyPermissions: ["leads:view"],
+      },
+      {
+        href: "/os/field-operations",
+        label: "Field Operations",
+        icon: ClipboardCheck,
+        roles: acquisitionRoles,
+        anyPermissions: ["underwriting:edit", "operations:manage"],
+      },
+      {
+        href: "/os/underwriting",
+        label: "Underwriting",
+        icon: ChartNoAxesCombined,
+        roles: acquisitionRoles,
+        anyPermissions: ["underwriting:edit"],
+      },
+    ],
+  },
+  {
+    label: "Deal tools",
+    items: [
+      {
+        href: "/os/approvals",
+        label: "Approvals",
+        icon: CheckCheck,
+        roles: ["acquisition_manager", "transaction_coordinator"],
+        anyPermissions: ["offers:approve", "contracts:send"],
+      },
+      {
+        href: "/os/transactions",
+        label: "Transactions",
+        icon: FileCheck2,
+        roles: [
+          ...acquisitionRoles,
+          ...dispositionRoles,
+          "transaction_coordinator",
+          "read_only_partner",
+          "restricted_vendor",
+          "finance_accounting",
+        ],
+        anyPermissions: ["deals:view"],
+      },
+      {
+        href: "/os/dispositions",
+        label: "Dispositions",
+        icon: Handshake,
+        roles: [...dispositionRoles, "transaction_coordinator"],
+        anyPermissions: ["deals:view"],
       },
     ],
   },
@@ -199,33 +305,34 @@ export const osNavGroups: OsNavGroup[] = [
         icon: BadgeCheck,
         roles: [],
         anyPermissions: [],
+        alwaysVisible: true,
       },
       {
         href: "/os/operations?tab=team",
         label: "Team & Access",
         icon: BriefcaseBusiness,
-        roles: [...ownerRoles, "administrator", "acquisition_manager"],
+        roles: ["administrator", "acquisition_manager"],
         anyPermissions: ["operations:manage"],
       },
       {
         href: "/os/inbox?manage=email",
         label: "Email Management",
         icon: Mail,
-        roles: [...ownerRoles, "acquisition_manager"],
+        roles: ["acquisition_manager"],
         anyPermissions: ["communications:manage_email_accounts"],
       },
       {
         href: "/os/operating-model",
         label: "Company & Policy",
-        icon: Settings2,
-        roles: ownerRoles,
+        icon: Gauge,
+        roles: [],
         anyPermissions: ["operating_model:manage"],
       },
       {
         href: "/os/ai",
         label: "AI Control",
         icon: Bot,
-        roles: ownerRoles,
+        roles: [],
         anyPermissions: ["ai:change_prompts"],
       },
     ],
@@ -238,12 +345,11 @@ export function isOwnerProfile(profile: WorkspaceProfile) {
 
 export function canSeeNavItem(profile: WorkspaceProfile, item: OsNavItem) {
   if (isOwnerProfile(profile)) return true;
-  if (item.href === "/os/my-setup") return true;
+  if (item.alwaysVisible) return true;
   const roleRelevant = profile.role_keys.some((role) => item.roles.includes(role));
-  const authorized = item.anyPermissions.some((permission) =>
-    profile.permissions.includes(permission),
-  );
-  if (item.href === "/os/prospecting") return authorized;
+  const authorized =
+    item.anyPermissions.length === 0 ||
+    item.anyPermissions.some((permission) => profile.permissions.includes(permission));
   return roleRelevant && authorized;
 }
 
@@ -256,39 +362,70 @@ export function visibleNavGroups(profile: WorkspaceProfile) {
     .filter((group) => group.items.length > 0);
 }
 
+export function visibleCompatibilityGroups(profile: WorkspaceProfile) {
+  return compatibilityNavGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => canSeeNavItem(profile, item)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 export function defaultRouteForProfile(profile: WorkspaceProfile) {
   if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting";
-  if (profile.role_keys.some((role) => dispositionRoles.includes(role))) return "/os/dispositions";
-  if (profile.role_keys.includes("transaction_coordinator")) return "/os/transactions";
+  if (profile.role_keys.some((role) => dispositionRoles.includes(role))) return "/os/deals";
+  if (profile.role_keys.includes("transaction_coordinator")) return "/os/deals";
   if (profile.role_keys.includes("finance_accounting")) return "/os/finance";
   if (profile.role_keys.includes("marketing_manager")) return "/os/marketing";
   if (
     profile.role_keys.some((role) => ["read_only_partner", "restricted_vendor"].includes(role))
   ) {
-    return "/os/transactions";
+    return "/os/deals";
   }
   return "/os";
 }
 
+function pathMatches(pathname: string, item: OsNavItem) {
+  const itemPath = item.href.split("?")[0];
+  if (itemPath === "/os" && pathname === "/os") return true;
+  if (itemPath !== "/os" && (pathname === itemPath || pathname.startsWith(`${itemPath}/`))) {
+    return true;
+  }
+  return item.activePaths?.some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  ) ?? false;
+}
+
+function queryOwner(pathname: string, query: string) {
+  if (!query) return null;
+  const current = new URLSearchParams(query);
+  return osNavGroups
+    .flatMap((group) => group.items)
+    .find((item) =>
+      item.activeHrefs?.some((href) => {
+        const [expectedPath, expectedQuery] = href.split("?");
+        if (pathname !== expectedPath || !expectedQuery) return false;
+        return Array.from(new URLSearchParams(expectedQuery).entries()).every(
+          ([key, value]) => current.get(key) === value,
+        );
+      }),
+    ) ?? null;
+}
+
+export function isNavItemActive(pathname: string, item: OsNavItem, query = "") {
+  const owner = queryOwner(pathname, query);
+  if (owner) return owner.href === item.href;
+  return pathMatches(pathname, item);
+}
+
 export function navigationContext(pathname: string, query = "") {
-  const requestedHref = query ? `${pathname}?${query}` : pathname;
-  for (const group of osNavGroups) {
-    const exactItem = group.items.find((candidate) => candidate.href === requestedHref);
-    if (exactItem) return { group: group.label, label: exactItem.label };
-  }
-  if (pathname === "/os/leads/archived") {
-    return { group: "Acquisitions", label: "Archived Leads" };
-  }
-  if (/^\/os\/leads\/[^/]+$/.test(pathname)) {
-    return { group: "Acquisitions", label: "Lead Record" };
+  const owner = queryOwner(pathname, query);
+  if (owner) {
+    const group = osNavGroups.find((candidate) => candidate.items.includes(owner));
+    return { group: group?.label ?? "Stonegate", label: owner.label };
   }
   for (const group of osNavGroups) {
-    const item = group.items.find((candidate) =>
-      candidate.href.split("?")[0] === "/os"
-        ? pathname === "/os"
-        : pathname === candidate.href.split("?")[0] ||
-          pathname.startsWith(`${candidate.href.split("?")[0]}/`),
-    );
+    const item = group.items.find((candidate) => pathMatches(pathname, candidate));
     if (item) return { group: group.label, label: item.label };
   }
   return { group: "Stonegate", label: "Operating System" };

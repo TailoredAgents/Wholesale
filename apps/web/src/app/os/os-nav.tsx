@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 
 import type { WorkspaceProfile } from "../lib/api";
-import { visibleNavGroups } from "./os-navigation";
+import { isNavItemActive, visibleNavGroups } from "./os-navigation";
 import styles from "./page.module.css";
 
 export function OsNav({
@@ -17,35 +17,17 @@ export function OsNav({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const navGroups = visibleNavGroups(profile);
-  const queryMatchedPath = navGroups
-    .flatMap((group) => group.items)
-    .some((item) => {
-      const [itemPath, itemQuery] = item.href.split("?");
-      if (!itemQuery || itemPath !== pathname) return false;
-      const expected = new URLSearchParams(itemQuery);
-      return Array.from(expected.entries()).every(
-        ([key, value]) => searchParams.get(key) === value,
-      );
-    });
 
   return (
     <nav aria-label="Stonegate workspaces" className={styles.nav}>
       {navGroups.map((group) => (
         <div
-          className={`${styles.navGroup} ${group.label === "Management" ? styles.managementNavGroup : ""}`}
+          className={`${styles.navGroup} ${group.label === "Administration" ? styles.managementNavGroup : ""}`}
           key={group.label}
         >
           <p className={styles.navLabel}>{group.label}</p>
           {group.items.map((item) => {
-            const [itemPath, itemQuery] = item.href.split("?");
-            const queryMatches = itemQuery
-              ? Array.from(new URLSearchParams(itemQuery).entries()).every(
-                  ([key, value]) => searchParams.get(key) === value,
-                )
-              : !queryMatchedPath;
-            const isActive =
-              (itemPath === "/os" ? pathname === "/os" : pathname.startsWith(itemPath)) &&
-              queryMatches;
+            const isActive = isNavItemActive(pathname, item, searchParams.toString());
             return (
               <Link
                 aria-current={isActive ? "page" : undefined}

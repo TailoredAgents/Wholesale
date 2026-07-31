@@ -181,7 +181,7 @@ export default async function Home() {
         actions={
           <div className={styles.headerActions}>
             <Link href="/os/inbox"><Inbox aria-hidden="true" size={16} />Inbox</Link>
-            <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Work Queue</Link>
+            <Link href="/os/tasks"><ListChecks aria-hidden="true" size={16} />Tasks</Link>
             <Link href="/os/calendar"><CalendarDays aria-hidden="true" size={16} />Calendar</Link>
             {executiveCopilot ? (
               <ManagementCopilotLauncher
@@ -194,7 +194,7 @@ export default async function Home() {
         description={dashboardDescription(roleKeys)}
         eyebrow={profile ? `${profile.display_name} · ${roleLabel}` : "Daily command center"}
         meta={dashboard.apiConnected ? "Live workspace data" : "API fallback view"}
-        title="Dashboard"
+        title="Home"
       />
 
       {!dashboard.apiConnected ? (

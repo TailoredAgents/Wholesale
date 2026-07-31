@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { getWorkspaceProfile } from "../../lib/api";
-import { canSeeNavItem, osNavGroups } from "../os-navigation";
+import { canSeeNavItem, compatibilityNavGroups, osNavGroups } from "../os-navigation";
 import styles from "./deal-journey.module.css";
 
 const routeByKey = {
@@ -16,7 +16,15 @@ export type DealRouteKey = keyof typeof routeByKey;
 
 export async function DealJourney({ active }: { active: DealRouteKey }) {
   const profile = await getWorkspaceProfile();
-  const dealItems = osNavGroups.find((group) => group.label === "Deal Flow")?.items ?? [];
+  const dealItems = [
+    ...(compatibilityNavGroups.find((group) => group.label === "Acquisitions")?.items.filter(
+      (item) => item.href === "/os/underwriting",
+    ) ?? []),
+    ...(compatibilityNavGroups.find((group) => group.label === "Deal tools")?.items ?? []),
+    ...(osNavGroups.find((group) => group.label === "Operations")?.items.filter(
+      (item) => item.href === "/os/buyers",
+    ) ?? []),
+  ];
   const visibleItems = profile
     ? dealItems.filter((item) => canSeeNavItem(profile, item))
     : process.env.NODE_ENV === "development"

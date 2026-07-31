@@ -674,11 +674,13 @@ export function InboxWorkspace({
   initialFilter = "team",
   initialConversationId = null,
   initialEmailAdminOpen = false,
+  initialGlobalComposeOpen = false,
   initialLeadId = null,
 }: {
   initialFilter?: InboxFilterKey;
   initialConversationId?: string | null;
   initialEmailAdminOpen?: boolean;
+  initialGlobalComposeOpen?: boolean;
   initialLeadId?: string | null;
 }) {
   const { getToken } = useAuth();
@@ -705,7 +707,7 @@ export function InboxWorkspace({
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
 
-  const [globalComposeOpen, setGlobalComposeOpen] = useState(false);
+  const [globalComposeOpen, setGlobalComposeOpen] = useState(initialGlobalComposeOpen);
   const [mailboxAliasId, setMailboxAliasId] = useState<string | null>(null);
   const [, setEmailSettingsStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [selectedId, setSelectedId] = useState<string | null>(null);

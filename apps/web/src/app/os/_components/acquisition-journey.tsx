@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { getWorkspaceProfile } from "../../lib/api";
-import { canSeeNavItem, osNavGroups } from "../os-navigation";
+import { canSeeNavItem, compatibilityNavGroups } from "../os-navigation";
 import styles from "./acquisition-journey.module.css";
 
 const routeByKey = {
@@ -18,7 +18,8 @@ export type AcquisitionRouteKey = keyof typeof routeByKey;
 
 export async function AcquisitionJourney({ active }: { active: AcquisitionRouteKey }) {
   const profile = await getWorkspaceProfile();
-  const acquisitionItems = osNavGroups.find((group) => group.label === "Acquisitions")?.items ?? [];
+  const acquisitionItems =
+    compatibilityNavGroups.find((group) => group.label === "Acquisitions")?.items ?? [];
   const visibleItems = profile
     ? acquisitionItems.filter((item) => canSeeNavItem(profile, item))
     : process.env.NODE_ENV === "development"

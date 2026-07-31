@@ -30,7 +30,7 @@ export default async function TasksPage({
         description="Triage assigned follow-up, due work, and seller next actions without losing record context."
         eyebrow="Daily execution"
         meta={profile ? `${primaryRoleLabel(profile)} · ${dashboard.openTaskQueue.length} open` : null}
-        title="Work Queue"
+        title="Tasks"
       />
       <WorkQueueWorkspace
         canComplete={canComplete}

@@ -37,7 +37,7 @@ current code or canonical documentation.
 | --- | --- | --- |
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
-| `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Approved target navigation, workspace consolidation, route migration, role experience, and IA phase plan | Owner, managers, and developers |
+| `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Approved target navigation, live IA1-IA2 implementation, workspace consolidation, route migration, role experience, and remaining IA phase plan | Owner, managers, and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
 | `VA_DIALER_ROADMAP.md` | One-by-one VA calling workflow, acceptance, handoff, and reporting sequence | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
