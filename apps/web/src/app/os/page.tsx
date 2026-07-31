@@ -305,7 +305,7 @@ export default async function Home() {
             <p>Pipeline pulse</p>
             <h2 id="pipeline-heading">Active seller stages</h2>
           </div>
-          <Link href="/os/leads?display=board">Open Seller Pipeline <ArrowRight aria-hidden="true" size={15} /></Link>
+          <Link href="/os/leads?display=board">Open Pipeline <ArrowRight aria-hidden="true" size={15} /></Link>
         </header>
         <div>
           {pipelineStages.slice(0, 8).map((stage) => (

@@ -35,7 +35,7 @@ The complete internal workflow is implemented:
 
 - Public seller intake and consent evidence.
 - Campaigns, imports, screening, calling batches, and VA prospecting.
-- Warm handoff, Lead Desk, qualification, tasks, Inbox, and appointments.
+- Warm handoff, Lead Queue, qualification, tasks, Inbox, and appointments.
 - Field preparation, inspections, underwriting, reports, offer approval, and negotiation records.
 - Contract generation, transaction coordination, SignWell records, and in-person iPad signing.
 - Buyers, dispositions, buyer offers, selection, reconciliation, and accounting export.
@@ -144,7 +144,7 @@ intentional.
 | --- | --- | --- |
 | Owner / Founder / CEO | Home | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
 | Administrator | Home | User support, records, audit, and acquisition administration |
-| Lead Manager | Home or Tools > Lead Desk | Warm response, qualification, nurture, and appointment setting |
+| Lead Manager | Seller Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
 | Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
 | Dispositions Manager / Rep | Deals | Buyer matching, package release preparation, offers, buyer outcome, and backup |
@@ -201,12 +201,12 @@ The exact list is reduced by role and permission.
 
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
-Use **New** to enter a seller lead or compose a company email when authorized. Use **Tools** for
-Lead Desk, Seller Pipeline, Underwriting, Transactions,
-Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control while
-those workspaces are consolidated. Global search finds both primary workspaces and authorized
-Tools. Recent destinations return to recently opened OS pages. On mobile, use the menu button to
-open the navigation drawer. The floating Help button remains at the bottom-right.
+Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
+local views for focused work: Campaigns and My Calls in Prospecting; Lead Queue, Pipeline, and
+Underwriting in Seller Leads; and transaction, disposition, and finance sections inside Deals.
+**My setup** is always available at the bottom of the sidebar. Global search finds authorized
+primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
+menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
 
 ### Route Reference
 
@@ -244,8 +244,9 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Seller Leads: Underwriting | `/os/leads?view=underwriting` |
 | Tasks: Approvals | `/os/tasks?view=approvals` |
 | Legacy Approvals redirect | `/os/approvals` |
-| Transactions | `/os/transactions` |
-| Dispositions | `/os/dispositions` |
+| Deals: Transaction work | `/os/deals?view=closing-exceptions` |
+| Deals: Disposition work | `/os/deals?view=ready-for-disposition` |
+| Disposition case setup | `/os/dispositions` |
 | My Setup | `/os/my-setup` |
 | Legacy Company & Policy redirect | `/os/operating-model` |
 | Legacy AI Control redirect | `/os/ai` |
@@ -589,8 +590,8 @@ The normal deal path and its completion evidence are:
 | Stage | Primary workspace | The stage is complete when |
 | --- | --- | --- |
 | Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
-| Warm handoff | Prospecting, Lead Desk | The Lead Manager accepted a sufficiently documented handoff |
-| Qualification | Lead Desk, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
+| Warm handoff | Prospecting, Lead Queue | The Lead Manager accepted a sufficiently documented handoff |
+| Qualification | Lead Queue, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
 | Appointment | Calendar | The meeting has an owner, time, location, preparation, and recorded outcome |
 | Underwriting | Lead record, Underwriting | Comps and repairs were human-reviewed, a version was saved, and warnings were understood |
 | Negotiation | Lead record, Approvals | Current offer authority exists and each seller response is recorded |
@@ -622,7 +623,7 @@ After submission:
 3. The system creates or reuses the seller, property, lead, and conversation.
 4. Consent and attribution are retained even when the submission matches an existing lead.
 5. A speed-to-lead task is created.
-6. Staff sees the lead in **All Leads**, **Lead Desk**, **Inbox**, and relevant dashboard queues.
+6. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
 
 Use the public form to test seller intake with your own controlled information. Do not repeatedly
 submit a real seller to diagnose an internal visibility problem.
@@ -1147,7 +1148,7 @@ Prospecting as prospects until the seller expresses interest.
 
 Use **Archived** from Seller Leads to locate and restore archived records.
 
-### Seller Pipeline
+### Pipeline
 
 Select **Pipeline** to switch the same filtered records to a stage board. Search, owner, stage,
 selected seller, and display mode stay in the URL. Use the recommended next action to open Inbox,
@@ -1795,14 +1796,14 @@ Copilots live inside the human workspace they assist:
 
 | Copilot | Location | Current authority |
 | --- | --- | --- |
-| Lead Manager | Lead Desk | Draft and recommend |
+| Lead Manager | Lead Queue | Draft and recommend |
 | Prospecting | Prospecting | Priority, preparation, and reviewed coaching |
 | Acquisitions | Calendar Appointment | Meeting and follow-up drafts |
-| Transaction | Transactions | Coordination drafts |
-| Disposition | Dispositions | Buyer and package guidance |
+| Transaction | Deal > Contract or Closing | Coordination drafts |
+| Disposition | Deal > Disposition | Buyer and package guidance |
 | Finance | Finance | Aggregate analysis and recommendations |
 | Marketing | Marketing | Aggregate analysis and recommendations |
-| Executive | Dashboard | Operating brief and decisions |
+| Executive | Home | Operating brief and decisions |
 
 ### Standard Copilot Review
 

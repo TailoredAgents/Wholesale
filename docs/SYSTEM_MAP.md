@@ -199,18 +199,20 @@ is not the security boundary.
 
 ### 5.5 User Provisioning
 
-Owners create or activate a Stonegate user in Operations and assign the correct role. Each person
+Owners create or activate a Stonegate user in **Settings > People & Access** and assign the correct role. Each person
 must use an individual Clerk login. Shared employee credentials are not part of the design.
 
 Role-specific default routes include:
 
-- VA Caller: `/os/prospecting`
-- Dispositions: `/os/dispositions`
-- Transaction Coordinator: `/os/transactions`
+- VA Caller: `/os/prospecting?view=my-calls`
+- Lead Manager: `/os/leads?view=queue`
+- Acquisitions Closer: `/os/calendar?view=day`
+- Dispositions: `/os/deals?view=ready-for-disposition`
+- Transaction Coordinator: `/os/deals?view=closing-exceptions`
 - Finance: `/os/finance`
 - Marketing: `/os/marketing`
-- restricted partners or vendors: `/os/transactions`
-- owner and acquisitions roles: `/os`
+- restricted partners or vendors: `/os/deals`
+- owner and administrator roles: `/os`
 
 ## 6. Public Seller Website
 
@@ -329,9 +331,9 @@ markup when the feed is empty. No self-serving Review or AggregateRating schema 
 
 ## 7. Private OS Navigation
 
-The live OS sidebar uses four stable groups and 11 owner destinations. Authorized legacy
-workspaces remain available through the global **Tools** menu until their consolidation phase
-reaches feature parity.
+The live OS sidebar uses four stable groups and 11 owner destinations. Focused queues and controls
+are local views inside those workspaces. Legacy URLs remain as context-preserving redirects but are
+not presented as competing navigation.
 
 ### 7.1 Work
 
@@ -461,19 +463,19 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Approval records keep their domain-specific authority, evidence, decision, and audit rules.
 - `/os/approvals` is a compatibility redirect to this Tasks view.
 
-**Transactions (`/os/transactions`)**
+**Transaction work (`/os/deals`)**
 
-- Compatibility and specialist setup route for contract-to-closing coordination. Normal daily
-  work begins in Deals.
-- Manages contract templates, packages, approvals, signatures, documents, parties, milestones,
-  checklists, closing, and Transaction Copilot drafts.
+- Contract-to-closing work is performed in the selected Deal's Contract, Closing, Documents,
+  Parties, and Timeline sections.
+- The legacy `/os/transactions` URL resolves its transaction ID and tab to the same canonical Deal.
 
-**Dispositions (`/os/dispositions`)**
+**Disposition work (`/os/deals`)**
 
-- Compatibility and specialist setup route for opening a new disposition case. Existing cases
-  are worked from the Disposition and Finance sections of Deals.
-- Manages deal packages, matches, campaigns, engagement, offers, proof, selection, reconciliation,
-  and Disposition Copilot drafts.
+- Existing cases are worked from the Disposition and Finance sections of the selected Deal.
+- `/os/dispositions` is setup-only when an executed transaction needs its first disposition case.
+  A legacy `case` bookmark resolves to the same canonical Deal.
+- Deal packages, matches, engagement, offers, proof, buyer selection, reconciliation, and
+  Disposition Copilot drafts remain server governed.
 
 **Buyers (`/os/buyers`)**
 
@@ -1059,7 +1061,7 @@ Employees generally interact with copilots, not a collection of separate chat ro
 | Copilot | Location | Current role |
 | --- | --- | --- |
 | Prospecting | Prospecting | Pre-call brief, script guidance, disposition quality, coaching |
-| Lead Manager | Lead Desk | Priority, seller brief, missing facts, reply and task proposals |
+| Lead Manager | Seller Leads > Lead Queue | Priority, seller brief, missing facts, reply and task proposals |
 | Acquisitions | Calendar Appointment | Meeting preparation, evidence gaps, negotiation support |
 | Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
 | Disposition | Dispositions | Package gaps, buyer ranking, outreach and offer review |

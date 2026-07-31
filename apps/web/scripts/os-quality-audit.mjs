@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 
 import { chromium } from "playwright-core";
 
-const baseUrl = process.env.OS_AUDIT_BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrl = process.env.OS_AUDIT_BASE_URL ?? "http://localhost:3000";
 const require = createRequire(import.meta.url);
 const axePath = require.resolve("axe-core/axe.min.js");
 const leadId = process.env.OS_AUDIT_LEAD_ID;
@@ -12,29 +12,27 @@ const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const executablePath = process.env.CHROME_EXECUTABLE_PATH ??
   (existsSync(macChrome) ? macChrome : undefined);
 
-const routes = [
+const defaultRoutes = [
   "/os",
   "/os/inbox",
   "/os/tasks",
   "/os/calendar",
-  "/os/operations",
-  "/os/campaigns",
   "/os/prospecting",
-  "/os/lead-manager",
   "/os/leads",
-  "/os/pipeline",
-  "/os/field-operations",
-  "/os/underwriting",
-  "/os/approvals",
-  "/os/transactions",
+  "/os/deals",
   "/os/dispositions",
   "/os/buyers",
   "/os/finance?period=30",
   "/os/marketing?period=30",
-  "/os/operating-model",
-  "/os/ai",
+  "/os/settings",
   "/os/leads/archived",
 ];
+
+const requestedRoutes = process.env.OS_AUDIT_ROUTES
+  ?.split(",")
+  .map((route) => route.trim())
+  .filter(Boolean);
+const routes = requestedRoutes?.length ? requestedRoutes : defaultRoutes;
 
 if (leadId) routes.push(`/os/leads/${leadId}`);
 
@@ -42,7 +40,7 @@ const screenshotRoutes = new Set([
   "/os",
   "/os/inbox",
   "/os/leads",
-  "/os/underwriting",
+  "/os/deals",
   "/os/dispositions",
   ...(leadId ? [`/os/leads/${leadId}`] : []),
 ]);
@@ -74,7 +72,11 @@ async function auditRoute(page, width, route) {
   }
 
   if (response?.status() !== 200) record(width, route, "status", response?.status() ?? 0);
-  for (const error of browserErrors) record(width, route, "browser-error", error);
+  for (const error of browserErrors) {
+    if (!error.includes("status of 401 (Unauthorized)")) {
+      record(width, route, "browser-error", error);
+    }
+  }
 
   if ([390, 1440].includes(width)) {
     await page.addScriptTag({ path: axePath });

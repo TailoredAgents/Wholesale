@@ -55,22 +55,21 @@ If one of these is missing, the lead can be forgotten.
 | Page | What you use it for |
 | --- | --- |
 | **Home** | See urgent work, appointments, and exceptions |
-| **Tools > Lead Desk** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
+| **Seller Leads > Lead Queue** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
 | **Inbox** | Read and record seller conversations |
 | **Tasks** | Complete assigned and overdue tasks |
-| **Calendar** | Review scheduled appointments |
-| **Tools > Field Operations** | Choose a closer and schedule an appointment |
+| **Calendar** | Review appointments, choose a closer, and schedule or dispatch meetings |
 | **Seller Leads** | Search for any active seller |
-| **Tools > Seller Pipeline** | See where sellers are in the process |
+| **Seller Leads > Pipeline** | See where sellers are in the process |
 
-Your primary sidebar page is **Seller Leads**. Use **Tools > Lead Desk** for the current guided
-qualification queue until that queue is merged into Seller Leads.
+Your primary sidebar page is **Seller Leads**. Select **Lead Queue** for guided qualification work,
+**Pipeline** for stage review, or **Underwriting** for valuation work.
 
 ## Starting Your Day
 
 Follow this order every workday:
 
-1. Open **Tools > Lead Desk**.
+1. Open **Seller Leads > Lead Queue**.
 2. Look at the numbers across the top.
 3. Open **Daily queue**.
 4. Accept every new warm handoff assigned to you.
@@ -83,7 +82,7 @@ Follow this order every workday:
 
 Work new warm leads before routine follow-up. Fast response matters.
 
-## Understanding The Lead Desk
+## Understanding The Lead Queue
 
 The numbers at the top tell you what needs attention:
 
@@ -96,7 +95,7 @@ The numbers at the top tell you what needs attention:
 
 Red or warning-styled numbers should be handled first.
 
-The Lead Desk contains these tabs:
+The Lead Queue contains these tabs:
 
 - **Copilot**
 - **Daily queue**
@@ -108,7 +107,7 @@ The Lead Desk contains these tabs:
 
 When a VA, public form, campaign, or team member creates a warm handoff:
 
-1. Open **Tools > Lead Desk**.
+1. Open **Seller Leads > Lead Queue**.
 2. Select **Daily queue**.
 3. Find **Accept warm handoffs**.
 4. Review the seller name, property, source, assigned person, and acceptance deadline.
@@ -185,7 +184,7 @@ An unhelpful note is vague:
 
 Complete qualification during or immediately after the seller conversation.
 
-1. Open **Lead Desk**.
+1. Open **Lead Queue**.
 2. Select **Qualification**.
 3. Choose the seller from **Needs qualification**.
 4. Ask the displayed questions naturally.
@@ -247,7 +246,7 @@ scheduling queue. The appointment is not fully dispatched until a closer and tim
 
 To schedule it:
 
-1. Open **Field Operations**.
+1. Open **Calendar**.
 2. Select **Dispatch**.
 3. Choose the seller under **Needs appointment**.
 4. Enter the requested start and end times.
@@ -293,7 +292,7 @@ The Copilot helps organize information. It does not replace your judgment.
 
 To use it:
 
-1. Open **Lead Desk > Copilot**.
+1. Open **Lead Queue > Copilot**.
 2. Select a seller under **Needs attention**.
 3. Review the system's recommended action and alerts.
 4. Click **Generate brief**.
@@ -322,7 +321,7 @@ The Copilot cannot:
 - Promise or approve an offer.
 
 After reviewing the Copilot, perform the real action yourself in Inbox, Work Queue, Qualification,
-or Field Operations.
+or Calendar.
 
 ## Working The Inbox
 
@@ -361,7 +360,7 @@ the full lead.
 
 Mark a task complete only after the call, text, email, review, or follow-up is actually finished.
 
-## Using All Leads And Seller Pipeline
+## Using All Leads And Pipeline
 
 Use **All Leads** when you need to find a seller.
 
@@ -373,7 +372,7 @@ You can search by:
 - Email
 - Lead source
 
-Use **Seller Pipeline** to see where active sellers are in the process. Move a seller to a new
+Use **Pipeline** to see where active sellers are in the process. Move a seller to a new
 stage only when that real event has happened.
 
 Do not create another lead simply because you cannot find the record immediately. Search by the
@@ -490,11 +489,11 @@ Before signing out:
 
 ### New warm lead
 
-**Lead Desk > Daily queue > Accept > Inbox > Contact > Qualification > Next action**
+**Lead Queue > Daily queue > Accept > Inbox > Contact > Qualification > Next action**
 
 ### Qualified seller ready to meet
 
-**Qualification > Seller appointment > Field Operations > Dispatch > Check capacity > Choose
+**Qualification > Seller appointment > Calendar > Dispatch > Check capacity > Choose
 closer > Dispatch appointment > Calendar**
 
 ### Seller needs more time
@@ -511,7 +510,7 @@ closer > Dispatch appointment > Calendar**
 
 ### Copilot assistance
 
-**Lead Desk > Copilot > Choose seller > Generate brief > Review > Accept, Correct, or Reject >
+**Lead Queue > Copilot > Choose seller > Generate brief > Review > Accept, Correct, or Reject >
 Perform the real action**
 
 ## Getting Help

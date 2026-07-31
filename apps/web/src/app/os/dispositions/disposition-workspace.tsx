@@ -2,15 +2,12 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
-  BadgeDollarSign,
   Check,
   CircleDollarSign,
   DatabaseZap,
   Download,
-  FileCheck2,
   LoaderCircle,
   Megaphone,
-  Plus,
   SearchCheck,
   ShieldCheck,
   Upload,
@@ -22,13 +19,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import type {
   BuyerDataProvider,
   BuyerDiscoveryRun,
-  DispositionCase,
   DispositionCopilotOverview,
   DispositionCopilotRecommendation,
   DispositionOverview,
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
-import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import { DispositionCopilotPanel } from "./disposition-copilot-panel";
 import styles from "./dispositions.module.css";
@@ -50,12 +45,10 @@ function cents(value: FormDataEntryValue | null) {
 }
 
 export function DispositionWorkspace({
-  embedded = false,
   initialCaseId,
   initialData,
   initialTab = "package",
 }: {
-  embedded?: boolean;
   initialCaseId?: string;
   initialData: DispositionOverview;
   initialTab?: Tab;
@@ -178,39 +171,6 @@ export function DispositionWorkspace({
       setMessage(success);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function openCase(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = event.currentTarget;
-    const values = new FormData(form);
-    const next = await request<DispositionCase>("/api/v1/dispositions/cases", {
-      method: "POST",
-      body: JSON.stringify({
-        transaction_id: values.get("transaction_id"),
-        strategy: values.get("strategy"),
-        asking_price_cents: cents(values.get("asking_price")),
-        minimum_acceptable_cents: cents(values.get("minimum_price")),
-        operating_mode_key: "human_led",
-        notes: values.get("notes") || null,
-      }),
-    });
-    await reload(next.id);
-    setSelectedId(next.id);
-    setMessage("Disposition case opened with its compensation plan frozen.");
-    form.reset();
-  }
-
-  async function submitCase(event: FormEvent<HTMLFormElement>) {
-    setBusy(true);
-    setMessage(null);
-    try {
-      await openCase(event);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to open case.");
     } finally {
       setBusy(false);
     }
@@ -430,53 +390,13 @@ export function DispositionWorkspace({
   const post = (path: string) => request(path, { method: "POST", body: "{}" });
 
   return (
-    <section aria-label="Disposition management" className={`${styles.workspace} ${embedded ? styles.embeddedWorkspace : ""}`}>
-      {!embedded ? <section className={styles.metrics}>
-        <div><Megaphone size={18} /><span>Active cases</span><strong>{data.metrics.active_cases}</strong></div>
-        <div><FileCheck2 size={18} /><span>Packages pending</span><strong>{data.metrics.packages_pending}</strong></div>
-        <div><UsersRound size={18} /><span>Buyer selected</span><strong>{data.metrics.buyer_selected}</strong></div>
-        <div><BadgeDollarSign size={18} /><span>Reconcile</span><strong>{data.metrics.reconciliation_pending}</strong></div>
-        <div><ShieldCheck size={18} /><span>Below 30% target</span><strong>{data.metrics.below_margin_target}</strong></div>
-      </section> : null}
-
+    <section aria-label="Disposition management" className={`${styles.workspace} ${styles.embeddedWorkspace}`}>
       {message ? <p className={message.includes("Unable") || message.includes("required") ? styles.notice : styles.success}>{message}</p> : null}
 
-      <section className={`${styles.body} ${embedded ? styles.embeddedBody : ""}`}>
-        {!embedded ? <aside className={styles.queue}>
-          <div className={styles.queueHeader}><div><span>Disposition queue</span><strong>{data.cases.length} cases</strong></div></div>
-          {data.cases.map((item) => (
-            <button className={item.id === selectedId ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => setSelectedId(item.id)} type="button">
-              <div><strong>{item.seller_name}</strong><span>{labelize(item.status)}</span></div>
-              <p>{item.property_address}</p>
-              <dl><div><dt>Ask</dt><dd>{money(item.asking_price_cents)}</dd></div><div><dt>Minimum</dt><dd>{money(item.minimum_acceptable_cents)}</dd></div></dl>
-            </button>
-          ))}
-          {data.eligible_transactions.length ? (
-            <form className={styles.openForm} onSubmit={submitCase}>
-              <div className={styles.formTitle}><Plus size={15} /><strong>Open contracted deal</strong></div>
-              <label><span>Transaction</span><select name="transaction_id" required>{data.eligible_transactions.map((item) => <option key={item.id} value={item.id}>{item.property_address}</option>)}</select></label>
-              <label><span>Strategy</span><select name="strategy"><option value="assignment">Assignment</option><option value="double_close">Double close</option><option value="novation">Novation</option></select></label>
-              <label><span>Investor asking price</span><input name="asking_price" inputMode="decimal" required /></label>
-              <label><span>Approved minimum</span><input name="minimum_price" inputMode="decimal" required /></label>
-              <label><span>Internal notes</span><textarea name="notes" rows={2} /></label>
-              <button disabled={busy} type="submit">Open case</button>
-            </form>
-          ) : null}
-        </aside> : null}
-
+      <section className={`${styles.body} ${styles.embeddedBody}`}>
         <div className={styles.detail}>
           {!selected ? <div className={styles.empty}><UsersRound size={30} /><h3>No disposition cases</h3><p>Executed transactions will appear here when ready for buyer placement.</p></div> : (
             <>
-              {!embedded ? <><header className={styles.dealHeader}><div><span>{labelize(selected.strategy)} · {selected.operating_mode_label}</span><h3>{selected.property_address}</h3><p>{selected.seller_name} · {selected.compensation_plan_label}</p></div><div><span>Approved floor</span><strong>{money(selected.minimum_acceptable_cents)}</strong></div></header>
-              <div className={styles.controlStrip}>
-                <DealControlStrip
-                  authority={{ label: "Authority", value: selected.selected_buyer_id ? "Selection approved" : "Human approval required", detail: selected.operating_mode_label, tone: selected.selected_buyer_id ? "success" : "warning" }}
-                  blocker={{ label: "Primary blocker", value: selected.package_status !== "approved" ? "Package approval" : !selected.matches.length ? "Buyer matching" : !selected.offers.length ? "Buyer offers" : !selected.selected_buyer_id ? "Buyer selection" : selected.reconciliation?.status !== "approved" ? "Reconciliation" : "No active blocker", detail: "Sequence is server enforced", tone: selected.reconciliation?.status === "approved" ? "success" : "warning" }}
-                  deadline={{ label: "Buyer urgency", value: `${selected.engagements.length} activities`, detail: `${selected.offers.length} offers received`, tone: selected.offers.length ? "info" : "warning" }}
-                  evidence={{ label: "Buyer evidence", value: `${selected.matches.filter((item) => item.latest_proof_document_id).length}/${selected.matches.length} POF verified`, detail: `${selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified matches`, tone: selected.matches.some((item) => item.latest_proof_document_id) ? "success" : "warning" }}
-                  nextAction={{ label: "Authorized next step", value: selected.package_status !== "approved" ? "Approve investor package" : !selected.matches.length ? "Generate buyer ranking" : !selected.offers.length ? "Record buyer offers" : !selected.selected_buyer_id ? "Approve buyer selection" : "Reconcile closing", detail: `Floor ${money(selected.minimum_acceptable_cents)}`, tone: "info" }}
-                />
-              </div></> : null}
               {copilot && copilotCaseId === selected.id ? (
                 <CopilotLauncher
                   attentionCount={copilot.readiness_gaps.length + copilot.risk_alerts.length}

@@ -67,9 +67,9 @@ is relevant and the required permission is present.
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | Settings | Owner, Administrator | At least one administration permission |
 
-Campaigns, Lead Desk, Seller Pipeline, Underwriting, Approvals, Transactions,
-Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control remain
-available as permission-filtered compatibility tools.
+Campaigns and My Calls are local Prospecting views. Lead Queue, Pipeline, and Underwriting are
+local Seller Leads views. Approvals are in Tasks; transaction and disposition work is in Deals;
+administration is in Settings. My Setup remains available to every signed-in employee.
 
 ## Public Website
 
@@ -187,10 +187,9 @@ change staff-reviewed information.
 | Search workspaces | Filters workspaces the user is allowed to open | It searches navigation, not sellers or records |
 | `/` keyboard key | Focuses workspace search | Does not activate while typing in another field |
 | **New** | Opens direct Seller lead and Email actions | Each action appears only with its required permission |
-| **Tools** | Opens authorized compatibility workspaces removed from the primary sidebar | Contents vary by role and permission |
 | **Recent destinations** | Shows up to five recently visited OS destinations stored in this browser | Empty until pages have been visited |
 | Approvals shortcut | Opens **Tasks > Approvals** and shows the pending count | Visible only to authorized reviewers |
-| Notifications bell | Opens Operations notification work | Visible to users allowed into Operations |
+| Notifications bell | Opens Calendar, where operational commitments and appointments are reviewed | Visible to users allowed operational notifications |
 | Notification count | Shows unread operational notification count, capped visually at 99 | Updates from the user profile |
 | Account control | Shows signed-in Clerk identity and sign-out controls | Requires a completed Clerk session |
 | Escape key | Closes search, recent menu, or mobile navigation | Browser keyboard control |
@@ -212,7 +211,7 @@ change staff-reviewed information.
 | **Open full queue** | Opens Tasks | Navigation only |
 | Needs intervention links | Open unread conversations, unassigned leads, unscheduled tasks, or approvals | Team-wide exceptions are hidden from narrowly scoped roles |
 | Pipeline stage | Opens Seller Leads in Board mode filtered to that stage | Navigation only |
-| **Open Seller Pipeline** | Opens Seller Leads in Board mode | Navigation only |
+| **Open Pipeline** | Opens Seller Leads in Board mode | Navigation only |
 
 An **API fallback view** warning means counts are empty fallback data, not proof that no work exists.
 
@@ -288,7 +287,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Stage filter | Shows one normalized pipeline stage | Filter only |
 | Table / Board | Changes display while preserving saved view, search, owner, stage, and selected seller | Display only |
 | Seller row | Selects the local seller preview | Does not edit the lead |
-| Primary next-action link | Opens Lead Desk, Inbox, Dispatch, Underwriting, Negotiation, or full record based on status | Navigation only |
+| Primary next-action link | Opens Lead Queue, Inbox, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
 | **Conversation** | Opens Inbox on this seller | Requires conversation access |
 | **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
@@ -1074,8 +1073,9 @@ disposition, buyer, task, document, and reconciliation records through one emplo
 | Timeline | Embeds immutable transaction history and notes | Read access follows the deal role |
 | Transaction / Disposition Copilot | Opens the active domain assistant in a drawer | Draft and review only; does not hide or replace source evidence |
 
-The Transactions and Dispositions routes below remain compatibility and setup tools. Employees
-should begin ordinary active-deal work in Deals.
+The legacy Transactions route redirects its selected transaction and tab into Deals. The
+Dispositions route is setup-only for opening the first case and redirects existing case bookmarks
+into Deals. Employees begin ordinary active-deal work in Deals.
 
 ## Transactions
 
@@ -1571,8 +1571,8 @@ It does not create a second AI system. Its views are **Copilots**, **Runtime**,
 ## Shared Copilot Controls
 
 Role-specific Copilots normally appear near the top of the page where their advice is
-used: Lead Desk, Prospecting, Underwriting/Acquisitions, Transactions, Dispositions,
-Finance, Tax, Marketing, and Executive management.
+used: Seller Leads, Prospecting, Underwriting/Acquisitions, Deals, Finance, Tax, Marketing, and
+Executive management.
 
 | Control or concept | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |

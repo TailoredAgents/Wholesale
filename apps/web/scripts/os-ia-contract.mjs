@@ -147,7 +147,7 @@ export const targetRoleExperiences = [
   },
   {
     role: "acquisition_manager",
-    defaultRoute: "/os/leads?view=needs-qualification",
+    defaultRoute: "/os/leads?view=queue",
     destinations: ["home", "inbox", "tasks", "calendar", "prospecting", "seller-leads"],
   },
   {
@@ -393,8 +393,8 @@ export const currentRouteInventory = [
     routePattern: "/os/transactions",
     source: "src/app/os/transactions/page.tsx",
     targetWorkspace: "deals",
-    targetCanonical: "/os/deals?view=closing",
-    migration: "retain-record-deep-links",
+    targetCanonical: "/os/deals?view=all&tab=closing",
+    migration: "legacy-record-redirect",
     queryParameters: [
       { name: "transaction", status: "consumed" },
       { name: "tab", status: "consumed" },
@@ -406,9 +406,12 @@ export const currentRouteInventory = [
     routePattern: "/os/dispositions",
     source: "src/app/os/dispositions/page.tsx",
     targetWorkspace: "deals",
-    targetCanonical: "/os/deals?view=disposition",
-    migration: "retain-record-deep-links",
-    queryParameters: [{ name: "case", status: "consumed" }],
+    targetCanonical: "/os/deals?view=ready-for-disposition",
+    migration: "setup-and-record-redirect",
+    queryParameters: [
+      { name: "case", status: "consumed" },
+      { name: "transaction", status: "consumed" },
+    ],
     helpSections: ["Dispositions"],
     baselinePath: "/os/dispositions",
   },

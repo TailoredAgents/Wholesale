@@ -1,7 +1,6 @@
 import { Activity, Bot, CircleDollarSign, Clock3, ShieldAlert } from "lucide-react";
 
 import { getAiControlOverview, getDashboardData, getWorkspaceProfile } from "../../lib/api";
-import { ManagementJourney } from "../_components/management-journey";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import managementStyles from "../_components/management-workspaces.module.css";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
@@ -67,7 +66,6 @@ export default async function AiControlPage() {
         meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Live controls" : "AI controls unavailable"}</StatusBadge>}
         title="AI Control"
       />
-      <ManagementJourney active="ai" />
       <ManagementSummaryStrip
         authority={{ label: "External authority", value: "Execution blocked", detail: canManage ? "You may test and request promotion" : "Control policy is view only", tone: "success" }}
         comparison={{ label: "Copilot coverage", value: `${metrics.active_copilot_count} of ${metrics.copilot_count} approved`, detail: `${metrics.portfolio_agent_count} specialist engines`, tone: metrics.active_copilot_count ? "info" : "warning" }}

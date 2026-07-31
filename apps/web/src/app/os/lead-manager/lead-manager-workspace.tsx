@@ -329,7 +329,7 @@ export function LeadManagerWorkspace({
                 </button>
               ))}
               {!data.copilot.work_items.length ? (
-                <p className={styles.empty}>No active Lead Desk work needs review.</p>
+                <p className={styles.empty}>No active Lead Queue work needs review.</p>
               ) : null}
             </aside>
 

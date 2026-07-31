@@ -8,7 +8,6 @@ import {
   getTrustProofOverview,
   getWorkspaceProfile,
 } from "../../lib/api";
-import { ManagementJourney } from "../_components/management-journey";
 import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
@@ -123,7 +122,6 @@ export default async function MarketingPage({ searchParams }: { searchParams: Pr
       meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Attribution current" : "Marketing data unavailable"}</StatusBadge>}
       title="Marketing"
     />
-    <ManagementJourney active="marketing" />
     <ManagementSummaryStrip
       authority={{ label: "Authority", value: canExport ? "Attribution operator" : "Reporting view", detail: canExport ? "Offline exports may be generated" : "Export controls are hidden", tone: canExport ? "success" : "info" }}
       comparison={{ label: "Revenue trend", value: delta(marketing.summary.collected_revenue_cents, previous?.collected_revenue_cents), detail: `${roas(marketing.summary.return_on_ad_spend_basis_points)} return on spend`, tone: (marketing.summary.return_on_ad_spend_basis_points ?? 0) >= 10000 ? "success" : "warning" }}

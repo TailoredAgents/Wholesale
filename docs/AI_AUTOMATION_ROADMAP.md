@@ -126,7 +126,7 @@ Every copilot is complete only when:
 
 ## Phase AI1: Copilot Contracts And Data Governance
 
-Status: **Complete in code. Owner review and approval are available in `/os/ai`.**
+Status: **Complete in code. Owner review and approval are available in `/os/settings/ai`.**
 
 Goal: Define exactly how humans and AI work together before adding production model behavior.
 
@@ -157,7 +157,7 @@ Exit criteria:
 
 ## Phase AI2: Golden Cases And Evaluation Standards
 
-Status: **Complete in code. Production executive and role-owner signoff remain in `/os/ai`.**
+Status: **Complete in code. Production executive and role-owner signoff remain in `/os/settings/ai`.**
 
 Goal: Create the practice tests Stonegate will use to judge AI quality.
 
@@ -471,7 +471,7 @@ capability.
 
 Implementation status: the control plane is implemented in code. Seller acknowledgement,
 appointment reminder, consented seller follow-up, and approved buyer-campaign contracts can be
-installed, owner-reviewed, simulated, paused, and audited from `/os/ai`. External delivery remains
+installed, owner-reviewed, simulated, paused, and audited from `/os/settings/ai`. External delivery remains
 structurally locked in this release.
 
 Eligible only after earlier pilots:

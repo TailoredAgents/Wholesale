@@ -1,23 +1,13 @@
 import {
-  BadgeCheck,
   BarChart3,
-  Bot,
-  BriefcaseBusiness,
   Building2,
   CalendarDays,
-  ChartNoAxesCombined,
-  ContactRound,
-  FileCheck2,
-  Gauge,
   Handshake,
   Home,
   Inbox,
   Landmark,
   ListChecks,
-  Mail,
-  Megaphone,
   PhoneCall,
-  Route,
   Settings2,
   UsersRound,
   type LucideIcon,
@@ -38,11 +28,6 @@ export type OsNavItem = {
 
 export type OsNavGroup = {
   label: "Work" | "Operations" | "Business" | "Administration";
-  items: OsNavItem[];
-};
-
-export type CompatibilityNavGroup = {
-  label: "Acquisitions" | "Deal tools" | "Management";
   items: OsNavItem[];
 };
 
@@ -219,109 +204,6 @@ export const osNavGroups: OsNavGroup[] = [
   },
 ];
 
-export const compatibilityNavGroups: CompatibilityNavGroup[] = [
-  {
-    label: "Acquisitions",
-    items: [
-      {
-        href: "/os/prospecting?view=campaigns",
-        label: "Campaigns",
-        icon: Megaphone,
-        roles: ["administrator", "acquisition_manager"],
-        anyPermissions: ["operations:manage"],
-      },
-      {
-        href: "/os/leads?view=queue",
-        label: "Lead Desk",
-        icon: ContactRound,
-        roles: acquisitionRoles,
-        anyPermissions: ["leads:view"],
-      },
-      {
-        href: "/os/leads?display=board",
-        label: "Seller Pipeline",
-        icon: Route,
-        roles: ["administrator", ...acquisitionRoles],
-        anyPermissions: ["leads:view"],
-      },
-      {
-        href: "/os/leads?view=underwriting",
-        label: "Underwriting",
-        icon: ChartNoAxesCombined,
-        roles: acquisitionRoles,
-        anyPermissions: ["underwriting:edit"],
-      },
-    ],
-  },
-  {
-    label: "Deal tools",
-    items: [
-      {
-        href: "/os/transactions",
-        label: "Transactions",
-        icon: FileCheck2,
-        roles: [
-          ...acquisitionRoles,
-          ...dispositionRoles,
-          "transaction_coordinator",
-          "read_only_partner",
-          "restricted_vendor",
-          "finance_accounting",
-        ],
-        anyPermissions: ["deals:view"],
-      },
-      {
-        href: "/os/dispositions",
-        label: "Dispositions",
-        icon: Handshake,
-        roles: [...dispositionRoles, "transaction_coordinator"],
-        anyPermissions: ["deals:view"],
-      },
-    ],
-  },
-  {
-    label: "Management",
-    items: [
-      {
-        href: "/os/my-setup",
-        label: "My Setup",
-        icon: BadgeCheck,
-        roles: [],
-        anyPermissions: [],
-        alwaysVisible: true,
-      },
-      {
-        href: "/os/settings/people",
-        label: "Team & Access",
-        icon: BriefcaseBusiness,
-        roles: ["administrator", "acquisition_manager"],
-        anyPermissions: ["operations:manage"],
-      },
-      {
-        href: "/os/settings/communications",
-        label: "Email Management",
-        icon: Mail,
-        roles: ["acquisition_manager"],
-        anyPermissions: ["communications:manage_email_accounts"],
-      },
-      {
-        href: "/os/settings/finance-policy",
-        label: "Company & Policy",
-        icon: Gauge,
-        roles: [],
-        anyPermissions: ["operating_model:manage"],
-      },
-      {
-        href: "/os/settings/ai",
-        label: "AI Control",
-        icon: Bot,
-        roles: [],
-        anyPermissions: ["ai:change_prompts"],
-      },
-    ],
-  },
-];
-
 export function isOwnerProfile(profile: WorkspaceProfile) {
   return profile.role_keys.some((role) => ownerRoles.includes(role));
 }
@@ -345,19 +227,17 @@ export function visibleNavGroups(profile: WorkspaceProfile) {
     .filter((group) => group.items.length > 0);
 }
 
-export function visibleCompatibilityGroups(profile: WorkspaceProfile) {
-  return compatibilityNavGroups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => canSeeNavItem(profile, item)),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
 export function defaultRouteForProfile(profile: WorkspaceProfile) {
-  if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting";
-  if (profile.role_keys.some((role) => dispositionRoles.includes(role))) return "/os/deals";
-  if (profile.role_keys.includes("transaction_coordinator")) return "/os/deals";
+  if (isOwnerProfile(profile) || profile.role_keys.includes("administrator")) return "/os";
+  if (profile.role_keys.includes("prospecting_caller")) return "/os/prospecting?view=my-calls";
+  if (profile.role_keys.includes("acquisition_manager")) return "/os/leads?view=queue";
+  if (profile.role_keys.includes("acquisition_rep")) return "/os/calendar?view=day";
+  if (profile.role_keys.some((role) => dispositionRoles.includes(role))) {
+    return "/os/deals?view=ready-for-disposition";
+  }
+  if (profile.role_keys.includes("transaction_coordinator")) {
+    return "/os/deals?view=closing-exceptions";
+  }
   if (profile.role_keys.includes("finance_accounting")) return "/os/finance";
   if (profile.role_keys.includes("marketing_manager")) return "/os/marketing";
   if (

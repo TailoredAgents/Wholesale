@@ -11,7 +11,6 @@ import {
   Plus,
   Search,
   UserRoundPlus,
-  Wrench,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -27,7 +26,6 @@ import {
   defaultRouteForProfile,
   navigationContext,
   primaryRoleLabel,
-  visibleCompatibilityGroups,
   visibleNavGroups,
 } from "./os-navigation";
 import { OsNav } from "./os-nav";
@@ -74,7 +72,6 @@ export function OsShell({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
-  const [toolsOpen, setToolsOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [recent, setRecent] = useState<RecentDestination[]>([]);
@@ -100,20 +97,8 @@ export function OsShell({
     () => (effectiveProfile ? visibleNavGroups(effectiveProfile) : []),
     [effectiveProfile],
   );
-  const compatibilityGroups = useMemo(
-    () => (effectiveProfile ? visibleCompatibilityGroups(effectiveProfile) : []),
-    [effectiveProfile],
-  );
   const destinations = useMemo(() => navGroups.flatMap((group) => group.items), [navGroups]);
-  const compatibilityDestinations = useMemo(
-    () => compatibilityGroups.flatMap((group) => group.items),
-    [compatibilityGroups],
-  );
-  const searchResults = [...destinations, ...compatibilityDestinations]
-    .filter(
-      (item, index, items) =>
-        items.findIndex((candidate) => candidate.href === item.href) === index,
-    )
+  const searchResults = destinations
     .filter((item) =>
       `${item.label} ${item.href}`.toLowerCase().includes(query.trim().toLowerCase()),
     );
@@ -208,7 +193,6 @@ export function OsShell({
       setDrawerOpen(false);
       setSearchOpen(false);
       setNewOpen(false);
-      setToolsOpen(false);
       setRecentOpen(false);
       setQuery("");
 
@@ -236,7 +220,6 @@ export function OsShell({
         setDrawerOpen(false);
         setSearchOpen(false);
         setNewOpen(false);
-        setToolsOpen(false);
         setRecentOpen(false);
       }
       if (
@@ -296,7 +279,6 @@ export function OsShell({
     setDrawerOpen(false);
     setSearchOpen(false);
     setNewOpen(false);
-    setToolsOpen(false);
     setRecentOpen(false);
   }
 
@@ -371,6 +353,11 @@ export function OsShell({
           <span>Signed in as</span>
           <strong>{effectiveProfile ? primaryRoleLabel(effectiveProfile) : "Verifying access"}</strong>
           {effectiveProfile ? <small>{effectiveProfile.display_name}</small> : null}
+          {effectiveProfile ? (
+            <Link className={styles.sidebarSetupLink} href="/os/my-setup" onClick={closeTransientUi}>
+              My setup
+            </Link>
+          ) : null}
         </div>
       </aside>
 
@@ -408,13 +395,11 @@ export function OsShell({
                     setQuery(event.target.value);
                     setSearchOpen(true);
                     setNewOpen(false);
-                    setToolsOpen(false);
                     setRecentOpen(false);
                   }}
                   onFocus={() => {
                     setSearchOpen(true);
                     setNewOpen(false);
-                    setToolsOpen(false);
                     setRecentOpen(false);
                   }}
                   placeholder="Search workspaces"
@@ -450,7 +435,6 @@ export function OsShell({
                   onClick={() => {
                     setNewOpen((current) => !current);
                     setSearchOpen(false);
-                    setToolsOpen(false);
                     setRecentOpen(false);
                   }}
                   type="button"
@@ -485,47 +469,6 @@ export function OsShell({
               </div>
             ) : null}
 
-            {compatibilityGroups.length ? (
-              <div
-                className={styles.headerMenuWrap}
-                onBlur={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget)) setToolsOpen(false);
-                }}
-              >
-                <button
-                  aria-expanded={toolsOpen}
-                  aria-label="Open additional tools"
-                  className={styles.toolsMenuButton}
-                  onClick={() => {
-                    setToolsOpen((current) => !current);
-                    setSearchOpen(false);
-                    setNewOpen(false);
-                    setRecentOpen(false);
-                  }}
-                  type="button"
-                >
-                  <Wrench aria-hidden="true" size={17} />
-                  <span>Tools</span>
-                  <ChevronDown aria-hidden="true" size={14} />
-                </button>
-                {toolsOpen ? (
-                  <div className={`${styles.headerDropdown} ${styles.toolsMenu}`}>
-                    {compatibilityGroups.map((group) => (
-                      <section key={group.label}>
-                        <span>{group.label}</span>
-                        {group.items.map((item) => (
-                          <Link href={item.href} key={item.href} onClick={closeTransientUi}>
-                            <item.icon aria-hidden="true" size={16} />
-                            <strong>{item.label}</strong>
-                          </Link>
-                        ))}
-                      </section>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
             <div className={`${styles.headerMenuWrap} ${styles.recentMenuWrap}`}>
               <button
                 aria-expanded={recentOpen}
@@ -535,7 +478,6 @@ export function OsShell({
                   setRecentOpen((current) => !current);
                   setSearchOpen(false);
                   setNewOpen(false);
-                  setToolsOpen(false);
                 }}
                 type="button"
               >
@@ -572,7 +514,7 @@ export function OsShell({
               <Link
                 aria-label={`${effectiveProfile?.unread_notification_count ?? 0} unread notifications`}
                 className={styles.headerIconButton}
-                href="/os/operations?tab=today"
+                href="/os/calendar"
                 title="Notifications"
               >
                 <Bell aria-hidden="true" size={18} />

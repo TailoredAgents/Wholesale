@@ -1,40 +1,23 @@
-import { getTransactionOverview } from "../../lib/api";
-import { DealJourney } from "../_components/deal-journey";
-import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
-import { StatusBadge } from "../_components/design-system";
-import { TransactionWorkspace } from "./transaction-workspace";
+import { redirect } from "next/navigation";
+
+import { getDealOverview } from "../../lib/api";
 
 export const dynamic = "force-dynamic";
+
+const transactionTabs = new Set(["contract", "closing", "documents", "parties", "timeline"]);
 
 export default async function TransactionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ transaction?: string; tab?: string }>;
+  searchParams: Promise<{ tab?: string; transaction?: string }>;
 }) {
-  const [{ transactions, apiConnected }, params] = await Promise.all([
-    getTransactionOverview(),
-    searchParams,
-  ]);
-  return (
-    <WorkspacePage>
-      <PageHeader
-        description="Control contracts, evidence, deadlines, closing parties, and funding from one record."
-        eyebrow="Deal flow / contract to funding"
-        meta={<StatusBadge tone={apiConnected ? "success" : "danger"}>{apiConnected ? "Closing queue current" : "Queue unavailable"}</StatusBadge>}
-        title="Transactions"
-      />
-      <DealJourney active="transactions" />
-      {transactions ? (
-        <TransactionWorkspace
-          initialData={transactions}
-          initialTab={params.tab === "contract" ? "contract" : "closing"}
-          initialTransactionId={params.transaction}
-        />
-      ) : (
-        <SectionPanel description="A deal-access role and an available API connection are required." title="Transaction workspace unavailable">
-          The server did not return transaction data.
-        </SectionPanel>
-      )}
-    </WorkspacePage>
-  );
+  const [params, { deals }] = await Promise.all([searchParams, getDealOverview()]);
+  const selected = deals?.items.find((item) => item.transaction_id === params.transaction);
+  const query = new URLSearchParams({
+    display: "queue",
+    tab: transactionTabs.has(params.tab ?? "") ? params.tab! : "closing",
+    view: "all",
+  });
+  if (selected) query.set("deal", selected.id);
+  redirect(`/os/deals?${query.toString()}`);
 }

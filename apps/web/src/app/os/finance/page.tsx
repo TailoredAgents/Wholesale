@@ -15,7 +15,6 @@ import {
   getVendorAccounting,
   getWorkspaceProfile,
 } from "../../lib/api";
-import { ManagementJourney } from "../_components/management-journey";
 import { ManagementCopilotLauncher } from "../_components/management-copilot-launcher";
 import { ManagementSummaryStrip } from "../_components/management-summary-strip";
 import { PageHeader, WorkspacePage } from "../_components/page-contracts";
@@ -155,7 +154,6 @@ export default async function FinancePage({
       meta={<StatusBadge tone={financeData.apiConnected ? "success" : "danger"}>{financeData.apiConnected ? "Ledger current" : "Finance unavailable"}</StatusBadge>}
       title="Finance"
     />
-    <ManagementJourney active="finance" />
     <ManagementSummaryStrip
       authority={{ label: "Authority", value: canChangeComp ? "Financial controller" : "Ledger access", detail: canChangeComp ? "Compensation rules may be changed" : "Compensation policy is view only", tone: canChangeComp ? "success" : "info" }}
       comparison={{ label: "Company net trend", value: delta(finance.summary.company_net_cents, previous?.company_net_cents), detail: `${percent(margin)} of collected revenue`, tone: finance.summary.company_net_cents >= 0 ? "success" : "danger" }}

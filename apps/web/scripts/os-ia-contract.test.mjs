@@ -154,7 +154,7 @@ test("live primary navigation matches the approved 11-destination target", () =>
   const source = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
   const primarySource = source.slice(
     source.indexOf("export const osNavGroups"),
-    source.indexOf("export const compatibilityNavGroups"),
+    source.indexOf("export function isOwnerProfile"),
   );
   const sourceItems = [...primarySource.matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g)]
     .map((match) => `${match[1]}|${match[2]}`);
@@ -167,25 +167,27 @@ test("live primary navigation matches the approved 11-destination target", () =>
   }
 });
 
-test("compatibility tools preserve authorized access to legacy destinations", () => {
-  const source = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
-  const compatibilitySource = source.slice(
-    source.indexOf("export const compatibilityNavGroups"),
-    source.indexOf("export function isOwnerProfile"),
+test("legacy routes preserve record context without competing navigation", () => {
+  const navigation = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
+  const shell = readFileSync(resolve(osSourceRoot, "os-shell.tsx"), "utf8");
+  const transactions = readFileSync(resolve(osSourceRoot, "transactions/page.tsx"), "utf8");
+  const dispositions = readFileSync(resolve(osSourceRoot, "dispositions/page.tsx"), "utf8");
+  const setup = readFileSync(
+    resolve(osSourceRoot, "dispositions/disposition-setup-workspace.tsx"),
+    "utf8",
   );
-  const sourceItems = [
-    ...compatibilitySource.matchAll(/href:\s*"([^"]+)"[\s\S]*?label:\s*"([^"]+)"/g),
-  ].map((match) => ({ href: match[1], label: match[2] }));
-  assert.ok(sourceItems.length > 0);
-  for (const item of sourceItems) {
-    assert.ok(
-      legacyNavigation.some(
-        (legacy) => legacy.href === item.href && legacy.label === item.label,
-      ),
-      `${item.label} is not part of the legacy inventory`,
-    );
-    assert.ok(routeInventoryForPath(item.href), `${item.href} has no route owner`);
-  }
+  const componentNames = walk(resolve(osSourceRoot, "_components")).map((path) =>
+    path.split("/").at(-1),
+  );
+
+  assert.doesNotMatch(navigation, /compatibilityNavGroups|visibleCompatibilityGroups/);
+  assert.doesNotMatch(shell, /toolsOpen|Open additional tools|>Tools</);
+  assert.match(transactions, /item\.transaction_id === params\.transaction/);
+  assert.match(transactions, /redirect\(`\/os\/deals\?/);
+  assert.match(dispositions, /item\.disposition_case_id === params\.case/);
+  assert.match(dispositions, /DispositionSetupWorkspace/);
+  assert.match(setup, /router\.push\(/);
+  assert.ok(componentNames.every((name) => !name?.includes("journey")));
 });
 
 test("all static OS links and their declared query keys have a route owner", () => {
@@ -236,8 +238,8 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(dealsPage, /transactionTabs\.has\(params\.tab/);
   assert.match(dealsPage, /dispositionTabs\.has\(params\.tab/);
   assert.match(dealWorkspace, /returnTo=/);
-  assert.doesNotMatch(transactionWorkspace, /!embedded && copilot/);
-  assert.doesNotMatch(dispositionWorkspace, /!embedded && copilot/);
+  assert.doesNotMatch(transactionWorkspace, /\bembedded\b/);
+  assert.doesNotMatch(dispositionWorkspace, /\bembedded\b/);
   assert.match(leadRecord, /activeTab === "contract"\s*\? getBuyers\(\)/);
   assert.match(leadRecord, /internalReturnPath/);
   assert.match(buyerPage, /initialBuyerId=\{params\?\.buyer\}/);
@@ -303,6 +305,22 @@ test("canonical Help sources and baseline evidence commands are present", () => 
   assert.equal(evidenceContract.requiredViewports.length, 3);
   assert.match(evidenceContract.architectureCheck, /audit:ia/);
   assert.match(evidenceContract.visualBaseline, /baseline:ia/);
+});
+
+test("role defaults and current manuals use canonical workspace language", () => {
+  const navigation = readFileSync(resolve(osSourceRoot, "os-navigation.tsx"), "utf8");
+  for (const experience of targetRoleExperiences.filter((item) => item.defaultRoute)) {
+    if (["owner", "founder_operator", "ceo", "administrator"].includes(experience.role)) continue;
+    assert.ok(
+      navigation.includes(`return "${experience.defaultRoute}"`),
+      `${experience.role} default is not implemented in os-navigation.tsx`,
+    );
+  }
+  for (const document of canonicalHelpDocuments) {
+    const source = readFileSync(resolve(repositoryRoot, document), "utf8");
+    assert.doesNotMatch(source, /Tools\s*>\s*(Lead Desk|Seller Pipeline|Field Operations)/i);
+    assert.doesNotMatch(source, /Use \*\*Tools\*\*/i);
+  }
 });
 
 test("old and new employee vocabulary is explicit and non-duplicative", () => {

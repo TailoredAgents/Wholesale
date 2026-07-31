@@ -8,7 +8,7 @@ import { currentRouteInventory, evidenceContract } from "./os-ia-contract.mjs";
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, "../../..");
-const baseUrl = process.env.IA_BASELINE_BASE_URL ?? "http://127.0.0.1:3000";
+const baseUrl = process.env.IA_BASELINE_BASE_URL ?? "http://localhost:3000";
 const outputDirectory = resolve(
   repositoryRoot,
   process.env.IA_BASELINE_OUTPUT ?? evidenceContract.visualArtifactDirectory,
@@ -18,6 +18,8 @@ const requestedRoutes = process.env.IA_BASELINE_ROUTES
   .map((route) => route.trim())
   .filter(Boolean);
 const routes = currentRouteInventory
+  .filter((route) => !route.migration.startsWith("legacy"))
+  .filter((route) => route.migration !== "development-only")
   .map((route) => route.baselinePath)
   .filter(Boolean)
   .filter((route) => !requestedRoutes || requestedRoutes.includes(route));

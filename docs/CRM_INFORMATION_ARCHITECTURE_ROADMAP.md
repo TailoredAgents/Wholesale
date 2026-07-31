@@ -1071,7 +1071,7 @@ unchanged.
 
 ## IA10. Compatibility, Documentation, And Role Acceptance
 
-Status: **Planned**
+Status: **Implemented July 31, 2026**
 
 Scope:
 
@@ -1091,6 +1091,20 @@ Exit criteria:
 - each role completes its daily routine without owner-level navigation knowledge
 - no required feature or record history is lost
 - production passes desktop, mobile, and iPad acceptance
+
+Implementation note: the global Tools menu and duplicate journey strips were removed after their
+controls reached canonical parity. My Setup remains at the bottom of every signed-in user's
+sidebar. `/os/transactions` now resolves the selected transaction and tab into the matching Deal.
+`/os/dispositions?case=...` resolves the selected case into the matching Deal, while the route
+without a case retains only the first-case setup form. The embedded transaction and disposition
+tools no longer render their own queues, record headers, or local tab bars inside Deals.
+
+The System Map, User Manual, UI Control Reference, Staff Role Manuals, Lead Manager Manual, AI
+documentation, and Help sources now use the canonical workspace language. Automated acceptance
+checks cover route ownership, static deep links, role visibility, role defaults, permission
+inventory synchronization, retired navigation removal, canonical Help sources, and retained
+record context. Production employee-seat smoke checks remain an operational deployment task when
+each real staff account is activated; they do not require additional information architecture.
 
 ## 14. Cross-Phase Acceptance Standards
 
@@ -1629,8 +1643,8 @@ display, selected deal, and selected tab in the URL.
 ### 26.2 One Deal Record
 
 The Deal record has **Summary**, **Contract**, **Closing**, **Documents**, **Parties**,
-**Disposition**, **Finance**, and **Timeline** sections. Transaction and Disposition workspaces
-support embedded record mode, so the canonical Deal record uses their existing APIs, permissions,
+**Disposition**, **Finance**, and **Timeline** sections. Transaction and Disposition controls are
+embedded in the canonical Deal record and use their existing APIs, permissions,
 approval rules, documents, checklists, buyer matching, offers, and reconciliation controls rather
 than reproducing them.
 
@@ -1655,3 +1669,32 @@ are worked inside Deals. Final redirects are deferred until new-case setup has c
 - Next.js production build passes with the canonical Deals workspace.
 - Desktop and 390px mobile captures confirm the queue and record remain readable without
   document-level horizontal overflow.
+
+## 27. IA9 Record Standards And Contextual Tools Implementation
+
+Seller Lead, Deal, Buyer, and Campaign records now preserve selected record, local section, and
+return context in the URL. Related-record links return staff to the originating list or record.
+Buyer detail becomes a drawer on phone layouts, and specialist data loads only when its local view
+is selected.
+
+Transaction and Disposition Copilots remain review-gated inside the canonical Deal. The Help
+bubble remains a separate global utility. Canonical pages no longer repeat acquisition, deal, or
+management journey strips above their actual record controls.
+
+## 28. IA10 Compatibility And Role Acceptance Implementation
+
+The OS exposes only the approved 11 primary destinations, reduced by role and permission. Focused
+queues are local views inside Prospecting, Seller Leads, Tasks, Calendar, Deals, and Settings.
+My Setup remains permanently available from the signed-in role block.
+
+Legacy links preserve context without advertising duplicate workspaces:
+
+- transaction ID and selected transaction tab resolve to the matching Deal
+- disposition case ID resolves to the matching Deal's Disposition section
+- first-case disposition setup remains available for eligible executed transactions
+- campaign, pipeline, underwriting, approval, team, policy, and AI links keep their earlier
+  context-preserving redirects
+
+The architecture contract verifies current routes, query parameters, static links, canonical
+navigation, role visibility, default workspace, permission inventory, Help source ownership, and
+retired navigation removal. Current manuals teach only the canonical employee workflow.

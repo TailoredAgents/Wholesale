@@ -2,17 +2,13 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
-  AlertTriangle,
   Check,
-  ChevronRight,
   CircleDollarSign,
-  Clock3,
   Download,
   FileCheck2,
   FileSearch,
   FileText,
   History,
-  Landmark,
   LoaderCircle,
   PenLine,
   Plus,
@@ -32,7 +28,6 @@ import type {
 } from "../../lib/api";
 import { CopilotLauncher } from "../_components/copilot-launcher";
 import { RecordTimeline } from "../_components/record-timeline";
-import { DealControlStrip } from "../_components/deal-control-strip";
 import { labelize } from "../os-utils";
 import { TransactionCopilotPanel } from "./transaction-copilot-panel";
 import styles from "./transactions.module.css";
@@ -54,24 +49,21 @@ function date(value: string | null) {
 }
 
 export function TransactionWorkspace({
-  embedded = false,
   initialData,
   initialTab = "closing",
   initialTransactionId,
 }: {
-  embedded?: boolean;
   initialData: TransactionOverview;
   initialTab?: Tab;
   initialTransactionId?: string;
 }) {
   const { getToken } = useAuth();
-  const [overview, setOverview] = useState(initialData);
-  const [selectedId, setSelectedId] = useState(initialTransactionId ?? initialData.items[0]?.id ?? null);
+  const selectedId = initialTransactionId ?? initialData.items[0]?.id ?? null;
   const [detail, setDetail] = useState<TransactionDetail | null>(null);
   const [copilot, setCopilot] = useState<TransactionCopilotOverview | null>(null);
   const [f4Status, setF4Status] = useState<F4IntegrationStatus | null>(null);
   const [signaturePackageId, setSignaturePackageId] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>(initialTab);
+  const tab = initialTab;
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const apiBase = useMemo(() => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000", []);
@@ -97,14 +89,12 @@ export function TransactionWorkspace({
 
   async function reload(transactionId = selectedId) {
     if (!transactionId) return;
-    const [nextDetail, nextOverview, nextCopilot, nextF4Status] = await Promise.all([
+    const [nextDetail, nextCopilot, nextF4Status] = await Promise.all([
       request<TransactionDetail>(`/api/v1/transactions/${transactionId}`),
-      request<TransactionOverview>("/api/v1/transactions"),
       request<TransactionCopilotOverview>(`/api/v1/transactions/${transactionId}/copilot`),
       request<F4IntegrationStatus>("/api/v1/transactions/integrations/f4"),
     ]);
     setDetail(nextDetail);
-    setOverview(nextOverview);
     setCopilot(nextCopilot);
     setF4Status(nextF4Status);
   }
@@ -296,23 +286,6 @@ export function TransactionWorkspace({
     } catch (error) { setMessage(error instanceof Error ? error.message : "Contract preview failed."); }
   }
 
-  const requiredOpen = detail?.checklist.filter(
-    (item) => item.is_required && item.status !== "complete",
-  ) ?? [];
-  const nextDeadline = detail
-    ? [
-        ...detail.checklist.map((item) => item.due_at),
-        detail.earnest_money_due_at,
-        detail.due_diligence_deadline,
-        detail.assignment_deadline,
-        detail.closing_date,
-      ]
-        .filter((value): value is string => Boolean(value))
-        .map((value) => new Date(value))
-        .filter((value) => !Number.isNaN(value.getTime()) && value >= new Date())
-        .sort((left, right) => left.getTime() - right.getTime())[0] ?? null
-    : null;
-  const pendingPackage = detail?.contract_packages.some((item) => item.status === "pending_approval") ?? false;
   const sellerParty = detail?.parties.find((item) => item.party_type === "seller" && item.email);
   const signatureDocumentType = detail?.contract_packages.find(
     (item) => item.id === signaturePackageId,
@@ -320,33 +293,10 @@ export function TransactionWorkspace({
   const primarySignerRole = signatureDocumentType === "assignment_contract" ? "Assignee" : "Seller";
 
   return (
-    <div className={`${styles.workspace} ${embedded ? styles.embeddedWorkspace : ""}`}>
-      {!embedded ? <section className={styles.metrics} aria-label="Transaction summary">
-        {[{ label: "Active", value: overview.metrics.active, icon: Landmark }, { label: "Approval", value: overview.metrics.pending_approval, icon: FileCheck2 }, { label: "Due in 7 days", value: overview.metrics.due_next_seven_days, icon: Clock3 }, { label: "Overdue", value: overview.metrics.overdue, icon: AlertTriangle }, { label: "Ready to close", value: overview.metrics.ready_to_close, icon: CircleDollarSign }].map((item) => <div key={item.label}><item.icon size={18} /><span>{item.label}</span><strong>{item.value}</strong></div>)}
-      </section> : null}
-      <div className={`${styles.body} ${embedded ? styles.embeddedBody : ""}`}>
-        {!embedded ? <aside className={styles.queue}>
-          <div className={styles.queueHeader}><div><span>Closing queue</span><strong>{overview.items.length} active</strong></div></div>
-          {overview.items.length === 0 ? <p className={styles.empty}>Open a transaction from a lead&apos;s Deal tab.</p> : overview.items.map((item) => (
-            <button className={selectedId === item.id ? styles.selectedQueueItem : styles.queueItem} key={item.id} onClick={() => { setDetail(null); setCopilot(null); setSelectedId(item.id); }} type="button">
-              <div><strong>{item.seller_name}</strong><ChevronRight size={16} /></div><span>{item.property_address}</span>
-              <dl><div><dt>Close</dt><dd>{date(item.closing_date)}</dd></div><div><dt>Progress</dt><dd>{item.checklist_complete}/{item.checklist_total}</dd></div></dl>
-              {item.risk_flags[0] ? <small><AlertTriangle size={13} />{item.risk_flags[0]}</small> : <small className={styles.clear}><Check size={13} />On track</small>}
-            </button>
-          ))}
-        </aside> : null}
+    <div className={`${styles.workspace} ${styles.embeddedWorkspace}`}>
+      <div className={`${styles.body} ${styles.embeddedBody}`}>
         <section aria-label="Transaction detail" className={styles.detail}>
           {!selectedId ? <div className={styles.emptyState}><FileText size={24} /><h3>No active transactions</h3><p>Open one from the Deal tab on a qualified lead.</p></div> : !detail ? <div className={styles.loading}><LoaderCircle className={styles.spin} size={22} /> Loading transaction</div> : <>
-            {!embedded ? <><header className={styles.dealHeader}><div><span>{labelize(detail.status)}</span><h3>{detail.seller_name}</h3><p>{detail.property_address}</p></div><div><span>Purchase</span><strong>{money(detail.purchase_price_cents)}</strong></div></header>
-            <div className={styles.controlStrip}>
-              <DealControlStrip
-                authority={{ label: "Authority", value: pendingPackage ? "Owner approval" : "Coordinator controls", detail: pendingPackage ? "Contract remains blocked" : detail.coordinator_name ?? "Coordinator unassigned", tone: pendingPackage ? "warning" : "info" }}
-                blocker={{ label: "Primary blocker", value: requiredOpen[0]?.title ?? "No required blocker", detail: requiredOpen.length ? `${requiredOpen.length} required items open` : "Required checklist is clear", tone: requiredOpen.length ? "warning" : "success" }}
-                deadline={{ label: "Next deadline", value: nextDeadline ? date(nextDeadline.toISOString()) : "No future deadline", detail: detail.closing_date ? `Closing ${date(detail.closing_date)}` : "Closing date missing", tone: nextDeadline ? "info" : "warning" }}
-                evidence={{ label: "Evidence", value: `${detail.documents.length} documents`, detail: `${detail.checklist.filter((item) => item.status === "complete").length}/${detail.checklist.length} checklist complete`, tone: detail.documents.length ? "success" : "warning" }}
-                nextAction={{ label: "Authorized next step", value: pendingPackage ? "Resolve contract approval" : requiredOpen[0]?.title ?? (detail.status === "funded" ? "Closing complete" : "Confirm funding"), detail: "Server gates remain enforced", tone: detail.status === "funded" ? "success" : "info" }}
-              />
-            </div></> : null}
             {copilot ? (
               <CopilotLauncher
                 attentionCount={copilot.readiness_gaps.length + copilot.deadline_risks.length}
@@ -363,7 +313,6 @@ export function TransactionWorkspace({
                 />
               </CopilotLauncher>
             ) : null}
-            {!embedded ? <nav className={styles.tabs}>{(["closing", "contract", "documents", "parties", "timeline"] as Tab[]).map((value) => <button className={tab === value ? styles.activeTab : ""} key={value} onClick={() => setTab(value)} type="button">{labelize(value)}</button>)}</nav> : null}
             {message ? <div className={message === "Saved." || message.startsWith("SignWell connected") ? styles.success : styles.notice}>{message}</div> : null}
 
             {tab === "closing" ? <>

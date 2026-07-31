@@ -56,8 +56,8 @@ two jobs.
 ## Owner
 
 Main pages: Home, Tasks, Deals, Finance, Marketing, and Settings. Governed decisions are in
-**Tasks > Approvals**. Use Tools for Company & Policy, Team & Access, and AI Control while those
-detailed workspaces are being consolidated.
+**Tasks > Approvals**. Company policy, People & Access, integrations, and AI controls are local
+views inside **Settings**.
 
 - Set policy, staffing, market, compensation, and approval authority.
 - Cover open operational seats without hiding which job was performed.
@@ -98,13 +98,14 @@ active value queue and the seller record's Valuation & Offer section for detaile
 - After an accepted outcome, use the iPad signing panel only when the exact agreement is approved
   and matches the recorded accepted price.
 - Review the PDF privately before handing the iPad to each named signer, then confirm the completed
-  contract returns to Transactions.
+  contract returns to the Deal's Contract section.
 - Do not alter approved ARV, offer ceilings, or contract terms without the required approval.
 
 ## Transaction Coordinator
 
 Main pages: Home, Inbox, Tasks, Calendar, and Deals. Use **Tasks > Approvals** for authorized
-decisions and Tools for the detailed Transactions workspace.
+decisions and the selected Deal's Contract, Closing, Documents, Parties, and Timeline sections for
+transaction work.
 
 - Own deadlines and evidence from signed seller contract through funded closing.
 - Track earnest money, title, payoff, due diligence, assignments, and closing requirements.
@@ -114,7 +115,8 @@ decisions and Tools for the detailed Transactions workspace.
 
 ## Dispositions
 
-Main pages: Dispositions, Buyers, Transactions, Inbox, and Calendar.
+Main pages: Deals, Buyers, Inbox, Tasks, and Calendar. Use **Deals > Ready for Disposition**, then
+the selected Deal's Disposition section for package, buyer, and offer work.
 
 - Prepare approved deal packages and match only appropriate buyers.
 - Track inquiries, showings, offers, proof of funds, deposits, primary buyer, and backup buyer.
@@ -390,7 +392,7 @@ Conner currently covers this seat together with Finance/Accounting.
 
 ### New Contract Intake
 
-1. Open **Transactions**.
+1. Open **Deals > Closing Exceptions** and select the contracted property.
 2. Confirm the executed agreement matches the lead and approved version.
 3. Confirm all seller names, property address, price, dates, and signatures.
 4. Add the closing attorney/title company and other parties.

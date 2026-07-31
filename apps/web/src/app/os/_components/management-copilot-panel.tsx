@@ -27,10 +27,10 @@ const workspacePaths: Record<string, string> = {
   dashboard: "/os",
   finance: "/os/finance",
   marketing: "/os/marketing",
-  operations: "/os/operations",
-  dispositions: "/os/dispositions",
-  transactions: "/os/transactions",
-  ai: "/os/ai",
+  operations: "/os/calendar",
+  dispositions: "/os/deals?view=ready-for-disposition",
+  transactions: "/os/deals?view=closing-exceptions",
+  ai: "/os/settings/ai",
 };
 
 function rate(basisPoints: number) {
