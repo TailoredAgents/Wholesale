@@ -1,58 +1,19 @@
-import { getAcquisitionOperations, getDashboardData } from "../../lib/api";
-import { ManagementJourney } from "../_components/management-journey";
-import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
-import {
-  OperationsWorkspace,
-  type OperationsTab,
-} from "./operations-workspace";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+const destinations: Record<string, string> = {
+  today: "/os/calendar",
+  structure: "/os/settings/markets",
+  calling: "/os/prospecting",
+  team: "/os/settings/people",
+  quality: "/os/settings/data-quality",
+  "follow-up": "/os/settings/workflows",
+};
 
-const operationsTabs = new Set<OperationsTab>([
-  "today",
-  "structure",
-  "calling",
-  "team",
-  "quality",
-  "follow-up",
-]);
-
-export default async function AcquisitionOperationsPage({
+export default async function LegacyOperationsPage({
   searchParams,
 }: {
   searchParams: Promise<{ tab?: string }>;
 }) {
-  const params = await searchParams;
-  const initialTab = operationsTabs.has(params.tab as OperationsTab)
-    ? (params.tab as OperationsTab)
-    : "team";
-  const [{ operations, apiConnected }, dashboard] = await Promise.all([
-    getAcquisitionOperations(),
-    getDashboardData(),
-  ]);
-
-  return (
-    <WorkspacePage>
-      <PageHeader
-        description="Employee accounts, access, team structure, operational configuration, and quality controls."
-        eyebrow="Workspace management"
-        meta={apiConnected ? "Live operations" : "API unavailable"}
-        title="Team & Access"
-      />
-      <ManagementJourney active="team-access" />
-
-      {operations ? (
-        <OperationsWorkspace
-          initialTab={initialTab}
-          key={initialTab}
-          leads={dashboard.leads}
-          operations={operations}
-        />
-      ) : (
-        <SectionPanel description="Check API authentication and deployment status." title="Operations unavailable">
-          <div />
-        </SectionPanel>
-      )}
-    </WorkspacePage>
-  );
+  const { tab } = await searchParams;
+  redirect(destinations[tab ?? "team"] ?? "/os/settings/people");
 }

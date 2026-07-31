@@ -34,7 +34,8 @@ Start with:
 - `docs/FINISHING_ROADMAP.md`: canonical remaining production acceptance and launch sequence.
 - `docs/CRM_INFORMATION_ARCHITECTURE_ROADMAP.md`: approved private-OS navigation, workspace,
   record-layout, compatibility, and role-acceptance upgrade plan; IA1 provides the executable
-  contract and IA2 provides the live 11-destination shell, global controls, and compatibility hubs.
+  contract, IA2 provides the live 11-destination shell, and IA3 provides the permission-filtered
+  Settings workspace and legacy management redirects.
 - `docs/VA_DIALER_ROADMAP.md`: one-by-one staff calling workflow, assignment, acceptance, and
   launch sequence.
 - `docs/OPERATING_MODEL.md`: authoritative roles, workflow, compensation, AI, controls, and metrics.

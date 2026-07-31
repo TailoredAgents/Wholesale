@@ -311,8 +311,11 @@ lead record's audited stage control.
 
 ## Operations
 
-Operations contains six tabs: **Calendar**, **Markets & campaigns**, **Calling lists**, **Team**,
-**Data quality**, and **Follow-up plans**.
+The former Operations page is now a compatibility redirect. Its controls retain the behavior
+documented below, but their live owners are: Calendar in **Calendar**; campaigns, prospects, and
+calling lists in **Prospecting**; markets in **Settings > Markets & Territories**; team controls
+in **Settings > People & Access**; duplicate review in **Settings > Data & Quality**; and follow-up
+plans in **Settings > Workflows**.
 
 ### Calendar Tab
 
@@ -704,6 +707,9 @@ history into separate channel threads.
 
 ### Email Administration
 
+Email administration is embedded at `/os/settings/communications`. The legacy
+`/os/inbox?manage=email` link redirects there.
+
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Senders** | Manages approved outbound identities | Owner or communication administrator |
@@ -719,6 +725,21 @@ history into separate channel threads.
 | Watcher grant | Gives a user visibility into routed replies | Used for shared coverage |
 | Unresolved inbound assignment | Routes an unmatched reply to a person or team | Requires an unresolved inbound event |
 | **Save / Update** | Persists sender or routing changes | Administrator only |
+
+### Voice Line Administration
+
+Voice-line administration is shown below Email Administration at `/os/settings/communications`
+only to owners and users with `communications:manage_voice_lines`.
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
+| Label | Names the line by purpose or seat | Required |
+| Status | Activates or deactivates routing through the line | Deactivation preserves call history |
+| Inbound route | Routes calls to conversation owner, assigned user, or voicemail | Provider webhook must point to Stonegate |
+| Default company line | Marks the preferred line for company calling | Use one operational default |
+| **Add line** | Creates the Stonegate voice-line record | Requires voice-line management permission |
+| **Save** | Updates label, status, default, and route | Requires voice-line management permission |
 
 ## Field Operations
 
@@ -1298,9 +1319,10 @@ books. Sensitive vendor, banking, tax, and accounting controls are permission-ga
 
 ## Company & Policy
 
-The Company & Policy workspace uses **Setup**, **Active**, **Pending**, **History**, and
-**Launches** to manage seats, role acknowledgement, compensation policy, work credit,
-counterparties, and market readiness.
+These controls are split by ownership: **Settings > Company** contains setup, seats,
+counterparties, and role acknowledgement; **Settings > Finance Policy** contains Active, Pending,
+and History; **Settings > Markets & Territories** contains Launches. The legacy Company & Policy
+route redirects to Finance Policy.
 
 ### Setup And Team Seats
 
@@ -1401,7 +1423,8 @@ stored as a business record.
 
 ## AI Control
 
-AI Control is the owner/administrator workspace for the existing Stonegate Copilot system.
+AI Control now lives at **Settings > AI & Automation**. The legacy `/os/ai` route redirects there.
+It is the owner/administrator workspace for the existing Stonegate Copilot system.
 It does not create a second AI system. Its views are **Copilots**, **Runtime**,
 **Automation**, **Portfolio**, **Evaluations**, **Traces**, and **Governance**.
 

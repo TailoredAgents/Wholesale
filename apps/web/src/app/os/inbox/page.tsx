@@ -1,3 +1,5 @@
+import { redirect } from "next/navigation";
+
 import { InboxWorkspace, type InboxFilterKey } from "./inbox-workspace";
 
 export const dynamic = "force-dynamic";
@@ -23,22 +25,17 @@ export default async function InboxPage({
   }>;
 }) {
   const params = await searchParams;
+  if (params.manage === "email") redirect("/os/settings/communications");
   const requestedFilter = params.view as InboxFilterKey | undefined;
 
   return (
     <InboxWorkspace
       initialFilter={requestedFilter && inboxFilters.has(requestedFilter) ? requestedFilter : "team"}
       initialConversationId={params.conversation ?? null}
-      initialEmailAdminOpen={params.manage === "email"}
+      initialEmailAdminOpen={false}
       initialGlobalComposeOpen={params.compose === "email"}
       initialLeadId={params.lead ?? null}
-      key={
-        params.manage === "email"
-          ? "email-management"
-          : params.compose === "email"
-            ? "compose-email"
-            : "inbox"
-      }
+      key={params.compose === "email" ? "compose-email" : "inbox"}
     />
   );
 }

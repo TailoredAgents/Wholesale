@@ -159,6 +159,7 @@ export function EmailAdminPanel({
   configurationBlockers,
   onAliasesChanged,
   onClose,
+  variant = "dialog",
 }: {
   aliases: EmailSenderAlias[];
   conversations: ConversationOption[];
@@ -166,7 +167,8 @@ export function EmailAdminPanel({
   providerConfigured: boolean;
   configurationBlockers: string[];
   onAliasesChanged: () => Promise<void>;
-  onClose: () => void;
+  onClose?: () => void;
+  variant?: "dialog" | "inline";
 }) {
   const { getToken } = useAuth();
   const [tab, setTab] = useState<"senders" | "routing">("senders");
@@ -367,23 +369,22 @@ export function EmailAdminPanel({
 
   if (!open) return null;
 
-  return (
-    <div className={styles.backdrop} onMouseDown={onClose} role="presentation">
+  const panel = (
       <section
         aria-labelledby="email-admin-title"
-        aria-modal="true"
-        className={styles.panel}
+        aria-modal={variant === "dialog" ? "true" : undefined}
+        className={`${styles.panel} ${variant === "inline" ? styles.inlinePanel : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
-        role="dialog"
+        role={variant === "dialog" ? "dialog" : "region"}
       >
         <header className={styles.header}>
           <div>
             <span>Shared Inbox</span>
             <h2 id="email-admin-title">Email administration</h2>
           </div>
-          <button onClick={onClose} title="Close email administration" type="button">
+          {variant === "dialog" ? <button onClick={onClose} title="Close email administration" type="button">
             <X aria-hidden="true" size={18} />
-          </button>
+          </button> : null}
         </header>
 
         <div className={styles.providerStatus} data-ready={providerConfigured}>
@@ -766,6 +767,13 @@ export function EmailAdminPanel({
           </div>
         )}
       </section>
+  );
+
+  if (variant === "inline") return panel;
+
+  return (
+    <div className={styles.backdrop} onMouseDown={onClose} role="presentation">
+      {panel}
     </div>
   );
 }

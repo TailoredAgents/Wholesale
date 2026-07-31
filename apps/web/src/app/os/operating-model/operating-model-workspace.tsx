@@ -9,10 +9,10 @@ import type { LeadListItem, OperatingModelOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./operating-model.module.css";
 
-type Tab = "setup" | "active" | "history" | "credits" | "launches";
+export type OperatingModelTab = "setup" | "active" | "history" | "credits" | "launches";
 type RequestStatus = "idle" | "saving" | "saved" | "error";
 
-const tabs: Array<{ key: Tab; label: string }> = [
+const tabs: Array<{ key: OperatingModelTab; label: string }> = [
   { key: "setup", label: "Company setup" },
   { key: "active", label: "Active policy" },
   { key: "credits", label: "Pending decisions" },
@@ -53,13 +53,19 @@ function modeShare(minimum: number, maximum: number) {
 export function OperatingModelWorkspace({
   operatingModel,
   leads,
+  initialTab = "setup",
+  allowedTabs,
+  showTabs = true,
 }: {
   operatingModel: OperatingModelOverview;
   leads: LeadListItem[];
+  initialTab?: OperatingModelTab;
+  allowedTabs?: OperatingModelTab[];
+  showTabs?: boolean;
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("setup");
+  const [activeTab, setActiveTab] = useState<OperatingModelTab>(initialTab);
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [selectedChecklistId, setSelectedChecklistId] = useState(
@@ -296,8 +302,8 @@ export function OperatingModelWorkspace({
         <div><span>Company setup</span><strong>{operatingModel.company_setup.completed_check_count}/{operatingModel.company_setup.total_check_count}</strong></div>
       </div>
 
-      <div className={styles.tabBar} role="tablist" aria-label="Operating model views">
-        {tabs.map((tab) => (
+      {showTabs ? <div className={styles.tabBar} role="tablist" aria-label="Operating model views">
+        {tabs.filter((tab) => !allowedTabs || allowedTabs.includes(tab.key)).map((tab) => (
           <button
             aria-selected={activeTab === tab.key}
             className={activeTab === tab.key ? styles.activeTab : undefined}
@@ -309,7 +315,7 @@ export function OperatingModelWorkspace({
             {tab.label}
           </button>
         ))}
-      </div>
+      </div> : null}
 
       {status !== "idle" ? (
         <p className={`${styles.feedback} ${styles[status]}`} role="status">{status === "saving" ? "Saving..." : message}</p>

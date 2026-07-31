@@ -30,6 +30,16 @@ export type WorkspaceProfile = {
   unread_notification_count: number;
 };
 
+export type IntegrationStatus = {
+  key: string;
+  name: string;
+  category: string;
+  mode: string;
+  enabled: boolean;
+  configured: boolean;
+  blockers: string[];
+};
+
 export type LeadListItem = {
   id: string;
   source: string;
@@ -4240,5 +4250,25 @@ export async function getDispositionOverview(): Promise<{
     };
   } catch {
     return { dispositions: null, apiConnected: false };
+  }
+}
+
+export async function getIntegrationStatuses(): Promise<{
+  integrations: IntegrationStatus[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  try {
+    const response = await fetch(`${apiBaseUrl}/api/v1/integrations/status`, {
+      headers: await getServerApiHeaders(),
+      cache: "no-store",
+    });
+    if (!response.ok) throw await apiError(response);
+    return {
+      integrations: ((await response.json()) as { items: IntegrationStatus[] }).items,
+      apiConnected: true,
+    };
+  } catch {
+    return { integrations: [], apiConnected: false };
   }
 }

@@ -905,7 +905,7 @@ Exit criteria:
 
 ## IA3. Settings Consolidation
 
-Status: **Planned**
+Status: **Implemented July 30, 2026**
 
 Scope:
 
@@ -1344,7 +1344,78 @@ The direct New links consume `/os/leads?new=lead` and `/os/inbox?compose=email`.
   boundaries, fatal browser errors, or document-level horizontal overflow.
 - Manual review covered Home, Deals, Settings, and the mobile global header.
 
-### 20.5 Next Phase
+### 20.5 Handoff
 
-IA3 is next. It consolidates the compatibility Settings destinations behind permission-filtered
-local settings navigation while preserving the old URLs.
+IA3 followed this baseline. Section 21 records its implementation and verification.
+
+## 21. IA3 Settings Consolidation
+
+IA3 was implemented on July 30, 2026.
+
+### 21.1 Live Settings Structure
+
+`/os/settings` now redirects to the first section the signed-in employee may access. A stable,
+responsive local navigation exposes only authorized sections:
+
+| Section | Live route | Primary permission owner |
+| --- | --- | --- |
+| Company | `/os/settings/company` | `operating_model:manage` |
+| Markets & Territories | `/os/settings/markets` | Operations or operating-model management |
+| People & Access | `/os/settings/people` | User or operations management |
+| Communications | `/os/settings/communications` | Email or voice administration |
+| Integrations | `/os/settings/integrations` | Integration credential management |
+| Workflows | `/os/settings/workflows` | Operations management |
+| Data & Quality | `/os/settings/data-quality` | Operations, archive, or audit management |
+| Finance Policy | `/os/settings/finance-policy` | Operating-model or compensation management |
+| AI & Automation | `/os/settings/ai` | AI prompt/control management |
+
+Direct section requests run the same server-side permission check used to build the local
+navigation. Unauthorized sections return no page content.
+
+### 21.2 Existing Features Moved, Not Duplicated
+
+- Company reuses the operating-seat, counterparty, and role-acceptance controls.
+- Markets reuses market and territory controls plus market-launch evidence.
+- People reuses user, access-role, cold-calling eligibility, and team controls.
+- Communications embeds the existing sender, grant, signature, and inbound-routing administrator.
+- Workflows and Data & Quality reuse the existing follow-up and duplicate-review controls.
+- Finance Policy reuses active policy, work-credit, and policy-history controls.
+- AI & Automation reuses the existing Stonegate Copilot control plane.
+- Campaign and prospect creation remain under Prospecting and Campaigns, not Settings.
+
+### 21.3 Former Operations Tab Ownership
+
+| Former tab | New owner |
+| --- | --- |
+| Calendar | `/os/calendar` |
+| Markets & campaigns | Markets under Settings; campaigns and prospects under Prospecting |
+| Calling lists | `/os/prospecting` |
+| Team | `/os/settings/people` |
+| Data quality | `/os/settings/data-quality` |
+| Follow-up plans | `/os/settings/workflows` |
+
+### 21.4 Compatibility And Provider Status
+
+- `/os/operations` redirects by its `tab` query to the correct owner.
+- `/os/inbox?manage=email` redirects to Communications settings.
+- `/os/operating-model` redirects to Finance Policy.
+- `/os/ai` redirects to AI & Automation.
+- The Integrations page reports enabled/configured state and missing environment-variable names
+  for OpenAI, property data, Resend, Twilio, SignWell, DealMachine, document storage, and Sentry.
+  Credential values are never returned to the browser.
+
+### 21.5 Verification
+
+- IA contract: 10 tests passed with every new App Router page inventoried.
+- ESLint and TypeScript: passed.
+- Next.js production build: passed with all nine nested Settings routes.
+- Settings visual baseline: 30 captures across mobile, tablet, and desktop; zero failed routes,
+  fatal browser errors, or document-level horizontal overflow.
+- Targeted API regression suite: 22 tests passed across operations, company setup, operating
+  model, email administration, AI controls, voice lines, and integration status.
+- Six legacy management URL cases were verified to reach their intended new owner.
+
+### 21.6 Next Phase
+
+IA4 is next. It consolidates campaign list, creation, imports, assignments, cost, and results into
+the Prospecting workspace while preserving campaign deep links.

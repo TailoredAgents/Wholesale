@@ -223,9 +223,18 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Finance | `/os/finance` |
 | Marketing | `/os/marketing` |
 | Settings | `/os/settings` |
+| Settings: Company | `/os/settings/company` |
+| Settings: Markets & Territories | `/os/settings/markets` |
+| Settings: People & Access | `/os/settings/people` |
+| Settings: Communications | `/os/settings/communications` |
+| Settings: Integrations | `/os/settings/integrations` |
+| Settings: Workflows | `/os/settings/workflows` |
+| Settings: Data & Quality | `/os/settings/data-quality` |
+| Settings: Finance Policy | `/os/settings/finance-policy` |
+| Settings: AI & Automation | `/os/settings/ai` |
 | Compatibility: Campaigns | `/os/campaigns` |
-| Team & Access | `/os/operations?tab=team` |
-| Email Management | `/os/inbox?manage=email` |
+| Legacy Team & Access redirect | `/os/operations?tab=team` |
+| Legacy Email Management redirect | `/os/inbox?manage=email` |
 | Lead Desk | `/os/lead-manager` |
 | Archived Leads | `/os/leads/archived` |
 | Seller Pipeline | `/os/pipeline` |
@@ -235,8 +244,8 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Transactions | `/os/transactions` |
 | Dispositions | `/os/dispositions` |
 | My Setup | `/os/my-setup` |
-| Company & Policy | `/os/operating-model` |
-| AI Control | `/os/ai` |
+| Legacy Company & Policy redirect | `/os/operating-model` |
+| Legacy AI Control redirect | `/os/ai` |
 | Lead Record | `/os/leads/{lead_id}` |
 
 ## Home And Global Controls

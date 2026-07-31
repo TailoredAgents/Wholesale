@@ -471,24 +471,40 @@ links over the same underlying records.
 **Settings (`/os/settings`)**
 
 - Primary administration entry point.
-- Shows only personal, people, communications, policy, and AI sections allowed by permission.
-- Links to the existing management tools until IA3 consolidates their local navigation.
+- Redirects to the first authorized administration section.
+- Uses a stable permission-filtered local navigation for Company, Markets & Territories, People &
+  Access, Communications, Integrations, Workflows, Data & Quality, Finance Policy, and AI &
+  Automation.
+- Direct access to a restricted section is rejected by the server-rendered page.
+- Integrations reports provider readiness and missing environment-variable names without exposing
+  credential values.
 
 **My Setup (`/os/my-setup`)**
 
 - Every staff member can review and accept assigned role expectations.
 
-**Team & Access (`/os/operations?tab=team`)**
+**People & Access (`/os/settings/people`)**
 
-- Owner and manager administration for users, access roles, teams, markets, territories,
-  operational lists, saved views, duplicates, and follow-up plans.
+- Owner and manager administration for users, access roles, cold-calling eligibility, and teams.
 - This is where staff records are created before the matching person signs in with Clerk.
 - Cold-calling eligibility is controlled independently of the main access role.
 
-**Email Management (`/os/inbox?manage=email`)**
+**Markets & Territories (`/os/settings/markets`)**
 
-- Opens the existing authenticated email administration panel for senders, routing, signatures,
-  templates, mailbox grants, and unresolved inbound assignments.
+- Market and territory setup plus market-launch evidence.
+- Campaign and prospect creation remain in Prospecting.
+
+**Communications (`/os/settings/communications`)**
+
+- Embeds the authenticated email administration workspace for senders, routing, signatures,
+  mailbox grants, and unresolved inbound assignments.
+- Voice-line administrators can add company-owned numbers and update line labels, status, default
+  routing, and inbound behavior without receiving email-administration access.
+
+**Workflows And Data Quality**
+
+- `/os/settings/workflows` owns approved follow-up plans.
+- `/os/settings/data-quality` owns duplicate review.
 
 **Floating Help**
 
@@ -499,15 +515,18 @@ links over the same underlying records.
 - Returns document, heading, and source excerpts with every supported answer.
 - Has no access to live seller records and cannot perform operational actions.
 
-**Company & Policy (`/os/operating-model`)**
+**Company (`/os/settings/company`) And Finance Policy (`/os/settings/finance-policy`)**
 
-- Owner-controlled seats, counterparties, role acceptance, compensation plans, role credits,
-  disposition mode, and market launch checklists.
+- Company owns seats, counterparties, and role acceptance.
+- Finance Policy owns compensation plans, role credits, and policy history.
 
-**AI Control (`/os/ai`)**
+**AI & Automation (`/os/settings/ai`)**
 
 - Owner-controlled agent portfolio, copilots, capability contracts, model runtime, evaluation
   library, traces, budgets, shutdown controls, promotions, and external automation policy.
+
+Legacy `/os/operations`, `/os/inbox?manage=email`, `/os/operating-model`, and `/os/ai` links
+redirect to their new owners.
 
 ## 8. End-To-End Operating Lifecycle
 

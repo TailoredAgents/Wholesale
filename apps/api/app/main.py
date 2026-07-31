@@ -17,6 +17,7 @@ from app.routers import (
     health,
     help,
     inbox,
+    integrations,
     lead_manager,
     leads,
     marketing,
@@ -65,6 +66,7 @@ def create_app() -> FastAPI:
     app.include_router(field_operations.router)
     app.include_router(finance.router)
     app.include_router(inbox.router)
+    app.include_router(integrations.router)
     app.include_router(lead_manager.router)
     app.include_router(leads.router)
     app.include_router(marketing.router)

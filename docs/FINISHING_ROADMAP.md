@@ -43,7 +43,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 
 | Phase | Current state | Remaining proof |
 | --- | --- | --- |
-| IA private-OS organization | IA1 contract and IA2 11-destination shell, global controls, compatibility hubs, tests, and 72-capture baseline implemented | Implement IA3 through IA10 with route compatibility and role acceptance |
+| IA private-OS organization | IA1 contract, IA2 11-destination shell, and IA3 permission-filtered Settings consolidation implemented | Implement IA4 through IA10 with route compatibility and role acceptance |
 | F1 Production reliability | Reliability tooling implemented | Restore, revocation, readiness, and optional monitoring acceptance |
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |

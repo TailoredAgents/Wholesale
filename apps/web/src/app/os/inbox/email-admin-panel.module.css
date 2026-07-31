@@ -20,6 +20,13 @@
   overflow: hidden;
 }
 
+.inlinePanel {
+  width: 100%;
+  height: min(820px, calc(100vh - 210px));
+  min-height: 620px;
+  box-shadow: none;
+}
+
 .header {
   min-height: 68px;
   padding: 14px 18px;
@@ -535,6 +542,13 @@
     height: 100dvh;
     border: 0;
     border-radius: 0;
+  }
+
+  .inlinePanel {
+    height: auto;
+    min-height: 760px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
   }
 
   .senderWorkspace {

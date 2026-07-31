@@ -60,10 +60,16 @@ export function OperationsWorkspace({
   initialTab = "today",
   operations,
   leads,
+  showMetrics = true,
+  showTabs = true,
+  structureScope = "all",
 }: {
   initialTab?: OperationsTab;
   operations: AcquisitionOperations;
   leads: LeadListItem[];
+  showMetrics?: boolean;
+  showTabs?: boolean;
+  structureScope?: "all" | "markets";
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -347,14 +353,14 @@ export function OperationsWorkspace({
 
   return (
     <section className={styles.workspace}>
-      <div className={styles.metrics}>
+      {showMetrics ? <div className={styles.metrics}>
         <div><span>Internal calendar</span><strong>{operations.appointments.filter((item) => ["scheduled", "rescheduled"].includes(item.status)).length}</strong></div>
         <div><span>Unread alerts</span><strong>{operations.unread_notification_count}</strong></div>
         <div><span>Calling progress</span><strong>{operations.calling_lists.reduce((sum, item) => sum + item.completed_records, 0)} / {operations.calling_lists.reduce((sum, item) => sum + item.total_records, 0)}</strong></div>
         <div><span>Duplicate reviews</span><strong>{pendingDuplicates.length}</strong></div>
-      </div>
+      </div> : null}
 
-      <div className={styles.tabBar} role="tablist" aria-label="Acquisition operations views">
+      {showTabs ? <div className={styles.tabBar} role="tablist" aria-label="Acquisition operations views">
         {tabs.filter((tab) => operations.can_manage || !["structure", "team", "quality", "follow-up"].includes(tab.key)).map((tab) => (
           <button
             aria-selected={activeTab === tab.key}
@@ -367,7 +373,7 @@ export function OperationsWorkspace({
             {tab.label}
           </button>
         ))}
-      </div>
+      </div> : null}
 
       {status !== "idle" ? (
         <div className={`${styles.feedback} ${styles[status]}`} role="status">
@@ -377,7 +383,7 @@ export function OperationsWorkspace({
 
       {activeTab === "structure" ? (
         <>
-          <div className={styles.twoColumn}>
+          <div className={structureScope === "markets" ? undefined : styles.twoColumn}>
             <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div><span>Service area</span><h3>Markets and territories</h3></div>
@@ -428,7 +434,7 @@ export function OperationsWorkspace({
               ) : null}
             </div>
 
-            <div className={styles.section}>
+            {structureScope === "all" ? <div className={styles.section}>
               <div className={styles.sectionHeader}>
                 <div><span>Attribution</span><h3>Outreach campaigns</h3></div>
                 <strong>{operations.campaigns.length}</strong>
@@ -460,10 +466,10 @@ export function OperationsWorkspace({
                   <button type="submit">Create campaign</button>
                 </form>
               ) : null}
-            </div>
+            </div> : null}
           </div>
 
-          <div className={styles.section}>
+          {structureScope === "all" ? <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <div><span>Pre-CRM records</span><h3>Prospects</h3></div>
               <strong>{operations.prospects.length}</strong>
@@ -492,7 +498,7 @@ export function OperationsWorkspace({
                 <button type="submit">Add prospect</button>
               </form>
             ) : null}
-          </div>
+          </div> : null}
         </>
       ) : null}
 
