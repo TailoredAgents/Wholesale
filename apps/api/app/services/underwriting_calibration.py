@@ -25,6 +25,7 @@ from app.schemas.underwriting import (
     CalibrationDecisionRead,
     CalibrationMetricSummary,
     CalibrationOverview,
+    UnderwritingBaselineSummary,
 )
 
 FORMULA_REVIEW_SAMPLE = 50
@@ -197,6 +198,7 @@ def get_calibration_overview(
         or 0
     )
     return CalibrationOverview(
+        baseline=baseline_summary(analyses),
         overall=metric_summary("All markets", cases, analyses_by_id),
         markets=[
             metric_summary(key, values, analyses_by_id)
@@ -209,6 +211,89 @@ def get_calibration_overview(
         cases=[calibration_case_to_read(db, case) for case in cases],
         decisions=[calibration_decision_to_read(decision) for decision in decisions],
         uncalibrated_analysis_count=max(0, total_analyses - len(cases)),
+    )
+
+
+def baseline_summary(
+    analyses: list[UnderwritingMarketAnalysis],
+) -> UnderwritingBaselineSummary:
+    analyses_by_id = {analysis.id: analysis for analysis in analyses}
+    instrumented = [
+        analysis
+        for analysis in analyses
+        if isinstance(
+            (analysis.analysis_metadata or {}).get("execution_metrics"),
+            dict,
+        )
+    ]
+    execution_metrics = [
+        (analysis.analysis_metadata or {})["execution_metrics"]
+        for analysis in instrumented
+    ]
+    comp_yields = [
+        round(
+            analysis.selected_comp_count
+            / (analysis.selected_comp_count + analysis.rejected_comp_count)
+            * 100,
+            1,
+        )
+        for analysis in analyses
+        if analysis.selected_comp_count + analysis.rejected_comp_count > 0
+    ]
+    review_case_count, review_decisions, review_overrides = comp_review_metrics(
+        analyses,
+        analyses_by_id,
+    )
+    reuse_count = sum(
+        metric.get("market_data_reused") is True for metric in execution_metrics
+    )
+    manual_review_count = sum(
+        metric.get("manual_review_required") is True for metric in execution_metrics
+    )
+    methodology_versions = sorted(
+        {
+            version
+            for analysis in analyses
+            if (
+                version := string_value(
+                    (analysis.analysis_metadata or {}).get("methodology_version")
+                )
+            )
+        }
+    )
+    return UnderwritingBaselineSummary(
+        analysis_count=len(analyses),
+        instrumented_analysis_count=len(instrumented),
+        methodology_versions=methodology_versions,
+        median_duration_ms=metadata_median(execution_metrics, "duration_ms"),
+        median_provider_returned_comp_count=metadata_median(
+            execution_metrics,
+            "provider_returned_comp_count",
+        ),
+        median_candidate_comp_count=rounded_median(
+            [
+                float(analysis.selected_comp_count + analysis.rejected_comp_count)
+                for analysis in analyses
+            ]
+        ),
+        median_selected_comp_count=rounded_median(
+            [float(analysis.selected_comp_count) for analysis in analyses]
+        ),
+        median_comp_yield_percentage=rounded_median(comp_yields),
+        market_data_reuse_count=reuse_count,
+        market_data_reuse_percentage=percentage_of(reuse_count, len(instrumented)),
+        manual_review_required_count=manual_review_count,
+        manual_review_required_percentage=percentage_of(
+            manual_review_count,
+            len(instrumented),
+        ),
+        comp_review_case_count=review_case_count,
+        comp_review_decision_count=review_decisions,
+        comp_review_override_count=review_overrides,
+        comp_review_override_percentage=percentage_of(
+            review_overrides,
+            review_decisions,
+        ),
     )
 
 
@@ -729,6 +814,20 @@ def range_hit(low: int | None, high: int | None, actual: int) -> bool | None:
 
 def rounded_median(values: list[float]) -> float | None:
     return round(median(values), 1) if values else None
+
+
+def metadata_median(metrics: list[dict[str, object]], key: str) -> float | None:
+    values = [
+        float(value)
+        for metric in metrics
+        if isinstance((value := metric.get(key)), (int, float))
+        and not isinstance(value, bool)
+    ]
+    return rounded_median(values)
+
+
+def percentage_of(count: int, total: int) -> float | None:
+    return round(count / total * 100, 1) if total else None
 
 
 def readiness(sample_count: int) -> str:

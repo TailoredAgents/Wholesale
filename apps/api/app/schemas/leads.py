@@ -209,6 +209,11 @@ class MarketComparableRead(BaseModel):
     adjusted_value_cents: int | None = None
     price_per_square_foot_cents: int | None = None
     weight: float | None = None
+    subdivision: str | None = None
+    subdivision_match: bool | None = None
+    search_level: Literal["preferred", "expanded", "extended", "manual"] | None = None
+    comp_grade: Literal["A", "B", "C", "D"] | None = None
+    search_warnings: list[str] = Field(default_factory=list)
 
 
 class LeadMarketValueEstimateRead(BaseModel):
@@ -355,6 +360,67 @@ class LeadMarketAnalysisCreate(BaseModel):
     refresh_market_data: bool = False
 
 
+class UnderwritingMethodologyControlRead(BaseModel):
+    requested_version: str
+    active_version: str
+    planned_version: str
+    v3_available: bool
+    shadow_enabled: bool
+
+
+class UnderwritingExecutionMetricsRead(BaseModel):
+    duration_ms: int = Field(ge=0)
+    provider_returned_comp_count: int = Field(ge=0)
+    candidate_comp_count: int = Field(ge=0)
+    selected_comp_count: int = Field(ge=0)
+    rejected_comp_count: int = Field(ge=0)
+    comp_yield_percentage: float | None = Field(default=None, ge=0, le=100)
+    market_data_reused: bool
+    comp_review_applied: bool
+    comp_review_decision_count: int = Field(default=0, ge=0)
+    comp_review_override_count: int = Field(default=0, ge=0)
+    manual_review_required: bool
+
+
+class UnderwritingCompSearchAttemptRead(BaseModel):
+    level: Literal["preferred", "expanded", "extended", "manual"]
+    radius_miles: float | None = Field(default=None, ge=0)
+    days_old: int | None = Field(default=None, ge=0)
+    bedroom_tolerance: float | None = Field(default=None, ge=0)
+    bathroom_tolerance: float | None = Field(default=None, ge=0)
+    square_footage_tolerance_percentage: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+    )
+    year_built_tolerance_years: int | None = Field(default=None, ge=0)
+    returned_count: int = Field(ge=0)
+    unique_added_count: int = Field(default=0, ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    cumulative_unique_count: int = Field(default=0, ge=0)
+    selected_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    same_subdivision_count: int = Field(default=0, ge=0)
+    expansion_reason: str | None = None
+    provider_error: str | None = None
+
+
+class UnderwritingCompSearchSummaryRead(BaseModel):
+    strategy_version: str
+    final_level: Literal["preferred", "expanded", "extended", "manual"]
+    sufficient_closed_sales: bool
+    minimum_closed_sales: int = Field(default=3, ge=1)
+    total_provider_results: int = Field(default=0, ge=0)
+    total_unique_sales: int = Field(default=0, ge=0)
+    duplicate_count: int = Field(default=0, ge=0)
+    subject_subdivision: str | None = None
+    same_subdivision_count: int = Field(default=0, ge=0)
+    market_area_warning: str | None = None
+    evidence_shortage_reason: str | None = None
+    next_action: str | None = None
+    attempts: list[UnderwritingCompSearchAttemptRead] = Field(default_factory=list)
+
+
 class LeadMarketAnalysisRead(BaseModel):
     id: UUID
     lead_id: UUID
@@ -407,6 +473,9 @@ class LeadMarketAnalysisRead(BaseModel):
     pre_meeting_inputs: UnderwritingPreMeetingInputsRead | None = None
     comp_review: UnderwritingCompReviewSummaryRead | None = None
     subject_square_feet: int | None = None
+    methodology_control: UnderwritingMethodologyControlRead | None = None
+    execution_metrics: UnderwritingExecutionMetricsRead | None = None
+    comp_search_summary: UnderwritingCompSearchSummaryRead | None = None
 
 
 class TransactionChecklistItemRead(BaseModel):

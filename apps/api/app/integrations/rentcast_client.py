@@ -132,6 +132,10 @@ class RentCastClient:
         radius: float = 1,
         days_old: int = 365,
         limit: int = 50,
+        bedroom_tolerance: float | None = 1,
+        bathroom_tolerance: float | None = 1,
+        square_footage_tolerance: float | None = 0.2,
+        year_built_tolerance: int | None = 25,
     ) -> list[dict[str, Any]]:
         params: dict[str, str | int | float | bool] = {
             "radius": radius,
@@ -146,19 +150,33 @@ class RentCastClient:
         mapped_property_type = map_property_type(property_type)
         if mapped_property_type:
             params["propertyType"] = mapped_property_type
-        if bedrooms is not None:
-            params["bedrooms"] = numeric_range(bedrooms - 1, bedrooms + 1)
-        if bathrooms is not None:
-            params["bathrooms"] = numeric_range(bathrooms - 1, bathrooms + 1)
-        if square_footage is not None and square_footage > 0:
-            params["squareFootage"] = numeric_range(
-                round(square_footage * 0.8),
-                round(square_footage * 1.2),
+        if bedrooms is not None and bedroom_tolerance is not None:
+            params["bedrooms"] = numeric_range(
+                bedrooms - bedroom_tolerance,
+                bedrooms + bedroom_tolerance,
             )
-        if year_built is not None and year_built > 0:
+        if bathrooms is not None and bathroom_tolerance is not None:
+            params["bathrooms"] = numeric_range(
+                bathrooms - bathroom_tolerance,
+                bathrooms + bathroom_tolerance,
+            )
+        if (
+            square_footage is not None
+            and square_footage > 0
+            and square_footage_tolerance is not None
+        ):
+            params["squareFootage"] = numeric_range(
+                round(square_footage * (1 - square_footage_tolerance)),
+                round(square_footage * (1 + square_footage_tolerance)),
+            )
+        if (
+            year_built is not None
+            and year_built > 0
+            and year_built_tolerance is not None
+        ):
             params["yearBuilt"] = numeric_range(
-                max(1700, year_built - 25),
-                year_built + 25,
+                max(1700, year_built - year_built_tolerance),
+                year_built + year_built_tolerance,
             )
         return self._get_property_records(params, operation="recent sales")
 

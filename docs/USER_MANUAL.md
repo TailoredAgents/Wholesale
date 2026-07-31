@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: July 29, 2026
+Last verified against the application: July 31, 2026
 
 ## Purpose
 
@@ -502,7 +502,18 @@ does not automatically grant every permission.
 
 ### Data Quality
 
-Select **Scan active leads** to prepare possible duplicate candidates.
+The top valuation ribbons compare two different questions:
+
+- **Underwriting performance** uses later verified outcomes to show ARV error, directional bias,
+  range coverage, and tracked markets.
+- **Underwriting operating baseline** uses every saved analysis to show run count, median selected
+  comps, median comp yield, and median analysis time.
+
+These metrics do not change formulas automatically. Use them to identify thin comp coverage,
+operator effort, provider problems, and whether a later methodology actually improves V2.2.
+
+The duplicate section remains a separate workflow. Select **Scan active leads** to prepare possible
+duplicate candidates.
 
 1. Compare the two sellers, contacts, and properties.
 2. Choose the correct primary record.
@@ -1211,6 +1222,19 @@ provider has a matching subject but no AVM, the system can still use its recorde
 The **Subject match** status and resolved address show which property was used. Stop and correct the
 record if that address is not the subject property.
 
+Stonegate searches closed sales in controlled levels:
+
+1. **Preferred:** Tight physical match within 0.5 mile and 180 days.
+2. **Expanded:** Up to 1 mile and 365 days using the normal V2.2 physical limits.
+3. **Extended:** Up to 3 miles and 730 days with bounded additional size and age tolerance.
+4. **Manual:** The provider search ended without enough market-area support. Stonegate keeps the
+   best suitable sales and states what evidence is missing; it does not insert a listing or AVM as
+   a fake closed comp.
+
+The search stops when at least three screened sales meet the available market-area check. When the
+subject subdivision and comparable subdivision data are available, Stonegate also seeks at least
+two selected sales from the same subdivision. Wider-query duplicates are removed automatically.
+
 When controlled public research is enabled, Stonegate may also use bounded internet search to
 corroborate the exact address, property facts, prior sales, permits, and visible condition clues.
 This research:
@@ -1226,23 +1250,30 @@ Review the result from top to bottom:
 
 1. Confirm **Subject match** and the resolved address.
 2. Confirm **Core valuation evidence** contains usable recorded sales.
-3. Open **Why this confidence score** and read every factor.
-4. Open **Secondary public evidence** and investigate any conflict.
-5. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
+3. Open **Closed-sale search**. Confirm where the search stopped, which levels ran, how many unique
+   sales remained, and whether subdivision or market-area warnings exist.
+4. When the final level is **Manual**, read the evidence shortage and next action. Treat the result
+   as the best available preliminary evidence until the missing closed sale can be verified.
+5. Open **Why this confidence score** and read every factor.
+6. Open **Secondary public evidence** and investigate any conflict.
+7. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
    ceiling, and opening recommendation.
-6. Read every item under **Resolve before approval**.
-7. Review each comparable:
+8. Read every item under **Resolve before approval**.
+9. Review each comparable:
    - Confirm it is a real recorded sale.
    - Compare property type, location, distance, sale date, size, bedrooms, bathrooms, and price per
      square foot.
+   - Read its A-D grade and Preferred, Expanded, or Extended search label. A grade describes fit,
+     not whether the property was renovated.
+   - Investigate subdivision and extended-search warnings instead of ignoring them.
    - Mark **Condition at sale** as As-is, Renovated, or Unknown based on evidence.
    - Include or exclude it and choose the truthful **Decision reason**.
    - Adjust **Evidence weight** only when the record deserves more or less influence.
-8. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
-9. Repeat until the included set and assumptions reflect the evidence.
-10. Create a manual underwriting version only when an authorized person must preserve a separate
+10. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
+11. Repeat until the included set and assumptions reflect the evidence.
+12. Create a manual underwriting version only when an authorized person must preserve a separate
     judgment or scenario.
-11. Compare saved versions before requesting offer approval.
+13. Compare saved versions before requesting offer approval.
 
 The range is decision support, not an appraisal or guaranteed offer. A result remains visible when
 renovation status is unconfirmed, but confidence and warnings should affect judgment.

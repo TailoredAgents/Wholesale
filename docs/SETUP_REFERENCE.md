@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: July 29, 2026
+Last verified against the repository: July 31, 2026
 
 ## Purpose
 
@@ -289,7 +289,14 @@ Variables:
 - `PROPERTY_DATA_PROVIDER=rentcast`
 - `RENTCAST_API_KEY`
 - `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
+- `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2`
+- `UNDERWRITING_V3_SHADOW_ENABLED=false`
 - optional `ATTOM_API_KEY` placeholder
+
+V2.2 remains the only active calculation method during the U3 build. Do not change either V3
+control until the corresponding roadmap phase marks the runner available and its shadow replay
+passes. The API intentionally rejects premature V3 activation instead of silently using unfinished
+math.
 
 Acceptance:
 

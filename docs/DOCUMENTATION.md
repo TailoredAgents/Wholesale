@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: July 30, 2026
+Last verified against the repository: July 31, 2026
 
 ## Purpose
 
@@ -43,7 +43,7 @@ current code or canonical documentation.
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |
-| `UNDERWRITING_COMP_METHOD.md` | Comp selection, ARV, repairs, offer math, confidence, and calibration | Acquisitions and underwriting |
+| `UNDERWRITING_COMP_METHOD.md` | Current V2.2 comp/offer method plus the approved in-place U3.1-U3.10 underwriting upgrade plan | Acquisitions, underwriting, owner, and developers |
 | `SETUP_REFERENCE.md` | Local setup, production services, environment variables, and provider activation | Owner and developers |
 | `SETUP_MANUAL.md` | Nontechnical provider, account, staff, launch, and maintenance procedures | Owner and trusted administrators |
 | `USER_MANUAL.md` | Full current operating instructions | All staff |
@@ -79,6 +79,10 @@ employee help content and must not be ingested into the staff help assistant.
 - What is the approved business process?
 - What calculations and decision rules apply?
 - What must remain under human authority?
+
+`UNDERWRITING_COMP_METHOD.md` explicitly separates current V2.2 behavior from planned V3 behavior.
+The help assistant and staff instructions must answer from the V2.2 sections until each V3 phase is
+implemented and the corresponding current-state documents are updated.
 
 ### Instructions
 

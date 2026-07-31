@@ -85,6 +85,11 @@ type MarketComparable = {
   review_decision?: "included" | "excluded" | null;
   review_reason?: string | null;
   manual_weight_percentage?: number | null;
+  subdivision?: string | null;
+  subdivision_match?: boolean | null;
+  search_level?: "preferred" | "expanded" | "extended" | "manual" | null;
+  comp_grade?: "A" | "B" | "C" | "D" | null;
+  search_warnings?: string[];
 };
 
 type CompReviewDraft = {
@@ -120,6 +125,41 @@ type SecondaryEvidence = {
   }[];
   limitations?: string[];
   sources?: { url: string; title: string }[];
+};
+
+type CompSearchAttempt = {
+  level: "preferred" | "expanded" | "extended" | "manual";
+  radius_miles: number | null;
+  days_old: number | null;
+  bedroom_tolerance: number | null;
+  bathroom_tolerance: number | null;
+  square_footage_tolerance_percentage: number | null;
+  year_built_tolerance_years: number | null;
+  returned_count: number;
+  unique_added_count: number;
+  duplicate_count: number;
+  cumulative_unique_count: number;
+  selected_count: number;
+  rejected_count: number;
+  same_subdivision_count: number;
+  expansion_reason: string | null;
+  provider_error: string | null;
+};
+
+type CompSearchSummary = {
+  strategy_version: string;
+  final_level: "preferred" | "expanded" | "extended" | "manual";
+  sufficient_closed_sales: boolean;
+  minimum_closed_sales: number;
+  total_provider_results: number;
+  total_unique_sales: number;
+  duplicate_count: number;
+  subject_subdivision: string | null;
+  same_subdivision_count: number;
+  market_area_warning: string | null;
+  evidence_shortage_reason: string | null;
+  next_action: string | null;
+  attempts: CompSearchAttempt[];
 };
 
 type MarketValueEstimate = {
@@ -170,6 +210,7 @@ type MarketValueEstimate = {
   selected_comps?: MarketComparable[];
   rejected_comps?: MarketComparable[];
   subject_square_feet?: number | null;
+  comp_search_summary?: CompSearchSummary | null;
   source_note: string;
 };
 
@@ -1001,7 +1042,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             <div>
               <span>Core valuation evidence</span>
               <strong>{estimate.selected_comps?.length ?? 0} recorded sales</strong>
-              <small>Screened by similarity and price per square foot</small>
+              <small>
+                {estimate.comp_search_summary
+                  ? `${estimate.comp_search_summary.final_level.replaceAll("_", " ")} search · ${estimate.comp_search_summary.total_unique_sales} unique sales`
+                  : "Screened by similarity and price per square foot"}
+              </small>
             </div>
             <div>
               <span>Secondary research</span>
@@ -1013,6 +1058,60 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               </small>
             </div>
           </div>
+
+          {estimate.comp_search_summary ? (
+            <details className={styles.evidenceDetails}>
+              <summary>
+                Closed-sale search: {estimate.comp_search_summary.sufficient_closed_sales
+                  ? "evidence threshold met"
+                  : "more evidence needed"}
+              </summary>
+              <div className={styles.confidenceFactors}>
+                {estimate.comp_search_summary.attempts.map((attempt, index) => (
+                  <div key={`${attempt.level}-${index}`}>
+                    <span>{attempt.level.replaceAll("_", " ")} level</span>
+                    <strong>
+                      {attempt.level === "manual"
+                        ? "Manual evidence"
+                        : `${attempt.radius_miles ?? "--"} mi / ${attempt.days_old ?? "--"} days`}
+                    </strong>
+                    <small>
+                      {attempt.returned_count} returned · {attempt.unique_added_count} new ·{" "}
+                      {attempt.duplicate_count} duplicate · {attempt.selected_count} usable
+                    </small>
+                    {attempt.level !== "manual" ? (
+                      <small>
+                        Sqft +/- {attempt.square_footage_tolerance_percentage ?? "--"}% · age
+                        +/- {attempt.year_built_tolerance_years ?? "--"} yr · beds +/-{" "}
+                        {attempt.bedroom_tolerance ?? "--"} · baths +/-{" "}
+                        {attempt.bathroom_tolerance ?? "--"}
+                      </small>
+                    ) : null}
+                    {attempt.expansion_reason ? <small>{attempt.expansion_reason}</small> : null}
+                    {attempt.provider_error ? <small>{attempt.provider_error}</small> : null}
+                  </div>
+                ))}
+              </div>
+              <div className={styles.secondaryEvidence}>
+                {estimate.comp_search_summary.subject_subdivision ? (
+                  <p>
+                    Subject subdivision: {estimate.comp_search_summary.subject_subdivision}.{" "}
+                    {estimate.comp_search_summary.same_subdivision_count} selected sale(s)
+                    matched it.
+                  </p>
+                ) : null}
+                {estimate.comp_search_summary.market_area_warning ? (
+                  <small>{estimate.comp_search_summary.market_area_warning}</small>
+                ) : null}
+                {estimate.comp_search_summary.evidence_shortage_reason ? (
+                  <small>{estimate.comp_search_summary.evidence_shortage_reason}</small>
+                ) : null}
+                {estimate.comp_search_summary.next_action ? (
+                  <p><strong>Next action:</strong> {estimate.comp_search_summary.next_action}</p>
+                ) : null}
+              </div>
+            </details>
+          ) : null}
 
           {estimate.confidence_factors?.length ? (
             <details className={styles.evidenceDetails}>
@@ -1282,6 +1381,14 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                   <small>
                     Match score {comp.score ?? "?"}/100. {comp.selection_reason}
                   </small>
+                  <small>
+                    Grade {comp.comp_grade ?? "--"} /{" "}
+                    {(comp.search_level ?? "legacy").replaceAll("_", " ")} search
+                    {comp.subdivision ? ` / ${comp.subdivision}` : ""}
+                  </small>
+                  {comp.search_warnings?.length ? (
+                    <small>{comp.search_warnings.join(" ")}</small>
+                  ) : null}
                   <div className={styles.compReviewControls}>
                     <label>
                       <span>Condition at sale</span>

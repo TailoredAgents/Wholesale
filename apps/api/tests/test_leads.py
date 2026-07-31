@@ -1063,10 +1063,225 @@ def test_market_analysis_continues_without_separate_property_record(
     assert analysis["manual_review_required"] is True
     assert analysis["data_disagreements"] == [
         "The separate public property record was unavailable; subject facts came "
-        "from the RentCast AVM response."
+        "from the RentCast AVM response.",
+        "The complete adaptive search found 1 usable closed sale(s); at least 3 are "
+        "required for a sufficient set.",
     ]
     assert sales_request["latitude"] == 33.749
     assert sales_request["longitude"] == -84.388
+    cached_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "light"},
+    )
+    assert cached_response.status_code == 201
+    assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
+    assert cached_response.json()["data_disagreements"] == analysis[
+        "data_disagreements"
+    ]
+
+
+def test_market_analysis_records_provider_failure_without_partial_results(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    monkeypatch.setenv("UNDERWRITING_ACTIVE_METHODOLOGY_VERSION", "v2.2")
+    monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "false")
+    get_settings.cache_clear()
+
+    class FailedSalesRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            facts = {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "latitude": 33.749,
+                "longitude": -84.388,
+            }
+            return RentCastValueEstimate(
+                price=300000,
+                price_range_low=275000,
+                price_range_high=325000,
+                subject_property=facts,
+                comparables=[],
+                raw_response={
+                    "price": 300000,
+                    "priceRangeLow": 275000,
+                    "priceRangeHigh": 325000,
+                    "subjectProperty": facts,
+                    "comparables": [],
+                },
+            )
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            return {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "latitude": 33.749,
+                "longitude": -84.388,
+            }
+
+        def get_recent_sales(self, **_: object) -> list[dict[str, object]]:
+            raise RentCastClientError(
+                "RentCast recent sales failed (HTTP 503): provider unavailable.",
+                operation="recent sales",
+                status_code=503,
+            )
+
+    monkeypatch.setattr("app.services.leads.RentCastClient", FailedSalesRentCastClient)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={},
+    )
+
+    assert response.status_code == 502
+    assert "provider unavailable" in response.json()["detail"]
+    assert int(
+        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
+    ) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 0
+    get_settings.cache_clear()
+
+
+def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
+    monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    get_settings.cache_clear()
+
+    class AvmUnavailableRentCastClient:
+        def __init__(self, **_: object) -> None:
+            pass
+
+        def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            raise RentCastClientError(
+                "RentCast value estimate failed (HTTP 404): no AVM available.",
+                operation="value estimate",
+                status_code=404,
+            )
+
+        def get_property_record(self, **_: object) -> dict[str, object]:
+            return {
+                "id": "subject-1",
+                "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
+                "addressLine1": "123 Peachtree St",
+                "city": "Atlanta",
+                "state": "GA",
+                "zipCode": "30303",
+                "propertyType": "Single Family",
+                "bedrooms": 3,
+                "bathrooms": 2,
+                "squareFootage": 1800,
+                "yearBuilt": 1980,
+                "latitude": 33.749,
+                "longitude": -84.388,
+                "subdivision": "PEACHTREE PARK",
+            }
+
+        def get_recent_sales(self, **_: object) -> list[dict[str, object]]:
+            return [
+                {
+                    "id": f"comp-{index}",
+                    "formattedAddress": (
+                        f"{123 + index * 2} Peachtree St, Atlanta, GA 30303"
+                    ),
+                    "propertyType": "Single Family",
+                    "lastSalePrice": 285000 + index * 10000,
+                    "lastSaleDate": "2026-05-01T00:00:00Z",
+                    "bedrooms": 3,
+                    "bathrooms": 2,
+                    "squareFootage": 1750 + index * 40,
+                    "yearBuilt": 1979 + index,
+                    "distance": 0.1 + index * 0.1,
+                    "subdivision": "PEACHTREE PARK",
+                }
+                for index in range(1, 4)
+            ]
+
+        def get_rent_estimate(self, **_: object) -> RentCastRentEstimate:
+            return RentCastRentEstimate(
+                rent=2400,
+                rent_range_low=2200,
+                rent_range_high=2600,
+                comparables=[],
+                raw_response={"rent": 2400},
+            )
+
+    monkeypatch.setattr(
+        "app.services.leads.RentCastClient",
+        AvmUnavailableRentCastClient,
+    )
+    client = TestClient(app)
+    lead_id = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    ).json()["id"]
+
+    response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={},
+    )
+
+    assert response.status_code == 201, response.text
+    analysis = response.json()
+    assert analysis["estimated_value_cents"] is None
+    assert analysis["estimated_value_low_cents"] is None
+    assert analysis["estimated_value_high_cents"] is None
+    assert len(analysis["selected_comps"]) == 3
+    assert analysis["arv_point_cents"] is not None
+    assert analysis["seller_contract_ceiling_cents"] is not None
+    assert analysis["manual_review_required"] is True
+    assert analysis["comp_search_summary"]["final_level"] == "preferred"
+    assert analysis["comp_search_summary"]["sufficient_closed_sales"] is True
+    assert analysis["data_disagreements"] == [
+        "The RentCast AVM was unavailable; value conclusions use screened recorded "
+        "sales only."
+    ]
+    assert analysis["assumptions"]["as_is_value_basis"] == "unsupported"
+    assert analysis["as_is_value_cents"] is None
+    cached_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "light"},
+    )
+    assert cached_response.status_code == 201
+    assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
+    assert cached_response.json()["data_disagreements"] == analysis[
+        "data_disagreements"
+    ]
+    assert cached_response.json()["as_is_value_cents"] is None
+    get_settings.cache_clear()
 
 
 def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
@@ -1297,6 +1512,57 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     payload = response.json()
     assert payload["provider"] == "rentcast"
     assert payload["methodology_version"] == "v2.2"
+    assert payload["methodology_control"] == {
+        "requested_version": "v2.2",
+        "active_version": "v2.2",
+        "planned_version": "v3",
+        "v3_available": False,
+        "shadow_enabled": False,
+    }
+    assert payload["execution_metrics"]["duration_ms"] >= 0
+    assert payload["execution_metrics"]["provider_returned_comp_count"] == 7
+    assert payload["execution_metrics"]["candidate_comp_count"] == 7
+    assert payload["execution_metrics"]["selected_comp_count"] == 5
+    assert payload["execution_metrics"]["rejected_comp_count"] == 2
+    assert payload["execution_metrics"]["comp_yield_percentage"] == 71.4
+    assert payload["execution_metrics"]["market_data_reused"] is False
+    assert payload["execution_metrics"]["manual_review_required"] is False
+    assert payload["comp_search_summary"] == {
+        "strategy_version": "adaptive_v1",
+        "final_level": "preferred",
+        "sufficient_closed_sales": True,
+        "minimum_closed_sales": 3,
+        "total_provider_results": 7,
+        "total_unique_sales": 7,
+        "duplicate_count": 0,
+        "subject_subdivision": None,
+        "same_subdivision_count": 0,
+        "market_area_warning": None,
+        "evidence_shortage_reason": None,
+        "next_action": (
+            "Verify comp condition and approve or revise the recommended closed-sale set."
+        ),
+        "attempts": [
+            {
+                "level": "preferred",
+                "radius_miles": 0.5,
+                "days_old": 180,
+                "bedroom_tolerance": 0.0,
+                "bathroom_tolerance": 0.5,
+                "square_footage_tolerance_percentage": 15,
+                "year_built_tolerance_years": 15,
+                "returned_count": 7,
+                "unique_added_count": 7,
+                "duplicate_count": 0,
+                "cumulative_unique_count": 7,
+                "selected_count": 5,
+                "rejected_count": 2,
+                "same_subdivision_count": 0,
+                "expansion_reason": None,
+                "provider_error": None,
+            }
+        ],
+    }
     assert payload["as_is_value_low_cents"] == 23351400
     assert payload["as_is_value_cents"] == 23351400
     assert payload["as_is_value_high_cents"] == 23657100
@@ -1331,6 +1597,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["selected_comps"][0]["price_source"] == "recorded_sale"
     assert payload["selected_comps"][0]["price_per_square_foot_cents"] is not None
     assert payload["selected_comps"][0]["adjusted_value_cents"] is not None
+    assert payload["selected_comps"][0]["search_level"] == "preferred"
+    assert payload["selected_comps"][0]["comp_grade"] in {"A", "B"}
     price_outlier = next(
         comp
         for comp in payload["rejected_comps"]
@@ -1373,6 +1641,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Pre-meeting reviewed" in investor_report_response.content
     assert b"Pre-meeting contractor estimate" in investor_report_response.content
     assert b"Roof" in investor_report_response.content
+    assert b"Closed-sale search" in investor_report_response.content
+    assert b"Unique sale evidence" in investor_report_response.content
 
     client_report_response = client.get(
         (
@@ -1394,6 +1664,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Repair scope and input record" not in client_report_response.content
     assert b"Pre-meeting contractor estimate" not in client_report_response.content
     assert b"Pre-meeting reviewed" in client_report_response.content
+    assert b"Closed-sale search" in client_report_response.content
     unclassified_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -1441,6 +1712,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert provider_calls == ["init", "value", "subject", "sales", "rent"]
     assert cached_response.json()["base_rehab_cents"] == 4000000
     assert cached_response.json()["total_rehab_cents"] == 4400000
+    assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
     assert (
         cached_response.json()["pre_meeting_inputs"]["repair_estimate_source"]
         == "user_total"
@@ -1667,6 +1939,26 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert int(
         db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0
     ) == 6
+    baseline = client.get(
+        "/api/v1/underwriting/calibration",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()["baseline"]
+    assert baseline["analysis_count"] == 6
+    assert baseline["instrumented_analysis_count"] == 6
+    assert baseline["methodology_versions"] == ["v2.2"]
+    assert baseline["median_duration_ms"] >= 0
+    assert baseline["median_provider_returned_comp_count"] == 7.0
+    assert baseline["median_candidate_comp_count"] == 7.0
+    assert baseline["median_selected_comp_count"] == 5.0
+    assert baseline["median_comp_yield_percentage"] == 71.4
+    assert baseline["market_data_reuse_count"] == 5
+    assert baseline["market_data_reuse_percentage"] == 83.3
+    assert baseline["manual_review_required_count"] == 1
+    assert baseline["manual_review_required_percentage"] == 16.7
+    assert baseline["comp_review_case_count"] == 1
+    assert baseline["comp_review_decision_count"] == 7
+    assert baseline["comp_review_override_count"] == 0
+    assert baseline["comp_review_override_percentage"] == 0.0
     get_settings.cache_clear()
 
 

@@ -7,9 +7,10 @@ from typing import Any
 from app.core.config import Settings
 from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
 from app.schemas.leads import MarketAnalysisCompRead
+from app.services.underwriting_methodology import ACTIVE_METHODOLOGY_VERSION
 
 MONEY = 100
-METHODOLOGY_VERSION = "v2.2"
+METHODOLOGY_VERSION = ACTIVE_METHODOLOGY_VERSION
 
 
 @dataclass(frozen=True)
@@ -125,7 +126,9 @@ def analyze_underwriting_v2(
         as_is_low = dollars_to_cents(estimate.price_range_low)
         as_is_point = dollars_to_cents(estimate.price)
         as_is_high = dollars_to_cents(estimate.price_range_high)
-        as_is_value_basis = "provider_avm_benchmark"
+        as_is_value_basis = (
+            "provider_avm_benchmark" if as_is_point is not None else "unsupported"
+        )
 
     repair_level = normalize_repair_level(
         repair_level_override or current_condition_override or lead_condition
@@ -425,6 +428,7 @@ def score_recorded_sale(
     address = string(record.get("formattedAddress"))
     sale_price = integer(record.get("lastSalePrice"))
     sale_date = string(record.get("lastSaleDate"))
+    search_level = normalize_search_level(record.get("_stonegateSearchLevel"))
     subject_square_feet = integer(subject.get("squareFootage"))
     comp_square_feet = integer(record.get("squareFootage"))
     price_per_square_foot_cents = (
@@ -444,6 +448,19 @@ def score_recorded_sale(
     condition = normalize_condition_override(
         condition_overrides.get(provider_id or "")
         or condition_overrides.get(address or "")
+    )
+    subject_subdivision = string(subject.get("subdivision"))
+    subdivision = string(record.get("subdivision"))
+    subdivision_match = (
+        normalize_key(subject_subdivision) == normalize_key(subdivision)
+        if subject_subdivision and subdivision
+        else None
+    )
+    search_warnings = comp_search_warnings(
+        search_level=search_level,
+        subject_subdivision=subject_subdivision,
+        subdivision=subdivision,
+        subdivision_match=subdivision_match,
     )
     base: dict[str, Any] = {
         "provider_id": provider_id,
@@ -473,8 +490,19 @@ def score_recorded_sale(
         "adjusted_value_cents": subject_size_value_cents,
         "price_per_square_foot_cents": price_per_square_foot_cents,
         "weight": None,
+        "subdivision": subdivision,
+        "subdivision_match": subdivision_match,
+        "search_level": search_level,
+        "comp_grade": "D",
+        "search_warnings": search_warnings,
     }
-    rejection = recorded_sale_rejection_reason(subject, record, sale_price, sale_date)
+    rejection = recorded_sale_rejection_reason(
+        subject,
+        record,
+        sale_price,
+        sale_date,
+        search_level=search_level,
+    )
     if rejection:
         return MarketAnalysisCompRead(
             **base,
@@ -489,6 +517,12 @@ def score_recorded_sale(
     if distance is None:
         score -= 12
         reasons.append("distance unavailable")
+    elif search_level == "extended" and distance > 2:
+        score -= 20
+        reasons.append("more than 2 miles from the subject")
+    elif search_level == "extended" and distance > 1:
+        score -= 14
+        reasons.append("more than 1 mile from the subject")
     elif distance > 0.5:
         score -= 8
         reasons.append("outside initial 0.5-mile area")
@@ -496,6 +530,12 @@ def score_recorded_sale(
     if days_old is None:
         score -= 10
         reasons.append("sale recency unavailable")
+    elif search_level == "extended" and days_old > 545:
+        score -= 18
+        reasons.append("older than 18 months")
+    elif search_level == "extended" and days_old > 365:
+        score -= 14
+        reasons.append("older than one year")
     elif days_old > 180:
         score -= 8
         reasons.append("older than 180 days")
@@ -521,9 +561,18 @@ def score_recorded_sale(
     if lot_difference is not None and lot_difference > 0.3:
         score -= 5
         reasons.append("material lot-size difference")
+    if subdivision_match is True:
+        reasons.append("same recorded subdivision")
+    elif subdivision_match is False:
+        score -= 6
+        reasons.append("different recorded subdivision")
     bounded_score = max(1, min(100, score))
     return MarketAnalysisCompRead(
-        **{**base, "weight": round(bounded_score / 100, 3)},
+        **{
+            **base,
+            "weight": round(bounded_score / 100, 3),
+            "comp_grade": grade_for_comp(bounded_score, search_level),
+        },
         selection_status="candidate",
         selection_reason=", ".join(reasons),
         score=bounded_score,
@@ -535,6 +584,8 @@ def recorded_sale_rejection_reason(
     record: dict[str, Any],
     sale_price: int | None,
     sale_date: str | None,
+    *,
+    search_level: str | None = None,
 ) -> str | None:
     if same_property(subject, record):
         return "Subject property sale; excluded from comparable set."
@@ -550,8 +601,9 @@ def recorded_sale_rejection_reason(
         integer(subject.get("squareFootage")),
         integer(record.get("squareFootage")),
     )
-    if size_difference is not None and size_difference > 0.20:
-        return "Living area differs by more than 20%."
+    size_limit = 0.25 if search_level == "extended" else 0.20
+    if size_difference is not None and size_difference > size_limit:
+        return f"Living area differs by more than {round(size_limit * 100)}%."
     bed_difference = absolute_difference(
         number(subject.get("bedrooms")),
         number(record.get("bedrooms")),
@@ -568,9 +620,49 @@ def recorded_sale_rejection_reason(
         integer(subject.get("yearBuilt")),
         integer(record.get("yearBuilt")),
     )
-    if year_difference is not None and year_difference > 25:
-        return "Year built differs by more than 25 years."
+    year_limit = 35 if search_level == "extended" else 25
+    if year_difference is not None and year_difference > year_limit:
+        return f"Year built differs by more than {year_limit} years."
     return None
+
+
+def normalize_search_level(value: object) -> str | None:
+    normalized = normalize_key(string(value))
+    return normalized if normalized in {"preferred", "expanded", "extended"} else None
+
+
+def comp_search_warnings(
+    *,
+    search_level: str | None,
+    subject_subdivision: str | None,
+    subdivision: str | None,
+    subdivision_match: bool | None,
+) -> list[str]:
+    warnings: list[str] = []
+    if search_level == "expanded":
+        warnings.append("Found after expanding beyond the preferred search area or recency.")
+    elif search_level == "extended":
+        warnings.append("Found only in the extended distance, recency, or physical-fit search.")
+    if subdivision_match is False:
+        warnings.append(
+            f"Recorded subdivision {subdivision} differs from subject subdivision "
+            f"{subject_subdivision}."
+        )
+    return warnings
+
+
+def grade_for_comp(score: int, search_level: str | None) -> str:
+    if score >= 90:
+        grade = "A"
+    elif score >= 80:
+        grade = "B"
+    elif score >= 65:
+        grade = "C"
+    else:
+        grade = "D"
+    if search_level == "extended" and grade in {"A", "B"}:
+        return "C"
+    return grade
 
 
 def reject_renovated_price_per_square_foot_outliers(
@@ -872,7 +964,11 @@ def confidence_and_review_reasons(
     else:
         condition_points = 15
     if len(as_is_comps) < 2:
-        reasons.append("As-is value is an AVM benchmark until as-is comps are classified.")
+        reasons.append(
+            "As-is value is an AVM benchmark until as-is comps are classified."
+            if avm_value_cents is not None
+            else "As-is value is unavailable until as-is comps are classified."
+        )
     spread = value_spread(arv_low_cents, arv_point_cents, arv_high_cents)
     precision_points = 0
     if spread is not None and spread > 0.15:
@@ -1062,6 +1158,7 @@ def canonical_subject_facts(
         "county",
         "countyFips",
         "stateFips",
+        "subdivision",
         "latitude",
         "longitude",
         "propertyType",

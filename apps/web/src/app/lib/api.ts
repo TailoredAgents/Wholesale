@@ -3040,7 +3040,27 @@ export type UnderwritingCalibrationDecision = {
   updated_at: string;
 };
 
+export type UnderwritingBaseline = {
+  analysis_count: number;
+  instrumented_analysis_count: number;
+  methodology_versions: string[];
+  median_duration_ms: number | null;
+  median_provider_returned_comp_count: number | null;
+  median_candidate_comp_count: number | null;
+  median_selected_comp_count: number | null;
+  median_comp_yield_percentage: number | null;
+  market_data_reuse_count: number;
+  market_data_reuse_percentage: number | null;
+  manual_review_required_count: number;
+  manual_review_required_percentage: number | null;
+  comp_review_case_count: number;
+  comp_review_decision_count: number;
+  comp_review_override_count: number;
+  comp_review_override_percentage: number | null;
+};
+
 export type UnderwritingCalibration = {
+  baseline?: UnderwritingBaseline;
   overall: UnderwritingCalibrationMetric;
   markets: UnderwritingCalibrationMetric[];
   provider_scorecards: UnderwritingCalibrationMetric[];

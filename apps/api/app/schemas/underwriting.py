@@ -83,6 +83,25 @@ class CalibrationMetricSummary(BaseModel):
     readiness: str
 
 
+class UnderwritingBaselineSummary(BaseModel):
+    analysis_count: int
+    instrumented_analysis_count: int
+    methodology_versions: list[str]
+    median_duration_ms: float | None
+    median_provider_returned_comp_count: float | None
+    median_candidate_comp_count: float | None
+    median_selected_comp_count: float | None
+    median_comp_yield_percentage: float | None
+    market_data_reuse_count: int
+    market_data_reuse_percentage: float | None
+    manual_review_required_count: int
+    manual_review_required_percentage: float | None
+    comp_review_case_count: int
+    comp_review_decision_count: int
+    comp_review_override_count: int
+    comp_review_override_percentage: float | None
+
+
 class CalibrationDecisionCreate(BaseModel):
     scope_key: str = Field(min_length=1, max_length=255)
     decision_type: Literal[
@@ -126,6 +145,7 @@ class CalibrationDecisionRead(BaseModel):
 
 
 class CalibrationOverview(BaseModel):
+    baseline: UnderwritingBaselineSummary
     overall: CalibrationMetricSummary
     markets: list[CalibrationMetricSummary]
     provider_scorecards: list[CalibrationMetricSummary]

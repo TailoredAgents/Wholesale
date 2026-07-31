@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from time import perf_counter
 from typing import Any
 from uuid import UUID
 
@@ -107,6 +108,9 @@ from app.schemas.leads import (
     TransactionChecklistItemRead,
     TransactionRead,
     UnderwritingCompReviewSummaryRead,
+    UnderwritingCompSearchSummaryRead,
+    UnderwritingExecutionMetricsRead,
+    UnderwritingMethodologyControlRead,
     UnderwritingPreMeetingInputsRead,
     UnderwritingVersionRead,
 )
@@ -128,16 +132,21 @@ from app.services.tasks import (
     get_primary_next_action,
     supersede_open_primary_tasks,
 )
-from app.services.underwriting_v2 import (
-    METHODOLOGY_VERSION,
-    UnderwritingV2Result,
-    analyze_underwriting_v2,
+from app.services.underwriting_comp_search import (
+    search_adaptive_closed_sales,
+    warnings_from_search_summary,
 )
 from app.services.underwriting_evidence import (
     collect_secondary_market_evidence,
     resolve_rentcast_subject,
     secondary_conflict_warnings,
     unavailable_secondary_evidence,
+)
+from app.services.underwriting_methodology import resolve_underwriting_methodology
+from app.services.underwriting_v2 import (
+    METHODOLOGY_VERSION,
+    UnderwritingV2Result,
+    analyze_underwriting_v2,
 )
 
 logger = structlog.get_logger()
@@ -1499,8 +1508,10 @@ def create_lead_market_analysis(
     lead_id: UUID,
     payload: LeadMarketAnalysisCreate | None = None,
 ) -> LeadMarketAnalysisRead | None:
+    analysis_started_at = perf_counter()
     payload = payload or LeadMarketAnalysisCreate()
     settings = get_settings()
+    methodology_control = resolve_underwriting_methodology(settings)
     if settings.property_data_provider.lower() != "rentcast":
         raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for market analysis.")
     if not settings.rentcast_api_key:
@@ -1589,6 +1600,8 @@ def create_lead_market_analysis(
         "No fresh market-data research was requested."
     )
     avm_error: str | None = None
+    comp_search_summary: dict[str, Any] | None = None
+    provider_returned_comp_count = 0
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
@@ -1625,6 +1638,26 @@ def create_lead_market_analysis(
             if isinstance(cached_sales, list)
             else []
         )
+        cached_search_summary = (
+            (cached_analysis.analysis_metadata or {}).get("comp_search_summary")
+            if cached_analysis is not None
+            else None
+        )
+        comp_search_summary = (
+            cached_search_summary
+            if isinstance(cached_search_summary, dict)
+            else None
+        )
+        cached_execution_metrics = (
+            (cached_analysis.analysis_metadata or {}).get("execution_metrics")
+            if cached_analysis is not None
+            else None
+        )
+        provider_returned_comp_count = (
+            optional_int(cached_execution_metrics.get("provider_returned_comp_count"))
+            if isinstance(cached_execution_metrics, dict)
+            else None
+        ) or len(sale_records)
         rent_estimate = (
             rent_estimate_from_payload(cached_rent)
             if isinstance(cached_rent, dict)
@@ -1635,6 +1668,15 @@ def create_lead_market_analysis(
             provider_warnings.append(
                 "The separate public property record was unavailable; subject facts came "
                 "from the RentCast AVM response."
+            )
+        if avm_error:
+            provider_warnings.append(
+                "The RentCast AVM was unavailable; value conclusions use screened recorded "
+                "sales only."
+            )
+        if comp_search_summary is not None:
+            provider_warnings.extend(
+                warnings_from_search_summary(comp_search_summary)
             )
     else:
         client = RentCastClient(
@@ -1685,21 +1727,12 @@ def create_lead_market_analysis(
 
         subject_facts = {**estimate.subject_property, **subject_record}
         try:
-            sale_records = client.get_recent_sales(
+            search_result = search_adaptive_closed_sales(
+                client,
                 address=resolved_address,
-                property_type=(
-                    string_or_none(subject_facts.get("propertyType"))
-                    or property_record.property_type
-                ),
-                bedrooms=optional_float(subject_facts.get("bedrooms")),
-                bathrooms=optional_float(subject_facts.get("bathrooms")),
-                square_footage=first_int(
-                    subject_facts,
-                    ("squareFootage", "livingArea", "grossLivingArea"),
-                ),
-                year_built=optional_int(subject_facts.get("yearBuilt")),
-                latitude=optional_float(subject_facts.get("latitude")),
-                longitude=optional_float(subject_facts.get("longitude")),
+                subject_facts=subject_facts,
+                local_property_type=property_record.property_type,
+                condition_overrides=payload.comp_condition_overrides,
             )
         except RentCastClientError as exc:
             logger.warning(
@@ -1712,6 +1745,10 @@ def create_lead_market_analysis(
                 error_message=str(exc),
             )
             raise RuntimeError(str(exc)) from exc
+        sale_records = search_result.records
+        comp_search_summary = search_result.summary
+        provider_returned_comp_count = search_result.provider_returned_count
+        provider_warnings.extend(search_result.warnings)
 
         try:
             rent_estimate = client.get_rent_estimate(
@@ -1841,8 +1878,39 @@ def create_lead_market_analysis(
         if payload.comp_review_decisions and cached_analysis is not None
         else None
     )
+    candidate_comp_count = len(result.selected_comps) + len(result.rejected_comps)
+    comp_review_override_count = count_comp_review_overrides(
+        cached_analysis,
+        payload.comp_review_decisions,
+    )
+    execution_metrics = {
+        "duration_ms": max(0, round((perf_counter() - analysis_started_at) * 1000)),
+        "provider_returned_comp_count": provider_returned_comp_count,
+        "candidate_comp_count": candidate_comp_count,
+        "selected_comp_count": len(result.selected_comps),
+        "rejected_comp_count": len(result.rejected_comps),
+        "comp_yield_percentage": (
+            round(len(result.selected_comps) / candidate_comp_count * 100, 1)
+            if candidate_comp_count
+            else None
+        ),
+        "market_data_reused": reuse_market_data,
+        "comp_review_applied": comp_review is not None,
+        "comp_review_decision_count": len(payload.comp_review_decisions),
+        "comp_review_override_count": comp_review_override_count,
+        "manual_review_required": result.manual_review_required,
+    }
+    if comp_search_summary is None:
+        comp_search_summary = legacy_comp_search_summary(
+            sale_records=sale_records,
+            selected_count=len(result.selected_comps),
+            rejected_count=len(result.rejected_comps),
+        )
     analysis_metadata = {
         "methodology_version": METHODOLOGY_VERSION,
+        "methodology_control": methodology_control.as_dict(),
+        "execution_metrics": execution_metrics,
+        "comp_search_summary": comp_search_summary,
         "report_stage": report_stage,
         "pre_meeting_inputs": pre_meeting_inputs.model_dump(mode="json"),
         "repair_estimate_id": str(repair_estimate.id) if repair_estimate else None,
@@ -3529,7 +3597,97 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             else None
         ),
         subject_square_feet=optional_int(metadata.get("subject_square_feet")),
+        methodology_control=(
+            UnderwritingMethodologyControlRead.model_validate(
+                metadata.get("methodology_control")
+            )
+            if isinstance(metadata.get("methodology_control"), dict)
+            else None
+        ),
+        execution_metrics=(
+            UnderwritingExecutionMetricsRead.model_validate(
+                metadata.get("execution_metrics")
+            )
+            if isinstance(metadata.get("execution_metrics"), dict)
+            else None
+        ),
+        comp_search_summary=(
+            UnderwritingCompSearchSummaryRead.model_validate(
+                metadata.get("comp_search_summary")
+            )
+            if isinstance(metadata.get("comp_search_summary"), dict)
+            else None
+        ),
     )
+
+
+def count_comp_review_overrides(
+    source: UnderwritingMarketAnalysis | None,
+    decisions: Sequence[Any],
+) -> int:
+    if source is None or not decisions:
+        return 0
+    source_included = {
+        string_or_none(comp.get("provider_id"))
+        or string_or_none(comp.get("formatted_address"))
+        for comp in source.selected_comps
+        if isinstance(comp, dict)
+    }
+    source_included.discard(None)
+    return sum(
+        decision.included != (decision.comp_key in source_included)
+        for decision in decisions
+    )
+
+
+def legacy_comp_search_summary(
+    *,
+    sale_records: Sequence[dict[str, Any]],
+    selected_count: int,
+    rejected_count: int,
+) -> dict[str, Any]:
+    sufficient = selected_count >= 3
+    return {
+        "strategy_version": "fixed_v2.2_legacy",
+        "final_level": "preferred" if sufficient else "manual",
+        "sufficient_closed_sales": sufficient,
+        "minimum_closed_sales": 3,
+        "total_provider_results": len(sale_records),
+        "total_unique_sales": len(sale_records),
+        "duplicate_count": 0,
+        "subject_subdivision": None,
+        "same_subdivision_count": 0,
+        "market_area_warning": None,
+        "evidence_shortage_reason": (
+            None
+            if sufficient
+            else (
+                f"The saved fixed search contains {selected_count} usable closed sale(s); "
+                "refresh market data to run the adaptive search."
+            )
+        ),
+        "next_action": (
+            "Verify comp condition and approve or revise the recommended closed-sale set."
+            if sufficient
+            else "Refresh market data to run adaptive closed-sale discovery."
+        ),
+        "attempts": [
+            {
+                "level": "preferred",
+                "radius_miles": 1,
+                "days_old": 365,
+                "returned_count": len(sale_records),
+                "unique_added_count": len(sale_records),
+                "duplicate_count": 0,
+                "cumulative_unique_count": len(sale_records),
+                "selected_count": selected_count,
+                "rejected_count": rejected_count,
+                "same_subdivision_count": 0,
+                "expansion_reason": None,
+                "provider_error": None,
+            }
+        ],
+    }
 
 
 def string_list(value: Any) -> list[str]:

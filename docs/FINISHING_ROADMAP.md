@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 30, 2026
+Last updated: July 31, 2026
 
 ## Purpose
 
@@ -50,7 +50,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | V2.2 and calibration workflows implemented | Verified Georgia outcomes and operator review |
+| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.2 implemented | Implement U3.3-U3.10, then collect verified Georgia outcomes and operator acceptance |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
@@ -64,6 +64,8 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
 - `VA_DIALER_ROADMAP.md` now owns the one-by-one VA calling workflow. External multi-line dialing
   and BatchDialer were retired by Owner decision on July 30, 2026.
+- `UNDERWRITING_COMP_METHOD.md` owns both the current V2.2 method and the approved U3.1-U3.10
+  in-place upgrade plan. Planned V3 behavior must not be treated as implemented behavior.
 
 These sub-roadmaps extend the product boundaries above. They do not authorize a parallel CRM,
 communications history, or AI system.
@@ -322,8 +324,27 @@ deliberately deferred until Stonegate is close to a contracted deal so monthly c
 - comp screening, outlier handling, price-per-square-foot context, and condition review
 - ARV, as-is, repair, offer, confidence, and investor/client reports
 - immutable comp-review versions
+- adaptive preferred, expanded, extended, and manual closed-sale discovery
+- comp deduplication, A-D grades, subdivision evidence, and precise shortage guidance
+- provisional closed-sale continuity when the AVM is unavailable
 - verified outcome records
 - market scorecards and methodology decision ledger
+
+### Planned In-Place V3 Upgrade
+
+`UNDERWRITING_COMP_METHOD.md` defines U3.1-U3.10. The upgrade preserves the existing subject,
+market-analysis, repair-estimate, field-inspection, underwriting-version, approval, report, audit,
+and calibration records. Its target capabilities are:
+
+- adaptive closed-sale discovery with explicit search expansion and manual verified comps
+- separate active/pending, AVM, market-trend, and public-research evidence
+- a focused comp review workbench
+- market-supported adjustments replacing full price-per-square-foot scaling as the controlling
+  transformation
+- a guided repair scope with Georgia cost catalog, ranges, overrides, and unknown-risk treatment
+- human-confirmed AI repair assistance and an upgraded iPad walkthrough
+- one progressive Quick Comp, Desk Review, Walkthrough, and Offer Decision workflow
+- updated reports, calibration, shadow replay, and controlled activation
 
 ### Remaining Actions
 
@@ -339,8 +360,20 @@ For every suitable reviewed Georgia analysis:
 7. Consider another provider only when measured error or operator time justifies it.
 8. Require the configured minimum evidence and human approval for method changes.
 
+For the V3 build:
+
+1. Use the implemented U3.1 fixtures and baseline measurement before changing formulas.
+2. Use implemented U3.2 adaptive search evidence and implement U3.3-U3.4 supporting evidence,
+   manual comps, and operator review before adjustment expansion.
+3. Implement U3.5 adjustment governance and compare it against retained V2.2 results.
+4. Implement U3.6-U3.7 guided repairs and iPad evidence without duplicating field records.
+5. Implement U3.8-U3.9 workspace, report, and calibration updates.
+6. Complete U3.10 shadow validation and record the methodology activation decision.
+
 ### Exit Criteria
 
+- U3.1-U3.10 meet the phase exit criteria in `UNDERWRITING_COMP_METHOD.md` before V3 is declared
+  the default method.
 - The first market has enough verified cases for the approved review threshold.
 - Material bias and failure patterns are documented.
 - Stonegate has decided whether RentCast is adequate for that market.

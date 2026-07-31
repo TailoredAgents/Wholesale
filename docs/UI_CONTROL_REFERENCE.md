@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: July 29, 2026
+Last verified against the application: July 31, 2026
 
 ## Purpose
 
@@ -408,6 +408,10 @@ plans in **Settings > Workflows**.
 
 | Control | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| Underwriting performance ribbon | Shows verified ARV error, bias, range coverage, and tracked markets | Read-only; requires calibration outcomes for accuracy metrics |
+| Underwriting operating baseline ribbon | Shows analysis count, median selected comps, comp yield, and run time | Read-only; older analyses without execution timing still count where their stored comp totals permit |
+| Provider and methodology scorecard | Breaks verified errors, range coverage, overrides, and adequacy down by market/provider | Read-only; small samples remain insufficient evidence |
+| Methodology decision controls | Records evidence-backed proposals and human approval/rejection | Formula/provider changes retain the configured sample threshold |
 | **Scan active leads** | Runs duplicate detection across active seller records | Does not merge automatically |
 | **Keep separate** | Marks the candidate pair as two legitimate records | Requires a pending duplicate candidate |
 | **Merge records** | Combines the supported records while retaining history | Requires management authority and a pending candidate |
@@ -980,6 +984,8 @@ appraisal or permission to promise a seller a price.
 | Confidence | Summarizes evidence quality and unresolved gaps | Does not gate PDF generation |
 | Offer range | Shows policy-based low/high offer guidance after repairs and assignment fee | Staff must use current authority and approval rules |
 | Provider evidence | Shows market-data source, retrieval result, and matching details | Read-only |
+| Closed-sale search summary | Shows the final Preferred, Expanded, Extended, or Manual evidence level, unique and duplicate counts, subdivision support, shortage, and next action | Read-only; Manual means the controlled provider search remained insufficient, not that the analysis disappeared |
+| Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Public evidence | Shows controlled secondary evidence and source links when used | Must be verified before relying on a material fact |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
@@ -990,7 +996,9 @@ appraisal or permission to promise a seller a price.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Comparable row | Shows address, sale date, distance, size, beds/baths, price, price per square foot, and evidence source | Read-only source facts |
+| Comparable row | Shows address, sale date, distance, size, beds/baths, price, price per square foot, evidence source, A-D fit grade, search level, and subdivision when available | Read-only source facts |
+| Comp grade | Summarizes physical, location, recency, and market-area fit; Extended-only records cannot receive A or B | A grade does not prove renovated condition |
+| Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, or Extended query | Wider-query duplicates retain their earliest level |
 | Include | Allows a comparable to contribute to the estimate | Staff judgment; exclusion reason recommended when changed |
 | Condition | Marks renovated, average, distressed, unknown, or other supported state | Unconfirmed renovation reduces confidence but does not block results |
 | Exclusion reason | Explains why a comp should not be used | Required by review workflow when excluded |

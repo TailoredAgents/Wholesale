@@ -1,4 +1,18 @@
-# Underwriting V2.2 Method
+# Stonegate Underwriting Method
+
+## Version Status
+
+- **Current implemented method:** Underwriting V2.2 calculations with `adaptive_v1` closed-sale
+  discovery.
+- **Approved target:** Underwriting V3, planned as an in-place upgrade to V2.2.
+- **Current operating authority:** V2.2 formulas remain live. Implemented evidence and workflow
+  phases may improve the inputs and explanations without activating unfinished V3 formulas.
+- **V3 roadmap authority:** The planned V3 section at the end of this document governs the upgrade
+  sequence. Planned behavior must not be presented to staff as if it already exists.
+
+V3 does not create a second underwriting system. It extends the existing market-analysis service,
+repair estimates, field inspections, underwriting versions, offer approvals, reports, audit events,
+and calibration cases. Existing V2.2 analyses remain immutable and readable after V3 is introduced.
 
 ## Purpose
 
@@ -50,20 +64,27 @@ but does not hide the calculations or prevent report generation.
 
 ## Comparable Search
 
-The initial provider query uses:
+Fresh provider evidence uses three controlled searches, stopping as soon as the evidence threshold
+is met:
 
-- Same property type.
-- One-mile radius.
-- Sale within 365 days.
-- Bedrooms and bathrooms within one.
-- Living area within 20% at retrieval and final screening.
-- Year built within 25 years.
-- Up to 50 candidate records.
+| Level | Radius | Sale age | Bedrooms | Bathrooms | Living area | Year built |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Preferred | 0.5 mile | 180 days | exact | +/- 0.5 | +/- 15% | +/- 15 years |
+| Expanded | 1 mile | 365 days | +/- 1 | +/- 1 | +/- 20% | +/- 25 years |
+| Extended | 3 miles | 730 days | +/- 1 | +/- 1 | +/- 25% | +/- 35 years |
 
-The final screen rejects the subject property, missing sale price/date, different property
-type, living-area difference over 20%, bed/bath difference over one, and age difference over
-25 years. Eligible sales are scored for distance, recency, living area, age, and lot fit. The
-living-area score penalty increases as the size difference grows.
+Each query returns up to 50 public property records. Wider results are deduplicated by RentCast
+property ID or normalized address, and a repeated sale keeps the earliest level where it appeared.
+The system stops with at least three screened closed sales when available market-area evidence is
+adequate. If subject and comp subdivisions are both available, at least two selected sales must
+match the subject subdivision. Missing subdivision data does not invent a mismatch, but it creates
+a visible micro-market warning.
+
+The final screen rejects the subject property, missing sale price/date, different property type,
+bed/bath difference over one, and records beyond the active level's bounded size or age limit.
+Eligible sales are scored for distance, recency, living area, age, lot, and subdivision fit. Each
+sale receives an A-D fit grade plus its search level. Extended-only evidence receives stronger
+distance and recency penalties and cannot receive an A or B grade.
 
 When at least three physically eligible records have been human-verified as renovated, the
 engine calculates that group's median price per square foot. It rejects only extreme
@@ -72,9 +93,12 @@ Unknown and as-is records are not rejected for a low price because condition may
 difference. The five best remaining records are saved; all excluded records retain a reason,
 including the renovated-group median used for a price-per-square-foot rejection.
 
-The search does not cross a neighborhood boundary intentionally. RentCast radius search is a
-geographic screen, so the reviewer must still reject sales from a different subdivision,
-school district, flood influence, traffic corridor, or other competing market.
+If the extended search remains insufficient, the final level becomes `manual`. Stonegate saves the
+best suitable labeled evidence, the exact shortage, and the next action. It does not silently use
+an active listing, AVM value, subject sale, different property type, or otherwise rejected record
+to reach three comps. RentCast radius and subdivision fields remain evidence, not a definitive
+market boundary, so the reviewer must still evaluate school district, flood influence, traffic
+corridor, design, and other competing-market differences.
 
 ## Condition Classification
 
@@ -379,11 +403,437 @@ Before broad operational reliance:
 6. Add licensed MLS/RESO sold data when available.
 7. Keep offer sending and contract commitments behind human approval.
 
+## Underwriting V3 Upgrade Roadmap
+
+### Product Objective
+
+Underwriting V3 should let the closer move from an address to a supportable appointment offer with
+the least practical manual work while preserving the evidence needed to challenge, explain, or
+correct every conclusion. It must work as one Stonegate workflow before the appointment, during an
+iPad walkthrough, and during offer preparation.
+
+The system should help Austin answer five questions:
+
+1. Did Stonegate identify the correct property?
+2. What are the best available closed sales, and how strong is each one?
+3. What would this specific property likely cost to renovate to the selected target finish?
+4. What can a real buyer pay while preserving the intended exit economics?
+5. What price can Stonegate open at, negotiate toward, and never exceed without new approval?
+
+### Upgrade Principles
+
+1. **Extend existing records.** Reuse the current lead, property, market analysis, repair estimate,
+   inspection, underwriting version, offer plan, report, audit, and calibration records.
+2. **One workflow, multiple evidence stages.** Preliminary, pre-meeting reviewed, and walkthrough
+   verified are increasingly supported versions of the same deal, not separate tools.
+3. **Closed sales remain primary.** Active or pending listings, AVMs, market trends, and public web
+   research provide context but cannot silently replace closed-sale support.
+4. **Broaden searches transparently.** The system may use older, farther, or less physically similar
+   sales when better evidence is unavailable, but it must label the tradeoff and preserve the reason.
+5. **Unknown never means zero.** Missing condition or repair evidence creates uncertainty, a reserve,
+   or a verification item. It cannot silently remove cost or risk.
+6. **AI interprets evidence; governed math prices it.** AI may suggest scope from seller answers,
+   transcripts, notes, and photos. A versioned cost catalog and deterministic formulas calculate the
+   dollars. A human confirms consequential inputs.
+7. **No fabricated precision.** When local evidence cannot support an adjustment, V3 widens the
+   range and lowers confidence instead of inventing a dollar adjustment.
+8. **Every recommendation is explainable.** Raw values, adjustments, sources, search tiers,
+   overrides, assumptions, and uncertainty remain visible and auditable.
+9. **Existing approvals remain authoritative.** V3 does not send an offer, sign a contract, or permit
+   an amount above an approved seller ceiling.
+10. **Provider-neutral boundaries.** RentCast remains the first provider. Additional sold-data or
+    construction-cost providers connect through adapters only after measured need justifies them.
+
+### Target Operator Journey
+
+#### Stage 1: Quick Comp
+
+From the lead, the closer selects **Prepare valuation**. Stonegate verifies the subject, runs the
+adaptive comp search, applies a preliminary repair scope from known seller information, and shows a
+working ARV and offer range. No itemized dollar knowledge is required. The result is explicitly
+`Preliminary` and lists the few facts that would most improve it.
+
+#### Stage 2: Desk Review
+
+Before the appointment, the closer reviews the strongest closed sales, condition evidence, active
+market support, search expansion, and conflicts in one workbench. Stonegate recommends a set, but the
+closer confirms the final comps and any available renovation classifications. The result becomes
+`Pre-meeting reviewed` and can generate an appointment packet.
+
+#### Stage 3: iPad Walkthrough
+
+The existing field inspection becomes the guided property walkthrough. The closer marks each major
+component as `Unknown`, `No work`, `Repair`, `Replace`, or `Specialist review`; records quantity and
+severity only when useful; takes photos; and dictates notes. AI may prefill suggestions with cited
+evidence, but the closer confirms them. The verified scope transfers into the existing repair
+estimate and underwriting version records.
+
+#### Stage 4: Offer Decision
+
+Stonegate recalculates the deal and presents a focused decision summary: supported ARV range,
+expected and high repair scenarios, buyer maximum, Stonegate contract ceiling, opening offer,
+approved negotiation ladder, and unresolved risks. Supporting evidence stays one level below the
+summary instead of crowding the seller conversation.
+
+#### Stage 5: Reports And Outcome
+
+The investor report carries complete math and evidence. The client report remains seller-safe and
+does not expose Stonegate margins or negotiation authority. Later contractor bids, buyer offers,
+resale results, and closing outcomes feed the existing calibration workflow without rewriting the
+historical analysis.
+
+### Adaptive Comparable Search Contract
+
+V3 replaces the single fixed recent-sales request with a recorded search ladder. The ranges below
+are initial defaults, not claims that radius alone defines a market:
+
+| Level | Default search | Intended use |
+| --- | --- | --- |
+| Preferred | Same known subdivision/market area when available; approximately 1 mile, 12 months, same property type, and tight physical similarity | Primary closed-sale evidence |
+| Expanded | Approximately 2 miles and 18 months with moderately wider physical limits | Fill a thin preferred set while preserving likely buyer competition |
+| Extended | Up to approximately 5 miles and 24 months or a documented competing market area | Best available evidence for unusual, rural, or low-volume properties |
+| Manual | User-entered verified closed sale with its source and reason | Licensed MLS, agent, closing record, or other trusted evidence absent from the provider |
+
+The engine stops expanding when it has enough strong evidence, not merely enough rows. Search
+quality considers subdivision or market area, property type, living area, room count, age, lot,
+sale recency, distance, condition evidence, and known location influences. Extended results never
+inherit the same confidence as preferred results merely because they pass a wider filter.
+
+Every search attempt stores its parameters, returned count, accepted count, provider cost metadata
+when available, timestamp, and reason for expansion. Results are deduplicated across levels. Fresh
+provider retrieval is cached with the immutable analysis so comp review and repair changes do not
+repeat paid requests.
+
+If fewer than three defensible closed sales remain, V3 still produces a clearly provisional range
+when evidence permits. It offers manual comp entry and identifies the exact missing support instead
+of returning a generic failure. Active/pending listings and the AVM remain separately labeled
+context and cannot be counted as the missing closed sales.
+
+### Comparable Evidence Classes
+
+The workbench keeps four evidence classes visually and mathematically separate:
+
+1. **Closed sales:** primary value evidence.
+2. **Active and pending listings:** competition, direction, and ceiling/floor context; not closed
+   prices.
+3. **AVM and market statistics:** benchmark, trend, and disagreement detection.
+4. **Public research and operator evidence:** permits, listing photos or remarks, agent verification,
+   and other cited condition or property facts.
+
+Each closed-sale candidate receives a grade:
+
+- **Strong:** same likely market, strong physical fit, recent, and condition evidence suitable for
+  the conclusion.
+- **Acceptable:** useful with a visible and supportable difference or adjustment.
+- **Weak:** best available context but materially different, expanded, or poorly verified.
+- **Excluded:** not a credible indicator for the selected conclusion, with a retained reason.
+
+The user can add, include, exclude, or reweight a comp, but every manual decision requires a reason
+and creates a new immutable analysis as V2.2 does today.
+
+### V3 Value Adjustment Contract
+
+V3 retains raw recorded prices and price per square foot, but the current full subject-size
+indicator becomes a benchmark rather than the controlling value transformation.
+
+The target adjusted-sale formula is:
+
+```text
+Recorded sale price
++ supported market-condition/time adjustment
++ supported marginal living-area adjustment
++ supported condition, quality, or feature adjustments
+= adjusted comparable indication
+```
+
+An adjustment is used only when its source market has enough relevant observations, the method is
+stable under replay, and the rate and evidence are stored with the analysis. Candidate methods may
+include matched pairs, a robust local model, or a documented market index. The model-development
+sample is separate from the final selected comp set so three selected comps are not misrepresented
+as a statistically sufficient adjustment model.
+
+V3 must guard against double counting. For example, bedroom count normally overlaps with living
+area, and a renovated-condition adjustment must not duplicate an item already reflected in the
+target-finish comparison. Unsupported differences reduce grade or confidence instead of receiving
+a guessed dollar value. The reconciled conclusion remains within the supportable adjusted range.
+
+### Guided Repair Scope Contract
+
+The existing `System`, `Total`, and `Itemized` modes remain compatible. Itemized mode evolves from
+blank dollar inputs into a guided scope.
+
+Each category stores, where applicable:
+
+- component status: `unknown`, `no_work`, `repair`, `replace`, or `specialist_review`
+- severity or finish level
+- quantity and unit
+- low, expected, and high system cost
+- manual override and override reason
+- evidence source and references
+- AI suggestion, confidence, and confirmation status
+- inspection verification status
+
+The first categories remain roof, HVAC, plumbing, electrical, foundation, kitchen, bathrooms,
+flooring, paint/drywall, windows/doors, exterior, landscaping, permits, cleanup, and other. Their
+inputs become component-specific: roof area or scope, HVAC system count, bathroom count, window
+count, flooring/paint area, kitchen finish level, and minor/partial/full system work.
+
+The cost engine uses a versioned catalog with effective dates, Georgia market or ZIP/metro factors,
+unit costs, minimum charges, labor/material components when available, and source notes. It returns
+low, expected, and high totals plus contingency. A manual amount remains available on every row and
+always shows that it replaced the system amount.
+
+Unknown high-risk components receive an explicit uncertainty treatment. Foundation, structural,
+major electrical, major plumbing, environmental, and similar concerns may require specialist
+review. That warning does not hide the valuation or PDFs, but it widens repair/offer scenarios and
+appears in the appointment plan.
+
+Initially, Stonegate can maintain an internal Georgia cost catalog. A licensed source such as
+RSMeans or another construction-cost provider is optional later. Actual walkthrough scopes,
+contractor bids, and completed project costs calibrate the internal catalog by market and category;
+AI does not silently train on or change those rates.
+
+### AI Repair Assistant Contract
+
+The existing Acquisitions Copilot gains a repair-scope tool rather than becoming a second agent or
+valuation engine. It may:
+
+- extract reported repair facts from qualification answers, communications, and transcripts
+- identify likely component conditions from supported inspection photos
+- turn dictated walkthrough notes into structured draft scope items
+- identify contradictions or missing evidence
+- recommend the next highest-value inspection question or photo
+- explain why the governed cost engine produced a range
+
+It may not independently confirm a component, set a manual price, erase an unknown, approve ARV,
+change offer authority, or represent a repair budget as a contractor quote. Every suggestion keeps
+its source evidence and requires human confirmation before it changes the working scope.
+
+### Planned Implementation Phases
+
+#### U3.1: Compatibility, Baseline, And Evaluation Cases
+
+**Status:** Implemented July 31, 2026.
+
+- Freeze representative V2.2 analyses and expected calculations as regression fixtures.
+- Add ordinary, thin-market, rural, unique-property, conflicting-data, provider-failure, repair,
+  and adversarial test cases.
+- Define additive V3 API/schema contracts and V2.2 read compatibility.
+- Record baseline comp yield, operator overrides, completion time, ARV error, range coverage, and
+  repair error from available cases.
+- Put V3 calculation activation behind a methodology version or controlled feature flag.
+
+**Exit:** Existing analyses and reports remain readable; baseline fixtures pass; every later phase
+has measurable acceptance cases.
+
+Implementation record:
+
+- V2.2 golden fixtures preserve verified ARV, as-is, repair, buyer-economics, seller-ceiling, and
+  opening-offer outputs.
+- Regression cases cover ordinary, thin-market, rural/older, unique-property, conflicting-source,
+  provider-failure, adversarial-sale, and repair-entry behavior.
+- `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2` pins the active runner.
+- `UNDERWRITING_V3_SHADOW_ENABLED=false` reserves the future shadow path; premature live or shadow
+  activation is rejected with a clear configuration error.
+- New analyses store methodology control, execution duration, provider/candidate/selected/rejected
+  counts, comp yield, cache reuse, manual-review state, and comp-review override counts in existing
+  immutable analysis metadata.
+- The existing calibration API now includes an all-analysis operating baseline while retaining ARV,
+  range-coverage, repair, disposition, seller-ceiling, and reviewed-outcome metrics.
+- Legacy analyses without the new metadata continue to read with optional V3 fields absent.
+
+#### U3.2: Adaptive Closed-Sale Discovery
+
+**Status:** Implemented July 31, 2026.
+
+- Add the preferred, expanded, extended, and manual search levels.
+- Use subdivision evidence when available and retain market-area warnings.
+- Cache, deduplicate, grade, and explain every returned sale.
+- Continue safely when the AVM is unavailable but verified subject and closed-sale evidence exist.
+- Replace generic insufficient-comp failures with a search summary and next action.
+
+**Exit:** Thin-market test properties either produce the best available labeled set or a precise
+evidence shortage; the engine never silently substitutes an unsuitable property or listing price.
+
+Implementation record:
+
+- Fresh analyses use `adaptive_v1` closed-sale discovery. Preferred search is 0.5 mile / 180 days
+  with tight physical filters, expanded search is 1 mile / 365 days with the prior V2.2 physical
+  limits, and extended search is 3 miles / 730 days with bounded 25% living-area and 35-year age
+  tolerances.
+- Search stops as soon as at least three screened sales satisfy the available market-area evidence.
+  When the subject subdivision and returned subdivision data are available, at least two selected
+  sales must match that subdivision before the provider search is considered sufficient.
+- Repeated records from wider queries are deduplicated by provider ID or normalized address while
+  preserving the earliest, strongest discovery level. Later responses may fill missing fields but
+  cannot silently relabel a sale as preferred evidence.
+- Every unique sale retains its preferred, expanded, or extended level, A-D fit grade, subdivision
+  relationship, score, inclusion result, and explanation. Extended-only sales receive stronger
+  distance and recency penalties and cannot receive an A or B grade.
+- Search metadata records every query's radius, age and physical tolerances, returned and unique
+  counts, duplicates, cumulative selected/rejected counts, subdivision support, provider errors,
+  final level, shortage reason, and next action.
+- If all provider levels remain thin, the analysis still saves the best available labeled evidence,
+  marks the final level `manual`, and explains the exact shortage. It does not insert a listing,
+  AVM value, or unsuitable property to reach the count threshold.
+- A verified RentCast subject record plus screened closed sales can produce a provisional analysis
+  when the AVM is unavailable. AVM fields and unsupported as-is value remain empty rather than
+  being invented.
+- Saved adaptive sales and search metadata are reused for repair changes and comp review. A fresh
+  provider search occurs only when market data is explicitly refreshed.
+- The lead Underwriting view and both PDF report types expose the search conclusion. The investor
+  comparable table also prints each comp's grade, search level, and subdivision when available.
+- Focused acceptance tests cover preferred stopping, controlled expansion, deduplication,
+  subdivision expansion, complete evidence shortage, later provider outage, cache reuse, and
+  AVM-unavailable continuity.
+
+#### U3.3: Supporting Evidence And Manual Comps
+
+**Status:** Planned.
+
+- Add RentCast active/pending sale listings as separately labeled support.
+- Add ZIP/market trend evidence for context and candidate time-adjustment research.
+- Add manual closed-sale entry with source, verification, condition evidence, and duplicate checks.
+- Preserve bounded public research and condition-source links.
+- Keep optional future MLS/RESO or second-provider adapters behind the same normalized contract.
+
+**Exit:** The operator can finish a defensible review when RentCast misses a known sale without
+turning active listings, internet claims, or AVMs into fake closed comps.
+
+#### U3.4: Comparable Review Workbench
+
+**Status:** Planned.
+
+- Recompose the current comp table into a side-by-side subject and candidate review workspace.
+- Show grade, search level, raw sale, adjusted indication, distance, direction, sale date, physical
+  differences, condition evidence, source, and inclusion rationale.
+- Provide focused filters and a map/location view when an approved map source is available.
+- Recommend a final set while keeping include/exclude/reweight authority with the reviewer.
+- Hide advanced evidence until requested and keep the decision summary visible.
+
+**Exit:** Austin can identify, verify, and explain the final comp set without moving among unrelated
+pages or decoding provider fields.
+
+#### U3.5: Market-Supported Adjustment Engine
+
+**Status:** Planned.
+
+- Retain V2.2 results for shadow comparison.
+- Replace full price-per-square-foot scaling as the controlling transformation.
+- Add governed time and marginal living-area adjustments only when evidence thresholds pass.
+- Add condition, quality, lot, basement, garage, pool, or other feature adjustments only when the
+  local evidence supports them.
+- Detect collinearity/double counting, cap unsupported extrapolation, and store every rate/source.
+- Rework confidence to include search expansion and adjustment support.
+
+**Exit:** Every adjusted dollar is reproducible and sourced; unsupported cases remain usable with a
+wider range instead of fabricated precision.
+
+#### U3.6: Guided Repair Scope And Georgia Cost Catalog
+
+**Status:** Planned.
+
+- Extend repair items compatibly with status, severity, quantity/unit, ranges, source, uncertainty,
+  override, and confirmation fields.
+- Add `Unknown`, `No work`, `Repair`, `Replace`, and `Specialist review` controls.
+- Build versioned component formulas and Georgia market factors.
+- Preserve direct total and manual line-item amounts for experienced users and contractor bids.
+- Add explicit unknown-component reserves and low/expected/high repair scenarios.
+
+**Exit:** A user who does not know repair prices can create a transparent initial budget by stating
+what needs work; manual estimates and immutable contractor evidence still work.
+
+#### U3.7: AI Scope Assistance And iPad Walkthrough
+
+**Status:** Planned.
+
+- Connect the existing Acquisitions Copilot to structured repair-scope suggestions.
+- Use seller answers, calls, notes, inspection observations, and photos as cited inputs.
+- Prefill only suggestions and visibly distinguish AI-proposed, user-confirmed, and
+  walkthrough-verified facts.
+- Upgrade the existing field inspection for fast touch controls, photo/voice capture, autosave,
+  poor-connection recovery, and transfer into the existing repair estimate.
+- Track AI acceptance, correction, misses, latency, and cost without granting pricing authority.
+
+**Exit:** The iPad workflow creates a walkthrough-verified repair estimate without duplicate entry,
+and no AI suggestion becomes a confirmed repair fact silently.
+
+#### U3.8: Unified Valuation And Offer Workspace
+
+**Status:** Planned.
+
+- Present Quick Comp, Desk Review, Walkthrough, and Offer Decision as progressive stages of one
+  underwriting workspace.
+- Make **Prepare valuation** the simple first action and show only the most valuable missing facts.
+- Recalculate from the latest immutable evidence without repeating provider calls unnecessarily.
+- Keep the focused offer summary visible while advanced math remains expandable.
+- Link directly to appointment preparation, field inspection, approved offer plan, reports, and
+  in-person contract signing already present in Stonegate.
+
+**Exit:** One lead moves from preliminary analysis to approved negotiation authority without a
+parallel record, duplicate repair scope, or unexplained number change.
+
+#### U3.9: Reports, Explainability, And Calibration
+
+**Status:** Planned.
+
+- Update investor and client PDFs for search levels, comp grades, supported adjustments, repair
+  scenarios, unknowns, evidence sources, and report stage.
+- Keep internal economics and negotiation limits out of the client report.
+- Add version comparison for changed comps, adjustments, repairs, and seller ceilings.
+- Extend calibration by market, property type, search level, comp grade, repair category, and input
+  verification stage.
+- Add scorecards for comp yield, operator override burden, AI correction rate, and cost-catalog
+  accuracy.
+
+**Exit:** A saved report explains how Stonegate reached its conclusion, and later outcomes can show
+which data source, rule, category, or human assumption caused a miss.
+
+#### U3.10: Shadow Validation And Controlled Rollout
+
+**Status:** Planned.
+
+- Replay V2.2 and V3 against redacted known deals before changing the default.
+- Review at least 50 suitable cases overall and enough cases per initial Georgia market to avoid
+  treating anecdotes as calibration.
+- Test dense, suburban, rural, unique, low-comp, wrong-address, provider-failure, and high-risk
+  repair scenarios.
+- Require Owner acceptance of usability and an authorized methodology decision for activation.
+- Roll out to internal users first, monitor errors and overrides, and retain V2.2 rollback/read
+  compatibility.
+- Keep all offer, contract, and methodology authority human-controlled.
+
+**Exit:** V3 becomes the default only after it demonstrates better evidence coverage or accuracy
+without increasing unexplained overrides, unsafe certainty, or operator effort.
+
+### Overall Definition Of Done
+
+Underwriting V3 is implemented only when:
+
+- the correct subject is verified before valuation
+- the search adapts automatically and explains every expansion
+- known good comps can be entered manually with evidence
+- active listings and AVMs remain separate from closed-sale conclusions
+- the final value no longer depends solely on full price-per-square-foot scaling
+- a non-estimator can create a repair scope through component decisions
+- every system repair price has a version, location, unit, range, and source
+- unknown conditions create visible uncertainty rather than zero cost
+- iPad evidence transfers without duplicate entry
+- AI suggestions remain sourced, reversible, and human-confirmed
+- investor and client reports agree with the saved immutable analysis
+- offer ceilings remain approval-gated
+- V2.2 history remains readable
+- measured Georgia outcomes support the rollout decision
+
 ## Primary Sources
 
 - RentCast property records: https://developers.rentcast.io/reference/property-records
+- RentCast property data schema: https://developers.rentcast.io/reference/property-data-schema
 - RentCast property valuation: https://developers.rentcast.io/reference/property-valuation
+- RentCast property listings: https://developers.rentcast.io/reference/property-listings
+- RentCast market data: https://developers.rentcast.io/reference/market-data
 - RentCast long-term rent estimate: https://developers.rentcast.io/reference/rent-estimate-long-term
+- Gordian RSMeans cost data: https://www.gordian.com/products/rsmeans-data-services/
 - OpenAI Responses API web search:
   https://developers.openai.com/api/docs/guides/tools-web-search
 - Fannie Mae comparable sales: https://selling-guide.fanniemae.com/sel/b4-1.3-08/comparable-sales

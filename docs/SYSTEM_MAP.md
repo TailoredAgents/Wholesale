@@ -537,7 +537,13 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 **Workflows And Data Quality**
 
 - `/os/settings/workflows` owns approved follow-up plans.
-- `/os/settings/data-quality` owns duplicate review.
+- `/os/settings/data-quality` owns duplicate review plus underwriting operating baselines,
+  verified-outcome scorecards, and methodology decisions.
+- Every newly created V2.2 market analysis stores its methodology control, run duration, provider
+  and candidate counts, comp yield, cache reuse, review requirement, and operator override count in
+  the existing immutable analysis metadata.
+- V3 is represented as a planned methodology behind disabled configuration controls. The API
+  rejects live or shadow V3 activation until the corresponding runner exists.
 
 **Floating Help**
 
@@ -633,18 +639,23 @@ redirect to their new owners.
 
 1. Stonegate validates the subject address and canonical property facts.
 2. RentCast supplies the subject record and recorded-sale candidates when available.
-3. Safe address variants may be retried when the provider misses the original string.
-4. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
+3. Fresh recorded-sale discovery starts with a preferred 0.5-mile / 180-day search, expands to 1
+   mile / 365 days, and reaches 3 miles / 730 days only when the prior level remains insufficient.
+4. Wider-query duplicates are removed, and every unique sale retains its earliest search level,
+   fit grade, subdivision relationship, score, and screening reason.
+5. Safe address variants may be retried when the provider misses the original string.
+6. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
    ARV or offer values.
-5. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
+7. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
    condition, and material price or price-per-square-foot outliers.
-6. Selected and rejected comps retain scores and reasons.
-7. The engine produces an ARV range, as-is range, repair result, buyer economics, offer scenarios,
+8. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
+   exact shortage and manual-evidence next action; unsuitable properties are not substituted.
+9. The engine produces an ARV range, as-is range, repair result, buyer economics, offer scenarios,
    confidence tier, and review flags.
-8. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
-9. A human creates a negotiation plan tied to one saved underwriting version.
-10. Approval establishes opening, target, stretch, and hard-ceiling authority.
-11. Concessions and price discussions are appended to the negotiation ledger.
+10. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
+11. A human creates a negotiation plan tied to one saved underwriting version.
+12. Approval establishes opening, target, stretch, and hard-ceiling authority.
+13. Concessions and price discussions are appended to the negotiation ledger.
 
 ### 8.8 Contract And E-Signature
 
@@ -860,8 +871,8 @@ The one complete-analysis workflow performs:
 1. address normalization and identity validation
 2. provider-safe address retries
 3. subject fact reconciliation
-4. recorded-sale search
-5. candidate screening and scoring
+4. adaptive preferred, expanded, and extended recorded-sale search
+5. sale deduplication, subdivision comparison, A-D grading, screening, and scoring
 6. optional bounded public-record research
 7. comparable weighting
 8. ARV and as-is range calculation
@@ -869,6 +880,12 @@ The one complete-analysis workflow performs:
 10. buyer economics and Stonegate offer scenarios
 11. confidence factors and review flags
 12. immutable analysis storage
+
+The search stops when at least three screened closed sales satisfy available market-area evidence.
+If the complete provider search remains thin, the result is labeled `manual`, records the exact
+shortage and next action, and preserves every suitable sale found. Repair-only reruns and comp
+reviews reuse this immutable provider snapshot unless the operator explicitly refreshes market
+data.
 
 ### 11.3 Offer Math
 
@@ -1216,6 +1233,10 @@ Acquisitions Copilot records.
 
 `UnderwritingVersion`, `UnderwritingMarketAnalysis`, calibration cases and decisions,
 `RepairEstimate`, `OfferNegotiationPlan`, `OfferConcession`, and `OfferNegotiationEvent`.
+
+`UnderwritingMarketAnalysis.metadata` remains the additive compatibility boundary for methodology
+control, execution metrics, and comparable-search summaries. This avoids a duplicate analysis table
+and keeps older V2.2 records readable when newer optional fields are absent.
 
 ### Contracts And Transactions
 

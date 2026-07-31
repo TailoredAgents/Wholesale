@@ -503,6 +503,14 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="TWILIO_VOICE_RECORDING_DISCLOSURE",
     )
+    underwriting_active_methodology_version: Literal["v2.2", "v3"] = Field(
+        default="v2.2",
+        validation_alias="UNDERWRITING_ACTIVE_METHODOLOGY_VERSION",
+    )
+    underwriting_v3_shadow_enabled: bool = Field(
+        default=False,
+        validation_alias="UNDERWRITING_V3_SHADOW_ENABLED",
+    )
     underwriting_offer_low_percentage: float = Field(
         default=0.65,
         validation_alias="UNDERWRITING_OFFER_LOW_PERCENTAGE",

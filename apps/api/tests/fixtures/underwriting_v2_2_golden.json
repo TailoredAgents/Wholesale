@@ -1,0 +1,22 @@
+{
+  "verified_standard": {
+    "as_is_low_cents": 23351400,
+    "as_is_value_cents": 23351400,
+    "as_is_high_cents": 23657100,
+    "arv_low_cents": 29647100,
+    "arv_point_cents": 30000000,
+    "arv_high_cents": 30315800,
+    "conservative_arv_cents": 29647100,
+    "base_rehab_cents": 5000000,
+    "total_rehab_cents": 6000000,
+    "flip_buyer_max_cents": 13514151,
+    "rental_buyer_max_cents": 13829430,
+    "seller_contract_ceiling_cents": 12079430,
+    "recommended_opening_offer_cents": 11113076,
+    "selected_comp_count": 5,
+    "rejected_comp_count": 2,
+    "manual_review_required": false,
+    "arv_value_basis": "verified_renovated_recorded_sales",
+    "comp_value_method": "subject_size_ppsf_indicator"
+  }
+}

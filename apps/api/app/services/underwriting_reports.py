@@ -762,41 +762,70 @@ def evidence_audit_story(
     metadata = context.analysis.analysis_metadata or {}
     address_evidence = dict_value(metadata.get("address_evidence"))
     secondary_evidence = dict_value(metadata.get("secondary_evidence"))
+    comp_search = dict_value(metadata.get("comp_search_summary"))
     sources = list_of_dicts(secondary_evidence.get("sources"))
     factors = list_of_dicts(metadata.get("confidence_factors"))
-    story: list[Flowable] = [
-        section_heading("Evidence and confidence record", styles),
-        key_value_table(
+    search_attempts = list_of_dicts(comp_search.get("attempts"))
+    provider_search_passes = len(
+        [attempt for attempt in search_attempts if attempt.get("level") != "manual"]
+    )
+    evidence_rows = [
+        (
+            "Confidence",
+            (
+                f"{labelize(safe_string(metadata.get('confidence_tier')))} "
+                f"({context.analysis.confidence_score}/100)"
+            ),
+        ),
+        (
+            "Address match",
+            (
+                f"{labelize(safe_string(address_evidence.get('status')))}; "
+                f"{optional_int(address_evidence.get('match_score')) or 0}/100"
+            ),
+        ),
+        (
+            "Resolved property",
+            safe_string(address_evidence.get("resolved_address"))
+            or context.analysis.requested_address,
+        ),
+        (
+            "Secondary research",
+            (
+                f"{labelize(safe_string(secondary_evidence.get('status')))}; "
+                f"{len(sources)} cited public source(s)"
+            ),
+        ),
+    ]
+    if comp_search:
+        evidence_rows.extend(
             [
                 (
-                    "Confidence",
+                    "Closed-sale search",
                     (
-                        f"{labelize(safe_string(metadata.get('confidence_tier')))} "
-                        f"({context.analysis.confidence_score}/100)"
+                        f"{labelize(safe_string(comp_search.get('final_level')))}; "
+                        f"{provider_search_passes} provider pass(es)"
                     ),
                 ),
                 (
-                    "Address match",
+                    "Unique sale evidence",
                     (
-                        f"{labelize(safe_string(address_evidence.get('status')))}; "
-                        f"{optional_int(address_evidence.get('match_score')) or 0}/100"
+                        f"{optional_int(comp_search.get('total_unique_sales')) or 0} unique; "
+                        f"{optional_int(comp_search.get('duplicate_count')) or 0} duplicate "
+                        "result(s) removed"
                     ),
                 ),
                 (
-                    "Resolved property",
-                    safe_string(address_evidence.get("resolved_address"))
-                    or context.analysis.requested_address,
+                    "Search conclusion",
+                    safe_string(comp_search.get("evidence_shortage_reason"))
+                    or safe_string(comp_search.get("market_area_warning"))
+                    or "Closed-sale evidence threshold met.",
                 ),
-                (
-                    "Secondary research",
-                    (
-                        f"{labelize(safe_string(secondary_evidence.get('status')))}; "
-                        f"{len(sources)} cited public source(s)"
-                    ),
-                ),
-            ],
-            styles,
-        ),
+            ]
+        )
+    story: list[Flowable] = [
+        section_heading("Evidence and confidence record", styles),
+        key_value_table(evidence_rows, styles),
         Spacer(1, 0.12 * inch),
     ]
     if include_factors and factors:
@@ -1213,10 +1242,30 @@ def investor_comp_table(
         price_per_square_foot = format_ppsf_cents(
             optional_int(comp.get("price_per_square_foot_cents"))
         )
+        comp_evidence_label = " / ".join(
+            value
+            for value in (
+                (
+                    f"Grade {safe_string(comp.get('comp_grade'))}"
+                    if safe_string(comp.get("comp_grade"))
+                    else ""
+                ),
+                labelize(safe_string(comp.get("search_level"))),
+                safe_string(comp.get("subdivision")),
+            )
+            if value
+        )
         rows.append(
             [
                 Paragraph(
-                    escape(safe_string(comp.get("formatted_address"))),
+                    (
+                        escape(safe_string(comp.get("formatted_address")))
+                        + (
+                            f"<br/><font color='#657269'>{escape(comp_evidence_label)}</font>"
+                            if comp_evidence_label
+                            else ""
+                        )
+                    ),
                     styles["table_cell_bold"],
                 ),
                 Paragraph(

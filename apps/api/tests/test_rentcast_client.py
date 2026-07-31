@@ -196,3 +196,48 @@ def test_recent_sales_prefers_avm_coordinates(
     assert params["latitude"] == 34.245
     assert params["longitude"] == -84.49
     assert "address" not in params
+
+
+def test_recent_sales_applies_adaptive_search_tolerances(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> list[dict[str, object]]:
+            return []
+
+    def fake_get(url: str, **kwargs: object) -> FakeResponse:
+        captured["url"] = url
+        captured.update(kwargs)
+        return FakeResponse()
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    RentCastClient(api_key="test-key").get_recent_sales(
+        address="134 Waterstone Trail, Canton, GA 30114",
+        property_type="single_family",
+        bedrooms=4,
+        bathrooms=2.5,
+        square_footage=2400,
+        year_built=2002,
+        radius=0.5,
+        days_old=180,
+        bedroom_tolerance=0,
+        bathroom_tolerance=0.5,
+        square_footage_tolerance=0.15,
+        year_built_tolerance=15,
+    )
+
+    params = captured["params"]
+    assert isinstance(params, dict)
+    assert params["radius"] == 0.5
+    assert params["saleDateRange"] == 180
+    assert params["bedrooms"] == "4:4"
+    assert params["bathrooms"] == "2:3"
+    assert params["squareFootage"] == "2040:2760"
+    assert params["yearBuilt"] == "1987:2017"

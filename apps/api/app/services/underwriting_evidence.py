@@ -526,7 +526,7 @@ def empty_value_estimate(
     subject_record: dict[str, Any],
     error: RentCastClientError | None,
 ) -> RentCastValueEstimate:
-    payload = {
+    payload: dict[str, Any] = {
         "price": None,
         "priceRangeLow": None,
         "priceRangeHigh": None,

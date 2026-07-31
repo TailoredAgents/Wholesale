@@ -1,4 +1,4 @@
-import { BarChart3, FileSearch, Gauge, MapPinned } from "lucide-react";
+import { BarChart3, Clock3, FileSearch, Gauge, ListChecks, MapPinned, Search } from "lucide-react";
 import Link from "next/link";
 
 import type { UnderwritingCalibration } from "../../../lib/api";
@@ -34,6 +34,7 @@ export function UnderwritingQuality({
   calibration: UnderwritingCalibration;
 }) {
   const overall = calibration.overall;
+  const baseline = calibration.baseline;
   const minimum = calibration.minimum_sample_for_formula_review;
 
   return (
@@ -44,6 +45,15 @@ export function UnderwritingQuality({
         <div><FileSearch size={17} /><span>Range coverage</span><strong>{percent(overall.range_coverage_percentage)}</strong></div>
         <div><MapPinned size={17} /><span>Tracked markets</span><strong>{calibration.markets.length}</strong></div>
       </section>
+
+      {baseline ? (
+        <section className={styles.metricRibbon} aria-label="Underwriting operating baseline">
+          <div><Search size={17} /><span>Analysis runs</span><strong>{baseline.analysis_count}</strong></div>
+          <div><ListChecks size={17} /><span>Median selected comps</span><strong>{baseline.median_selected_comp_count ?? "--"}</strong></div>
+          <div><Gauge size={17} /><span>Median comp yield</span><strong>{percent(baseline.median_comp_yield_percentage)}</strong></div>
+          <div><Clock3 size={17} /><span>Median run time</span><strong>{baseline.median_duration_ms === null ? "--" : `${baseline.median_duration_ms.toFixed(0)} ms`}</strong></div>
+        </section>
+      ) : null}
 
       <section className={styles.section}>
         <header>

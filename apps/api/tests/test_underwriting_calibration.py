@@ -101,6 +101,15 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     analysis = seed_analysis(db_session, client)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
 
+    legacy_read = client.get(
+        f"/api/v1/leads/{analysis.lead_id}/underwriting/market-analysis",
+        headers=headers,
+    )
+    assert legacy_read.status_code == 200
+    assert legacy_read.json()["methodology_control"] is None
+    assert legacy_read.json()["execution_metrics"] is None
+    assert legacy_read.json()["comp_search_summary"] is None
+
     response = client.put(
         f"/api/v1/underwriting/calibration-cases/{analysis.id}",
         headers=headers,
