@@ -973,7 +973,7 @@ Exit criteria:
 
 ## IA6. Calendar And Appointment Execution
 
-Status: **Planned**
+Status: **Implemented July 30, 2026**
 
 Scope:
 
@@ -1505,3 +1505,40 @@ Quality**, where authorized managers configure and audit valuation quality.
 - `/os/pipeline?stage=...` redirects to `/os/leads?display=board&stage=...`.
 - `/os/underwriting?lead=...` redirects to `/os/leads?view=underwriting&lead=...`.
 - Existing `/os/leads/[leadId]` links remain valid.
+
+## 24. IA6 Calendar And Appointment Execution Implementation
+
+### 24.1 One Appointment Destination
+
+`/os/calendar` is the canonical appointment workspace. Its permission-aware local views are:
+
+- **Schedule** for month, week, day, and agenda calendars.
+- **Dispatch** for qualified-seller scheduling, territory matching, closer capacity, and travel
+  conflict review.
+- **Appointment** for meeting preparation, walkthrough evidence, photos, seller presentation,
+  negotiation, outcome, and approved in-person signing.
+- **Availability** for authorized managers to configure closer hours, territories, capacity,
+  travel buffers, and unavailable blocks.
+
+Selecting a Calendar appointment opens Appointment mode in one action. Dispatching a new meeting
+opens that appointment immediately.
+
+### 24.2 iPad Appointment Mode
+
+Direct appointment links enter focus mode automatically. The existing responsive appointment
+workspace retains larger tablet controls, seller-safe presentation, camera capture, structured
+walkthroughs, negotiation authority, and SignWell in-person signing. Seller presentation never
+renders internal margins, ceilings, assignment economics, or staff-only notes.
+
+### 24.3 URL And Compatibility Contract
+
+Calendar preserves `view`, `appointment`, and `lead` context. The public local-view names are
+`schedule`, `dispatch`, `appointment`, and `availability`. Existing
+`/os/field-operations?view=...` links redirect to the equivalent Calendar URL while preserving the
+selected appointment or lead.
+
+### 24.4 Preserved Capabilities
+
+No appointment, closer profile, availability block, brief, inspection, photo, negotiation,
+underwriting transfer, signature envelope, or outcome model was duplicated. IA6 recomposes the
+existing field workflow under Calendar and keeps the same permission and API boundaries.

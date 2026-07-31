@@ -209,10 +209,12 @@ function EvidencePhoto({ photo }: { photo: FieldInspection["photos"][number] }) 
 export function FieldMeetingWorkspace({
   data,
   initialWorkspace,
+  onAppointmentChange,
   requestedAppointmentId,
 }: {
   data: FieldOperationsOverview;
   initialWorkspace: FieldAppointmentWorkspace | null;
+  onAppointmentChange?: (appointmentId: string) => void;
   requestedAppointmentId: string;
 }) {
   const { request, requestJson, requestPhoto } = useFieldApi();
@@ -396,7 +398,11 @@ export function FieldMeetingWorkspace({
             <button
               className={appointmentId === appointment.id ? styles.selectedMeeting : ""}
               key={appointment.id}
-              onClick={() => setAppointmentId(appointment.id)}
+              onClick={() => {
+                setAppointmentId(appointment.id);
+                setFocusMode(true);
+                onAppointmentChange?.(appointment.id);
+              }}
               type="button"
             >
               <time>{new Date(appointment.scheduled_start_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</time>

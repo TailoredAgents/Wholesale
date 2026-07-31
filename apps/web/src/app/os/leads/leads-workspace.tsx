@@ -52,7 +52,7 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
     return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Open qualification queue" };
   }
   if (status === "Appointment work") {
-    return { href: `/os/field-operations?view=dispatch&lead=${lead.id}`, label: "Open dispatch" };
+    return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Open dispatch" };
   }
   if (status === "Offer prep") {
     return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };

@@ -7,7 +7,6 @@ import {
   CalendarDays,
   ChartNoAxesCombined,
   CheckCheck,
-  ClipboardCheck,
   ContactRound,
   FileCheck2,
   Gauge,
@@ -245,13 +244,6 @@ export const compatibilityNavGroups: CompatibilityNavGroup[] = [
         icon: Route,
         roles: ["administrator", ...acquisitionRoles],
         anyPermissions: ["leads:view"],
-      },
-      {
-        href: "/os/field-operations",
-        label: "Field Operations",
-        icon: ClipboardCheck,
-        roles: acquisitionRoles,
-        anyPermissions: ["underwriting:edit", "operations:manage"],
       },
       {
         href: "/os/leads?view=underwriting",

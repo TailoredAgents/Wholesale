@@ -60,12 +60,14 @@ function candidateStatus(candidate: DispatchCandidate) {
 }
 
 export function FieldOperationsWorkspace({
+  basePath = "/os/calendar",
   data,
   initialAppointmentId = "",
   initialLeadId = "",
   initialWorkspace = null,
   initialView = "dispatch",
 }: {
+  basePath?: string;
   data: FieldOperationsOverview;
   initialAppointmentId?: string;
   initialLeadId?: string;
@@ -112,6 +114,35 @@ export function FieldOperationsWorkspace({
   const selectedCandidate =
     evaluation?.candidates.find((item) => item.user_id === selectedCloserId) ?? null;
   const editingProfile = data.profiles.find((item) => item.user_id === editingUserId) ?? null;
+
+  function viewUrl(nextView: View, appointmentId = "", leadId = "") {
+    const params = new URLSearchParams();
+    const publicView =
+      nextView === "calendar"
+        ? "schedule"
+        : nextView === "meetings"
+          ? "appointment"
+          : nextView === "capacity"
+            ? "availability"
+            : "dispatch";
+    if (publicView !== "schedule") params.set("view", publicView);
+    if (appointmentId) params.set("appointment", appointmentId);
+    if (leadId) params.set("lead", leadId);
+    const query = params.toString();
+    return query ? `${basePath}?${query}` : basePath;
+  }
+
+  function chooseView(nextView: View) {
+    setView(nextView);
+    router.replace(
+      viewUrl(
+        nextView,
+        nextView === "meetings" ? requestedAppointmentId : "",
+        nextView === "dispatch" ? selectedLeadId : "",
+      ),
+      { scroll: false },
+    );
+  }
 
   async function request<T>(path: string, method: string, body?: object): Promise<T | null> {
     setSaving(true);
@@ -179,6 +210,9 @@ export function FieldOperationsWorkspace({
     if (!result) return;
     setMessage("Appointment dispatched and added to the internal calendar.");
     setEvaluation(null);
+    setRequestedAppointmentId(result.appointment_id);
+    setView("meetings");
+    router.replace(viewUrl("meetings", result.appointment_id), { scroll: false });
     router.refresh();
   }
 
@@ -246,18 +280,18 @@ export function FieldOperationsWorkspace({
 
   return (
     <div className={styles.workspace}>
-      <section className={styles.metrics} aria-label="Field operations summary">
+      <section className={styles.metrics} aria-label="Calendar operations summary">
         <div><span>Ready to schedule</span><strong>{data.metrics.ready_to_schedule}</strong></div>
         <div><span>Appointments today</span><strong>{data.metrics.appointments_today}</strong></div>
         <div className={data.metrics.unassigned_today ? styles.riskMetric : ""}><span>Unassigned today</span><strong>{data.metrics.unassigned_today}</strong></div>
         <div className={data.metrics.at_capacity_today ? styles.riskMetric : ""}><span>Closers at capacity</span><strong>{data.metrics.at_capacity_today}</strong></div>
       </section>
 
-      <nav className={styles.tabs} aria-label="Field operations views">
-        <button className={view === "dispatch" ? styles.activeTab : ""} onClick={() => setView("dispatch")} type="button"><Route size={16} />Dispatch</button>
-        <button className={view === "calendar" ? styles.activeTab : ""} onClick={() => setView("calendar")} type="button"><CalendarDays size={16} />Calendar</button>
-        <button className={view === "meetings" ? styles.activeTab : ""} onClick={() => setView("meetings")} type="button"><ClipboardCheck size={16} />Meetings</button>
-        {data.can_manage ? <button className={view === "capacity" ? styles.activeTab : ""} onClick={() => setView("capacity")} type="button"><Settings2 size={16} />Capacity</button> : null}
+      <nav className={styles.tabs} aria-label="Calendar views">
+        <button className={view === "calendar" ? styles.activeTab : ""} onClick={() => chooseView("calendar")} type="button"><CalendarDays size={16} />Schedule</button>
+        <button className={view === "dispatch" ? styles.activeTab : ""} onClick={() => chooseView("dispatch")} type="button"><Route size={16} />Dispatch</button>
+        <button className={view === "meetings" ? styles.activeTab : ""} onClick={() => chooseView("meetings")} type="button"><ClipboardCheck size={16} />Appointment</button>
+        {data.can_manage ? <button className={view === "capacity" ? styles.activeTab : ""} onClick={() => chooseView("capacity")} type="button"><Settings2 size={16} />Availability</button> : null}
       </nav>
 
       {message ? <p className={message.includes("saved") || message.includes("added") || message.includes("dispatched") || message.includes("removed") ? styles.notice : styles.error}>{message}</p> : null}
@@ -332,6 +366,7 @@ export function FieldOperationsWorkspace({
           onOpenMeeting={(appointmentId) => {
             setRequestedAppointmentId(appointmentId);
             setView("meetings");
+            router.replace(viewUrl("meetings", appointmentId), { scroll: false });
           }}
         />
       ) : null}
@@ -340,6 +375,10 @@ export function FieldOperationsWorkspace({
         <FieldMeetingWorkspace
           data={data}
           initialWorkspace={initialWorkspace}
+          onAppointmentChange={(appointmentId) => {
+            setRequestedAppointmentId(appointmentId);
+            router.replace(viewUrl("meetings", appointmentId), { scroll: false });
+          }}
           requestedAppointmentId={requestedAppointmentId}
         />
       ) : null}

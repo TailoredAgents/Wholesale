@@ -1,52 +1,32 @@
-import {
-  getFieldAppointmentWorkspace,
-  getFieldOperationsOverview,
-} from "../../lib/api";
-import { AcquisitionJourney } from "../_components/acquisition-journey";
-import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
-import { FieldOperationsWorkspace } from "./field-operations-workspace";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+type SearchValue = string | string[] | undefined;
 
-const fieldViews = new Set(["dispatch", "calendar", "meetings", "capacity"]);
+function first(value: SearchValue) {
+  return Array.isArray(value) ? value[0] ?? "" : value ?? "";
+}
 
 export default async function FieldOperationsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ appointment?: string; lead?: string; view?: string }>;
+  searchParams?: Promise<Record<string, SearchValue>>;
 }) {
-  const params = await searchParams;
-  const [{ fieldOperations, apiConnected }, initialWorkspace] = await Promise.all([
-    getFieldOperationsOverview(),
-    getFieldAppointmentWorkspace(params.appointment ?? ""),
-  ]);
-  const initialView = fieldViews.has(params.view ?? "")
-    ? (params.view as "dispatch" | "calendar" | "meetings" | "capacity")
-    : "dispatch";
-
-  return (
-    <WorkspacePage>
-      <PageHeader
-        description="Seller appointment dispatch, closer capacity, meeting preparation, property evidence, and visit outcomes."
-        eyebrow="Appointment execution"
-        meta={apiConnected ? "Capacity current" : "API unavailable"}
-        title="Field Operations"
-      />
-      <AcquisitionJourney active="field-operations" />
-
-      {fieldOperations ? (
-        <FieldOperationsWorkspace
-          data={fieldOperations}
-          initialAppointmentId={params.appointment ?? ""}
-          initialLeadId={params.lead ?? ""}
-          initialWorkspace={initialWorkspace}
-          initialView={initialView}
-        />
-      ) : (
-        <SectionPanel description="An acquisitions or management role is required." title="Field dispatch unavailable">
-          <div />
-        </SectionPanel>
-      )}
-    </WorkspacePage>
-  );
+  const params = (await searchParams) ?? {};
+  const legacyView = first(params.view);
+  const view =
+    legacyView === "meetings"
+      ? "appointment"
+      : legacyView === "capacity"
+        ? "availability"
+        : legacyView === "calendar"
+          ? "schedule"
+          : legacyView || "schedule";
+  const query = new URLSearchParams();
+  if (view !== "schedule") query.set("view", view);
+  const appointment = first(params.appointment);
+  const lead = first(params.lead);
+  if (appointment) query.set("appointment", appointment);
+  if (lead) query.set("lead", lead);
+  const suffix = query.toString();
+  redirect(suffix ? `/os/calendar?${suffix}` : "/os/calendar");
 }

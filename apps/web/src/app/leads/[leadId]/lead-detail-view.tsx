@@ -251,7 +251,7 @@ function OverviewTab({
   lead: LeadDetail;
 }) {
   const appointmentWorkspaceHref = activeAppointment
-    ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
+    ? `/os/calendar?view=appointment&appointment=${encodeURIComponent(activeAppointment.id)}`
     : `/os/leads/${lead.id}?tab=appointments`;
   return (
     <div className={styles.overviewGrid}>
@@ -635,7 +635,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
       && !appointment.outcome,
   );
   const appointmentWorkspaceHref = activeAppointment
-    ? `/os/field-operations?view=meetings&appointment=${encodeURIComponent(activeAppointment.id)}`
+    ? `/os/calendar?view=appointment&appointment=${encodeURIComponent(activeAppointment.id)}`
     : tabHref("appointments");
 
   return (

@@ -11,7 +11,7 @@ const routeByKey = {
   "lead-manager": "/os/leads?view=queue",
   leads: "/os/leads",
   pipeline: "/os/leads?display=board",
-  "field-operations": "/os/field-operations",
+  "field-operations": "/os/calendar",
 } as const;
 
 export type AcquisitionRouteKey = keyof typeof routeByKey;

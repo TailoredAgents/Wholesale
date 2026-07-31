@@ -137,7 +137,7 @@ export default async function Home() {
       category: "Seller meeting",
       title: appointment.seller_name,
       detail: `${formatDateTime(appointment.scheduled_start_at)} · ${appointment.property_address}`,
-      href: `/os/field-operations?view=meetings&appointment=${appointment.id}`,
+      href: `/os/calendar?view=appointment&appointment=${appointment.id}`,
       status: isToday(appointment.scheduled_start_at) ? "Today" : "Scheduled",
       tone: isToday(appointment.scheduled_start_at) ? "info" : "neutral",
     });

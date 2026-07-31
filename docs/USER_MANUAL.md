@@ -145,7 +145,7 @@ intentional.
 | Owner / Founder / CEO | Home | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
 | Administrator | Home | User support, records, audit, and acquisition administration |
 | Lead Manager | Home or Tools > Lead Desk | Warm response, qualification, nurture, and appointment setting |
-| Acquisitions Closer | Calendar or Tools > Field Operations | Meeting preparation, property visit, underwriting review, negotiation, and contract |
+| Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
 | Dispositions Manager / Rep | Deals | Buyer matching, package release preparation, offers, buyer outcome, and backup |
 | Transaction Coordinator | Deals | Contract-to-close checklist, parties, documents, dates, funding, and closing evidence |
@@ -202,7 +202,7 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use **Tools** for
-Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
+Lead Desk, Seller Pipeline, Underwriting, Approvals, Transactions,
 Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control while
 those workspaces are consolidated. Global search finds both primary workspaces and authorized
 Tools. Recent destinations return to recently opened OS pages. On mobile, use the menu button to
@@ -240,7 +240,7 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Seller Leads: Lead Queue | `/os/leads?view=queue` |
 | Archived Leads | `/os/leads/archived` |
 | Seller Leads: Pipeline | `/os/leads?display=board` |
-| Field Operations | `/os/field-operations` |
+| Calendar: Appointment | `/os/calendar?view=appointment` |
 | Seller Leads: Underwriting | `/os/leads?view=underwriting` |
 | Approvals | `/os/approvals` |
 | Transactions | `/os/transactions` |
@@ -334,7 +334,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Acquisitions Closer
 
-1. Open **Calendar** and **Field Operations > Meetings**.
+1. Open **Calendar > Appointment**.
 2. Review the meeting brief, unresolved questions, property facts, and underwriting.
 3. Record walkthrough evidence and repairs during the visit.
 4. Review the approved offer ceiling before discussing price.
@@ -590,10 +590,10 @@ The normal deal path and its completion evidence are:
 | Seller inquiry or outreach | Public form, Campaigns, Prospecting | One seller record exists with source, contact evidence, and an owned next action |
 | Warm handoff | Prospecting, Lead Desk | The Lead Manager accepted a sufficiently documented handoff |
 | Qualification | Lead Desk, Inbox | Required facts are confirmed or marked unknown, and the next appointment or follow-up is dated |
-| Appointment | Calendar, Field Operations | The meeting has an owner, time, location, preparation, and recorded outcome |
+| Appointment | Calendar | The meeting has an owner, time, location, preparation, and recorded outcome |
 | Underwriting | Lead record, Underwriting | Comps and repairs were human-reviewed, a version was saved, and warnings were understood |
 | Negotiation | Lead record, Approvals | Current offer authority exists and each seller response is recorded |
-| Contract | Field Operations, Transactions | The exact approved agreement is fully signed and the completed PDF is retained |
+| Contract | Calendar Appointment, Transactions | The exact approved agreement is fully signed and the completed PDF is retained |
 | Closing coordination | Transactions | Checklist, parties, dates, title issues, documents, and funding evidence are complete |
 | Buyer placement | Dispositions, Buyers | Package is approved, offers are compared, and primary and backup selections are approved |
 | Funded deal | Transactions, Dispositions, Finance | Cleared revenue, deductions, role credits, commissions, and accounting evidence reconcile |
@@ -1025,27 +1025,27 @@ Use:
 
 To schedule:
 
-1. Open the lead in **Lead Desk**, **Inbox**, or **Field Operations > Dispatch**.
+1. Open the lead in **Seller Leads > Lead Queue**, **Inbox**, or **Calendar > Dispatch**.
 2. Select the requested start and end time.
 3. Evaluate closer availability, territory, overlap, and travel buffers.
 4. Select an eligible closer.
 5. Save the appointment.
-6. Confirm it appears in Calendar and Field Operations.
+6. Confirm it appears in Calendar.
 
 Manager override is allowed only for authorized roles and requires a reason.
 
-## 8. Field Operations
+## 8. Calendar Appointment Execution
 
-Open **Field Operations**. Views are:
+Open **Calendar**. Its local views are:
 
+- **Schedule**
 - **Dispatch**
-- **Calendar**
-- **Meetings**
-- **Capacity**
+- **Appointment**
+- **Availability** for authorized managers
 
 ### Prepare A Meeting
 
-1. Open **Meetings** and select the appointment.
+1. Open **Appointment** and select the meeting.
 2. Appointments opened from Calendar or a lead enter **Appointment mode** automatically.
 3. Review **Prepare** for seller goals, history, property, unresolved questions, and logistics.
 4. Refresh the meeting brief after changing underwriting or comparable sales.
@@ -1137,7 +1137,7 @@ Use **Archived** from Seller Leads to locate and restore archived records.
 
 Select **Pipeline** to switch the same filtered records to a stage board. Search, owner, stage,
 selected seller, and display mode stay in the URL. Use the recommended next action to open Inbox,
-Lead Queue, Field Operations, Valuation & Offer, Contract & Deal, or the complete record.
+Lead Queue, Calendar, Valuation & Offer, Contract & Deal, or the complete record.
 
 Move a stage only when the corresponding real-world event occurred. Stage movement does not
 replace qualification, approvals, or evidence.
@@ -1239,7 +1239,7 @@ insufficient.
 
 ### Use The Result In A Seller Meeting
 
-On the iPad, open **Field Operations > Meetings** and select the appointment. Use the market
+On the iPad, open **Calendar > Appointment** and select the appointment. Use the market
 evidence view to discuss the property and the reasons behind the range. Keep these numbers
 distinct:
 
@@ -1334,8 +1334,8 @@ The Transactions workspace has:
    delayed.
 10. Confirm the completed provider PDF appears in Documents before continuing closing work.
 
-For an accepted in-person appointment, use the signing panel in **Field Operations > Meetings >
-Finish** instead of the email form. Both methods use the same approved package, signer records,
+For an accepted in-person appointment, use the signing panel in **Calendar > Appointment >
+Outcome** instead of the email form. Both methods use the same approved package, signer records,
 provider status, completed PDF, and audit trail.
 
 Until production SignWell acceptance is complete, use the controlled manual execution workflow.
@@ -1752,7 +1752,7 @@ Copilots live inside the human workspace they assist:
 | --- | --- | --- |
 | Lead Manager | Lead Desk | Draft and recommend |
 | Prospecting | Prospecting | Priority, preparation, and reviewed coaching |
-| Acquisitions | Field Operations | Meeting and follow-up drafts |
+| Acquisitions | Calendar Appointment | Meeting and follow-up drafts |
 | Transaction | Transactions | Coordination drafts |
 | Disposition | Dispositions | Buyer and package guidance |
 | Finance | Finance | Aggregate analysis and recommendations |

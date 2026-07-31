@@ -67,7 +67,7 @@ is relevant and the required permission is present.
 | Marketing | Marketing Manager | `financials:view` or `communications:send_bulk` |
 | Settings | Owner, Administrator | At least one administration permission |
 
-Campaigns, Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
+Campaigns, Lead Desk, Seller Pipeline, Underwriting, Approvals, Transactions,
 Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control remain
 available as permission-filtered compatibility tools.
 
@@ -242,8 +242,8 @@ If a bulk request partially fails, completed tasks disappear and failed tasks re
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Schedule status | Shows today's appointments, leads ready to schedule, unassigned meetings, and capacity exceptions | Read-only summary |
-| **Dispatch** | Opens Field Operations dispatch | Navigation only |
-| Upcoming appointment / **Prepare** | Opens that appointment's meeting workspace | Requires an appointment |
+| Schedule / Dispatch / Appointment / Availability | Switches Calendar work without changing appointment records | Availability requires management authority |
+| Upcoming appointment / **Prepare** | Opens that appointment workspace in one action | Requires an appointment |
 | Previous arrow | Moves back one month, week, day, or 30-day agenda period | Filter only |
 | **Today** | Returns the cursor to today | Filter only |
 | Next arrow | Moves forward one period | Filter only |
@@ -252,7 +252,7 @@ If a bulk request partially fails, completed tasks disappear and failed tasks re
 | Month day number | Opens that date in Day view | Navigation within calendar |
 | `+N more` | Opens a crowded month date in Day view | Appears after more than three appointments |
 | Week day heading | Opens that date in Day view | Week mode only |
-| Appointment event | Opens Field Operations meeting preparation | Requires a selected appointment |
+| Appointment event | Opens Calendar appointment mode | Requires a selected appointment |
 
 Calendar loading or availability errors do not delete appointments. Refresh after API recovery.
 
@@ -323,7 +323,7 @@ plans in **Settings > Workflows**.
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Internal calendar | Shows acquisition appointments and operating commitments | Read-only here; use Calendar or Field Operations for appointment work |
+| Internal calendar | Shows acquisition appointments and operating commitments | Use Calendar > Appointment for meeting work |
 | Needs attention | Lists operational notifications | Read-only until a notification is selected |
 | **Mark read** | Records the notification as read | Hidden after it has been read |
 | Saved view name | Names a reusable Operations view | Required to save |
@@ -758,9 +758,9 @@ only to owners and users with `communications:manage_voice_lines`.
 | **Add line** | Creates the Stonegate voice-line record | Requires voice-line management permission |
 | **Save** | Updates label, status, default, and route | Requires voice-line management permission |
 
-## Field Operations
+## Calendar Dispatch And Availability
 
-Field Operations has **Dispatch**, **Calendar**, **Meetings**, and **Capacity** views.
+Calendar has **Schedule**, **Dispatch**, **Appointment**, and **Availability** views.
 
 ### Dispatch
 

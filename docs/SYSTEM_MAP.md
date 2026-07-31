@@ -363,7 +363,7 @@ reaches feature parity.
 
 The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaign
 management is a local Prospecting view. Lead Queue, Pipeline, and active Underwriting are local
-Seller Leads views. Field Operations remains a compatibility tool and appointment deep link.
+Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local Calendar views.
 
 **Prospecting > Campaigns (`/os/prospecting?view=campaigns`)**
 
@@ -412,10 +412,14 @@ Seller Leads views. Field Operations remains a compatibility tool and appointmen
 - `/os/lead-manager`, `/os/pipeline`, and `/os/underwriting` preserve old links by redirecting to
   the corresponding Seller Leads view.
 
-**Field Operations (`/os/field-operations`)**
+**Calendar (`/os/calendar`)**
 
-- Closer dispatch, availability, territory, capacity, appointment preparation, walkthrough,
-  photographs, seller presentation, negotiation, and iPad signing.
+- Internal month, week, day, and agenda schedule.
+- Dispatch with closer capacity, working-hours, territory, travel-buffer, and conflict checks.
+- Appointment execution with preparation, walkthrough, photographs, seller-safe presentation,
+  negotiation, outcome, and approved iPad signing.
+- Manager Availability view for closer profiles and unavailable blocks.
+- The former `/os/field-operations` route redirects while preserving appointment and lead context.
 
 ### 7.3 Deals And Deal Tools
 
@@ -1026,7 +1030,7 @@ Employees generally interact with copilots, not a collection of separate chat ro
 | --- | --- | --- |
 | Prospecting | Prospecting | Pre-call brief, script guidance, disposition quality, coaching |
 | Lead Manager | Lead Desk | Priority, seller brief, missing facts, reply and task proposals |
-| Acquisitions | Field Operations | Meeting preparation, evidence gaps, negotiation support |
+| Acquisitions | Calendar Appointment | Meeting preparation, evidence gaps, negotiation support |
 | Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
 | Disposition | Dispositions | Package gaps, buyer ranking, outreach and offer review |
 | Finance | Finance | Classification, journal, match, variance, and close guidance |

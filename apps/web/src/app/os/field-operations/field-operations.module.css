@@ -2819,7 +2819,17 @@
   }
 
   .monthCalendar {
-    overflow-x: auto;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+
+  .calendarToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendarControls {
+    justify-content: space-between;
+    width: 100%;
   }
 }
 
@@ -2923,10 +2933,6 @@
 
   .calendarModes {
     overflow-x: auto;
-  }
-
-  .monthCalendar {
-    grid-template-columns: repeat(7, minmax(96px, 1fr));
   }
 
   .monthDay {

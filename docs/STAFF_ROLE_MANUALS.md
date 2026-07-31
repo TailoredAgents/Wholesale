@@ -183,7 +183,7 @@ to change advertising.
 - Use **Operating Model** for staffing, coverage, work credit, and policy versions.
 - Use **AI Control** for model/runtime governance, not normal seller work.
 - Use the role-specific page when performing that role. For example, work an appointment in
-  **Field Operations**, not from an Owner-only shortcut.
+  **Calendar > Appointment**, not from an Owner-only shortcut.
 
 ### End Of Day
 
