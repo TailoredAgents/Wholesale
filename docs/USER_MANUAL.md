@@ -202,7 +202,7 @@ The exact list is reduced by role and permission.
 - **Settings:** Personal setup, people and access, communications, company policy, and AI controls.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use **Tools** for
-Campaigns, Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
+Lead Desk, Seller Pipeline, Field Operations, Underwriting, Approvals, Transactions,
 Dispositions, My Setup, Team & Access, Email Management, Company & Policy, and AI Control while
 those workspaces are consolidated. Global search finds both primary workspaces and authorized
 Tools. Recent destinations return to recently opened OS pages. On mobile, use the menu button to
@@ -217,6 +217,8 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Tasks | `/os/tasks` |
 | Calendar | `/os/calendar` |
 | Prospecting | `/os/prospecting` |
+| Prospecting: Campaigns | `/os/prospecting?view=campaigns` |
+| Prospecting: My Calls | `/os/prospecting?view=my-calls` |
 | Seller Leads | `/os/leads` |
 | Deals | `/os/deals` |
 | Buyers | `/os/buyers` |
@@ -232,7 +234,7 @@ open the navigation drawer. The floating Help button remains at the bottom-right
 | Settings: Data & Quality | `/os/settings/data-quality` |
 | Settings: Finance Policy | `/os/settings/finance-policy` |
 | Settings: AI & Automation | `/os/settings/ai` |
-| Compatibility: Campaigns | `/os/campaigns` |
+| Legacy Campaigns redirect | `/os/campaigns` |
 | Legacy Team & Access redirect | `/os/operations?tab=team` |
 | Legacy Email Management redirect | `/os/inbox?manage=email` |
 | Lead Desk | `/os/lead-manager` |
@@ -428,14 +430,16 @@ confirming the actual property address.
 
 ### Create An Outreach Campaign
 
-1. Enter the campaign name and stable code.
-2. Select the market and optional territory.
-3. Select the real channel: cold call, cold email, direct mail, paid search, paid social, organic,
+1. Open **Prospecting > Campaigns**.
+2. Select **New campaign**.
+3. Enter the campaign name and stable code.
+4. Select the market and optional territory.
+5. Select the real channel: cold call, cold email, direct mail, paid search, paid social, organic,
    referral, or other.
-4. Select the accountable owner.
-5. Enter start date and initial budget.
-6. Save the campaign.
-7. Use **Campaigns** for detailed imports, costs, batches, and reporting.
+6. Select the accountable owner.
+7. Enter start date and initial budget.
+8. Select **Create campaign**. Stonegate opens the new campaign as the context for imports, costs,
+   assignments, history, and reporting.
 
 ### Add A Prospect Manually
 
@@ -624,24 +628,24 @@ submit a real seller to diagnose an internal visibility problem.
 
 ## 2. Campaign And Prospect Import
 
-Open **Campaigns**. The workspace contains:
+Open **Prospecting > Campaigns**. The selected campaign owns every action in:
 
-- **Performance**
-- **Import prospects**
+- **Overview**
+- **Import**
 - **Costs**
-- **Calling batches**
-- **Import history**
+- **Assignments**
+- **History**
 
 ### Create And Prepare A Campaign
 
-1. Create or select the campaign.
+1. Create or select the campaign at the top of Prospecting.
 2. Record the market, list source, channel, budget, dates, and manager.
-3. Go to **Import prospects**.
+3. Go to **Import**.
 4. For the PropStream contact export containing **First Name**, **Last Name**, **Company Name**,
    **Phone 1-5**, and **Email 1-4**, select **Add contact export preset** once. Use **Add standard
    preset** only for the other PropStream layout containing **Property ID** and
    **Owner 1 First Name**.
-5. Choose the campaign and measurement cohort.
+5. Choose the measurement cohort. The campaign is already selected.
 6. Enter the PropStream export or saved-list identity and the filters used to build the list.
 7. Upload the CSV and select the correct vendor-column mapping.
 8. Review the preview before saving. It shows contact count, property totals by state, rows outside
@@ -652,7 +656,7 @@ Open **Campaigns**. The workspace contains:
     losing prior activity.
 11. Record list, labor, phone-number, and voice costs in **Costs**, linked to the cohort when
     applicable.
-12. Create a calling batch using the same cohort and import.
+12. Open **Assignments** and create a calling batch using the same cohort and import.
 13. Assign the batch to a VA or another active staff member with **Cold calling** enabled.
 
 The contact-export preset uses **Company Name** for trusts and companies, then falls back to
@@ -675,7 +679,9 @@ blocked.
 
 ## 3. Prospecting
 
-Open **Prospecting**. Available views depend on role:
+Open **Prospecting**. Managers first see **Campaigns** and may switch to **My Calls**. Caller-only
+accounts open **My Calls** directly and do not receive campaign-management controls. My Calls
+contains:
 
 - **Work queue**
 - **Call quality**

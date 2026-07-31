@@ -411,8 +411,19 @@ plans in **Settings > Workflows**.
 
 ## Campaigns
 
-Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling batches**, and
-**Import history**.
+Open **Prospecting > Campaigns**. Managers see **Overview**, **Import**, **Costs**,
+**Assignments**, and **History**. Caller-only accounts open **My Calls** instead.
+
+### Campaign Context
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Switch campaign | Makes one campaign the context for every local section | Requires at least one campaign |
+| **New campaign** | Opens campaign creation without leaving Prospecting | Requires `operations:manage` |
+| Name / Short code | Identifies the campaign and its stable internal code | Both required; code uses lowercase letters, numbers, underscores, or hyphens |
+| Market / Territory | Places the campaign in the active service area | Market required; territory optional |
+| Channel / Owner / Dates / Budget | Sets ownership, source channel, operating dates, and planned spend | Channel required; other fields may be added as known |
+| **Create campaign** | Creates the campaign and opens it as selected context | Requires a valid market and unique code |
 
 ### Performance
 
@@ -433,7 +444,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Phone-specific DNC columns | Retains each source-marked number but excludes only that number from calling | A clear alternate number remains callable |
 | Record-wide do-not-call column | Maps a single explicit source flag when the vendor provides one | Optional; do not use it for phone-specific flags |
 | **Save mapping** | Saves the reusable column mapping | Required headings must be valid |
-| Campaign | Selects the campaign receiving imported records | Required |
+| Selected campaign context | Receives every imported record automatically | Choose the campaign at the top of Prospecting before importing |
 | Saved mapping | Selects the vendor mapping | Required |
 | Source format | Identifies a PropStream export or a general CSV | PropStream requires an export ID, saved-list ID, or saved-list name |
 | Measurement cohort | Attributes list performance and determines its dialing mode | Recommended for every controlled VA comparison |
@@ -444,12 +455,15 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Property states and campaign-state warning | Shows state totals and identifies rows outside the selected campaign market | Warning only; does not block import |
 | **Validate file** | Previews valid, invalid, duplicate, suppressed, review, eligible, prior-contact, callback, active-conversation, and existing-lead states | Does not commit records |
 | **Import reviewed file** | Commits new records and attaches refreshed source/contact evidence to existing matches | Disabled when no row can be imported or matched |
+| Add one prospect manually | Opens individual cold-prospect entry inside the selected campaign | Use for one pre-lead record that is not in a CSV |
+| Owner / Phone / Email / Address / Caller / Source ID | Creates one traceable prospect with optional assignment | Phone or email required; enter either the complete address or no address |
+| **Add prospect** | Saves the record as a prospect without creating a seller lead | Requires the selected campaign and valid contact details |
 
 ### Costs
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Campaign / Cohort / Category | Links cost to list purchase, VA labor, enrichment, phone, voice, mail, ads, software, or other | Campaign and category required |
+| Selected campaign / Cohort / Category | Links cost to list purchase, VA labor, enrichment, phone, voice, mail, ads, software, or other | Campaign context and category required |
 | Related import | Links cost to one imported file | Optional |
 | Incurred on | Cost date | Required |
 | Worker / Hours / Hourly rate | Calculates VA labor cost | Used for VA labor |
@@ -462,7 +476,7 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Existing batch row | Selects the batch whose records appear below | Requires a batch |
-| Batch name / Campaign | Names and scopes the batch | Required |
+| Batch name / selected campaign | Names and scopes the batch | Campaign is inherited from the page context |
 | Cohort | Restricts records to the selected source cohort and applies its dialing mode | Recommended for controlled comparisons |
 | Import batch | Limits records to one import or any unbatched campaign records | Optional |
 | Assigned caller | Gives the batch to a specific active caller | Required; the person must have **Cold calling** enabled in Operations > Team |
@@ -481,7 +495,8 @@ Campaigns contains **Performance**, **Import prospects**, **Costs**, **Calling b
 
 ## Prospecting
 
-Prospecting views are **Work queue**, **Call quality**, **Handoff review** for managers,
+Prospecting has **Campaigns** for authorized managers and **My Calls** for assigned callers.
+Within My Calls, views are **Work queue**, **Call quality**, **Handoff review** for managers,
 **Performance**, and **Caller scripts** for managers.
 
 ### Work Queue And Attempt

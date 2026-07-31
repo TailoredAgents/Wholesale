@@ -361,12 +361,13 @@ reaches feature parity.
 
 ### 7.2 Operations And Acquisition Tools
 
-The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaigns,
-Lead Desk, Seller Pipeline, Field Operations, and Underwriting are compatibility tools and deep
-links over the same underlying records.
+The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaign
+management is now a local Prospecting view. Lead Desk, Seller Pipeline, Field Operations, and
+Underwriting remain compatibility tools and deep links over the same underlying records.
 
-**Campaigns (`/os/campaigns`)**
+**Prospecting > Campaigns (`/os/prospecting?view=campaigns`)**
 
+- Creates a campaign and keeps the selected campaign as the context for every downstream action.
 - CSV prospect import, reusable mappings, validation previews, costs, batches, and campaign
   performance.
 - Includes standard and contact-export PropStream presets, trust/company-to-person name fallback,
@@ -379,10 +380,14 @@ links over the same underlying records.
   one-by-one calling.
 - Work sessions preserve paid time, productive calling time, VA labor, and cohort attribution.
 - Cold prospect records remain separate from CRM leads until a valid handoff.
+- The selected campaign, local section, and deep-link context are preserved with `campaign`,
+  `campaignView`, and `view` query parameters.
+- The former `/os/campaigns` route redirects to this view.
 
-**Prospecting (`/os/prospecting`)**
+**Prospecting > My Calls (`/os/prospecting?view=my-calls`)**
 
 - Assigned-caller workbench for VAs and any other staff explicitly enabled for cold calling.
+- Caller-only accounts open directly to My Calls and cannot load campaign management.
 - Shows the complete assigned shift through due, callback, correction, scheduled, waiting, and
   all-assigned queue views while one selected prospect remains the active calling context.
 - Shows campaign/batch workload, ranked contact methods, approved script, prior attempts and

@@ -5,6 +5,48 @@
   min-width: 0;
 }
 
+.hubNavigation {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-muted);
+  overflow-x: auto;
+}
+
+.hubNavigation a {
+  min-height: 40px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-soft);
+  font-size: 13px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.hubNavigation a:hover,
+.hubNavigation .activeHubNavigation {
+  border-color: var(--line);
+  background: var(--surface);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow-tight);
+}
+
+.hubNavigation strong {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  font-size: 10px;
+  text-align: center;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

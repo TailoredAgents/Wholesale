@@ -1,4 +1,35 @@
 .workspace { display: grid; gap: 16px; }
+.campaignContext { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-tight); overflow: hidden; }
+.campaignContextHeader { min-height: 86px; padding: 16px 18px; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.campaignContextHeader > div:first-child { min-width: 0; display: grid; gap: 4px; }
+.campaignContextHeader span, .campaignSummary span, .campaignForm label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
+.campaignContextHeader h2 { font-size: 19px; line-height: 1.2; }
+.campaignContextHeader p { margin: 0; color: var(--text-soft); font-size: 12px; }
+.campaignActions { display: flex; align-items: flex-end; gap: 8px; }
+.campaignActions label { display: grid; gap: 5px; }
+.campaignActions label > div { position: relative; min-width: 230px; }
+.campaignActions select { width: 100%; min-height: 38px; padding: 7px 32px 7px 10px; appearance: none; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 750; }
+.campaignActions label svg { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); pointer-events: none; }
+.campaignActions > button { min-height: 38px; padding: 0 12px; display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; white-space: nowrap; }
+.campaignSummary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 1px solid var(--line-soft); background: var(--surface-soft); }
+.campaignSummary > div { min-width: 0; padding: 12px 16px; display: grid; gap: 5px; border-right: 1px solid var(--line-soft); }
+.campaignSummary > div:last-child { border-right: 0; }
+.campaignSummary strong { min-width: 0; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.campaignForm { padding: 17px 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; border-top: 1px solid var(--line); background: var(--surface-soft); }
+.campaignForm label { min-width: 0; display: grid; gap: 6px; }
+.campaignForm input, .campaignForm select { min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.campaignForm > button { align-self: end; min-height: 39px; width: fit-content; padding: 0 14px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
+.campaignForm > button:disabled { cursor: wait; opacity: .65; }
+.formIntroduction { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding-bottom: 4px; color: var(--brand-strong); }
+.formIntroduction div { display: grid; gap: 2px; }
+.formIntroduction strong { font-size: 13px; }
+.formIntroduction span { color: var(--muted); font-size: 11px; }
+.contextNote { grid-column: 1 / -1; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); }
+.contextNote strong { color: var(--brand-strong); font-size: 12px; }
+.contextNote span { color: var(--text-soft); font-size: 11px; text-align: right; }
+.noCampaign { min-height: 190px; padding: 28px; display: grid; place-items: center; align-content: center; gap: 8px; border: 1px dashed var(--line); border-radius: 8px; background: var(--surface-soft); color: var(--muted); text-align: center; }
+.noCampaign strong { color: var(--text); font-size: 15px; }
+.noCampaign p { max-width: 480px; margin: 0; font-size: 12px; line-height: 1.5; }
 .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-tight); }
 .metrics > div { min-width: 0; padding: 17px 19px; display: grid; gap: 7px; border-right: 1px solid var(--line-soft); }
 .metrics > div:last-child { border-right: 0; }
@@ -29,12 +60,15 @@
 .progress span { display: block; height: 100%; background: var(--brand); }
 .mappingForm, .importForm, .stackForm { padding: 17px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
 .mappingForm label, .importForm label, .stackForm label { min-width: 0; display: grid; gap: 6px; }
-.mappingForm input, .importForm input, .importForm select, .stackForm input, .stackForm select, .stackForm textarea { min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
+.mappingForm input, .mappingForm select, .importForm input, .importForm select, .stackForm input, .stackForm select, .stackForm textarea { min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; }
 .mappingForm button, .importForm button, .stackForm button, .preview > button { min-height: 38px; width: fit-content; padding: 0 13px; border: 1px solid var(--brand); border-radius: 6px; background: var(--brand); color: #fff; font: inherit; font-size: 11px; font-weight: 850; cursor: pointer; }
 .mappingForm button, .formNote, .fileField, .full { grid-column: 1 / -1; }
 .formNote { margin: 0; padding: 9px 10px; border-left: 3px solid var(--info); background: var(--info-soft); color: var(--text-soft); font-size: 11px; line-height: 1.4; }
 .sectionHeader > .presetActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; }
 .presetActions button { min-height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--text-soft); font: inherit; font-size: 10px; font-weight: 850; cursor: pointer; }
+.manualProspect { border-top: 1px solid var(--line); }
+.manualProspect summary { padding: 13px 17px; color: var(--brand-strong); font-size: 11px; font-weight: 850; cursor: pointer; }
+.manualProspect[open] summary { border-bottom: 1px solid var(--line-soft); background: var(--surface-soft); }
 .fileField input { padding: 7px; background: var(--surface-soft); }
 .preview { border-top: 1px solid var(--line); padding: 16px; display: grid; gap: 14px; background: var(--surface-soft); }
 .previewMetrics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 6px; background: var(--surface); overflow: hidden; }
@@ -73,6 +107,6 @@
 .batchEntries strong { font-size: 11px; }
 .batchEntries small { color: var(--muted); font-size: 10px; }
 .empty { margin: 0; padding: 28px 17px; color: var(--muted); font-size: 12px; text-align: center; }
-@media (max-width: 1180px) { .twoColumn, .historyLayout { grid-template-columns: 1fr; } .section:has(.qualityTable) { overflow-x: auto; } }
-@media (max-width: 760px) { .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full { grid-column: auto; } .sectionHeader > .presetActions { width: 100%; justify-content: flex-start; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .stateSummary { align-items: flex-start; flex-direction: column; } .stateSummary span { text-align: left; } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
-@media (max-width: 480px) { .metrics { grid-template-columns: 1fr; } .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); } .metrics > div:last-child { border-bottom: 0; } .previewMetrics { grid-template-columns: repeat(2, 1fr); } .previewMetrics > div:nth-child(2n) { border-right: 0; } .previewMetrics > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } }
+@media (max-width: 1180px) { .twoColumn, .historyLayout { grid-template-columns: 1fr; } .section:has(.qualityTable) { overflow-x: auto; } .campaignSummary { grid-template-columns: repeat(3, minmax(0, 1fr)); } .campaignSummary > div:nth-child(3) { border-right: 0; } .campaignSummary > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } }
+@media (max-width: 760px) { .campaignContextHeader { align-items: stretch; flex-direction: column; } .campaignActions { align-items: stretch; flex-direction: column; } .campaignActions label > div { min-width: 0; } .campaignForm { grid-template-columns: 1fr; } .formIntroduction { grid-column: auto; } .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .metrics > div:nth-child(2) { border-right: 0; } .metrics > div:nth-child(-n + 2) { border-bottom: 1px solid var(--line-soft); } .mappingForm, .importForm, .stackForm { grid-template-columns: 1fr; } .mappingForm button, .formNote, .fileField, .full, .contextNote { grid-column: auto; } .contextNote { align-items: flex-start; flex-direction: column; } .contextNote span { text-align: left; } .sectionHeader > .presetActions { width: 100%; justify-content: flex-start; } .previewMetrics { grid-template-columns: repeat(3, 1fr); } .previewMetrics > div:nth-child(3) { border-right: 0; } .previewMetrics > div:nth-child(-n + 3) { border-bottom: 1px solid var(--line-soft); } .stateSummary { align-items: flex-start; flex-direction: column; } .stateSummary span { text-align: left; } .previewRows > div, .historyRows > div { grid-template-columns: 28px minmax(0, 1fr) auto; } .previewRows p, .historyRows p { grid-column: 2 / -1; } }
+@media (max-width: 480px) { .campaignSummary { grid-template-columns: repeat(2, minmax(0, 1fr)); } .campaignSummary > div:nth-child(3) { border-right: 1px solid var(--line-soft); } .campaignSummary > div:nth-child(2n) { border-right: 0; } .campaignSummary > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } .metrics { grid-template-columns: 1fr; } .metrics > div { border-right: 0; border-bottom: 1px solid var(--line-soft); } .metrics > div:last-child { border-bottom: 0; } .previewMetrics { grid-template-columns: repeat(2, 1fr); } .previewMetrics > div:nth-child(2n) { border-right: 0; } .previewMetrics > div:nth-child(-n + 4) { border-bottom: 1px solid var(--line-soft); } }

@@ -785,7 +785,7 @@ phase so it answers using the current interface, not the final planned roadmap.
 | `/os/inbox` | `/os/inbox` | Keep |
 | `/os/tasks` | `/os/tasks` Tasks | Keep and rename display label |
 | `/os/calendar` | `/os/calendar` | Keep |
-| `/os/campaigns` | `/os/prospecting/campaigns` | Redirect after parity |
+| `/os/campaigns` | `/os/prospecting?view=campaigns` | Redirect implemented |
 | `/os/prospecting` | `/os/prospecting` | Keep as workspace root |
 | `/os/lead-manager` | `/os/leads?view=needs-qualification` | Redirect after parity |
 | `/os/leads` | `/os/leads` Seller Leads | Keep |
@@ -927,7 +927,7 @@ Exit criteria:
 
 ## IA4. Prospecting Consolidation
 
-Status: **Planned**
+Status: **Implemented July 30, 2026**
 
 Scope:
 
@@ -1417,5 +1417,54 @@ navigation. Unauthorized sections return no page content.
 
 ### 21.6 Next Phase
 
-IA4 is next. It consolidates campaign list, creation, imports, assignments, cost, and results into
-the Prospecting workspace while preserving campaign deep links.
+IA4 followed this phase. Section 22 records its implementation and verification.
+
+## 22. IA4 Prospecting Consolidation
+
+IA4 was implemented on July 30, 2026.
+
+### 22.1 One Prospecting Destination
+
+`/os/prospecting` now owns two permission-aware local views:
+
+- **Campaigns** for authorized managers to create campaigns, select campaign context, import
+  prospect lists, attribute costs, assign calling batches, and inspect results
+- **My Calls** for callers to open their assigned one-by-one calling queue directly
+
+Manager accounts default to Campaigns. Caller-only accounts default to My Calls and do not receive
+campaign-management data or controls.
+
+### 22.2 Selected Campaign Context
+
+The campaign selector is now the context owner for Overview, Import, Costs, Assignments, and
+History. Each control automatically writes to the selected campaign, removing repeated campaign
+selectors and reducing cross-campaign attribution mistakes. The selected campaign and local view
+are preserved through `view`, `campaign`, and `campaignView` query parameters.
+
+Campaign creation now lives at the top of Prospecting and uses the existing market, territory,
+owner, channel, date, and budget records. This moves the existing feature; it does not create a
+second campaign model.
+
+### 22.3 Preserved Record Boundaries
+
+- Imported cold prospects remain prospect records until a valid warm handoff creates a seller lead.
+- Existing PropStream mapping, validation, duplicate matching, source history, and contact evidence
+  remain unchanged.
+- Existing one-by-one call attempts, callbacks, qualification, appointment handoff, cost
+  attribution, and caller permissions remain unchanged.
+- `/os/campaigns` redirects to `/os/prospecting?view=campaigns`.
+
+### 22.4 Verification
+
+- IA contract: 10 tests passed.
+- ESLint, TypeScript, and the Next.js production build passed.
+- Fifteen targeted campaign, acquisition-operations, and prospecting API tests passed.
+- The Campaigns workspace and legacy redirect passed six formal browser captures across mobile,
+  tablet, and desktop with no failed routes, fatal browser errors, or horizontal overflow.
+- My Calls passed three additional responsive captures with no horizontal overflow; its only
+  browser error was the expected unauthorized Help request in the credential-free local browser.
+
+### 22.5 Next Phase
+
+IA5 consolidates Lead Desk, the lead list, pipeline, and active underwriting queue as local Seller
+Leads views while preserving every seller record and deep link.

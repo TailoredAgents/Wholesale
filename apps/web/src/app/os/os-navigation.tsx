@@ -226,7 +226,7 @@ export const compatibilityNavGroups: CompatibilityNavGroup[] = [
     label: "Acquisitions",
     items: [
       {
-        href: "/os/campaigns",
+        href: "/os/prospecting?view=campaigns",
         label: "Campaigns",
         icon: Megaphone,
         roles: ["administrator", "acquisition_manager"],

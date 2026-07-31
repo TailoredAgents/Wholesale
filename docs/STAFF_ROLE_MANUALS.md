@@ -76,7 +76,7 @@ Pipeline until IA5 consolidates those views.
 
 ## VA Caller
 
-Main page: Prospecting.
+Main page: **Prospecting > My Calls**. Caller-only accounts open this view directly.
 
 - Work only assigned calling batches and the approved script.
 - Call one assigned property owner at a time and finish the outcome before moving forward.
@@ -150,7 +150,7 @@ Stonegate documents a payment that occurred elsewhere; it does not move money.
 
 ## Marketing
 
-Main pages: Marketing, Campaigns, and approved aggregate reporting.
+Main pages: Marketing, **Prospecting > Campaigns**, and approved aggregate reporting.
 
 The Marketing role reviews source economics, public funnel performance, provider readiness, and
 the conversion delivery queue. It may prepare deterministic outcome records and investigate

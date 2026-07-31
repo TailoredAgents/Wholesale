@@ -1,10 +1,11 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { ChevronDown, Plus, Target, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
-import type { CampaignManagementOverview } from "../../lib/api";
+import type { AcquisitionOperations, CampaignManagementOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
 import styles from "./campaigns.module.css";
 
@@ -52,12 +53,13 @@ type ImportRequest = {
 };
 
 const tabs: Array<{ key: Tab; label: string }> = [
-  { key: "performance", label: "Performance" },
-  { key: "import", label: "Import prospects" },
+  { key: "performance", label: "Overview" },
+  { key: "import", label: "Import" },
   { key: "costs", label: "Costs" },
-  { key: "batches", label: "Calling batches" },
-  { key: "history", label: "Import history" },
+  { key: "batches", label: "Assignments" },
+  { key: "history", label: "History" },
 ];
+const tabKeys = new Set<Tab>(tabs.map((tab) => tab.key));
 
 function value(data: FormData, key: string) {
   return String(data.get(key) ?? "").trim();
@@ -88,16 +90,41 @@ function callingModeLabel() {
   return "One-by-one calling";
 }
 
-export function CampaignManagementWorkspace({ data }: { data: CampaignManagementOverview }) {
+export function CampaignManagementWorkspace({
+  data,
+  initialCampaignId,
+  initialTab,
+  markets,
+  territories,
+}: {
+  data: CampaignManagementOverview;
+  initialCampaignId?: string;
+  initialTab?: string;
+  markets: AcquisitionOperations["markets"];
+  territories: AcquisitionOperations["territories"];
+}) {
   const router = useRouter();
   const { getToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("performance");
+  const [activeTab, setActiveTab] = useState<Tab>(
+    initialTab && tabKeys.has(initialTab as Tab) ? (initialTab as Tab) : "performance",
+  );
+  const [selectedCampaignId, setSelectedCampaignId] = useState(
+    data.campaigns.some((campaign) => campaign.id === initialCampaignId)
+      ? initialCampaignId!
+      : data.campaigns[0]?.id ?? "",
+  );
+  const [showCampaignForm, setShowCampaignForm] = useState(!data.campaigns.length);
+  const [campaignMarketId, setCampaignMarketId] = useState(markets[0]?.id ?? "");
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importRequest, setImportRequest] = useState<ImportRequest | null>(null);
-  const [selectedImportId, setSelectedImportId] = useState(data.import_batches[0]?.id ?? "");
-  const [selectedBatchId, setSelectedBatchId] = useState(data.calling_batches[0]?.id ?? "");
+  const [selectedImportId, setSelectedImportId] = useState(
+    data.import_batches.find((item) => item.campaign_id === selectedCampaignId)?.id ?? "",
+  );
+  const [selectedBatchId, setSelectedBatchId] = useState(
+    data.calling_batches.find((item) => item.campaign_id === selectedCampaignId)?.id ?? "",
+  );
   const [costCategory, setCostCategory] = useState("list_purchase");
   const [sourceProfile, setSourceProfile] = useState<"general_csv" | "propstream">("propstream");
   const apiBaseUrl = useMemo(
@@ -110,12 +137,33 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
   );
   const activeUsers = data.users.filter((user) => user.is_active);
   const callers = activeUsers.filter((user) => user.calling_enabled);
-  const selectedImport = data.import_batches.find((item) => item.id === selectedImportId);
-  const selectedBatch = data.calling_batches.find((item) => item.id === selectedBatchId);
-  const totalActualCost = data.quality.reduce((total, campaign) => total + campaign.actual_cost_cents, 0);
-  const totalProspects = data.quality.reduce((total, campaign) => total + campaign.imported_prospects, 0);
-  const totalCallable = data.quality.reduce((total, campaign) => total + campaign.callable_prospects, 0);
-  const totalReview = data.quality.reduce((total, campaign) => total + campaign.review_required_prospects, 0);
+  const selectedCampaign =
+    data.campaigns.find((campaign) => campaign.id === selectedCampaignId) ?? null;
+  const campaignQuality = data.quality.filter(
+    (campaign) => campaign.campaign_id === selectedCampaignId,
+  );
+  const campaignCohorts = data.cohorts.filter(
+    (cohort) => cohort.campaign_id === selectedCampaignId,
+  );
+  const campaignImports = data.import_batches.filter(
+    (batch) => batch.campaign_id === selectedCampaignId,
+  );
+  const campaignCosts = data.costs.filter(
+    (cost) => cost.campaign_id === selectedCampaignId,
+  );
+  const campaignBatches = data.calling_batches.filter(
+    (batch) => batch.campaign_id === selectedCampaignId,
+  );
+  const selectedImport = campaignImports.find((item) => item.id === selectedImportId);
+  const selectedBatch = campaignBatches.find((item) => item.id === selectedBatchId);
+  const selectedQuality = campaignQuality[0] ?? null;
+  const totalActualCost = selectedQuality?.actual_cost_cents ?? 0;
+  const totalProspects = selectedQuality?.imported_prospects ?? selectedCampaign?.prospect_count ?? 0;
+  const totalCallable = selectedQuality?.callable_prospects ?? 0;
+  const totalReview = selectedQuality?.review_required_prospects ?? 0;
+  const availableTerritories = territories.filter(
+    (territory) => territory.market_id === campaignMarketId,
+  );
 
   async function request<T>(path: string, method: "POST", body: object): Promise<T | null> {
     setStatus("saving");
@@ -141,6 +189,59 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "The operation could not be completed.");
       return null;
+    }
+  }
+
+  function updateLocation(campaignId: string, tab: Tab) {
+    const params = new URLSearchParams({
+      view: "campaigns",
+      campaignView: tab,
+    });
+    if (campaignId) params.set("campaign", campaignId);
+    window.history.replaceState(null, "", `/os/prospecting?${params.toString()}`);
+  }
+
+  function selectCampaign(campaignId: string) {
+    setSelectedCampaignId(campaignId);
+    setSelectedImportId(
+      data.import_batches.find((item) => item.campaign_id === campaignId)?.id ?? "",
+    );
+    setSelectedBatchId(
+      data.calling_batches.find((item) => item.campaign_id === campaignId)?.id ?? "",
+    );
+    setPreview(null);
+    setImportRequest(null);
+    updateLocation(campaignId, activeTab);
+  }
+
+  function selectTab(tab: Tab) {
+    setActiveTab(tab);
+    updateLocation(selectedCampaignId, tab);
+  }
+
+  async function submitCampaign(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const budget = value(formData, "budget");
+    const result = await request<{ id: string }>("/api/v1/operations/campaigns", "POST", {
+      market_id: value(formData, "market_id"),
+      territory_id: value(formData, "territory_id") || null,
+      owner_user_id: value(formData, "owner_user_id") || null,
+      name: value(formData, "name"),
+      code: value(formData, "code").toLowerCase(),
+      channel: value(formData, "channel"),
+      starts_on: value(formData, "starts_on") || null,
+      ends_on: value(formData, "ends_on") || null,
+      budget_cents: budget ? dollarsToCents(budget) : null,
+    });
+    if (result) {
+      form.reset();
+      setShowCampaignForm(false);
+      router.push(
+        `/os/prospecting?view=campaigns&campaign=${result.id}&campaignView=performance`,
+      );
+      router.refresh();
     }
   }
 
@@ -212,8 +313,56 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     if (result) router.refresh();
   }
 
+  async function submitProspect(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedCampaignId) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    const phone = value(formData, "phone");
+    const email = value(formData, "email");
+    const address = [
+      value(formData, "street_address"),
+      value(formData, "city"),
+      value(formData, "state_code"),
+      value(formData, "postal_code"),
+    ];
+    if (!phone && !email) {
+      setStatus("error");
+      setMessage("Enter a phone number or email address for the prospect.");
+      return;
+    }
+    if (address.some(Boolean) && !address.every(Boolean)) {
+      setStatus("error");
+      setMessage("Complete every property address field or leave all four blank.");
+      return;
+    }
+    const result = await request("/api/v1/operations/prospects", "POST", {
+      campaign_id: selectedCampaignId,
+      territory_id: selectedCampaign?.territory_id ?? null,
+      assigned_user_id: value(formData, "assigned_user_id") || null,
+      source_record_key: value(formData, "source_record_key") || null,
+      legal_name: value(formData, "legal_name"),
+      phone: phone || null,
+      email: email || null,
+      street_address: address[0] || null,
+      city: address[1] || null,
+      state_code: address[2].toUpperCase() || null,
+      postal_code: address[3] || null,
+      source_payload: { entry_method: "manual_campaign_entry" },
+    });
+    if (result) {
+      form.reset();
+      router.refresh();
+    }
+  }
+
   async function validateImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedCampaignId) {
+      setStatus("error");
+      setMessage("Create or select a campaign before importing prospects.");
+      return;
+    }
     const formData = new FormData(event.currentTarget);
     const file = formData.get("csv_file");
     if (!(file instanceof File) || !file.size) {
@@ -228,7 +377,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
     );
     const exportedAt = value(formData, "source_exported_at");
     const payload: ImportRequest = {
-      campaign_id: value(formData, "campaign_id"),
+      campaign_id: selectedCampaignId,
       mapping_id: value(formData, "mapping_id"),
       cohort_id: value(formData, "cohort_id") || null,
       default_assignee_user_id: value(formData, "default_assignee_user_id") || null,
@@ -268,13 +417,14 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
 
   async function submitCost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedCampaignId) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
     const isLabor = costCategory === "va_labor";
     const laborHours = Number(value(formData, "labor_hours") || 0);
     const hourlyRate = Number(value(formData, "hourly_rate") || 0);
     const result = await request("/api/v1/campaign-management/costs", "POST", {
-      campaign_id: value(formData, "campaign_id"),
+      campaign_id: selectedCampaignId,
       cohort_id: value(formData, "cohort_id") || null,
       import_batch_id: value(formData, "import_batch_id") || null,
       worker_user_id: isLabor ? value(formData, "worker_user_id") || null : null,
@@ -295,12 +445,13 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
 
   async function submitCallingBatch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!selectedCampaignId) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
     const cohortId = value(formData, "cohort_id");
     const cohort = data.cohorts.find((item) => item.id === cohortId);
     const result = await request("/api/v1/campaign-management/calling-batches", "POST", {
-      campaign_id: value(formData, "campaign_id"),
+      campaign_id: selectedCampaignId,
       import_batch_id: value(formData, "import_batch_id") || null,
       cohort_id: cohortId || null,
       dialer_mode: cohort?.dialer_mode ?? "one_line_power",
@@ -318,6 +469,101 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
 
   return (
     <section className={styles.workspace}>
+      <section className={styles.campaignContext}>
+        <div className={styles.campaignContextHeader}>
+          <div>
+            <span>Working campaign</span>
+            <h2>{selectedCampaign?.name ?? "Create your first campaign"}</h2>
+            <p>
+              {selectedCampaign
+                ? `${selectedCampaign.market_name}${selectedCampaign.territory_name ? ` · ${selectedCampaign.territory_name}` : ""} · ${labelize(selectedCampaign.channel)}`
+                : "A campaign keeps the source list, assignments, spend, and results connected."}
+            </p>
+          </div>
+          <div className={styles.campaignActions}>
+            {data.campaigns.length ? (
+              <label>
+                <span>Switch campaign</span>
+                <div>
+                  <select
+                    onChange={(event) => selectCampaign(event.target.value)}
+                    value={selectedCampaignId}
+                  >
+                    {data.campaigns.map((campaign) => (
+                      <option key={campaign.id} value={campaign.id}>
+                        {campaign.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown aria-hidden="true" size={15} />
+                </div>
+              </label>
+            ) : null}
+            <button
+              aria-expanded={showCampaignForm}
+              onClick={() =>
+                setShowCampaignForm((current) => {
+                  if (!current) {
+                    setCampaignMarketId(
+                      selectedCampaign?.market_id ?? markets[0]?.id ?? "",
+                    );
+                  }
+                  return !current;
+                })
+              }
+              type="button"
+            >
+              {showCampaignForm ? <X aria-hidden="true" size={15} /> : <Plus aria-hidden="true" size={15} />}
+              {showCampaignForm ? "Close" : "New campaign"}
+            </button>
+          </div>
+        </div>
+        {selectedCampaign ? (
+          <div className={styles.campaignSummary}>
+            <div><span>Status</span><strong>{labelize(selectedCampaign.status)}</strong></div>
+            <div><span>Owner</span><strong>{selectedCampaign.owner_name ?? "Unassigned"}</strong></div>
+            <div><span>Budget</span><strong>{formatMoney(selectedCampaign.budget_cents)}</strong></div>
+            <div><span>Start</span><strong>{selectedCampaign.starts_on ? dateLabel(selectedCampaign.starts_on) : "Not set"}</strong></div>
+            <div><span>Imported</span><strong>{totalProspects.toLocaleString()}</strong></div>
+            <div><span>Warm leads</span><strong>{selectedQuality?.accepted_warm_leads ?? 0}</strong></div>
+          </div>
+        ) : null}
+        {showCampaignForm ? (
+          <form className={styles.campaignForm} onSubmit={submitCampaign}>
+            <div className={styles.formIntroduction}>
+              <Target aria-hidden="true" size={18} />
+              <div>
+                <strong>New outreach campaign</strong>
+                <span>Create the campaign before importing or assigning prospect records.</span>
+              </div>
+            </div>
+            <label><span>Name</span><input name="name" placeholder="Cherokee absentee owners" required /></label>
+            <label><span>Short code</span><input name="code" pattern="[a-z0-9][a-z0-9_-]+" placeholder="cherokee_absentee" required /></label>
+            <label>
+              <span>Market</span>
+              <select
+                name="market_id"
+                onChange={(event) => setCampaignMarketId(event.target.value)}
+                required
+                value={campaignMarketId}
+              >
+                <option value="">Select market</option>
+                {markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}
+              </select>
+            </label>
+            <label><span>Territory</span><select name="territory_id"><option value="">Whole market</option>{availableTerritories.map((territory) => <option key={territory.id} value={territory.id}>{territory.name}</option>)}</select></label>
+            <label><span>Channel</span><select defaultValue="cold_call" name="channel" required><option value="cold_call">Cold call</option><option value="cold_email">Cold email</option><option value="direct_mail">Direct mail</option><option value="paid_search">Paid search</option><option value="paid_social">Paid social</option><option value="organic">Organic</option><option value="referral">Referral</option><option value="other">Other</option></select></label>
+            <label><span>Campaign owner</span><select name="owner_user_id"><option value="">Unassigned</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+            <label><span>Start date</span><input defaultValue={new Date().toISOString().slice(0, 10)} name="starts_on" type="date" /></label>
+            <label><span>End date</span><input name="ends_on" type="date" /></label>
+            <label><span>Budget ($)</span><input min="0" name="budget" step="0.01" type="number" /></label>
+            <button disabled={status === "saving"} type="submit">Create campaign</button>
+          </form>
+        ) : null}
+      </section>
+
+      {selectedCampaign ? (
+        <>
       <div className={styles.metrics}>
         <div><span>Imported prospects</span><strong>{totalProspects.toLocaleString()}</strong></div>
         <div><span>Callable now</span><strong>{totalCallable.toLocaleString()}</strong></div>
@@ -327,7 +573,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
 
       <div className={styles.tabBar} role="tablist" aria-label="Campaign management views">
         {tabs.map((tab) => (
-          <button className={activeTab === tab.key ? styles.activeTab : undefined} key={tab.key} onClick={() => setActiveTab(tab.key)} role="tab" type="button">{tab.label}</button>
+          <button className={activeTab === tab.key ? styles.activeTab : undefined} key={tab.key} onClick={() => selectTab(tab.key)} role="tab" type="button">{tab.label}</button>
         ))}
       </div>
       {status !== "idle" ? <p className={`${styles.feedback} ${styles[status]}`} role="status">{status === "saving" ? "Working..." : message}</p> : null}
@@ -338,10 +584,10 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
           className={styles.section}
           tabIndex={0}
         >
-          <div className={styles.sectionHeader}><div><span>Campaign economics and data health</span><h3>Performance by campaign</h3></div><strong>{data.quality.length}</strong></div>
+          <div className={styles.sectionHeader}><div><span>Economics and data health</span><h3>{selectedCampaign.name} performance</h3></div><strong>{campaignQuality.length}</strong></div>
           <div className={styles.qualityTable}>
             <div className={styles.tableHeader}><span>Campaign</span><span>Spend</span><span>Data quality</span><span>Callable</span><span>Warm leads</span><span>Cost / warm lead</span><span>Batch progress</span></div>
-            {data.quality.map((campaign) => (
+            {campaignQuality.map((campaign) => (
               <div className={styles.qualityRow} key={campaign.campaign_id}>
                 <div><strong>{campaign.campaign_name}</strong><small>{campaign.imported_prospects.toLocaleString()} imported · {campaign.blocked_prospects} blocked</small></div>
                 <div><strong>{formatMoney(campaign.actual_cost_cents)}</strong><small>{campaign.remaining_budget_cents === null ? "No budget" : `${formatMoney(campaign.remaining_budget_cents)} remaining`}</small></div>
@@ -352,7 +598,7 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
                 <div><strong>{campaign.calling_batch_completed}/{campaign.calling_batch_entries}</strong><div className={styles.progress}><span style={{ width: `${campaign.calling_batch_entries ? campaign.calling_batch_completed / campaign.calling_batch_entries * 100 : 0}%` }} /></div></div>
               </div>
             ))}
-            {!data.quality.length ? <p className={styles.empty}>Create a campaign in Acquisition Ops to begin.</p> : null}
+            {!campaignQuality.length ? <p className={styles.empty}>Import prospects to begin measuring this campaign.</p> : null}
           </div>
         </section>
       ) : null}
@@ -401,14 +647,30 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
               <label><span>Record-wide do-not-call column</span><input name="dnc_status" /></label>
               <button type="submit">Save mapping</button>
             </form>
+            <details className={styles.manualProspect}>
+              <summary>Add one prospect manually</summary>
+              <form className={styles.mappingForm} onSubmit={submitProspect}>
+                <div className={styles.contextNote}><strong>{selectedCampaign.name}</strong><span>This creates a cold prospect, not a seller lead.</span></div>
+                <label><span>Owner name</span><input name="legal_name" required /></label>
+                <label><span>Assigned caller</span><select name="assigned_user_id"><option value="">Unassigned</option>{callers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
+                <label><span>Phone</span><input name="phone" type="tel" /></label>
+                <label><span>Email</span><input name="email" type="email" /></label>
+                <label><span>Street address</span><input name="street_address" /></label>
+                <label><span>City</span><input name="city" /></label>
+                <label><span>State</span><input defaultValue={markets.find((market) => market.id === selectedCampaign.market_id)?.state_code} maxLength={2} name="state_code" /></label>
+                <label><span>ZIP</span><input name="postal_code" /></label>
+                <label><span>Source record ID</span><input name="source_record_key" /></label>
+                <button type="submit">Add prospect</button>
+              </form>
+            </details>
           </section>
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Step 2</span><h3>Validate prospect file</h3></div></div>
             <form className={styles.importForm} onSubmit={validateImport}>
-              <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
+              <div className={styles.contextNote}><strong>{selectedCampaign.name}</strong><span>Imported records will stay attached to this campaign.</span></div>
               <label><span>Saved mapping</span><select name="mapping_id" required><option value="">Select mapping</option>{data.mappings.map((mapping) => <option key={mapping.id} value={mapping.id}>{mapping.name}</option>)}</select></label>
               <label><span>Source format</span><select onChange={(event) => setSourceProfile(event.target.value as "general_csv" | "propstream")} value={sourceProfile}><option value="propstream">PropStream export</option><option value="general_csv">General CSV</option></select></label>
-              <label><span>Measurement cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
+              <label><span>Measurement cohort</span><select name="cohort_id"><option value="">No cohort</option>{campaignCohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
               <label><span>Default assignee</span><select name="default_assignee_user_id"><option value="">Leave unassigned</option>{callers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
               <label><span>PropStream export ID</span><input name="source_export_id" /></label>
               <label><span>Saved list ID</span><input name="source_list_id" /></label>
@@ -456,16 +718,16 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       {activeTab === "costs" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>Actual spend</span><h3>Campaign cost ledger</h3></div><strong>{data.costs.length}</strong></div>
-            <div className={styles.rows}>{data.costs.map((cost) => <div className={styles.costRow} key={cost.id}><div><strong>{cost.campaign_name}</strong><span>{labelize(cost.category)}{cost.worker_name ? ` · ${cost.worker_name}` : ""}</span></div><div><strong>{formatMoney(cost.amount_cents)}</strong><span>{dateLabel(cost.incurred_on)}</span></div></div>)}{!data.costs.length ? <p className={styles.empty}>No campaign costs recorded.</p> : null}</div>
+            <div className={styles.sectionHeader}><div><span>Actual spend</span><h3>Campaign cost ledger</h3></div><strong>{campaignCosts.length}</strong></div>
+            <div className={styles.rows}>{campaignCosts.map((cost) => <div className={styles.costRow} key={cost.id}><div><strong>{cost.campaign_name}</strong><span>{labelize(cost.category)}{cost.worker_name ? ` · ${cost.worker_name}` : ""}</span></div><div><strong>{formatMoney(cost.amount_cents)}</strong><span>{dateLabel(cost.incurred_on)}</span></div></div>)}{!campaignCosts.length ? <p className={styles.empty}>No campaign costs recorded.</p> : null}</div>
           </section>
           <section className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Attribution</span><h3>Record a cost</h3></div></div>
             <form className={styles.stackForm} onSubmit={submitCost}>
-              <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
-              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select></label>
+              <div className={styles.contextNote}><strong>{selectedCampaign.name}</strong><span>This expense will be attributed to the selected campaign.</span></div>
+              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{campaignCohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}</select></label>
               <label><span>Category</span><select name="category" onChange={(event) => setCostCategory(event.target.value)} value={costCategory}><option value="list_purchase">List purchase</option><option value="va_labor">VA labor</option><option value="data_enrichment">Data enrichment</option><option value="phone_number">Phone number</option><option value="voice_usage">Voice usage</option><option value="direct_mail">Direct mail</option><option value="ad_spend">Ad spend</option><option value="software">Software</option><option value="other">Other</option></select></label>
-              <label><span>Related import</span><select name="import_batch_id"><option value="">No import</option>{data.import_batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
+              <label><span>Related import</span><select name="import_batch_id"><option value="">No import</option>{campaignImports.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
               <label><span>Incurred on</span><input defaultValue={new Date().toISOString().slice(0, 10)} name="incurred_on" required type="date" /></label>
               {costCategory === "va_labor" ? <><label><span>Worker</span><select name="worker_user_id" required><option value="">Select worker</option>{activeUsers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label><label><span>Hours</span><input min="0.01" name="labor_hours" required step="0.01" type="number" /></label><label><span>Hourly rate ($)</span><input defaultValue="8" min="0" name="hourly_rate" required step="0.01" type="number" /></label></> : <label><span>Amount ($)</span><input min="0" name="amount" required step="0.01" type="number" /></label>}
               <label><span>Vendor</span><input name="vendor_name" /></label>
@@ -479,13 +741,13 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
       {activeTab === "batches" ? (
         <div className={styles.twoColumn}>
           <section className={styles.section}>
-            <div className={styles.sectionHeader}><div><span>Controlled assignments</span><h3>Prospect calling batches</h3></div><strong>{data.calling_batches.length}</strong></div>
-            <div className={styles.picker}>{data.calling_batches.map((batch) => <button className={selectedBatchId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedBatchId(batch.id)} type="button"><strong>{batch.name}</strong><span>{batch.assigned_user_name} · {batch.completed_entries}/{batch.total_entries}</span></button>)}</div>
+            <div className={styles.sectionHeader}><div><span>Controlled assignments</span><h3>Prospect calling batches</h3></div><strong>{campaignBatches.length}</strong></div>
+            <div className={styles.picker}>{campaignBatches.map((batch) => <button className={selectedBatchId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedBatchId(batch.id)} type="button"><strong>{batch.name}</strong><span>{batch.assigned_user_name} · {batch.completed_entries}/{batch.total_entries}</span></button>)}</div>
             <form className={styles.stackForm} onSubmit={submitCallingBatch}>
+              <div className={styles.contextNote}><strong>{selectedCampaign.name}</strong><span>Only unassigned callable prospects from this campaign will be added.</span></div>
               <label><span>Batch name</span><input name="name" required /></label>
-              <label><span>Campaign</span><select name="campaign_id" required><option value="">Select campaign</option>{data.campaigns.map((campaign) => <option key={campaign.id} value={campaign.id}>{campaign.name}</option>)}</select></label>
-              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{data.cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
-              <label><span>Import batch</span><select name="import_batch_id"><option value="">Any unbatched campaign records</option>{data.import_batches.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
+              <label><span>Cohort</span><select name="cohort_id"><option value="">No cohort</option>{campaignCohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name} · {callingModeLabel()}</option>)}</select></label>
+              <label><span>Import batch</span><select name="import_batch_id"><option value="">Any unbatched campaign records</option>{campaignImports.map((batch) => <option key={batch.id} value={batch.id}>{batch.file_name}</option>)}</select></label>
               <label><span>Assigned caller</span><select name="assigned_user_id" required><option value="">Select caller</option>{callers.map((user) => <option key={user.id} value={user.id}>{user.display_name}</option>)}</select></label>
               <label><span>Maximum records</span><input defaultValue="100" max="1000" min="1" name="maximum_records" type="number" /></label>
               <label><span>Due by</span><input name="due_at" type="datetime-local" /></label>
@@ -502,10 +764,18 @@ export function CampaignManagementWorkspace({ data }: { data: CampaignManagement
 
       {activeTab === "history" ? (
         <div className={styles.historyLayout}>
-          <section className={styles.section}><div className={styles.sectionHeader}><div><span>Import lineage</span><h3>Committed files</h3></div></div><div className={styles.picker}>{data.import_batches.map((batch) => <button className={selectedImportId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedImportId(batch.id)} type="button"><strong>{batch.file_name}</strong><span>{batch.source_name}{batch.source_list_name ? ` · ${batch.source_list_name}` : ""} · {batch.imported_rows} new / {batch.matched_existing_rows} matched</span></button>)}{!data.import_batches.length ? <p className={styles.empty}>No files imported.</p> : null}</div></section>
+          <section className={styles.section}><div className={styles.sectionHeader}><div><span>Import lineage</span><h3>Committed files</h3></div></div><div className={styles.picker}>{campaignImports.map((batch) => <button className={selectedImportId === batch.id ? styles.selected : undefined} key={batch.id} onClick={() => setSelectedImportId(batch.id)} type="button"><strong>{batch.file_name}</strong><span>{batch.source_name}{batch.source_list_name ? ` · ${batch.source_list_name}` : ""} · {batch.imported_rows} new / {batch.matched_existing_rows} matched</span></button>)}{!campaignImports.length ? <p className={styles.empty}>No files imported for this campaign.</p> : null}</div></section>
           <section className={styles.section}><div className={styles.sectionHeader}><div><span>{selectedImport?.cohort_name ?? selectedImport?.mapping_name ?? "No import selected"}</span><h3>{selectedImport?.file_name ?? "Row-level results"}</h3></div>{selectedImport ? <strong>{selectedImport.total_rows}</strong> : null}</div><div className={styles.historyRows}>{selectedImport?.rows.map((row) => <div key={row.id}><span>{row.row_number}</span><div><strong>{row.legal_name ?? "Missing owner"}</strong><small>{row.property_address ?? row.phone ?? "No address or phone"} · {row.contact_point_count} contacts · {labelize(row.relationship_state)}</small></div><span className={`${styles.badge} ${styles[row.status.replace("imported_", "")]}`}>{labelize(row.status)}</span><p>{[...row.validation_errors, ...row.eligibility_reasons].join(" ") || (row.status === "matched_existing" ? "Existing history preserved and source appearance refreshed." : "Imported and ready.")}</p></div>)}{!selectedImport ? <p className={styles.empty}>Select an import to inspect every row.</p> : null}</div></section>
         </div>
       ) : null}
+        </>
+      ) : (
+        <div className={styles.noCampaign}>
+          <Target aria-hidden="true" size={24} />
+          <strong>No outreach campaign yet</strong>
+          <p>Create a campaign above, then import your PropStream file and assign records to callers.</p>
+        </div>
+      )}
     </section>
   );
 }

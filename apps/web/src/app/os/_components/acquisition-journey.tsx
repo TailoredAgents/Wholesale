@@ -6,8 +6,8 @@ import styles from "./acquisition-journey.module.css";
 
 const routeByKey = {
   operations: "/os/operations",
-  campaigns: "/os/campaigns",
-  prospecting: "/os/prospecting",
+  campaigns: "/os/prospecting?view=campaigns",
+  prospecting: "/os/prospecting?view=my-calls",
   "lead-manager": "/os/lead-manager",
   leads: "/os/leads",
   pipeline: "/os/pipeline",
