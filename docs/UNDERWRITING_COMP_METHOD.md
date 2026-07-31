@@ -633,8 +633,8 @@ Implementation record:
 - Regression cases cover ordinary, thin-market, rural/older, unique-property, conflicting-source,
   provider-failure, adversarial-sale, and repair-entry behavior.
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2` pins the active runner.
-- `UNDERWRITING_V3_SHADOW_ENABLED=false` reserves the future shadow path; premature live or shadow
-  activation is rejected with a clear configuration error.
+- `UNDERWRITING_V3_SHADOW_ENABLED=true` now runs the implemented adjustment method beside V2.2;
+  `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3` remains rejected until controlled rollout.
 - New analyses store methodology control, execution duration, provider/candidate/selected/rejected
   counts, comp yield, cache reuse, manual-review state, and comp-review override counts in existing
   immutable analysis metadata.
@@ -783,7 +783,7 @@ Implementation record:
 
 #### U3.5: Market-Supported Adjustment Engine
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026.
 
 - Retain V2.2 results for shadow comparison.
 - Replace full price-per-square-foot scaling as the controlling transformation.
@@ -795,6 +795,40 @@ Implementation record:
 
 **Exit:** Every adjusted dollar is reproducible and sourced; unsupported cases remain usable with a
 wider range instead of fabricated precision.
+
+Implementation record:
+
+- Every new analysis keeps the unchanged V2.2 ARV and offer calculation as live authority and saves
+  a `v3.0-adjustment-shadow` comparison in analysis metadata. The shadow has no write path into
+  ARV, buyer maximum, seller ceiling, opening offer, approvals, or contracts.
+- The shadow begins each indication at the recorded closed-sale price. It does not use V2.2's full
+  price-per-square-foot scaling as its controlling transformation.
+- A market-conditions rate is applied only when at least four physically similar sales provide at
+  least three local time-pair observations across at least 120 days. The saved evidence includes
+  every pair, monthly rate, source comp key, method, sample count, and observed time span.
+- A living-area rate is applied only when at least three sales provide at least three stable local
+  matched-pair observations and meaningful area variation. The rate is a marginal contribution,
+  not the average property price per square foot.
+- Lot adjustments require their own stronger evidence and are withheld when lot area is strongly
+  correlated with living area. Bedroom/bathroom adjustments are withheld while living area is used
+  unless separate local evidence can prevent double counting.
+- Garage, pool, and basement facts are normalized from RentCast county-record features. A feature
+  adjustment requires the subject fact, at least three local sales with the feature, three without,
+  and stable matched-pair evidence. Correlated feature rates cannot both be applied.
+- Known as-is sales remain outside the ARV set. Condition and quality adjustments remain zero until
+  consistently classified local paired sales support them; unknown evidence is never treated as a
+  renovated fact.
+- Time and physical differences cannot be extrapolated beyond the observed local pair range. Every
+  comp stores the source rate, raw difference, applied difference, dollar component, total
+  adjustment, adjusted indication, gross adjustment percentage, and review flag.
+- Shadow confidence separately scores closed-sale depth, A/B comp quality, supported adjustment
+  rates, search expansion, and indications needing extrapolation or magnitude review. Weak or
+  expanded evidence widens the displayed shadow range instead of inventing a precise rate.
+- Valuation & Offer now shows live V2.2 and shadow ARV side by side, supported/withheld rates, and
+  expandable per-comp dollar math. The interface repeatedly labels the result as research only.
+- Regression coverage proves the V2.2 golden results remain unchanged and covers supported living
+  area/time rates, collinearity blocking, thin-market continuity, methodology control, API
+  persistence, and read-back.
 
 #### U3.6: Guided Repair Scope And Georgia Cost Catalog
 

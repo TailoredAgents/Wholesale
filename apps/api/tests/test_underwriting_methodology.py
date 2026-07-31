@@ -34,13 +34,16 @@ def test_v3_cannot_be_activated_before_its_runner_exists(
     get_settings.cache_clear()
 
 
-def test_v3_shadow_cannot_be_enabled_before_replay_exists(
+def test_v3_shadow_can_run_without_becoming_live_authority(
     monkeypatch: MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("UNDERWRITING_ACTIVE_METHODOLOGY_VERSION", "v2.2")
     monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "true")
     get_settings.cache_clear()
 
-    with pytest.raises(ValueError, match="shadow execution is not available"):
-        resolve_underwriting_methodology(get_settings())
+    control = resolve_underwriting_methodology(get_settings())
+
+    assert control.active_version == "v2.2"
+    assert control.v3_available is False
+    assert control.shadow_enabled is True
     get_settings.cache_clear()

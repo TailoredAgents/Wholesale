@@ -290,13 +290,12 @@ Variables:
 - `RENTCAST_API_KEY`
 - `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2`
-- `UNDERWRITING_V3_SHADOW_ENABLED=false`
+- `UNDERWRITING_V3_SHADOW_ENABLED=true`
 - optional `ATTOM_API_KEY` placeholder
 
-V2.2 remains the only active calculation method during the U3 build. Do not change either V3
-control until the corresponding roadmap phase marks the runner available and its shadow replay
-passes. The API intentionally rejects premature V3 activation instead of silently using unfinished
-math.
+V2.2 remains the only active calculation method during the U3 build. The V3 adjustment runner is
+enabled only as saved comparison research and cannot change offer math. Keep
+`UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2`; the API rejects premature live V3 activation.
 
 Fresh analysis may use these RentCast endpoints:
 

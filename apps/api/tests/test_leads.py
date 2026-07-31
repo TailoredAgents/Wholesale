@@ -1293,6 +1293,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
     monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
     monkeypatch.setenv("UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS", "1500000")
+    monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "true")
     get_settings.cache_clear()
     provider_calls: list[str] = []
 
@@ -1520,8 +1521,13 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         "active_version": "v2.2",
         "planned_version": "v3",
         "v3_available": False,
-        "shadow_enabled": False,
+        "shadow_enabled": True,
     }
+    assert payload["adjustment_shadow"]["valuation_use"] == (
+        "shadow_only_excluded_from_offer_math"
+    )
+    assert payload["adjustment_shadow"]["baseline"]["arv_point_cents"] == 30000000
+    assert payload["adjustment_shadow"]["conclusion"]["arv_point_cents"] is not None
     assert payload["execution_metrics"]["duration_ms"] >= 0
     assert payload["execution_metrics"]["provider_returned_comp_count"] == 7
     assert payload["execution_metrics"]["candidate_comp_count"] == 7

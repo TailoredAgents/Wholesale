@@ -6,6 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CalibrationOutcomeForm } from "./calibration-outcome-form";
 import {
+  AdjustmentShadowPanel,
+  type AdjustmentShadow,
+} from "./adjustment-shadow-panel";
+import {
   ComparableReviewWorkbench,
   COMPARABLE_EXCLUDED_REASONS,
   COMPARABLE_INCLUDED_REASONS,
@@ -217,6 +221,7 @@ type MarketValueEstimate = {
   subject_square_feet?: number | null;
   comp_search_summary?: CompSearchSummary | null;
   supporting_evidence?: SupportingEvidence | null;
+  adjustment_shadow?: AdjustmentShadow | null;
   manual_comp_ids?: string[];
   source_note: string;
 };
@@ -1191,6 +1196,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 ) : null}
               </div>
             </details>
+          ) : null}
+
+          {estimate.adjustment_shadow ? (
+            <AdjustmentShadowPanel shadow={estimate.adjustment_shadow} />
           ) : null}
 
           {estimate.confidence_factors?.length ? (

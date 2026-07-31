@@ -469,6 +469,9 @@ def score_recorded_sale(
         or condition_overrides.get(address or "")
         or string(record.get("_stonegateConditionClassification"))
     )
+    raw_features = record.get("features")
+    features: dict[str, Any] = raw_features if isinstance(raw_features, dict) else {}
+    foundation_type = string(features.get("foundationType"))
     subject_subdivision = string(subject.get("subdivision"))
     subdivision = string(record.get("subdivision"))
     subdivision_match = (
@@ -515,6 +518,12 @@ def score_recorded_sale(
             or ("human_classification" if condition != "unknown" else "not_provided")
         ),
         "lot_size": integer(record.get("lotSize")),
+        "garage": boolean(features.get("garage")),
+        "garage_spaces": number(features.get("garageSpaces")),
+        "pool": boolean(features.get("pool")),
+        "basement": (
+            "basement" in foundation_type.lower() if foundation_type else None
+        ),
         "adjusted_value_cents": subject_size_value_cents,
         "price_per_square_foot_cents": price_per_square_foot_cents,
         "weight": None,
@@ -1214,6 +1223,7 @@ def canonical_subject_facts(
         "lastSaleDate",
         "lastSalePrice",
         "propertyTaxes",
+        "features",
     )
     facts: dict[str, Any] = {}
     provenance: dict[str, str] = {}
@@ -1400,6 +1410,10 @@ def number(value: Any) -> float | None:
     if isinstance(value, (int, float)):
         return float(value)
     return None
+
+
+def boolean(value: Any) -> bool | None:
+    return value if isinstance(value, bool) else None
 
 
 def integer(value: Any) -> int | None:

@@ -33,16 +33,10 @@ def resolve_underwriting_methodology(
             "Underwriting V3 is planned but is not available for live calculations. "
             "Set UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2."
         )
-    if settings.underwriting_v3_shadow_enabled:
-        raise ValueError(
-            "Underwriting V3 shadow execution is not available until its calculation "
-            "runner and replay checks are implemented. Set "
-            "UNDERWRITING_V3_SHADOW_ENABLED=false."
-        )
     return UnderwritingMethodologyControl(
         requested_version=requested,
         active_version=ACTIVE_METHODOLOGY_VERSION,
         planned_version=PLANNED_METHODOLOGY_VERSION,
         v3_available=False,
-        shadow_enabled=False,
+        shadow_enabled=settings.underwriting_v3_shadow_enabled,
     )

@@ -209,6 +209,10 @@ class MarketComparableRead(BaseModel):
     condition_classification: str | None = None
     condition_evidence: str | None = None
     lot_size: int | None = None
+    garage: bool | None = None
+    garage_spaces: float | None = None
+    pool: bool | None = None
+    basement: bool | None = None
     adjusted_value_cents: int | None = None
     price_per_square_foot_cents: int | None = None
     weight: float | None = None
@@ -601,6 +605,7 @@ class LeadMarketAnalysisRead(BaseModel):
     execution_metrics: UnderwritingExecutionMetricsRead | None = None
     comp_search_summary: UnderwritingCompSearchSummaryRead | None = None
     supporting_evidence: UnderwritingSupportingEvidenceRead | None = None
+    adjustment_shadow: dict[str, Any] | None = None
     manual_comp_ids: list[UUID] = Field(default_factory=list)
 
 

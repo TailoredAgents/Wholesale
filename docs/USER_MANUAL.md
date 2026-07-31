@@ -1263,14 +1263,18 @@ Review the result from top to bottom:
    sales remained, and whether subdivision or market-area warnings exist.
 4. When the final level is **Manual**, read the manual verified count, evidence shortage, and next
    action. Open each manual comp's source link/reference and verify the closing and condition.
-5. Open **Why this confidence score** and read every factor.
-6. Open **Secondary public evidence** and investigate any conflict.
-7. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
+5. Review **V3 adjustment research** when present. Compare its shadow ARV with live V2.2, then open
+   the rate and comparable math. **Supported** means the local pair threshold passed; **Withheld**
+   means Stonegate applied zero dollars rather than guessing. This section never changes the live
+   ARV, seller ceiling, or opening recommendation.
+6. Open **Why this confidence score** and read every factor.
+7. Open **Secondary public evidence** and investigate any conflict.
+8. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
    prices and supporting-only evidence.
-8. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
+9. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
    ceiling, and opening recommendation.
-9. Read every item under **Resolve before approval**.
-10. Review each comparable:
+10. Read every item under **Resolve before approval**.
+11. Review each comparable:
    - Keep the **Subject property** band visible as the comparison baseline. Correct the lead or run
      a new analysis if its physical facts are wrong.
    - Use **All**, **Included**, **Excluded**, grade, search-level, address/subdivision, and sort
@@ -1294,11 +1298,11 @@ Review the result from top to bottom:
      is not a parcel, school-boundary, or neighborhood-boundary map.
    - Use **Restore system set** only to return inclusion choices and weights to the engine's saved
      recommendation; it does not erase condition classifications.
-11. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
-12. Repeat until the included set and assumptions reflect the evidence.
-13. Create a manual underwriting version only when an authorized person must preserve a separate
+12. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
+13. Repeat until the included set and assumptions reflect the evidence.
+14. Create a manual underwriting version only when an authorized person must preserve a separate
     judgment or scenario.
-14. Compare saved versions before requesting offer approval.
+15. Compare saved versions before requesting offer approval.
 
 To correct a saved manual sale, select **Remove** and create a new verified record. Removal voids it
 for future analyses; it does not alter an analysis or PDF that was already saved.

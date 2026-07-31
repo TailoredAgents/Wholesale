@@ -121,6 +121,7 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
+from app.services.underwriting_adjustments import build_adjustment_shadow
 from app.services.property_validation import (
     canonical_address_key,
     reset_property_validation,
@@ -1849,6 +1850,17 @@ def create_lead_market_analysis(
         secondary_evidence=secondary_evidence,
         settings=settings,
     )
+    adjustment_shadow = (
+        build_adjustment_shadow(
+            subject=dict_value(result.assumptions.get("canonical_subject_facts")),
+            selected_comps=result.selected_comps,
+            active_arv_point_cents=result.arv_point_cents,
+            active_arv_low_cents=result.arv_low_cents,
+            active_arv_high_cents=result.arv_high_cents,
+        )
+        if methodology_control.shadow_enabled
+        else None
+    )
     custom_inputs_applied = any(
         (
             payload.current_condition,
@@ -1982,6 +1994,7 @@ def create_lead_market_analysis(
         "address_evidence": address_evidence,
         "secondary_evidence": secondary_evidence,
         "supporting_evidence": supporting_evidence,
+        "adjustment_shadow": adjustment_shadow,
         "manual_comp_ids": [str(record_id) for record_id in manual_comp_ids],
         "manual_duplicate_comp_ids": duplicate_manual_comp_ids,
         "confidence_tier": result.confidence_tier,
@@ -3681,6 +3694,11 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
                 metadata.get("supporting_evidence")
             )
             if isinstance(metadata.get("supporting_evidence"), dict)
+            else None
+        ),
+        adjustment_shadow=(
+            dict_value(metadata.get("adjustment_shadow"))
+            if isinstance(metadata.get("adjustment_shadow"), dict)
             else None
         ),
         manual_comp_ids=uuid_list(metadata.get("manual_comp_ids")),

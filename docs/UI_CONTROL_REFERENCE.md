@@ -1005,6 +1005,10 @@ appraisal or permission to promise a seller a price.
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
 | Supporting listings and ZIP market context | Shows active asking prices, size, days on market, ZIP median asking price, asking price per square foot, inventory, and market timing | Supporting-only; asking prices are not closed comps |
+| V3 adjustment research | Compares the saved V2.2 ARV with a market-supported adjusted-sales shadow result | Research only; cannot change ARV, buyer economics, seller ceiling, or offer authority |
+| Supported local adjustments | Shows only time, living-area, lot, garage, pool, or basement rates that passed local evidence and double-count controls | A missing feature rate is withheld, not assumed to be zero market value |
+| Review rate support and withheld adjustments | Shows sample/pair counts and the exact reason each rate was supported or withheld | Read-only evidence |
+| Review comparable adjustment math | Shows recorded price, every sourced dollar component, extrapolation limit, total adjustment, and adjusted indication | Read-only; review flags require operator judgment |
 | Public evidence | Shows controlled secondary evidence and source links when used | Must be verified before relying on a material fact |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
