@@ -243,7 +243,7 @@ export type InboxFilterKey =
   | "appointments"
   | "unread";
 type MobilePane = "conversations" | "thread" | "details";
-type ComposerChannel = "sms" | "email" | "call" | "note";
+export type ComposerChannel = "sms" | "email" | "call" | "note";
 const filters: Array<{
   key: InboxFilterKey;
   label: string;
@@ -639,12 +639,14 @@ export function InboxWorkspace({
   initialEmailAdminOpen = false,
   initialGlobalComposeOpen = false,
   initialLeadId = null,
+  initialChannel = "sms",
 }: {
   initialFilter?: InboxFilterKey;
   initialConversationId?: string | null;
   initialEmailAdminOpen?: boolean;
   initialGlobalComposeOpen?: boolean;
   initialLeadId?: string | null;
+  initialChannel?: ComposerChannel;
 }) {
   const { getToken } = useAuth();
   const timelineEndRef = useRef<HTMLDivElement>(null);
@@ -675,7 +677,7 @@ export function InboxWorkspace({
   const [filter, setFilter] = useState<InboxFilterKey>(initialFilter);
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
-  const [channel, setChannel] = useState<ComposerChannel>("sms");
+  const [channel, setChannel] = useState<ComposerChannel>(initialChannel);
   const [callComposerMode, setCallComposerMode] = useState<"device" | "log">("device");
   const [direction, setDirection] = useState<"inbound" | "outbound">("outbound");
   const [subject, setSubject] = useState("");
@@ -2239,14 +2241,8 @@ export function InboxWorkspace({
                 <div className={styles.contactList}>
                   {detail.contact_methods.length === 0 ? <span>No contact methods</span> : null}
                   {detail.contact_methods.map((method) => (
-                    <a
-                      href={
-                        method.method_type === "phone"
-                          ? `tel:${method.value}`
-                          : method.method_type === "email"
-                            ? `mailto:${method.value}`
-                            : undefined
-                      }
+                    <div
+                      className={styles.contactMethod}
                       key={`${method.method_type}-${method.value}`}
                     >
                       {method.method_type === "phone" ? (
@@ -2258,7 +2254,7 @@ export function InboxWorkspace({
                         <strong>{labelize(method.method_type)}</strong>
                         <small>{method.value}</small>
                       </span>
-                    </a>
+                    </div>
                   ))}
                 </div>
                 <div

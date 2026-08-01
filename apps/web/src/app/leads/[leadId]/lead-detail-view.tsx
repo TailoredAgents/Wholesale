@@ -18,6 +18,7 @@ import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
 import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
+import { LeadCallButton } from "./lead-call-button";
 import { LeadEditForm } from "./lead-edit-form";
 import { MarketValuePreview } from "./market-value-preview";
 import { NegotiationGovernance } from "./negotiation-governance";
@@ -798,9 +799,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </div>
         </div>
         <div className={styles.quickActions}>
-          {phone ? <a className={styles.primaryCommand} href={`tel:${phone}`}>Call seller</a> : null}
-          {phone ? <a href={`sms:${phone}`}>Text</a> : null}
-          {email ? <a href={`mailto:${email}`}>Email</a> : null}
+          {phone ? <LeadCallButton leadId={lead.id} /> : null}
+          {phone ? <Link href={`/os/inbox?lead=${lead.id}&channel=sms`}>Text</Link> : null}
+          {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
           <Link href={tabHref("property") + "#edit-lead"}>Edit lead</Link>
           <Link href={tabHref("activity")}>Log contact</Link>
           <Link href={tabHref("valuation")}>Run comps</Link>

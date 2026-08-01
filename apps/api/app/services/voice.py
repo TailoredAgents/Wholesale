@@ -720,6 +720,33 @@ def start_forwarded_call(
     return call_intent_to_read(intent, line, settings)
 
 
+def start_forwarded_lead_call(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: VoiceCallIntentCreate,
+    *,
+    provider: TwilioVoiceCallProvider | None = None,
+) -> VoiceCallIntentRead | None:
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.id == lead_id,
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+        )
+    )
+    if lead is None:
+        return None
+    conversation = ensure_primary_conversation(db, lead)
+    return start_forwarded_call(
+        db,
+        principal,
+        conversation.id,
+        payload,
+        provider=provider,
+    )
+
+
 def process_forwarded_voice_connect(
     db: Session,
     payload: dict[str, str],

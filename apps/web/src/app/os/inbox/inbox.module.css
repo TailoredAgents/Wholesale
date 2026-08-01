@@ -1743,7 +1743,7 @@
   font-size: 12px;
 }
 
-.contactList a {
+.contactMethod {
   min-width: 0;
   color: var(--text-soft);
   display: flex;
@@ -1751,7 +1751,7 @@
   gap: 8px;
 }
 
-.contactList a > span {
+.contactMethod > span {
   min-width: 0;
   display: grid;
   gap: 2px;

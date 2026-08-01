@@ -44,6 +44,7 @@ from app.services.voice import (
     list_voice_line_users,
     list_voice_lines,
     start_forwarded_call,
+    start_forwarded_lead_call,
     update_user_voice_forwarding,
     update_voice_line,
 )
@@ -119,6 +120,34 @@ def create_forwarded_conversation_call(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     if intent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return intent
+
+
+@router.post("/leads/{lead_id}/forwarded-calls", status_code=201)
+def create_forwarded_lead_call(
+    lead_id: UUID,
+    payload: VoiceCallIntentCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(call_dependency)],
+) -> VoiceCallIntentRead:
+    try:
+        intent = start_forwarded_lead_call(db, principal, lead_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except (VoiceConfigurationError, TwilioVoiceCallError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if intent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return intent
 
 

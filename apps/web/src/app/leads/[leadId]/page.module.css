@@ -1319,6 +1319,57 @@
   color: #ffffff;
 }
 
+.callAction {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.callAction button {
+  min-height: 40px;
+  padding: 0 13px;
+  border: 1px solid #2f6f4e;
+  border-radius: 6px;
+  background: #2f6f4e;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.callAction button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.callStatus,
+.callError {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 5px);
+  right: 0;
+  width: min(300px, 80vw);
+  padding: 7px 9px;
+  border: 1px solid #b9d4c3;
+  border-radius: 5px;
+  background: #f2f8f4;
+  color: #18442f;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.callError {
+  border-color: #e2b7b1;
+  background: #fff5f3;
+  color: #842e26;
+}
+
 .quickActions > .appointmentCommand {
   border-color: #2f6f4e;
   background: #edf5f0;

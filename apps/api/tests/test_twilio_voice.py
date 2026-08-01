@@ -601,6 +601,40 @@ def test_forwarded_outbound_call_rings_staff_then_connects_seller(
     assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
 
 
+def test_forwarded_outbound_call_can_start_from_lead_page(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FakeVoiceProvider:
+        def start(self, **kwargs: str) -> TwilioVoiceCallResult:
+            return TwilioVoiceCallResult(
+                sid="CA00000000000000000000000000000091",
+                status="queued",
+            )
+
+    monkeypatch.setattr(
+        "app.services.voice.get_twilio_voice_call_provider",
+        lambda: FakeVoiceProvider(),
+    )
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+
+    response = client.post(
+        f"/api/v1/voice/leads/{conversation.lead_id}/forwarded-calls",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"idempotency_key": "lead-page-forwarded-call-0001"},
+    )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["conversation_id"] == str(conversation.id)
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    assert call.from_number == STONEGATE_NUMBER
+    assert call.to_number == SELLER_NUMBER
+
+
 def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
     db_session: Session,
     api_db_override: None,
