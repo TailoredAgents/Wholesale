@@ -248,10 +248,6 @@ def get_voice_provider_readiness(
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
     environment_blockers = list(settings.twilio_voice_configuration_blockers)
-    expected_number = format_e164(settings.twilio_voice_from_number or "")
-    line_number_matches = bool(
-        line is not None and expected_number and line.phone_number == expected_number
-    )
     line_read = voice_line_to_read(db, line) if line is not None else None
     base_url = (settings.twilio_webhook_base_url or "https://api.stonegatehb.com").rstrip("/")
     checks = [
@@ -278,14 +274,14 @@ def get_voice_provider_readiness(
             ),
         ),
         VoiceReadinessCheckRead(
-            key="number_match",
-            label="Render number matches Stonegate",
+            key="caller_id",
+            label="Company caller ID",
             required=True,
-            ready=line_number_matches,
+            ready=bool(line and format_e164(line.phone_number)),
             detail=(
-                "TWILIO_VOICE_FROM_NUMBER matches the active acquisitions line."
-                if line_number_matches
-                else "Set TWILIO_VOICE_FROM_NUMBER to the acquisitions line in +1 format."
+                f"Outbound seller calls use {line.phone_number}."
+                if line is not None
+                else "Add the acquisitions company number in Communications settings."
             ),
         ),
         VoiceReadinessCheckRead(

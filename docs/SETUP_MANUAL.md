@@ -518,9 +518,10 @@ Voice, microphone access, API keys, and a TwiML App are not required.
    - `TWILIO_VOICE_ENABLED=true`
    - `TWILIO_ACCOUNT_SID`
    - `TWILIO_AUTH_TOKEN`
-   - `TWILIO_VOICE_FROM_NUMBER` using the acquisitions number in `+1...` format
    - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
    - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
+   `TWILIO_VOICE_FROM_NUMBER` is optional legacy bootstrap configuration; active company lines in
+   Stonegate are the source of truth for caller ID.
 5. In **Settings > Communications**, select Austin and Devon as the primary and fallback staff,
    choose **Everyone at once**, set the coverage window and **Fallback, then voicemail**, and save
    both company lines.

@@ -91,6 +91,19 @@ def public_payload() -> dict[str, object]:
     }
 
 
+def test_cellphone_voice_uses_active_line_without_legacy_from_number(
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TWILIO_VOICE_FROM_NUMBER")
+    get_settings.cache_clear()
+
+    settings = get_settings()
+
+    assert settings.twilio_voice_configured is True
+    assert "TWILIO_VOICE_FROM_NUMBER" not in settings.twilio_voice_configuration_blockers
+
+
 def seed_voice_lead(db: Session, client: TestClient) -> Conversation:
     bootstrap_foundation(
         db,

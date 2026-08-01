@@ -484,7 +484,6 @@ After campaign approval and number attachment:
 - `TWILIO_VOICE_ENABLED`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_VOICE_FROM_NUMBER`
 - `TWILIO_WEBHOOK_BASE_URL`
 - token TTL, ring timeout, timezone, and calling-hour variables
 - `TWILIO_VOICE_RECORDING_ENABLED`
@@ -493,6 +492,8 @@ After campaign approval and number attachment:
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
 keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode.
+`TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
+records under **Settings > Communications** control caller ID.
 
 ### Webhooks
 

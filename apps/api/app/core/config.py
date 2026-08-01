@@ -707,7 +707,6 @@ class Settings(BaseSettings):
         for configured, variable in (
             (self.twilio_account_sid, "TWILIO_ACCOUNT_SID"),
             (self.twilio_auth_token, "TWILIO_AUTH_TOKEN"),
-            (self.twilio_voice_from_number, "TWILIO_VOICE_FROM_NUMBER"),
             (self.twilio_webhook_base_url, "TWILIO_WEBHOOK_BASE_URL"),
         ):
             if not configured:
