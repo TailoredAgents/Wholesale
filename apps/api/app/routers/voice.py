@@ -36,6 +36,7 @@ from app.services.voice import (
     delete_recording,
     get_scoped_recording,
     list_voice_lines,
+    list_voice_line_teams,
     list_voice_line_users,
     update_voice_line,
 )
@@ -94,6 +95,7 @@ def read_voice_lines(
     return VoiceLineListResponse(
         items=list_voice_lines(db, principal),
         users=list_voice_line_users(db, principal),
+        teams=list_voice_line_teams(db, principal),
     )
 
 

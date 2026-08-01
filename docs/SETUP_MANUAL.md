@@ -512,9 +512,12 @@ the browser token. The TwiML App tells Twilio where to request call instructions
 2. Create a Twilio API key and securely record its SID and secret.
 3. Create a TwiML App for Stonegate browser calling.
 4. Configure inbound and outbound Voice webhooks from [SETUP_REFERENCE.md](./SETUP_REFERENCE.md).
-5. Enter Voice variables on **oakwell-api**.
-6. Keep recording disabled until disclosure and retention rules are approved.
-7. Enable Voice and redeploy.
+5. In **Settings > Communications**, select the Acquisitions team, Austin/Devon primary and
+   fallback order, ring strategy, coverage window, and missed-call plan.
+6. Enter Voice variables on **oakwell-api**.
+7. Keep call recording disabled until disclosure and retention rules are approved. Voicemail uses
+   its own caller-initiated recording path.
+8. Enable Voice and redeploy.
 
 ### Acceptance
 

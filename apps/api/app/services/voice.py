@@ -11,8 +11,10 @@ from app.domain.rbac import PermissionKeys
 from app.integrations.twilio_recordings import delete_twilio_recording
 from app.integrations.twilio_voice import (
     create_voice_access_token,
+    hangup_twiml,
     inbound_call_twiml,
     outbound_call_twiml,
+    voicemail_twiml,
     voice_identity,
 )
 from app.models.foundation import (
@@ -31,6 +33,8 @@ from app.models.foundation import (
     Role,
     RoleAssignment,
     Task,
+    Team,
+    TeamMembership,
     User,
     VoiceCallIntent,
     VoiceLine,
@@ -41,6 +45,7 @@ from app.schemas.voice import (
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
     VoiceLineRead,
+    VoiceLineTeamRead,
     VoiceLineUserRead,
     VoiceRecordingRead,
     VoiceSessionRead,
@@ -59,6 +64,7 @@ from app.services.inbox import (
 
 VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user"}
 VOICE_LINE_STATUSES = {"active", "inactive"}
+VOICE_LINE_RING_STRATEGIES = {"sequential", "simultaneous"}
 VOICE_LINE_DEPARTMENT_PURPOSES = {
     "acquisitions": "seller_conversations",
     "dispositions": "buyer_relations",
@@ -120,6 +126,21 @@ def list_voice_line_users(db: Session, principal: Principal) -> list[VoiceLineUs
     ]
 
 
+def list_voice_line_teams(db: Session, principal: Principal) -> list[VoiceLineTeamRead]:
+    teams = db.scalars(
+        select(Team)
+        .where(
+            Team.organization_id == principal.organization_id,
+            Team.is_active.is_(True),
+        )
+        .order_by(Team.name.asc())
+    ).all()
+    return [
+        VoiceLineTeamRead(id=team.id, name=team.name, team_type=team.team_type)
+        for team in teams
+    ]
+
+
 def create_voice_line(
     db: Session,
     principal: Principal,
@@ -133,12 +154,14 @@ def create_voice_line(
         principal.organization_id,
         assigned_user_id=payload.assigned_user_id,
         fallback_user_id=payload.fallback_user_id,
+        assigned_team_id=payload.assigned_team_id,
         department_key=payload.department_key,
         purpose_key=payload.purpose_key,
         coverage_timezone=payload.coverage_timezone,
         coverage_start_hour=payload.coverage_start_hour,
         coverage_end_hour=payload.coverage_end_hour,
         missed_call_action=payload.missed_call_action,
+        ring_strategy=payload.ring_strategy,
     )
     if payload.inbound_route not in VOICE_LINE_ROUTES:
         raise ValueError("Unsupported inbound voice route.")
@@ -156,6 +179,7 @@ def create_voice_line(
         organization_id=principal.organization_id,
         assigned_user_id=payload.assigned_user_id,
         fallback_user_id=payload.fallback_user_id,
+        assigned_team_id=payload.assigned_team_id,
         provider="twilio",
         provider_phone_number_id=payload.provider_phone_number_id,
         phone_number=phone_number,
@@ -165,6 +189,7 @@ def create_voice_line(
         status="active",
         is_default=payload.is_default,
         inbound_route=payload.inbound_route,
+        ring_strategy=payload.ring_strategy,
         coverage_timezone=payload.coverage_timezone,
         coverage_start_hour=payload.coverage_start_hour,
         coverage_end_hour=payload.coverage_end_hour,
@@ -206,6 +231,11 @@ def update_voice_line(
         if "fallback_user_id" in payload.model_fields_set
         else line.fallback_user_id
     )
+    assigned_team_id = (
+        payload.assigned_team_id
+        if "assigned_team_id" in payload.model_fields_set
+        else line.assigned_team_id
+    )
     department_key = payload.department_key or line.department_key
     purpose_key = payload.purpose_key or line.purpose_key
     coverage_timezone = payload.coverage_timezone or line.coverage_timezone
@@ -220,26 +250,31 @@ def update_voice_line(
         else line.coverage_end_hour
     )
     missed_call_action = payload.missed_call_action or line.missed_call_action
+    ring_strategy = payload.ring_strategy or line.ring_strategy
     validate_line_ownership(
         db,
         principal.organization_id,
         assigned_user_id=assigned_user_id,
         fallback_user_id=fallback_user_id,
+        assigned_team_id=assigned_team_id,
         department_key=department_key,
         purpose_key=purpose_key,
         coverage_timezone=coverage_timezone,
         coverage_start_hour=coverage_start_hour,
         coverage_end_hour=coverage_end_hour,
         missed_call_action=missed_call_action,
+        ring_strategy=ring_strategy,
     )
     line.assigned_user_id = assigned_user_id
     line.fallback_user_id = fallback_user_id
+    line.assigned_team_id = assigned_team_id
     line.department_key = department_key
     line.purpose_key = purpose_key
     line.coverage_timezone = coverage_timezone
     line.coverage_start_hour = coverage_start_hour
     line.coverage_end_hour = coverage_end_hour
     line.missed_call_action = missed_call_action
+    line.ring_strategy = ring_strategy
     if payload.label is not None:
         line.label = payload.label.strip()
     if payload.status is not None:
@@ -467,28 +502,37 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
     existing = find_call(db, line.organization_id, provider_call_id=call_sid)
     if existing is not None:
-        target_user_id = resolve_inbound_user(db, line, existing.conversation_id)
-        if target_user_id is None:
+        if not is_within_line_coverage(line):
+            if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
+                return voicemail_twiml(settings, call_id=str(existing.id))
+            return hangup_twiml(
+                "Stonegate is currently closed. We will return your call shortly."
+            )
+        target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
+        if not target_user_ids:
             raise VoiceConfigurationError("No Stonegate user is available for this call.")
         return inbound_call_twiml(
             settings,
-            identity=voice_identity(str(target_user_id)),
+            targets=[
+                (voice_identity(str(user_id)), str(user_id)) for user_id in target_user_ids
+            ],
             call_id=str(existing.id),
             recording_enabled=settings.twilio_voice_recording_configured,
+            ring_strategy=line.ring_strategy,
         )
     conversation = find_conversation_by_phone(db, line.organization_id, caller)
     if conversation is None:
         conversation = create_inbound_call_lead(db, line, caller)
     if conversation.lead_id is None:
         raise VoiceConfigurationError("Inbound calling currently requires a lead conversation.")
-    target_user_id = resolve_inbound_user(db, line, conversation.id)
+    target_user_ids = resolve_inbound_users(db, line, conversation.id)
     communication, call = create_call_records(
         db,
         organization_id=line.organization_id,
         conversation_id=conversation.id,
         lead_id=conversation.lead_id,
         contact_id=conversation.contact_id,
-        actor_user_id=target_user_id,
+        actor_user_id=None,
         voice_line_id=line.id,
         call_intent_id=None,
         provider_call_id=call_sid,
@@ -503,6 +547,13 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         ),
     )
     communication.body = f"Inbound call from {format_e164(caller) or caller}"
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "routing_target_user_ids": [str(user_id) for user_id in target_user_ids],
+        "routing_owner_user_id": str(target_user_ids[0]) if target_user_ids else None,
+        "ring_strategy": line.ring_strategy,
+        "ring_target_count": len(target_user_ids),
+    }
     update_conversation_activity(
         conversation,
         direction="inbound",
@@ -527,13 +578,22 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         payload=payload,
     )
     db.commit()
-    if target_user_id is None:
+    if not is_within_line_coverage(line):
+        if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
+            return voicemail_twiml(settings, call_id=str(call.id))
+        ensure_missed_call_task(db, call)
+        db.commit()
+        return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
+    if not target_user_ids:
         raise VoiceConfigurationError("No Stonegate user is available for this call.")
     return inbound_call_twiml(
         settings,
-        identity=voice_identity(str(target_user_id)),
+        targets=[
+            (voice_identity(str(user_id)), str(user_id)) for user_id in target_user_ids
+        ],
         call_id=str(call.id),
         recording_enabled=settings.twilio_voice_recording_configured,
+        ring_strategy=line.ring_strategy,
     )
 
 
@@ -543,6 +603,7 @@ def process_voice_status(
     *,
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
+    answered_user_id: UUID | None = None,
 ) -> str:
     status = (
         payload.get("DialCallStatus")
@@ -557,7 +618,13 @@ def process_voice_status(
     existing_event = get_voice_provider_event(db, call.organization_id, event_id)
     if existing_event is not None:
         return existing_event.processing_status
-    apply_call_status(db, call, status, payload)
+    apply_call_status(
+        db,
+        call,
+        status,
+        payload,
+        answered_user_id=answered_user_id,
+    )
     event = record_provider_event(
         db,
         organization_id=call.organization_id,
@@ -570,6 +637,61 @@ def process_voice_status(
     event.processed_at = datetime.now(UTC)
     db.commit()
     return event.processing_status
+
+
+def process_voice_dial_result(
+    db: Session,
+    payload: dict[str, str],
+    *,
+    intent_id: UUID | None = None,
+    call_id: UUID | None = None,
+) -> str:
+    process_voice_status(db, payload, intent_id=intent_id, call_id=call_id)
+    call = resolve_callback_call(db, payload, intent_id=intent_id, call_id=call_id)
+    if call is None or call.direction != "inbound":
+        return hangup_twiml()
+    status = (payload.get("DialCallStatus") or payload.get("CallStatus") or "").lower()
+    if status not in {"busy", "failed", "no-answer", "canceled"}:
+        return hangup_twiml()
+    line = db.get(VoiceLine, call.voice_line_id) if call.voice_line_id else None
+    if line is None or line.missed_call_action == "task_only":
+        return hangup_twiml()
+    return voicemail_twiml(get_settings(), call_id=str(call.id))
+
+
+def process_voice_voicemail_complete(
+    db: Session,
+    payload: dict[str, str],
+    *,
+    call_id: UUID,
+) -> None:
+    call = db.get(CallRecord, call_id)
+    if call is None:
+        return
+    now = datetime.now(UTC)
+    call.status = "completed"
+    call.ended_at = now
+    call.duration_seconds = parse_int(payload.get("RecordingDuration")) or call.duration_seconds
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "voicemail": True,
+        "voicemail_recording_sid": payload.get("RecordingSid"),
+    }
+    communication = (
+        db.get(CommunicationRecord, call.communication_record_id)
+        if call.communication_record_id
+        else None
+    )
+    if communication is not None:
+        communication.status = "completed"
+        communication.body = f"Voicemail from {call.from_number or 'caller'}"
+        communication.external_payload = {
+            **(communication.external_payload or {}),
+            "voicemail": True,
+            "recording_sid": payload.get("RecordingSid"),
+        }
+    ensure_missed_call_task(db, call)
+    db.commit()
 
 
 def process_voice_recording(
@@ -902,15 +1024,35 @@ def apply_call_status(
     call: CallRecord,
     status: str,
     payload: dict[str, str],
+    *,
+    answered_user_id: UUID | None = None,
 ) -> None:
     now = datetime.now(UTC)
     child_sid = payload.get("CallSid")
     if payload.get("ParentCallSid") and child_sid:
-        call.child_provider_call_id = child_sid
+        if status in {"in-progress", "answered"} or call.child_provider_call_id is None:
+            call.child_provider_call_id = child_sid
+        child_statuses = dict((call.call_metadata or {}).get("child_statuses") or {})
+        child_statuses[child_sid] = status
         call.call_metadata = {
             **(call.call_metadata or {}),
-            "child_call_sid": child_sid,
+            "child_call_sid": call.child_provider_call_id,
+            "child_statuses": child_statuses,
         }
+    if status in {"in-progress", "answered"} and answered_user_id is not None:
+        routed_ids = set((call.call_metadata or {}).get("routing_target_user_ids") or [])
+        user = db.get(User, answered_user_id)
+        if (
+            user is not None
+            and user.is_active
+            and user.organization_id == call.organization_id
+            and (not routed_ids or str(user.id) in routed_ids)
+        ):
+            call.actor_user_id = user.id
+    is_child_terminal = bool(payload.get("ParentCallSid")) and status in FINAL_CALL_STATUSES
+    target_count = int((call.call_metadata or {}).get("ring_target_count") or 1)
+    if is_child_terminal and target_count > 1:
+        return
     current_rank = CALL_STATUS_RANK.get(call.status, -1)
     incoming_rank = CALL_STATUS_RANK.get(status, current_rank)
     if current_rank >= 4 and incoming_rank < current_rank:
@@ -933,6 +1075,8 @@ def apply_call_status(
         else None
     )
     if communication is not None:
+        if call.actor_user_id is not None:
+            communication.actor_user_id = call.actor_user_id
         communication.status = status
         communication.external_payload = {
             **(communication.external_payload or {}),
@@ -955,11 +1099,18 @@ def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
     )
     if existing is not None:
         return
+    responsible_user_id = call.actor_user_id
+    if responsible_user_id is None:
+        raw_owner_id = (call.call_metadata or {}).get("routing_owner_user_id")
+        try:
+            responsible_user_id = UUID(str(raw_owner_id)) if raw_owner_id else None
+        except ValueError:
+            responsible_user_id = None
     db.add(
         Task(
             organization_id=call.organization_id,
             lead_id=call.lead_id,
-            responsible_user_id=call.actor_user_id,
+            responsible_user_id=responsible_user_id,
             task_type="missed_call",
             title=f"Return missed call from {call.from_number or 'seller'}",
             status="open",
@@ -1154,32 +1305,44 @@ def find_conversation_by_phone(
     )
 
 
-def resolve_inbound_user(
+def resolve_inbound_users(
     db: Session,
     line: VoiceLine,
     conversation_id: UUID,
-) -> UUID | None:
+) -> list[UUID]:
     conversation = db.get(Conversation, conversation_id)
-    candidate_ids = (
-        [
-            line.assigned_user_id,
-            conversation.assigned_user_id if conversation else None,
-            line.fallback_user_id,
-        ]
+    candidate_ids: list[UUID | None] = (
+        [line.assigned_user_id, conversation.assigned_user_id if conversation else None]
         if line.inbound_route == "assigned_user"
-        else [
-            conversation.assigned_user_id if conversation else None,
-            line.assigned_user_id,
-            line.fallback_user_id,
-        ]
+        else [conversation.assigned_user_id if conversation else None, line.assigned_user_id]
     )
+    if line.assigned_team_id is not None:
+        candidate_ids.extend(
+            db.scalars(
+                select(TeamMembership.user_id)
+                .join(User, User.id == TeamMembership.user_id)
+                .where(
+                    TeamMembership.organization_id == line.organization_id,
+                    TeamMembership.team_id == line.assigned_team_id,
+                    User.is_active.is_(True),
+                )
+                .order_by(
+                    (TeamMembership.membership_role == "manager").desc(),
+                    TeamMembership.created_at.asc(),
+                )
+            ).all()
+        )
+    candidate_ids.append(line.fallback_user_id)
+    result: list[UUID] = []
     for candidate_id in candidate_ids:
-        if candidate_id is None:
+        if candidate_id is None or candidate_id in result:
             continue
         user = db.get(User, candidate_id)
         if user is not None and user.is_active and user.organization_id == line.organization_id:
-            return user.id
-    return db.scalar(
+            result.append(user.id)
+    if result:
+        return result[:10]
+    owner_id = db.scalar(
         select(User.id)
         .join(RoleAssignment, RoleAssignment.user_id == User.id)
         .join(Role, Role.id == RoleAssignment.role_id)
@@ -1190,6 +1353,23 @@ def resolve_inbound_user(
         )
         .order_by(User.created_at.asc())
     )
+    return [owner_id] if owner_id is not None else []
+
+
+def is_within_line_coverage(
+    line: VoiceLine,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    local_now = now or datetime.now(ZoneInfo(line.coverage_timezone))
+    if local_now.tzinfo is None:
+        local_now = local_now.replace(tzinfo=ZoneInfo(line.coverage_timezone))
+    else:
+        local_now = local_now.astimezone(ZoneInfo(line.coverage_timezone))
+    hour = local_now.hour
+    if line.coverage_start_hour < line.coverage_end_hour:
+        return line.coverage_start_hour <= hour < line.coverage_end_hour
+    return hour >= line.coverage_start_hour or hour < line.coverage_end_hour
 
 
 def find_voice_line_by_number(db: Session, phone_number: str) -> VoiceLine | None:
@@ -1209,11 +1389,19 @@ def select_voice_line(
     organization_id: UUID,
     user_id: UUID,
 ) -> VoiceLine | None:
+    team_ids = select(TeamMembership.team_id).where(
+        TeamMembership.organization_id == organization_id,
+        TeamMembership.user_id == user_id,
+    )
     assigned = db.scalar(
         select(VoiceLine)
         .where(
             VoiceLine.organization_id == organization_id,
-            VoiceLine.assigned_user_id == user_id,
+            (
+                (VoiceLine.assigned_user_id == user_id)
+                | (VoiceLine.fallback_user_id == user_id)
+                | (VoiceLine.assigned_team_id.in_(team_ids))
+            ),
             VoiceLine.status == "active",
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
@@ -1305,21 +1493,42 @@ def validate_line_assignment(
         raise ValueError("Voice line assignee must be an active Stonegate user.")
 
 
+def validate_line_team(
+    db: Session,
+    organization_id: UUID,
+    team_id: UUID | None,
+) -> None:
+    if team_id is None:
+        return
+    team = db.scalar(
+        select(Team).where(
+            Team.id == team_id,
+            Team.organization_id == organization_id,
+            Team.is_active.is_(True),
+        )
+    )
+    if team is None:
+        raise ValueError("Voice line team must be an active Stonegate team.")
+
+
 def validate_line_ownership(
     db: Session,
     organization_id: UUID,
     *,
     assigned_user_id: UUID | None,
     fallback_user_id: UUID | None,
+    assigned_team_id: UUID | None,
     department_key: str,
     purpose_key: str,
     coverage_timezone: str,
     coverage_start_hour: int,
     coverage_end_hour: int,
     missed_call_action: str,
+    ring_strategy: str,
 ) -> None:
     validate_line_assignment(db, organization_id, assigned_user_id)
     validate_line_assignment(db, organization_id, fallback_user_id)
+    validate_line_team(db, organization_id, assigned_team_id)
     if assigned_user_id is not None and assigned_user_id == fallback_user_id:
         raise ValueError("Primary and fallback owners must be different people.")
     expected_purpose = VOICE_LINE_DEPARTMENT_PURPOSES.get(department_key)
@@ -1329,6 +1538,8 @@ def validate_line_ownership(
         raise ValueError("Phone-line purpose must match its department.")
     if missed_call_action not in VOICE_LINE_MISSED_CALL_ACTIONS:
         raise ValueError("Unsupported missed-call action.")
+    if ring_strategy not in VOICE_LINE_RING_STRATEGIES:
+        raise ValueError("Unsupported voice-line ring strategy.")
     if coverage_start_hour == coverage_end_hour:
         raise ValueError("Coverage start and end hours must be different.")
     try:
@@ -1347,6 +1558,7 @@ def clear_default_lines(db: Session, organization_id: UUID) -> None:
 def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
     assigned_user = db.get(User, line.assigned_user_id) if line.assigned_user_id else None
     fallback_user = db.get(User, line.fallback_user_id) if line.fallback_user_id else None
+    assigned_team = db.get(Team, line.assigned_team_id) if line.assigned_team_id else None
     return VoiceLineRead(
         id=line.id,
         phone_number=line.phone_number,
@@ -1360,6 +1572,9 @@ def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
         assigned_user_name=assigned_user.display_name if assigned_user else None,
         fallback_user_id=line.fallback_user_id,
         fallback_user_name=fallback_user.display_name if fallback_user else None,
+        assigned_team_id=line.assigned_team_id,
+        assigned_team_name=assigned_team.name if assigned_team else None,
+        ring_strategy=line.ring_strategy,
         coverage_timezone=line.coverage_timezone,
         coverage_start_hour=line.coverage_start_hour,
         coverage_end_hour=line.coverage_end_hour,
@@ -1412,12 +1627,16 @@ def record_line_audit(
                 "fallback_user_id": (
                     str(line.fallback_user_id) if line.fallback_user_id else None
                 ),
+                "assigned_team_id": (
+                    str(line.assigned_team_id) if line.assigned_team_id else None
+                ),
                 "department_key": line.department_key,
                 "purpose_key": line.purpose_key,
                 "coverage_timezone": line.coverage_timezone,
                 "coverage_start_hour": line.coverage_start_hour,
                 "coverage_end_hour": line.coverage_end_hour,
                 "missed_call_action": line.missed_call_action,
+                "ring_strategy": line.ring_strategy,
                 "status": line.status,
                 "is_default": line.is_default,
             },

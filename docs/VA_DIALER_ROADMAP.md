@@ -126,12 +126,19 @@ messages or broken assignment.
 
 ### PH3. Shared Acquisitions Voice Routing
 
+Status: implemented in code; Twilio Console, Render, and live acceptance remain in PH4.
+
 - Extend the existing company voice-line records with department membership, primary and fallback
   users, ring strategy, business hours, voicemail destination, and line-use permissions.
 - Allow Austin and Devon to place calls from the same acquisitions caller ID.
 - Route known callers to the conversation owner first, then the acquisitions fallback group.
 - Route new callers to the acquisitions group instead of a single hard-coded employee.
 - Preserve the existing browser Voice token and one-time call-intent controls.
+
+Implemented routing supports an optional department team, sequential or simultaneous ringing of
+up to 10 active browser identities, conversation-owner priority, primary/fallback deduplication,
+answer attribution, coverage-hour enforcement, Stonegate voicemail, and urgent missed-call tasks.
+Authorized primary, fallback, and team members select the shared line for outbound calls.
 
 Exit criteria: both authorized users can call from the shared number, inbound calls reach the right
 person or fallback, and every call attaches to one conversation.
@@ -230,8 +237,8 @@ two competing communication histories.
 1. In **Settings > Communications**, configure the approved number as Acquisitions, select Austin
    and Devon as primary/fallback in the intended order, and save the coverage policy.
 2. Complete the Twilio acquisitions SMS steps because the A2P campaign is already approved.
-3. Build PH3 shared acquisitions routing before relying on Voice for both Austin and Devon.
-4. Complete acquisitions Voice acceptance.
+3. Complete PH4 acquisitions Voice configuration and acceptance for Austin and Devon.
+4. Confirm the shared line's ring strategy, after-hours voicemail, and answer attribution live.
 5. Add the dispositions line and its correct messaging registration.
 6. Open BatchDialer and run PH6-PH8 with one VA before adding more seats.
 

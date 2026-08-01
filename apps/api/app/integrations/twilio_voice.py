@@ -116,10 +116,13 @@ def outbound_call_twiml(
 def inbound_call_twiml(
     settings: Settings,
     *,
-    identity: str,
+    targets: list[tuple[str, str]],
     call_id: str,
     recording_enabled: bool,
+    ring_strategy: str,
 ) -> str:
+    if not targets:
+        raise TwilioVoiceConfigurationError("Inbound call has no active routing targets.")
     response = VoiceResponse()
     if recording_enabled and settings.twilio_voice_recording_disclosure:
         response.say(settings.twilio_voice_recording_disclosure)
@@ -132,6 +135,7 @@ def inbound_call_twiml(
             call_id=call_id,
         ),
         "method": "POST",
+        "sequential": ring_strategy == "sequential",
     }
     if recording_enabled:
         dial_options.update(
@@ -147,15 +151,44 @@ def inbound_call_twiml(
             }
         )
     dial = response.dial(**dial_options)
-    dial.client(
-        identity,
-        status_callback=callback_url(
+    for identity, user_id in targets[:10]:
+        dial.client(
+            identity,
+            status_callback=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/status",
+                call_id=call_id,
+                answered_user_id=user_id,
+            ),
+            status_callback_event="initiated ringing answered completed",
+            status_callback_method="POST",
+        )
+    return str(response)
+
+
+def voicemail_twiml(settings: Settings, *, call_id: str) -> str:
+    response = VoiceResponse()
+    response.say(
+        "Thank you for calling Stonegate Home Buyers. Please leave your name, phone number, "
+        "property address, and a short message after the tone."
+    )
+    response.record(
+        action=callback_url(
             settings,
-            "/api/v1/webhooks/twilio/voice/status",
+            "/api/v1/webhooks/twilio/voice/voicemail-complete",
             call_id=call_id,
         ),
-        status_callback_event="initiated ringing answered completed",
-        status_callback_method="POST",
+        method="POST",
+        max_length=180,
+        play_beep=True,
+        recording_status_callback=callback_url(
+            settings,
+            "/api/v1/webhooks/twilio/voice/recording",
+            call_id=call_id,
+        ),
+        recording_status_callback_event="completed absent",
+        recording_status_callback_method="POST",
+        trim="trim-silence",
     )
     return str(response)
 

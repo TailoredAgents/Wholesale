@@ -101,6 +101,11 @@ def seed_voice_lead(db: Session, client: TestClient) -> Conversation:
     assert response.status_code == 201
     conversation = db.scalar(select(Conversation))
     assert conversation is not None
+    line = db.scalar(select(VoiceLine))
+    assert line is not None
+    line.coverage_start_hour = 0
+    line.coverage_end_hour = 24
+    db.commit()
     return conversation
 
 
@@ -189,8 +194,8 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
             "fallback_user_id": devon["id"],
             "inbound_route": "conversation_owner",
             "coverage_timezone": "America/New_York",
-            "coverage_start_hour": 8,
-            "coverage_end_hour": 21,
+            "coverage_start_hour": 0,
+            "coverage_end_hour": 24,
             "missed_call_action": "fallback_then_voicemail",
             "is_default": True,
         },
@@ -201,8 +206,8 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     assert updated["purpose_key"] == "seller_conversations"
     assert updated["assigned_user_name"] == "Owner"
     assert updated["fallback_user_name"] == "Devon"
-    assert updated["coverage_start_hour"] == 8
-    assert updated["coverage_end_hour"] == 21
+    assert updated["coverage_start_hour"] == 0
+    assert updated["coverage_end_hour"] == 24
     assert updated["ownership_complete"] is True
 
     duplicate_owner_response = client.patch(
@@ -254,6 +259,166 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     inbound_response = post_signed(client, inbound_path, inbound_payload)
     assert inbound_response.status_code == 200, inbound_response.text
     assert f"stonegate_{str(devon['id']).replace('-', '')}" in inbound_response.text
+
+
+def test_shared_line_rings_multiple_users_and_attributes_the_answer(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    devon_response = client.post(
+        "/api/v1/operations/users",
+        headers=headers,
+        json={
+            "email": "devon@example.com",
+            "display_name": "Devon",
+            "role_key": "disposition_rep",
+        },
+    )
+    assert devon_response.status_code == 201, devon_response.text
+    devon = devon_response.json()
+    line_payload = client.get("/api/v1/voice/lines", headers=headers).json()
+    line = line_payload["items"][0]
+    owner = next(user for user in line_payload["users"] if user["email"] == OWNER_EMAIL)
+    team_response = client.post(
+        "/api/v1/operations/teams",
+        headers=headers,
+        json={
+            "name": "Acquisitions",
+            "team_type": "acquisitions",
+            "manager_user_id": owner["id"],
+        },
+    )
+    assert team_response.status_code == 201, team_response.text
+    team = team_response.json()
+    member_response = client.post(
+        f"/api/v1/operations/teams/{team['id']}/members",
+        headers=headers,
+        json={"user_id": devon["id"], "membership_role": "member"},
+    )
+    assert member_response.status_code == 200, member_response.text
+    line_payload = client.get("/api/v1/voice/lines", headers=headers).json()
+    assert any(item["id"] == team["id"] for item in line_payload["teams"])
+    updated = client.patch(
+        f"/api/v1/voice/lines/{line['id']}",
+        headers=headers,
+        json={
+            "assigned_user_id": owner["id"],
+            "fallback_user_id": devon["id"],
+            "assigned_team_id": team["id"],
+            "ring_strategy": "simultaneous",
+            "coverage_start_hour": 0,
+            "coverage_end_hour": 24,
+        },
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["assigned_team_name"] == "Acquisitions"
+
+    inbound_payload = {
+        "From": SELLER_NUMBER,
+        "To": STONEGATE_NUMBER,
+        "CallSid": "CA00000000000000000000000000000082",
+    }
+    inbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        inbound_payload,
+    )
+
+    assert inbound.status_code == 200, inbound.text
+    assert inbound.text.count("<Client ") == 2
+    assert 'sequential="false"' in inbound.text
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    assert call.call_metadata["ring_target_count"] == 2
+
+    answered_path = (
+        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"
+        f"&answered_user_id={devon['id']}"
+    )
+    answered = post_signed(
+        client,
+        answered_path,
+        {
+            "CallSid": "CA00000000000000000000000000000083",
+            "ParentCallSid": inbound_payload["CallSid"],
+            "CallStatus": "in-progress",
+        },
+    )
+    assert answered.status_code == 204, answered.text
+    db_session.refresh(call)
+    assert str(call.actor_user_id) == devon["id"]
+    assert call.status == "in-progress"
+
+    canceled_path = (
+        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"
+        f"&answered_user_id={owner['id']}"
+    )
+    canceled = post_signed(
+        client,
+        canceled_path,
+        {
+            "CallSid": "CA00000000000000000000000000000084",
+            "ParentCallSid": inbound_payload["CallSid"],
+            "CallStatus": "canceled",
+        },
+    )
+    assert canceled.status_code == 204, canceled.text
+    db_session.refresh(call)
+    assert call.status == "in-progress"
+    assert str(call.actor_user_id) == devon["id"]
+
+
+def test_after_hours_call_uses_voicemail_and_creates_follow_up(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    seed_voice_lead(db_session, client)
+    line = db_session.scalar(select(VoiceLine))
+    assert line is not None
+    local_hour = datetime.now(ZoneInfo("America/New_York")).hour
+    line.coverage_start_hour = (local_hour + 1) % 24
+    line.coverage_end_hour = (local_hour + 2) % 24
+    line.missed_call_action = "fallback_then_voicemail"
+    db_session.commit()
+    inbound_payload = {
+        "From": SELLER_NUMBER,
+        "To": STONEGATE_NUMBER,
+        "CallSid": "CA00000000000000000000000000000085",
+    }
+
+    inbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        inbound_payload,
+    )
+
+    assert inbound.status_code == 200, inbound.text
+    assert "<Record " in inbound.text
+    assert "voicemail-complete" in inbound.text
+    assert "<Client " not in inbound.text
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    complete_path = f"/api/v1/webhooks/twilio/voice/voicemail-complete?call_id={call.id}"
+    completed = post_signed(
+        client,
+        complete_path,
+        {
+            "CallSid": inbound_payload["CallSid"],
+            "RecordingSid": "RE00000000000000000000000000000085",
+            "RecordingDuration": "32",
+        },
+    )
+    assert completed.status_code == 200, completed.text
+    db_session.refresh(call)
+    assert call.status == "completed"
+    assert call.call_metadata["voicemail"] is True
+    assert db_session.scalar(select(Task).where(Task.task_type == "missed_call")) is not None
 
 
 def test_voice_session_and_outbound_call_are_scoped_and_idempotent(

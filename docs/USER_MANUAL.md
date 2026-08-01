@@ -940,13 +940,18 @@ Owners manage department phone-line responsibility in **Settings > Communication
 1. Find the company-owned number or select **Add line**.
 2. Set the department to **Acquisitions**, **Dispositions**, or **Company general**.
 3. Select the primary owner and a different fallback owner.
-4. Choose whether known callers prefer their conversation owner or the line's primary owner.
-5. Record the staffed coverage window, timezone, and missed-call policy.
-6. Mark the acquisitions line as the default company line.
-7. Select **Save** and confirm the line shows **Ownership ready**.
+4. Optionally select the department team so future active team members join the line automatically.
+5. Choose whether known callers prefer their conversation owner or the line's primary owner.
+6. Choose **In order** to ring the owner, primary, team, and fallback sequentially, or **Everyone at
+   once** when the first available employee should answer.
+7. Record the staffed coverage window, timezone, and missed-call policy.
+8. Mark the acquisitions line as the default company line.
+9. Select **Save** and confirm the line shows **Ownership ready**.
 
-PH1 records ownership and uses the fallback when a preferred owner is unavailable. PH3 adds the
-full department ring sequence, coverage-hours enforcement, and voicemail execution.
+During coverage hours, Stonegate removes inactive users and duplicate targets before ringing up to
+10 browser-phone identities. It records the employee who answers. Outside coverage hours, or after
+an unanswered ring sequence, the selected missed-call policy sends the caller to Stonegate
+voicemail or creates an urgent return-call task.
 
 ### Use Browser Calling
 

@@ -19,6 +19,9 @@ type VoiceLine = {
   assigned_user_name: string | null;
   fallback_user_id: string | null;
   fallback_user_name: string | null;
+  assigned_team_id: string | null;
+  assigned_team_name: string | null;
+  ring_strategy: "sequential" | "simultaneous";
   coverage_timezone: string;
   coverage_start_hour: number;
   coverage_end_hour: number;
@@ -30,6 +33,12 @@ type VoiceLineUser = {
   id: string;
   display_name: string;
   email: string;
+};
+
+type VoiceLineTeam = {
+  id: string;
+  name: string;
+  team_type: string;
 };
 
 const hourOptions = Array.from({ length: 25 }, (_, hour) => hour);
@@ -58,6 +67,7 @@ export function VoiceLineSettings() {
   const { getToken } = useAuth();
   const [lines, setLines] = useState<VoiceLine[]>([]);
   const [users, setUsers] = useState<VoiceLineUser[]>([]);
+  const [teams, setTeams] = useState<VoiceLineTeam[]>([]);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -93,11 +103,16 @@ export function VoiceLineSettings() {
   );
 
   const load = useCallback(async () => {
-    const payload = await request<{ items: VoiceLine[]; users: VoiceLineUser[] }>(
+    const payload = await request<{
+      items: VoiceLine[];
+      users: VoiceLineUser[];
+      teams: VoiceLineTeam[];
+    }>(
       "/api/v1/voice/lines",
     );
     setLines(payload.items);
     setUsers(payload.users);
+    setTeams(payload.teams);
   }, [request]);
 
   useEffect(() => {
@@ -127,7 +142,9 @@ export function VoiceLineSettings() {
           purpose_key: purposeForDepartment(departmentKey),
           assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
           fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
+          assigned_team_id: String(data.get("assigned_team_id") ?? "") || null,
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
+          ring_strategy: String(data.get("ring_strategy") ?? "sequential"),
           coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
           coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
           coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
@@ -163,8 +180,10 @@ export function VoiceLineSettings() {
           purpose_key: purposeForDepartment(departmentKey),
           assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
           fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
+          assigned_team_id: String(data.get("assigned_team_id") ?? "") || null,
           status: String(data.get("status") ?? "active"),
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
+          ring_strategy: String(data.get("ring_strategy") ?? "sequential"),
           coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
           coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
           coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
@@ -251,10 +270,26 @@ export function VoiceLineSettings() {
               </select>
             </label>
             <label>
+              <span>Department team</span>
+              <select defaultValue={line.assigned_team_id ?? ""} name="assigned_team_id">
+                <option value="">Primary and fallback only</option>
+                {teams.map((team) => (
+                  <option key={team.id} value={team.id}>{team.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span>Inbound route</span>
               <select defaultValue={line.inbound_route} name="inbound_route">
                 <option value="conversation_owner">Conversation owner</option>
                 <option value="assigned_user">Primary owner</option>
+              </select>
+            </label>
+            <label>
+              <span>Ring strategy</span>
+              <select defaultValue={line.ring_strategy} name="ring_strategy">
+                <option value="sequential">In order</option>
+                <option value="simultaneous">Everyone at once</option>
               </select>
             </label>
             <label>
@@ -339,10 +374,26 @@ export function VoiceLineSettings() {
             </select>
           </label>
           <label>
+            <span>Department team</span>
+            <select defaultValue="" name="assigned_team_id">
+              <option value="">Primary and fallback only</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>{team.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Inbound route</span>
             <select defaultValue="conversation_owner" name="inbound_route">
               <option value="conversation_owner">Conversation owner</option>
               <option value="assigned_user">Primary owner</option>
+            </select>
+          </label>
+          <label>
+            <span>Ring strategy</span>
+            <select defaultValue="sequential" name="ring_strategy">
+              <option value="sequential">In order</option>
+              <option value="simultaneous">Everyone at once</option>
             </select>
           </label>
           <label>

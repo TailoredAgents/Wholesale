@@ -14,9 +14,11 @@ from app.services.voice import (
     VoiceConfigurationError,
     process_inbound_voice_request,
     process_outbound_voice_request,
+    process_voice_dial_result,
     process_voice_recording,
     process_voice_recording_disclosure,
     process_voice_status,
+    process_voice_voicemail_complete,
 )
 
 router = APIRouter(prefix="/api/v1/webhooks/twilio", tags=["webhooks"])
@@ -112,6 +114,7 @@ async def twilio_voice_status(
     signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
     intent_id: UUID | None = None,
     call_id: UUID | None = None,
+    answered_user_id: UUID | None = None,
 ) -> Response:
     payload = await parse_twilio_form(request)
     validate_request(request, payload, signature)
@@ -120,6 +123,7 @@ async def twilio_voice_status(
         payload,
         intent_id=intent_id,
         call_id=call_id,
+        answered_user_id=answered_user_id,
     )
     return Response(status_code=204)
 
@@ -134,12 +138,26 @@ async def twilio_voice_dial_result(
 ) -> Response:
     payload = await parse_twilio_form(request)
     validate_request(request, payload, signature)
-    process_voice_status(
+    content = process_voice_dial_result(
         db,
         payload,
         intent_id=intent_id,
         call_id=call_id,
     )
+    return Response(content=content, media_type="application/xml")
+
+
+@router.post("/voice/voicemail-complete")
+async def twilio_voice_voicemail_complete(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
+    call_id: UUID | None = None,
+) -> Response:
+    payload = await parse_twilio_form(request)
+    validate_request(request, payload, signature)
+    if call_id is not None:
+        process_voice_voicemail_complete(db, payload, call_id=call_id)
     return Response(content=hangup_twiml(), media_type="application/xml")
 
 

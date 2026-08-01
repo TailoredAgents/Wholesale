@@ -1760,6 +1760,9 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     fallback_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id"), index=True
     )
+    assigned_team_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("teams.id", ondelete="SET NULL"), index=True
+    )
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     provider_phone_number_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str] = mapped_column(String(80), nullable=False)
@@ -1773,6 +1776,9 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     inbound_route: Mapped[str] = mapped_column(String(80), nullable=False)
+    ring_strategy: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="sequential"
+    )
     coverage_timezone: Mapped[str] = mapped_column(
         String(80), nullable=False, server_default="America/New_York"
     )

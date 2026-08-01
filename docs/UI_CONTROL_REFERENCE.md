@@ -771,12 +771,14 @@ only to owners and users with `communications:manage_voice_lines`.
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |
 | Fallback owner | Records the second responsible employee when the owner or primary is unavailable | Must differ from the primary owner |
-| Coverage starts / ends / timezone | Records the department's intended staffed coverage window | PH3 will enforce this policy during shared routing |
-| Missed-call plan | Records fallback, voicemail, or task policy | PH3 will execute the full no-answer sequence |
+| Department team | Adds active team members to the shared ring group and grants them use of the line | Optional; manage membership under People & Access |
+| Ring strategy | Rings targets in owner-first order or rings all active targets simultaneously | Twilio supports up to 10 targets per call |
+| Coverage starts / ends / timezone | Defines the staffed window enforced during inbound routing | Outside the window, Stonegate applies the missed-call plan |
+| Missed-call plan | Chooses voicemail or urgent-task behavior after no answer or outside coverage | Fallback targets are included in the ring sequence before voicemail |
 | Ownership ready | Confirms both an active primary and active fallback are assigned | Does not mean Twilio provider acceptance has passed |
 | Label | Names the line by purpose or seat | Required |
 | Status | Activates or deactivates routing through the line | Deactivation preserves call history |
-| Inbound route | Prefers the conversation owner or the line's primary owner | Falls through to the configured fallback when the preferred person is unavailable |
+| Inbound route | Starts routing with the conversation owner or the line's primary owner | Then includes active team members and fallback without duplicates |
 | Default company line | Marks the preferred line for company calling | Use one operational default |
 | **Add line** | Creates the Stonegate voice-line record | Requires voice-line management permission |
 | **Save** | Updates ownership, coverage policy, label, status, default, and route | Requires voice-line management permission |

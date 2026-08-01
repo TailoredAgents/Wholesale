@@ -878,10 +878,14 @@ company's Messaging Service, campaign, number, or consent description.
 
 The Twilio Voice implementation supports:
 
-- company voice lines
+- company voice lines separated by department and purpose
+- primary, fallback, and optional department-team membership
+- conversation-owner-first routing with sequential or simultaneous ringing
+- active-user filtering, duplicate removal, and answer attribution
+- line-specific coverage windows, after-hours handling, voicemail, and missed-call tasks
 - scoped browser access tokens
 - call intents tied to a conversation
-- outbound and inbound routing
+- shared outbound caller ID and number-aware inbound routing
 - call status and dial result callbacks
 - missed-call tasks
 - private recordings

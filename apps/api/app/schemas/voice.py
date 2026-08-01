@@ -18,6 +18,9 @@ class VoiceLineRead(BaseModel):
     assigned_user_name: str | None
     fallback_user_id: UUID | None
     fallback_user_name: str | None
+    assigned_team_id: UUID | None
+    assigned_team_name: str | None
+    ring_strategy: str
     coverage_timezone: str
     coverage_start_hour: int
     coverage_end_hour: int
@@ -31,18 +34,26 @@ class VoiceLineUserRead(BaseModel):
     email: str
 
 
+class VoiceLineTeamRead(BaseModel):
+    id: UUID
+    name: str
+    team_type: str
+
+
 class VoiceLineCreate(BaseModel):
     phone_number: str = Field(min_length=8, max_length=80)
     label: str = Field(min_length=1, max_length=120)
     provider_phone_number_id: str | None = Field(default=None, max_length=255)
     assigned_user_id: UUID | None = None
     fallback_user_id: UUID | None = None
+    assigned_team_id: UUID | None = None
     department_key: Literal["acquisitions", "dispositions", "general"] = "acquisitions"
     purpose_key: Literal[
         "seller_conversations", "buyer_relations", "company_general"
     ] = "seller_conversations"
     is_default: bool = False
     inbound_route: str = Field(default="conversation_owner", max_length=80)
+    ring_strategy: Literal["sequential", "simultaneous"] = "sequential"
     coverage_timezone: str = Field(default="America/New_York", min_length=3, max_length=80)
     coverage_start_hour: int = Field(default=9, ge=0, le=23)
     coverage_end_hour: int = Field(default=20, ge=1, le=24)
@@ -54,6 +65,7 @@ class VoiceLineCreate(BaseModel):
 class VoiceLineAssignmentUpdate(BaseModel):
     assigned_user_id: UUID | None = None
     fallback_user_id: UUID | None = None
+    assigned_team_id: UUID | None = None
     label: str | None = Field(default=None, min_length=1, max_length=120)
     department_key: Literal["acquisitions", "dispositions", "general"] | None = None
     purpose_key: Literal[
@@ -62,6 +74,7 @@ class VoiceLineAssignmentUpdate(BaseModel):
     status: str | None = Field(default=None, max_length=40)
     is_default: bool | None = None
     inbound_route: str | None = Field(default=None, max_length=80)
+    ring_strategy: Literal["sequential", "simultaneous"] | None = None
     coverage_timezone: str | None = Field(default=None, min_length=3, max_length=80)
     coverage_start_hour: int | None = Field(default=None, ge=0, le=23)
     coverage_end_hour: int | None = Field(default=None, ge=1, le=24)
@@ -73,6 +86,7 @@ class VoiceLineAssignmentUpdate(BaseModel):
 class VoiceLineListResponse(BaseModel):
     items: list[VoiceLineRead]
     users: list[VoiceLineUserRead]
+    teams: list[VoiceLineTeamRead]
 
 
 class VoiceSessionRead(BaseModel):
