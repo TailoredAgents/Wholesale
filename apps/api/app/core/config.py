@@ -707,9 +707,6 @@ class Settings(BaseSettings):
         for configured, variable in (
             (self.twilio_account_sid, "TWILIO_ACCOUNT_SID"),
             (self.twilio_auth_token, "TWILIO_AUTH_TOKEN"),
-            (self.twilio_api_key_sid, "TWILIO_API_KEY_SID"),
-            (self.twilio_api_key_secret, "TWILIO_API_KEY_SECRET"),
-            (self.twilio_twiml_app_sid, "TWILIO_TWIML_APP_SID"),
             (self.twilio_voice_from_number, "TWILIO_VOICE_FROM_NUMBER"),
             (self.twilio_webhook_base_url, "TWILIO_WEBHOOK_BASE_URL"),
         ):
@@ -717,6 +714,22 @@ class Settings(BaseSettings):
                 blockers.append(variable)
         if not self.twilio_validate_webhook_signatures:
             blockers.append("TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true")
+        return tuple(blockers)
+
+    @property
+    def twilio_browser_voice_configured(self) -> bool:
+        return not self.twilio_browser_voice_configuration_blockers
+
+    @property
+    def twilio_browser_voice_configuration_blockers(self) -> tuple[str, ...]:
+        blockers = list(self.twilio_voice_configuration_blockers)
+        for configured, variable in (
+            (self.twilio_api_key_sid, "TWILIO_API_KEY_SID"),
+            (self.twilio_api_key_secret, "TWILIO_API_KEY_SECRET"),
+            (self.twilio_twiml_app_sid, "TWILIO_TWIML_APP_SID"),
+        ):
+            if not configured:
+                blockers.append(variable)
         return tuple(blockers)
 
     @property

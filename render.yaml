@@ -250,10 +250,6 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
-      - key: TWILIO_API_KEY_SID
-        sync: false
-      - key: TWILIO_API_KEY_SECRET
-        sync: false
       - key: TWILIO_MESSAGING_SERVICE_SID
         sync: false
       - key: TWILIO_SMS_FROM_NUMBER
@@ -271,8 +267,6 @@ services:
       - key: TWILIO_VOICE_ENABLED
         sync: false
       - key: TWILIO_VOICE_FROM_NUMBER
-        sync: false
-      - key: TWILIO_TWIML_APP_SID
         sync: false
       - key: TWILIO_VOICE_TOKEN_TTL_SECONDS
         value: 3600

@@ -29,7 +29,7 @@ def create_voice_access_token(
     *,
     identity: str,
 ) -> tuple[str, datetime]:
-    if not settings.twilio_voice_configured:
+    if not settings.twilio_browser_voice_configured:
         raise TwilioVoiceConfigurationError("Twilio Voice is not fully configured.")
     assert settings.twilio_account_sid is not None
     assert settings.twilio_api_key_sid is not None
@@ -121,6 +121,25 @@ def outbound_call_twiml(
     return str(response)
 
 
+def forwarded_outbound_screen_twiml(settings: Settings, *, intent_id: str) -> str:
+    response = VoiceResponse()
+    gather = response.gather(
+        action=callback_url(
+            settings,
+            "/api/v1/webhooks/twilio/voice/forwarded-connect",
+            intent_id=intent_id,
+        ),
+        method="POST",
+        input="dtmf",
+        num_digits=1,
+        timeout=8,
+        action_on_empty_result=True,
+    )
+    gather.say("Stonegate outbound call. Press 1 to connect to the contact.")
+    response.hangup()
+    return str(response)
+
+
 def inbound_call_twiml(
     settings: Settings,
     *,
@@ -163,27 +182,7 @@ def inbound_call_twiml(
     for target in targets:
         if endpoint_count >= 10:
             break
-        dial.client(
-            target.identity,
-            url=callback_url(
-                settings,
-                "/api/v1/webhooks/twilio/voice/screen",
-                call_id=call_id,
-                answered_user_id=target.user_id,
-                mobile="false",
-            ),
-            method="POST",
-            status_callback=callback_url(
-                settings,
-                "/api/v1/webhooks/twilio/voice/status",
-                call_id=call_id,
-                answered_user_id=target.user_id,
-            ),
-            status_callback_event="initiated ringing answered completed",
-            status_callback_method="POST",
-        )
-        endpoint_count += 1
-        if target.forwarding_number is None or endpoint_count >= 10:
+        if target.forwarding_number is None:
             continue
         dial.number(
             target.forwarding_number,

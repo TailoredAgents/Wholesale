@@ -436,8 +436,7 @@ Using company-controlled addresses:
 - Twilio SMS adapter
 - signed inbound and delivery callbacks
 - STOP, START, suppression, consent, idempotency, and delivery state
-- browser Voice tokens and call intents
-- company lines, inbound routing, status history, and missed-call work
+- company lines, cellphone forwarding, inbound routing, status history, and missed-call work
 - recording callbacks, private media, disclosure state, retention, and deletion
 - OpenAI transcription, speaker segments, structured notes, and human review
 
@@ -460,11 +459,13 @@ acceptance remain. Another company's campaign, number, or webhooks must not be u
 ### Remaining Voice Actions
 
 1. Use Stonegate's dedicated Voice number.
-2. Create the API key SID and secret for browser tokens.
-3. Create the TwiML App and configure outbound instructions.
-4. Enter Voice values in Render.
-5. Configure inbound, status, dial-result, recording, and disclosure callbacks.
-6. Test browser registration, outbound, inbound, no-answer, missed-call work, and reassignment.
+2. Enter the Account SID, Auth Token, acquisitions number, webhook base URL, and Voice enablement
+   values in Render.
+3. Configure each number's inbound Voice webhook.
+4. Save Austin's and Devon's cellphone destinations and enable forwarding.
+5. Test simultaneous inbound ringing, press-1 acceptance, no-answer, voicemail, missed-call work,
+   and reassignment.
+6. Test outbound cellphone bridging, Stonegate caller ID, and conversation history.
 7. Keep recording disabled until the Owner approves the disclosure and retention behavior.
 8. When approved, test recording, transcription, review, private access, and deletion.
 

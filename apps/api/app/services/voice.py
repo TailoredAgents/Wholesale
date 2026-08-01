@@ -13,12 +13,19 @@ from app.integrations.twilio_voice import (
     InboundVoiceTarget,
     call_screen_result_twiml,
     call_screen_twiml,
+    callback_url,
     create_voice_access_token,
+    forwarded_outbound_screen_twiml,
     hangup_twiml,
     inbound_call_twiml,
     outbound_call_twiml,
-    voicemail_twiml,
     voice_identity,
+    voicemail_twiml,
+)
+from app.integrations.twilio_voice_calls import (
+    TwilioVoiceCallError,
+    TwilioVoiceCallProvider,
+    get_twilio_voice_call_provider,
 )
 from app.models.foundation import (
     ActivityEvent,
@@ -29,9 +36,9 @@ from app.models.foundation import (
     CallTranscript,
     CommunicationProviderEvent,
     CommunicationRecord,
+    ConsentRecord,
     Contact,
     ContactMethod,
-    ConsentRecord,
     Conversation,
     ConversationContextLink,
     Lead,
@@ -250,7 +257,7 @@ def get_voice_provider_readiness(
     checks = [
         VoiceReadinessCheckRead(
             key="environment",
-            label="Render Voice configuration",
+            label="Twilio forwarding configuration",
             required=True,
             ready=not environment_blockers,
             detail=(
@@ -283,13 +290,13 @@ def get_voice_provider_readiness(
         ),
         VoiceReadinessCheckRead(
             key="ownership",
-            label="Primary and fallback coverage",
+            label="Primary and fallback staff",
             required=True,
             ready=bool(line_read and line_read.ownership_complete),
             detail=(
-                "Both active owners are assigned."
+                "Both assigned staff members have cellphone forwarding enabled."
                 if line_read and line_read.ownership_complete
-                else "Select two different active users as primary and fallback."
+                else "Assign primary and fallback staff, then save both cellphone destinations."
             ),
         ),
         VoiceReadinessCheckRead(
@@ -491,8 +498,8 @@ def create_voice_session(
     identity = voice_identity(str(principal.user_id))
     line = select_voice_line(db, principal.organization_id, principal.user_id)
     blockers: list[str] = []
-    if not settings.twilio_voice_configured:
-        blockers.append("Twilio Voice is not configured.")
+    if not settings.twilio_browser_voice_configured:
+        blockers.append("Browser calling is disabled. Stonegate calls use staff cellphones.")
     if line is None:
         blockers.append("No active Stonegate voice line is available.")
     if blockers:
@@ -604,6 +611,136 @@ def create_call_intent(
     db.add(intent)
     db.commit()
     return call_intent_to_read(intent, line, settings)
+
+
+def start_forwarded_call(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+    payload: VoiceCallIntentCreate,
+    *,
+    provider: TwilioVoiceCallProvider | None = None,
+) -> VoiceCallIntentRead | None:
+    intent_read = create_call_intent(db, principal, conversation_id, payload)
+    if intent_read is None:
+        return None
+    intent = db.get(VoiceCallIntent, intent_read.id)
+    if intent is None:
+        return None
+    line = db.get(VoiceLine, intent.voice_line_id)
+    user = db.get(User, principal.user_id)
+    if line is None or line.status != "active":
+        raise VoiceConfigurationError("The Stonegate company line is unavailable.")
+    forwarding_number = format_e164(user.voice_forwarding_number or "") if user else None
+    if user is None or not user.voice_forwarding_enabled or forwarding_number is None:
+        raise VoiceConfigurationError(
+            "Add and enable your cellphone under Settings > Communications before calling."
+        )
+    if intent.status == "started" and intent.provider_call_id:
+        return call_intent_to_read(intent, line, get_settings())
+
+    settings = get_settings()
+    if not settings.twilio_voice_configured:
+        raise VoiceConfigurationError("Twilio cellphone calling is not configured.")
+    try:
+        result = (provider or get_twilio_voice_call_provider()).start(
+            to=forwarding_number,
+            from_number=line.phone_number,
+            twiml=forwarded_outbound_screen_twiml(settings, intent_id=str(intent.id)),
+            status_callback=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/status",
+                intent_id=str(intent.id),
+            ),
+        )
+    except TwilioVoiceCallError:
+        intent.status = "failed"
+        db.commit()
+        raise
+    communication, call = create_call_records(
+        db,
+        organization_id=intent.organization_id,
+        conversation_id=intent.conversation_id,
+        lead_id=intent.lead_id,
+        contact_id=intent.contact_id,
+        actor_user_id=intent.actor_user_id,
+        voice_line_id=line.id,
+        call_intent_id=intent.id,
+        provider_call_id=result.sid,
+        direction="outbound",
+        status=result.status,
+        from_number=line.phone_number,
+        to_number=intent.recipient,
+        recording_consent_status=intent.recording_consent_status,
+    )
+    conversation = db.get(Conversation, intent.conversation_id)
+    if conversation is None:
+        raise VoiceConfigurationError("Call conversation is unavailable.")
+    entity_type, entity_id = conversation_activity_entity(db, conversation)
+    db.add(
+        ActivityEvent(
+            organization_id=intent.organization_id,
+            actor_user_id=intent.actor_user_id,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=f"{entity_type}.call_started",
+            summary="Outbound call started through the Stonegate cellphone bridge.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=intent.organization_id,
+            actor_user_id=intent.actor_user_id,
+            actor_type="user",
+            action="communication.voice_call_start",
+            entity_type="call_record",
+            entity_id=call.id,
+            previous_value=None,
+            new_value={
+                "conversation_id": str(intent.conversation_id),
+                "communication_record_id": str(communication.id),
+                "from": line.phone_number,
+                "to": intent.recipient,
+            },
+            reason="Call initiated through the Stonegate cellphone bridge",
+        )
+    )
+    record_provider_event(
+        db,
+        organization_id=intent.organization_id,
+        conversation_id=intent.conversation_id,
+        event_type="voice.outbound.forwarded",
+        external_event_id=f"voice:outbound:{result.sid}",
+        payload={"CallSid": result.sid, "CallStatus": result.status},
+    )
+    intent.status = "started"
+    intent.consumed_at = datetime.now(UTC)
+    intent.provider_call_id = result.sid
+    db.commit()
+    return call_intent_to_read(intent, line, settings)
+
+
+def process_forwarded_voice_connect(
+    db: Session,
+    payload: dict[str, str],
+    *,
+    intent_id: UUID,
+) -> str:
+    intent = db.get(VoiceCallIntent, intent_id)
+    if intent is None or intent.status != "started":
+        raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
+    if payload.get("Digits") != "1":
+        return hangup_twiml()
+    line = db.get(VoiceLine, intent.voice_line_id)
+    if line is None or line.status != "active":
+        raise VoiceConfigurationError("Stonegate voice line is unavailable.")
+    return outbound_call_twiml(
+        get_settings(),
+        recipient=intent.recipient,
+        from_number=line.phone_number,
+        intent_id=str(intent.id),
+        recording_enabled=get_settings().twilio_voice_recording_configured,
+    )
 
 
 def process_outbound_voice_request(
@@ -726,7 +863,11 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
         targets = resolve_inbound_targets(db, target_user_ids)
         if not targets:
-            raise VoiceConfigurationError("No Stonegate user is available for this call.")
+            if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
+                return voicemail_twiml(settings, call_id=str(existing.id))
+            ensure_missed_call_task(db, existing)
+            db.commit()
+            return hangup_twiml("Stonegate is unavailable. We will return your call shortly.")
         update_call_routing_metadata(existing, line, targets)
         db.commit()
         return inbound_call_twiml(
@@ -809,7 +950,11 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         db.commit()
         return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
     if not targets:
-        raise VoiceConfigurationError("No Stonegate user is available for this call.")
+        if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
+            return voicemail_twiml(settings, call_id=str(call.id))
+        ensure_missed_call_task(db, call)
+        db.commit()
+        return hangup_twiml("Stonegate is unavailable. We will return your call shortly.")
     return inbound_call_twiml(
         settings,
         targets=targets,
@@ -1693,9 +1838,8 @@ def resolve_inbound_targets(
     user_ids: list[UUID],
 ) -> list[InboundVoiceTarget]:
     targets: list[InboundVoiceTarget] = []
-    endpoint_count = 0
     for user_id in user_ids:
-        if endpoint_count >= 10:
+        if len(targets) >= 10:
             break
         user = db.get(User, user_id)
         if user is None or not user.is_active:
@@ -1705,8 +1849,8 @@ def resolve_inbound_targets(
             if user.voice_forwarding_enabled
             else None
         )
-        if forwarding_number is not None and endpoint_count == 9:
-            forwarding_number = None
+        if forwarding_number is None:
+            continue
         targets.append(
             InboundVoiceTarget(
                 identity=voice_identity(str(user.id)),
@@ -1714,7 +1858,6 @@ def resolve_inbound_targets(
                 forwarding_number=forwarding_number,
             )
         )
-        endpoint_count += 1 + int(forwarding_number is not None)
     return targets
 
 
@@ -1723,7 +1866,7 @@ def update_call_routing_metadata(
     line: VoiceLine,
     targets: list[InboundVoiceTarget],
 ) -> None:
-    endpoint_count = sum(1 + int(target.forwarding_number is not None) for target in targets)
+    endpoint_count = sum(int(target.forwarding_number is not None) for target in targets)
     call.call_metadata = {
         **(call.call_metadata or {}),
         "routing_target_user_ids": [target.user_id for target in targets],
@@ -2046,8 +2189,12 @@ def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
         ownership_complete=bool(
             assigned_user
             and assigned_user.is_active
+            and assigned_user.voice_forwarding_enabled
+            and format_e164(assigned_user.voice_forwarding_number or "")
             and fallback_user
             and fallback_user.is_active
+            and fallback_user.voice_forwarding_enabled
+            and format_e164(fallback_user.voice_forwarding_number or "")
         ),
     )
 
@@ -2127,4 +2274,3 @@ def parse_int(value: str | None) -> int | None:
 
 def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
-    VoiceForwardingUpdate,

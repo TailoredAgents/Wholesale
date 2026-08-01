@@ -12,6 +12,7 @@ from app.integrations.twilio_voice import disclosure_twiml, hangup_twiml
 from app.services.messaging import process_twilio_inbound, process_twilio_status
 from app.services.voice import (
     VoiceConfigurationError,
+    process_forwarded_voice_connect,
     process_inbound_voice_request,
     process_outbound_voice_request,
     process_voice_dial_result,
@@ -102,6 +103,30 @@ async def twilio_inbound_voice(
     except VoiceConfigurationError:
         content = hangup_twiml("Stonegate is unavailable. Please try again shortly.")
     except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    return Response(content=content, media_type="application/xml")
+
+
+@router.post("/voice/forwarded-connect")
+async def twilio_forwarded_voice_connect(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
+    intent_id: UUID | None = None,
+) -> Response:
+    payload = await parse_twilio_form(request)
+    validate_request(request, payload, signature)
+    if intent_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Missing Stonegate call intent.",
+        )
+    try:
+        content = process_forwarded_voice_connect(db, payload, intent_id=intent_id)
+    except VoiceConfigurationError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),

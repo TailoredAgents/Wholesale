@@ -887,22 +887,21 @@ The Twilio Voice implementation supports:
 - company voice lines separated by department and purpose
 - primary, fallback, and optional department-team membership
 - conversation-owner-first routing with sequential or simultaneous ringing
-- mixed browser and private-cellphone ring groups with first-answer-wins behavior
+- private-cellphone forwarding groups with first-answer-wins behavior
 - department call announcements and press-1 cellphone screening
 - active-user filtering, duplicate removal, and answer attribution
 - line-specific coverage windows, after-hours handling, voicemail, and missed-call tasks
-- scoped browser access tokens
-- call intents tied to a conversation
-- shared outbound caller ID and number-aware inbound routing
+- outbound cellphone bridging with Stonegate caller ID and automatic conversation history
+- company-number-aware inbound routing
 - call status and dial result callbacks
 - missed-call tasks
 - private recordings
 - disclosure state
 - transcript review
 
-Voice requires the Account SID, Auth Token for webhooks, API key SID and secret for browser tokens,
-TwiML App SID, company number, and callback configuration. A single inbound webhook alone does not
-provide secure browser calling.
+Voice forwarding requires the Account SID, Auth Token, company number, inbound callback, active
+Stonegate line, and enabled staff cellphone destinations. Browser access tokens and a TwiML App
+are not required for this operating mode.
 
 ### 10.6 Call Intelligence
 

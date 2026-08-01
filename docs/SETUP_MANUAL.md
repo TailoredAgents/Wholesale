@@ -502,54 +502,45 @@ Do not use the consented seller-inquiry campaign for purchased-list cold text me
 
 ## Twilio Voice
 
-Twilio Voice needs more than a webhook because browser calling requires a short-lived device token.
-The Account SID and Auth Token identify and validate the account. The API Key SID and secret mint
-the browser token. The TwiML App tells Twilio where to request call instructions.
+Stonegate uses cellphone forwarding for Voice. The company-owned Twilio number receives the call,
+Stonegate chooses the responsible staff members, and Twilio rings their saved cellphones. Browser
+Voice, microphone access, API keys, and a TwiML App are not required.
 
 ### Setup Order
 
-1. In Twilio, open **Voice > Manage > TwiML Apps** and create **Stonegate Browser Voice**.
-2. Set its Voice request method to `POST` and URL to:
-   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`
-3. Under **API keys & tokens**, create a Stonegate API key. Copy its API Key SID and secret when
-   Twilio displays them; the secret is not shown again.
-4. Open the acquisitions number under **Phone Numbers > Manage > Active numbers**. Under Voice,
+1. Open the acquisitions number under **Phone Numbers > Manage > Active numbers**. Under Voice,
    set **A call comes in** to Webhook, `POST`:
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/incoming`
-5. If the number provides a call-status callback field, set it to `POST`:
+2. If the number provides a call-status callback field, set it to `POST`:
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/status`
-6. In **Settings > Communications**, select the Acquisitions team, Devon as primary, Austin as
-   fallback, **Conversation owner**, **Everyone at once**, the coverage window, and **Fallback,
-   then voicemail**. Repeat this ownership setup for the Dispositions line.
-7. On **oakwell-api** in Render, enter:
+3. Repeat those number-level settings for the dispositions number.
+4. On **oakwell-api** in Render, enter:
    - `TWILIO_VOICE_ENABLED=true`
    - `TWILIO_ACCOUNT_SID`
    - `TWILIO_AUTH_TOKEN`
-   - `TWILIO_API_KEY_SID`
-   - `TWILIO_API_KEY_SECRET`
-   - `TWILIO_TWIML_APP_SID`
    - `TWILIO_VOICE_FROM_NUMBER` using the acquisitions number in `+1...` format
    - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
    - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
-8. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for initial Voice acceptance. Voicemail uses its
+5. In **Settings > Communications**, select Austin and Devon as the primary and fallback staff,
+   choose **Everyone at once**, set the coverage window and **Fallback, then voicemail**, and save
+   both company lines.
+6. Under **Staff ring settings**, enter Austin's and Devon's cellphones in `+1...` format, enable
+   **Ring cellphone**, and save each person.
+7. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for initial Voice acceptance. Voicemail uses its
    own caller-initiated recording path.
-9. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
-   live Voice testing** before acceptance begins.
-10. Under **Staff ring settings**, enter Austin's and Devon's cellphones in `+1...` format, enable
-    **Ring cellphone**, and save each person. Inbound calls will ring each person's browser and
-    enabled cellphone together. Cellphone answers must press 1 before connecting.
+8. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
+   forwarded-call testing** before acceptance begins.
 
 ### Acceptance
 
-1. Confirm the browser phone registers.
-2. Place an outbound call to a controlled phone.
-3. Confirm the Stonegate number appears.
-4. Call each Stonegate number back and confirm both Austin and Devon ring simultaneously.
-5. Answer one test on a cellphone, confirm the department announcement, and press 1. Verify all
+1. Call each Stonegate number and confirm both Austin and Devon ring simultaneously.
+2. Answer one test on a cellphone, confirm the department announcement, and press 1. Verify all
    other devices stop ringing and the personal number is not exposed.
-6. Test no answer, missed call, voicemail, and call outcome.
-7. Confirm the call appears on the correct seller or buyer conversation.
-8. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
+3. Test no answer, missed call, voicemail, and call outcome.
+4. Confirm the inbound call appears on the correct seller or buyer conversation.
+5. From Inbox, select **Call > My cellphone**, answer the staff cellphone, press 1, and confirm the
+   seller sees the Stonegate company number.
+6. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
 
 ## DealMachine Buyer Data
 

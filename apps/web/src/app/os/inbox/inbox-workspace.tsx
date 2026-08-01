@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import type { Call, Device } from "@twilio/voice-sdk";
 import {
   ArrowRightLeft,
   Bot,
@@ -15,12 +14,9 @@ import {
   Mail,
   MailOpen,
   MessageSquare,
-  Mic,
-  MicOff,
   NotebookPen,
   Phone,
   PhoneCall,
-  PhoneOff,
   Play,
   Plus,
   Paperclip,
@@ -248,41 +244,6 @@ export type InboxFilterKey =
   | "unread";
 type MobilePane = "conversations" | "thread" | "details";
 type ComposerChannel = "sms" | "email" | "call" | "note";
-type VoiceStatus =
-  | "disabled"
-  | "loading"
-  | "ready"
-  | "connecting"
-  | "ringing"
-  | "incoming"
-  | "active"
-  | "ended"
-  | "error";
-
-type VoiceSession = {
-  can_initialize: boolean;
-  identity: string;
-  token: string | null;
-  expires_at: string | null;
-  line: {
-    id: string;
-    phone_number: string;
-    label: string;
-  } | null;
-  recording_enabled: boolean;
-  blockers: string[];
-};
-
-type VoiceCallIntent = {
-  id: string;
-  conversation_id: string;
-  recipient: string;
-  from_number: string;
-  status: string;
-  expires_at: string;
-  recording_enabled: boolean;
-};
-
 const filters: Array<{
   key: InboxFilterKey;
   label: string;
@@ -689,8 +650,6 @@ export function InboxWorkspace({
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
-  const voiceDeviceRef = useRef<Device | null>(null);
-  const activeCallRef = useRef<Call | null>(null);
   const recordingUrlsRef = useRef<Record<string, string>>({});
   const initialSelectionAppliedRef = useRef(false);
   const [me, setMe] = useState<Me | null>(null);
@@ -717,7 +676,7 @@ export function InboxWorkspace({
   const [search, setSearch] = useState("");
   const [mobilePane, setMobilePane] = useState<MobilePane>("conversations");
   const [channel, setChannel] = useState<ComposerChannel>("sms");
-  const [callComposerMode, setCallComposerMode] = useState<"browser" | "log">("browser");
+  const [callComposerMode, setCallComposerMode] = useState<"device" | "log">("device");
   const [direction, setDirection] = useState<"inbound" | "outbound">("outbound");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
@@ -726,16 +685,12 @@ export function InboxWorkspace({
   const [error, setError] = useState<string | null>(null);
   const [composerStatus, setComposerStatus] = useState<"idle" | "saving" | "saved">("idle");
   const [handoffStatus, setHandoffStatus] = useState<"idle" | "saving" | "saved">("idle");
+  const [forwardedCallStatus, setForwardedCallStatus] = useState<
+    "idle" | "starting" | "started"
+  >("idle");
   const [assigneeId, setAssigneeId] = useState("");
   const [queueKey, setQueueKey] = useState("acquisitions_follow_up");
   const [handoffReason, setHandoffReason] = useState("Reassigned from the shared inbox.");
-  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("disabled");
-  const [voiceSession, setVoiceSession] = useState<VoiceSession | null>(null);
-  const [voiceMessage, setVoiceMessage] = useState("Calling is off");
-  const [voiceCaller, setVoiceCaller] = useState<string | null>(null);
-  const [callStartedAt, setCallStartedAt] = useState<number | null>(null);
-  const [callElapsed, setCallElapsed] = useState(0);
-  const [callMuted, setCallMuted] = useState(false);
   const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
   const [recordingLoadingId, setRecordingLoadingId] = useState<string | null>(null);
   const [recordingDeleteTarget, setRecordingDeleteTarget] = useState<string | null>(null);
@@ -898,118 +853,8 @@ export function InboxWorkspace({
     [loadConversations, loadDetail, request, selectedId],
   );
 
-  const finishCall = useCallback(() => {
-    activeCallRef.current = null;
-    setCallStartedAt(null);
-    setCallElapsed(0);
-    setCallMuted(false);
-    setVoiceCaller(null);
-    setVoiceStatus("ended");
-    setVoiceMessage("Call ended");
-    const conversationId = selectedId;
-    window.setTimeout(() => {
-      setVoiceStatus((current) => (current === "ended" ? "ready" : current));
-      setVoiceMessage((current) => (current === "Call ended" ? "Ready for calls" : current));
-    }, 1600);
-    if (conversationId) {
-      void Promise.all([loadConversations(), loadDetail(conversationId)]);
-    }
-  }, [loadConversations, loadDetail, selectedId]);
-
-  const wireCall = useCallback(
-    (call: Call, incoming: boolean) => {
-      activeCallRef.current = call;
-      call.on("ringing", () => {
-        setVoiceStatus("ringing");
-        setVoiceMessage(incoming ? "Incoming call" : "Ringing seller");
-      });
-      call.on("accept", () => {
-        setVoiceStatus("active");
-        setVoiceMessage("Call connected");
-        setCallStartedAt(Date.now());
-      });
-      call.on("disconnect", finishCall);
-      call.on("cancel", finishCall);
-      call.on("reject", finishCall);
-      call.on("error", (callError: Error) => {
-        setVoiceStatus("error");
-        setVoiceMessage(callError.message || "Call failed");
-        setError(callError.message || "Twilio could not complete the call.");
-        activeCallRef.current = null;
-      });
-    },
-    [finishCall],
-  );
-
-  const enableCalling = useCallback(async (): Promise<Device | null> => {
-    if (voiceDeviceRef.current) return voiceDeviceRef.current;
-    setVoiceStatus("loading");
-    setVoiceMessage("Connecting secure phone");
-    try {
-      const session = await request<VoiceSession>("/api/v1/voice/session");
-      setVoiceSession(session);
-      if (!session.can_initialize || !session.token) {
-        const message = session.blockers.join(" ") || "Calling is not available.";
-        setVoiceStatus("disabled");
-        setVoiceMessage(message);
-        setError(message);
-        return null;
-      }
-      const { Device: TwilioDevice } = await import("@twilio/voice-sdk");
-      if (!TwilioDevice.isSupported) {
-        throw new Error("This browser does not support secure browser calling.");
-      }
-      const device = new TwilioDevice(session.token, {
-        closeProtection: "A Stonegate call is still active.",
-        tokenRefreshMs: 60_000,
-      });
-      device.on("registered", () => {
-        setVoiceStatus("ready");
-        setVoiceMessage(`Ready on ${session.line?.phone_number ?? "Stonegate line"}`);
-      });
-      device.on("unregistered", () => {
-        setVoiceStatus("disabled");
-        setVoiceMessage("Calling is off");
-      });
-      device.on("error", (deviceError: Error) => {
-        setVoiceStatus("error");
-        setVoiceMessage(deviceError.message || "Phone connection failed");
-        setError(deviceError.message || "Twilio Voice could not connect.");
-      });
-      device.on("incoming", (call: Call) => {
-        const caller =
-          call.parameters.From || call.customParameters.get("From") || "Unknown caller";
-        setVoiceCaller(caller);
-        setVoiceStatus("incoming");
-        setVoiceMessage("Incoming Stonegate call");
-        wireCall(call, true);
-      });
-      device.on("tokenWillExpire", async () => {
-        try {
-          const refreshed = await request<VoiceSession>("/api/v1/voice/session");
-          if (refreshed.token) {
-            device.updateToken(refreshed.token);
-            setVoiceSession(refreshed);
-          }
-        } catch {
-          setError("The phone session could not be refreshed. Finish the call and reconnect.");
-        }
-      });
-      voiceDeviceRef.current = device;
-      await device.register();
-      return device;
-    } catch (voiceError) {
-      const message =
-        voiceError instanceof Error ? voiceError.message : "Unable to initialize browser calling.";
-      setVoiceStatus("error");
-      setVoiceMessage(message);
-      setError(message);
-      return null;
-    }
-  }, [request, wireCall]);
-
   const startCall = useCallback(async () => {
-    if (!detail || activeCallRef.current) return;
+    if (!detail || forwardedCallStatus === "starting") return;
     const canPlaceCalls =
       me?.permissions.includes("communications:place_calls") ||
       (me?.permissions.includes("communications:place_assigned_calls") &&
@@ -1023,32 +868,24 @@ export function InboxWorkspace({
       return;
     }
     setError(null);
-    const device = voiceDeviceRef.current ?? (await enableCalling());
-    if (!device) return;
+    setChannel("call");
+    setCallComposerMode("device");
+    setForwardedCallStatus("starting");
     try {
-      setVoiceCaller(detail.preferred_name || detail.seller_name);
-      setCallElapsed(0);
-      setVoiceStatus("connecting");
-      setVoiceMessage(`Calling ${detail.voice_eligibility.recipient}`);
-      const intent = await request<VoiceCallIntent>(
-        `/api/v1/voice/conversations/${detail.id}/call-intents`,
-        {
-          method: "POST",
-          body: JSON.stringify({ idempotency_key: window.crypto.randomUUID() }),
-        },
-      );
-      const call = await device.connect({
-        params: { CallIntentId: intent.id },
+      await request(`/api/v1/voice/conversations/${detail.id}/forwarded-calls`, {
+        method: "POST",
+        body: JSON.stringify({ idempotency_key: window.crypto.randomUUID() }),
       });
-      wireCall(call, false);
-    } catch (voiceError) {
-      const message = voiceError instanceof Error ? voiceError.message : "Call could not start.";
-      setVoiceStatus("error");
-      setVoiceMessage(message);
-      setVoiceCaller(null);
-      setError(message);
+      setForwardedCallStatus("started");
+      window.setTimeout(() => setForwardedCallStatus("idle"), 5000);
+      window.setTimeout(() => {
+        void Promise.all([loadConversations(), loadDetail(detail.id)]);
+      }, 1200);
+    } catch (callError) {
+      setForwardedCallStatus("idle");
+      setError(callError instanceof Error ? callError.message : "Call could not start.");
     }
-  }, [detail, enableCalling, me, request, wireCall]);
+  }, [detail, forwardedCallStatus, loadConversations, loadDetail, me, request]);
 
   const loadRecording = useCallback(
     async (recordingId: string) => {
@@ -1161,21 +998,8 @@ export function InboxWorkspace({
     timelineEndRef.current?.scrollIntoView({ block: "end" });
   }, [detail?.id, detail?.timeline.length]);
 
-  useEffect(() => {
-    if (voiceStatus !== "active" || callStartedAt === null) {
-      return;
-    }
-    const updateElapsed = () => {
-      setCallElapsed(Math.max(0, Math.floor((Date.now() - callStartedAt) / 1000)));
-    };
-    updateElapsed();
-    const interval = window.setInterval(updateElapsed, 1000);
-    return () => window.clearInterval(interval);
-  }, [callStartedAt, voiceStatus]);
-
   useEffect(
     () => () => {
-      voiceDeviceRef.current?.destroy();
       for (const url of Object.values(recordingUrlsRef.current)) {
         URL.revokeObjectURL(url);
       }
@@ -1265,8 +1089,7 @@ export function InboxWorkspace({
   const nextTask = detail?.open_tasks[0];
   const isLiveSms = channel === "sms" && direction === "outbound";
   const isLiveEmail = channel === "email";
-  const isVoiceComposer = channel === "call" && callComposerMode === "browser";
-  const isCallInProgress = ["connecting", "ringing", "incoming", "active"].includes(voiceStatus);
+  const isVoiceComposer = channel === "call" && callComposerMode === "device";
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
@@ -1368,31 +1191,6 @@ export function InboxWorkspace({
           : "The attachment could not be downloaded.",
       );
     }
-  }
-
-  function acceptIncomingCall() {
-    const call = activeCallRef.current;
-    if (!call) return;
-    call.accept();
-    setVoiceStatus("connecting");
-    setVoiceMessage("Connecting call");
-  }
-
-  function rejectIncomingCall() {
-    activeCallRef.current?.reject();
-    finishCall();
-  }
-
-  function endActiveCall() {
-    activeCallRef.current?.disconnect();
-  }
-
-  function toggleCallMute() {
-    const call = activeCallRef.current;
-    if (!call) return;
-    const nextMuted = !callMuted;
-    call.mute(nextMuted);
-    setCallMuted(nextMuted);
   }
 
   async function submitCommunication(event: FormEvent<HTMLFormElement>) {
@@ -1539,19 +1337,6 @@ export function InboxWorkspace({
             </button>
           ) : null}
           <button
-            className={styles.phoneStatusButton}
-            data-status={voiceStatus}
-            disabled={voiceStatus === "loading"}
-            onClick={() => void enableCalling()}
-            title={voiceMessage}
-            type="button"
-          >
-            <PhoneCall size={16} aria-hidden="true" />
-            {voiceStatus === "disabled" || voiceStatus === "error"
-              ? "Enable calling"
-              : voiceMessage}
-          </button>
-          <button
             className={styles.refreshButton}
             onClick={() => void refreshInbox()}
             type="button"
@@ -1561,75 +1346,6 @@ export function InboxWorkspace({
           </button>
         </div>
       </header>
-
-      {["connecting", "ringing", "incoming", "active"].includes(voiceStatus) ? (
-        <section className={styles.callDock} aria-live="polite">
-          <span className={styles.callDockIcon}>
-            <PhoneCall size={18} aria-hidden="true" />
-          </span>
-          <div>
-            <strong>{voiceCaller || "Stonegate call"}</strong>
-            <span>
-              {voiceMessage}
-              {voiceStatus === "active" ? ` · ${formatDuration(callElapsed)}` : ""}
-            </span>
-          </div>
-          <div className={styles.callDockActions}>
-            {voiceStatus === "incoming" ? (
-              <>
-                <button
-                  className={styles.acceptCallButton}
-                  onClick={acceptIncomingCall}
-                  title="Answer call"
-                  type="button"
-                >
-                  <Phone size={17} aria-hidden="true" />
-                  <span className={styles.visuallyHidden}>Answer call</span>
-                </button>
-                <button
-                  className={styles.endCallButton}
-                  onClick={rejectIncomingCall}
-                  title="Decline call"
-                  type="button"
-                >
-                  <PhoneOff size={17} aria-hidden="true" />
-                  <span className={styles.visuallyHidden}>Decline call</span>
-                </button>
-              </>
-            ) : (
-              <>
-                {voiceStatus === "active" ? (
-                  <button
-                    className={styles.muteCallButton}
-                    data-muted={callMuted}
-                    onClick={toggleCallMute}
-                    title={callMuted ? "Unmute microphone" : "Mute microphone"}
-                    type="button"
-                  >
-                    {callMuted ? (
-                      <MicOff size={17} aria-hidden="true" />
-                    ) : (
-                      <Mic size={17} aria-hidden="true" />
-                    )}
-                    <span className={styles.visuallyHidden}>
-                      {callMuted ? "Unmute microphone" : "Mute microphone"}
-                    </span>
-                  </button>
-                ) : null}
-                <button
-                  className={styles.endCallButton}
-                  onClick={endActiveCall}
-                  title="End call"
-                  type="button"
-                >
-                  <PhoneOff size={17} aria-hidden="true" />
-                  <span className={styles.visuallyHidden}>End call</span>
-                </button>
-              </>
-            )}
-          </div>
-        </section>
-      ) : null}
 
       {error ? (
         <div className={styles.errorBanner} role="alert">
@@ -1866,9 +1582,9 @@ export function InboxWorkspace({
                 <div className={styles.contactActions}>
                   {primaryPhone ? (
                     <button
-                      disabled={isCallInProgress}
+                      disabled={forwardedCallStatus === "starting"}
                       onClick={() => void startCall()}
-                      title={`Call ${primaryPhone.value} from Stonegate`}
+                      title={`Call ${primaryPhone.value} through Stonegate`}
                       type="button"
                     >
                       <Phone size={17} aria-hidden="true" />
@@ -2131,13 +1847,13 @@ export function InboxWorkspace({
                       <div className={styles.callModeToggle}>
                         <button
                           className={
-                            callComposerMode === "browser" ? styles.activeDirection : undefined
+                            callComposerMode === "device" ? styles.activeDirection : undefined
                           }
-                          onClick={() => setCallComposerMode("browser")}
+                          onClick={() => setCallComposerMode("device")}
                           type="button"
                         >
                           <PhoneCall size={13} aria-hidden="true" />
-                          Browser
+                          My cellphone
                         </button>
                         <button
                           className={
@@ -2147,7 +1863,7 @@ export function InboxWorkspace({
                           type="button"
                         >
                           <NotebookPen size={13} aria-hidden="true" />
-                          Log external
+                          Log call
                         </button>
                       </div>
                       {callComposerMode === "log" ? (
@@ -2424,22 +2140,21 @@ export function InboxWorkspace({
                       )}
                       <span>
                         {detail.voice_eligibility.can_call
-                          ? `Call ${detail.voice_eligibility.recipient} from ${
-                              voiceSession?.line?.phone_number || "the Stonegate line"
-                            }`
+                          ? forwardedCallStatus === "started"
+                            ? "Answer your cellphone and press 1 to connect."
+                            : `Ready to call ${detail.voice_eligibility.recipient}`
                           : detail.voice_eligibility.blockers.join(" ")}
                       </span>
                     </div>
                     <button
                       disabled={
-                        !detail.voice_eligibility.can_call ||
-                        ["connecting", "ringing", "incoming", "active"].includes(voiceStatus)
+                        !detail.voice_eligibility.can_call || forwardedCallStatus === "starting"
                       }
                       onClick={() => void startCall()}
                       type="button"
                     >
                       <PhoneCall size={17} aria-hidden="true" />
-                      {voiceStatus === "loading" ? "Connecting phone" : "Call seller"}
+                      {forwardedCallStatus === "starting" ? "Calling your cellphone" : "Call seller"}
                     </button>
                   </div>
                 ) : (

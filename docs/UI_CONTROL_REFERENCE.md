@@ -661,7 +661,6 @@ history into separate channel threads.
 | Search | Finds a conversation by seller, property, phone, email, or message context | Searches visible records only |
 | Conversation row | Opens the unified timeline and seller detail panel | Requires conversation access |
 | **Compose** | Opens the global email composer without requiring a property lead | Requires outbound email permission and an active sender |
-| **Enable calling** | Initializes the browser phone | Requires configured Twilio Voice and microphone access |
 | **Refresh** | Reloads conversation and provider status | Available while Inbox is open |
 | Mobile **Inbox / Thread / Details** | Changes the active pane on narrow screens | Mobile layout only |
 
@@ -685,7 +684,7 @@ history into separate channel threads.
 | --- | --- | --- |
 | **SMS** | Selects text-message composition | Requires SMS consent, a routable phone number, and configured Twilio SMS |
 | **Email** | Selects email composition | Requires an active Resend sender and recipient email |
-| **Call** | Opens browser or external call options | Requires a seller phone number |
+| **Call** | Opens device calling or manual call logging | Requires a seller phone number |
 | **Note** | Creates an internal timeline note | Requires conversation edit access |
 | Inbound / Outbound | Records direction when manually logging a communication | Manual logging only |
 | Sender address | Chooses an authorized personal or shared email address | Only granted addresses appear |
@@ -699,16 +698,13 @@ history into separate channel threads.
 | **Send** | Sends the selected external message | Disabled when provider, consent, sender, recipient, or content requirements fail |
 | **Save note / Log communication** | Adds an internal or manually logged event | Does not contact the seller |
 
-### Browser Calling
+### Cellphone Calling
 
 | Control | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **Call in browser** | Starts an outbound call in Stonegate | Requires an enabled voice token, microphone permission, and configured number |
-| **Call externally** | Opens the device's phone handler | The resulting call must be logged or matched by provider event |
-| **Answer** | Accepts an inbound browser call | Appears only while ringing |
-| **Decline** | Rejects the inbound call | Appears only while ringing |
-| **Mute / Unmute** | Changes local microphone state | Active browser call only |
-| **End call** | Ends the current call | Active call only |
+| **My cellphone** | Selects Stonegate's Twilio cellphone bridge | Requires the employee's enabled forwarding number |
+| **Call seller** | Calls the employee first; pressing 1 connects the seller with Stonegate caller ID | Requires configured Twilio Voice and an active department line |
+| **Log call** | Opens the manual inbound/outbound call record form | Logging does not itself place a call |
 | Call outcome | Records answered, voicemail, missed, no answer, or other disposition | Required by the active workflow when shown |
 
 ### Assignment And Handoff
@@ -766,23 +762,22 @@ Voice-line administration is shown below Email Administration at `/os/settings/c
 only to owners and users with `communications:manage_voice_lines`.
 
 The Voice readiness panel above the line editor checks Render variables, webhook validation, the
-active acquisitions number, number matching, and primary/fallback ownership. Its copy buttons
-provide the number-level inbound webhook and the separate TwiML App outbound URL without exposing
-credentials.
+active acquisitions number, number matching, and primary/fallback cellphone coverage. Its copy
+button provides the number-level inbound webhook without exposing credentials.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Staff cellphone | Stores an employee's private forwarding destination | Enter in `+1...` format; never shown to sellers or buyers |
-| Ring cellphone | Adds that cellphone beside the employee's browser phone | Requires a valid cellphone; answering requires pressing 1 |
+| Ring cellphone | Adds that cellphone to the company line's forwarding group | Requires a valid cellphone; answering requires pressing 1 |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |
 | Fallback owner | Records the second responsible employee when the owner or primary is unavailable | Must differ from the primary owner |
 | Department team | Adds active team members to the shared ring group and grants them use of the line | Optional; manage membership under People & Access |
-| Ring strategy | Rings targets in owner-first order or rings all browser/cellphone destinations simultaneously | Twilio supports up to 10 total destinations per call |
+| Ring strategy | Rings staff cellphones in owner-first order or all simultaneously | Twilio supports up to 10 total destinations per call |
 | Coverage starts / ends / timezone | Defines the staffed window enforced during inbound routing | Outside the window, Stonegate applies the missed-call plan |
 | Missed-call plan | Chooses voicemail or urgent-task behavior after no answer or outside coverage | Fallback targets are included in the ring sequence before voicemail |
-| Ownership ready | Confirms both an active primary and active fallback are assigned | Does not mean Twilio provider acceptance has passed |
+| Ownership ready | Confirms primary and fallback staff both have forwarding enabled | Does not mean Twilio provider acceptance has passed |
 | Label | Names the line by purpose or seat | Required |
 | Status | Activates or deactivates routing through the line | Deactivation preserves call history |
 | Inbound route | Starts routing with the conversation owner or the line's primary owner | Then includes active team members and fallback without duplicates |

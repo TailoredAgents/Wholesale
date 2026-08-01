@@ -83,26 +83,6 @@
   gap: 8px;
 }
 
-.phoneStatusButton {
-  min-height: 38px;
-  max-width: 260px;
-  padding: 0 12px;
-  border: 1px solid #c6d9cd;
-  border-radius: 7px;
-  background: var(--brand-soft);
-  color: var(--brand-strong);
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  overflow: hidden;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
 .emailStatusButton {
   min-height: 38px;
   padding: 0 12px;
@@ -124,94 +104,6 @@
   border-color: #c6d9cd;
   background: var(--brand-soft);
   color: var(--brand-strong);
-}
-
-.phoneStatusButton[data-status="disabled"],
-.phoneStatusButton[data-status="error"] {
-  border-color: var(--line);
-  background: var(--surface);
-  color: var(--text-soft);
-}
-
-.phoneStatusButton:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-
-.callDock {
-  width: min(640px, 100%);
-  min-height: 58px;
-  margin: 0 auto 12px;
-  padding: 9px 10px;
-  border: 1px solid #bcd4c5;
-  border-radius: 8px;
-  background: #f2f8f4;
-  box-shadow: var(--shadow-soft);
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.callDockIcon {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--brand);
-  color: #fff;
-  display: grid;
-  place-items: center;
-}
-
-.callDock > div:not(.callDockActions) {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.callDock strong {
-  overflow: hidden;
-  font-size: 13px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.callDock span {
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 750;
-}
-
-.callDockActions {
-  display: flex;
-  gap: 7px;
-}
-
-.callDockActions button {
-  width: 36px;
-  height: 36px;
-  border: 0;
-  border-radius: 50%;
-  color: #fff;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-
-.acceptCallButton {
-  background: var(--brand);
-}
-
-.endCallButton {
-  background: var(--danger);
-}
-
-.muteCallButton {
-  background: #5d6862;
-}
-
-.muteCallButton[data-muted="true"] {
-  background: var(--amber);
 }
 
 .errorBanner {
@@ -2228,13 +2120,6 @@
     gap: 5px;
   }
 
-  .phoneStatusButton {
-    width: 38px;
-    padding: 0;
-    justify-content: center;
-    font-size: 0;
-  }
-
   .emailStatusButton {
     width: 38px;
     padding: 0;
@@ -2247,11 +2132,6 @@
     padding: 0;
     justify-content: center;
     font-size: 0;
-  }
-
-  .callDock {
-    width: 100%;
-    border-radius: 7px;
   }
 
   .inboxFrame {

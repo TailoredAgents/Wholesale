@@ -283,7 +283,7 @@ export function VoiceLineSettings() {
         <div className={styles.voiceReadiness} data-ready={readiness.configured}>
           <div className={styles.voiceReadinessHeading}>
             <div>
-              <strong>{readiness.configured ? "Ready for live Voice testing" : "Voice setup incomplete"}</strong>
+              <strong>{readiness.configured ? "Ready for forwarded-call testing" : "Voice setup incomplete"}</strong>
               <small>{readiness.line_phone_number ?? "No active acquisitions line"}</small>
             </div>
             {readiness.configured ? (
@@ -308,10 +308,7 @@ export function VoiceLineSettings() {
             ))}
           </div>
           <div className={styles.voiceUrls}>
-            {[
-              ["Number Voice webhook", readiness.inbound_webhook_url],
-              ["TwiML App Voice URL", readiness.outbound_twiml_app_url],
-            ].map(([label, value]) => (
+            {[["Number Voice webhook", readiness.inbound_webhook_url]].map(([label, value]) => (
               <div key={label}>
                 <span><strong>{label}</strong><code>{value}</code></span>
                 <button

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
 
 from app.core.config import get_settings
+from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
     AuditEvent,
@@ -103,6 +104,10 @@ def seed_voice_lead(db: Session, client: TestClient) -> Conversation:
     assert conversation is not None
     line = db.scalar(select(VoiceLine))
     assert line is not None
+    owner = db.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550100"
+    owner.voice_forwarding_enabled = True
     line.coverage_start_hour = 0
     line.coverage_end_hour = 24
     db.commit()
@@ -182,6 +187,20 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     acquisitions_line = line_payload["items"][0]
     owner = next(user for user in line_payload["users"] if user["email"] == OWNER_EMAIL)
     assert any(user["id"] == devon["id"] for user in line_payload["users"])
+
+    for user_id, cellphone in (
+        (owner["id"], "+14045550100"),
+        (devon["id"], "+14045550101"),
+    ):
+        forwarding_response = client.patch(
+            f"/api/v1/voice/users/{user_id}/forwarding",
+            headers=headers,
+            json={
+                "voice_forwarding_number": cellphone,
+                "voice_forwarding_enabled": True,
+            },
+        )
+        assert forwarding_response.status_code == 200, forwarding_response.text
 
     update_response = client.patch(
         f"/api/v1/voice/lines/{acquisitions_line['id']}",
@@ -267,7 +286,8 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     }
     inbound_response = post_signed(client, inbound_path, inbound_payload)
     assert inbound_response.status_code == 200, inbound_response.text
-    assert f"stonegate_{str(devon['id']).replace('-', '')}" in inbound_response.text
+    assert "+14045550101" in inbound_response.text
+    assert "<Client " not in inbound_response.text
 
 
 def test_shared_line_rings_multiple_users_and_attributes_the_answer(
@@ -276,7 +296,7 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     voice_settings: None,
 ) -> None:
     client = TestClient(app)
-    conversation = seed_voice_lead(db_session, client)
+    seed_voice_lead(db_session, client)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
     devon_response = client.post(
         "/api/v1/operations/users",
@@ -353,27 +373,14 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     )
 
     assert inbound.status_code == 200, inbound.text
-    assert inbound.text.count("<Client ") == 2
+    assert "<Client " not in inbound.text
     assert inbound.text.count("<Number ") == 2
     assert "/voice/screen" in inbound.text
     assert 'sequential="false"' in inbound.text
     call = db_session.scalar(select(CallRecord))
     assert call is not None
     assert call.call_metadata["ring_user_count"] == 2
-    assert call.call_metadata["ring_target_count"] == 4
-
-    browser_screen_path = (
-        f"/api/v1/webhooks/twilio/voice/screen?call_id={call.id}"
-        f"&answered_user_id={owner['id']}&mobile=false"
-    )
-    browser_screen = post_signed(
-        client,
-        browser_screen_path,
-        {"CallSid": "CA00000000000000000000000000000085"},
-    )
-    assert browser_screen.status_code == 200, browser_screen.text
-    assert "Stonegate acquisitions call" in browser_screen.text
-    assert "Press 1" not in browser_screen.text
+    assert call.call_metadata["ring_target_count"] == 2
 
     mobile_screen_path = (
         f"/api/v1/webhooks/twilio/voice/screen?call_id={call.id}"
@@ -542,6 +549,58 @@ def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     assert call_intent.status == "started"
 
 
+def test_forwarded_outbound_call_rings_staff_then_connects_seller(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    class FakeVoiceProvider:
+        def __init__(self) -> None:
+            self.request: dict[str, str] = {}
+
+        def start(self, **kwargs: str) -> TwilioVoiceCallResult:
+            self.request = kwargs
+            return TwilioVoiceCallResult(
+                sid="CA00000000000000000000000000000090",
+                status="queued",
+            )
+
+    fake_provider = FakeVoiceProvider()
+    monkeypatch.setattr(
+        "app.services.voice.get_twilio_voice_call_provider",
+        lambda: fake_provider,
+    )
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    response = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/forwarded-calls",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"idempotency_key": "forwarded-call-request-0001"},
+    )
+
+    assert response.status_code == 201, response.text
+    intent = response.json()
+    assert intent["status"] == "started"
+    assert fake_provider.request["to"] == "+14045550100"
+    assert fake_provider.request["from_number"] == STONEGATE_NUMBER
+    assert "Press 1 to connect" in fake_provider.request["twiml"]
+
+    connect_path = (
+        "/api/v1/webhooks/twilio/voice/forwarded-connect"
+        f"?intent_id={intent['id']}"
+    )
+    connected = post_signed(
+        client,
+        connect_path,
+        {"CallSid": "CA00000000000000000000000000000090", "Digits": "1"},
+    )
+    assert connected.status_code == 200, connected.text
+    assert SELLER_NUMBER in connected.text
+    assert f'callerId="{STONEGATE_NUMBER}"' in connected.text
+    assert db_session.scalar(select(func.count()).select_from(CallRecord)) == 1
+
+
 def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
     db_session: Session,
     api_db_override: None,
@@ -557,7 +616,8 @@ def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
     inbound_path = "/api/v1/webhooks/twilio/voice/incoming"
     inbound = post_signed(client, inbound_path, inbound_payload)
     assert inbound.status_code == 200
-    assert "<Client " in inbound.text
+    assert "<Client " not in inbound.text
+    assert "<Number " in inbound.text
 
     call = db_session.scalar(select(CallRecord))
     assert call is not None

@@ -12,6 +12,7 @@ from app.integrations.twilio_recordings import (
     TwilioRecordingError,
     download_twilio_recording,
 )
+from app.integrations.twilio_voice_calls import TwilioVoiceCallError
 from app.schemas.voice import (
     CallTranscriptRead,
     CallTranscriptReview,
@@ -39,11 +40,12 @@ from app.services.voice import (
     delete_recording,
     get_scoped_recording,
     get_voice_provider_readiness,
-    list_voice_lines,
     list_voice_line_teams,
     list_voice_line_users,
-    update_voice_line,
+    list_voice_lines,
+    start_forwarded_call,
     update_user_voice_forwarding,
+    update_voice_line,
 )
 
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
@@ -81,6 +83,34 @@ def create_conversation_call_intent(
             detail=str(exc),
         ) from exc
     except VoiceConfigurationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except VoiceIntentConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if intent is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return intent
+
+
+@router.post("/conversations/{conversation_id}/forwarded-calls", status_code=201)
+def create_forwarded_conversation_call(
+    conversation_id: UUID,
+    payload: VoiceCallIntentCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(call_dependency)],
+) -> VoiceCallIntentRead:
+    try:
+        intent = start_forwarded_call(db, principal, conversation_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except VoiceComplianceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except (VoiceConfigurationError, TwilioVoiceCallError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),

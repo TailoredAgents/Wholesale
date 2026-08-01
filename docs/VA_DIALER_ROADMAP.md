@@ -35,8 +35,8 @@ Stonegate already has:
 1. A unified inbox and seller conversation timeline.
 2. Twilio SMS sending, signed inbound and delivery webhooks, idempotency, delivery state, and
    STOP/START handling.
-3. Twilio browser Voice tokens, call intents, company voice-line records, inbound routing, missed
-   call handling, recordings, transcription, and AI call notes.
+3. Twilio company voice-line records, cellphone forwarding, inbound routing, missed-call handling,
+   recordings, transcription, and AI call notes.
 4. Individual users, teams, assignments, watchers, and role permissions.
 5. Campaigns, PropStream imports, cohorts, VA labor costs, attempts, qualification, appointments,
    and reviewed warm handoffs.
@@ -132,10 +132,10 @@ Status: implemented in code; Twilio Console, Render, and live acceptance remain 
 - Allow Austin and Devon to place calls from the same acquisitions caller ID.
 - Route known callers to the conversation owner first, then the acquisitions fallback group.
 - Route new callers to the acquisitions group instead of a single hard-coded employee.
-- Preserve the existing browser Voice token and one-time call-intent controls.
+- Use staff cellphone forwarding and Twilio's outbound cellphone bridge instead of browser Voice.
 
-Implemented routing supports an optional department team and up to 10 mixed browser and cellphone
-destinations. Simultaneous routing connects the first employee who accepts, announces whether the
+Implemented routing supports an optional department team and up to 10 cellphone destinations.
+Simultaneous routing connects the first employee who accepts, announces whether the
 call is for acquisitions or dispositions, requires cellphone recipients to press 1, and prevents
 personal voicemail from taking the call. It also preserves conversation-owner priority,
 primary/fallback deduplication, answer attribution, coverage-hour enforcement, Stonegate voicemail,

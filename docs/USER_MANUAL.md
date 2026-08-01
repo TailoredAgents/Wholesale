@@ -48,7 +48,7 @@ The following still require external configuration, approval, or production acce
 
 - Controlled Resend production mailbox acceptance.
 - Approved Stonegate Twilio acquisitions-number attachment and SMS production acceptance.
-- Twilio browser Voice and inbound routing activation.
+- Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until disclosure and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
 - DealMachine buyer-data activation near the first contracted deal.
@@ -828,8 +828,7 @@ Composer modes:
 
 The header shows the number of conversations needing replies, overdue, and unread. **Compose**
 starts a new company email. **Email ready** opens sender settings or owner administration.
-**Enable calling** initializes browser Voice when it is configured. **Refresh** reloads
-conversations and provider state.
+**Refresh** reloads conversations and provider state.
 
 ### Work A Conversation
 
@@ -923,10 +922,10 @@ internal note. Use the restricted document workflow for sensitive evidence.
 
 ### Log An External Call Or SMS
 
-When a provider is not active but an approved employee uses a manual phone:
+When an approved employee uses a staff cellphone:
 
 1. Select **Call** or **SMS**.
-2. Select **Log external** or the correct inbound/outbound direction.
+2. Select **Log call** or the correct inbound/outbound direction.
 3. Enter what happened, not a planned script.
 4. Save the communication.
 5. Create the next task.
@@ -951,27 +950,26 @@ Owners manage department phone-line responsibility in **Settings > Communication
 10. Select **Save** and confirm the line shows **Ownership ready**.
 
 During coverage hours, Stonegate removes inactive users and duplicate targets before ringing up to
-10 combined browser and cellphone destinations. With **Everyone at once**, the first employee to
+10 staff cellphones. With **Everyone at once**, the first employee to
 accept gets the call and all other devices stop ringing. Cellphone recipients hear the department
 and press 1 to accept, preventing personal voicemail from taking the business call. Stonegate
 records the employee who answers. Outside coverage hours, or after an unanswered ring sequence,
 the selected missed-call policy sends the caller to Stonegate voicemail or creates an urgent
 return-call task.
 
-### Use Browser Calling
+### Place A Call From Inbox
 
-When Twilio Voice is active:
+When the seller has a callable number:
 
-1. Select **Enable calling** and allow microphone access.
-2. Open the seller conversation.
-3. Select **Call > Browser**.
-4. Confirm the number and Stonegate line.
-5. Select **Call seller**.
-6. Use the call dock to mute or end the call.
-7. For inbound calls, use the answer or decline icons.
-8. Record the outcome and next action.
+1. Open the seller conversation.
+2. Select **Call > My cellphone**.
+3. Confirm the number and select **Call seller**.
+4. Stonegate calls your saved cellphone. Answer and press 1.
+5. Twilio connects the seller and shows the Stonegate company number as caller ID.
+6. Return to Stonegate, record any additional notes, and create the next action.
 
-Recording is a separate setting. A working browser call does not imply recording is enabled.
+Inbound calls to a Stonegate company number are different: Twilio forwards them to the enabled
+staff cellphones. The employee presses 1 to accept the business call.
 
 ### Review A Call Recording And AI Notes
 
@@ -2122,14 +2120,13 @@ Do not override suppression or use another business's Messaging Service.
 
 ### Voice, Recording, Or Email Is Unavailable
 
-Read the provider status in the Inbox header first.
+Read the provider status in Settings first.
 
 - **Email ready** means Resend sending and inbound routing are available.
 - **Email unavailable** or a setup message means an owner must inspect the Resend connection,
   domain, sender alias, webhook, or recipient route.
-- **Enable calling** means browser voice is not currently active for this user or environment.
-- SMS and voice remain unavailable until their Twilio provider settings and number routing pass
-  acceptance.
+- Voice forwarding remains unavailable until its Twilio provider settings, active company line,
+  and staff cellphone destinations pass acceptance.
 
 Log approved communication manually in Inbox when a provider is unavailable. Recording must remain
 off until disclosure, access, retention, and deletion settings are approved.
