@@ -311,6 +311,120 @@
   cursor: pointer;
 }
 
+.forwardingSection {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 13px;
+  display: grid;
+  gap: 10px;
+}
+
+.forwardingHeading,
+.forwardingHeading > div {
+  display: flex;
+}
+
+.forwardingHeading {
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--brand);
+}
+
+.forwardingHeading > div {
+  align-items: start;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.forwardingHeading h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.forwardingGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.forwardingGrid form {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.forwardingGrid form > div,
+.forwardingGrid label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.forwardingGrid strong,
+.forwardingGrid small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.forwardingGrid strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.forwardingGrid small,
+.forwardingGrid label > span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.forwardingGrid input[type="tel"] {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 0 9px;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+}
+
+.forwardingGrid .checkLabel {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+
+.forwardingGrid .checkLabel input {
+  width: 14px;
+  height: 14px;
+}
+
+.forwardingGrid button {
+  min-width: 74px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .voiceGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -487,7 +601,9 @@
 
   .voiceGrid,
   .voiceGrid form,
-  .voiceChecks {
+  .voiceChecks,
+  .forwardingGrid,
+  .forwardingGrid form {
     grid-template-columns: 1fr;
   }
 

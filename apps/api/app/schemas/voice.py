@@ -32,6 +32,13 @@ class VoiceLineUserRead(BaseModel):
     id: UUID
     display_name: str
     email: str
+    voice_forwarding_number: str | None
+    voice_forwarding_enabled: bool
+
+
+class VoiceForwardingUpdate(BaseModel):
+    voice_forwarding_number: str | None = Field(default=None, max_length=80)
+    voice_forwarding_enabled: bool = False
 
 
 class VoiceLineTeamRead(BaseModel):
@@ -53,7 +60,7 @@ class VoiceLineCreate(BaseModel):
     ] = "seller_conversations"
     is_default: bool = False
     inbound_route: str = Field(default="conversation_owner", max_length=80)
-    ring_strategy: Literal["sequential", "simultaneous"] = "sequential"
+    ring_strategy: Literal["sequential", "simultaneous"] = "simultaneous"
     coverage_timezone: str = Field(default="America/New_York", min_length=3, max_length=80)
     coverage_start_hour: int = Field(default=9, ge=0, le=23)
     coverage_end_hour: int = Field(default=20, ge=1, le=24)

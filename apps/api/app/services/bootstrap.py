@@ -230,6 +230,7 @@ def ensure_default_voice_line(
             status="active",
             is_default=True,
             inbound_route="conversation_owner",
+            ring_strategy="simultaneous",
             coverage_timezone=settings.twilio_voice_timezone,
             coverage_start_hour=settings.twilio_voice_allowed_start_hour,
             coverage_end_hour=settings.twilio_voice_allowed_end_hour,

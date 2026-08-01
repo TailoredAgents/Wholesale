@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
@@ -10,6 +11,13 @@ from app.core.config import Settings
 
 class TwilioVoiceConfigurationError(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class InboundVoiceTarget:
+    identity: str
+    user_id: str
+    forwarding_number: str | None = None
 
 
 def voice_identity(user_id: str) -> str:
@@ -116,7 +124,7 @@ def outbound_call_twiml(
 def inbound_call_twiml(
     settings: Settings,
     *,
-    targets: list[tuple[str, str]],
+    targets: list[InboundVoiceTarget],
     call_id: str,
     recording_enabled: bool,
     ring_strategy: str,
@@ -151,18 +159,89 @@ def inbound_call_twiml(
             }
         )
     dial = response.dial(**dial_options)
-    for identity, user_id in targets[:10]:
+    endpoint_count = 0
+    for target in targets:
+        if endpoint_count >= 10:
+            break
         dial.client(
-            identity,
+            target.identity,
+            url=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/screen",
+                call_id=call_id,
+                answered_user_id=target.user_id,
+                mobile="false",
+            ),
+            method="POST",
             status_callback=callback_url(
                 settings,
                 "/api/v1/webhooks/twilio/voice/status",
                 call_id=call_id,
-                answered_user_id=user_id,
+                answered_user_id=target.user_id,
             ),
             status_callback_event="initiated ringing answered completed",
             status_callback_method="POST",
         )
+        endpoint_count += 1
+        if target.forwarding_number is None or endpoint_count >= 10:
+            continue
+        dial.number(
+            target.forwarding_number,
+            url=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/screen",
+                call_id=call_id,
+                answered_user_id=target.user_id,
+                mobile="true",
+            ),
+            method="POST",
+            status_callback=callback_url(
+                settings,
+                "/api/v1/webhooks/twilio/voice/status",
+                call_id=call_id,
+            ),
+            status_callback_event="initiated ringing answered completed",
+            status_callback_method="POST",
+        )
+        endpoint_count += 1
+    return str(response)
+
+
+def call_screen_twiml(
+    settings: Settings,
+    *,
+    call_id: str,
+    answered_user_id: str,
+    announcement: str,
+    require_acceptance: bool,
+) -> str:
+    response = VoiceResponse()
+    if not require_acceptance:
+        response.say(announcement)
+        return str(response)
+    gather = response.gather(
+        action=callback_url(
+            settings,
+            "/api/v1/webhooks/twilio/voice/screen-result",
+            call_id=call_id,
+            answered_user_id=answered_user_id,
+        ),
+        method="POST",
+        input="dtmf",
+        num_digits=1,
+        timeout=6,
+        action_on_empty_result=True,
+    )
+    gather.say(f"{announcement} Press 1 to accept.")
+    response.hangup()
+    return str(response)
+
+
+def call_screen_result_twiml(*, accepted: bool) -> str:
+    response = VoiceResponse()
+    if not accepted:
+        response.say("Call declined.")
+        response.hangup()
     return str(response)
 
 

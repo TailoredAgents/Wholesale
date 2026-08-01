@@ -870,8 +870,8 @@ The Twilio SMS implementation supports:
 - number normalization
 - organization and permission scope
 
-Stonegate's dedicated seller-inquiry A2P campaign is approved. Its acquisitions number still needs
-provider attachment, Render configuration, and controlled acceptance. Do not use another
+Stonegate's dedicated seller-inquiry A2P campaign must show approved in Twilio before production
+SMS acceptance. Do not use another
 company's Messaging Service, campaign, number, or consent description.
 
 ### 10.5 Voice
@@ -881,6 +881,8 @@ The Twilio Voice implementation supports:
 - company voice lines separated by department and purpose
 - primary, fallback, and optional department-team membership
 - conversation-owner-first routing with sequential or simultaneous ringing
+- mixed browser and private-cellphone ring groups with first-answer-wins behavior
+- department call announcements and press-1 cellphone screening
 - active-user filtering, duplicate removal, and answer attribution
 - line-specific coverage windows, after-hours handling, voicemail, and missed-call tasks
 - scoped browser access tokens

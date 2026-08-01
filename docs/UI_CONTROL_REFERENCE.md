@@ -772,12 +772,14 @@ credentials.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| Staff cellphone | Stores an employee's private forwarding destination | Enter in `+1...` format; never shown to sellers or buyers |
+| Ring cellphone | Adds that cellphone beside the employee's browser phone | Requires a valid cellphone; answering requires pressing 1 |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |
 | Fallback owner | Records the second responsible employee when the owner or primary is unavailable | Must differ from the primary owner |
 | Department team | Adds active team members to the shared ring group and grants them use of the line | Optional; manage membership under People & Access |
-| Ring strategy | Rings targets in owner-first order or rings all active targets simultaneously | Twilio supports up to 10 targets per call |
+| Ring strategy | Rings targets in owner-first order or rings all browser/cellphone destinations simultaneously | Twilio supports up to 10 total destinations per call |
 | Coverage starts / ends / timezone | Defines the staffed window enforced during inbound routing | Outside the window, Stonegate applies the missed-call plan |
 | Missed-call plan | Chooses voicemail or urgent-task behavior after no answer or outside coverage | Fallback targets are included in the ring sequence before voicemail |
 | Ownership ready | Confirms both an active primary and active fallback are assigned | Does not mean Twilio provider acceptance has passed |

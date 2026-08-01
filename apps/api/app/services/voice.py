@@ -10,6 +10,9 @@ from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
 from app.integrations.twilio_recordings import delete_twilio_recording
 from app.integrations.twilio_voice import (
+    InboundVoiceTarget,
+    call_screen_result_twiml,
+    call_screen_twiml,
     create_voice_access_token,
     hangup_twiml,
     inbound_call_twiml,
@@ -45,6 +48,7 @@ from app.models.foundation import (
 from app.schemas.voice import (
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
+    VoiceForwardingUpdate,
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
     VoiceLineRead,
@@ -127,9 +131,83 @@ def list_voice_line_users(db: Session, principal: Principal) -> list[VoiceLineUs
         .order_by(User.display_name.asc(), User.email.asc())
     ).all()
     return [
-        VoiceLineUserRead(id=user.id, display_name=user.display_name, email=user.email)
+        VoiceLineUserRead(
+            id=user.id,
+            display_name=user.display_name,
+            email=user.email,
+            voice_forwarding_number=user.voice_forwarding_number,
+            voice_forwarding_enabled=user.voice_forwarding_enabled,
+        )
         for user in users
     ]
+
+
+def update_user_voice_forwarding(
+    db: Session,
+    principal: Principal,
+    user_id: UUID,
+    payload: VoiceForwardingUpdate,
+) -> VoiceLineUserRead | None:
+    user = db.scalar(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == principal.organization_id,
+            User.is_active.is_(True),
+        )
+    )
+    if user is None:
+        return None
+    formatted = (
+        format_e164(payload.voice_forwarding_number)
+        if payload.voice_forwarding_number
+        else None
+    )
+    if payload.voice_forwarding_number and formatted is None:
+        raise ValueError("Cellphone must be a valid E.164 phone number.")
+    if payload.voice_forwarding_enabled and formatted is None:
+        raise ValueError("Enter a cellphone number before enabling forwarding.")
+    company_line = (
+        db.scalar(
+            select(VoiceLine.id).where(
+                VoiceLine.organization_id == principal.organization_id,
+                VoiceLine.phone_number == formatted,
+            )
+        )
+        if formatted
+        else None
+    )
+    if company_line is not None:
+        raise ValueError("A Stonegate company line cannot be used as a staff cellphone.")
+    previous = {
+        "voice_forwarding_number": user.voice_forwarding_number,
+        "voice_forwarding_enabled": user.voice_forwarding_enabled,
+    }
+    user.voice_forwarding_number = formatted
+    user.voice_forwarding_enabled = payload.voice_forwarding_enabled
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="communication.voice_forwarding_update",
+            entity_type="user",
+            entity_id=user.id,
+            previous_value=previous,
+            new_value={
+                "voice_forwarding_number": formatted,
+                "voice_forwarding_enabled": payload.voice_forwarding_enabled,
+            },
+            reason="Updated staff inbound call destination",
+        )
+    )
+    db.commit()
+    return VoiceLineUserRead(
+        id=user.id,
+        display_name=user.display_name,
+        email=user.email,
+        voice_forwarding_number=user.voice_forwarding_number,
+        voice_forwarding_enabled=user.voice_forwarding_enabled,
+    )
 
 
 def list_voice_line_teams(db: Session, principal: Principal) -> list[VoiceLineTeamRead]:
@@ -646,13 +724,14 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
                 "Stonegate is currently closed. We will return your call shortly."
             )
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
-        if not target_user_ids:
+        targets = resolve_inbound_targets(db, target_user_ids)
+        if not targets:
             raise VoiceConfigurationError("No Stonegate user is available for this call.")
+        update_call_routing_metadata(existing, line, targets)
+        db.commit()
         return inbound_call_twiml(
             settings,
-            targets=[
-                (voice_identity(str(user_id)), str(user_id)) for user_id in target_user_ids
-            ],
+            targets=targets,
             call_id=str(existing.id),
             recording_enabled=settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
@@ -692,13 +771,8 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         ),
     )
     communication.body = f"Inbound call from {format_e164(caller) or caller}"
-    call.call_metadata = {
-        **(call.call_metadata or {}),
-        "routing_target_user_ids": [str(user_id) for user_id in target_user_ids],
-        "routing_owner_user_id": str(target_user_ids[0]) if target_user_ids else None,
-        "ring_strategy": line.ring_strategy,
-        "ring_target_count": len(target_user_ids),
-    }
+    targets = resolve_inbound_targets(db, target_user_ids)
+    update_call_routing_metadata(call, line, targets)
     update_conversation_activity(
         conversation,
         direction="inbound",
@@ -734,17 +808,59 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         ensure_missed_call_task(db, call)
         db.commit()
         return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
-    if not target_user_ids:
+    if not targets:
         raise VoiceConfigurationError("No Stonegate user is available for this call.")
     return inbound_call_twiml(
         settings,
-        targets=[
-            (voice_identity(str(user_id)), str(user_id)) for user_id in target_user_ids
-        ],
+        targets=targets,
         call_id=str(call.id),
         recording_enabled=settings.twilio_voice_recording_configured,
         ring_strategy=line.ring_strategy,
     )
+
+
+def process_voice_screen_request(
+    db: Session,
+    *,
+    call_id: UUID,
+    answered_user_id: UUID,
+    mobile: bool,
+) -> str:
+    call, line, user = validate_screening_target(db, call_id, answered_user_id)
+    return call_screen_twiml(
+        get_settings(),
+        call_id=str(call.id),
+        answered_user_id=str(user.id),
+        announcement=voice_line_announcement(line),
+        require_acceptance=mobile,
+    )
+
+
+def process_voice_screen_result(
+    db: Session,
+    payload: dict[str, str],
+    *,
+    call_id: UUID,
+    answered_user_id: UUID,
+) -> str:
+    call, _line, user = validate_screening_target(db, call_id, answered_user_id)
+    accepted = payload.get("Digits") == "1"
+    if accepted and call.actor_user_id is None:
+        call.actor_user_id = user.id
+        communication = (
+            db.get(CommunicationRecord, call.communication_record_id)
+            if call.communication_record_id
+            else None
+        )
+        if communication is not None:
+            communication.actor_user_id = user.id
+        call.call_metadata = {
+            **(call.call_metadata or {}),
+            "mobile_screen_accepted_by_user_id": str(user.id),
+            "mobile_screen_accepted_at": datetime.now(UTC).isoformat(),
+        }
+        db.commit()
+    return call_screen_result_twiml(accepted=accepted)
 
 
 def process_voice_status(
@@ -1572,6 +1688,86 @@ def resolve_inbound_users(
     return [owner_id] if owner_id is not None else []
 
 
+def resolve_inbound_targets(
+    db: Session,
+    user_ids: list[UUID],
+) -> list[InboundVoiceTarget]:
+    targets: list[InboundVoiceTarget] = []
+    endpoint_count = 0
+    for user_id in user_ids:
+        if endpoint_count >= 10:
+            break
+        user = db.get(User, user_id)
+        if user is None or not user.is_active:
+            continue
+        forwarding_number = (
+            format_e164(user.voice_forwarding_number or "")
+            if user.voice_forwarding_enabled
+            else None
+        )
+        if forwarding_number is not None and endpoint_count == 9:
+            forwarding_number = None
+        targets.append(
+            InboundVoiceTarget(
+                identity=voice_identity(str(user.id)),
+                user_id=str(user.id),
+                forwarding_number=forwarding_number,
+            )
+        )
+        endpoint_count += 1 + int(forwarding_number is not None)
+    return targets
+
+
+def update_call_routing_metadata(
+    call: CallRecord,
+    line: VoiceLine,
+    targets: list[InboundVoiceTarget],
+) -> None:
+    endpoint_count = sum(1 + int(target.forwarding_number is not None) for target in targets)
+    call.call_metadata = {
+        **(call.call_metadata or {}),
+        "routing_target_user_ids": [target.user_id for target in targets],
+        "routing_mobile_user_ids": [
+            target.user_id for target in targets if target.forwarding_number is not None
+        ],
+        "routing_owner_user_id": targets[0].user_id if targets else None,
+        "ring_strategy": line.ring_strategy,
+        "ring_user_count": len(targets),
+        "ring_target_count": endpoint_count,
+    }
+
+
+def voice_line_announcement(line: VoiceLine) -> str:
+    if line.purpose_key == "buyer_relations":
+        return "Stonegate dispositions call."
+    if line.purpose_key == "seller_conversations":
+        return "Stonegate acquisitions call."
+    return "Stonegate company call."
+
+
+def validate_screening_target(
+    db: Session,
+    call_id: UUID,
+    user_id: UUID,
+) -> tuple[CallRecord, VoiceLine, User]:
+    call = db.get(CallRecord, call_id)
+    if call is None or call.direction != "inbound" or call.voice_line_id is None:
+        raise VoiceConfigurationError("Inbound call screening target was not found.")
+    routed_ids = set((call.call_metadata or {}).get("routing_target_user_ids") or [])
+    user = db.get(User, user_id)
+    if (
+        user is None
+        or not user.is_active
+        or user.organization_id != call.organization_id
+        or str(user.id) not in routed_ids
+    ):
+        raise VoiceConfigurationError("Inbound call screening target is unavailable.")
+    line = db.get(VoiceLine, call.voice_line_id)
+    if line is None or line.status != "active":
+        raise VoiceConfigurationError("Stonegate voice line is unavailable.")
+    return call, line, user
+
+
 def is_within_line_coverage(
     line: VoiceLine,
     *,
@@ -1931,3 +2127,4 @@ def parse_int(value: str | None) -> int | None:
 
 def as_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+    VoiceForwardingUpdate,

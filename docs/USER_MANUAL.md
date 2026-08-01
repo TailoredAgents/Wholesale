@@ -944,14 +944,19 @@ Owners manage department phone-line responsibility in **Settings > Communication
 5. Choose whether known callers prefer their conversation owner or the line's primary owner.
 6. Choose **In order** to ring the owner, primary, team, and fallback sequentially, or **Everyone at
    once** when the first available employee should answer.
-7. Record the staffed coverage window, timezone, and missed-call policy.
-8. Mark the acquisitions line as the default company line.
-9. Select **Save** and confirm the line shows **Ownership ready**.
+7. Under **Staff ring settings**, enter each answering employee's cellphone and enable **Ring
+   cellphone**.
+8. Record the staffed coverage window, timezone, and missed-call policy.
+9. Mark the acquisitions line as the default company line.
+10. Select **Save** and confirm the line shows **Ownership ready**.
 
 During coverage hours, Stonegate removes inactive users and duplicate targets before ringing up to
-10 browser-phone identities. It records the employee who answers. Outside coverage hours, or after
-an unanswered ring sequence, the selected missed-call policy sends the caller to Stonegate
-voicemail or creates an urgent return-call task.
+10 combined browser and cellphone destinations. With **Everyone at once**, the first employee to
+accept gets the call and all other devices stop ringing. Cellphone recipients hear the department
+and press 1 to accept, preventing personal voicemail from taking the business call. Stonegate
+records the employee who answers. Outside coverage hours, or after an unanswered ring sequence,
+the selected missed-call policy sends the caller to Stonegate voicemail or creates an urgent
+return-call task.
 
 ### Use Browser Calling
 

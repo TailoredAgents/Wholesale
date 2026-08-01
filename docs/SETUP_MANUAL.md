@@ -519,8 +519,8 @@ the browser token. The TwiML App tells Twilio where to request call instructions
 5. If the number provides a call-status callback field, set it to `POST`:
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/status`
 6. In **Settings > Communications**, select the Acquisitions team, Devon as primary, Austin as
-   fallback, **Conversation owner**, **In order**, the coverage window, and **Fallback, then
-   voicemail**.
+   fallback, **Conversation owner**, **Everyone at once**, the coverage window, and **Fallback,
+   then voicemail**. Repeat this ownership setup for the Dispositions line.
 7. On **oakwell-api** in Render, enter:
    - `TWILIO_VOICE_ENABLED=true`
    - `TWILIO_ACCOUNT_SID`
@@ -535,16 +535,21 @@ the browser token. The TwiML App tells Twilio where to request call instructions
    own caller-initiated recording path.
 9. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
    live Voice testing** before acceptance begins.
+10. Under **Staff ring settings**, enter Austin's and Devon's cellphones in `+1...` format, enable
+    **Ring cellphone**, and save each person. Inbound calls will ring each person's browser and
+    enabled cellphone together. Cellphone answers must press 1 before connecting.
 
 ### Acceptance
 
 1. Confirm the browser phone registers.
 2. Place an outbound call to a controlled phone.
 3. Confirm the Stonegate number appears.
-4. Call Stonegate back and confirm intended staff routing.
-5. Test no answer, missed call, voicemail, and call outcome.
-6. Confirm the call appears on the correct conversation.
-7. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
+4. Call each Stonegate number back and confirm both Austin and Devon ring simultaneously.
+5. Answer one test on a cellphone, confirm the department announcement, and press 1. Verify all
+   other devices stop ringing and the personal number is not exposed.
+6. Test no answer, missed call, voicemail, and call outcome.
+7. Confirm the call appears on the correct seller or buyer conversation.
+8. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
 
 ## DealMachine Buyer Data
 

@@ -33,6 +33,8 @@ type VoiceLineUser = {
   id: string;
   display_name: string;
   email: string;
+  voice_forwarding_number: string | null;
+  voice_forwarding_enabled: boolean;
 };
 
 type VoiceLineTeam = {
@@ -164,7 +166,7 @@ export function VoiceLineSettings() {
           fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
           assigned_team_id: String(data.get("assigned_team_id") ?? "") || null,
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
-          ring_strategy: String(data.get("ring_strategy") ?? "sequential"),
+          ring_strategy: String(data.get("ring_strategy") ?? "simultaneous"),
           coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
           coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
           coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
@@ -218,6 +220,34 @@ export function VoiceLineSettings() {
     } catch (saveError) {
       setError(
         saveError instanceof Error ? saveError.message : "Voice line could not be updated.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  async function saveForwarding(event: FormEvent<HTMLFormElement>, userId: string) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setBusyId(`user:${userId}`);
+    setMessage("");
+    setError("");
+    try {
+      await request(`/api/v1/voice/users/${userId}/forwarding`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          voice_forwarding_number:
+            String(data.get("voice_forwarding_number") ?? "").trim() || null,
+          voice_forwarding_enabled: data.get("voice_forwarding_enabled") === "on",
+        }),
+      });
+      await load();
+      setMessage("Staff call destination updated.");
+    } catch (saveError) {
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "Staff call destination could not be updated.",
       );
     } finally {
       setBusyId("");
@@ -297,6 +327,50 @@ export function VoiceLineSettings() {
           </div>
         </div>
       ) : null}
+
+      <div className={styles.forwardingSection}>
+        <div className={styles.forwardingHeading}>
+          <div>
+            <span>Call destinations</span>
+            <h3>Staff ring settings</h3>
+          </div>
+          <Phone aria-hidden="true" size={18} />
+        </div>
+        <div className={styles.forwardingGrid}>
+          {users.map((user) => (
+            <form
+              key={`${user.id}:${user.voice_forwarding_number ?? ""}:${user.voice_forwarding_enabled}`}
+              onSubmit={(event) => saveForwarding(event, user.id)}
+            >
+              <div>
+                <strong>{user.display_name}</strong>
+                <small>{user.email}</small>
+              </div>
+              <label>
+                <span>Cellphone</span>
+                <input
+                  defaultValue={user.voice_forwarding_number ?? ""}
+                  name="voice_forwarding_number"
+                  placeholder="+14045550100"
+                  type="tel"
+                />
+              </label>
+              <label className={styles.checkLabel}>
+                <input
+                  defaultChecked={user.voice_forwarding_enabled}
+                  name="voice_forwarding_enabled"
+                  type="checkbox"
+                />
+                <span>Ring cellphone</span>
+              </label>
+              <button disabled={busyId === `user:${user.id}`} type="submit">
+                <Save aria-hidden="true" size={15} />
+                Save
+              </button>
+            </form>
+          ))}
+        </div>
+      </div>
 
       <div className={styles.voiceGrid}>
         {lines.map((line) => (
@@ -471,7 +545,7 @@ export function VoiceLineSettings() {
           </label>
           <label>
             <span>Ring strategy</span>
-            <select defaultValue="sequential" name="ring_strategy">
+            <select defaultValue="simultaneous" name="ring_strategy">
               <option value="sequential">In order</option>
               <option value="simultaneous">Everyone at once</option>
             </select>

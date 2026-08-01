@@ -134,10 +134,13 @@ Status: implemented in code; Twilio Console, Render, and live acceptance remain 
 - Route new callers to the acquisitions group instead of a single hard-coded employee.
 - Preserve the existing browser Voice token and one-time call-intent controls.
 
-Implemented routing supports an optional department team, sequential or simultaneous ringing of
-up to 10 active browser identities, conversation-owner priority, primary/fallback deduplication,
-answer attribution, coverage-hour enforcement, Stonegate voicemail, and urgent missed-call tasks.
-Authorized primary, fallback, and team members select the shared line for outbound calls.
+Implemented routing supports an optional department team and up to 10 mixed browser and cellphone
+destinations. Simultaneous routing connects the first employee who accepts, announces whether the
+call is for acquisitions or dispositions, requires cellphone recipients to press 1, and prevents
+personal voicemail from taking the call. It also preserves conversation-owner priority,
+primary/fallback deduplication, answer attribution, coverage-hour enforcement, Stonegate voicemail,
+and urgent missed-call tasks. Authorized primary, fallback, and team members select the shared line
+for outbound calls.
 
 Exit criteria: both authorized users can call from the shared number, inbound calls reach the right
 person or fallback, and every call attaches to one conversation.

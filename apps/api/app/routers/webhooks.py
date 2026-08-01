@@ -17,6 +17,8 @@ from app.services.voice import (
     process_voice_dial_result,
     process_voice_recording,
     process_voice_recording_disclosure,
+    process_voice_screen_request,
+    process_voice_screen_result,
     process_voice_status,
     process_voice_voicemail_complete,
 )
@@ -126,6 +128,55 @@ async def twilio_voice_status(
         answered_user_id=answered_user_id,
     )
     return Response(status_code=204)
+
+
+@router.post("/voice/screen")
+async def twilio_voice_screen(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
+    call_id: UUID | None = None,
+    answered_user_id: UUID | None = None,
+    mobile: bool = False,
+) -> Response:
+    payload = await parse_twilio_form(request)
+    validate_request(request, payload, signature)
+    if call_id is None or answered_user_id is None:
+        return Response(content=hangup_twiml(), media_type="application/xml")
+    try:
+        content = process_voice_screen_request(
+            db,
+            call_id=call_id,
+            answered_user_id=answered_user_id,
+            mobile=mobile,
+        )
+    except VoiceConfigurationError:
+        content = hangup_twiml()
+    return Response(content=content, media_type="application/xml")
+
+
+@router.post("/voice/screen-result")
+async def twilio_voice_screen_result(
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    signature: Annotated[str | None, Header(alias="X-Twilio-Signature")] = None,
+    call_id: UUID | None = None,
+    answered_user_id: UUID | None = None,
+) -> Response:
+    payload = await parse_twilio_form(request)
+    validate_request(request, payload, signature)
+    if call_id is None or answered_user_id is None:
+        return Response(content=hangup_twiml(), media_type="application/xml")
+    try:
+        content = process_voice_screen_result(
+            db,
+            payload,
+            call_id=call_id,
+            answered_user_id=answered_user_id,
+        )
+    except VoiceConfigurationError:
+        content = hangup_twiml()
+    return Response(content=content, media_type="application/xml")
 
 
 @router.post("/voice/dial-result")

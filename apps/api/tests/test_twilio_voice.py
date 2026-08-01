@@ -325,6 +325,21 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     )
     assert updated.status_code == 200, updated.text
     assert updated.json()["assigned_team_name"] == "Acquisitions"
+    for user_id, cellphone in (
+        (owner["id"], "+14045550101"),
+        (devon["id"], "+14045550102"),
+    ):
+        forwarding = client.patch(
+            f"/api/v1/voice/users/{user_id}/forwarding",
+            headers=headers,
+            json={
+                "voice_forwarding_number": cellphone,
+                "voice_forwarding_enabled": True,
+            },
+        )
+        assert forwarding.status_code == 200, forwarding.text
+        assert forwarding.json()["voice_forwarding_number"] == cellphone
+        assert forwarding.json()["voice_forwarding_enabled"] is True
 
     inbound_payload = {
         "From": SELLER_NUMBER,
@@ -339,10 +354,58 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
 
     assert inbound.status_code == 200, inbound.text
     assert inbound.text.count("<Client ") == 2
+    assert inbound.text.count("<Number ") == 2
+    assert "/voice/screen" in inbound.text
     assert 'sequential="false"' in inbound.text
     call = db_session.scalar(select(CallRecord))
     assert call is not None
-    assert call.call_metadata["ring_target_count"] == 2
+    assert call.call_metadata["ring_user_count"] == 2
+    assert call.call_metadata["ring_target_count"] == 4
+
+    browser_screen_path = (
+        f"/api/v1/webhooks/twilio/voice/screen?call_id={call.id}"
+        f"&answered_user_id={owner['id']}&mobile=false"
+    )
+    browser_screen = post_signed(
+        client,
+        browser_screen_path,
+        {"CallSid": "CA00000000000000000000000000000085"},
+    )
+    assert browser_screen.status_code == 200, browser_screen.text
+    assert "Stonegate acquisitions call" in browser_screen.text
+    assert "Press 1" not in browser_screen.text
+
+    mobile_screen_path = (
+        f"/api/v1/webhooks/twilio/voice/screen?call_id={call.id}"
+        f"&answered_user_id={devon['id']}&mobile=true"
+    )
+    mobile_screen = post_signed(
+        client,
+        mobile_screen_path,
+        {"CallSid": "CA00000000000000000000000000000086"},
+    )
+    assert mobile_screen.status_code == 200, mobile_screen.text
+    assert "Stonegate acquisitions call" in mobile_screen.text
+    assert "Press 1 to accept" in mobile_screen.text
+    assert "<Gather" in mobile_screen.text
+
+    screen_result_path = (
+        f"/api/v1/webhooks/twilio/voice/screen-result?call_id={call.id}"
+        f"&answered_user_id={devon['id']}"
+    )
+    screen_result = post_signed(
+        client,
+        screen_result_path,
+        {
+            "CallSid": "CA00000000000000000000000000000086",
+            "Digits": "1",
+        },
+    )
+    assert screen_result.status_code == 200, screen_result.text
+    assert "<Hangup" not in screen_result.text
+    db_session.refresh(call)
+    assert str(call.actor_user_id) == devon["id"]
+    assert call.call_metadata["mobile_screen_accepted_by_user_id"] == devon["id"]
 
     answered_path = (
         f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"

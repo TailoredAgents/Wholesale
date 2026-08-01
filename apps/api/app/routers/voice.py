@@ -17,10 +17,12 @@ from app.schemas.voice import (
     CallTranscriptReview,
     VoiceCallIntentCreate,
     VoiceCallIntentRead,
+    VoiceForwardingUpdate,
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
     VoiceLineListResponse,
     VoiceLineRead,
+    VoiceLineUserRead,
     VoiceProviderReadinessRead,
     VoiceRecordingDelete,
     VoiceRecordingRead,
@@ -41,6 +43,7 @@ from app.services.voice import (
     list_voice_line_teams,
     list_voice_line_users,
     update_voice_line,
+    update_user_voice_forwarding,
 )
 
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
@@ -143,6 +146,25 @@ def update_company_voice_line(
     if line is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Voice line not found.")
     return line
+
+
+@router.patch("/users/{user_id}/forwarding")
+def update_staff_voice_forwarding(
+    user_id: UUID,
+    payload: VoiceForwardingUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_lines_dependency)],
+) -> VoiceLineUserRead:
+    try:
+        user = update_user_voice_forwarding(db, principal, user_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff member not found.")
+    return user
 
 
 @router.get("/recordings/{recording_id}/media")

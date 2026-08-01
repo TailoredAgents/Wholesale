@@ -48,6 +48,13 @@ class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=False,
         server_default="false",
     )
+    voice_forwarding_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    voice_forwarding_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
 
 class Role(UuidPrimaryKeyMixin, TimestampMixin, Base):
