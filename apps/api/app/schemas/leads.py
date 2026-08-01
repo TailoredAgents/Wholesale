@@ -71,6 +71,7 @@ class LeadRead(BaseModel):
     property_county: str | None
     property_type: str | None
     property_validation: PropertyValidationRead
+    assigned_user_id: UUID | None
     assigned_user_email: str | None
     motivation: str | None
     desired_timeline: str | None
@@ -90,9 +91,16 @@ class LeadListResponse(BaseModel):
 
 
 class ContactMethodRead(BaseModel):
+    id: UUID
     method_type: str
     value: str
     is_primary: bool
+
+
+class LeadAssignableUserRead(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
 
 
 class ConsentRecordRead(BaseModel):
@@ -793,6 +801,7 @@ class LeadIntelligence(BaseModel):
 
 class LeadDetail(LeadRead):
     contact_methods: list[ContactMethodRead]
+    assignable_users: list[LeadAssignableUserRead]
     consent_records: list[ConsentRecordRead]
     attribution_touches: list[AttributionTouchRead]
     open_tasks: list[LeadTaskRead]
@@ -810,11 +819,23 @@ class LeadStageUpdate(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
 
 
+class LeadContactMethodUpdate(BaseModel):
+    id: UUID | None = None
+    method_type: Literal["phone", "email"]
+    value: str = Field(min_length=1, max_length=320)
+    is_primary: bool = False
+
+
 class LeadStaffUpdate(BaseModel):
     seller_name: str | None = Field(default=None, min_length=1, max_length=255)
     preferred_name: str | None = Field(default=None, max_length=255)
     phone: str | None = Field(default=None, max_length=80)
     email: str | None = Field(default=None, max_length=320)
+    contact_methods: list[LeadContactMethodUpdate] | None = Field(
+        default=None,
+        max_length=20,
+    )
+    assigned_user_id: UUID | None = None
     property_street_address: str | None = Field(default=None, min_length=1, max_length=255)
     property_city: str | None = Field(default=None, min_length=1, max_length=120)
     property_state: str | None = Field(default=None, min_length=2, max_length=2)

@@ -417,6 +417,12 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Table and board modes operate on the same filtered records and preserve URL state.
 - Opening a full seller record preserves the originating list, board, filter, and selected-seller
   context so **Back** returns to the same working view.
+- The header **Edit lead** action opens one canonical editor in the Property section. Authorized
+  staff can manage every seller phone and email, choose the primary method for each type, correct
+  seller/property/qualification facts, and reassign ownership without creating a duplicate lead.
+- Ownership reassignment synchronizes the lead, contact, conversation, watcher, open task, and
+  upcoming appointment records and creates assignment and audit history. Stage changes remain a
+  separate control because responsibility and pipeline state are different business facts.
 - Seller and transaction histories use the same chronological activity pattern for event title,
   supporting context, actor, and timestamp.
 - Underwriting shows the active valuation queue; detailed comp work remains on the seller record.

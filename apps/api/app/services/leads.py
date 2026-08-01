@@ -80,9 +80,11 @@ from app.schemas.leads import (
     ContactMethodRead,
     DashboardSummary,
     LeadAiReadySummary,
+    LeadAssignableUserRead,
     LeadAppointmentCreate,
     LeadBuyerOfferCreate,
     LeadCommunicationCreate,
+    LeadContactMethodUpdate,
     LeadCreate,
     LeadDetail,
     LeadFollowUpTaskCreate,
@@ -431,6 +433,18 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         )
         .order_by(ContactMethod.created_at.asc())
     ).all()
+    assignable_users = (
+        db.scalars(
+            select(User)
+            .where(
+                User.organization_id == principal.organization_id,
+                User.is_active.is_(True),
+            )
+            .order_by(User.display_name.asc(), User.email.asc())
+        ).all()
+        if PermissionKeys.EDIT_LEADS in principal.permission_keys
+        else []
+    )
     consent_records = db.scalars(
         select(ConsentRecord)
         .where(
@@ -581,11 +595,20 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         **base.model_dump(),
         contact_methods=[
             ContactMethodRead(
+                id=method.id,
                 method_type=method.method_type,
                 value=method.value,
                 is_primary=method.is_primary,
             )
             for method in contact_methods
+        ],
+        assignable_users=[
+            LeadAssignableUserRead(
+                id=user.id,
+                display_name=user.display_name,
+                email=user.email,
+            )
+            for user in assignable_users
         ],
         consent_records=[
             ConsentRecordRead(
@@ -2574,6 +2597,18 @@ def update_lead_staff_details(
 
     provided_fields = payload.model_fields_set
 
+    if "assigned_user_id" in provided_fields:
+        update_lead_assignment(
+            db,
+            principal,
+            lead,
+            contact,
+            payload.assigned_user_id,
+            previous_values,
+            new_values,
+            reason=payload.reason,
+        )
+
     update_value(previous_values, new_values, contact, "legal_name", payload.seller_name)
     update_nullable_value(
         previous_values,
@@ -2697,24 +2732,36 @@ def update_lead_staff_details(
         provided_fields,
     )
 
-    phone_changed = update_contact_method(
-        db,
-        principal,
-        contact,
-        previous_values,
-        new_values,
-        method_type="phone",
-        value=payload.phone,
-    )
-    email_changed = update_contact_method(
-        db,
-        principal,
-        contact,
-        previous_values,
-        new_values,
-        method_type="email",
-        value=payload.email,
-    )
+    if payload.contact_methods is not None:
+        contact_methods_changed = sync_lead_contact_methods(
+            db,
+            principal,
+            contact,
+            payload.contact_methods,
+            previous_values,
+            new_values,
+        )
+        phone_changed = contact_methods_changed
+        email_changed = False
+    else:
+        phone_changed = update_contact_method(
+            db,
+            principal,
+            contact,
+            previous_values,
+            new_values,
+            method_type="phone",
+            value=payload.phone,
+        )
+        email_changed = update_contact_method(
+            db,
+            principal,
+            contact,
+            previous_values,
+            new_values,
+            method_type="email",
+            value=payload.email,
+        )
 
     if property_fields_changed(previous_values) or property_fields_changed(new_values):
         property_record.normalized_address_key = canonical_address_key(
@@ -3420,6 +3467,222 @@ def update_contact_method(
     )
     previous_values[audit_key] = None
     new_values[audit_key] = cleaned_value
+    return True
+
+
+def sync_lead_contact_methods(
+    db: Session,
+    principal: Principal,
+    contact: Contact,
+    methods: list[LeadContactMethodUpdate],
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+) -> bool:
+    existing_methods = db.scalars(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type.in_(("phone", "email")),
+        )
+        .order_by(ContactMethod.method_type.asc(), ContactMethod.is_primary.desc())
+    ).all()
+    existing_by_id = {method.id: method for method in existing_methods}
+    normalized: list[dict[str, Any]] = []
+    seen_ids: set[UUID] = set()
+    seen_values: set[tuple[str, str]] = set()
+    for item in methods:
+        cleaned_value = item.value.strip()
+        normalized_value = (
+            normalize_email(cleaned_value)
+            if item.method_type == "email"
+            else normalize_phone(cleaned_value)
+        )
+        if item.method_type == "email" and (
+            "@" not in normalized_value or normalized_value.startswith("@")
+        ):
+            raise ValueError(f"Enter a valid email address: {cleaned_value}")
+        if item.method_type == "phone" and len(normalized_value) < 10:
+            raise ValueError(f"Enter a valid phone number: {cleaned_value}")
+        key = (item.method_type, normalized_value)
+        if key in seen_values:
+            raise ValueError(f"Remove the duplicate {item.method_type}: {cleaned_value}")
+        seen_values.add(key)
+        if item.id is not None:
+            if item.id in seen_ids:
+                raise ValueError("A contact method cannot be submitted more than once.")
+            existing = existing_by_id.get(item.id)
+            if existing is None:
+                raise ValueError("A contact method does not belong to this lead.")
+            seen_ids.add(item.id)
+        normalized.append(
+            {
+                "id": item.id,
+                "method_type": item.method_type,
+                "value": cleaned_value,
+                "normalized_value": normalized_value,
+                "is_primary": item.is_primary,
+            }
+        )
+    if not normalized:
+        raise ValueError("Keep at least one phone number or email address on the lead.")
+    for method_type in ("phone", "email"):
+        group = [item for item in normalized if item["method_type"] == method_type]
+        primary_count = sum(bool(item["is_primary"]) for item in group)
+        if primary_count > 1:
+            raise ValueError(f"Select only one primary {method_type}.")
+        if group and primary_count == 0:
+            group[0]["is_primary"] = True
+
+    before = sorted(
+        (contact_method_audit_value(method) for method in existing_methods),
+        key=contact_method_audit_sort_key,
+    )
+    submitted_ids = {item["id"] for item in normalized if item["id"] is not None}
+    for method in existing_methods:
+        if method.id not in submitted_ids:
+            db.delete(method)
+    for item in normalized:
+        method = existing_by_id.get(item["id"]) if item["id"] is not None else None
+        if method is None:
+            method = ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=contact.id,
+                method_type=item["method_type"],
+                value=item["value"],
+                normalized_value=item["normalized_value"],
+                is_primary=item["is_primary"],
+            )
+            db.add(method)
+        else:
+            method.method_type = item["method_type"]
+            method.value = item["value"]
+            method.normalized_value = item["normalized_value"]
+            method.is_primary = item["is_primary"]
+    after = sorted(
+        (
+            {
+                "method_type": item["method_type"],
+                "value": item["value"],
+                "is_primary": item["is_primary"],
+            }
+            for item in normalized
+        ),
+        key=contact_method_audit_sort_key,
+    )
+    if before == after:
+        return False
+    previous_values["contact_methods"] = before
+    new_values["contact_methods"] = after
+    return True
+
+
+def contact_method_audit_value(method: ContactMethod) -> dict[str, Any]:
+    return {
+        "method_type": method.method_type,
+        "value": method.value,
+        "is_primary": method.is_primary,
+    }
+
+
+def contact_method_audit_sort_key(item: dict[str, Any]) -> tuple[str, bool, str]:
+    return (
+        str(item["method_type"]),
+        not bool(item["is_primary"]),
+        str(item["value"]).lower(),
+    )
+
+
+def update_lead_assignment(
+    db: Session,
+    principal: Principal,
+    lead: Lead,
+    contact: Contact,
+    assigned_user_id: UUID | None,
+    previous_values: dict[str, Any],
+    new_values: dict[str, Any],
+    *,
+    reason: str | None,
+) -> bool:
+    if lead.assigned_user_id == assigned_user_id:
+        return False
+    assignee = None
+    if assigned_user_id is not None:
+        assignee = db.scalar(
+            select(User).where(
+                User.id == assigned_user_id,
+                User.organization_id == principal.organization_id,
+                User.is_active.is_(True),
+            )
+        )
+        if assignee is None:
+            raise ValueError("Lead owner must be an active Stonegate user.")
+    previous_assigned_user_id = lead.assigned_user_id
+    lead.assigned_user_id = assignee.id if assignee else None
+    contact.assigned_user_id = lead.assigned_user_id
+    previous_values["assigned_user_id"] = (
+        str(previous_assigned_user_id) if previous_assigned_user_id else None
+    )
+    new_values["assigned_user_id"] = str(lead.assigned_user_id) if lead.assigned_user_id else None
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.organization_id == principal.organization_id,
+            Conversation.lead_id == lead.id,
+        )
+    )
+    if conversation is not None:
+        previous_conversation_owner = conversation.assigned_user_id
+        conversation.assigned_user_id = lead.assigned_user_id
+        db.add(
+            ConversationAssignmentEvent(
+                organization_id=principal.organization_id,
+                conversation_id=conversation.id,
+                lead_id=lead.id,
+                actor_user_id=principal.user_id,
+                previous_assigned_user_id=previous_conversation_owner,
+                assigned_user_id=lead.assigned_user_id,
+                previous_queue_key=conversation.queue_key,
+                queue_key=conversation.queue_key,
+                reason=reason or "Lead owner updated from the lead record.",
+                created_at=datetime.now(UTC),
+            )
+        )
+        if assignee is not None:
+            watcher = db.scalar(
+                select(ConversationWatcher).where(
+                    ConversationWatcher.organization_id == principal.organization_id,
+                    ConversationWatcher.conversation_id == conversation.id,
+                    ConversationWatcher.user_id == assignee.id,
+                )
+            )
+            if watcher is None:
+                db.add(
+                    ConversationWatcher(
+                        organization_id=principal.organization_id,
+                        conversation_id=conversation.id,
+                        user_id=assignee.id,
+                        source="lead_edit",
+                        notification_level="all",
+                        is_muted=False,
+                    )
+                )
+    for task in db.scalars(
+        select(Task).where(
+            Task.organization_id == principal.organization_id,
+            Task.lead_id == lead.id,
+            Task.status.in_(("open", "in_progress")),
+        )
+    ):
+        task.responsible_user_id = lead.assigned_user_id
+    for appointment in db.scalars(
+        select(Appointment).where(
+            Appointment.organization_id == principal.organization_id,
+            Appointment.lead_id == lead.id,
+            Appointment.status.in_(("scheduled", "rescheduled")),
+        )
+    ):
+        appointment.owner_user_id = lead.assigned_user_id
     return True
 
 
@@ -4253,6 +4516,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         property_county=property_record.county,
         property_type=property_record.property_type,
         property_validation=property_validation_to_read(property_record),
+        assigned_user_id=lead.assigned_user_id,
         assigned_user_email=assigned_user.email if assigned_user else None,
         motivation=lead.motivation,
         desired_timeline=lead.desired_timeline,

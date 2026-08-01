@@ -21,6 +21,8 @@ from app.models.foundation import (
     CommunicationRecord,
     Contact,
     ContactMethod,
+    Conversation,
+    ConversationAssignmentEvent,
     Deal,
     Lead,
     OfferNegotiationPlan,
@@ -545,6 +547,113 @@ def test_update_lead_staff_details_records_audit(
         )
         or 0
     ) == 1
+
+
+def test_edit_lead_manages_multiple_contacts_and_assignment(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    assignee_response = client.post(
+        "/api/v1/operations/users",
+        headers=headers,
+        json={
+            "email": "devon@example.com",
+            "display_name": "Devon",
+            "role_key": "acquisition_manager",
+        },
+    )
+    assert assignee_response.status_code == 201, assignee_response.text
+    assignee_id = assignee_response.json()["id"]
+    payload = lead_payload()
+    payload["phone"] = "+14045550101"
+    payload["email"] = "seller@example.com"
+    created_response = client.post("/api/v1/leads", headers=headers, json=payload)
+    assert created_response.status_code == 201, created_response.text
+    lead_id = created_response.json()["id"]
+    detail = client.get(f"/api/v1/leads/{lead_id}", headers=headers).json()
+    original_phone = next(
+        method for method in detail["contact_methods"] if method["method_type"] == "phone"
+    )
+    original_email = next(
+        method for method in detail["contact_methods"] if method["method_type"] == "email"
+    )
+    assert any(user["id"] == assignee_id for user in detail["assignable_users"])
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers=headers,
+        json={
+            "assigned_user_id": assignee_id,
+            "contact_methods": [
+                {
+                    "id": original_phone["id"],
+                    "method_type": "phone",
+                    "value": "+14045550111",
+                    "is_primary": True,
+                },
+                {
+                    "method_type": "phone",
+                    "value": "+16785550122",
+                    "is_primary": False,
+                },
+                {
+                    "id": original_email["id"],
+                    "method_type": "email",
+                    "value": "seller@example.com",
+                    "is_primary": True,
+                },
+                {
+                    "method_type": "email",
+                    "value": "seller.work@example.com",
+                    "is_primary": False,
+                },
+            ],
+            "reason": "Seller supplied updated contact information.",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated["assigned_user_id"] == assignee_id
+    assert updated["assigned_user_email"] == "devon@example.com"
+    assert len(updated["contact_methods"]) == 4
+    assert sum(
+        method["is_primary"]
+        for method in updated["contact_methods"]
+        if method["method_type"] == "phone"
+    ) == 1
+    assert {
+        method["value"]
+        for method in updated["contact_methods"]
+        if method["method_type"] == "phone"
+    } == {"+14045550111", "+16785550122"}
+    conversation = db_session.scalar(select(Conversation).where(Conversation.lead_id == UUID(lead_id)))
+    assert conversation is not None
+    assert str(conversation.assigned_user_id) == assignee_id
+    assert db_session.scalar(
+        select(func.count()).select_from(ConversationAssignmentEvent).where(
+            ConversationAssignmentEvent.conversation_id == conversation.id,
+            ConversationAssignmentEvent.assigned_user_id == UUID(assignee_id),
+        )
+    ) == 1
+
+    retained_methods = [
+        method
+        for method in updated["contact_methods"]
+        if method["value"] != "+16785550122"
+    ]
+    delete_response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers=headers,
+        json={"contact_methods": retained_methods},
+    )
+    assert delete_response.status_code == 200, delete_response.text
+    assert "+16785550122" not in {
+        method["value"] for method in delete_response.json()["contact_methods"]
+    }
 
 
 def test_add_lead_note_and_follow_up_task(

@@ -230,9 +230,9 @@ function QualificationPanel({ lead }: { lead: LeadDetail }) {
           </div>
         ))}
       </div>
-      <ActionDisclosure label="Answer qualification questions">
-        <LeadEditForm lead={lead} />
-      </ActionDisclosure>
+      <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=property#edit-lead`}>
+        Edit qualification
+      </Link>
     </section>
   );
 }
@@ -647,8 +647,8 @@ function PropertyTab({ lead }: { lead: LeadDetail }) {
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
         <PropertyPanel lead={lead} />
-        <section className={styles.sectionPanel}>
-          <SectionHeader title="Edit seller and property details" />
+        <section className={`${styles.sectionPanel} ${styles.editAnchor}`} id="edit-lead">
+          <SectionHeader title="Edit lead" />
           <div className={styles.sectionBody}><LeadEditForm lead={lead} /></div>
         </section>
       </div>
@@ -801,6 +801,7 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           {phone ? <a className={styles.primaryCommand} href={`tel:${phone}`}>Call seller</a> : null}
           {phone ? <a href={`sms:${phone}`}>Text</a> : null}
           {email ? <a href={`mailto:${email}`}>Email</a> : null}
+          <Link href={tabHref("property") + "#edit-lead"}>Edit lead</Link>
           <Link href={tabHref("activity")}>Log contact</Link>
           <Link href={tabHref("valuation")}>Run comps</Link>
           <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { Plus, Trash2 } from "lucide-react";
 import { FormEvent, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -8,6 +9,13 @@ import type { LeadDetail } from "../../lib/api";
 import styles from "./page.module.css";
 
 type Status = "idle" | "saving" | "saved" | "error";
+type EditableContactMethod = {
+  clientKey: string;
+  id: string | null;
+  method_type: "phone" | "email";
+  value: string;
+  is_primary: boolean;
+};
 
 const sources = [
   ["website", "Website"],
@@ -54,12 +62,25 @@ const appointmentOptions = [
   ["no_show", "No show"],
 ];
 
-function primaryContactValue(lead: LeadDetail, methodType: string) {
-  const primary = lead.contact_methods.find(
-    (method) => method.method_type === methodType && method.is_primary,
-  );
-  const first = lead.contact_methods.find((method) => method.method_type === methodType);
-  return primary?.value ?? first?.value ?? "";
+function editableContactMethods(lead: LeadDetail): EditableContactMethod[] {
+  return lead.contact_methods
+    .filter((method) => method.method_type === "phone" || method.method_type === "email")
+    .map((method) => ({
+      clientKey: method.id,
+      id: method.id,
+      method_type: method.method_type as "phone" | "email",
+      value: method.value,
+      is_primary: method.is_primary,
+    }));
+}
+
+function ensurePrimaryMethods(methods: EditableContactMethod[]) {
+  return methods.map((method, index, all) => {
+    const group = all.filter((item) => item.method_type === method.method_type);
+    const groupHasPrimary = group.some((item) => item.is_primary);
+    const isFirstInGroup = all.findIndex((item) => item.method_type === method.method_type) === index;
+    return { ...method, is_primary: groupHasPrimary ? method.is_primary : isFirstInGroup };
+  });
 }
 
 function formString(formData: FormData, key: string) {
@@ -92,6 +113,10 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
   const router = useRouter();
   const { getToken } = useAuth();
   const [status, setStatus] = useState<Status>("idle");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [contactMethods, setContactMethods] = useState<EditableContactMethod[]>(() =>
+    ensurePrimaryMethods(editableContactMethods(lead)),
+  );
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -110,7 +135,16 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    const submittedMethods = contactMethods
+      .map((method) => ({ ...method, value: method.value.trim() }))
+      .filter((method) => method.value);
+    if (submittedMethods.length === 0) {
+      setErrorMessage("Keep at least one phone number or email address on the lead.");
+      setStatus("error");
+      return;
+    }
     setStatus("saving");
+    setErrorMessage("");
 
     try {
       const token = await getToken().catch(() => null);
@@ -126,8 +160,13 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
         body: JSON.stringify({
           seller_name: formString(formData, "seller_name"),
           preferred_name: optionalFormString(formData, "preferred_name"),
-          phone: optionalFormString(formData, "phone"),
-          email: optionalFormString(formData, "email"),
+          contact_methods: submittedMethods.map(({ id, method_type, value, is_primary }) => ({
+            id,
+            method_type,
+            value,
+            is_primary,
+          })),
+          assigned_user_id: optionalFormString(formData, "assigned_user_id"),
           property_street_address: formString(formData, "property_street_address"),
           property_city: formString(formData, "property_city"),
           property_state: formString(formData, "property_state"),
@@ -148,15 +187,72 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
         }),
       });
 
+      const responsePayload = (await response.json().catch(() => null)) as
+        | LeadDetail
+        | { detail?: string }
+        | null;
       if (!response.ok) {
-        throw new Error("Unable to update lead details.");
+        throw new Error(
+          responsePayload && "detail" in responsePayload && responsePayload.detail
+            ? responsePayload.detail
+            : "Unable to update lead details.",
+        );
       }
 
+      const updatedLead = responsePayload as LeadDetail;
+      setContactMethods(ensurePrimaryMethods(editableContactMethods(updatedLead)));
       setStatus("saved");
       router.refresh();
-    } catch {
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Unable to update lead details.");
       setStatus("error");
     }
+  }
+
+  function addContactMethod(methodType: "phone" | "email") {
+    setContactMethods((current) => [
+      ...current,
+      {
+        clientKey: crypto.randomUUID(),
+        id: null,
+        method_type: methodType,
+        value: "",
+        is_primary: !current.some((method) => method.method_type === methodType),
+      },
+    ]);
+    setStatus("idle");
+  }
+
+  function updateContactMethod(
+    clientKey: string,
+    updates: Partial<EditableContactMethod>,
+  ) {
+    setContactMethods((current) =>
+      ensurePrimaryMethods(
+        current.map((method) =>
+          method.clientKey === clientKey ? { ...method, ...updates } : method,
+        ),
+      ),
+    );
+    setStatus("idle");
+  }
+
+  function makePrimary(clientKey: string, methodType: "phone" | "email") {
+    setContactMethods((current) =>
+      current.map((method) => ({
+        ...method,
+        is_primary:
+          method.method_type === methodType ? method.clientKey === clientKey : method.is_primary,
+      })),
+    );
+    setStatus("idle");
+  }
+
+  function removeContactMethod(clientKey: string) {
+    setContactMethods((current) =>
+      ensurePrimaryMethods(current.filter((method) => method.clientKey !== clientKey)),
+    );
+    setStatus("idle");
   }
 
   return (
@@ -171,18 +267,75 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
           <input name="preferred_name" defaultValue={lead.preferred_name ?? ""} maxLength={255} />
         </label>
         <label>
-          <span>Phone</span>
-          <input name="phone" defaultValue={primaryContactValue(lead, "phone")} maxLength={80} />
+          <span>Lead owner</span>
+          <select name="assigned_user_id" defaultValue={lead.assigned_user_id ?? ""}>
+            <option value="">Unassigned</option>
+            {lead.assignable_users.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.display_name} ({user.email})
+              </option>
+            ))}
+          </select>
         </label>
-        <label>
-          <span>Email</span>
-          <input
-            name="email"
-            defaultValue={primaryContactValue(lead, "email")}
-            maxLength={320}
-            type="email"
-          />
-        </label>
+        <div className={`${styles.contactMethodEditor} ${styles.editWide}`}>
+          <div className={styles.contactMethodHeading}>
+            <strong>Phone numbers and emails</strong>
+            <div>
+              <button onClick={() => addContactMethod("phone")} type="button">
+                <Plus aria-hidden="true" size={14} /> Add phone
+              </button>
+              <button onClick={() => addContactMethod("email")} type="button">
+                <Plus aria-hidden="true" size={14} /> Add email
+              </button>
+            </div>
+          </div>
+          <div className={styles.contactMethodRows}>
+            {contactMethods.map((method) => (
+              <div className={styles.contactMethodRow} key={method.clientKey}>
+                <select
+                  aria-label="Contact method type"
+                  onChange={(event) =>
+                    updateContactMethod(method.clientKey, {
+                      method_type: event.target.value as "phone" | "email",
+                      is_primary: false,
+                    })
+                  }
+                  value={method.method_type}
+                >
+                  <option value="phone">Phone</option>
+                  <option value="email">Email</option>
+                </select>
+                <input
+                  aria-label={method.method_type === "phone" ? "Phone number" : "Email address"}
+                  maxLength={method.method_type === "phone" ? 80 : 320}
+                  onChange={(event) =>
+                    updateContactMethod(method.clientKey, { value: event.target.value })
+                  }
+                  type={method.method_type === "phone" ? "tel" : "email"}
+                  value={method.value}
+                />
+                <label className={styles.primaryMethod}>
+                  <input
+                    checked={method.is_primary}
+                    name={`primary-${method.method_type}`}
+                    onChange={() => makePrimary(method.clientKey, method.method_type)}
+                    type="radio"
+                  />
+                  <span>Primary</span>
+                </label>
+                <button
+                  aria-label={`Remove ${method.method_type}`}
+                  className={styles.removeMethod}
+                  onClick={() => removeContactMethod(method.clientKey)}
+                  title={`Remove ${method.method_type}`}
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
         <label className={styles.editWide}>
           <span>Street address</span>
           <input
@@ -317,9 +470,10 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
         </label>
       </div>
       <button disabled={status === "saving"} type="submit">
-        Save details
+        {status === "saving" ? "Saving..." : "Save lead"}
       </button>
-      {status !== "idle" ? <p className={styles[status]}>{status}</p> : null}
+      {status === "saved" ? <p className={styles.saved}>Lead saved.</p> : null}
+      {status === "error" ? <p className={styles.error}>{errorMessage}</p> : null}
     </form>
   );
 }

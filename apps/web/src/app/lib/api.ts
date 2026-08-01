@@ -65,6 +65,7 @@ export type LeadListItem = {
     facts: Record<string, unknown>;
     validated_at: string | null;
   };
+  assigned_user_id: string | null;
   assigned_user_email: string | null;
   motivation: string | null;
   desired_timeline: string | null;
@@ -1376,9 +1377,15 @@ export type FieldAppointmentWorkspace = {
 
 export type LeadDetail = LeadListItem & {
   contact_methods: Array<{
+    id: string;
     method_type: string;
     value: string;
     is_primary: boolean;
+  }>;
+  assignable_users: Array<{
+    id: string;
+    display_name: string;
+    email: string;
   }>;
   consent_records: Array<{
     channel: string;

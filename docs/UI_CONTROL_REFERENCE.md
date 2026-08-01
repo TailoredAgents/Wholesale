@@ -920,17 +920,21 @@ changing ownership or stage does not create a second record.
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Back to leads** | Returns to the lead workspace | Always available |
+| **Edit lead** | Opens the single complete lead editor in the Property section | Requires lead edit access |
 | Current stage | Shows the seller's current pipeline stage | Read-only in header |
-| Owner | Shows the person responsible for the record | Read-only in header; editable with permission |
+| Owner | Shows and reassigns the person responsible for the record | Reassignment also updates the conversation, open tasks, upcoming appointments, watchers, and assignment history |
 | Contact action | Opens the relevant communication workflow | Requires phone/email and channel access |
 | First name / Last name | Edits the primary contact | Required fields depend on lead source |
-| Phone / Email | Edits seller contact methods | Format validation applies |
+| **Add phone** / **Add email** | Adds another contact method without replacing the existing methods | At least one phone or email must remain on the lead |
+| Contact type / value | Edits any seller phone number or email address | Phone and email format validation applies |
+| Primary | Chooses the preferred phone and preferred email used first by Stonegate | One primary is maintained per contact type |
+| Remove contact method | Deletes an incorrect or obsolete phone number or email address | Cannot leave the lead without any phone or email |
 | Property address / City / State / ZIP | Edits the subject property | Address required for market analysis |
 | Source / Campaign | Records acquisition attribution | Options come from configured operations data |
 | Motivation / Timeline / Condition / Occupancy | Saves qualification facts | Unknown is valid until confirmed |
 | Asking price / Mortgage balance | Saves seller-stated figures | Must not be treated as independently verified |
 | Preferred contact method/time | Guides follow-up | Does not itself create a task |
-| **Save details** | Persists edited lead and qualification fields | Disabled while saving |
+| **Save lead** | Atomically persists ownership, contact methods, seller, property, and qualification changes | Disabled while saving; validation errors are shown in the editor |
 | Stage / Stage reason | Changes pipeline status and records why | Reason may be required by target stage |
 | **Update stage** | Applies the stage change | Permission and transition rules apply |
 | Archive | Removes the lead from active queues without deleting history | Requires archive permission |

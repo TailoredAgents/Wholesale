@@ -1223,6 +1223,24 @@ The full lead record has seven sections:
 Use the lead record when you need the complete evidence chain. Use focused workspaces for daily
 queue execution.
 
+### Edit A Lead
+
+1. Open the seller's full lead record.
+2. Select **Edit lead** in the record header. Stonegate opens the canonical editor in the
+   **Property** section.
+3. Update the seller name, property, source, qualification, price context, follow-up preference,
+   or lead owner as needed.
+4. Under **Phone numbers and email addresses**, edit an existing contact method or select **Add
+   phone** or **Add email**. Use **Primary** to choose the number and email Stonegate should use
+   first. Use the trash button to remove an incorrect method.
+5. Select **Save lead**.
+
+At least one phone number or email address must remain on the lead. Add the replacement before
+removing the only contact method. Changing the lead owner also reassigns its conversation, open
+tasks, and upcoming appointments and records the handoff in assignment history. Change the sales
+stage separately under **Summary > Record controls** so ownership and pipeline progress remain
+independent decisions.
+
 ## 10. Underwriting And Comp Analysis
 
 Open **Seller Leads > Underwriting** to choose an active valuation case. Detailed analysis is
