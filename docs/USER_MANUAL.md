@@ -1212,35 +1212,51 @@ Confirm:
 ### Run Market Analysis
 
 1. Open the seller record's **Valuation & Offer** section.
-2. Confirm the property panel contains the correct complete address and known subject facts.
-3. Open **Comp setup**.
-4. Choose **Repair scope**: Light cosmetic, Moderate renovation, Heavy renovation, or Structural /
+2. Read the four-stage bar: **Quick Comp**, **Desk Review**, **Walkthrough**, and **Offer
+   Decision**. The highlighted stage is the next stage supported by the saved evidence. Select a
+   stage to jump to its existing analysis, appointment, or approval workspace.
+3. If **Highest-value missing facts** appears, correct those facts before relying on the result.
+   Stonegate limits this strip to the three most useful missing facts so it does not become another
+   questionnaire.
+4. Confirm the property panel contains the correct complete address and known subject facts.
+5. Open **Comp setup**.
+6. Choose **Repair scope**: Light cosmetic, Moderate renovation, Heavy renovation, or Structural /
    full rebuild.
-5. Choose a remodel estimate method:
+7. Choose a remodel estimate method:
    - **System:** Use Stonegate's size and scope estimate.
    - **Total:** Enter one expected base remodel amount.
    - **Itemized:** Use the guided Georgia scope. Select **Apply preset** for a starting point or
      assess only the categories you know. For each category choose Unknown, No work, Repair,
      Replace, or Specialist review. Stonegate estimates a low, expected, and high cost from the
      saved quantity and catalog version.
-6. Adjust quantity or scope when the property facts justify it. Open **Evidence and override** to
+8. Adjust quantity or scope when the property facts justify it. Open **Evidence and override** to
    record who observed the issue, confirmation status, notes, or a known manual amount. A manual
    amount requires a reason and does not erase the original system range.
-7. Leave an uncertain item as **Unknown** instead of No work. Unknown items add a visible allowance
+9. Leave an uncertain item as **Unknown** instead of No work. Unknown items add a visible allowance
    and widen the repair range; they do not block the analysis or PDFs.
-8. When using Total or Itemized, set the contingency reserve and explain the estimate source under
+10. When using Total or Itemized, set the contingency reserve and explain the estimate source under
    **Repair details and source notes**.
-9. Save the current guided scope as Internal scope or Walkthrough scope when it should become
+11. Save the current guided scope as Internal scope or Walkthrough scope when it should become
    reusable evidence. Select Contractor bid only when written contractor pricing has been entered.
    Applying any saved estimate uses that immutable evidence in the next analysis.
-10. Open **Verified manual sales** only when you know a legitimate closing that RentCast missed.
+12. Open **Verified manual sales** only when you know a legitimate closing that RentCast missed.
    Enter the complete address, closed date and price, property type, square footage, verification
    source and reference, and clear verification notes. Add condition evidence before calling a sale
    As-is or Renovated. Save the record and leave its checkbox selected when it should enter the next
    analysis.
-11. Select **Run complete analysis**. Review **Repair range**, **Unconfirmed work**, and each item to
-    verify before discussing an offer. The expected scenario drives current offer math; low/high
-    scenarios explain repair uncertainty.
+13. Select **Prepare valuation** for the first result. After a result exists, use **Recalculate
+   valuation** to apply the latest saved evidence without paying for or waiting on another market
+   lookup. Use **Refresh market data** only when the property evidence is stale or the provider
+   needs to be queried again.
+14. Review **Repair range**, **Unconfirmed work**, and each item to
+   verify before discussing an offer. The expected scenario drives current offer math; low/high
+   scenarios explain repair uncertainty.
+
+The right-side **Current decision** panel stays visible on desktop and stacks on smaller screens.
+Use it to keep ARV, repair range, buyer target, opening recommendation, and seller ceiling distinct.
+Its links open the existing reports, appointment or scheduling flow, offer approval, and Contract &
+Deal signing flow. Open **Advanced records** only when comparing versions or preserving a manual
+scenario.
 
 Stonegate first requests the exact address from RentCast. If that lookup fails or returns the wrong
 property, Stonegate tries normalized address variations and a matching property record. If the

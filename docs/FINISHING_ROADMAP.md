@@ -50,7 +50,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.7 implemented | Implement U3.8-U3.10, calibrate Georgia repair allowances, then collect verified outcomes and operator acceptance |
+| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.8 implemented | Implement U3.9-U3.10, calibrate Georgia repair allowances, then collect verified outcomes and operator acceptance |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
@@ -370,7 +370,8 @@ For the V3 build:
    Georgia projects; adjust only through a new catalog version.
 5. Validate implemented U3.7 iPad autosave, field scope, and human-reviewed AI suggestions during
    real walkthroughs; AI remains unable to confirm repairs or set prices.
-6. Implement U3.8-U3.9 workspace, report, and calibration updates.
+6. Validate the implemented U3.8 unified workspace with real appointment cases, then implement
+   U3.9 report and calibration updates.
 7. Complete U3.10 shadow validation and record the methodology activation decision.
 
 ### Exit Criteria

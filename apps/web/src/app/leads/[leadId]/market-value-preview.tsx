@@ -690,15 +690,25 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         <div className={styles.marketValueActions}>
           <button
             disabled={isLoading}
-            onClick={() => createAnalysis(Boolean(estimate))}
+            onClick={() => createAnalysis(false)}
             type="button"
           >
             {isLoading
-              ? "Analyzing..."
+              ? "Preparing..."
               : estimate
-                ? "Refresh complete analysis"
-                : "Run complete analysis"}
+                ? "Recalculate valuation"
+                : "Prepare valuation"}
           </button>
+          {estimate ? (
+            <button
+              className={styles.secondaryButton}
+              disabled={isLoading}
+              onClick={() => createAnalysis(true)}
+              type="button"
+            >
+              Refresh market data
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -1263,7 +1273,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </div>
           ) : null}
 
-          <div className={styles.reportActions}>
+          <div className={styles.reportActions} id="valuation-reports">
             <span>Saved report</span>
             <button
               className={styles.secondaryButton}

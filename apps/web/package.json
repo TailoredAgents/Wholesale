@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "audit:ia": "node --test scripts/os-ia-contract.test.mjs",
+    "audit:underwriting": "node --test scripts/underwriting-workspace-contract.test.mjs",
     "baseline:ia": "node scripts/os-ia-baseline.mjs",
     "audit:os": "node scripts/os-quality-audit.mjs",
     "audit:help": "node scripts/help-bubble-audit.mjs",

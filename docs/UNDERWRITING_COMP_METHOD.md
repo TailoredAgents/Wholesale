@@ -905,7 +905,7 @@ and no AI suggestion becomes a confirmed repair fact silently.
 
 #### U3.8: Unified Valuation And Offer Workspace
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026; operator acceptance remains.
 
 - Present Quick Comp, Desk Review, Walkthrough, and Offer Decision as progressive stages of one
   underwriting workspace.
@@ -917,6 +917,25 @@ and no AI suggestion becomes a confirmed repair fact silently.
 
 **Exit:** One lead moves from preliminary analysis to approved negotiation authority without a
 parallel record, duplicate repair scope, or unexplained number change.
+
+**Implementation record:**
+
+- The existing seller Valuation & Offer section now presents Quick Comp, Desk Review, Walkthrough,
+  and Offer Decision as one progressive workflow. Status comes from the latest underwriting
+  version, report stage, field evidence, and approved lead stage; no parallel valuation record was
+  introduced.
+- **Prepare valuation** is the first-run action. **Recalculate valuation** applies current saved
+  repair and comp-review evidence while reusing the retained market snapshot; **Refresh market
+  data** is a separate explicit action when new provider evidence is actually needed.
+- The workspace surfaces only the first three highest-value missing lead facts above the analysis
+  and links directly to the existing Property section for correction.
+- A sticky decision summary keeps the current ARV range, repair range, buyer target, opening
+  recommendation, and seller ceiling visible while version comparison and manual underwriting
+  records remain under an expandable advanced section.
+- The same workspace links to the existing appointment or scheduling flow, investor/client
+  reports, offer approval and negotiation controls, and Contract & Deal signing flow.
+- Responsive layouts stack the decision summary and convert the four-stage rail to two columns on
+  narrow screens without creating a second mobile workflow.
 
 #### U3.9: Reports, Explainability, And Calibration
 

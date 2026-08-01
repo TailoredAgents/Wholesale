@@ -1,3 +1,12 @@
+import {
+  ArrowRight,
+  CalendarDays,
+  Check,
+  Circle,
+  FileSignature,
+  FileText,
+  ShieldCheck,
+} from "lucide-react";
 import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
@@ -355,47 +364,167 @@ function CommunicationsTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
+function valuationStageState(
+  complete: boolean,
+  priorComplete: boolean,
+): "complete" | "current" | "upcoming" {
+  if (complete) return "complete";
+  return priorComplete ? "current" : "upcoming";
+}
+
 function UnderwritingTab({ lead }: { lead: LeadDetail }) {
+  const latestVersion = lead.underwriting_versions[0];
+  const quickCompComplete = Boolean(latestVersion);
+  const deskReviewComplete = Boolean(
+    latestVersion
+    && ["pre_meeting_reviewed", "walkthrough_verified"].includes(
+      latestVersion.report_stage ?? "",
+    ),
+  );
+  const walkthroughComplete = Boolean(
+    latestVersion?.report_stage === "walkthrough_verified"
+    || latestVersion?.source === "field_inspection",
+  );
+  const offerDecisionComplete = [
+    "offer_ready",
+    "offer_presented",
+    "negotiating",
+    "under_contract",
+  ].includes(lead.stage_key);
+  const activeAppointment = lead.appointments.find(
+    (appointment) =>
+      ["scheduled", "rescheduled"].includes(appointment.status)
+      && !appointment.outcome,
+  );
+  const appointmentHref = activeAppointment
+    ? `/os/calendar?view=appointment&appointment=${encodeURIComponent(activeAppointment.id)}`
+    : `/os/leads/${lead.id}?tab=appointments`;
+  const missingFacts = lead.intelligence.missing_fields.slice(0, 3);
+  const stages = [
+    {
+      key: "quick",
+      label: "Quick Comp",
+      meta: quickCompComplete ? `Version ${latestVersion?.version_number}` : "Not prepared",
+      href: "#valuation-analysis",
+      state: valuationStageState(quickCompComplete, true),
+    },
+    {
+      key: "desk",
+      label: "Desk Review",
+      meta: deskReviewComplete ? "Evidence reviewed" : "Needs review",
+      href: "#valuation-analysis",
+      state: valuationStageState(deskReviewComplete, quickCompComplete),
+    },
+    {
+      key: "walkthrough",
+      label: "Walkthrough",
+      meta: walkthroughComplete
+        ? "Field evidence transferred"
+        : activeAppointment
+          ? "Appointment ready"
+          : "Not scheduled",
+      href: appointmentHref,
+      state: valuationStageState(walkthroughComplete, deskReviewComplete),
+    },
+    {
+      key: "offer",
+      label: "Offer Decision",
+      meta: offerDecisionComplete ? "Authority ready" : "Not approved",
+      href: "#offer-decision",
+      state: valuationStageState(offerDecisionComplete, walkthroughComplete),
+    },
+  ];
+
   return (
-    <div className={styles.tabGrid}>
-      <div className={styles.mainColumn}>
-        <section className={styles.sectionPanel}>
-          <SectionHeader title="Comp analysis and offer range" />
-          <div className={styles.sectionBody}><MarketValuePreview leadId={lead.id} /></div>
-        </section>
-        <section className={styles.sectionPanel}>
-          <SectionHeader title="Underwriting versions" meta={`${lead.underwriting_versions.length} saved`} />
-          <UnderwritingVersionComparison versions={lead.underwriting_versions} />
-          <div className={styles.recordList}>
-            {lead.underwriting_versions.length === 0 ? <p className={styles.emptyState}>No underwriting version saved.</p> : null}
-            {lead.underwriting_versions.map((version) => (
-              <article key={version.id}>
-                <div className={styles.recordTitle}><strong>Version {version.version_number}</strong><span>{labelize(version.status)}</span></div>
-                <dl className={styles.moneyGrid}>
-                  <div><dt>ARV</dt><dd>{formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)}</dd></div>
-                  <div><dt>Repairs</dt><dd>{formatMoney(version.repair_low_cents)} to {formatMoney(version.repair_high_cents)}</dd></div>
-                  <div><dt>MAO</dt><dd>{formatMoney(version.max_offer_cents)}</dd></div>
-                  <div><dt>Recommended</dt><dd>{formatMoney(version.recommended_offer_cents)}</dd></div>
-                </dl>
-                {version.notes ? <p>{version.notes}</p> : null}
-              </article>
-            ))}
+    <div className={styles.valuationWorkspace}>
+      <section className={styles.valuationProgress} aria-label="Valuation and offer progress">
+        <header>
+          <div>
+            <span>Decision workflow</span>
+            <h2>Valuation and offer</h2>
           </div>
-          <ActionDisclosure label="Create manual underwriting version">
-            <UnderwritingForm leadId={lead.id} />
-          </ActionDisclosure>
+          <strong>{stages.filter((stage) => stage.state === "complete").length}/4 complete</strong>
+        </header>
+        <nav>
+          {stages.map((stage, index) => (
+            <Link data-state={stage.state} href={stage.href} key={stage.key}>
+              <span>{stage.state === "complete" ? <Check size={15} /> : <Circle size={13} />}</span>
+              <div><strong>{index + 1}. {stage.label}</strong><small>{stage.meta}</small></div>
+            </Link>
+          ))}
+        </nav>
+      </section>
+
+      {missingFacts.length ? (
+        <section className={styles.valuationMissingFacts}>
+          <div>
+            <span>Highest-value missing facts</span>
+            <strong>{missingFacts.map((item) => item.label).join(" / ")}</strong>
+          </div>
+          <Link href={`/os/leads/${lead.id}?tab=property`}>Update property facts <ArrowRight size={14} /></Link>
         </section>
-        <section className={styles.sectionPanel} id="offer-approval">
-          <SectionHeader title="Offer approval and negotiation" />
-          <OfferApprovalControl
-            askingPrice={lead.asking_price}
-            leadId={lead.id}
-            versions={lead.underwriting_versions}
-          />
-          <NegotiationGovernance leadId={lead.id} />
-        </section>
+      ) : null}
+
+      <div className={styles.valuationGrid}>
+        <div className={styles.mainColumn}>
+          <div id="valuation-analysis"><MarketValuePreview leadId={lead.id} /></div>
+          <details className={styles.valuationAdvanced}>
+            <summary>
+              <span>Advanced records</span>
+              <strong>{lead.underwriting_versions.length} underwriting versions</strong>
+            </summary>
+            <div>
+              <UnderwritingVersionComparison versions={lead.underwriting_versions} />
+              <div className={styles.recordList}>
+                {lead.underwriting_versions.length === 0 ? <p className={styles.emptyState}>No underwriting version saved.</p> : null}
+                {lead.underwriting_versions.map((version) => (
+                  <article key={version.id}>
+                    <div className={styles.recordTitle}><strong>Version {version.version_number}</strong><span>{labelize(version.status)}</span></div>
+                    <dl className={styles.moneyGrid}>
+                      <div><dt>ARV</dt><dd>{formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)}</dd></div>
+                      <div><dt>Repairs</dt><dd>{formatMoney(version.repair_low_cents)} to {formatMoney(version.repair_high_cents)}</dd></div>
+                      <div><dt>MAO</dt><dd>{formatMoney(version.max_offer_cents)}</dd></div>
+                      <div><dt>Recommended</dt><dd>{formatMoney(version.recommended_offer_cents)}</dd></div>
+                    </dl>
+                    {version.notes ? <p>{version.notes}</p> : null}
+                  </article>
+                ))}
+              </div>
+              <ActionDisclosure label="Create manual underwriting version">
+                <UnderwritingForm leadId={lead.id} />
+              </ActionDisclosure>
+            </div>
+          </details>
+          <section className={styles.sectionPanel} id="offer-decision">
+            <SectionHeader title="Offer approval and negotiation" />
+            <OfferApprovalControl
+              askingPrice={lead.asking_price}
+              leadId={lead.id}
+              versions={lead.underwriting_versions}
+            />
+            <NegotiationGovernance leadId={lead.id} />
+          </section>
+        </div>
+        <aside className={styles.valuationSummary}>
+          <header><span>Current decision</span><strong>{latestVersion ? `Version ${latestVersion.version_number}` : "Not prepared"}</strong></header>
+          <dl>
+            <div><dt>ARV range</dt><dd>{formatMoney(latestVersion?.arv_low_cents ?? null)} to {formatMoney(latestVersion?.arv_high_cents ?? null)}</dd></div>
+            <div><dt>Repair range</dt><dd>{formatMoney(latestVersion?.repair_low_cents ?? null)} to {formatMoney(latestVersion?.repair_high_cents ?? null)}</dd></div>
+            <div><dt>Buyer target</dt><dd>{formatMoney(latestVersion?.recommended_disposition_cents ?? null)}</dd></div>
+            <div><dt>Opening</dt><dd>{formatMoney(latestVersion?.recommended_offer_cents ?? null)}</dd></div>
+            <div><dt>Seller ceiling</dt><dd>{formatMoney(latestVersion?.seller_contract_ceiling_cents ?? latestVersion?.max_offer_cents ?? null)}</dd></div>
+          </dl>
+          <nav>
+            <a href={latestVersion ? "#valuation-reports" : "#valuation-analysis"}>
+              <FileText size={15} />{latestVersion ? "Reports" : "Prepare valuation"}
+            </a>
+            <Link href={appointmentHref}><CalendarDays size={15} />{activeAppointment ? "Appointment" : "Schedule"}</Link>
+            <a href="#offer-decision"><ShieldCheck size={15} />Offer approval</a>
+            <Link href={`/os/leads/${lead.id}?tab=contract`}><FileSignature size={15} />Contract & signing</Link>
+          </nav>
+          <PropertyPanel lead={lead} />
+        </aside>
       </div>
-      <aside className={styles.sideColumn}><PropertyPanel lead={lead} /></aside>
     </div>
   );
 }

@@ -1008,7 +1008,13 @@ appraisal or permission to promise a seller a price.
 
 | Control or result | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **Analyze comps** | Validates the address, gathers property/comparable evidence, filters outliers, estimates ARV, applies repair and assignment assumptions, and creates a reviewable analysis | Requires valid address; external provider failures may fall back to controlled evidence collection |
+| Quick Comp / Desk Review / Walkthrough / Offer Decision | Shows the progressive status of the existing valuation, field evidence, and offer authority | Status is derived from saved records; selecting a stage opens its existing workspace |
+| Highest-value missing facts | Shows at most three lead facts most useful to the next valuation | Links to Property; absence does not mean every optional fact is known |
+| **Prepare valuation** | Validates the address, gathers property/comparable evidence, filters outliers, estimates ARV, applies repair and assignment assumptions, and creates the first reviewable analysis | Requires valid address; external provider failures may fall back to controlled evidence collection |
+| **Recalculate valuation** | Creates a new analysis from current saved inputs while reusing retained provider evidence | Requires a saved provider snapshot; does not silently perform another paid provider lookup |
+| **Refresh market data** | Explicitly requests a new provider snapshot and recalculates | Use only when evidence is stale, corrected, or incomplete; provider cost and availability apply |
+| Current decision | Keeps ARV, repairs, buyer target, opening, and seller ceiling visible and links to reports, appointment, approval, and signing | Values come from the latest saved underwriting version |
+| Advanced records | Expands version comparison, prior versions, and manual underwriting creation | Collapsed by default; normal comp review remains in the main analysis |
 | Subject facts | Shows bedrooms, bathrooms, size, year, lot, and property type used | Staff should correct material mismatches |
 | ARV range | Shows conservative low, central, and high after-repair value | Range width reflects evidence uncertainty |
 | Confidence | Summarizes evidence quality and unresolved gaps | Does not gate PDF generation |

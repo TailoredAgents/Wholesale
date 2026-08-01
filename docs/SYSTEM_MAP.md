@@ -679,6 +679,15 @@ redirect to their new owners.
 15. A human creates a negotiation plan tied to one saved underwriting version.
 16. Approval establishes opening, target, stretch, and hard-ceiling authority.
 17. Concessions and price discussions are appended to the negotiation ledger.
+18. The seller's Valuation & Offer section presents Quick Comp, Desk Review, Walkthrough, and Offer
+    Decision as progressive stages over these same records. It does not create a separate comp or
+    repair workflow.
+19. **Prepare valuation** creates the first analysis. **Recalculate valuation** reuses retained
+    provider evidence with current saved inputs, while the separate **Refresh market data** action
+    intentionally requests a new provider snapshot.
+20. A persistent decision summary shows the current ARV, repairs, buyer target, opening, and seller
+    ceiling and links to reports, the appointment/field workflow, approval, and contract signing.
+    Version comparison and manual scenarios remain available under expandable advanced records.
 
 ### 8.8 Contract And E-Signature
 
