@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Phone, Plus, Save } from "lucide-react";
+import { CheckCircle2, CircleAlert, Copy, Phone, Plus, Save } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import styles from "../settings.module.css";
@@ -41,6 +41,23 @@ type VoiceLineTeam = {
   team_type: string;
 };
 
+type VoiceReadiness = {
+  configured: boolean;
+  line_id: string | null;
+  line_phone_number: string | null;
+  inbound_webhook_url: string;
+  outbound_twiml_app_url: string;
+  status_callback_url: string;
+  recording_callback_url: string;
+  checks: Array<{
+    key: string;
+    label: string;
+    required: boolean;
+    ready: boolean;
+    detail: string;
+  }>;
+};
+
 const hourOptions = Array.from({ length: 25 }, (_, hour) => hour);
 
 function purposeForDepartment(department: string) {
@@ -68,6 +85,7 @@ export function VoiceLineSettings() {
   const [lines, setLines] = useState<VoiceLine[]>([]);
   const [users, setUsers] = useState<VoiceLineUser[]>([]);
   const [teams, setTeams] = useState<VoiceLineTeam[]>([]);
+  const [readiness, setReadiness] = useState<VoiceReadiness | null>(null);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -103,16 +121,18 @@ export function VoiceLineSettings() {
   );
 
   const load = useCallback(async () => {
-    const payload = await request<{
-      items: VoiceLine[];
-      users: VoiceLineUser[];
-      teams: VoiceLineTeam[];
-    }>(
-      "/api/v1/voice/lines",
-    );
+    const [payload, readinessPayload] = await Promise.all([
+      request<{
+        items: VoiceLine[];
+        users: VoiceLineUser[];
+        teams: VoiceLineTeam[];
+      }>("/api/v1/voice/lines"),
+      request<VoiceReadiness>("/api/v1/voice/readiness"),
+    ]);
     setLines(payload.items);
     setUsers(payload.users);
     setTeams(payload.teams);
+    setReadiness(readinessPayload);
   }, [request]);
 
   useEffect(() => {
@@ -204,6 +224,17 @@ export function VoiceLineSettings() {
     }
   }
 
+  async function copyValue(value: string) {
+    setError("");
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage("Webhook URL copied.");
+    } catch {
+      setMessage("");
+      setError("The browser could not copy that URL.");
+    }
+  }
+
   return (
     <section className={styles.voiceSection}>
       <header>
@@ -217,6 +248,55 @@ export function VoiceLineSettings() {
 
       {error ? <p className={styles.settingsError} role="alert">{error}</p> : null}
       {message ? <p className={styles.settingsSuccess} role="status">{message}</p> : null}
+
+      {readiness ? (
+        <div className={styles.voiceReadiness} data-ready={readiness.configured}>
+          <div className={styles.voiceReadinessHeading}>
+            <div>
+              <strong>{readiness.configured ? "Ready for live Voice testing" : "Voice setup incomplete"}</strong>
+              <small>{readiness.line_phone_number ?? "No active acquisitions line"}</small>
+            </div>
+            {readiness.configured ? (
+              <CheckCircle2 aria-hidden="true" size={20} />
+            ) : (
+              <CircleAlert aria-hidden="true" size={20} />
+            )}
+          </div>
+          <div className={styles.voiceChecks}>
+            {readiness.checks.map((check) => (
+              <div data-ready={check.ready} key={check.key}>
+                {check.ready ? (
+                  <CheckCircle2 aria-hidden="true" size={15} />
+                ) : (
+                  <CircleAlert aria-hidden="true" size={15} />
+                )}
+                <span>
+                  <strong>{check.label}{check.required ? "" : " (optional)"}</strong>
+                  <small>{check.detail}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className={styles.voiceUrls}>
+            {[
+              ["Number Voice webhook", readiness.inbound_webhook_url],
+              ["TwiML App Voice URL", readiness.outbound_twiml_app_url],
+            ].map(([label, value]) => (
+              <div key={label}>
+                <span><strong>{label}</strong><code>{value}</code></span>
+                <button
+                  aria-label={`Copy ${label}`}
+                  onClick={() => void copyValue(value)}
+                  title={`Copy ${label}`}
+                  type="button"
+                >
+                  <Copy aria-hidden="true" size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className={styles.voiceGrid}>
         {lines.map((line) => (

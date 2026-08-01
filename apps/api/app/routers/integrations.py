@@ -49,20 +49,7 @@ def read_integration_status(
     elif settings.property_data_provider == "attom" and not settings.attom_api_key:
         property_blockers.append("ATTOM_API_KEY")
 
-    voice_blockers = []
-    if not settings.twilio_voice_enabled:
-        voice_blockers.append("TWILIO_VOICE_ENABLED=true")
-    for configured, variable in (
-        (settings.twilio_account_sid, "TWILIO_ACCOUNT_SID"),
-        (settings.twilio_auth_token, "TWILIO_AUTH_TOKEN"),
-        (settings.twilio_api_key_sid, "TWILIO_API_KEY_SID"),
-        (settings.twilio_api_key_secret, "TWILIO_API_KEY_SECRET"),
-        (settings.twilio_twiml_app_sid, "TWILIO_TWIML_APP_SID"),
-        (settings.twilio_voice_from_number, "TWILIO_VOICE_FROM_NUMBER"),
-        (settings.twilio_webhook_base_url, "TWILIO_WEBHOOK_BASE_URL"),
-    ):
-        if not configured:
-            voice_blockers.append(variable)
+    voice_blockers = list(settings.twilio_voice_configuration_blockers)
 
     buyer_blockers = []
     if settings.buyer_data_provider != "dealmachine":

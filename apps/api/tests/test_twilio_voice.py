@@ -210,6 +210,15 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     assert updated["coverage_end_hour"] == 24
     assert updated["ownership_complete"] is True
 
+    readiness_response = client.get("/api/v1/voice/readiness", headers=headers)
+    assert readiness_response.status_code == 200, readiness_response.text
+    readiness = readiness_response.json()
+    assert readiness["configured"] is True
+    assert readiness["line_phone_number"] == STONEGATE_NUMBER
+    assert readiness["inbound_webhook_url"].endswith("/voice/incoming")
+    assert readiness["outbound_twiml_app_url"].endswith("/voice/outbound")
+    assert AUTH_TOKEN not in readiness_response.text
+
     duplicate_owner_response = client.patch(
         f"/api/v1/voice/lines/{acquisitions_line['id']}",
         headers=headers,

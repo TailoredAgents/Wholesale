@@ -765,6 +765,11 @@ Email administration is embedded at `/os/settings/communications`. The legacy
 Voice-line administration is shown below Email Administration at `/os/settings/communications`
 only to owners and users with `communications:manage_voice_lines`.
 
+The Voice readiness panel above the line editor checks Render variables, webhook validation, the
+active acquisitions number, number matching, and primary/fallback ownership. Its copy buttons
+provide the number-level inbound webhook and the separate TwiML App outbound URL without exposing
+credentials.
+
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |

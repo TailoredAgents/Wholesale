@@ -47,6 +47,8 @@ from app.schemas.voice import (
     VoiceLineRead,
     VoiceLineTeamRead,
     VoiceLineUserRead,
+    VoiceProviderReadinessRead,
+    VoiceReadinessCheckRead,
     VoiceRecordingRead,
     VoiceSessionRead,
 )
@@ -139,6 +141,115 @@ def list_voice_line_teams(db: Session, principal: Principal) -> list[VoiceLineTe
         VoiceLineTeamRead(id=team.id, name=team.name, team_type=team.team_type)
         for team in teams
     ]
+
+
+def get_voice_provider_readiness(
+    db: Session,
+    principal: Principal,
+) -> VoiceProviderReadinessRead:
+    settings = get_settings()
+    line = db.scalar(
+        select(VoiceLine)
+        .where(
+            VoiceLine.organization_id == principal.organization_id,
+            VoiceLine.department_key == "acquisitions",
+            VoiceLine.purpose_key == "seller_conversations",
+            VoiceLine.status == "active",
+        )
+        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    )
+    environment_blockers = list(settings.twilio_voice_configuration_blockers)
+    expected_number = format_e164(settings.twilio_voice_from_number or "")
+    line_number_matches = bool(
+        line is not None and expected_number and line.phone_number == expected_number
+    )
+    line_read = voice_line_to_read(db, line) if line is not None else None
+    base_url = (settings.twilio_webhook_base_url or "https://api.stonegatehb.com").rstrip("/")
+    checks = [
+        VoiceReadinessCheckRead(
+            key="environment",
+            label="Render Voice configuration",
+            required=True,
+            ready=not environment_blockers,
+            detail=(
+                "All required Voice variables are present."
+                if not environment_blockers
+                else f"Missing: {', '.join(environment_blockers)}"
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="line",
+            label="Active acquisitions line",
+            required=True,
+            ready=line is not None,
+            detail=(
+                f"{line.label} uses {line.phone_number}."
+                if line is not None
+                else "Add an active Acquisitions line in Communications settings."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="number_match",
+            label="Render number matches Stonegate",
+            required=True,
+            ready=line_number_matches,
+            detail=(
+                "TWILIO_VOICE_FROM_NUMBER matches the active acquisitions line."
+                if line_number_matches
+                else "Set TWILIO_VOICE_FROM_NUMBER to the acquisitions line in +1 format."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="ownership",
+            label="Primary and fallback coverage",
+            required=True,
+            ready=bool(line_read and line_read.ownership_complete),
+            detail=(
+                "Both active owners are assigned."
+                if line_read and line_read.ownership_complete
+                else "Select two different active users as primary and fallback."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="team",
+            label="Department team",
+            required=False,
+            ready=bool(line and line.assigned_team_id),
+            detail=(
+                f"{line_read.assigned_team_name} joins the shared line."
+                if line_read and line_read.assigned_team_name
+                else "Optional: select the Acquisitions team for future staff coverage."
+            ),
+        ),
+        VoiceReadinessCheckRead(
+            key="recording",
+            label="Call recording",
+            required=False,
+            ready=(
+                not settings.twilio_voice_recording_enabled
+                or settings.twilio_voice_recording_configured
+            ),
+            detail=(
+                "Call recording is intentionally disabled for initial Voice acceptance."
+                if not settings.twilio_voice_recording_enabled
+                else (
+                    "Recording disclosure and retention are configured."
+                    if settings.twilio_voice_recording_configured
+                    else "Recording is enabled but its disclosure or retention is incomplete."
+                )
+            ),
+        ),
+    ]
+    return VoiceProviderReadinessRead(
+        configured=all(check.ready for check in checks if check.required),
+        line_id=line.id if line is not None else None,
+        line_phone_number=line.phone_number if line is not None else None,
+        inbound_webhook_url=f"{base_url}/api/v1/webhooks/twilio/voice/incoming",
+        outbound_twiml_app_url=f"{base_url}/api/v1/webhooks/twilio/voice/outbound",
+        status_callback_url=f"{base_url}/api/v1/webhooks/twilio/voice/status",
+        recording_callback_url=f"{base_url}/api/v1/webhooks/twilio/voice/recording",
+        checks=checks,
+    )
 
 
 def create_voice_line(

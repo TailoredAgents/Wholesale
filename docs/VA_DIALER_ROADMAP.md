@@ -145,12 +145,19 @@ person or fallback, and every call attaches to one conversation.
 
 ### PH4. Acquisitions Voice Acceptance
 
+Status: readiness checks and setup controls are implemented; Twilio/Render configuration and live
+acceptance remain owner actions.
+
 - Configure the TwiML App, API key, number Voice webhook, and Render Voice variables.
 - Test browser registration for Austin and Devon.
 - Test outbound caller ID, known-seller routing, unknown-caller routing, busy, no answer, fallback,
   voicemail, and owner coverage.
 - Keep recording disabled until the recording disclosure and retention configuration is approved
   for production use.
+
+**Settings > Communications** now reports whether the required Voice environment, active
+acquisitions line, matching caller ID, signed webhooks, and owner/fallback coverage are ready. It
+also exposes safe copy controls for the number-level inbound webhook and TwiML App outbound URL.
 
 Exit criteria: the acquisitions line can replace personal phones for warm seller work.
 

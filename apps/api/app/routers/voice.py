@@ -21,6 +21,7 @@ from app.schemas.voice import (
     VoiceLineCreate,
     VoiceLineListResponse,
     VoiceLineRead,
+    VoiceProviderReadinessRead,
     VoiceRecordingDelete,
     VoiceRecordingRead,
     VoiceSessionRead,
@@ -35,6 +36,7 @@ from app.services.voice import (
     create_voice_session,
     delete_recording,
     get_scoped_recording,
+    get_voice_provider_readiness,
     list_voice_lines,
     list_voice_line_teams,
     list_voice_line_users,
@@ -97,6 +99,14 @@ def read_voice_lines(
         users=list_voice_line_users(db, principal),
         teams=list_voice_line_teams(db, principal),
     )
+
+
+@router.get("/readiness")
+def read_voice_provider_readiness(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_lines_dependency)],
+) -> VoiceProviderReadinessRead:
+    return get_voice_provider_readiness(db, principal)
 
 
 @router.post("/lines", status_code=201)

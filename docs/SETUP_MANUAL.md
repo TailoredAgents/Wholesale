@@ -508,16 +508,33 @@ the browser token. The TwiML App tells Twilio where to request call instructions
 
 ### Setup Order
 
-1. Choose the Stonegate-owned voice number.
-2. Create a Twilio API key and securely record its SID and secret.
-3. Create a TwiML App for Stonegate browser calling.
-4. Configure inbound and outbound Voice webhooks from [SETUP_REFERENCE.md](./SETUP_REFERENCE.md).
-5. In **Settings > Communications**, select the Acquisitions team, Austin/Devon primary and
-   fallback order, ring strategy, coverage window, and missed-call plan.
-6. Enter Voice variables on **oakwell-api**.
-7. Keep call recording disabled until disclosure and retention rules are approved. Voicemail uses
-   its own caller-initiated recording path.
-8. Enable Voice and redeploy.
+1. In Twilio, open **Voice > Manage > TwiML Apps** and create **Stonegate Browser Voice**.
+2. Set its Voice request method to `POST` and URL to:
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/outbound`
+3. Under **API keys & tokens**, create a Stonegate API key. Copy its API Key SID and secret when
+   Twilio displays them; the secret is not shown again.
+4. Open the acquisitions number under **Phone Numbers > Manage > Active numbers**. Under Voice,
+   set **A call comes in** to Webhook, `POST`:
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/incoming`
+5. If the number provides a call-status callback field, set it to `POST`:
+   `https://api.stonegatehb.com/api/v1/webhooks/twilio/voice/status`
+6. In **Settings > Communications**, select the Acquisitions team, Devon as primary, Austin as
+   fallback, **Conversation owner**, **In order**, the coverage window, and **Fallback, then
+   voicemail**.
+7. On **oakwell-api** in Render, enter:
+   - `TWILIO_VOICE_ENABLED=true`
+   - `TWILIO_ACCOUNT_SID`
+   - `TWILIO_AUTH_TOKEN`
+   - `TWILIO_API_KEY_SID`
+   - `TWILIO_API_KEY_SECRET`
+   - `TWILIO_TWIML_APP_SID`
+   - `TWILIO_VOICE_FROM_NUMBER` using the acquisitions number in `+1...` format
+   - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
+   - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
+8. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for initial Voice acceptance. Voicemail uses its
+   own caller-initiated recording path.
+9. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
+   live Voice testing** before acceptance begins.
 
 ### Acceptance
 

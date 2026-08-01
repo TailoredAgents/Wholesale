@@ -89,6 +89,25 @@ class VoiceLineListResponse(BaseModel):
     teams: list[VoiceLineTeamRead]
 
 
+class VoiceReadinessCheckRead(BaseModel):
+    key: str
+    label: str
+    required: bool
+    ready: bool
+    detail: str
+
+
+class VoiceProviderReadinessRead(BaseModel):
+    configured: bool
+    line_id: UUID | None
+    line_phone_number: str | None
+    inbound_webhook_url: str
+    outbound_twiml_app_url: str
+    status_callback_url: str
+    recording_callback_url: str
+    checks: list[VoiceReadinessCheckRead]
+
+
 class VoiceSessionRead(BaseModel):
     can_initialize: bool
     identity: str

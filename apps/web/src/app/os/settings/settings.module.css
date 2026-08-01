@@ -179,6 +179,138 @@
   font-size: 12px;
 }
 
+.voiceReadiness {
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--info);
+  border-radius: 7px;
+  background: var(--surface);
+  padding: 13px;
+  display: grid;
+  gap: 12px;
+}
+
+.voiceReadiness[data-ready="true"] {
+  border-left-color: var(--brand);
+}
+
+.voiceReadinessHeading,
+.voiceReadinessHeading > div {
+  display: flex;
+  align-items: center;
+}
+
+.voiceReadinessHeading {
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--info);
+}
+
+.voiceReadiness[data-ready="true"] .voiceReadinessHeading {
+  color: var(--brand);
+}
+
+.voiceReadinessHeading > div {
+  min-width: 0;
+  align-items: start;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.voiceReadinessHeading strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.voiceReadinessHeading small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.voiceChecks {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.voiceChecks > div {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  align-items: start;
+  gap: 7px;
+  color: var(--info);
+}
+
+.voiceChecks > div[data-ready="true"] {
+  color: var(--brand);
+}
+
+.voiceChecks span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.voiceChecks strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.voiceChecks small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.voiceUrls {
+  display: grid;
+  gap: 6px;
+}
+
+.voiceUrls > div {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voiceUrls span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.voiceUrls strong {
+  color: var(--text-soft);
+  font-size: 9px;
+}
+
+.voiceUrls code {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+.voiceUrls button {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
 .voiceGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -354,7 +486,8 @@
   }
 
   .voiceGrid,
-  .voiceGrid form {
+  .voiceGrid form,
+  .voiceChecks {
     grid-template-columns: 1fr;
   }
 

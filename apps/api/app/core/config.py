@@ -697,16 +697,27 @@ class Settings(BaseSettings):
 
     @property
     def twilio_voice_configured(self) -> bool:
-        return bool(
-            self.twilio_voice_enabled
-            and self.twilio_account_sid
-            and self.twilio_api_key_sid
-            and self.twilio_api_key_secret
-            and self.twilio_twiml_app_sid
-            and self.twilio_voice_from_number
-            and self.twilio_webhook_base_url
-            and self.twilio_auth_token
-        )
+        return not self.twilio_voice_configuration_blockers
+
+    @property
+    def twilio_voice_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.twilio_voice_enabled:
+            blockers.append("TWILIO_VOICE_ENABLED=true")
+        for configured, variable in (
+            (self.twilio_account_sid, "TWILIO_ACCOUNT_SID"),
+            (self.twilio_auth_token, "TWILIO_AUTH_TOKEN"),
+            (self.twilio_api_key_sid, "TWILIO_API_KEY_SID"),
+            (self.twilio_api_key_secret, "TWILIO_API_KEY_SECRET"),
+            (self.twilio_twiml_app_sid, "TWILIO_TWIML_APP_SID"),
+            (self.twilio_voice_from_number, "TWILIO_VOICE_FROM_NUMBER"),
+            (self.twilio_webhook_base_url, "TWILIO_WEBHOOK_BASE_URL"),
+        ):
+            if not configured:
+                blockers.append(variable)
+        if not self.twilio_validate_webhook_signatures:
+            blockers.append("TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true")
+        return tuple(blockers)
 
     @property
     def twilio_voice_recording_configured(self) -> bool:
