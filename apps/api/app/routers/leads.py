@@ -605,7 +605,13 @@ def update_seller_lead_details(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadDetail:
-    lead = update_lead_staff_details(db, principal, lead_id, payload)
+    try:
+        lead = update_lead_staff_details(db, principal, lead_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

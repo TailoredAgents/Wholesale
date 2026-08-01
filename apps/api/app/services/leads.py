@@ -3528,11 +3528,13 @@ def sync_lead_contact_methods(
         raise ValueError("Keep at least one phone number or email address on the lead.")
     for method_type in ("phone", "email"):
         group = [item for item in normalized if item["method_type"] == method_type]
-        primary_count = sum(bool(item["is_primary"]) for item in group)
-        if primary_count > 1:
-            raise ValueError(f"Select only one primary {method_type}.")
-        if group and primary_count == 0:
-            group[0]["is_primary"] = True
+        if not group:
+            continue
+        # Older intake paths may have left multiple primary rows. Retain the
+        # first selected method so an unrelated lead edit repairs the record.
+        primary = next((item for item in group if item["is_primary"]), group[0])
+        for item in group:
+            item["is_primary"] = item is primary
 
     before = sorted(
         (contact_method_audit_value(method) for method in existing_methods),

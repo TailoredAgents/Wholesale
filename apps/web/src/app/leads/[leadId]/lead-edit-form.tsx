@@ -75,12 +75,21 @@ function editableContactMethods(lead: LeadDetail): EditableContactMethod[] {
 }
 
 function ensurePrimaryMethods(methods: EditableContactMethod[]) {
-  return methods.map((method, index, all) => {
-    const group = all.filter((item) => item.method_type === method.method_type);
-    const groupHasPrimary = group.some((item) => item.is_primary);
-    const isFirstInGroup = all.findIndex((item) => item.method_type === method.method_type) === index;
-    return { ...method, is_primary: groupHasPrimary ? method.is_primary : isFirstInGroup };
-  });
+  const primaryKeys = new Map<"phone" | "email", string>();
+  for (const method of methods) {
+    if (method.is_primary && !primaryKeys.has(method.method_type)) {
+      primaryKeys.set(method.method_type, method.clientKey);
+    }
+  }
+  for (const method of methods) {
+    if (!primaryKeys.has(method.method_type)) {
+      primaryKeys.set(method.method_type, method.clientKey);
+    }
+  }
+  return methods.map((method) => ({
+    ...method,
+    is_primary: primaryKeys.get(method.method_type) === method.clientKey,
+  }));
 }
 
 function formString(formData: FormData, key: string) {

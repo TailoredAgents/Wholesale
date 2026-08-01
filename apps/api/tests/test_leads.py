@@ -656,6 +656,92 @@ def test_edit_lead_manages_multiple_contacts_and_assignment(
     }
 
 
+def test_edit_lead_normalizes_multiple_primary_contact_methods(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    created_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json=lead_payload(),
+    )
+    assert created_response.status_code == 201, created_response.text
+    lead_id = created_response.json()["id"]
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers=headers,
+        json={
+            "contact_methods": [
+                {
+                    "method_type": "email",
+                    "value": "seller@example.com",
+                    "is_primary": True,
+                },
+                {
+                    "method_type": "email",
+                    "value": "seller.secondary@example.com",
+                    "is_primary": True,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    emails = [
+        method
+        for method in response.json()["contact_methods"]
+        if method["method_type"] == "email"
+    ]
+    assert len(emails) == 2
+    assert sum(method["is_primary"] for method in emails) == 1
+    assert (
+        next(method for method in emails if method["is_primary"])["value"]
+        == "seller@example.com"
+    )
+
+
+def test_edit_lead_returns_validation_error_for_duplicate_contact_value(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    created_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json=lead_payload(),
+    )
+    assert created_response.status_code == 201, created_response.text
+    lead_id = created_response.json()["id"]
+
+    response = client.patch(
+        f"/api/v1/leads/{lead_id}",
+        headers=headers,
+        json={
+            "contact_methods": [
+                {
+                    "method_type": "email",
+                    "value": "seller@example.com",
+                    "is_primary": True,
+                },
+                {
+                    "method_type": "email",
+                    "value": "SELLER@example.com",
+                    "is_primary": False,
+                },
+            ]
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("Remove the duplicate email")
+
+
 def test_add_lead_note_and_follow_up_task(
     db_session: Session,
     api_db_override: None,
