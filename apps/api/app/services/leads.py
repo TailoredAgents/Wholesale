@@ -124,7 +124,10 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
-from app.services.underwriting_adjustments import build_adjustment_shadow
+from app.services.underwriting_adjustments import (
+    build_adjustment_shadow,
+    build_market_adjusted_conclusion,
+)
 from app.services.property_validation import (
     canonical_address_key,
     reset_property_validation,
@@ -158,9 +161,12 @@ from app.services.underwriting_supporting_evidence import (
     unavailable_supporting_evidence,
 )
 from app.services.underwriting_v2 import (
-    METHODOLOGY_VERSION,
     UnderwritingV2Result,
     analyze_underwriting_v2,
+)
+from app.services.underwriting_v3 import (
+    METHODOLOGY_VERSION,
+    promote_market_adjusted_result,
 )
 
 logger = structlog.get_logger()
@@ -1634,7 +1640,7 @@ def create_lead_market_analysis(
         if cached_analysis is not None
         and cached_analysis.analysis_metadata
         and cached_analysis.analysis_metadata.get("methodology_version")
-        in {"v2", "v2.1", METHODOLOGY_VERSION}
+        in {"v2", "v2.1", "v2.2", METHODOLOGY_VERSION}
         and isinstance(cached_analysis.raw_response, dict)
         else None
     )
@@ -1896,6 +1902,17 @@ def create_lead_market_analysis(
         secondary_evidence=secondary_evidence,
         settings=settings,
     )
+    market_adjustment = (
+        build_market_adjusted_conclusion(
+            subject=dict_value(result.assumptions.get("canonical_subject_facts")),
+            selected_comps=result.selected_comps,
+            active_arv_point_cents=result.arv_point_cents,
+            active_arv_low_cents=result.arv_low_cents,
+            active_arv_high_cents=result.arv_high_cents,
+        )
+        if methodology_control.active_version == METHODOLOGY_VERSION
+        else None
+    )
     adjustment_shadow = (
         build_adjustment_shadow(
             subject=dict_value(result.assumptions.get("canonical_subject_facts")),
@@ -1907,6 +1924,15 @@ def create_lead_market_analysis(
         if methodology_control.shadow_enabled
         else None
     )
+    if market_adjustment is not None:
+        result = promote_market_adjusted_result(
+            baseline=result,
+            market_adjustment=market_adjustment,
+            rent_estimate=rent_estimate,
+            local_property_type=property_record.property_type,
+            holding_period_months=payload.holding_period_months,
+            settings=settings,
+        )
     custom_inputs_applied = any(
         (
             payload.current_condition,
@@ -2024,7 +2050,7 @@ def create_lead_market_analysis(
         rejected_comps=result.rejected_comps,
     )
     analysis_metadata = {
-        "methodology_version": METHODOLOGY_VERSION,
+        "methodology_version": methodology_control.active_version,
         "methodology_control": methodology_control.as_dict(),
         "execution_metrics": execution_metrics,
         "comp_search_summary": comp_search_summary,
@@ -2052,6 +2078,7 @@ def create_lead_market_analysis(
         "address_evidence": address_evidence,
         "secondary_evidence": secondary_evidence,
         "supporting_evidence": supporting_evidence,
+        "market_adjustment": market_adjustment,
         "adjustment_shadow": adjustment_shadow,
         "manual_comp_ids": [str(record_id) for record_id in manual_comp_ids],
         "manual_duplicate_comp_ids": duplicate_manual_comp_ids,
@@ -2104,12 +2131,20 @@ def create_lead_market_analysis(
         max_offer_cents=result.seller_contract_ceiling_cents,
         recommended_offer_cents=result.recommended_opening_offer_cents,
         offer_strategy="flip_or_rental_buyer_economics",
-        notes=build_v2_market_analysis_notes(result, report_stage=report_stage),
+        notes=build_market_analysis_result_notes(
+            result,
+            report_stage=report_stage,
+            methodology_version=methodology_control.active_version,
+        ),
         source="rentcast_property_records",
         underwriting_metadata={
             "provider_imported": True,
             **analysis_metadata,
-            "method": "recorded_sales_and_buyer_economics",
+            "method": (
+                "market_supported_adjusted_closed_sales_and_buyer_economics"
+                if methodology_control.active_version == METHODOLOGY_VERSION
+                else "recorded_sales_and_buyer_economics"
+            ),
             "offer_formula": (
                 "buyer maximum minus assignment target minus transaction reserve"
             ),
@@ -2185,7 +2220,7 @@ def create_lead_market_analysis(
                     f"{len(result.rejected_comps)} excluded sales"
                     if comp_review
                     else (
-                        "Underwriting V2.2 created with "
+                        "Stonegate Valuation created with "
                         f"{len(result.selected_comps)} recorded-sale comps"
                         + (
                             f", including {len(manual_comp_ids)} verified manual sale(s)"
@@ -2214,7 +2249,7 @@ def create_lead_market_analysis(
             new_value={
                 "lead_id": str(lead.id),
                 "underwriting_version_id": str(version.id),
-                "methodology_version": METHODOLOGY_VERSION,
+                "methodology_version": methodology_control.active_version,
                 "arv_low_cents": result.arv_low_cents,
                 "arv_high_cents": result.arv_high_cents,
                 "seller_contract_ceiling_cents": result.seller_contract_ceiling_cents,
@@ -3617,19 +3652,27 @@ def build_market_analysis_notes(
     )
 
 
-def build_v2_market_analysis_notes(
+def build_market_analysis_result_notes(
     result: UnderwritingV2Result,
     *,
     report_stage: str,
+    methodology_version: str,
 ) -> str:
     review_status = (
         "Manual review required."
         if result.manual_review_required
         else "Evidence threshold met; human approval still required."
     )
-    return (
-        "Underwriting V2.2 used recorded sales, price-per-square-foot screening, "
-        "subject-size value indicators, and explicit buyer economics. "
+    method_summary = (
+        "Stonegate Valuation used screened closed sales, locally supported property "
+        "adjustments, and explicit buyer economics. "
+        if methodology_version == "v3"
+        else (
+            "The V2.2 rollback method used recorded sales, price-per-square-foot "
+            "screening, subject-size value indicators, and explicit buyer economics. "
+        )
+    )
+    return method_summary + (
         f"Selected {len(result.selected_comps)} recorded comps. "
         f"Confidence: {result.confidence_score}%. "
         f"Seller ceiling: {format_cents_for_note(result.seller_contract_ceiling_cents)}. "
@@ -3672,10 +3715,9 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         ],
         source_note=(
             (
-                "Underwriting V2.2 uses screened recorded sales and subject-size value "
-                "indicators. Unverified comp conditions produce preliminary results; three "
-                "verified renovated sales produce a comp-supported result. All offer terms "
-                "still require human approval."
+                "Stonegate Valuation uses screened closed sales and applies only locally "
+                "supported property adjustments. Unsupported differences remain visible for "
+                "review, and all offer terms require human approval."
             )
             if metadata.get("methodology_version") == METHODOLOGY_VERSION
             else (
@@ -3758,6 +3800,11 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
                 metadata.get("supporting_evidence")
             )
             if isinstance(metadata.get("supporting_evidence"), dict)
+            else None
+        ),
+        market_adjustment=(
+            dict_value(metadata.get("market_adjustment"))
+            if isinstance(metadata.get("market_adjustment"), dict)
             else None
         ),
         adjustment_shadow=(
@@ -3975,7 +4022,9 @@ def underwriting_version_repair_snapshot(
 def underwriting_version_adjustment_snapshot(
     metadata: dict[str, Any],
 ) -> UnderwritingVersionAdjustmentSnapshot | None:
-    shadow = dict_value(metadata.get("adjustment_shadow"))
+    shadow = dict_value(metadata.get("market_adjustment")) or dict_value(
+        metadata.get("adjustment_shadow")
+    )
     if not shadow:
         return None
     rate_evidence = list_of_dicts(shadow.get("rate_evidence"))

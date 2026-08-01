@@ -23,8 +23,8 @@ const qualityScorecards = readFileSync(
   resolve(webRoot, "src/app/os/settings/data-quality/underwriting-quality.tsx"),
   "utf8",
 );
-const shadowValidation = readFileSync(
-  resolve(webRoot, "src/app/os/settings/data-quality/underwriting-shadow-validation.tsx"),
+const marketAdjustment = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/adjustment-shadow-panel.tsx"),
   "utf8",
 );
 const calibrationOutcome = readFileSync(
@@ -86,7 +86,7 @@ test("U3.9 compares immutable comp, repair, and adjustment evidence", () => {
 
 test("U3.9 keeps investor and owner-facing report boundaries explicit", () => {
   assert.match(reportService, /def adjustment_research_story/);
-  assert.match(reportService, /SHADOW RESEARCH ONLY/);
+  assert.match(reportService, /LIVE VALUATION EVIDENCE/);
   assert.match(reportService, /def client_explainability_story/);
   assert.match(reportService, /internal acquisition calculations are intentionally excluded/i);
 });
@@ -104,21 +104,15 @@ test("U3.9 exposes segmented calibration and operating-quality scorecards", () =
   assert.match(phase, /property type, adaptive search level/);
 });
 
-test("U3.10 exposes paired shadow replay and hard rollout gates", () => {
-  for (const label of [
-    "V2.2 versus V3 shadow validation",
-    "Controlled-rollout readiness",
-    "Difficult-scenario coverage",
-    "Case-by-case accuracy comparison",
-  ]) {
-    assert.match(shadowValidation, new RegExp(label));
-  }
-  assert.match(shadowValidation, /V3 is comparison-only/);
+test("Stonegate Valuation is the single live user-facing method", () => {
+  assert.match(marketValue, /Stonegate Valuation/);
+  assert.match(marketValue, /market_adjustment/);
+  assert.match(marketAdjustment, /Stonegate valuation adjustments/);
+  assert.doesNotMatch(marketAdjustment, /V2\.2 still controls/);
+  assert.doesNotMatch(marketValue, /Underwriting V2\.2/);
   assert.match(calibrationOutcome, /validation_scenarios/);
-  assert.match(calibrationOutcome, /Wrong-address recovery/);
-  assert.match(calibrationOutcome, /Provider-failure recovery/);
   const phase = roadmap.slice(roadmap.indexOf("#### U3.10:"));
-  assert.match(phase, /Status:\*\* Implemented controls/);
-  assert.match(phase, /50 paired verified cases/);
-  assert.match(phase, /V2\.2 remains the live method/);
+  assert.match(phase, /Status:\*\* Superseded by owner decision/);
+  assert.match(phase, /V3 is the single live method/);
+  assert.match(phase, /V2\.2 remains\s+available only as a technical rollback/);
 });

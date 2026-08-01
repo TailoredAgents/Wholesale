@@ -7,12 +7,13 @@ from typing import Any
 
 from app.schemas.leads import MarketAnalysisCompRead
 
+METHODOLOGY_VERSION = "v3"
 SHADOW_VERSION = "v3.0-adjustment-shadow"
 MONEY = 100
 RATE_EVIDENCE_MAX_COMPS = 12
 
 
-def build_adjustment_shadow(
+def build_market_adjusted_conclusion(
     *,
     subject: dict[str, Any],
     selected_comps: list[MarketAnalysisCompRead],
@@ -20,7 +21,7 @@ def build_adjustment_shadow(
     active_arv_low_cents: int | None,
     active_arv_high_cents: int | None,
 ) -> dict[str, Any]:
-    """Build a reproducible market-adjustment comparison without changing live values."""
+    """Build the reproducible market-adjusted closed-sale conclusion used by V3."""
     arv_comps = _arv_evidence(selected_comps)
     rate_comps = sorted(
         arv_comps,
@@ -141,11 +142,11 @@ def build_adjustment_shadow(
         expansion_count=expansion_count,
     )
     return {
-        "version": SHADOW_VERSION,
+        "version": METHODOLOGY_VERSION,
         "status": status,
-        "valuation_use": "shadow_only_excluded_from_offer_math",
+        "valuation_use": "live_human_reviewed_underwriting",
         "method": "market_supported_adjusted_closed_sales",
-        "active_methodology_version": "v2.2",
+        "active_methodology_version": METHODOLOGY_VERSION,
         "policy_sources": [
             {
                 "title": "Fannie Mae: Adjustments to Comparable Sales",
@@ -186,6 +187,30 @@ def build_adjustment_shadow(
         "confidence_factors": confidence_factors,
         "warnings": warnings,
         "generated_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def build_adjustment_shadow(
+    *,
+    subject: dict[str, Any],
+    selected_comps: list[MarketAnalysisCompRead],
+    active_arv_point_cents: int | None,
+    active_arv_low_cents: int | None,
+    active_arv_high_cents: int | None,
+) -> dict[str, Any]:
+    """Compatibility runner for saved V2.2 analyses and regression fixtures."""
+    result = build_market_adjusted_conclusion(
+        subject=subject,
+        selected_comps=selected_comps,
+        active_arv_point_cents=active_arv_point_cents,
+        active_arv_low_cents=active_arv_low_cents,
+        active_arv_high_cents=active_arv_high_cents,
+    )
+    return {
+        **result,
+        "version": SHADOW_VERSION,
+        "valuation_use": "shadow_only_excluded_from_offer_math",
+        "active_methodology_version": "v2.2",
     }
 
 

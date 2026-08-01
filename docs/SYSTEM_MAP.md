@@ -539,16 +539,13 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 
 - `/os/settings/workflows` owns approved follow-up plans.
 - `/os/settings/data-quality` owns duplicate review plus underwriting operating baselines,
-  verified-outcome scorecards, paired V2.2/V3 shadow replay, rollout gates, and methodology
-  decisions.
-- Every newly created V2.2 market analysis stores its methodology control, run duration, provider
+  verified-outcome scorecards, market/provider quality, and methodology decisions.
+- Every newly created Stonegate Valuation stores its methodology control, run duration, provider
   and candidate counts, comp yield, cache reuse, review requirement, and operator override count in
   the existing immutable analysis metadata.
-- The V3 adjustment runner executes beside V2.2 as comparison-only shadow research. Each later
-  verified outcome can be classified into the governed validation cohort and compared against
-  both saved conclusions. The API continues to reject live V3 activation until the paired sample,
-  Georgia-market, difficult-scenario, accuracy, certainty, operator-review, and Owner-acceptance
-  gates pass.
+- V3 is the single live runner. Its locally supported adjustments produce the saved ARV and all
+  dependent economics. Unsupported evidence clears the recommendation and requires review; V2.2
+  remains a hidden engineering rollback and historical read path.
 
 **Floating Help**
 
@@ -671,12 +668,13 @@ redirect to their new owners.
    evidence, confirmations, manual override reasons, and low/expected/high scenarios on the
    existing repair and analysis records. Unknown work creates an allowance and warning rather than
    becoming zero; legacy totals and contractor bids remain valid.
-12. V2.2 produces the live ARV range, as-is range, expected repair result, buyer economics, offer
-   scenarios, confidence tier, and review flags.
-13. When enabled, the V3 adjustment runner saves a shadow comparison from the same closed-sale set.
+12. Stonegate Valuation V3 produces the live ARV range, as-is range, expected repair result, buyer
+   economics, offer scenarios, confidence tier, and review flags.
+13. V3 adjusts the selected closed-sale set using locally supported evidence.
    Time, marginal living area, lot, garage, pool, and basement adjustments require local pair
    support; collinear, unstable, missing, or extrapolated evidence is withheld or limited and every
-   dollar remains reproducible. The shadow cannot write to live offer fields.
+   dollar remains reproducible. The adjusted conclusion drives live offer fields only when at
+   least three usable indications exist; otherwise those fields remain unavailable for review.
 14. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
    Investor reports include guided repair decisions, ranges, evidence, catalog version, and items
    to verify; PDFs remain available when repairs are not walkthrough-confirmed.
@@ -695,7 +693,7 @@ redirect to their new owners.
 21. Version comparison reads the linked immutable analysis for each underwriting version and shows
     added or removed comps, search reach, changed repair categories, catalog version, adjustment
     support, ARV/repair/disposition/opening changes, and seller-ceiling changes.
-22. The investor PDF includes internal economics and reproducible shadow-adjustment research. The
+22. The investor PDF includes internal economics and reproducible market-adjustment evidence. The
     client PDF uses the same analysis but exposes only seller-safe evidence strength, preparation
     assumptions, unresolved work, comparable evidence, and public-source context.
 23. Verified outcomes feed calibration segments for market, provider, property type, search level,
@@ -705,12 +703,10 @@ redirect to their new owners.
 24. Data & Quality shows comp yield, operator comp overrides, supervised AI repair-scope corrections,
     and repair-catalog total-budget error. These measurements inform a human methodology decision;
     they do not modify formulas automatically.
-25. U3.10 pairs each eligible verified outcome with the V2.2 and V3-shadow conclusions stored in
-    the same immutable analysis. The rollout dashboard reports case and market accuracy, scenario
-    coverage, unsupported high-confidence risk, operator burden, and every activation blocker.
-26. An authorized V3 rollout decision can be proposed only with explicit Owner usability, pilot,
-    rollback, and human-authority confirmations. Approval remains blocked until all measured gates
-    pass, and an approved decision still does not rewrite historical analyses or offer authority.
+25. Verified outcomes measure V3 accuracy, range coverage, market bias, provider performance, and
+    operator correction burden without changing formulas automatically.
+26. Method changes remain evidence-backed human decisions. Historical analyses stay immutable and
+    V2.2 remains available only as an engineering rollback.
 
 ### 8.8 Contract And E-Signature
 

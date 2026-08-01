@@ -714,6 +714,7 @@ class LeadMarketAnalysisRead(BaseModel):
     execution_metrics: UnderwritingExecutionMetricsRead | None = None
     comp_search_summary: UnderwritingCompSearchSummaryRead | None = None
     supporting_evidence: UnderwritingSupportingEvidenceRead | None = None
+    market_adjustment: dict[str, Any] | None = None
     adjustment_shadow: dict[str, Any] | None = None
     manual_comp_ids: list[UUID] = Field(default_factory=list)
 

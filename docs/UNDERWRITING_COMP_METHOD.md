@@ -2,13 +2,13 @@
 
 ## Version Status
 
-- **Current implemented method:** Underwriting V2.2 calculations with `adaptive_v1` closed-sale
-  discovery plus implemented U3.1-U3.4 evidence and review controls.
-- **Approved target:** Underwriting V3, planned as an in-place upgrade to V2.2.
-- **Current operating authority:** V2.2 formulas remain live. Implemented evidence and workflow
-  phases may improve the inputs and explanations without activating unfinished V3 formulas.
-- **V3 roadmap authority:** The planned V3 section at the end of this document governs the upgrade
-  sequence. Planned behavior must not be presented to staff as if it already exists.
+- **Current implemented method:** Stonegate Valuation, methodology `v3`, with adaptive closed-sale
+  discovery, locally supported comparable adjustments, repair scope, and buyer economics.
+- **Current operating authority:** V3 is the single live calculation method. Staff do not choose
+  between valuation engines.
+- **Technical rollback:** V2.2 remains readable and can be restored through deployment
+  configuration by engineering. It is not a normal user option and never silently replaces an
+  unsupported V3 result.
 
 V3 does not create a second underwriting system. It extends the existing market-analysis service,
 repair estimates, field inspections, underwriting versions, offer approvals, reports, audit events,
@@ -16,7 +16,7 @@ and calibration cases. Existing V2.2 analyses remain immutable and readable afte
 
 ## Purpose
 
-Underwriting V2.2 creates an auditable acquisition recommendation. It does not approve an
+Stonegate Valuation creates an auditable acquisition recommendation. It does not approve an
 offer. A qualified user must verify comparable condition, repair scope, title, buyer demand,
 and exit assumptions before changing an underwriting version from `needs_review`.
 
@@ -824,7 +824,7 @@ Implementation record:
 - Shadow confidence separately scores closed-sale depth, A/B comp quality, supported adjustment
   rates, search expansion, and indications needing extrapolation or magnitude review. Weak or
   expanded evidence widens the displayed shadow range instead of inventing a precise rate.
-- Valuation & Offer now shows live V2.2 and shadow ARV side by side, supported/withheld rates, and
+- The original comparison build showed V2.2 and adjusted ARV side by side, supported/withheld rates, and
   expandable per-comp dollar math. The interface repeatedly labels the result as research only.
 - Regression coverage proves the V2.2 golden results remain unchanged and covers supported living
   area/time rates, collinearity blocking, thin-market continuity, methodology control, API
@@ -978,8 +978,8 @@ which data source, rule, category, or human assumption caused a miss.
 
 #### U3.10: Shadow Validation And Controlled Rollout
 
-**Status:** Implemented controls July 31, 2026; paired production evidence, internal pilot
-acceptance, and Owner activation approval remain.
+**Status:** Superseded by owner decision July 31, 2026. V3 is the single live method; V2.2 remains
+available only as a technical rollback and historical read path.
 
 - Replay V2.2 and V3 against redacted known deals before changing the default.
 - Review at least 50 suitable cases overall and enough cases per initial Georgia market to avoid
@@ -1008,8 +1008,10 @@ Implementation record:
 - A V3 rollout decision separately requires Owner usability acceptance, internal-pilot review,
   confirmed V2.2 rollback, and confirmation that offers, contracts, and methodology activation
   remain human-controlled. The API rejects approval while any evidence gate is incomplete.
-- V2.2 remains the live method. V3 stays comparison-only until the real cohort passes and an
-  authorized rollout decision is recorded; configuration still rejects premature V3 activation.
+- The paired replay controls remain internal calibration history, not an operator-facing method
+  selector or a prerequisite for using the live supervised method.
+- Unsupported V3 evidence produces no ARV or offer recommendation and requires human review. It
+  does not silently fall back to V2.2.
 - Migration `0080_underwriting_shadow_replay` adds only validation-scenario evidence to the
   existing calibration case. Analyses, versions, outcomes, decisions, and offers remain the same
   authoritative records.

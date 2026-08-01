@@ -410,12 +410,9 @@ plans in **Settings > Workflows**.
 | --- | --- | --- |
 | Underwriting performance ribbon | Shows verified ARV error, bias, range coverage, and tracked markets | Read-only; requires calibration outcomes for accuracy metrics |
 | Underwriting operating baseline ribbon | Shows analysis count, median selected comps, comp yield, and run time | Read-only; older analyses without execution timing still count where their stored comp totals permit |
-| V2.2 versus V3 shadow metrics | Compares median verified error and improvement on paired immutable analyses | V3 remains comparison-only and cannot set offer authority |
-| Controlled-rollout readiness | Shows every sample, market, scenario, accuracy, certainty, operator, and Owner gate | A blocked or pending gate prevents rollout approval |
 | Difficult-scenario coverage | Counts verified cohort tags for dense, suburban, rural, unique, low-comp, recovery, and repair-risk cases | Tags are entered on the lead's verified outcome and do not change valuation math |
-| Paired replay ledger | Opens each source lead and shows V2.2 error, V3 error, winner, and risk flags | Requires a verified outcome plus a saved V3 shadow conclusion |
 | Provider and methodology scorecard | Breaks verified errors, range coverage, overrides, and adequacy down by market/provider | Read-only; small samples remain insufficient evidence |
-| Methodology decision controls | Records evidence-backed proposals and human approval/rejection, including controlled V3 rollout | V3 approval also requires all measured gates and four Owner confirmations |
+| Methodology decision controls | Records evidence-backed formula or provider proposals and human approval/rejection | Does not change formulas automatically |
 | **Scan active leads** | Runs duplicate detection across active seller records | Does not merge automatically |
 | **Keep separate** | Marks the candidate pair as two legitimate records | Requires a pending duplicate candidate |
 | **Merge records** | Combines the supported records while retaining history | Requires management authority and a pending candidate |
@@ -1029,7 +1026,7 @@ appraisal or permission to promise a seller a price.
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
 | Supporting listings and ZIP market context | Shows active asking prices, size, days on market, ZIP median asking price, asking price per square foot, inventory, and market timing | Supporting-only; asking prices are not closed comps |
-| V3 adjustment research | Compares the saved V2.2 ARV with a market-supported adjusted-sales shadow result | Research only; cannot change ARV, buyer economics, seller ceiling, or offer authority |
+| Stonegate valuation adjustments | Shows the market-supported adjusted closed sales that drive the saved ARV and dependent offer math | Requires human review; unsupported evidence produces no recommendation instead of a fallback value |
 | Supported local adjustments | Shows only time, living-area, lot, garage, pool, or basement rates that passed local evidence and double-count controls | A missing feature rate is withheld, not assumed to be zero market value |
 | Review rate support and withheld adjustments | Shows sample/pair counts and the exact reason each rate was supported or withheld | Read-only evidence |
 | Review comparable adjustment math | Shows recorded price, every sourced dollar component, extrapolation limit, total adjustment, and adjusted indication | Read-only; review flags require operator judgment |
@@ -1038,10 +1035,10 @@ appraisal or permission to promise a seller a price.
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
 | **Client PDF** | Downloads the seller-safe presentation without internal negotiation details | Requires a saved analysis |
 | Re-run analysis | Creates a new analysis version using current inputs | Earlier versions remain auditable |
-| Version comparison | Compares ARV, repairs, disposition target, opening, seller ceiling, comp membership, repair categories, and adjustment research between two immutable versions | Requires at least two versions; shadow changes remain research-only |
+| Version comparison | Compares ARV, repairs, disposition target, opening, seller ceiling, comp membership, repair categories, and adjustment evidence between two immutable versions | Requires at least two saved versions |
 | Comparable changes | Lists selected sales added to or removed from the newer version | Uses provider ID, source reference, or saved address identity |
 | Repair-scope changes | Lists categories whose decision, expected cost, or confirmation changed | Uses the saved repair snapshot and catalog version |
-| Adjustment-research change | Shows supported/withheld rate counts and shadow ARV difference | Never changes live offer fields or approval authority |
+| Adjustment change | Shows supported/withheld rate counts and the adjusted ARV movement between saved versions | Read-only comparison; approval authority remains separate |
 
 ### Comparable Review
 
@@ -1094,7 +1091,7 @@ appraisal or permission to promise a seller a price.
 | Provider and methodology scorecard | Compares verified outcomes by market and provider | Read-only; sample threshold still applies |
 | Evidence segment scorecards | Attributes outcomes by property type, search level, comp grade, repair category, verification stage, and catalog | Grade/category rows overlap when one case contains several values |
 | Validation scenario checkboxes | Classifies a verified outcome for U3.10 cohort coverage | Select only scenarios actually represented; tags do not alter the analysis |
-| V2.2 versus V3 shadow validation | Shows paired accuracy, rollout gates, scenario coverage, and case-level risk | V2.2 remains live until every gate and Owner approval pass |
+| Stonegate valuation quality | Shows measured accuracy, range coverage, market bias, provider performance, and operator corrections | Uses verified outcomes; does not alter formulas automatically |
 | Decision review | Shows approvals, overrides, confidence, and result history | Manager access |
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |

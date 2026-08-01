@@ -213,8 +213,8 @@ export function UnderwritingVersionComparison({ versions }: { versions: Version[
           </strong>
           <p>
             {current.adjustment_snapshot
-              ? `${current.adjustment_snapshot.withheld_count} withheld; shadow ARV change ${formatMoney(current.adjustment_snapshot.point_delta_cents)}.`
-              : "No shadow adjustment evidence on this version."}
+              ? `${current.adjustment_snapshot.withheld_count} withheld; adjusted ARV movement ${formatMoney(current.adjustment_snapshot.point_delta_cents)}.`
+              : "No market-adjustment evidence on this version."}
           </p>
         </article>
       </div>

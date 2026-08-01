@@ -991,8 +991,15 @@ def shadow_replay_case(
     case_read: CalibrationCaseRead,
     analysis: UnderwritingMarketAnalysis,
 ) -> ShadowReplayCaseRead | None:
-    baseline_point = case.predicted_arv_point_cents
-    shadow = metadata_dict((analysis.analysis_metadata or {}).get("adjustment_shadow"))
+    metadata = analysis.analysis_metadata or {}
+    live_adjustment = metadata_dict(metadata.get("market_adjustment"))
+    shadow = live_adjustment or metadata_dict(metadata.get("adjustment_shadow"))
+    baseline = metadata_dict(shadow.get("baseline"))
+    baseline_point = (
+        integer_value(baseline.get("arv_point_cents"))
+        if live_adjustment
+        else case.predicted_arv_point_cents
+    )
     conclusion = metadata_dict(shadow.get("conclusion"))
     shadow_point = integer_value(conclusion.get("arv_point_cents"))
     baseline_error = percentage_error(baseline_point, case.benchmark_arv_cents)

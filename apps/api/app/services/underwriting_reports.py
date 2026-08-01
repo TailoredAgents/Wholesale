@@ -315,11 +315,15 @@ def build_investor_story(
     metadata = analysis.analysis_metadata or {}
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
+    is_v3 = metadata.get("methodology_version") == "v3"
     is_v2 = is_v2_method(metadata.get("methodology_version"))
     is_v2_1 = is_v2_method(metadata.get("methodology_version"))
     assumptions = dict_value(metadata.get("assumptions"))
     arv_value_basis = first_string(assumptions, ("arv_value_basis",))
-    arv_verified = arv_value_basis == "verified_renovated_recorded_sales"
+    arv_verified = arv_value_basis in {
+        "verified_renovated_recorded_sales",
+        "market_supported_adjusted_closed_sales",
+    }
     arv_range_label = (
         "Comp-supported ARV range"
         if arv_verified
@@ -509,7 +513,10 @@ def build_investor_story(
                 (
                     "Method",
                     (
-                        "Recorded-sale comparison, robust price-per-square-foot screening, "
+                        "Market-supported adjusted closed-sale indications, condition review, "
+                        "repair scope, and explicit buyer economics"
+                        if is_v3
+                        else "Recorded-sale comparison, price-per-square-foot screening, "
                         "subject-size indicators, condition classification, repair scope, and "
                         "buyer economics"
                         if arv_verified
@@ -544,10 +551,10 @@ def build_client_story(
     metadata = analysis.analysis_metadata or {}
     is_v2_1 = is_v2_method(metadata.get("methodology_version"))
     assumptions = dict_value(metadata.get("assumptions"))
-    arv_verified = (
-        first_string(assumptions, ("arv_value_basis",))
-        == "verified_renovated_recorded_sales"
-    )
+    arv_verified = first_string(assumptions, ("arv_value_basis",)) in {
+        "verified_renovated_recorded_sales",
+        "market_supported_adjusted_closed_sales",
+    }
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
     current_condition = labelize(
@@ -931,40 +938,47 @@ def adjustment_research_story(
     styles: dict[str, ParagraphStyle],
 ) -> list[Flowable]:
     metadata = context.analysis.analysis_metadata or {}
-    shadow = dict_value(metadata.get("adjustment_shadow"))
-    if not shadow:
+    adjustment = dict_value(metadata.get("market_adjustment"))
+    is_live = bool(adjustment)
+    if not adjustment:
+        adjustment = dict_value(metadata.get("adjustment_shadow"))
+    if not adjustment:
         return []
-    baseline = dict_value(shadow.get("baseline"))
-    conclusion = dict_value(shadow.get("conclusion"))
-    comparison = dict_value(shadow.get("comparison"))
-    rate_evidence = list_of_dicts(shadow.get("rate_evidence"))
-    comp_adjustments = list_of_dicts(shadow.get("comp_adjustments"))
+    baseline = dict_value(adjustment.get("baseline"))
+    conclusion = dict_value(adjustment.get("conclusion"))
+    comparison = dict_value(adjustment.get("comparison"))
+    rate_evidence = list_of_dicts(adjustment.get("rate_evidence"))
+    comp_adjustments = list_of_dicts(adjustment.get("comp_adjustments"))
     supported = [item for item in rate_evidence if item.get("status") == "supported"]
     withheld = [item for item in rate_evidence if item.get("status") != "supported"]
     story: list[Flowable] = [
-        section_heading("Market-supported adjustment research", styles),
+        section_heading("Market-supported valuation adjustments", styles),
         warning_box(
-            "SHADOW RESEARCH ONLY",
+            "LIVE VALUATION EVIDENCE" if is_live else "HISTORICAL RESEARCH RECORD",
             (
-                "This adjustment comparison is preserved for review and calibration. It is "
-                "excluded from the live ARV, buyer economics, seller ceiling, and offer authority."
+                "These locally supported comparable adjustments drive the saved ARV and its "
+                "dependent buyer economics. A human reviewer must still approve the evidence "
+                "before offer authority is granted."
+                if is_live
+                else "This older comparison is preserved for audit history and did not control "
+                "the saved ARV or offer authority."
             ),
             styles,
         ),
         Spacer(1, 0.1 * inch),
         key_value_table(
             [
-                ("Research status", labelize(safe_string(shadow.get("status")))),
+                ("Evidence status", labelize(safe_string(adjustment.get("status")))),
                 (
-                    "Live V2.2 ARV point",
-                    format_money(optional_int(baseline.get("arv_point_cents"))),
-                ),
-                (
-                    "Shadow adjusted ARV point",
+                    "Stonegate ARV point" if is_live else "Historical adjusted ARV point",
                     format_money(optional_int(conclusion.get("arv_point_cents"))),
                 ),
                 (
-                    "Shadow point difference",
+                    "Recorded-sale baseline" if is_live else "Historical baseline",
+                    format_money(optional_int(baseline.get("arv_point_cents"))),
+                ),
+                (
+                    "Adjustment from baseline",
                     format_money(optional_int(comparison.get("point_delta_cents"))),
                 ),
                 (
@@ -1088,8 +1102,10 @@ def client_explainability_story(
     repair_scenario = dict_value(inputs.get("repair_scenario"))
     repair_items = list_of_dicts(inputs.get("repair_items"))
     comp_search = dict_value(metadata.get("comp_search_summary"))
-    shadow = dict_value(metadata.get("adjustment_shadow"))
-    rate_evidence = list_of_dicts(shadow.get("rate_evidence"))
+    adjustment = dict_value(metadata.get("market_adjustment")) or dict_value(
+        metadata.get("adjustment_shadow")
+    )
+    rate_evidence = list_of_dicts(adjustment.get("rate_evidence"))
     grade_counts: dict[str, int] = {}
     for comp in list_of_dicts(context.analysis.selected_comps):
         grade = safe_string(comp.get("comp_grade"))
@@ -1138,7 +1154,7 @@ def client_explainability_story(
                 ),
             ]
         )
-    if shadow:
+    if adjustment:
         rows.append(
             (
                 "Local adjustment support",
@@ -2340,7 +2356,7 @@ def list_of_dicts(value: object) -> list[dict[str, Any]]:
 
 
 def is_v2_method(value: object) -> bool:
-    return isinstance(value, str) and value.startswith("v2")
+    return isinstance(value, str) and (value.startswith("v2") or value == "v3")
 
 
 def optional_int(value: object) -> int | None:

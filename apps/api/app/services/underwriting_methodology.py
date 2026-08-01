@@ -2,7 +2,8 @@ from dataclasses import dataclass
 
 from app.core.config import Settings
 
-ACTIVE_METHODOLOGY_VERSION = "v2.2"
+ACTIVE_METHODOLOGY_VERSION = "v3"
+ROLLBACK_METHODOLOGY_VERSION = "v2.2"
 PLANNED_METHODOLOGY_VERSION = "v3"
 
 
@@ -28,15 +29,17 @@ def resolve_underwriting_methodology(
     settings: Settings,
 ) -> UnderwritingMethodologyControl:
     requested = settings.underwriting_active_methodology_version
-    if requested != ACTIVE_METHODOLOGY_VERSION:
+    if requested not in {ACTIVE_METHODOLOGY_VERSION, ROLLBACK_METHODOLOGY_VERSION}:
         raise ValueError(
-            "Underwriting V3 is planned but is not available for live calculations. "
-            "Set UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2."
+            "Choose the live Stonegate V3 method or the V2.2 rollback method."
         )
     return UnderwritingMethodologyControl(
         requested_version=requested,
-        active_version=ACTIVE_METHODOLOGY_VERSION,
+        active_version=requested,
         planned_version=PLANNED_METHODOLOGY_VERSION,
-        v3_available=False,
-        shadow_enabled=settings.underwriting_v3_shadow_enabled,
+        v3_available=True,
+        shadow_enabled=(
+            requested == ROLLBACK_METHODOLOGY_VERSION
+            and settings.underwriting_v3_shadow_enabled
+        ),
     )

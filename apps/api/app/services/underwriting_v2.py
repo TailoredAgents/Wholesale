@@ -8,10 +8,8 @@ from app.core.config import Settings
 from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
 from app.schemas.leads import MarketAnalysisCompRead
 from app.services.repair_catalog import evaluate_repair_scope
-from app.services.underwriting_methodology import ACTIVE_METHODOLOGY_VERSION
-
 MONEY = 100
-METHODOLOGY_VERSION = ACTIVE_METHODOLOGY_VERSION
+METHODOLOGY_VERSION = "v2.2"
 
 
 @dataclass(frozen=True)

@@ -1300,10 +1300,10 @@ Review the result from top to bottom:
    sales remained, and whether subdivision or market-area warnings exist.
 4. When the final level is **Manual**, read the manual verified count, evidence shortage, and next
    action. Open each manual comp's source link/reference and verify the closing and condition.
-5. Review **V3 adjustment research** when present. Compare its shadow ARV with live V2.2, then open
-   the rate and comparable math. **Supported** means the local pair threshold passed; **Withheld**
-   means Stonegate applied zero dollars rather than guessing. This section never changes the live
-   ARV, seller ceiling, or opening recommendation.
+5. Review **Stonegate valuation adjustments**. The displayed ARV is the live result from these
+   adjusted closed-sale indications. **Supported** means the local pair threshold passed;
+   **Withheld** means Stonegate applied zero dollars rather than guessing. If the evidence is too
+   weak, Stonegate stops for manual review instead of substituting another method.
 6. Open **Why this confidence score** and read every factor.
 7. Open **Secondary public evidence** and investigate any conflict.
 8. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
@@ -1341,8 +1341,7 @@ Review the result from top to bottom:
     judgment or scenario.
 15. Open **Advanced records** and compare saved versions before requesting offer approval. The
     comparison shows headline dollar changes plus comps added or removed, repair categories that
-    changed, search reach, catalog version, and adjustment-research support. A shadow adjustment is
-    research evidence, not a change to the live ARV or offer authority.
+    changed, search reach, catalog version, and adjustment support.
 
 To correct a saved manual sale, select **Remove** and create a new verified record. Removal voids it
 for future analyses; it does not alter an analysis or PDF that was already saved.
@@ -1380,7 +1379,7 @@ After a completed analysis:
   disclosures.
 
 The Investor PDF contains Stonegate's acquisition math, seller ceiling, complete repair evidence,
-and shadow-adjustment research. The Client PDF contains seller-safe value evidence, preparation
+and market-supported adjustment evidence. The Client PDF contains seller-safe value evidence, preparation
 assumptions, comp fit, search reach, unresolved work, and source context; it intentionally excludes
 buyer economics, assignment assumptions, negotiation recommendations, and internal ceilings.
 
@@ -1405,16 +1404,9 @@ rows because one analysis can use several comp grades and repair categories. Sma
 questions to investigate; they do not justify changing formulas. Do not increase dependence on the
 comp engine until real-deal calibration and the governed human decision are acceptable.
 
-The **V2.2 versus V3 shadow validation** section uses the same verified outcome to score both saved
-methods. Positive shadow improvement means V3 was closer to the verified ARV; negative improvement
-means V2.2 was closer. Review each risk flag and never treat the V3 value as offer authority while
-the panel says comparison-only.
-
-The rollout gate list is the source of truth for what remains. Stonegate needs 50 paired outcomes,
-at least 10 in every tracked Georgia market, all difficult scenarios represented, acceptable
-accuracy and certainty, enough operator-review evidence, and a final Owner rollout decision. The
-Owner decision requires confirmation that the workflow was usable, the internal pilot was
-reviewed, V2.2 rollback remains available, and offer/contract authority stays human-controlled.
+Stonegate presents one live valuation method. Verified outcomes measure its real-world accuracy by
+market and evidence type. V2.2 exists only as an engineering rollback and is not a staff choice;
+offer and contract authority remains human-controlled.
 
 ## 11. Offer Approval And Negotiation
 

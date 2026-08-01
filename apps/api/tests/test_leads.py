@@ -1345,7 +1345,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
     monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
     monkeypatch.setenv("UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS", "1500000")
-    monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "true")
+    monkeypatch.setenv("UNDERWRITING_ACTIVE_METHODOLOGY_VERSION", "v3")
+    monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "false")
     get_settings.cache_clear()
     provider_calls: list[str] = []
 
@@ -1564,22 +1565,23 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert response.status_code == 201
     payload = response.json()
     assert payload["provider"] == "rentcast"
-    assert payload["methodology_version"] == "v2.2"
+    assert payload["methodology_version"] == "v3"
     assert payload["subject_property"]["formattedAddress"] == (
         "123 Peachtree St, Atlanta, GA 30303"
     )
     assert payload["methodology_control"] == {
-        "requested_version": "v2.2",
-        "active_version": "v2.2",
+        "requested_version": "v3",
+        "active_version": "v3",
         "planned_version": "v3",
-        "v3_available": False,
-        "shadow_enabled": True,
+        "v3_available": True,
+        "shadow_enabled": False,
     }
-    assert payload["adjustment_shadow"]["valuation_use"] == (
-        "shadow_only_excluded_from_offer_math"
+    assert payload["adjustment_shadow"] is None
+    assert payload["market_adjustment"]["valuation_use"] == (
+        "live_human_reviewed_underwriting"
     )
-    assert payload["adjustment_shadow"]["baseline"]["arv_point_cents"] == 30000000
-    assert payload["adjustment_shadow"]["conclusion"]["arv_point_cents"] is not None
+    assert payload["market_adjustment"]["baseline"]["arv_point_cents"] == 30000000
+    assert payload["market_adjustment"]["conclusion"]["arv_point_cents"] is not None
     assert payload["execution_metrics"]["duration_ms"] >= 0
     assert payload["execution_metrics"]["provider_returned_comp_count"] == 7
     assert payload["execution_metrics"]["candidate_comp_count"] == 7
@@ -1587,7 +1589,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["execution_metrics"]["rejected_comp_count"] == 2
     assert payload["execution_metrics"]["comp_yield_percentage"] == 71.4
     assert payload["execution_metrics"]["market_data_reused"] is False
-    assert payload["execution_metrics"]["manual_review_required"] is False
+    assert payload["execution_metrics"]["manual_review_required"] is True
     assert payload["comp_search_summary"] == {
         "strategy_version": "adaptive_v1",
         "final_level": "preferred",
@@ -1629,30 +1631,37 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["as_is_value_low_cents"] == 23351400
     assert payload["as_is_value_cents"] == 23351400
     assert payload["as_is_value_high_cents"] == 23657100
-    assert payload["arv_low_cents"] == 29647100
-    assert payload["arv_point_cents"] == 30000000
-    assert payload["arv_high_cents"] == 30315800
-    assert payload["conservative_arv_cents"] == 29647100
+    assert payload["arv_low_cents"] == payload["market_adjustment"]["conclusion"]["arv_low_cents"]
+    assert payload["arv_point_cents"] == payload["market_adjustment"]["conclusion"]["arv_point_cents"]
+    assert payload["arv_high_cents"] == payload["market_adjustment"]["conclusion"]["arv_high_cents"]
     assert payload["repair_low_cents"] == 5000000
     assert payload["repair_high_cents"] == 6000000
     assert payload["base_rehab_cents"] == 5000000
     assert payload["total_rehab_cents"] == 6000000
-    assert payload["flip_buyer_max_cents"] == 13514151
-    assert payload["rental_buyer_max_cents"] == 13829430
-    assert payload["seller_contract_ceiling_cents"] == 12079430
-    assert payload["recommended_offer_cents"] == 11113076
+    assert payload["flip_buyer_max_cents"] is not None
+    assert payload["rental_buyer_max_cents"] is not None
+    assert payload["recommended_disposition_cents"] == max(
+        payload["flip_buyer_max_cents"], payload["rental_buyer_max_cents"]
+    )
+    assert payload["seller_contract_ceiling_cents"] == (
+        payload["recommended_disposition_cents"]
+        - payload["assignment_fee_cents"]
+        - payload["transaction_reserve_cents"]
+    )
     assert payload["report_stage"] == "pre_meeting_reviewed"
     assert payload["pre_meeting_inputs"]["repair_estimate_source"] == "itemized"
     assert payload["pre_meeting_inputs"]["holding_period_months"] == 9
     assert len(payload["pre_meeting_inputs"]["repair_items"]) == 3
     assert payload["assumptions"]["financing_holding_percentage"] == 0.09
     assert payload["assumptions"]["arv_value_basis"] == (
-        "verified_renovated_recorded_sales"
+        "market_supported_adjusted_closed_sales"
     )
-    assert payload["assumptions"]["comp_value_method"] == "subject_size_ppsf_indicator"
+    assert payload["assumptions"]["comp_value_method"] == (
+        "market_supported_adjusted_sale_indications"
+    )
+    assert payload["assumptions"]["rollback_arv_point_cents"] == 30000000
     assert payload["assumptions"]["ppsf_outlier_count"] == 1
-    assert payload["manual_review_required"] is False
-    assert payload["review_reasons"] == []
+    assert payload["manual_review_required"] is True
     assert payload["offer_low_percentage"] == 65
     assert payload["offer_high_percentage"] == 70
     assert len(payload["selected_comps"]) == 5
@@ -1679,8 +1688,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert saved_version is not None
     assert saved_version.source == "rentcast_property_records"
     assert saved_version.status == "needs_review"
-    assert saved_version.max_offer_cents == 12079430
-    assert saved_version.recommended_offer_cents == 11113076
+    assert saved_version.max_offer_cents == payload["seller_contract_ceiling_cents"]
+    assert saved_version.recommended_offer_cents == payload["recommended_offer_cents"]
 
     latest_analysis_response = client.get(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
@@ -1708,9 +1717,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Roof" in investor_report_response.content
     assert b"Closed-sale search" in investor_report_response.content
     assert b"Unique sale evidence" in investor_report_response.content
-    assert b"Market-supported adjustment research" in investor_report_response.content
-    assert b"SHADOW RESEARCH ONLY" in investor_report_response.content
-    assert b"Live V2.2 ARV point" in investor_report_response.content
+    assert b"Market-supported valuation adjustments" in investor_report_response.content
+    assert b"LIVE VALUATION EVIDENCE" in investor_report_response.content
+    assert b"Stonegate ARV point" in investor_report_response.content
 
     client_report_response = client.get(
         (
@@ -1747,14 +1756,14 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert unclassified_response.status_code == 201
     unclassified_payload = unclassified_response.json()
     assert unclassified_payload["manual_review_required"] is True
-    assert unclassified_payload["confidence_score"] <= 59
+    assert unclassified_payload["methodology_version"] == "v3"
     assert unclassified_payload["arv_point_cents"] is not None
     assert unclassified_payload["conservative_arv_cents"] is not None
     assert unclassified_payload["seller_contract_ceiling_cents"] is not None
     assert unclassified_payload["recommended_offer_cents"] is not None
     assert (
         unclassified_payload["assumptions"]["arv_value_basis"]
-        == "provisional_unverified_recorded_sales"
+        == "market_supported_adjusted_closed_sales"
     )
     preliminary_report_response = client.get(
         (
@@ -2029,7 +2038,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     ).json()["baseline"]
     assert baseline["analysis_count"] == 6
     assert baseline["instrumented_analysis_count"] == 6
-    assert baseline["methodology_versions"] == ["v2.2"]
+    assert baseline["methodology_versions"] == ["v3"]
     assert baseline["median_duration_ms"] >= 0
     assert baseline["median_provider_returned_comp_count"] == 7.0
     assert baseline["median_candidate_comp_count"] == 7.0
@@ -2037,8 +2046,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert baseline["median_comp_yield_percentage"] == 71.4
     assert baseline["market_data_reuse_count"] == 5
     assert baseline["market_data_reuse_percentage"] == 83.3
-    assert baseline["manual_review_required_count"] == 1
-    assert baseline["manual_review_required_percentage"] == 16.7
+    assert baseline["manual_review_required_count"] == 6
+    assert baseline["manual_review_required_percentage"] == 100.0
     assert baseline["comp_review_case_count"] == 1
     assert baseline["comp_review_decision_count"] == 7
     assert baseline["comp_review_override_count"] == 0

@@ -6,8 +6,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CalibrationOutcomeForm } from "./calibration-outcome-form";
 import {
-  AdjustmentShadowPanel,
-  type AdjustmentShadow,
+  MarketAdjustmentPanel,
+  type MarketAdjustment,
 } from "./adjustment-shadow-panel";
 import {
   ComparableReviewWorkbench,
@@ -213,7 +213,8 @@ type MarketValueEstimate = {
   subject_square_feet?: number | null;
   comp_search_summary?: CompSearchSummary | null;
   supporting_evidence?: SupportingEvidence | null;
-  adjustment_shadow?: AdjustmentShadow | null;
+  market_adjustment?: MarketAdjustment | null;
+  adjustment_shadow?: MarketAdjustment | null;
   manual_comp_ids?: string[];
   source_note: string;
 };
@@ -664,10 +665,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   ];
   const currentRepairItems = repairItems;
   const isLoading = status === "loading";
-  const isV2 = estimate?.methodology_version?.startsWith("v2") ?? false;
+  const isCurrentMethod = estimate?.methodology_version === "v3";
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
   const hasVerifiedArv =
-    estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales";
+    estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales" ||
+    estimate?.assumptions?.arv_value_basis === "market_supported_adjusted_closed_sales";
   const activeReportStage = estimate?.report_stage ?? verificationStatus;
   const activeRepairSource =
     selectedRepairEstimateSource ??
@@ -683,8 +685,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     <section className={styles.marketValuePanel}>
       <div className={styles.marketValueHeader}>
         <div>
-          <span className={styles.underwritingEyebrow}>Underwriting V2.2</span>
-          <strong>Recorded sales and buyer economics</strong>
+          <span className={styles.underwritingEyebrow}>Stonegate Valuation</span>
+          <strong>Market-supported sales and buyer economics</strong>
           <span>Human-reviewed evidence for ARV, repairs, and seller negotiation limits</span>
         </div>
         <div className={styles.marketValueActions}>
@@ -880,9 +882,9 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
       {estimate ? (
         <div className={styles.marketValueResult}>
-          {!isV2 ? (
+          {!isCurrentMethod ? (
             <div className={styles.reviewBanner}>
-              This saved analysis uses the prior method. Refresh to create a V2.2 analysis.
+              This saved analysis uses a historical method. Recalculate to create a current Stonegate Valuation.
             </div>
           ) : null}
           <div
@@ -1058,8 +1060,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </details>
           ) : null}
 
-          {estimate.adjustment_shadow ? (
-            <AdjustmentShadowPanel shadow={estimate.adjustment_shadow} />
+          {estimate.market_adjustment ? (
+            <MarketAdjustmentPanel adjustment={estimate.market_adjustment} />
           ) : null}
 
           {estimate.confidence_factors?.length ? (

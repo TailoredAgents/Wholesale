@@ -289,13 +289,13 @@ Variables:
 - `PROPERTY_DATA_PROVIDER=rentcast`
 - `RENTCAST_API_KEY`
 - `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
-- `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2`
-- `UNDERWRITING_V3_SHADOW_ENABLED=true`
+- `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3`
+- `UNDERWRITING_V3_SHADOW_ENABLED=false`
 - optional `ATTOM_API_KEY` placeholder
 
-V2.2 remains the only active calculation method during the U3 build. The V3 adjustment runner is
-enabled only as saved comparison research and cannot change offer math. Keep
-`UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2`; the API rejects premature live V3 activation.
+V3 is the single live Stonegate Valuation method. V2.2 is retained only for historical reads and an
+engineering rollback; staff do not choose between versions. Keep shadow mode disabled in normal
+operation.
 
 Fresh analysis may use these RentCast endpoints:
 

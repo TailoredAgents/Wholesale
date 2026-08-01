@@ -19,10 +19,6 @@ type Draft = {
   rationale: string;
   proposedVersion: string;
   changeSummary: string;
-  ownerUsabilityAccepted: boolean;
-  internalPilotAccepted: boolean;
-  rollbackConfirmed: boolean;
-  humanAuthorityConfirmed: boolean;
 };
 
 const emptyDraft: Draft = {
@@ -32,10 +28,6 @@ const emptyDraft: Draft = {
   rationale: "",
   proposedVersion: "",
   changeSummary: "",
-  ownerUsabilityAccepted: false,
-  internalPilotAccepted: false,
-  rollbackConfirmed: false,
-  humanAuthorityConfirmed: false,
 };
 
 export function CalibrationGovernance({
@@ -80,19 +72,7 @@ export function CalibrationGovernance({
     setDraft((current) => ({
       ...current,
       [field]: value,
-      ...(field === "decisionType" && value === "v3_rollout"
-        ? { proposedVersion: "v3" }
-        : {}),
     }));
-    setMessage(null);
-    setError(null);
-  }
-
-  function confirm(
-    field: "ownerUsabilityAccepted" | "internalPilotAccepted" | "rollbackConfirmed" | "humanAuthorityConfirmed",
-    value: boolean,
-  ) {
-    setDraft((current) => ({ ...current, [field]: value }));
     setMessage(null);
     setError(null);
   }
@@ -125,21 +105,13 @@ export function CalibrationGovernance({
           title: draft.title,
           rationale: draft.rationale,
           proposed_methodology_version:
-            ["methodology_change", "v3_rollout"].includes(draft.decisionType)
+            draft.decisionType === "methodology_change"
               ? draft.proposedVersion || null
               : null,
           proposed_changes:
             draft.decisionType === "continue_current_method"
               ? {}
-              : draft.decisionType === "v3_rollout"
-                ? {
-                    summary: draft.changeSummary,
-                    owner_usability_accepted: draft.ownerUsabilityAccepted,
-                    internal_pilot_accepted: draft.internalPilotAccepted,
-                    rollback_confirmed: draft.rollbackConfirmed,
-                    human_authority_confirmed: draft.humanAuthorityConfirmed,
-                  }
-                : { summary: draft.changeSummary },
+              : { summary: draft.changeSummary },
         }),
       });
       setDraft(emptyDraft);
@@ -219,7 +191,6 @@ export function CalibrationGovernance({
                 <option value="continue_current_method">Continue current method</option>
                 <option value="methodology_change">Propose formula change</option>
                 <option value="provider_change">Propose provider change</option>
-                <option value="v3_rollout">Approve V3 controlled rollout</option>
               </select>
             </label>
             <label className={styles.wide}>
@@ -232,14 +203,13 @@ export function CalibrationGovernance({
                 value={draft.title}
               />
             </label>
-            {["methodology_change", "v3_rollout"].includes(draft.decisionType) ? (
+            {draft.decisionType === "methodology_change" ? (
               <label>
                 Proposed version
                 <input
                   maxLength={80}
                   onChange={(event) => update("proposedVersion", event.target.value)}
                   placeholder="v2.2-candidate"
-                  readOnly={draft.decisionType === "v3_rollout"}
                   required
                   value={draft.proposedVersion}
                 />
@@ -257,46 +227,6 @@ export function CalibrationGovernance({
                   value={draft.changeSummary}
                 />
               </label>
-            ) : null}
-            {draft.decisionType === "v3_rollout" ? (
-              <div className={`${styles.wide} ${styles.confirmations}`}>
-                <label>
-                  <input
-                    checked={draft.ownerUsabilityAccepted}
-                    onChange={(event) => confirm("ownerUsabilityAccepted", event.target.checked)}
-                    required
-                    type="checkbox"
-                  />
-                  Owner accepts the workflow and report usability.
-                </label>
-                <label>
-                  <input
-                    checked={draft.internalPilotAccepted}
-                    onChange={(event) => confirm("internalPilotAccepted", event.target.checked)}
-                    required
-                    type="checkbox"
-                  />
-                  Internal pilot results have been reviewed.
-                </label>
-                <label>
-                  <input
-                    checked={draft.rollbackConfirmed}
-                    onChange={(event) => confirm("rollbackConfirmed", event.target.checked)}
-                    required
-                    type="checkbox"
-                  />
-                  V2.2 rollback and history remain available.
-                </label>
-                <label>
-                  <input
-                    checked={draft.humanAuthorityConfirmed}
-                    onChange={(event) => confirm("humanAuthorityConfirmed", event.target.checked)}
-                    required
-                    type="checkbox"
-                  />
-                  Offers, contracts, and activation remain human-controlled.
-                </label>
-              </div>
             ) : null}
             <label className={styles.wide}>
               Evidence rationale
