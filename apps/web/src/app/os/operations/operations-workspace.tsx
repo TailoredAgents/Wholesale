@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, Pencil, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
@@ -107,7 +107,7 @@ export function OperationsWorkspace({
     return result;
   }
 
-  async function mutate(path: string, method: "POST" | "PATCH", body?: object) {
+  async function mutate(path: string, method: "POST" | "PATCH" | "DELETE", body?: object) {
     setStatus("saving");
     setMessage("");
     try {
@@ -243,6 +243,15 @@ export function OperationsWorkspace({
         ? "Workspace access deactivated by an operations manager."
         : "Workspace access restored by an operations manager.",
     });
+  }
+
+  async function deleteUser(user: AcquisitionOperations["users"][number]) {
+    if (user.is_active) return;
+    const confirmed = window.confirm(
+      `Permanently delete ${user.display_name}? This is only allowed when the account has no operating history.`,
+    );
+    if (!confirmed) return;
+    await mutate(`/api/v1/operations/users/${user.id}`, "DELETE");
   }
 
   async function setUserCalling(user: AcquisitionOperations["users"][number]) {
@@ -687,6 +696,18 @@ export function OperationsWorkspace({
                     >
                       {user.is_active ? "Deactivate" : "Reactivate"}
                     </button>
+                    {!user.is_active ? (
+                      <button
+                        aria-label={`Permanently delete ${user.display_name}`}
+                        className={styles.dangerButton}
+                        onClick={() => void deleteUser(user)}
+                        title="Permanently delete unused employee"
+                        type="button"
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               ))}

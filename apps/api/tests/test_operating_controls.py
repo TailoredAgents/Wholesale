@@ -1,11 +1,12 @@
 from typing import Any, cast
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.main import app
-from app.models.foundation import AuditEvent
+from app.models.foundation import AuditEvent, Lead
 from app.schemas.operating_model import CompensationPlanCreate
 from app.schemas.operations import CampaignCreate, MarketCreate
 from app.services.bootstrap import bootstrap_foundation
@@ -59,6 +60,109 @@ def create_lead(client: TestClient, headers: dict[str, str]) -> dict[str, Any]:
     )
     assert response.status_code == 201, response.text
     return cast(dict[str, Any], response.json())
+
+
+def test_deactivated_unused_employee_can_be_deleted_but_work_history_is_preserved(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    duplicate_response = client.post(
+        "/api/v1/operations/users",
+        headers=owner_headers,
+        json={
+            "email": "devon.duplicate@example.com",
+            "display_name": "Devon Duplicate",
+            "role_key": "disposition_rep",
+        },
+    )
+    assert duplicate_response.status_code == 201, duplicate_response.text
+    duplicate = cast(dict[str, Any], duplicate_response.json())
+
+    active_delete_response = client.delete(
+        f"/api/v1/operations/users/{duplicate['id']}", headers=owner_headers
+    )
+    assert active_delete_response.status_code == 422
+    assert "Deactivate" in active_delete_response.json()["detail"]
+
+    team_response = client.post(
+        "/api/v1/operations/teams",
+        headers=owner_headers,
+        json={
+            "name": "Dispositions",
+            "team_type": "dispositions",
+            "manager_user_id": duplicate["id"],
+        },
+    )
+    assert team_response.status_code == 201, team_response.text
+    team = cast(dict[str, Any], team_response.json())
+    membership_response = client.post(
+        f"/api/v1/operations/teams/{team['id']}/members",
+        headers=owner_headers,
+        json={"user_id": duplicate["id"], "membership_role": "manager"},
+    )
+    assert membership_response.status_code == 200, membership_response.text
+
+    deactivate_response = client.patch(
+        f"/api/v1/operations/users/{duplicate['id']}",
+        headers=owner_headers,
+        json={
+            "is_active": False,
+            "reason": "Duplicate account replaced by the correct login.",
+        },
+    )
+    assert deactivate_response.status_code == 200, deactivate_response.text
+    delete_response = client.delete(
+        f"/api/v1/operations/users/{duplicate['id']}", headers=owner_headers
+    )
+    assert delete_response.status_code == 204, delete_response.text
+
+    overview_response = client.get("/api/v1/operations", headers=owner_headers)
+    assert overview_response.status_code == 200, overview_response.text
+    overview = cast(dict[str, Any], overview_response.json())
+    assert all(user["id"] != duplicate["id"] for user in overview["users"])
+    updated_team = next(item for item in overview["teams"] if item["id"] == team["id"])
+    assert updated_team["manager_user_id"] is None
+    assert all(member["user_id"] != duplicate["id"] for member in updated_team["members"])
+
+    historical_response = client.post(
+        "/api/v1/operations/users",
+        headers=owner_headers,
+        json={
+            "email": "devon.history@example.com",
+            "display_name": "Devon With History",
+            "role_key": "disposition_rep",
+        },
+    )
+    assert historical_response.status_code == 201, historical_response.text
+    historical_user = cast(dict[str, Any], historical_response.json())
+    lead = create_lead(client, owner_headers)
+    lead_record = db_session.get(Lead, UUID(lead["id"]))
+    assert lead_record is not None
+    lead_record.assigned_user_id = UUID(historical_user["id"])
+    db_session.commit()
+    historical_deactivate_response = client.patch(
+        f"/api/v1/operations/users/{historical_user['id']}",
+        headers=owner_headers,
+        json={
+            "is_active": False,
+            "reason": "Employee left after working assigned leads.",
+        },
+    )
+    assert historical_deactivate_response.status_code == 200
+    blocked_delete_response = client.delete(
+        f"/api/v1/operations/users/{historical_user['id']}", headers=owner_headers
+    )
+    assert blocked_delete_response.status_code == 422
+    assert "operating history" in blocked_delete_response.json()["detail"]
 
 
 def test_versioned_compensation_role_credit_and_market_launch_controls(

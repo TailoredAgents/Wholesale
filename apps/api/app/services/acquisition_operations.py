@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import Settings
 from app.domain.rbac import PermissionKeys
+from app.models.base import Base
 from app.models.foundation import (
     ActivityEvent,
     Appointment,
@@ -89,6 +90,22 @@ OPERATIONAL_ROLE_KEYS = {
     "transaction_coordinator",
 }
 INTERESTED_DISPOSITIONS = {"interested", "appointment_set"}
+
+# These records only control access or assignment defaults. They can be removed or
+# cleared when an otherwise-unused duplicate employee account is deleted.
+USER_DELETE_ACCESS_REFERENCES = {
+    ("email_sender_grants", "user_id"),
+    ("role_assignments", "user_id"),
+    ("team_memberships", "user_id"),
+}
+USER_CLEAR_ACCESS_REFERENCES = {
+    ("calling_lists", "default_assignee_user_id"),
+    ("email_sender_aliases", "owner_user_id"),
+    ("operating_seats", "backup_user_id"),
+    ("operating_seats", "primary_user_id"),
+    ("teams", "manager_user_id"),
+    ("voice_lines", "assigned_user_id"),
+}
 
 
 def can_manage_operations(principal: Principal) -> bool:
@@ -813,6 +830,91 @@ def update_operations_user(
     )
     db.commit()
     return operations_user_read(db, user)
+
+
+def delete_operations_user(
+    db: Session,
+    principal: Principal,
+    user_id: UUID,
+) -> bool:
+    user = db.scalar(
+        select(User)
+        .where(
+            User.organization_id == principal.organization_id,
+            User.id == user_id,
+        )
+        .with_for_update()
+    )
+    if user is None:
+        return False
+    if user.id == principal.user_id:
+        raise ValueError("You cannot delete your own account.")
+    if user.is_active:
+        raise ValueError("Deactivate this employee before deleting them.")
+
+    blockers: list[str] = []
+    cleanup_references: list[tuple[object, object, str]] = []
+    for table in Base.metadata.sorted_tables:
+        for column in table.columns:
+            if not any(
+                foreign_key.target_fullname == "users.id"
+                for foreign_key in column.foreign_keys
+            ):
+                continue
+            reference = (table.name, column.name)
+            reference_count = int(
+                db.scalar(
+                    select(func.count()).select_from(table).where(column == user.id)
+                )
+                or 0
+            )
+            if not reference_count:
+                continue
+            if reference in USER_DELETE_ACCESS_REFERENCES:
+                cleanup_references.append((table, column, "delete"))
+            elif reference in USER_CLEAR_ACCESS_REFERENCES:
+                cleanup_references.append((table, column, "clear"))
+            else:
+                blockers.append(table.name)
+
+    if blockers:
+        raise ValueError(
+            "This employee has operating history and cannot be permanently deleted. "
+            "Keep the account deactivated so Stonegate preserves its lead, communication, "
+            "contract, and financial records."
+        )
+
+    previous = {
+        "email": user.email,
+        "display_name": user.display_name,
+        "is_active": user.is_active,
+        "role_keys": user_role_keys(db, principal.organization_id, user.id),
+    }
+    audit(
+        db,
+        principal,
+        action="user.delete",
+        entity_type="user",
+        entity_id=user.id,
+        previous=previous,
+        new={"deleted": True},
+        reason="Unused deactivated workspace account permanently deleted",
+    )
+    for table, column, operation in cleanup_references:
+        if operation == "delete":
+            db.execute(table.delete().where(column == user.id))
+        else:
+            db.execute(table.update().where(column == user.id).values({column.name: None}))
+    db.delete(user)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError(
+            "This employee gained operating history before deletion completed. "
+            "Keep the account deactivated to preserve that history."
+        ) from exc
+    return True
 
 
 def validate_operational_role(db: Session, organization_id: UUID, role_key: str) -> Role:

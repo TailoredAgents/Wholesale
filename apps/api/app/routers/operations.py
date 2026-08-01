@@ -49,6 +49,7 @@ from app.services.acquisition_operations import (
     create_saved_view,
     create_team,
     create_territory,
+    delete_operations_user,
     enroll_follow_up_plan,
     get_operations_overview,
     mark_notification_read,
@@ -152,6 +153,22 @@ def update_workspace_user(
     if user is None:
         raise HTTPException(status_code=404, detail="Workspace user not found.")
     return user
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_workspace_user(
+    user_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_operations_dependency)],
+) -> None:
+    try:
+        deleted = delete_operations_user(db, principal, user_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Workspace user not found.")
 
 
 @router.post("/teams", status_code=201)
