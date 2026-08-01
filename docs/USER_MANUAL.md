@@ -1083,10 +1083,20 @@ to return to the team meeting queue.
 1. Open **Walkthrough** on the iPad, phone, or laptop.
 2. Confirm occupancy, access, decision-makers, and material property facts.
 3. Tap the common property areas, then record condition and notes.
-4. Tap common repair categories, enter estimated costs and scope, and capture photographs.
-5. Save the draft while walking the property.
-6. Submit the inspection when the walkthrough is complete.
-7. Transfer confirmed field evidence into a new underwriting draft.
+4. Tap a common repair category. Choose **Not sure**, **No**, **Yes, repair**, **Yes, replace**, or
+   **Specialist review**, then confirm extent and quantity. Enter an exact amount only when you
+   have a better supported number than the system range.
+5. Capture photographs by area and add what you observed. Use **Dictate** to append a spoken note
+   when the browser supports it.
+6. Watch the walkthrough status for **Saving**, **Saved**, or the offline recovery message. The
+   iPad retains an unsynced draft locally; reconnect before submitting or uploading more photos.
+7. Open **Acquisitions Copilot** and select **Suggest repair scope** when useful. Review the draft
+   with **Accept**, **Save correction**, or **Reject**. Accepted suggestions are added as
+   unconfirmed rows and must still be checked during the walkthrough.
+8. Select **Save now** for an immediate sync, then **Submit walkthrough** when complete. Submission
+   first sends the latest on-screen draft and will not proceed while offline.
+9. Select **Review and transfer**. Stonegate carries the same verified rows and low/expected/high
+   range into one new underwriting draft; it does not overwrite prior approved work.
 
 Submitted inspections and evidence are retained. Correct material errors with a new record rather
 than silently rewriting historical evidence.

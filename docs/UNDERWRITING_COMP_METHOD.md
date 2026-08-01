@@ -867,7 +867,7 @@ what needs work; manual estimates and immutable contractor evidence still work.
 
 #### U3.7: AI Scope Assistance And iPad Walkthrough
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026; field acceptance and Georgia outcome calibration remain.
 
 - Connect the existing Acquisitions Copilot to structured repair-scope suggestions.
 - Use seller answers, calls, notes, inspection observations, and photos as cited inputs.
@@ -879,6 +879,29 @@ what needs work; manual estimates and immutable contractor evidence still work.
 
 **Exit:** The iPad workflow creates a walkthrough-verified repair estimate without duplicate entry,
 and no AI suggestion becomes a confirmed repair fact silently.
+
+**Implementation record:**
+
+- Calendar's existing appointment walkthrough now uses the same `ga-2026.07-v1` catalog and
+  repair-item contract as lead underwriting. A closer records `Not sure`, `No`, `Repair`,
+  `Replace`, or `Specialist review`, extent, quantity, optional exact price, and observed evidence.
+- Draft edits debounce-save to the API and retain a local iPad backup. The interface distinguishes
+  saved, saving, and offline recovery states; submission first flushes the current draft.
+- Existing camera capture remains attached to the immutable field inspection. Browser dictation
+  can append text to inspector notes; no separate audio or duplicate inspection record is created.
+- `underwriting.analyze` is now a supervised Acquisitions Copilot repair-scope capability. It can
+  read the appointment brief, seller/qualification facts, approved call notes, current
+  underwriting, inspection observations, repair items, and photo metadata/captions. It does not
+  receive raw photo bytes in this phase and cannot set a price, offer, or confirmed repair fact.
+- Structured AI suggestions require Accept, Correct, or Reject review. Applying an accepted or
+  corrected draft adds only missing categories, labels each row `AI proposed`, and leaves it
+  `unconfirmed` / `not inspected` until the closer changes the observed work decision.
+- The existing review records continue to measure acceptance, correction, rejection, latency,
+  token cost, and estimated time saved. Applying a scope writes an audit event but performs no
+  seller-facing action.
+- Review and transfer evaluates the same field items into one low/expected/high scenario, stores
+  them in the existing walkthrough repair estimate, and creates the existing draft underwriting
+  version. Prior approved underwriting remains unchanged.
 
 #### U3.8: Unified Valuation And Offer Workspace
 

@@ -16,6 +16,7 @@ import {
   House,
   LoaderCircle,
   LockKeyhole,
+  Mic,
   Minimize2,
   Pencil,
   Plus,
@@ -46,6 +47,7 @@ import type {
   EsignEnvelope,
   FieldAppointmentWorkspace,
   FieldInspection,
+  FieldRepairItem,
   FieldMeetingBrief,
   FieldOperationsOverview,
   FieldRoomObservation,
@@ -158,6 +160,34 @@ function cents(value: string) {
   return Math.round(Number(value) * 100);
 }
 
+function repairDraft(category: string, quantity = 1): FieldRepairItem {
+  return {
+    category,
+    estimated_cost_cents: null,
+    details: null,
+    scope_status: "unknown",
+    severity: "standard",
+    quantity,
+    unit: null,
+    pricing_method: "catalog",
+    manual_override_cents: null,
+    override_reason: null,
+    system_low_cents: null,
+    system_expected_cents: null,
+    system_high_cents: null,
+    evidence_source: "walkthrough",
+    evidence_reference: null,
+    confirmation_status: "unconfirmed",
+    inspection_status: "not_inspected",
+    catalog_version: null,
+    uncertainty_note: null,
+    suggested_by_ai: false,
+    ai_rationale: null,
+    ai_confidence: null,
+    ai_evidence: [],
+  };
+}
+
 async function compressPhoto(file: File): Promise<Blob> {
   if (!file.type.match(/^image\/(jpeg|png|webp)$/) || file.size < 1_200_000) return file;
   const source = URL.createObjectURL(file);
@@ -235,6 +265,9 @@ export function FieldMeetingWorkspace({
   const [inspection, setInspection] = useState<Partial<FieldInspection>>({});
   const [photoArea, setPhotoArea] = useState("Exterior");
   const [focusMode, setFocusMode] = useState(Boolean(requestedAppointmentId));
+  const [draftDirty, setDraftDirty] = useState(false);
+  const [syncState, setSyncState] = useState<"saved" | "saving" | "offline">("saved");
+  const editRevision = useRef(0);
 
   const loadWorkspace = useCallback(async (id: string) => {
     if (!id) return;
@@ -268,7 +301,25 @@ export function FieldMeetingWorkspace({
   }, [appointmentId, initialWorkspace?.appointment.id, loadWorkspace]);
 
   useEffect(() => {
-    setInspection(workspace?.inspection ?? {});
+    const serverInspection = workspace?.inspection;
+    if (!serverInspection) {
+      setInspection({});
+      return;
+    }
+    const backup = window.localStorage.getItem(`stonegate-field-${serverInspection.id}`);
+    if (serverInspection.status === "draft" && backup) {
+      try {
+        setInspection({ ...serverInspection, ...JSON.parse(backup) });
+        setDraftDirty(true);
+        setSyncState(navigator.onLine ? "saving" : "offline");
+        return;
+      } catch {
+        window.localStorage.removeItem(`stonegate-field-${serverInspection.id}`);
+      }
+    }
+    setInspection(serverInspection);
+    setDraftDirty(false);
+    setSyncState("saved");
   }, [workspace?.inspection]);
 
   async function run<T>(operation: () => Promise<T>, success: string) {
@@ -288,10 +339,18 @@ export function FieldMeetingWorkspace({
 
   function updateInspection<K extends keyof FieldInspection>(key: K, value: FieldInspection[K]) {
     setInspection((current) => ({ ...current, [key]: value }));
+    editRevision.current += 1;
+    setDraftDirty(true);
   }
 
-  const rooms = inspection.room_observations ?? [];
-  const repairs = inspection.repair_items ?? [];
+  const rooms = useMemo(
+    () => inspection.room_observations ?? [],
+    [inspection.room_observations],
+  );
+  const repairs = useMemo(
+    () => inspection.repair_items ?? [],
+    [inspection.repair_items],
+  );
   const brief = workspace?.brief?.brief_data;
   const seller = asRecord(brief?.seller);
   const property = asRecord(brief?.property);
@@ -323,10 +382,7 @@ export function FieldMeetingWorkspace({
     },
   ];
 
-  async function saveInspection() {
-    if (!workspace?.inspection) return;
-    await run(
-      () => requestJson(`/api/v1/field-operations/inspections/${workspace.inspection?.id}`, "PATCH", {
+  const inspectionPayload = useCallback(() => ({
         overall_condition: inspection.overall_condition || null,
         occupancy_observed: inspection.occupancy_observed || null,
         utilities_status: inspection.utilities_status || null,
@@ -336,9 +392,65 @@ export function FieldMeetingWorkspace({
         room_observations: rooms,
         repair_items: repairs,
         inspector_notes: inspection.inspector_notes || null,
-      }),
+  }), [inspection, rooms, repairs]);
+
+  const persistInspection = useCallback(async () => {
+    if (!workspace?.inspection || workspace.inspection.status !== "draft") return null;
+    const revision = editRevision.current;
+    if (!navigator.onLine) {
+      setSyncState("offline");
+      throw new Error("This walkthrough is saved on this iPad and will sync after reconnecting.");
+    }
+    setSyncState("saving");
+    const saved = await requestJson<FieldInspection>(
+      `/api/v1/field-operations/inspections/${workspace.inspection.id}`,
+      "PATCH",
+      inspectionPayload(),
+    );
+    if (revision === editRevision.current) {
+      setInspection(saved);
+      setWorkspace((current) => current ? { ...current, inspection: saved } : current);
+      setDraftDirty(false);
+      setSyncState("saved");
+      window.localStorage.removeItem(`stonegate-field-${saved.id}`);
+    }
+    return saved;
+  }, [inspectionPayload, requestJson, workspace]);
+
+  useEffect(() => {
+    if (!draftDirty || !workspace?.inspection || workspace.inspection.status !== "draft") return;
+    window.localStorage.setItem(
+      `stonegate-field-${workspace.inspection.id}`,
+      JSON.stringify(inspectionPayload()),
+    );
+    const timer = window.setTimeout(() => {
+      void persistInspection().catch((reason) => {
+        setSyncState(navigator.onLine ? "saved" : "offline");
+        if (navigator.onLine) {
+          setError(reason instanceof Error ? reason.message : "Walkthrough autosave failed.");
+        }
+      });
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [draftDirty, inspection, inspectionPayload, persistInspection, workspace?.inspection]);
+
+  async function saveInspection() {
+    if (!workspace?.inspection) return;
+    await run(
+      persistInspection,
       "Walkthrough draft saved.",
     );
+  }
+
+  async function submitInspection() {
+    if (!workspace?.inspection) return;
+    await run(async () => {
+      await persistInspection();
+      return requestJson(
+        `/api/v1/field-operations/inspections/${workspace.inspection?.id}/submit`,
+        "POST",
+      );
+    }, "Walkthrough submitted for review.");
   }
 
   function addArea(area: string) {
@@ -350,10 +462,55 @@ export function FieldMeetingWorkspace({
   }
 
   function addRepair(category: string) {
+    const catalogItem = workspace?.repair_catalog.items.find(
+      (item) => item.category === category,
+    );
     updateInspection("repair_items", [
       ...repairs,
-      { category, estimated_cost_cents: 100_000, details: null },
+      repairDraft(category, catalogItem?.default_quantity ?? 1),
     ]);
+  }
+
+  function updateRepair(index: number, values: Partial<FieldRepairItem>) {
+    updateInspection(
+      "repair_items",
+      repairs.map((item, itemIndex) =>
+        itemIndex === index ? { ...item, ...values } : item
+      ),
+    );
+  }
+
+  function dictateNotes() {
+    type Recognition = {
+      lang: string;
+      interimResults: boolean;
+      onresult: (event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void;
+      onerror: () => void;
+      start: () => void;
+    };
+    const SpeechRecognition = (
+      window as typeof window & {
+        SpeechRecognition?: new () => Recognition;
+        webkitSpeechRecognition?: new () => Recognition;
+      }
+    ).SpeechRecognition ?? (
+      window as typeof window & { webkitSpeechRecognition?: new () => Recognition }
+    ).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setError("Voice dictation is not supported by this browser.");
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = "en-US";
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (!transcript) return;
+      const current = String(inspection.inspector_notes ?? "").trim();
+      updateInspection("inspector_notes", `${current}${current ? " " : ""}${transcript}`);
+    };
+    recognition.onerror = () => setError("Voice dictation could not capture the note.");
+    recognition.start();
   }
 
   async function uploadPhotos(event: ChangeEvent<HTMLInputElement>) {
@@ -511,7 +668,15 @@ export function FieldMeetingWorkspace({
                   )} type="button"><ClipboardCheck size={17} />Start property walkthrough</button>
                 ) : (
                   <>
-                    <div className={styles.inspectionStatus}><span className={styles.statusPill}>{labelize(workspace.inspection.status)}</span><strong>{money(repairs.reduce((sum, item) => sum + item.estimated_cost_cents, 0))} observed repairs</strong></div>
+                    <div className={styles.inspectionStatus}>
+                      <span className={styles.statusPill}>{labelize(workspace.inspection.status)}</span>
+                      <strong>
+                        {money(Number(inspection.repair_scenario?.total_low_cents ?? 0))} – {money(Number(inspection.repair_scenario?.total_high_cents ?? 0))} repair range
+                      </strong>
+                      {workspace.inspection.status === "draft" ? (
+                        <small>{syncState === "saved" ? "Saved" : syncState === "saving" ? "Saving..." : "Saved on this iPad; reconnect to sync"}</small>
+                      ) : null}
+                    </div>
                     <fieldset className={styles.walkthroughFields} disabled={workspace.inspection.status !== "draft"}>
                       <label><span>Overall condition</span><select onChange={(event) => updateInspection("overall_condition", event.target.value)} value={inspection.overall_condition ?? ""}><option value="">Select condition</option><option value="light">Light repairs</option><option value="moderate">Moderate renovation</option><option value="heavy">Heavy renovation</option><option value="full_renovation">Full renovation</option></select></label>
                       <label><span>Observed occupancy</span><input onChange={(event) => updateInspection("occupancy_observed", event.target.value)} value={inspection.occupancy_observed ?? ""} /></label>
@@ -550,7 +715,7 @@ export function FieldMeetingWorkspace({
                     </section>
 
                     <section className={styles.observationSection}>
-                      <header><div><span>Repair scope</span><h4>Cost observations</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => addRepair("other")} type="button"><Plus size={15} />Custom repair</button> : null}</header>
+                      <header><div><span>Repair scope</span><h4>Observed work and system range</h4></div>{workspace.inspection.status === "draft" ? <button onClick={() => addRepair("other")} type="button"><Plus size={15} />Custom repair</button> : null}</header>
                       {workspace.inspection.status === "draft" ? (
                         <div className={styles.quickAddRail}>
                           {quickRepairCategories.map((category) => (
@@ -561,14 +726,40 @@ export function FieldMeetingWorkspace({
                         </div>
                       ) : null}
                       {repairs.map((repair, index) => (
-                        <div className={styles.repairRow} key={index}>
-                          <select disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateInspection("repair_items", repairs.map((item, itemIndex) => itemIndex === index ? { ...item, category: event.target.value } : item))} value={repair.category}>{repairCategories.map((category) => <option key={category} value={category}>{labelize(category)}</option>)}</select>
-                          <label><span>$</span><input disabled={workspace.inspection?.status !== "draft"} min="1" onChange={(event) => updateInspection("repair_items", repairs.map((item, itemIndex) => itemIndex === index ? { ...item, estimated_cost_cents: Math.round(Number(event.target.value) * 100) } : item))} type="number" value={repair.estimated_cost_cents / 100} /></label>
-                          <input disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateInspection("repair_items", repairs.map((item, itemIndex) => itemIndex === index ? { ...item, details: event.target.value || null } : item))} placeholder="Evidence and scope" value={repair.details ?? ""} />
-                          {workspace.inspection?.status === "draft" ? <button aria-label="Remove repair" onClick={() => updateInspection("repair_items", repairs.filter((_, itemIndex) => itemIndex !== index))} title="Remove repair" type="button"><Trash2 size={15} /></button> : null}
-                        </div>
+                        <article className={styles.guidedRepairRow} key={`${repair.category}-${index}`}>
+                          <header>
+                            <select disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateRepair(index, { category: event.target.value, catalog_version: null })} value={repair.category}>{repairCategories.map((category) => <option key={category} value={category}>{labelize(category)}</option>)}</select>
+                            <strong>{money(repair.system_low_cents)} – {money(repair.system_high_cents)}</strong>
+                            {repair.suggested_by_ai ? <span><Sparkles size={13} />AI proposed</span> : null}
+                            {workspace.inspection?.status === "draft" ? <button aria-label="Remove repair" onClick={() => updateInspection("repair_items", repairs.filter((_, itemIndex) => itemIndex !== index))} title="Remove repair" type="button"><Trash2 size={15} /></button> : null}
+                          </header>
+                          <div className={styles.guidedRepairControls}>
+                            <label><span>Work needed</span><select disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateRepair(index, { scope_status: event.target.value as FieldRepairItem["scope_status"], confirmation_status: "walkthrough_verified", inspection_status: event.target.value === "specialist_review" ? "specialist_needed" : "observed", catalog_version: null })} value={repair.scope_status}><option value="unknown">Not sure</option><option value="no_work">No</option><option value="repair">Yes, repair</option><option value="replace">Yes, replace</option><option value="specialist_review">Specialist review</option></select></label>
+                            <label><span>Extent</span><select disabled={workspace.inspection?.status !== "draft" || repair.scope_status === "no_work"} onChange={(event) => updateRepair(index, { severity: event.target.value as FieldRepairItem["severity"], catalog_version: null })} value={repair.severity}><option value="minor">Minor</option><option value="standard">Standard</option><option value="extensive">Extensive</option></select></label>
+                            <label><span>Quantity</span><input disabled={workspace.inspection?.status !== "draft" || repair.scope_status === "no_work"} min="0.01" onChange={(event) => updateRepair(index, { quantity: Number(event.target.value) || 1, catalog_version: null })} step="0.1" type="number" value={repair.quantity ?? 1} /></label>
+                            <label><span>Exact amount (optional)</span><input disabled={workspace.inspection?.status !== "draft" || repair.scope_status === "no_work"} min="0" onChange={(event) => updateRepair(index, { manual_override_cents: cents(event.target.value), pricing_method: "catalog", override_reason: event.target.value ? (repair.override_reason || "Walkthrough price override") : null, catalog_version: null })} placeholder="Use system range" type="number" value={dollars(repair.manual_override_cents)} /></label>
+                          </div>
+                          <input disabled={workspace.inspection?.status !== "draft"} onChange={(event) => updateRepair(index, { details: event.target.value || null, evidence_reference: event.target.value || null })} placeholder="What you observed" value={repair.details ?? ""} />
+                          {repair.ai_rationale ? <small className={styles.aiRepairRationale}>{repair.ai_rationale}</small> : null}
+                        </article>
                       ))}
                     </section>
+
+                    <CopilotLauncher
+                      attentionCount={workspace.copilot.readiness_gaps.length}
+                      description="Suggests repair categories from reviewed seller, call, inspection, and photo-caption evidence. Every suggestion remains unconfirmed until you review it."
+                      name="Acquisitions Copilot"
+                      score={workspace.copilot.readiness_score}
+                      summary="Prepare a repair checklist without giving AI pricing authority."
+                      triggerLabel="Suggest repair scope"
+                    >
+                      <AcquisitionsCopilotPanel
+                        appointmentId={appointmentId}
+                        run={run}
+                        saving={saving}
+                        workspace={workspace}
+                      />
+                    </CopilotLauncher>
 
                     <section className={styles.photoSection}>
                       <header><div><span>Property evidence</span><h4>Photos</h4></div><strong>{workspace.inspection.photos.length}/30</strong></header>
@@ -576,8 +767,8 @@ export function FieldMeetingWorkspace({
                       <div className={styles.photoGrid}>{workspace.inspection.photos.map((photo) => <figure key={photo.id}><EvidencePhoto photo={photo} /><figcaption><strong>{photo.area}</strong><small>{photo.file_name}</small></figcaption>{workspace.inspection?.status === "draft" ? <button aria-label="Delete photo" onClick={() => run(() => requestJson(`/api/v1/field-operations/photos/${photo.id}`, "DELETE"), "Evidence photo removed.")} title="Delete photo" type="button"><Trash2 size={14} /></button> : null}</figure>)}</div>
                     </section>
 
-                    <label className={styles.inspectorNotes}><span>Inspector notes</span><textarea disabled={workspace.inspection.status !== "draft"} onChange={(event) => updateInspection("inspector_notes", event.target.value)} rows={4} value={inspection.inspector_notes ?? ""} /></label>
-                    {workspace.inspection.status === "draft" ? <div className={styles.actionRow}><button disabled={saving} onClick={saveInspection} type="button"><Check size={16} />Save draft</button><button className={styles.primaryAction} disabled={saving} onClick={() => run(() => requestJson(`/api/v1/field-operations/inspections/${workspace.inspection?.id}/submit`, "POST"), "Walkthrough submitted for review.")} type="button"><ClipboardCheck size={16} />Submit walkthrough</button></div> : null}
+                    <div className={styles.inspectorNotes}><label><span>Inspector notes</span><textarea disabled={workspace.inspection.status !== "draft"} onChange={(event) => updateInspection("inspector_notes", event.target.value)} rows={4} value={inspection.inspector_notes ?? ""} /></label>{workspace.inspection.status === "draft" ? <button onClick={dictateNotes} type="button"><Mic size={15} />Dictate</button> : null}</div>
+                    {workspace.inspection.status === "draft" ? <div className={styles.actionRow}><button disabled={saving} onClick={saveInspection} type="button"><Check size={16} />Save now</button><button className={styles.primaryAction} disabled={saving} onClick={submitInspection} type="button"><ClipboardCheck size={16} />Submit walkthrough</button></div> : null}
                     {workspace.inspection.status === "submitted" && workspace.can_review_underwriting ? <div className={styles.reviewTransfer}><div><Wrench size={20} /><span><strong>Create reviewed underwriting draft</strong><small>This preserves the old valuation and requires a fresh offer calculation and approval.</small></span></div><button disabled={saving} onClick={() => run(() => requestJson(`/api/v1/field-operations/inspections/${workspace.inspection?.id}/underwriting-transfer`, "POST"), "Field evidence transferred to a new underwriting version.")} type="button">Review and transfer</button></div> : null}
                     {workspace.underwriting_transfer ? <p className={styles.notice}>Transferred to underwriting version {workspace.underwriting_transfer.created_underwriting_version_number}. The prior approved valuation remains unchanged.</p> : null}
                   </>
@@ -849,7 +1040,9 @@ function AcquisitionsCopilotPanel({
   const output = useMemo(() => selected?.output_payload ?? {}, [selected]);
   const primaryKey = selected?.recommendation_type === "follow_up"
     ? "meeting_summary"
-    : "executive_brief";
+    : selected?.recommendation_type === "repair_scope"
+      ? "summary"
+      : "executive_brief";
   const [correction, setCorrection] = useState("");
 
   useEffect(() => {
@@ -860,7 +1053,7 @@ function AcquisitionsCopilotPanel({
     setCorrection(String(output[primaryKey] ?? ""));
   }, [selected?.id, output, primaryKey]);
 
-  function generate(recommendationType: "preparation" | "follow_up") {
+  function generate(recommendationType: "preparation" | "repair_scope" | "follow_up") {
     return run(
       () => requestJson(
         `/api/v1/field-operations/appointments/${appointmentId}/copilot/analyze`,
@@ -869,7 +1062,9 @@ function AcquisitionsCopilotPanel({
       ),
       recommendationType === "preparation"
         ? "Appointment preparation draft generated."
-        : "Meeting follow-up draft generated.",
+        : recommendationType === "repair_scope"
+          ? "Repair-scope suggestions generated for review."
+          : "Meeting follow-up draft generated.",
     );
   }
 
@@ -905,15 +1100,26 @@ function AcquisitionsCopilotPanel({
     && workspace.negotiation !== null
     && workspace.negotiation.outcome !== "pending"
   );
+  const canSuggestRepairs = (
+    workspace.copilot.repair_scope_capability_status === "enabled"
+    && workspace.brief !== null
+  );
   const headline = selected
     ? String(output[primaryKey] ?? "Draft guidance")
     : "";
   const questionItems = selected?.recommendation_type === "follow_up"
     ? textList(output, "unresolved_items")
-    : textList(output, "unresolved_questions");
+    : selected?.recommendation_type === "repair_scope"
+      ? textList(output, "missing_evidence")
+      : textList(output, "unresolved_questions");
   const actionItems = selected?.recommendation_type === "follow_up"
     ? textList(output, "recommended_internal_actions")
-    : textList(output, "meeting_objectives");
+    : selected?.recommendation_type === "repair_scope"
+      ? asList(output.suggestions).map((item) => {
+        const suggestion = asRecord(item);
+        return `${labelize(String(suggestion.category))}: ${labelize(String(suggestion.scope_status))}`;
+      })
+      : textList(output, "meeting_objectives");
   const riskItems = textList(output, "risks");
 
   return (
@@ -957,6 +1163,9 @@ function AcquisitionsCopilotPanel({
         <button disabled={saving || !canPrepare} onClick={() => void generate("preparation")} type="button">
           <Sparkles size={16} />Prepare appointment
         </button>
+        <button disabled={saving || !canSuggestRepairs} onClick={() => void generate("repair_scope")} type="button">
+          <Wrench size={16} />Suggest repair scope
+        </button>
         <button disabled={saving || !canFollowUp} onClick={() => void generate("follow_up")} type="button">
           <RefreshCw size={16} />Draft follow-up
         </button>
@@ -973,7 +1182,7 @@ function AcquisitionsCopilotPanel({
               <select onChange={(event) => setSelectedId(event.target.value)} value={selected?.id ?? ""}>
                 {workspace.copilot.recommendations.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {item.recommendation_type === "preparation" ? "Appointment prep" : "Follow-up"} · {labelize(item.status)} · {new Date(item.generated_at).toLocaleDateString()}
+                    {item.recommendation_type === "preparation" ? "Appointment prep" : item.recommendation_type === "repair_scope" ? "Repair scope" : "Follow-up"} · {labelize(item.status)} · {new Date(item.generated_at).toLocaleDateString()}
                   </option>
                 ))}
               </select>
@@ -983,7 +1192,7 @@ function AcquisitionsCopilotPanel({
           <h5>{headline}</h5>
           <div className={styles.copilotDraftColumns}>
             <section>
-              <strong>{selected?.recommendation_type === "follow_up" ? "Internal actions" : "Meeting objectives"}</strong>
+              <strong>{selected?.recommendation_type === "follow_up" ? "Internal actions" : selected?.recommendation_type === "repair_scope" ? "Suggested scope" : "Meeting objectives"}</strong>
               {actionItems.map((item) => <p key={item}><CircleCheckBig size={14} />{item}</p>)}
             </section>
             <section>
@@ -1008,7 +1217,19 @@ function AcquisitionsCopilotPanel({
               </div>
             </div>
           ) : (
-            <p className={styles.copilotReviewed}><ShieldCheck size={15} />Reviewed: {labelize(selected?.status ?? "")}. No CRM or seller-facing action was performed.</p>
+            <div className={styles.copilotReviewed}>
+              <p><ShieldCheck size={15} />Reviewed: {labelize(selected?.status ?? "")}. No seller-facing action was performed.</p>
+              {selected?.recommendation_type === "repair_scope" && selected.status !== "rejected" && workspace.inspection?.status === "draft" ? (
+                <button
+                  disabled={saving}
+                  onClick={() => void run(
+                    () => requestJson(`/api/v1/field-operations/inspections/${workspace.inspection?.id}/copilot-scope/${selected.id}/apply`, "POST"),
+                    "Reviewed repair suggestions added as unconfirmed walkthrough items.",
+                  )}
+                  type="button"
+                ><Sparkles size={15} />Add unconfirmed suggestions</button>
+              ) : null}
+            </div>
           )}
         </div>
       ) : (

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.schemas.leads import RepairCategory, UnderwritingRepairItemInput
 from app.schemas.transactions import EsignEnvelopeRead, EsignRecipientCreate
 
 
@@ -283,6 +284,28 @@ class AcquisitionsFollowUpOutput(BaseModel):
     confidence: int = Field(ge=0, le=100)
 
 
+class AcquisitionsRepairScopeSuggestion(BaseModel):
+    category: RepairCategory
+    scope_status: Literal[
+        "unknown", "no_work", "repair", "replace", "specialist_review"
+    ]
+    severity: Literal["minor", "standard", "extensive"]
+    quantity: float | None = Field(default=None, gt=0, le=100_000)
+    rationale: str = Field(max_length=1000)
+    evidence: list[str] = Field(max_length=20)
+    confidence: int = Field(ge=0, le=100)
+
+
+class AcquisitionsRepairScopeOutput(BaseModel):
+    summary: str = Field(max_length=4000)
+    suggestions: list[AcquisitionsRepairScopeSuggestion] = Field(max_length=25)
+    missing_evidence: list[str] = Field(max_length=30)
+    requested_photos: list[str] = Field(max_length=20)
+    safety_notes: list[str] = Field(max_length=20)
+    evidence: list[str] = Field(max_length=50)
+    confidence: int = Field(ge=0, le=100)
+
+
 class AcquisitionsCopilotRecommendationRead(BaseModel):
     id: UUID
     appointment_id: UUID
@@ -297,7 +320,7 @@ class AcquisitionsCopilotRecommendationRead(BaseModel):
 
 
 class AcquisitionsCopilotAnalyzeRequest(BaseModel):
-    recommendation_type: Literal["preparation", "follow_up"] = "preparation"
+    recommendation_type: Literal["preparation", "repair_scope", "follow_up"] = "preparation"
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=255)
 
 
@@ -344,6 +367,7 @@ class AcquisitionsCopilotOverview(BaseModel):
     runtime_status: str
     preparation_capability_status: str
     follow_up_capability_status: str
+    repair_scope_capability_status: str
     external_actions_blocked: bool
     readiness_score: int
     readiness_band: str
@@ -361,26 +385,11 @@ class FieldRoomObservation(BaseModel):
     notes: str | None = Field(default=None, max_length=1000)
 
 
-class FieldRepairItem(BaseModel):
-    category: Literal[
-        "roof",
-        "hvac",
-        "plumbing",
-        "electrical",
-        "foundation",
-        "kitchen",
-        "bathrooms",
-        "flooring",
-        "paint_drywall",
-        "windows_doors",
-        "exterior",
-        "landscaping",
-        "permits",
-        "cleanup",
-        "other",
-    ]
-    estimated_cost_cents: int = Field(ge=1, le=100_000_000)
-    details: str | None = Field(default=None, max_length=500)
+class FieldRepairItem(UnderwritingRepairItemInput):
+    suggested_by_ai: bool = False
+    ai_rationale: str | None = Field(default=None, max_length=1000)
+    ai_confidence: int | None = Field(default=None, ge=0, le=100)
+    ai_evidence: list[str] = Field(default_factory=list, max_length=20)
 
 
 class FieldInspectionUpdate(BaseModel):
@@ -422,6 +431,7 @@ class FieldInspectionRead(BaseModel):
     started_at: datetime
     submitted_at: datetime | None
     reviewed_at: datetime | None
+    updated_at: datetime
     overall_condition: str | None
     occupancy_observed: str | None
     utilities_status: str | None
@@ -433,6 +443,7 @@ class FieldInspectionRead(BaseModel):
     inspector_notes: str | None
     photos: list[FieldInspectionPhotoRead]
     repair_total_cents: int
+    repair_scenario: dict[str, Any]
 
 
 class FieldObjection(BaseModel):
@@ -531,5 +542,6 @@ class FieldAppointmentWorkspaceRead(BaseModel):
     underwriting_transfer: FieldUnderwritingTransferRead | None
     contract_signing: FieldContractSigningRead
     copilot: AcquisitionsCopilotOverview
+    repair_catalog: dict[str, Any]
     can_edit: bool
     can_review_underwriting: bool

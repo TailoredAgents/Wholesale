@@ -41,12 +41,22 @@ from app.schemas.field_operations import (
     AcquisitionsCopilotReviewRequest,
     AcquisitionsFollowUpOutput,
     AcquisitionsPreparationOutput,
+    AcquisitionsRepairScopeOutput,
+    FieldInspectionRead,
 )
+from app.services.repair_catalog import evaluate_repair_scope
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
 
 CAPABILITY_BY_TYPE = {
     "preparation": ("appointment_preparation", "appointment.brief"),
+    "repair_scope": ("underwriting_comp", "underwriting.analyze"),
     "follow_up": ("negotiation_coach", "negotiation.coach"),
+}
+
+REPAIR_CATEGORIES = {
+    "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen", "bathrooms",
+    "flooring", "paint_drywall", "windows_doors", "exterior", "landscaping", "permits",
+    "cleanup", "other",
 }
 
 
@@ -95,6 +105,9 @@ def get_acquisitions_copilot_overview(
         ),
         follow_up_capability_status=statuses.get(
             "negotiation.coach", "not_installed"
+        ),
+        repair_scope_capability_status=statuses.get(
+            "underwriting.analyze", "not_installed"
         ),
         external_actions_blocked=(
             runtime.policy is None or not runtime.policy.external_actions_enabled
@@ -173,6 +186,7 @@ def analyze_appointment(
                 "authority_status": facts["authority_status"],
                 "restrictions": [
                     "Do not calculate or approve a new offer.",
+                    "Do not invent a repair price or approve a repair amount.",
                     "Do not exceed or reinterpret approved seller authority.",
                     "Do not change CRM, underwriting, appointment, or task records.",
                     "Do not contact the seller.",
@@ -190,13 +204,20 @@ def analyze_appointment(
             message=run.error_message or "The governed runtime did not produce a draft.",
             recommendation=None,
         )
-    output_model = (
-        AcquisitionsPreparationOutput
-        if payload.recommendation_type == "preparation"
-        else AcquisitionsFollowUpOutput
-    )
     try:
-        parsed = output_model.model_validate(json.loads(run.output_summary))
+        raw_output = json.loads(run.output_summary)
+        if payload.recommendation_type == "preparation":
+            parsed_output = AcquisitionsPreparationOutput.model_validate(
+                raw_output
+            ).model_dump()
+        elif payload.recommendation_type == "repair_scope":
+            parsed_output = AcquisitionsRepairScopeOutput.model_validate(
+                raw_output
+            ).model_dump()
+        else:
+            parsed_output = AcquisitionsFollowUpOutput.model_validate(
+                raw_output
+            ).model_dump()
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
             "The model response did not match the Acquisitions Copilot contract."
@@ -224,7 +245,7 @@ def analyze_appointment(
         ai_run_log_id=run.id,
         idempotency_key=idempotency_key,
         status="draft",
-        output_payload=parsed.model_dump(),
+        output_payload=parsed_output,
         evidence_snapshot={
             "readiness_score": facts["readiness_score"],
             "readiness_gaps": facts["readiness_gaps"],
@@ -232,7 +253,7 @@ def analyze_appointment(
             "authority_status": facts["authority_status"],
             "approved_ceiling_cents": facts["approved_ceiling_cents"],
         },
-        confidence_score=parsed.confidence,
+        confidence_score=int(parsed_output["confidence"]),
         generated_at=datetime.now(UTC),
         reviewed_at=None,
     )
@@ -290,13 +311,19 @@ def review_recommendation(
 
     if payload.decision == "edited":
         assert payload.final_output is not None
-        contract = (
-            AcquisitionsPreparationOutput
-            if recommendation.recommendation_type == "preparation"
-            else AcquisitionsFollowUpOutput
-        )
         try:
-            final_output = contract.model_validate(payload.final_output).model_dump()
+            if recommendation.recommendation_type == "preparation":
+                final_output = AcquisitionsPreparationOutput.model_validate(
+                    payload.final_output
+                ).model_dump()
+            elif recommendation.recommendation_type == "repair_scope":
+                final_output = AcquisitionsRepairScopeOutput.model_validate(
+                    payload.final_output
+                ).model_dump()
+            else:
+                final_output = AcquisitionsFollowUpOutput.model_validate(
+                    payload.final_output
+                ).model_dump()
         except ValidationError as exc:
             raise ValueError(
                 "The corrected output must preserve the acquisitions response contract."
@@ -321,6 +348,8 @@ def review_recommendation(
     db.add(review)
     recommendation.status = payload.decision
     recommendation.reviewed_at = now
+    if final_output is not None:
+        recommendation.output_payload = final_output
     _audit(
         db,
         principal,
@@ -335,6 +364,89 @@ def review_recommendation(
     db.commit()
     db.refresh(review)
     return review_read(review)
+
+
+def apply_repair_scope_suggestions(
+    db: Session,
+    principal: Principal,
+    inspection_id: UUID,
+    recommendation_id: UUID,
+) -> FieldInspectionRead | None:
+    from app.services.field_workflows import inspection_read, repair_subject, scoped_inspection
+
+    inspection = scoped_inspection(db, principal, inspection_id)
+    if inspection is None:
+        return None
+    if inspection.status != "draft":
+        raise ValueError("AI scope suggestions can only be applied to a draft walkthrough.")
+    recommendation = db.scalar(
+        select(AcquisitionsCopilotRecommendation).where(
+            AcquisitionsCopilotRecommendation.organization_id == principal.organization_id,
+            AcquisitionsCopilotRecommendation.id == recommendation_id,
+        )
+    )
+    if recommendation is None:
+        raise ValueError("The repair-scope recommendation was not found.")
+    if recommendation.appointment_id != inspection.appointment_id:
+        raise ValueError("The recommendation belongs to a different appointment.")
+    if recommendation.recommendation_type != "repair_scope":
+        raise ValueError("Only repair-scope guidance can be applied to a walkthrough.")
+    if recommendation.status not in {"accepted", "edited"}:
+        raise ValueError("Review the AI repair-scope draft before applying it.")
+
+    parsed = AcquisitionsRepairScopeOutput.model_validate(
+        recommendation.output_payload
+    )
+    existing_categories = {
+        str(item.get("category")) for item in inspection.repair_items
+    }
+    additions: list[dict[str, object]] = []
+    for suggestion in parsed.suggestions:
+        category = suggestion.category if suggestion.category in REPAIR_CATEGORIES else "other"
+        if category in existing_categories:
+            continue
+        additions.append(
+            {
+                "category": category,
+                "estimated_cost_cents": None,
+                "details": suggestion.rationale,
+                "scope_status": suggestion.scope_status,
+                "severity": suggestion.severity,
+                "quantity": suggestion.quantity,
+                "pricing_method": "catalog",
+                "evidence_source": "not_provided",
+                "evidence_reference": "; ".join(suggestion.evidence)[:500] or None,
+                "confirmation_status": "unconfirmed",
+                "inspection_status": "not_inspected",
+                "suggested_by_ai": True,
+                "ai_rationale": suggestion.rationale,
+                "ai_confidence": suggestion.confidence,
+                "ai_evidence": suggestion.evidence,
+            }
+        )
+        existing_categories.add(category)
+    scenario = evaluate_repair_scope(
+        [*inspection.repair_items, *additions],
+        contingency_percentage=15,
+        subject=repair_subject(db, inspection.lead_id),
+    )
+    inspection.repair_items = scenario["items"]
+    _audit(
+        db,
+        principal,
+        "acquisitions.copilot_repair_scope_applied",
+        recommendation.id,
+        {
+            "inspection_id": str(inspection.id),
+            "suggestion_count": len(parsed.suggestions),
+            "added_count": len(additions),
+            "human_review_status": recommendation.status,
+            "pricing_authority_executed": False,
+        },
+    )
+    db.commit()
+    db.refresh(inspection)
+    return inspection_read(db, inspection)
 
 
 def recommendation_read(

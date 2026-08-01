@@ -90,6 +90,7 @@ DRAFT_ONLY_ENABLED_CAPABILITIES = {
     "prospecting.prioritize",
     "call.quality_coach",
     "appointment.brief",
+    "underwriting.analyze",
     "negotiation.coach",
     "transaction.coordinate",
     "disposition.match",
@@ -371,6 +372,52 @@ ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA: dict[str, Any] = {
         "risks",
         "evidence",
         "confidence",
+    ],
+}
+ACQUISITIONS_REPAIR_SCOPE_SUGGESTION_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "category": {
+            "type": "string",
+            "enum": [
+                "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen",
+                "bathrooms", "flooring", "paint_drywall", "windows_doors", "exterior",
+                "landscaping", "permits", "cleanup", "other",
+            ],
+        },
+        "scope_status": {
+            "type": "string",
+            "enum": ["unknown", "no_work", "repair", "replace", "specialist_review"],
+        },
+        "severity": {"type": "string", "enum": ["minor", "standard", "extensive"]},
+        "quantity": {"type": ["number", "null"]},
+        "rationale": {"type": "string"},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "category", "scope_status", "severity", "quantity", "rationale", "evidence", "confidence"
+    ],
+}
+ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "suggestions": {
+            "type": "array",
+            "items": ACQUISITIONS_REPAIR_SCOPE_SUGGESTION_SCHEMA,
+        },
+        "missing_evidence": {"type": "array", "items": {"type": "string"}},
+        "requested_photos": {"type": "array", "items": {"type": "string"}},
+        "safety_notes": {"type": "array", "items": {"type": "string"}},
+        "evidence": {"type": "array", "items": {"type": "string"}},
+        "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
+    },
+    "required": [
+        "summary", "suggestions", "missing_evidence", "requested_photos",
+        "safety_notes", "evidence", "confidence"
     ],
 }
 TRANSACTION_DEADLINE_RISK_SCHEMA: dict[str, Any] = {
@@ -745,6 +792,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
                 "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
                 "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
+                "underwriting.analyze": ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA,
                 "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                 "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                 "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
@@ -774,6 +822,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                     "lead.next_action": LEAD_MANAGER_OUTPUT_SCHEMA,
                     "prospecting.prioritize": PROSPECTING_OUTPUT_SCHEMA,
                     "appointment.brief": ACQUISITIONS_PREPARATION_OUTPUT_SCHEMA,
+                    "underwriting.analyze": ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA,
                     "negotiation.coach": ACQUISITIONS_FOLLOW_UP_OUTPUT_SCHEMA,
                     "transaction.coordinate": TRANSACTION_COORDINATION_OUTPUT_SCHEMA,
                     "disposition.match": DISPOSITION_COORDINATION_OUTPUT_SCHEMA,
@@ -1419,7 +1468,9 @@ def _execute_read_tool(
         raise ValueError("The runtime read tool is not permitted for this capability.")
     context: dict[str, Any] = {"request": payload.input_payload}
     field_scope: list[str]
-    if capability.capability_key in {"appointment.brief", "negotiation.coach"}:
+    if capability.capability_key in {
+        "appointment.brief", "underwriting.analyze", "negotiation.coach"
+    }:
         acquisitions_context, field_scope = _acquisitions_context(
             db, principal, capability.capability_key, payload
         )
@@ -1994,18 +2045,18 @@ def _acquisitions_context(
             FieldInspection.appointment_id == appointment.id,
         )
     )
-    photo_count = (
-        int(
-            db.scalar(
-                select(func.count(FieldInspectionPhoto.id)).where(
+    photos = (
+        list(
+            db.scalars(
+                select(FieldInspectionPhoto).where(
                     FieldInspectionPhoto.organization_id == principal.organization_id,
                     FieldInspectionPhoto.inspection_id == inspection.id,
                 )
-            )
-            or 0
+                .order_by(FieldInspectionPhoto.created_at)
+            ).all()
         )
         if inspection
-        else 0
+        else []
     )
     negotiation = db.scalar(
         select(FieldNegotiationSession).where(
@@ -2197,7 +2248,15 @@ def _acquisitions_context(
                     "room_observations": inspection.room_observations,
                     "repair_items": inspection.repair_items,
                     "inspector_notes": inspection.inspector_notes,
-                    "photo_count": photo_count,
+                    "photos": [
+                        {
+                            "id": str(photo.id),
+                            "area": photo.area,
+                            "caption": photo.caption,
+                            "captured_at": photo.captured_at,
+                        }
+                        for photo in photos
+                    ],
                 }
                 if inspection
                 else None

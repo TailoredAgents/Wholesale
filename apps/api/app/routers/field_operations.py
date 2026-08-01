@@ -36,6 +36,7 @@ from app.schemas.field_operations import (
 from app.schemas.transactions import EsignEnvelopeRead
 from app.services.acquisitions_copilot import (
     analyze_appointment,
+    apply_repair_scope_suggestions,
     review_recommendation,
 )
 from app.services.field_operations import (
@@ -203,6 +204,30 @@ def create_field_inspection(
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     if result is None:
         raise HTTPException(status_code=404, detail="Appointment not found.")
+    return result
+
+
+@router.post(
+    "/inspections/{inspection_id}/copilot-scope/{recommendation_id}/apply"
+)
+def apply_copilot_repair_scope(
+    inspection_id: UUID,
+    recommendation_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(work_dependency)],
+) -> FieldInspectionRead:
+    try:
+        result = apply_repair_scope_suggestions(
+            db, principal, inspection_id, recommendation_id
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Inspection not found.")
     return result
 
 

@@ -54,6 +54,7 @@ from app.schemas.transactions import EsignEnvelopeRead, EsignSendRequest
 from app.services.document_storage import delete_content, read_content, store_content
 from app.services.esign import envelope_read, send_contract_for_signature
 from app.services.offer_concessions import record_field_agreement, record_field_offer
+from app.services.repair_catalog import evaluate_repair_scope, repair_catalog_payload
 
 ALLOWED_PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 MAX_PHOTO_BYTES = 5 * 1024 * 1024
@@ -204,6 +205,7 @@ def appointment_workspace(
             negotiation,
         ),
         copilot=get_acquisitions_copilot_overview(db, principal, appointment),
+        repair_catalog=repair_catalog_payload(repair_subject(db, appointment.lead_id)),
         can_edit=can_manage(principal) or appointment.owner_user_id == principal.user_id,
         can_review_underwriting=can_review_underwriting(principal),
     )
@@ -542,7 +544,14 @@ def update_inspection(
         return None
     if inspection.status != "draft":
         raise ValueError("Submitted field inspections are immutable.")
-    for key, value in payload.model_dump(mode="json", exclude_unset=True).items():
+    values = payload.model_dump(mode="json", exclude_unset=True)
+    if "repair_items" in values:
+        values["repair_items"] = evaluate_repair_scope(
+            values["repair_items"],
+            contingency_percentage=15,
+            subject=repair_subject(db, inspection.lead_id),
+        )["items"]
+    for key, value in values.items():
         setattr(inspection, key, value)
     add_audit(
         db,
@@ -870,10 +879,15 @@ def transfer_to_underwriting(
         )
         + 1
     )
-    repair_items = list(inspection.repair_items)
-    subtotal = sum(int(item["estimated_cost_cents"]) for item in repair_items)
     contingency_percentage = 15
-    contingency = round(subtotal * contingency_percentage / 100)
+    scenario = evaluate_repair_scope(
+        list(inspection.repair_items),
+        contingency_percentage=contingency_percentage,
+        subject=repair_subject(db, inspection.lead_id),
+    )
+    repair_items = scenario["items"]
+    subtotal = int(scenario["subtotal_expected_cents"])
+    contingency = int(scenario["total_expected_cents"]) - subtotal
     repair_estimate: RepairEstimate | None = None
     if repair_items:
         repair_estimate = RepairEstimate(
@@ -888,7 +902,7 @@ def transfer_to_underwriting(
             subtotal_cents=subtotal,
             contingency_percentage=contingency_percentage,
             contingency_cents=contingency,
-            total_cents=subtotal + contingency,
+            total_cents=int(scenario["total_expected_cents"]),
             evidence_reference=f"field-inspection:{inspection.id}",
             notes=inspection.inspector_notes,
         )
@@ -905,6 +919,7 @@ def transfer_to_underwriting(
             "overall_condition": inspection.overall_condition,
             "room_observations": inspection.room_observations,
             "field_photo_count": photo_count(db, inspection.id),
+            "repair_scenario": scenario,
             "requires_offer_recalculation": True,
         }
     )
@@ -917,10 +932,10 @@ def transfer_to_underwriting(
         status="draft",
         arv_low_cents=source.arv_low_cents if source else None,
         arv_high_cents=source.arv_high_cents if source else None,
-        repair_low_cents=subtotal
+        repair_low_cents=int(scenario["total_low_cents"])
         if repair_items
         else (source.repair_low_cents if source else None),
-        repair_high_cents=(subtotal + contingency)
+        repair_high_cents=int(scenario["total_high_cents"])
         if repair_items
         else (source.repair_high_cents if source else None),
         max_offer_cents=None,
@@ -940,7 +955,8 @@ def transfer_to_underwriting(
         "created_underwriting_version_id": str(version.id),
         "repair_estimate_id": str(repair_estimate.id) if repair_estimate else None,
         "repair_subtotal_cents": subtotal,
-        "repair_total_cents": subtotal + contingency,
+        "repair_total_cents": int(scenario["total_expected_cents"]),
+        "repair_scenario": scenario,
         "room_observations": inspection.room_observations,
         "photo_ids": [
             str(item)
@@ -1013,6 +1029,11 @@ def inspection_read(db: Session, inspection: FieldInspection) -> FieldInspection
             .order_by(FieldInspectionPhoto.created_at)
         )
     )
+    scenario = evaluate_repair_scope(
+        list(inspection.repair_items),
+        contingency_percentage=15,
+        subject=repair_subject(db, inspection.lead_id),
+    )
     return FieldInspectionRead(
         id=inspection.id,
         appointment_id=inspection.appointment_id,
@@ -1024,6 +1045,7 @@ def inspection_read(db: Session, inspection: FieldInspection) -> FieldInspection
         started_at=inspection.started_at,
         submitted_at=inspection.submitted_at,
         reviewed_at=inspection.reviewed_at,
+        updated_at=inspection.updated_at,
         overall_condition=inspection.overall_condition,
         occupancy_observed=inspection.occupancy_observed,
         utilities_status=inspection.utilities_status,
@@ -1033,13 +1055,21 @@ def inspection_read(db: Session, inspection: FieldInspection) -> FieldInspection
         room_observations=[
             FieldRoomObservation.model_validate(item) for item in inspection.room_observations
         ],
-        repair_items=[FieldRepairItem.model_validate(item) for item in inspection.repair_items],
+        repair_items=[FieldRepairItem.model_validate(item) for item in scenario["items"]],
         inspector_notes=inspection.inspector_notes,
         photos=[photo_read(photo) for photo in photos],
-        repair_total_cents=sum(
-            int(item["estimated_cost_cents"]) for item in inspection.repair_items
-        ),
+        repair_total_cents=int(scenario["total_expected_cents"]),
+        repair_scenario=scenario,
     )
+
+
+def repair_subject(db: Session, lead_id: UUID) -> dict[str, object]:
+    analysis = db.scalar(
+        select(UnderwritingMarketAnalysis)
+        .where(UnderwritingMarketAnalysis.lead_id == lead_id)
+        .order_by(UnderwritingMarketAnalysis.created_at.desc())
+    )
+    return dict(analysis.subject_property or {}) if analysis else {}
 
 
 def photo_read(photo: FieldInspectionPhoto) -> FieldInspectionPhotoRead:

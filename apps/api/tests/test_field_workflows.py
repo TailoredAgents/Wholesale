@@ -446,8 +446,9 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     )
     assert new_version is not None
     assert new_version.status == "draft"
-    assert new_version.repair_low_cents == 2_000_000
+    assert new_version.repair_low_cents == 2_300_000
     assert new_version.repair_high_cents == 2_300_000
+    assert new_version.underwriting_metadata["repair_scenario"]["version"] == "ga-2026.07-v1"
     assert new_version.max_offer_cents is None
     repair = db_session.scalar(select(RepairEstimate).where(RepairEstimate.lead_id == lead.id))
     assert repair is not None
@@ -751,6 +752,25 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
         "evidence": ["Recorded accepted outcome"],
         "confidence": 91,
     }
+    repair_scope_output = {
+        "summary": "Use a walkthrough to confirm roof and kitchen scope.",
+        "suggestions": [
+            {
+                "category": "roof",
+                "scope_status": "unknown",
+                "severity": "standard",
+                "quantity": 20,
+                "rationale": "Seller reported age but no inspected condition is recorded.",
+                "evidence": ["Meeting brief v1", "Seller condition report"],
+                "confidence": 68,
+            }
+        ],
+        "missing_evidence": ["Roof surface photos"],
+        "requested_photos": ["Roof planes and penetrations"],
+        "safety_notes": ["Do not climb the roof during the walkthrough."],
+        "evidence": ["Meeting brief v1"],
+        "confidence": 68,
+    }
 
     class FakeOpenAIResponsesClient:
         def __init__(self, **_: object) -> None:
@@ -761,11 +781,12 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
         ) -> tuple[dict[str, object], dict[str, int]]:
             schema = kwargs["json_schema"]
             assert isinstance(schema, dict)
-            output = (
-                preparation_output
-                if "executive_brief" in schema["properties"]
-                else follow_up_output
-            )
+            if "executive_brief" in schema["properties"]:
+                output = preparation_output
+            elif "suggestions" in schema["properties"]:
+                output = repair_scope_output
+            else:
+                output = follow_up_output
             return output, {
                 "input_tokens": 160,
                 "output_tokens": 120,
@@ -780,7 +801,7 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
         headers=headers,
         json={"provider_status": "enabled"},
     ).status_code == 200
-    for capability in ("appointment.brief", "negotiation.coach"):
+    for capability in ("appointment.brief", "underwriting.analyze", "negotiation.coach"):
         assert client.patch(
             f"/api/v1/ai/runtime/capabilities/{capability}",
             headers=headers,
@@ -816,6 +837,42 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
     assert recommendation["status"] == "draft"
     assert second.json()["recommendation"]["id"] == recommendation["id"]
     assert recommendation["output_payload"]["confidence"] == 86
+
+    inspection = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/inspection",
+        headers=headers,
+    )
+    assert inspection.status_code == 201, inspection.text
+    scope = client.post(
+        f"/api/v1/field-operations/appointments/{appointment.id}/copilot/analyze",
+        headers=headers,
+        json={
+            "recommendation_type": "repair_scope",
+            "idempotency_key": "acquisitions:repair-scope:1",
+        },
+    )
+    assert scope.status_code == 200, scope.text
+    scope_recommendation = scope.json()["recommendation"]
+    assert scope_recommendation["status"] == "draft"
+    assert inspection.json()["repair_items"] == []
+    scope_review = client.post(
+        f"/api/v1/field-operations/copilot/recommendations/{scope_recommendation['id']}/review",
+        headers=headers,
+        json={"decision": "accepted", "estimated_time_saved_seconds": 180},
+    )
+    assert scope_review.status_code == 200, scope_review.text
+    apply_scope_url = (
+        f"/api/v1/field-operations/inspections/{inspection.json()['id']}"
+        f"/copilot-scope/{scope_recommendation['id']}/apply"
+    )
+    applied = client.post(apply_scope_url, headers=headers)
+    assert applied.status_code == 200, applied.text
+    suggested_item = applied.json()["repair_items"][0]
+    assert suggested_item["category"] == "roof"
+    assert suggested_item["suggested_by_ai"] is True
+    assert suggested_item["confirmation_status"] == "unconfirmed"
+    assert suggested_item["inspection_status"] == "not_inspected"
+    assert suggested_item["estimated_cost_cents"] > 0
 
     corrected = {**preparation_output, "executive_brief": "Human-corrected meeting brief."}
     reviewed = client.post(
@@ -885,7 +942,7 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
             )
             or 0
         )
-        == 2
+        == 3
     )
     assert (
         int(
@@ -894,5 +951,5 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
             )
             or 0
         )
-        == 1
+        == 2
     )

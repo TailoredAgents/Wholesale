@@ -831,7 +831,7 @@ and **Outcome**. Focus mode reduces navigation distractions during a seller meet
 | --- | --- | --- |
 | Focus mode | Expands the meeting workspace for an iPad or laptop | Appointment workspace only |
 | Seller/property brief | Shows contact, property, qualification, appointment, and risk context | Read-only |
-| Acquisitions Copilot | Generates meeting questions, gaps, risks, and next-step guidance | Draft-only; requires enabled capability |
+| Acquisitions Copilot | Generates meeting questions, repair-scope suggestions, gaps, risks, and next-step guidance | Draft-only; requires the corresponding enabled capability |
 | Supporting evidence | Shows why the Copilot made a recommendation | Available after generation |
 | **Accept / Correct / Reject** | Records human review of Copilot guidance | Does not contact seller or approve an offer |
 
@@ -847,10 +847,17 @@ and **Outcome**. Focus mode reduces navigation distractions during a seller meet
 | Title concern | Records a possible ownership or title issue | Requires later verification |
 | Safety concern | Warns the team about unsafe conditions | Does not replace professional inspection |
 | Area/room items | Adds location-specific repair observations | Repeatable |
-| Repair estimate | Records an estimated cost for an observed item | Estimate, not a contractor bid |
+| Repair work decision | Records not sure, no work, repair, replace, or specialist review | A closer's selection marks the item walkthrough verified; AI suggestions remain unconfirmed |
+| Extent and quantity | Applies the versioned Georgia catalog range to the observed scope | Planning allowance, not a contractor bid |
+| Exact amount | Replaces the expected system amount while preserving its original range | Optional; use only with stronger price evidence |
+| Repair range | Shows low and high totals including contingency | Uses the same scenario transferred to underwriting |
+| **Suggest repair scope** | Generates cited categories and scope candidates from existing appointment evidence | Draft only; cannot price or confirm work |
+| **Add unconfirmed suggestions** | Adds reviewed AI categories that are not already in the walkthrough | Requires Accept or Save correction; rows remain unconfirmed |
 | Photo upload | Attaches property evidence | Requires supported image and network access |
 | Delete photo | Removes an uploaded photo | Requires field edit access |
-| **Save draft** | Preserves incomplete walkthrough work | Does not mark inspection complete |
+| **Dictate** | Converts supported browser speech into inspector-note text | Audio is not retained by Stonegate |
+| Saving / Saved / offline status | Shows API autosave or local iPad recovery state | Reconnect before final submission |
+| **Save now** | Immediately syncs the incomplete walkthrough | Does not mark inspection complete |
 | **Submit walkthrough** | Finalizes the current field report | Blocked if required inspection details are missing |
 | **Review and transfer** | Moves verified field facts into underwriting inputs | Requires a submitted walkthrough |
 

@@ -428,7 +428,8 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 
 - Internal month, week, day, and agenda schedule.
 - Dispatch with closer capacity, working-hours, territory, travel-buffer, and conflict checks.
-- Appointment execution with preparation, walkthrough, photographs, seller-safe presentation,
+- Appointment execution with preparation, guided repair walkthrough, photographs, local/API
+  autosave, note dictation, supervised AI scope suggestions, seller-safe presentation,
   negotiation, outcome, and approved iPad signing.
 - Manager Availability view for closer profiles and unavailable blocks.
 - The former `/os/field-operations` route redirects while preserving appointment and lead context.
@@ -629,11 +630,17 @@ redirect to their new owners.
 
 1. The closer opens the appointment workspace on a phone or iPad.
 2. A meeting brief combines seller facts, property context, qualification, and approved analysis.
-3. The walkthrough records condition, repair scope, notes, and photographs.
-4. The seller presentation exposes selected market evidence but hides Stonegate's internal offer
+3. The walkthrough records condition, guided repair decisions, quantities, optional exact prices,
+   notes, and photographs. Drafts autosave to the API and retain an iPad recovery copy while
+   disconnected.
+4. Acquisitions Copilot can propose missing repair categories from cited text evidence and photo
+   metadata. A person must review the draft, apply it, and confirm each observation; the Copilot
+   cannot set repair prices or silently mark a suggestion verified.
+5. The seller presentation exposes selected market evidence but hides Stonegate's internal offer
    authority, assignment fee, buyer profit, and negotiation history.
-5. Reviewed field evidence creates a new repair estimate and draft underwriting version; it does
-   not overwrite an approved analysis.
+6. Reviewed field evidence evaluates the same catalog items into a low/expected/high repair
+   scenario, creates the existing repair estimate and draft underwriting version, and does not
+   overwrite an approved analysis.
 
 ### 8.7 Underwriting And Offer
 

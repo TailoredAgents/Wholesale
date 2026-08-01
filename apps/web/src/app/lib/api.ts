@@ -1202,8 +1202,28 @@ export type FieldRoomObservation = {
 
 export type FieldRepairItem = {
   category: string;
-  estimated_cost_cents: number;
+  estimated_cost_cents: number | null;
   details: string | null;
+  scope_status: "unknown" | "no_work" | "repair" | "replace" | "specialist_review";
+  severity: "minor" | "standard" | "extensive";
+  quantity: number | null;
+  unit: string | null;
+  pricing_method: "catalog" | "manual" | "contractor";
+  manual_override_cents: number | null;
+  override_reason: string | null;
+  system_low_cents: number | null;
+  system_expected_cents: number | null;
+  system_high_cents: number | null;
+  evidence_source: string;
+  evidence_reference: string | null;
+  confirmation_status: "unconfirmed" | "user_confirmed" | "walkthrough_verified" | "contractor_verified";
+  inspection_status: "not_inspected" | "observed" | "specialist_needed" | "verified";
+  catalog_version: string | null;
+  uncertainty_note: string | null;
+  suggested_by_ai: boolean;
+  ai_rationale: string | null;
+  ai_confidence: number | null;
+  ai_evidence: string[];
 };
 
 export type FieldInspection = {
@@ -1217,6 +1237,7 @@ export type FieldInspection = {
   started_at: string;
   submitted_at: string | null;
   reviewed_at: string | null;
+  updated_at: string;
   overall_condition: string | null;
   occupancy_observed: string | null;
   utilities_status: string | null;
@@ -1239,6 +1260,7 @@ export type FieldInspection = {
     created_at: string;
   }>;
   repair_total_cents: number;
+  repair_scenario: Record<string, unknown>;
 };
 
 export type FieldNegotiation = {
@@ -1271,7 +1293,7 @@ export type AcquisitionsCopilotRecommendation = {
   id: string;
   appointment_id: string;
   lead_id: string;
-  recommendation_type: "preparation" | "follow_up";
+  recommendation_type: "preparation" | "repair_scope" | "follow_up";
   ai_run_log_id: string | null;
   status: "draft" | "accepted" | "edited" | "rejected";
   output_payload: Record<string, unknown>;
@@ -1285,6 +1307,7 @@ export type AcquisitionsCopilotOverview = {
   runtime_status: string;
   preparation_capability_status: string;
   follow_up_capability_status: string;
+  repair_scope_capability_status: string;
   external_actions_blocked: boolean;
   readiness_score: number;
   readiness_band: string;
@@ -1336,6 +1359,17 @@ export type FieldAppointmentWorkspace = {
     envelope: EsignEnvelope | null;
   };
   copilot: AcquisitionsCopilotOverview;
+  repair_catalog: {
+    version: string;
+    source_note: string;
+    items: Array<{
+      category: string;
+      label: string;
+      unit: string;
+      default_quantity: number;
+      quantity_basis: string;
+    }>;
+  };
   can_edit: boolean;
   can_review_underwriting: boolean;
 };
