@@ -229,6 +229,49 @@
   font-weight: 700;
 }
 
+.userNameLine,
+.nameEditForm {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.userNameLine button,
+.nameEditForm button {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  cursor: pointer;
+}
+
+.userNameLine button:hover,
+.nameEditForm button:hover {
+  border-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.nameEditForm input {
+  width: min(220px, 100%);
+  min-width: 0;
+  min-height: 34px;
+  padding: 6px 9px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .appointmentRow > div,
 .notificationRow > div,
 .userRow > div,

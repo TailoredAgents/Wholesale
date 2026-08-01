@@ -390,6 +390,7 @@ plans in **Settings > Workflows**.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
+| Pencil beside staff name | Edits the Stonegate display name and records an audit event | Does not change Clerk email, password, role, or permissions |
 | **Deactivate / Reactivate** | Removes or restores OS access without deleting history | Owner or authorized administrator only |
 | Existing user's access-role menu | Changes an existing person's OS role without recreating the login | Selecting Owner / full access grants company-wide access |
 | **Cold calling** | Allows this user to receive calling batches and opens their assigned Prospecting queue | Does not change the user's main role or grant unrelated pages |

@@ -487,6 +487,8 @@ Use **Deactivate** immediately when a person leaves or should lose access. Reass
 Use **Reactivate** only after management confirms the person should return.
 If the user already exists, change the access-role menu on that person's row instead of creating a
 duplicate account.
+To correct a staff name, select the pencil beside the displayed name, enter the real name, and save.
+This changes Stonegate's staff display name without changing the person's Clerk email or password.
 
 ### Create And Staff A Team
 

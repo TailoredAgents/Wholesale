@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
+import { Check, Pencil, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
@@ -77,6 +78,8 @@ export function OperationsWorkspace({
   const [status, setStatus] = useState<RequestStatus>("idle");
   const [message, setMessage] = useState("");
   const [selectedListId, setSelectedListId] = useState(operations.calling_lists[0]?.id ?? "");
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editingDisplayName, setEditingDisplayName] = useState("");
 
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -259,6 +262,33 @@ export function OperationsWorkspace({
       role_key: roleKey,
       reason: "Workspace access role changed by an operations manager.",
     });
+  }
+
+  function beginUserNameEdit(user: AcquisitionOperations["users"][number]) {
+    setEditingUserId(user.id);
+    setEditingDisplayName(user.display_name);
+  }
+
+  function cancelUserNameEdit() {
+    setEditingUserId(null);
+    setEditingDisplayName("");
+  }
+
+  async function submitUserName(
+    event: FormEvent<HTMLFormElement>,
+    user: AcquisitionOperations["users"][number],
+  ) {
+    event.preventDefault();
+    const displayName = editingDisplayName.trim();
+    if (!displayName || displayName === user.display_name) {
+      cancelUserNameEdit();
+      return;
+    }
+    const saved = await mutate(`/api/v1/operations/users/${user.id}`, "PATCH", {
+      display_name: displayName,
+      reason: "Staff display name updated by an operations manager.",
+    });
+    if (saved) cancelUserNameEdit();
   }
 
   function openSavedView(resourceType: string) {
@@ -583,7 +613,84 @@ export function OperationsWorkspace({
         <div className={styles.twoColumn}>
           <div className={styles.section}>
             <div className={styles.sectionHeader}><div><span>Access</span><h3>Workspace users</h3></div><strong>{activeUsers.length}</strong></div>
-            <div className={styles.rows}>{operations.users.map((user) => <div className={styles.userRow} key={user.id}><div><strong>{user.display_name}</strong><span>{user.email}</span></div><div><span>{roleLabel(user)}</span><small>{user.open_leads} leads · {user.open_tasks} tasks</small></div><div className={styles.inlineActions}><select aria-label={`Access role for ${user.display_name}`} className={styles.roleSelect} onChange={(event) => void setUserRole(user, event.target.value)} value={user.role_keys[0] ?? ""}>{accessRoles.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}</select><label className={styles.callingToggle}><input checked={user.calling_enabled} onChange={() => void setUserCalling(user)} type="checkbox" /><span>Cold calling</span></label><button className={styles.secondaryButton} onClick={() => setUserActive(user)} type="button">{user.is_active ? "Deactivate" : "Reactivate"}</button></div></div>)}</div>
+            <div className={styles.rows}>
+              {operations.users.map((user) => (
+                <div className={styles.userRow} key={user.id}>
+                  <div>
+                    {editingUserId === user.id ? (
+                      <form
+                        className={styles.nameEditForm}
+                        onSubmit={(event) => void submitUserName(event, user)}
+                      >
+                        <input
+                          aria-label={`Display name for ${user.email}`}
+                          autoFocus
+                          maxLength={255}
+                          onChange={(event) => setEditingDisplayName(event.target.value)}
+                          required
+                          value={editingDisplayName}
+                        />
+                        <button aria-label="Save display name" title="Save display name" type="submit">
+                          <Check size={15} />
+                        </button>
+                        <button
+                          aria-label="Cancel name edit"
+                          onClick={cancelUserNameEdit}
+                          title="Cancel"
+                          type="button"
+                        >
+                          <X size={15} />
+                        </button>
+                      </form>
+                    ) : (
+                      <div className={styles.userNameLine}>
+                        <strong>{user.display_name}</strong>
+                        <button
+                          aria-label={`Edit ${user.display_name}'s name`}
+                          onClick={() => beginUserNameEdit(user)}
+                          title="Edit display name"
+                          type="button"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                      </div>
+                    )}
+                    <span>{user.email}</span>
+                  </div>
+                  <div>
+                    <span>{roleLabel(user)}</span>
+                    <small>{user.open_leads} leads · {user.open_tasks} tasks</small>
+                  </div>
+                  <div className={styles.inlineActions}>
+                    <select
+                      aria-label={`Access role for ${user.display_name}`}
+                      className={styles.roleSelect}
+                      onChange={(event) => void setUserRole(user, event.target.value)}
+                      value={user.role_keys[0] ?? ""}
+                    >
+                      {accessRoles.map((role) => (
+                        <option key={role.key} value={role.key}>{role.label}</option>
+                      ))}
+                    </select>
+                    <label className={styles.callingToggle}>
+                      <input
+                        checked={user.calling_enabled}
+                        onChange={() => void setUserCalling(user)}
+                        type="checkbox"
+                      />
+                      <span>Cold calling</span>
+                    </label>
+                    <button
+                      className={styles.secondaryButton}
+                      onClick={() => setUserActive(user)}
+                      type="button"
+                    >
+                      {user.is_active ? "Deactivate" : "Reactivate"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
             <form className={styles.stackForm} onSubmit={submitUser}><h4>Add individual login</h4><label><span>Name</span><input name="display_name" required /></label><label><span>Email</span><input name="email" required type="email" /></label><label><span>Access role</span><select name="role_key">{accessRoles.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}</select></label><label className={styles.callingToggle}><input name="calling_enabled" type="checkbox" /><span>Allow assigned cold calling</span></label><button type="submit">Create user</button></form>
           </div>
           <div className={styles.section}>

@@ -74,6 +74,24 @@ def test_versioned_compensation_role_credit_and_market_launch_controls(
     client = TestClient(app)
     owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
 
+    operations_response = client.get("/api/v1/operations", headers=owner_headers)
+    assert operations_response.status_code == 200, operations_response.text
+    owner = next(
+        user
+        for user in operations_response.json()["users"]
+        if user["email"] == OWNER_EMAIL
+    )
+    rename_response = client.patch(
+        f"/api/v1/operations/users/{owner['id']}",
+        headers=owner_headers,
+        json={
+            "display_name": "Austin",
+            "reason": "Owner corrected their staff display name.",
+        },
+    )
+    assert rename_response.status_code == 200, rename_response.text
+    assert rename_response.json()["display_name"] == "Austin"
+
     user_response = client.post(
         "/api/v1/operations/users",
         headers=owner_headers,
