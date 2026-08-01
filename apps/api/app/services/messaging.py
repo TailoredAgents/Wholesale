@@ -26,9 +26,11 @@ from app.models.foundation import (
     Contact,
     ContactMethod,
     Conversation,
+    ConversationContextLink,
     Lead,
     Organization,
     SuppressionRecord,
+    TeamMembership,
     VoiceLine,
 )
 from app.schemas.inbox import SmsSendRead, SmsSendRequest
@@ -74,9 +76,9 @@ def send_conversation_sms(
         )
     ):
         raise PermissionError("SMS can only be sent from an assigned conversation.")
-    if conversation.lead_id is None:
+    if conversation.conversation_type not in {"lead", "buyer"}:
         raise SmsConfigurationError(
-            "SMS from general email conversations is not available yet."
+            "SMS is only available from seller and buyer conversations."
         )
 
     body = payload.body.strip()
@@ -111,9 +113,11 @@ def send_conversation_sms(
             f"This SMS request is already {existing_dispatch.status}; use a new request to retry."
         )
 
-    lead = db.get(Lead, conversation.lead_id)
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     contact = db.get(Contact, conversation.contact_id)
-    if lead is None or contact is None:
+    if conversation.conversation_type == "lead" and lead is None:
+        return None
+    if contact is None:
         return None
     eligibility = evaluate_sms_eligibility(db, contact)
     if not eligibility.can_send or eligibility.recipient is None:
@@ -129,6 +133,22 @@ def send_conversation_sms(
     sender_number = (
         sender_line.phone_number if sender_line is not None else settings.twilio_sms_from_number
     )
+    if conversation.conversation_type == "buyer" and sender_line is None:
+        raise SmsConfigurationError(
+            "No active Stonegate dispositions line is configured for buyer SMS."
+        )
+    if (
+        conversation.conversation_type == "buyer"
+        and sender_line is not None
+        and not user_can_use_line(
+            db,
+            sender_line,
+            user_id=principal.user_id,
+        )
+    ):
+        raise PermissionError(
+            "Buyer SMS requires assignment to the Stonegate dispositions line."
+        )
     if not settings.communication_simulation_enabled and not sender_number:
         raise SmsConfigurationError(
             "No active Stonegate SMS line is configured for this conversation."
@@ -136,7 +156,7 @@ def send_conversation_sms(
     dispatch = CommunicationDispatch(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=lead.id if lead is not None else None,
         contact_id=contact.id,
         actor_user_id=principal.user_id,
         communication_record_id=None,
@@ -182,7 +202,7 @@ def send_conversation_sms(
     try:
         result = provider.send(
             OutboundMessageRequest(
-                lead_id=str(lead.id),
+                lead_id=str(lead.id if lead is not None else conversation.id),
                 contact_id=str(contact.id),
                 channel="sms",
                 recipient=eligibility.recipient,
@@ -218,7 +238,7 @@ def send_conversation_sms(
     communication = CommunicationRecord(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=lead.id if lead is not None else None,
         contact_id=contact.id,
         actor_user_id=principal.user_id,
         direction="outbound",
@@ -252,14 +272,19 @@ def send_conversation_sms(
         direction="outbound",
         occurred_at=occurred_at,
     )
+    entity_type, entity_id = conversation_activity_entity(db, conversation)
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
             actor_user_id=principal.user_id,
-            entity_type="lead",
-            entity_id=lead.id,
-            event_type="lead.sms_sent",
-            summary="Outbound seller SMS accepted for delivery.",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=f"{entity_type}.sms_sent",
+            summary=(
+                "Outbound buyer SMS accepted for delivery."
+                if entity_type == "buyer"
+                else "Outbound seller SMS accepted for delivery."
+            ),
         )
     )
     db.add(
@@ -319,10 +344,16 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     recipient = required_twilio_value(payload, "To")
     body = payload.get("Body", "").strip()
     sender_line = find_sms_line_by_number(db, organization.id, recipient)
-    conversation = (
-        find_conversation_by_phone(db, organization.id, sender)
-        if sender_line is None or sender_line.purpose_key == "seller_conversations"
-        else None
+    conversation_type = (
+        "buyer"
+        if sender_line is not None and sender_line.purpose_key == "buyer_relations"
+        else "lead"
+    )
+    conversation = find_conversation_by_phone(
+        db,
+        organization.id,
+        sender,
+        conversation_type=conversation_type,
     )
     event = CommunicationProviderEvent(
         organization_id=organization.id,
@@ -344,16 +375,18 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
         db.commit()
         return event.processing_status
 
-    lead = db.get(Lead, conversation.lead_id)
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     contact = db.get(Contact, conversation.contact_id)
-    if lead is None or contact is None:
-        raise RuntimeError("Matched Twilio conversation is missing lead context.")
+    if conversation.conversation_type == "lead" and lead is None:
+        raise RuntimeError("Matched Twilio seller conversation is missing lead context.")
+    if contact is None:
+        raise RuntimeError("Matched Twilio conversation is missing contact context.")
     opt_out_type = classify_opt_out(payload, body)
     occurred_at = datetime.now(UTC)
     communication = CommunicationRecord(
         organization_id=organization.id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=lead.id if lead is not None else None,
         contact_id=contact.id,
         actor_user_id=None,
         direction="inbound",
@@ -393,17 +426,19 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             message_sid=message_sid,
             preference=opt_out_type,
         )
+    entity_type, entity_id = conversation_activity_entity(db, conversation)
+    party_label = "buyer" if entity_type == "buyer" else "seller"
     db.add(
         ActivityEvent(
             organization_id=organization.id,
             actor_user_id=None,
-            entity_type="lead",
-            entity_id=lead.id,
-            event_type="lead.sms_received",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=f"{entity_type}.sms_received",
             summary=(
-                f"Inbound seller SMS received ({opt_out_type})."
+                f"Inbound {party_label} SMS received ({opt_out_type})."
                 if opt_out_type
-                else "Inbound seller SMS received."
+                else f"Inbound {party_label} SMS received."
             ),
         )
     )
@@ -565,6 +600,8 @@ def find_conversation_by_phone(
     db: Session,
     organization_id: UUID,
     phone_number: str,
+    *,
+    conversation_type: str,
 ) -> Conversation | None:
     lookup_values = phone_lookup_values(phone_number)
     if not lookup_values:
@@ -574,7 +611,7 @@ def find_conversation_by_phone(
         .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
         .where(
             Conversation.organization_id == organization_id,
-            Conversation.lead_id.is_not(None),
+            Conversation.conversation_type == conversation_type,
             ContactMethod.organization_id == organization_id,
             ContactMethod.method_type == "phone",
             ContactMethod.normalized_value.in_(lookup_values),
@@ -585,6 +622,22 @@ def find_conversation_by_phone(
             Conversation.created_at.desc(),
         )
     )
+
+
+def conversation_activity_entity(
+    db: Session,
+    conversation: Conversation,
+) -> tuple[str, UUID]:
+    if conversation.lead_id is not None:
+        return "lead", conversation.lead_id
+    buyer_id = db.scalar(
+        select(ConversationContextLink.buyer_id).where(
+            ConversationContextLink.organization_id == conversation.organization_id,
+            ConversationContextLink.conversation_id == conversation.id,
+            ConversationContextLink.context_type == "buyer",
+        )
+    )
+    return ("buyer", buyer_id) if buyer_id is not None else ("conversation", conversation.id)
 
 
 def select_sms_sender_line(
@@ -626,6 +679,25 @@ def find_sms_line_by_number(
             VoiceLine.status == "active",
         )
     )
+
+
+def user_can_use_line(
+    db: Session,
+    line: VoiceLine,
+    *,
+    user_id: UUID,
+) -> bool:
+    if user_id in {line.assigned_user_id, line.fallback_user_id}:
+        return True
+    if line.assigned_team_id is None:
+        return False
+    return db.scalar(
+        select(TeamMembership.id).where(
+            TeamMembership.organization_id == line.organization_id,
+            TeamMembership.team_id == line.assigned_team_id,
+            TeamMembership.user_id == user_id,
+        )
+    ) is not None
 
 
 def classify_opt_out(payload: dict[str, str], body: str) -> str | None:

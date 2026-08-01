@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.models.foundation import Buyer
 from app.schemas.buyers import (
     BuyerCreate,
+    BuyerConversationRead,
     BuyerDataProviderRead,
     BuyerDiscoveryCreate,
     BuyerDiscoveryImport,
@@ -18,6 +20,7 @@ from app.schemas.buyers import (
 )
 from app.services import buyer_discovery
 from app.services.buyers import create_buyer, list_buyers
+from app.services.inbox import ensure_buyer_conversation
 
 router = APIRouter(prefix="/api/v1/buyers", tags=["buyers"])
 view_buyers_dependency = require_permission(PermissionKeys.VIEW_BUYERS)
@@ -45,6 +48,24 @@ def create_buyer_record(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail=str(exc),
         ) from exc
+
+
+@router.post("/{buyer_id}/conversation")
+def open_buyer_conversation(
+    buyer_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerConversationRead:
+    buyer = db.get(Buyer, buyer_id)
+    if buyer is None or buyer.organization_id != principal.organization_id:
+        raise HTTPException(status_code=404, detail="Buyer not found.")
+    conversation = ensure_buyer_conversation(
+        db,
+        buyer,
+        actor_user_id=principal.user_id,
+    )
+    db.commit()
+    return BuyerConversationRead(conversation_id=conversation.id)
 
 
 @router.get("/provider")

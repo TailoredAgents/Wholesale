@@ -23,6 +23,8 @@ class BuyerCreate(BaseModel):
     proof_of_funds_status: str = Field(default="unknown", max_length=80)
     max_purchase_price_cents: int | None = Field(default=None, ge=0)
     notes: str | None = Field(default=None, max_length=2000)
+    phone_contact_permission: bool = False
+    sms_consent: bool = False
     criteria: BuyerCriteriaCreate | None = None
 
 
@@ -56,6 +58,10 @@ class BuyerRead(BaseModel):
 
 class BuyerListResponse(BaseModel):
     items: list[BuyerRead]
+
+
+class BuyerConversationRead(BaseModel):
+    conversation_id: UUID
 
 
 class BuyerDataProviderRead(BaseModel):

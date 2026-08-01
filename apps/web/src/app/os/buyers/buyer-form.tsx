@@ -69,6 +69,8 @@ export function BuyerForm({ onSaved }: { onSaved?: () => void }) {
           proof_of_funds_status: formString(formData, "proof_of_funds_status"),
           max_purchase_price_cents: optionalCents(formData, "max_purchase_price"),
           notes: optionalFormString(formData, "notes"),
+          phone_contact_permission: formData.get("phone_contact_permission") === "on",
+          sms_consent: formData.get("sms_consent") === "on",
           criteria: {
             markets: optionalFormString(formData, "markets"),
             property_types: optionalFormString(formData, "property_types"),
@@ -113,6 +115,17 @@ export function BuyerForm({ onSaved }: { onSaved?: () => void }) {
           <input name="phone" maxLength={80} placeholder="404-555-0101" />
         </label>
       </div>
+      <fieldset>
+        <legend>Buyer communication permission</legend>
+        <label>
+          <input name="phone_contact_permission" type="checkbox" />
+          <span>Buyer confirmed Stonegate may call this number</span>
+        </label>
+        <label>
+          <input name="sms_consent" type="checkbox" />
+          <span>Buyer opted in to one-to-one Stonegate text messages</span>
+        </label>
+      </fieldset>
       <div className={styles.formGrid}>
         <label>
           <span>Type</span>

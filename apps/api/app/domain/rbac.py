@@ -305,7 +305,10 @@ DISPOSITION_KEYS = (
     PermissionKeys.VIEW_BUYERS,
     PermissionKeys.EDIT_BUYERS,
     PermissionKeys.VIEW_CONVERSATIONS,
+    PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_EMAIL,
+    PermissionKeys.PLACE_CALLS,
+    PermissionKeys.ACCESS_RECORDINGS,
 )
 
 ROLES: tuple[RoleDefinition, ...] = (

@@ -1,9 +1,18 @@
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.models.foundation import ActivityEvent, AuditEvent, Buyer, BuyerCriteria
+from app.models.foundation import (
+    ActivityEvent,
+    AuditEvent,
+    Buyer,
+    BuyerCriteria,
+    ConsentRecord,
+)
 from app.schemas.buyers import BuyerCreate, BuyerCriteriaRead, BuyerRead
+from app.services.inbox import ensure_buyer_conversation
 
 BUYER_TYPES = {"cash_buyer", "landlord", "flipper", "builder", "hedge_fund", "agent"}
 BUYER_STATUSES = {"active", "paused", "inactive"}
@@ -66,6 +75,44 @@ def create_buyer(db: Session, principal: Principal, payload: BuyerCreate) -> Buy
             summary=f"Buyer created: {buyer.name}.",
         )
     )
+    conversation = ensure_buyer_conversation(
+        db,
+        buyer,
+        actor_user_id=principal.user_id,
+    )
+    now = datetime.now(UTC)
+    if payload.phone_contact_permission:
+        db.add(
+            ConsentRecord(
+                organization_id=principal.organization_id,
+                contact_id=conversation.contact_id,
+                channel="phone",
+                status="granted",
+                source="buyer_crm_manual",
+                wording_version="buyer-contact-v1",
+                wording="Buyer confirmed permission for one-to-one phone contact.",
+                captured_ip=None,
+                user_agent=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    if payload.sms_consent:
+        db.add(
+            ConsentRecord(
+                organization_id=principal.organization_id,
+                contact_id=conversation.contact_id,
+                channel="sms",
+                status="granted",
+                source="buyer_crm_manual",
+                wording_version="buyer-sms-v1",
+                wording="Buyer confirmed opt-in for one-to-one Stonegate text messages.",
+                captured_ip=None,
+                user_agent=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
     db.add(
         AuditEvent(
             organization_id=principal.organization_id,

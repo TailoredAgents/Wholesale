@@ -1386,6 +1386,39 @@
   font-weight: 800;
 }
 
+.buyerForm fieldset {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #cfc8bc;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+}
+
+.buyerForm fieldset legend {
+  padding: 0 5px;
+  color: var(--text-soft);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.buyerForm fieldset label {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.buyerForm fieldset input[type="checkbox"] {
+  min-height: 0;
+  width: 16px;
+  height: 16px;
+  margin: 1px 0 0;
+  padding: 0;
+  box-shadow: none;
+}
+
 .buyerForm input,
 .buyerForm select,
 .buyerForm textarea,

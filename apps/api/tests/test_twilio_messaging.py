@@ -26,6 +26,7 @@ from app.models.foundation import (
     Contact,
     Conversation,
     SuppressionRecord,
+    User,
     VoiceLine,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -577,3 +578,103 @@ def test_sms_eligibility_identifies_missing_render_setting(
     assert response.status_code == 200
     blockers = response.json()["sms_eligibility"]["blockers"]
     assert any("TWILIO_MESSAGING_SERVICE_SID" in blocker for blocker in blockers)
+
+
+def test_buyer_sms_uses_dispositions_line_and_routes_reply_to_buyer_thread(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    dispositions_number = "+14708887952"
+    db_session.add(
+        VoiceLine(
+            organization_id=owner.organization_id,
+            assigned_user_id=owner.id,
+            fallback_user_id=None,
+            assigned_team_id=None,
+            provider="twilio",
+            provider_phone_number_id=None,
+            phone_number=dispositions_number,
+            label="Stonegate Dispositions",
+            department_key="dispositions",
+            purpose_key="buyer_relations",
+            status="active",
+            is_default=False,
+            inbound_route="assigned_user",
+            ring_strategy="sequential",
+            coverage_timezone="America/New_York",
+            coverage_start_hour=0,
+            coverage_end_hour=24,
+            missed_call_action="fallback_then_voicemail",
+            line_metadata={"source": "test"},
+        )
+    )
+    db_session.commit()
+    seller_response = client.post("/api/v1/public/seller-leads", json=public_payload())
+    assert seller_response.status_code == 201, seller_response.text
+    buyer_response = client.post(
+        "/api/v1/buyers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "name": "Alex Investor",
+            "phone": "+14045551212",
+            "buyer_type": "cash_buyer",
+            "phone_contact_permission": True,
+            "sms_consent": True,
+        },
+    )
+    assert buyer_response.status_code == 201, buyer_response.text
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.conversation_type == "buyer")
+    )
+    seller_conversation = db_session.scalar(
+        select(Conversation).where(Conversation.conversation_type == "lead")
+    )
+    assert conversation is not None
+    assert seller_conversation is not None
+    assert seller_conversation.id != conversation.id
+    fake_provider = FakeTwilioProvider()
+    monkeypatch.setattr(
+        "app.services.messaging.get_twilio_messaging_provider",
+        lambda: fake_provider,
+    )
+
+    outbound = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/messages/sms",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"body": "Is this deal in your buy box?", "idempotency_key": "buyer-sms-0001"},
+    )
+    assert outbound.status_code == 201, outbound.text
+    assert fake_provider.requests[0].metadata["sender_number"] == dispositions_number
+
+    inbound_payload = {
+        "MessageSid": "SM00000000000000000000000000000077",
+        "From": "+14045551212",
+        "To": dispositions_number,
+        "Body": "Yes, send me the details.",
+    }
+    inbound = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        inbound_payload,
+    )
+    assert inbound.status_code == 200, inbound.text
+    received = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == inbound_payload["MessageSid"]
+        )
+    )
+    assert received is not None
+    assert received.conversation_id == conversation.id
+    assert received.conversation_id != seller_conversation.id
+    assert received.lead_id is None

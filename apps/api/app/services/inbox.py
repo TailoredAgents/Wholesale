@@ -11,6 +11,7 @@ from app.models.foundation import (
     ActivityEvent,
     Appointment,
     AuditEvent,
+    Buyer,
     CallRecord,
     CallRecording,
     CallTranscript,
@@ -34,6 +35,7 @@ from app.models.foundation import (
     Team,
     TeamMembership,
     User,
+    VoiceLine,
 )
 from app.schemas.email import EmailAttachmentRead
 from app.schemas.inbox import (
@@ -70,6 +72,7 @@ CONVERSATION_QUEUE_KEYS = {
     "qualified",
     "appointment_set",
     "acquisitions_follow_up",
+    "dispositions",
     "closed",
 }
 ELIGIBLE_ACQUISITION_ROLE_KEYS = {
@@ -81,7 +84,16 @@ ELIGIBLE_ACQUISITION_ROLE_KEYS = {
 }
 ELIGIBLE_ASSIGNMENT_ROLE_KEYS = {
     *ELIGIBLE_ACQUISITION_ROLE_KEYS,
+    "disposition_manager",
+    "disposition_rep",
     "prospecting_caller",
+}
+ELIGIBLE_DISPOSITION_ROLE_KEYS = {
+    "owner",
+    "founder_operator",
+    "ceo",
+    "disposition_manager",
+    "disposition_rep",
 }
 OWNER_WATCHER_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
 PRE_QUALIFIED_STAGES = {
@@ -158,6 +170,127 @@ def ensure_primary_conversation(
             reason="Conversation created from lead.",
         )
     )
+    return conversation
+
+
+def ensure_buyer_conversation(
+    db: Session,
+    buyer: Buyer,
+    *,
+    actor_user_id: UUID | None = None,
+) -> Conversation:
+    existing = db.scalar(
+        select(Conversation)
+        .join(
+            ConversationContextLink,
+            ConversationContextLink.conversation_id == Conversation.id,
+        )
+        .where(
+            Conversation.organization_id == buyer.organization_id,
+            ConversationContextLink.organization_id == buyer.organization_id,
+            ConversationContextLink.context_type == "buyer",
+            ConversationContextLink.buyer_id == buyer.id,
+        )
+    )
+    if existing is not None:
+        return existing
+
+    line = db.scalar(
+        select(VoiceLine)
+        .where(
+            VoiceLine.organization_id == buyer.organization_id,
+            VoiceLine.department_key == "dispositions",
+            VoiceLine.purpose_key == "buyer_relations",
+            VoiceLine.status == "active",
+        )
+        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    )
+    contact = Contact(
+        organization_id=buyer.organization_id,
+        legal_name=buyer.name,
+        preferred_name=buyer.name.split()[0] if buyer.name.strip() else None,
+        contact_type="buyer",
+        assigned_user_id=line.assigned_user_id if line is not None else None,
+    )
+    db.add(contact)
+    db.flush()
+    if buyer.phone:
+        digits = "".join(character for character in buyer.phone if character.isdigit())
+        db.add(
+            ContactMethod(
+                organization_id=buyer.organization_id,
+                contact_id=contact.id,
+                method_type="phone",
+                value=buyer.phone,
+                normalized_value=digits,
+                is_primary=True,
+            )
+        )
+    if buyer.email:
+        db.add(
+            ContactMethod(
+                organization_id=buyer.organization_id,
+                contact_id=contact.id,
+                method_type="email",
+                value=buyer.email,
+                normalized_value=buyer.email.strip().lower(),
+                is_primary=not bool(buyer.phone),
+            )
+        )
+
+    conversation = Conversation(
+        organization_id=buyer.organization_id,
+        conversation_type="buyer",
+        lead_id=None,
+        contact_id=contact.id,
+        assigned_user_id=line.assigned_user_id if line is not None else None,
+        assigned_team_id=line.assigned_team_id if line is not None else None,
+        source_alias_id=None,
+        visibility_scope="standard",
+        status="open",
+        queue_key="dispositions",
+        priority="normal",
+        unread_count=0,
+        last_activity_at=buyer.created_at,
+        last_inbound_at=None,
+        last_outbound_at=None,
+        closed_at=None,
+        conversation_metadata={
+            "source": "buyer_crm",
+            "unified_timeline": True,
+            "department_key": "dispositions",
+        },
+    )
+    db.add(conversation)
+    db.flush()
+    db.add(
+        ConversationContextLink(
+            organization_id=buyer.organization_id,
+            conversation_id=conversation.id,
+            context_type="buyer",
+            lead_id=None,
+            transaction_id=None,
+            buyer_id=buyer.id,
+            disposition_case_id=None,
+            created_by_user_id=actor_user_id,
+            is_primary=True,
+            link_metadata={"source": "buyer_conversation"},
+        )
+    )
+    db.add(
+        ConversationAssignmentEvent(
+            organization_id=buyer.organization_id,
+            conversation_id=conversation.id,
+            lead_id=None,
+            actor_user_id=actor_user_id,
+            previous_assigned_user_id=None,
+            assigned_user_id=conversation.assigned_user_id,
+            previous_queue_key="unassigned",
+            queue_key="dispositions",
+            reason="Buyer conversation created for dispositions.",
+        )
+    )
+    db.flush()
     return conversation
 
 
@@ -856,7 +989,7 @@ def handoff_conversation(
     )
     if conversation is None:
         return None
-    if conversation.lead_id is None:
+    if conversation.lead_id is None and conversation.conversation_type != "buyer":
         raise ValueError(
             "General conversation assignment is introduced in the mailbox routing phase."
         )
@@ -868,12 +1001,12 @@ def handoff_conversation(
     ):
         raise PermissionError("Conversation is not assigned to the current user.")
 
-    allowed_queue_keys = {
-        "qualified",
-        "appointment_set",
-        "acquisitions_follow_up",
-    }
-    if can_manage_all:
+    allowed_queue_keys = (
+        {"dispositions"}
+        if conversation.conversation_type == "buyer"
+        else {"qualified", "appointment_set", "acquisitions_follow_up"}
+    )
+    if can_manage_all and conversation.conversation_type == "lead":
         allowed_queue_keys.add("va_prospecting")
     if payload.queue_key not in allowed_queue_keys:
         raise ValueError(f"Unsupported handoff queue: {payload.queue_key}")
@@ -889,7 +1022,85 @@ def handoff_conversation(
         raise ValueError("Assignment target must be an active workspace user.")
     target_role_keys = get_user_role_keys(db, target)
     if not target_role_keys.intersection(ELIGIBLE_ASSIGNMENT_ROLE_KEYS):
-        raise ValueError("Assignment target must have an operational acquisitions role.")
+        raise ValueError("Assignment target must have an operational communications role.")
+    if conversation.conversation_type == "buyer":
+        if not target_role_keys.intersection(ELIGIBLE_DISPOSITION_ROLE_KEYS):
+            raise ValueError("Buyer conversations require an active dispositions user.")
+        buyer_id = db.scalar(
+            select(ConversationContextLink.buyer_id).where(
+                ConversationContextLink.organization_id == principal.organization_id,
+                ConversationContextLink.conversation_id == conversation.id,
+                ConversationContextLink.context_type == "buyer",
+            )
+        )
+        if buyer_id is None:
+            raise ValueError("Buyer conversation is missing its buyer record.")
+        previous_assigned_user_id = conversation.assigned_user_id
+        previous_queue_key = conversation.queue_key
+        conversation.assigned_user_id = target.id
+        conversation.queue_key = "dispositions"
+        conversation.status = "open"
+        conversation.closed_at = None
+        conversation.last_activity_at = datetime.now(UTC)
+        contact = db.get(Contact, conversation.contact_id)
+        if contact is not None:
+            contact.assigned_user_id = target.id
+        db.add(
+            ConversationAssignmentEvent(
+                organization_id=principal.organization_id,
+                conversation_id=conversation.id,
+                lead_id=None,
+                actor_user_id=principal.user_id,
+                previous_assigned_user_id=previous_assigned_user_id,
+                assigned_user_id=target.id,
+                previous_queue_key=previous_queue_key,
+                queue_key="dispositions",
+                reason=payload.reason,
+                created_at=datetime.now(UTC),
+            )
+        )
+        ensure_watcher(
+            db,
+            conversation,
+            target,
+            source="assignment",
+            notification_level="all",
+        )
+        add_automatic_owner_watchers(db, conversation)
+        db.add(
+            ActivityEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                entity_type="buyer",
+                entity_id=buyer_id,
+                event_type="buyer.conversation_assigned",
+                summary=f"Buyer conversation assigned to {target.display_name}.",
+            )
+        )
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="conversation.assign",
+                entity_type="conversation",
+                entity_id=conversation.id,
+                previous_value={
+                    "assigned_user_id": (
+                        str(previous_assigned_user_id) if previous_assigned_user_id else None
+                    ),
+                    "queue_key": previous_queue_key,
+                },
+                new_value={
+                    "assigned_user_id": str(target.id),
+                    "queue_key": "dispositions",
+                },
+                reason=payload.reason,
+            )
+        )
+        db.commit()
+        db.refresh(conversation)
+        return conversation_to_read(db, conversation)
     if (
         payload.queue_key == "va_prospecting"
         and "prospecting_caller" not in target_role_keys
@@ -1224,6 +1435,13 @@ def conversation_access_filter(
                 Conversation.visibility_scope == "standard",
             )
         )
+    if PermissionKeys.VIEW_BUYERS in principal.permission_keys:
+        access.append(
+            and_(
+                Conversation.conversation_type == "buyer",
+                Conversation.visibility_scope == "standard",
+            )
+        )
     return or_(*access)
 
 
@@ -1280,17 +1498,29 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         get_settings(),
         latest_inbound_channel=latest_inbound_channel(db, conversation),
     )
+    buyer_id = db.scalar(
+        select(ConversationContextLink.buyer_id).where(
+            ConversationContextLink.organization_id == conversation.organization_id,
+            ConversationContextLink.conversation_id == conversation.id,
+            ConversationContextLink.context_type == "buyer",
+        )
+    )
     return ConversationRead(
         id=conversation.id,
         conversation_type=conversation.conversation_type,
         lead_id=conversation.lead_id,
+        buyer_id=buyer_id,
         contact_id=conversation.contact_id,
         seller_name=contact.legal_name,
         property_address=(
             f"{property_record.street_address}, {property_record.city}, "
             f"{property_record.state} {property_record.postal_code}"
             if property_record is not None
-            else "General correspondence"
+            else (
+                "Buyer relationship"
+                if conversation.conversation_type == "buyer"
+                else "General correspondence"
+            )
         ),
         assigned_user_id=conversation.assigned_user_id,
         assigned_user_email=assigned_user.email if assigned_user else None,

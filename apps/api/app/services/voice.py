@@ -20,6 +20,7 @@ from app.integrations.twilio_voice import (
 from app.models.foundation import (
     ActivityEvent,
     AuditEvent,
+    Buyer,
     CallRecord,
     CallRecording,
     CallTranscript,
@@ -27,7 +28,9 @@ from app.models.foundation import (
     CommunicationRecord,
     Contact,
     ContactMethod,
+    ConsentRecord,
     Conversation,
+    ConversationContextLink,
     Lead,
     Property,
     Role,
@@ -59,6 +62,7 @@ from app.services.communication_compliance import (
     phone_lookup_values,
 )
 from app.services.inbox import (
+    ensure_buyer_conversation,
     ensure_primary_conversation,
     get_scoped_conversation,
     update_conversation_activity,
@@ -469,26 +473,36 @@ def create_call_intent(
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
         return call_intent_to_read(existing, line, get_settings())
 
-    if conversation.lead_id is None:
+    if conversation.conversation_type not in {"lead", "buyer"}:
         raise VoiceConfigurationError(
-            "Calling from general email conversations is not available yet."
+            "Calling is only available from seller and buyer conversations."
         )
     contact = db.get(Contact, conversation.contact_id)
-    lead = db.get(Lead, conversation.lead_id)
-    if contact is None or lead is None:
+    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    if conversation.conversation_type == "lead" and lead is None:
+        return None
+    if contact is None:
         return None
     eligibility = evaluate_voice_eligibility(db, contact)
     if not eligibility.can_call or eligibility.recipient is None:
         raise VoiceComplianceError(" ".join(eligibility.blockers))
-    line = select_voice_line(db, principal.organization_id, principal.user_id)
+    line = select_voice_line_for_conversation(
+        db,
+        principal.organization_id,
+        principal.user_id,
+        conversation=conversation,
+    )
     if line is None:
-        raise VoiceConfigurationError("No active Stonegate voice line is available.")
+        department = "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
+        raise VoiceConfigurationError(
+            f"No authorized active Stonegate {department} line is available."
+        )
     now = datetime.now(UTC)
     settings = get_settings()
     intent = VoiceCallIntent(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
-        lead_id=lead.id,
+        lead_id=lead.id if lead is not None else None,
         contact_id=contact.id,
         actor_user_id=principal.user_id,
         voice_line_id=line.id,
@@ -503,7 +517,11 @@ def create_call_intent(
         expires_at=now + timedelta(minutes=5),
         consumed_at=None,
         provider_call_id=None,
-        intent_metadata={"source": "shared_inbox"},
+        intent_metadata={
+            "source": "shared_inbox",
+            "conversation_type": conversation.conversation_type,
+            "department_key": line.department_key,
+        },
     )
     db.add(intent)
     db.commit()
@@ -554,14 +572,22 @@ def process_outbound_voice_request(
             to_number=intent.recipient,
             recording_consent_status=intent.recording_consent_status,
         )
+        conversation = db.get(Conversation, intent.conversation_id)
+        if conversation is None:
+            raise VoiceConfigurationError("Call conversation is unavailable.")
+        entity_type, entity_id = conversation_activity_entity(db, conversation)
         db.add(
             ActivityEvent(
                 organization_id=intent.organization_id,
                 actor_user_id=intent.actor_user_id,
-                entity_type="lead",
-                entity_id=intent.lead_id,
-                event_type="lead.call_started",
-                summary="Outbound seller call initiated from the shared inbox.",
+                entity_type=entity_type,
+                entity_id=entity_id,
+                event_type=f"{entity_type}.call_started",
+                summary=(
+                    "Outbound buyer call initiated from the shared inbox."
+                    if entity_type == "buyer"
+                    else "Outbound seller call initiated from the shared inbox."
+                ),
             )
         )
         db.add(
@@ -631,11 +657,19 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
             recording_enabled=settings.twilio_voice_recording_configured,
             ring_strategy=line.ring_strategy,
         )
-    conversation = find_conversation_by_phone(db, line.organization_id, caller)
+    conversation_type = "buyer" if line.purpose_key == "buyer_relations" else "lead"
+    conversation = find_conversation_by_phone(
+        db,
+        line.organization_id,
+        caller,
+        conversation_type=conversation_type,
+    )
     if conversation is None:
-        conversation = create_inbound_call_lead(db, line, caller)
-    if conversation.lead_id is None:
-        raise VoiceConfigurationError("Inbound calling currently requires a lead conversation.")
+        conversation = (
+            create_inbound_call_buyer(db, line, caller)
+            if conversation_type == "buyer"
+            else create_inbound_call_lead(db, line, caller)
+        )
     target_user_ids = resolve_inbound_users(db, line, conversation.id)
     communication, call = create_call_records(
         db,
@@ -670,14 +704,19 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         direction="inbound",
         occurred_at=call.started_at or datetime.now(UTC),
     )
+    entity_type, entity_id = conversation_activity_entity(db, conversation)
     db.add(
         ActivityEvent(
             organization_id=line.organization_id,
             actor_user_id=None,
-            entity_type="lead",
-            entity_id=conversation.lead_id,
-            event_type="lead.call_received",
-            summary="Inbound seller call received.",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=f"{entity_type}.call_received",
+            summary=(
+                "Inbound buyer call received."
+                if entity_type == "buyer"
+                else "Inbound seller call received."
+            ),
         )
     )
     record_provider_event(
@@ -1217,13 +1256,20 @@ def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
             responsible_user_id = UUID(str(raw_owner_id)) if raw_owner_id else None
         except ValueError:
             responsible_user_id = None
+    conversation = db.get(Conversation, call.conversation_id)
+    entity_type, entity_id = (
+        conversation_activity_entity(db, conversation)
+        if conversation is not None
+        else ("conversation", call.conversation_id)
+    )
+    party_label = "buyer" if entity_type == "buyer" else "seller"
     db.add(
         Task(
             organization_id=call.organization_id,
             lead_id=call.lead_id,
             responsible_user_id=responsible_user_id,
             task_type="missed_call",
-            title=f"Return missed call from {call.from_number or 'seller'}",
+            title=f"Return missed call from {call.from_number or party_label}",
             status="open",
             priority="high",
             due_at=datetime.now(UTC) + timedelta(minutes=5),
@@ -1234,9 +1280,9 @@ def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
         ActivityEvent(
             organization_id=call.organization_id,
             actor_user_id=None,
-            entity_type="lead",
-            entity_id=call.lead_id,
-            event_type="lead.missed_call",
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=f"{entity_type}.missed_call",
             summary="Missed inbound call created an urgent return-call task.",
         )
     )
@@ -1247,7 +1293,7 @@ def create_call_records(
     *,
     organization_id: UUID,
     conversation_id: UUID,
-    lead_id: UUID,
+    lead_id: UUID | None,
     contact_id: UUID,
     actor_user_id: UUID | None,
     voice_line_id: UUID,
@@ -1390,10 +1436,69 @@ def create_inbound_call_lead(
     return conversation
 
 
+def create_inbound_call_buyer(
+    db: Session,
+    line: VoiceLine,
+    caller: str,
+) -> Conversation:
+    normalized = format_e164(caller) or caller
+    buyer = Buyer(
+        organization_id=line.organization_id,
+        name=f"Inbound buyer {normalized}",
+        company_name=None,
+        email=None,
+        phone=normalized,
+        buyer_type="cash_buyer",
+        status="active",
+        proof_of_funds_status="unknown",
+        max_purchase_price_cents=None,
+        reliability_score_basis_points=5000,
+        completed_deals=0,
+        failed_deals=0,
+        proof_of_funds_expires_at=None,
+        notes="Created automatically from an inbound dispositions call.",
+    )
+    db.add(buyer)
+    db.flush()
+    conversation = ensure_buyer_conversation(
+        db,
+        buyer,
+        actor_user_id=line.assigned_user_id,
+    )
+    db.add(
+        ConsentRecord(
+            organization_id=line.organization_id,
+            contact_id=conversation.contact_id,
+            channel="phone",
+            status="granted",
+            source="inbound_call",
+            wording_version="caller-initiated-v1",
+            wording="Buyer initiated a call to the Stonegate dispositions line.",
+            captured_ip=None,
+            user_agent=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=line.organization_id,
+            actor_user_id=None,
+            entity_type="buyer",
+            entity_id=buyer.id,
+            event_type="buyer.created_from_inbound_call",
+            summary="New buyer created from an unknown dispositions caller.",
+        )
+    )
+    return conversation
+
+
 def find_conversation_by_phone(
     db: Session,
     organization_id: UUID,
     phone_number: str,
+    *,
+    conversation_type: str,
 ) -> Conversation | None:
     values = phone_lookup_values(phone_number)
     if not values:
@@ -1403,7 +1508,7 @@ def find_conversation_by_phone(
         .join(ContactMethod, ContactMethod.contact_id == Conversation.contact_id)
         .where(
             Conversation.organization_id == organization_id,
-            Conversation.lead_id.is_not(None),
+            Conversation.conversation_type == conversation_type,
             ContactMethod.organization_id == organization_id,
             ContactMethod.method_type == "phone",
             ContactMethod.normalized_value.in_(values),
@@ -1527,6 +1632,58 @@ def select_voice_line(
         )
         .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
     )
+
+
+def select_voice_line_for_conversation(
+    db: Session,
+    organization_id: UUID,
+    user_id: UUID,
+    *,
+    conversation: Conversation,
+) -> VoiceLine | None:
+    department_key = (
+        "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
+    )
+    purpose_key = (
+        "buyer_relations"
+        if conversation.conversation_type == "buyer"
+        else "seller_conversations"
+    )
+    team_ids = select(TeamMembership.team_id).where(
+        TeamMembership.organization_id == organization_id,
+        TeamMembership.user_id == user_id,
+    )
+    return db.scalar(
+        select(VoiceLine)
+        .where(
+            VoiceLine.organization_id == organization_id,
+            VoiceLine.department_key == department_key,
+            VoiceLine.purpose_key == purpose_key,
+            VoiceLine.status == "active",
+            (
+                (VoiceLine.assigned_user_id == user_id)
+                | (VoiceLine.fallback_user_id == user_id)
+                | (VoiceLine.assigned_team_id.in_(team_ids))
+            ),
+        )
+        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    )
+
+
+def conversation_activity_entity(
+    db: Session,
+    conversation: Conversation,
+) -> tuple[str, UUID]:
+    if conversation.lead_id is not None:
+        return "lead", conversation.lead_id
+    buyer_id = db.scalar(
+        select(ConversationContextLink.buyer_id).where(
+            ConversationContextLink.organization_id == conversation.organization_id,
+            ConversationContextLink.conversation_id == conversation.id,
+            ConversationContextLink.context_type == "buyer",
+        )
+    )
+    return ("buyer", buyer_id) if buyer_id is not None else ("conversation", conversation.id)
 
 
 def find_call(

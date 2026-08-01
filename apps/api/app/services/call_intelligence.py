@@ -199,9 +199,7 @@ def process_call_transcript(
         call = db.get(CallRecord, recording.call_record_id)
         if call is None:
             raise CallIntelligenceError("The call record is unavailable.")
-        lead = db.get(Lead, call.lead_id)
-        if lead is None:
-            raise CallIntelligenceError("The call lead is unavailable.")
+        lead = db.get(Lead, call.lead_id) if call.lead_id is not None else None
 
         agent, prompt = ensure_call_intelligence_agent(
             db,
@@ -212,7 +210,7 @@ def process_call_transcript(
             organization_id=transcript.organization_id,
             agent_definition_id=agent.id,
             prompt_version_id=prompt.id,
-            lead_id=lead.id,
+            lead_id=lead.id if lead is not None else None,
             status="running",
             model_name=agent.model_name,
             input_summary=f"Recorded call {call.id} queued for transcription and note review.",
@@ -291,7 +289,7 @@ def process_call_transcript(
             note_usage["output_tokens"],
         )
         transcript.confidence_score = confidence
-        transcript.status = "needs_review"
+        transcript.status = "needs_review" if lead is not None else "completed"
         transcript.error_message = None
         transcript.transcript_metadata = {
             **metadata,
@@ -299,12 +297,16 @@ def process_call_transcript(
             "structured_notes": notes.model_dump(mode="json"),
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
-            "human_review_required": True,
+            "human_review_required": lead is not None,
+            "conversation_context": "seller" if lead is not None else "buyer",
             "evidence_coverage_percent": evidence_coverage_percent(notes),
         }
-        approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
-        transcript.transcript_metadata["approval_request_id"] = str(approval.id)
-        run.status = "needs_review"
+        if lead is not None:
+            approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
+            transcript.transcript_metadata["approval_request_id"] = str(approval.id)
+            run.status = "needs_review"
+        else:
+            run.status = "completed"
         run.output_summary = notes.summary[:4000]
         run.input_tokens = input_tokens
         run.output_tokens = output_tokens
@@ -589,9 +591,12 @@ def build_call_notes_prompt(db: Session, call: CallRecord, transcript: CallTrans
     lead = db.get(Lead, call.lead_id)
     property_record = db.get(Property, lead.property_id) if lead else None
     segments = transcript.speaker_segments or []
+    contact_name = contact.preferred_name or contact.legal_name if contact else "Unknown"
     return json.dumps(
         {
-            "seller": contact.preferred_name or contact.legal_name if contact else "Unknown",
+            "party_type": "seller" if lead is not None else "buyer",
+            "seller": contact_name if lead is not None else None,
+            "buyer": contact_name if lead is None else None,
             "property": (
                 {
                     "address": property_record.street_address,

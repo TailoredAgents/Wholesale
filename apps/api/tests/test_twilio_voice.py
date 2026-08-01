@@ -859,3 +859,89 @@ def test_voice_webhooks_reject_invalid_signatures(
         == 0
     )
     assert db_session.scalar(select(VoiceLine)) is not None
+
+
+def test_buyer_call_intent_and_inbound_call_use_dispositions_line(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    dispositions_number = "+14708887952"
+    line = VoiceLine(
+        organization_id=owner.organization_id,
+        assigned_user_id=owner.id,
+        fallback_user_id=None,
+        assigned_team_id=None,
+        provider="twilio",
+        provider_phone_number_id=None,
+        phone_number=dispositions_number,
+        label="Stonegate Dispositions",
+        department_key="dispositions",
+        purpose_key="buyer_relations",
+        status="active",
+        is_default=False,
+        inbound_route="assigned_user",
+        ring_strategy="sequential",
+        coverage_timezone="America/New_York",
+        coverage_start_hour=0,
+        coverage_end_hour=24,
+        missed_call_action="fallback_then_voicemail",
+        line_metadata={"source": "test"},
+    )
+    db_session.add(line)
+    db_session.commit()
+    buyer_response = client.post(
+        "/api/v1/buyers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "name": "Alex Investor",
+            "phone": SELLER_NUMBER,
+            "buyer_type": "cash_buyer",
+            "phone_contact_permission": True,
+        },
+    )
+    assert buyer_response.status_code == 201, buyer_response.text
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.conversation_type == "buyer")
+    )
+    assert conversation is not None
+
+    intent_response = client.post(
+        f"/api/v1/voice/conversations/{conversation.id}/call-intents",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"idempotency_key": "buyer-call-0001"},
+    )
+    assert intent_response.status_code == 201, intent_response.text
+    assert intent_response.json()["from_number"] == dispositions_number
+    intent = db_session.get(VoiceCallIntent, UUID(intent_response.json()["id"]))
+    assert intent is not None
+    assert intent.lead_id is None
+    assert intent.voice_line_id == line.id
+
+    inbound_payload = {
+        "From": SELLER_NUMBER,
+        "To": dispositions_number,
+        "CallSid": "CA00000000000000000000000000000077",
+    }
+    inbound_response = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/incoming",
+        inbound_payload,
+    )
+    assert inbound_response.status_code == 200, inbound_response.text
+    call = db_session.scalar(
+        select(CallRecord).where(CallRecord.provider_call_id == inbound_payload["CallSid"])
+    )
+    assert call is not None
+    assert call.conversation_id == conversation.id
+    assert call.lead_id is None
+    assert call.voice_line_id == line.id

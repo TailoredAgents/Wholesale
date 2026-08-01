@@ -117,9 +117,8 @@ Render, and live acceptance remain.
 
 Stonegate now selects the active acquisitions number for seller conversations and preserves the
 selected line on dispatch and communication records. Both number-level webhooks may use the same
-endpoint because inbound routing reads Twilio's `To` number. Until PH5 creates buyer conversation
-routing, messages arriving on a dispositions-purpose number are deliberately prevented from being
-attached to a seller thread.
+endpoint because inbound routing reads Twilio's `To` number. PH5 now applies the corresponding
+buyer-only rule to the dispositions line.
 
 Exit criteria: Austin and Devon can work one seller SMS thread from Stonegate without duplicate
 messages or broken assignment.
@@ -163,6 +162,10 @@ Exit criteria: the acquisitions line can replace personal phones for warm seller
 
 ### PH5. Dispositions Line
 
+Status: buyer conversations, strict line selection, inbox presentation, permissions, and inbound
+routing are implemented; final line ownership and live call/SMS acceptance remain in Twilio and
+Render.
+
 - Purchase or designate a separate Twilio Voice/SMS-capable number.
 - Add it to Stonegate as **Stonegate Dispositions** with Devon as primary and Austin as fallback.
 - Configure the number-level inbound webhook separately. It may share the approved Messaging
@@ -171,6 +174,26 @@ Exit criteria: the acquisitions line can replace personal phones for warm seller
 - Add line selection and sender permission so buyer communication cannot accidentally use the
   acquisitions number.
 - Route buyer replies into the existing inbox with dispositions visibility and ownership.
+
+Implemented behavior creates one buyer conversation linked to each buyer CRM record, including
+existing buyers when their conversation is first opened. **Buyers > Conversation** opens that
+thread in the shared inbox. Seller threads can only select the acquisitions line; buyer threads
+can only select an active dispositions line assigned to the sender, their fallback assignment, or
+their team. Inbound SMS and Voice use the receiving number's purpose before matching a phone
+number, so the same phone cannot merge a seller thread with a buyer thread. Unknown callers to the
+dispositions number create a minimal buyer record instead of a fake seller lead. Recorded buyer
+calls may be transcribed and summarized, but they do not offer seller CRM field updates.
+
+Production acceptance:
+
+1. Confirm **Stonegate Dispositions** is active in Settings > Communications with Devon primary,
+   Austin fallback, and `+14708887952` as its number.
+2. Keep both number-level Voice and Messaging webhooks on the shared Stonegate endpoints; routing
+   uses Twilio's `To` value.
+3. Confirm the approved A2P campaign covers one-to-one investor/buyer messaging before enabling
+   buyer SMS traffic.
+4. Test one outbound and inbound call, one outbound and inbound SMS, caller ID, assignment,
+   unanswered-call handling, and seller/buyer isolation with controlled contacts.
 
 Exit criteria: seller and buyer communication are operationally and visibly separated while still
 using Stonegate's unified timeline architecture.

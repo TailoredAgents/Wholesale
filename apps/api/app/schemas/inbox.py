@@ -100,6 +100,7 @@ class ConversationRead(BaseModel):
     id: UUID
     conversation_type: str
     lead_id: UUID | None
+    buyer_id: UUID | None
     contact_id: UUID
     seller_name: str
     property_address: str

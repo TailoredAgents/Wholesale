@@ -64,6 +64,7 @@ type Conversation = {
   id: string;
   conversation_type: "lead" | "transaction" | "buyer" | "general";
   lead_id: string | null;
+  buyer_id: string | null;
   contact_id: string;
   seller_name: string;
   property_address: string;
@@ -311,10 +312,11 @@ const managerQueueOptions = [
   { value: "qualified", label: "Qualified" },
   { value: "appointment_set", label: "Appointment set" },
   { value: "acquisitions_follow_up", label: "Acquisitions follow-up" },
+  { value: "dispositions", label: "Dispositions" },
 ];
 
 const acquisitionQueueOptions = managerQueueOptions.filter(
-  (option) => option.value !== "va_prospecting",
+  (option) => !["va_prospecting", "dispositions"].includes(option.value),
 );
 
 function labelize(value: string | null | undefined) {
@@ -848,6 +850,7 @@ export function InboxWorkspace({
           setChannel("email");
           setDirection("outbound");
         }
+        setQueueKey(item.conversation_type === "buyer" ? "dispositions" : item.queue_key);
         if (item.unread_count > 0) {
           await request<Conversation>(`/api/v1/inbox/conversations/${conversationId}/read`, {
             method: "PATCH",
@@ -1246,7 +1249,11 @@ export function InboxWorkspace({
     me?.permissions.includes("communications:manage_assignments") ||
     me?.permissions.includes("communications:handoff_assigned");
   const canManageAssignments = me?.permissions.includes("communications:manage_assignments");
-  const queueOptions = canManageAssignments ? managerQueueOptions : acquisitionQueueOptions;
+  const queueOptions = detail?.conversation_type === "buyer"
+    ? managerQueueOptions.filter((option) => option.value === "dispositions")
+    : canManageAssignments
+      ? managerQueueOptions.filter((option) => option.value !== "dispositions")
+      : acquisitionQueueOptions;
   const primaryPhone = detail?.contact_methods.find((method) => method.method_type === "phone");
   const primaryEmail = detail?.contact_methods.find((method) => method.method_type === "email");
   const selectedEmailAlias =
@@ -1832,13 +1839,17 @@ export function InboxWorkspace({
                     <span className={styles.stageBadge}>
                       {detail.conversation_type === "general"
                         ? "General email"
-                        : labelize(detail.stage_key)}
+                        : detail.conversation_type === "buyer"
+                          ? "Buyer"
+                          : labelize(detail.stage_key)}
                     </span>
                   </div>
                   <p>
                     {detail.conversation_type === "general"
                       ? emailAliases.find((alias) => alias.id === detail.source_alias_id)
                           ?.email_address || "Stonegate company email"
+                      : detail.conversation_type === "buyer"
+                        ? "Stonegate dispositions relationship"
                       : detail.property_address}
                   </p>
                   {detail.response_state !== "none" ? (
@@ -2041,6 +2052,7 @@ export function InboxWorkspace({
                           me?.permissions.includes("communications:access_recordings") ? (
                             <CallTranscriptPanel
                               canReview={Boolean(
+                                detail.lead_id &&
                                 me.permissions.includes("leads:edit") &&
                                 item.recording_status === "completed" &&
                                 me.permissions.includes("communications:access_recordings"),
@@ -2054,7 +2066,9 @@ export function InboxWorkspace({
                       ) : null}
                       <small>
                         {item.actor_display_name ||
-                          (item.direction === "inbound" ? "Seller" : "Team")}
+                          (item.direction === "inbound"
+                            ? detail.conversation_type === "buyer" ? "Buyer" : "Seller"
+                            : "Team")}
                         {" · "}
                         {labelize(item.status)}
                       </small>
@@ -2486,13 +2500,20 @@ export function InboxWorkspace({
                   <span>
                     {detail.conversation_type === "general"
                       ? "Company correspondence"
-                      : "Lead context"}
+                      : detail.conversation_type === "buyer"
+                        ? "Buyer relationship"
+                        : "Lead context"}
                   </span>
                   <h3>{detail.seller_name}</h3>
                 </div>
                 {detail.lead_id ? (
                   <Link href={`/os/leads/${detail.lead_id}`}>
                     Full record
+                    <ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                ) : detail.buyer_id ? (
+                  <Link href={`/os/buyers?buyer=${detail.buyer_id}`}>
+                    Buyer record
                     <ChevronRight size={15} aria-hidden="true" />
                   </Link>
                 ) : null}
@@ -2583,6 +2604,15 @@ export function InboxWorkspace({
                       <dt>Visibility</dt>
                       <dd>{labelize(detail.visibility_scope)}</dd>
                     </div>
+                  </dl>
+                </section>
+              ) : detail.conversation_type === "buyer" ? (
+                <section className={styles.detailSection}>
+                  <h4>Dispositions</h4>
+                  <dl className={styles.detailList}>
+                    <div><dt>Relationship</dt><dd>Cash buyer / investor</dd></div>
+                    <div><dt>Department</dt><dd>Dispositions</dd></div>
+                    <div><dt>Communication line</dt><dd>Stonegate Dispositions</dd></div>
                   </dl>
                 </section>
               ) : (

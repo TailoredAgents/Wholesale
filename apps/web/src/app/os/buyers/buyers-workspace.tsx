@@ -1,6 +1,7 @@
 "use client";
 
-import { BadgeDollarSign, Building2, Plus, Search, ShieldCheck, UsersRound, X } from "lucide-react";
+import { useAuth } from "@clerk/nextjs";
+import { BadgeDollarSign, Building2, MessageSquare, Plus, Search, ShieldCheck, UsersRound, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -57,6 +58,12 @@ export function BuyersWorkspace({
     buyers.some((buyer) => buyer.id === initialBuyerId),
   );
   const [showCreate, setShowCreate] = useState(false);
+  const [conversationStatus, setConversationStatus] = useState<"idle" | "opening" | "error">("idle");
+  const { getToken } = useAuth();
+  const apiBaseUrl = useMemo(
+    () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
+    [],
+  );
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     if (!normalized) return buyers;
@@ -91,6 +98,26 @@ export function BuyersWorkspace({
     return `/os/buyers?${values.toString()}`;
   }
 
+  async function openConversation() {
+    if (!selected) return;
+    setConversationStatus("opening");
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      const token = await getToken().catch(() => null);
+      if (token) headers.Authorization = `Bearer ${token}`;
+      else headers["X-Dev-User-Email"] = process.env.NEXT_PUBLIC_DEV_USER_EMAIL ?? "richardaustindugger@users.noreply.github.com";
+      const response = await fetch(`${apiBaseUrl}/api/v1/buyers/${selected.id}/conversation`, {
+        method: "POST",
+        headers,
+      });
+      if (!response.ok) throw new Error("Unable to open buyer conversation.");
+      const payload = (await response.json()) as { conversation_id: string };
+      window.location.assign(`/os/inbox?conversation=${payload.conversation_id}`);
+    } catch {
+      setConversationStatus("error");
+    }
+  }
+
   return (
     <section aria-label="Buyer management" className={styles.workspace}>
       <DealControlStrip
@@ -119,7 +146,8 @@ export function BuyersWorkspace({
           {filtered.length === 0 ? <p className={styles.empty}>No buyers match this search.</p> : filtered.map((buyer) => <button className={buyer.id === selected?.id ? styles.selectedBuyer : styles.buyerRow} key={buyer.id} onClick={() => selectBuyer(buyer.id)} type="button"><div><strong>{buyer.name}</strong><StatusBadge tone={buyer.status === "active" ? "success" : "neutral"}>{labelize(buyer.status)}</StatusBadge></div><span>{buyer.company_name ?? labelize(buyer.buyer_type)}</span><dl><div><dt>POF</dt><dd>{labelize(buyer.proof_of_funds_status)}</dd></div><div><dt>Maximum</dt><dd>{money(buyer.max_purchase_price_cents)}</dd></div></dl></button>)}
         </aside>
         <section className={`${styles.detail} ${mobileDetailOpen ? styles.detailOpen : ""}`}>
-          {selected ? <><header className={styles.buyerHeader}><div><span>{labelize(selected.buyer_type)}</span><h2>{selected.name}</h2><p>{selected.company_name ?? "Independent buyer"}</p></div><div className={styles.headerStatus}><StatusBadge tone={proofVerified(selected.proof_of_funds_status) ? "success" : "warning"}>POF {labelize(selected.proof_of_funds_status)}</StatusBadge><button aria-label="Close buyer details" onClick={() => setMobileDetailOpen(false)} type="button"><X size={17} /></button></div></header>
+          {selected ? <><header className={styles.buyerHeader}><div><span>{labelize(selected.buyer_type)}</span><h2>{selected.name}</h2><p>{selected.company_name ?? "Independent buyer"}</p></div><div className={styles.headerStatus}>{canEdit ? <button className={styles.conversationButton} disabled={conversationStatus === "opening"} onClick={() => void openConversation()} type="button"><MessageSquare size={15} />{conversationStatus === "opening" ? "Opening" : "Conversation"}</button> : null}<StatusBadge tone={proofVerified(selected.proof_of_funds_status) ? "success" : "warning"}>POF {labelize(selected.proof_of_funds_status)}</StatusBadge><button aria-label="Close buyer details" onClick={() => setMobileDetailOpen(false)} type="button"><X size={17} /></button></div></header>
+            {conversationStatus === "error" ? <p className={styles.actionError}>Buyer conversation could not be opened.</p> : null}
             <nav aria-label="Buyer record sections" className={styles.localTabs}>{buyerTabs.map((tab) => <button aria-current={activeTab === tab.key ? "page" : undefined} className={activeTab === tab.key ? styles.activeTab : ""} key={tab.key} onClick={() => selectTab(tab.key)} type="button">{tab.label}</button>)}</nav>
             {activeTab === "summary" ? <div className={styles.detailGrid}>
               <section className={styles.panel}><header><div><span>Relationship</span><h3>Buyer snapshot</h3></div></header><dl><div><dt>Status</dt><dd>{labelize(selected.status)}</dd></div><div><dt>Reliability</dt><dd>{reliability(selected)}</dd></div><div><dt>Completed deals</dt><dd>{selected.completed_deals}</dd></div><div><dt>Failed deals</dt><dd>{selected.failed_deals}</dd></div><div><dt>Added</dt><dd>{new Date(selected.created_at).toLocaleDateString()}</dd></div></dl></section>
