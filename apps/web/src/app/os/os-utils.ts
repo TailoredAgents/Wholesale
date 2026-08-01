@@ -101,6 +101,36 @@ export function labelize(value: string | null) {
     .join(" ");
 }
 
+export function internalCode(value: string) {
+  const normalized = value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^[-_]+|[-_]+$/g, "")
+    .slice(0, 80);
+  return normalized.length >= 2 ? normalized : `${normalized || "area"}-market`;
+}
+
+export function apiErrorMessage(detail: unknown, fallback: string) {
+  if (typeof detail === "string" && detail.trim()) {
+    return detail;
+  }
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const error = item as { loc?: unknown; msg?: unknown };
+        if (typeof error.msg !== "string") return null;
+        const location = Array.isArray(error.loc) ? error.loc.at(-1) : null;
+        const field = typeof location === "string" ? labelize(location) : null;
+        return field ? `${field}: ${error.msg}` : error.msg;
+      })
+      .filter((message): message is string => Boolean(message));
+    if (messages.length) return messages.join(" ");
+  }
+  return fallback;
+}
+
 export function formatTime(value: string | null) {
   if (!value) {
     return "Unscheduled";

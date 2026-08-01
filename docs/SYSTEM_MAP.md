@@ -526,6 +526,8 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 **Markets & Territories (`/os/settings/markets`)**
 
 - Market and territory setup plus market-launch evidence.
+- Staff enter human-readable names; stable lowercase market and territory codes are generated
+  automatically and normalized again by the API.
 - Campaign and prospect creation remain in Prospecting.
 
 **Communications (`/os/settings/communications`)**

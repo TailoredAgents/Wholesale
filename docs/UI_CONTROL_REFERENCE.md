@@ -346,16 +346,15 @@ plans in **Settings > Workflows**.
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Market Name | Human-readable market name | Required |
-| Market Code | Stable lowercase system key | Must match lowercase letters, numbers, underscore, or hyphen rules |
 | State | Two-letter state code | Required |
 | Timezone | Eastern or Central operating timezone | Required for scheduling controls |
-| **Create market** | Creates the geographic market record | Disabled by browser validation when required values are missing |
+| **Add market** | Creates the geographic market record and its internal lowercase code | Disabled by browser validation when required values are missing |
 | Territory Market | Parent market | Required |
 | Assigned team | Team responsible for the territory | Optional |
-| Territory Name / Code | Human label and stable system key | Required |
+| Territory Name | Human-readable territory label; the internal code is automatic | Required |
 | Counties | Comma-separated county names | Optional but important for assignment |
 | ZIP codes | Comma-separated postal codes | Optional but important for territory matching |
-| **Create territory** | Creates routing geography under a market | Requires market, name, and code |
+| **Create territory** | Creates routing geography under a market | Requires market and name |
 | Campaign Name / Code | Human label and stable campaign key | Required |
 | Campaign Market / Territory | Geographic scope | Market required; territory optional |
 | Channel | Cold call, cold email, direct mail, paid search, paid social, organic, referral, or other | Required |

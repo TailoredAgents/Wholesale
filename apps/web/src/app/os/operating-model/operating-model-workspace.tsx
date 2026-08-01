@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import type { LeadListItem, OperatingModelOverview } from "../../lib/api";
-import { labelize } from "../os-utils";
+import { apiErrorMessage, labelize } from "../os-utils";
 import styles from "./operating-model.module.css";
 
 export type OperatingModelTab = "setup" | "active" | "history" | "credits" | "launches";
@@ -55,12 +55,14 @@ export function OperatingModelWorkspace({
   leads,
   initialTab = "setup",
   allowedTabs,
+  showMetrics = true,
   showTabs = true,
 }: {
   operatingModel: OperatingModelOverview;
   leads: LeadListItem[];
   initialTab?: OperatingModelTab;
   allowedTabs?: OperatingModelTab[];
+  showMetrics?: boolean;
   showTabs?: boolean;
 }) {
   const router = useRouter();
@@ -104,8 +106,10 @@ export function OperatingModelWorkspace({
         body: JSON.stringify(body),
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-        throw new Error(payload?.detail ?? "The operation could not be completed.");
+        const payload = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+        throw new Error(
+          apiErrorMessage(payload?.detail, "The operation could not be completed."),
+        );
       }
       setStatus("saved");
       setMessage("Saved.");
@@ -295,12 +299,12 @@ export function OperatingModelWorkspace({
 
   return (
     <section className={styles.workspace}>
-      <div className={styles.metrics}>
+      {showMetrics ? <div className={styles.metrics}>
         <div><span>Active plan</span><strong>{activePlan ? `v${activePlan.version_number}` : "None"}</strong></div>
         <div><span>Company target</span><strong>{activePlan ? formatPercent(activePlan.target_company_margin_basis_points) : "-"}</strong></div>
         <div><span>Credits awaiting review</span><strong>{proposedCredits.length}</strong></div>
         <div><span>Company setup</span><strong>{operatingModel.company_setup.completed_check_count}/{operatingModel.company_setup.total_check_count}</strong></div>
-      </div>
+      </div> : null}
 
       {showTabs ? <div className={styles.tabBar} role="tablist" aria-label="Operating model views">
         {tabs.filter((tab) => !allowedTabs || allowedTabs.includes(tab.key)).map((tab) => (

@@ -1,8 +1,15 @@
+import re
 from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def normalize_operating_code(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"[^a-z0-9_-]+", "-", value.strip().lower()).strip("-_")
 
 
 class OperationsUserRead(BaseModel):
@@ -227,6 +234,11 @@ class MarketCreate(BaseModel):
     timezone: str = Field(min_length=3, max_length=80)
     is_primary: bool = False
 
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any) -> Any:
+        return normalize_operating_code(value)
+
 
 class TerritoryRead(BaseModel):
     id: UUID
@@ -250,6 +262,11 @@ class TerritoryCreate(BaseModel):
     code: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9][a-z0-9_-]*$")
     county_names: list[str] = Field(default_factory=list, max_length=100)
     postal_codes: list[str] = Field(default_factory=list, max_length=500)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any) -> Any:
+        return normalize_operating_code(value)
 
 
 class CampaignRead(BaseModel):
@@ -290,6 +307,11 @@ class CampaignCreate(BaseModel):
     starts_on: date | None = None
     ends_on: date | None = None
     budget_cents: int | None = Field(default=None, ge=0)
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def normalize_code(cls, value: Any) -> Any:
+        return normalize_operating_code(value)
 
     @model_validator(mode="after")
     def dates_are_ordered(self) -> "CampaignCreate":

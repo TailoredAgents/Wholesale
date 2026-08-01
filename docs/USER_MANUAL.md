@@ -410,11 +410,10 @@ and duplicate-review count.
 
 ### Create A Market
 
-1. Open **Markets & campaigns**.
-2. Under **Create market**, enter a clear name such as `Atlanta Metro`.
-3. Enter a stable lowercase code such as `atlanta-metro`.
-4. Confirm the two-letter state and timezone.
-5. Select **Create market**.
+1. Open **Settings > Markets & Territories**.
+2. Under **Add operating market**, enter a clear service-area name such as `Metro Atlanta`.
+3. Confirm the two-letter state and timezone.
+4. Select **Add market**. Stonegate creates the internal code automatically.
 
 Do not create a second market just to represent a neighborhood or employee. Use territories and
 teams inside the existing market.
@@ -423,9 +422,9 @@ teams inside the existing market.
 
 1. Select the market.
 2. Select the assigned team when known.
-3. Enter a territory name and stable code.
+3. Enter a territory name such as `North Metro`.
 4. Enter counties and ZIP codes as comma-separated values.
-5. Save the territory.
+5. Select **Create territory**. Stonegate creates the internal code automatically.
 
 Territory information supports assignment and closer dispatch. It is not a substitute for
 confirming the actual property address.

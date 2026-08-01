@@ -40,15 +40,15 @@ export default async function MarketSettingsPage() {
           <div />
         </SectionPanel>
       )}
-      {operatingModel ? (
+      {operatingModel && operations?.markets.length ? (
         <OperatingModelWorkspace
           initialTab="launches"
           leads={dashboard.leads}
           operatingModel={operatingModel}
+          showMetrics={false}
           showTabs={false}
         />
       ) : null}
     </WorkspacePage>
   );
 }
-

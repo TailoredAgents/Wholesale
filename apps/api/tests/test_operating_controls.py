@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models.foundation import AuditEvent
 from app.schemas.operating_model import CompensationPlanCreate
+from app.schemas.operations import CampaignCreate, MarketCreate
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
@@ -19,6 +20,24 @@ def test_current_compensation_plan_defaults() -> None:
     assert payload.dispositions_basis_points == 2000
     assert payload.ai_managed_disposition_basis_points == 1000
     assert payload.target_company_margin_basis_points == 3000
+
+
+def test_operating_codes_are_normalized_before_validation() -> None:
+    market = MarketCreate(
+        name="Metro Atlanta",
+        code="Georgia State",
+        state_code="GA",
+        timezone="America/New_York",
+    )
+    campaign = CampaignCreate(
+        market_id="00000000-0000-0000-0000-000000000001",
+        name="North Metro Absentee Owners",
+        code="North Metro / August",
+        channel="cold_call",
+    )
+
+    assert market.code == "georgia-state"
+    assert campaign.code == "north-metro-august"
 
 
 def create_lead(client: TestClient, headers: dict[str, str]) -> dict[str, Any]:

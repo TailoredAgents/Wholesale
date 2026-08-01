@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useMemo, useState } from "react";
 
 import type { AcquisitionOperations, LeadListItem } from "../../lib/api";
-import { labelize } from "../os-utils";
+import { apiErrorMessage, internalCode, labelize } from "../os-utils";
 import styles from "./operations.module.css";
 
 export type OperationsTab = "today" | "structure" | "calling" | "team" | "quality" | "follow-up";
@@ -114,8 +114,10 @@ export function OperationsWorkspace({
         body: body ? JSON.stringify(body) : undefined,
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-        throw new Error(payload?.detail ?? "The operation could not be completed.");
+        const payload = (await response.json().catch(() => null)) as { detail?: unknown } | null;
+        throw new Error(
+          apiErrorMessage(payload?.detail, "The operation could not be completed."),
+        );
       }
       setStatus("saved");
       router.refresh();
@@ -156,9 +158,10 @@ export function OperationsWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const name = formValue(data, "name");
     const saved = await mutate("/api/v1/operations/markets", "POST", {
-      name: formValue(data, "name"),
-      code: formValue(data, "code"),
+      name,
+      code: internalCode(name),
       state_code: formValue(data, "state_code"),
       timezone: formValue(data, "timezone"),
       is_primary: operations.markets.length === 0,
@@ -170,11 +173,12 @@ export function OperationsWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const name = formValue(data, "name");
     const saved = await mutate("/api/v1/operations/territories", "POST", {
       market_id: formValue(data, "market_id"),
       assigned_team_id: formValue(data, "assigned_team_id") || null,
-      name: formValue(data, "name"),
-      code: formValue(data, "code"),
+      name,
+      code: internalCode(name),
       county_names: splitValues(formValue(data, "county_names")),
       postal_codes: splitValues(formValue(data, "postal_codes")),
     });
@@ -390,7 +394,7 @@ export function OperationsWorkspace({
                 <strong>{operations.markets.length}</strong>
               </div>
               <div className={styles.rows}>
-                {operations.markets.length === 0 ? <p className={styles.empty}>Create Stonegate&apos;s first operating market.</p> : null}
+                {operations.markets.length === 0 ? <p className={styles.empty}>No operating market has been created.</p> : null}
                 {operations.markets.map((market) => (
                   <div className={styles.planRow} key={market.id}>
                     <div>
@@ -413,12 +417,11 @@ export function OperationsWorkspace({
                 ))}
               </div>
               <form className={styles.stackForm} onSubmit={submitMarket}>
-                <h4>Create market</h4>
-                <label><span>Name</span><input name="name" required placeholder="Atlanta Metro" /></label>
-                <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="atlanta-metro" /></label>
+                <h4>Add operating market</h4>
+                <label><span>Name</span><input name="name" required placeholder="Metro Atlanta" /></label>
                 <label><span>State</span><input maxLength={2} minLength={2} name="state_code" required defaultValue="GA" /></label>
                 <label><span>Timezone</span><select name="timezone" defaultValue="America/New_York"><option value="America/New_York">Eastern</option><option value="America/Chicago">Central</option></select></label>
-                <button type="submit">Create market</button>
+                <button type="submit">Add market</button>
               </form>
               {operations.markets.length ? (
                 <form className={styles.stackForm} onSubmit={submitTerritory}>
@@ -426,7 +429,6 @@ export function OperationsWorkspace({
                   <label><span>Market</span><select name="market_id" required>{operations.markets.map((market) => <option key={market.id} value={market.id}>{market.name}</option>)}</select></label>
                   <label><span>Assigned team</span><select name="assigned_team_id"><option value="">No team</option>{operations.teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}</select></label>
                   <label><span>Name</span><input name="name" required placeholder="North Atlanta" /></label>
-                  <label><span>Code</span><input name="code" required pattern="[a-z0-9][a-z0-9_-]*" placeholder="north-atlanta" /></label>
                   <label><span>Counties</span><input name="county_names" placeholder="Gwinnett, Forsyth" /></label>
                   <label><span>ZIP codes</span><input name="postal_codes" placeholder="30024, 30518" /></label>
                   <button type="submit">Create territory</button>
