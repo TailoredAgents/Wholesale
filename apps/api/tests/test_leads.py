@@ -1708,6 +1708,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Roof" in investor_report_response.content
     assert b"Closed-sale search" in investor_report_response.content
     assert b"Unique sale evidence" in investor_report_response.content
+    assert b"Market-supported adjustment research" in investor_report_response.content
+    assert b"SHADOW RESEARCH ONLY" in investor_report_response.content
+    assert b"Live V2.2 ARV point" in investor_report_response.content
 
     client_report_response = client.get(
         (
@@ -1730,6 +1733,12 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert b"Pre-meeting contractor estimate" not in client_report_response.content
     assert b"Pre-meeting reviewed" in client_report_response.content
     assert b"Closed-sale search" in client_report_response.content
+    assert b"Evidence strength and preparation assumptions" in client_report_response.content
+    assert b"Local adjustment support" in client_report_response.content
+    assert b"Seller ceiling" not in client_report_response.content
+    assert b"Flip buyer maximum" not in client_report_response.content
+    assert b"Rental buyer maximum" not in client_report_response.content
+    assert b"Transaction reserve" not in client_report_response.content
     unclassified_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -1945,6 +1954,16 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert newest_version["total_rehab_cents"] == 6000000
     assert newest_version["repair_estimate_source"] == "contractor_bid"
     assert newest_version["arv_point_cents"] == estimate_analysis["arv_point_cents"]
+    assert newest_version["comp_search_level"] == "preferred"
+    assert len(newest_version["comp_snapshot"]) == 5
+    assert newest_version["comp_snapshot"][0]["grade"] in {"A", "B"}
+    assert len(newest_version["repair_snapshot"]) == 3
+    assert newest_version["repair_snapshot"][0]["category"] == "roof"
+    assert newest_version["adjustment_snapshot"]["status"] in {
+        "supported",
+        "partial",
+        "unsupported",
+    }
 
     source_comps = [*payload["selected_comps"], *payload["rejected_comps"]]
     review_response = client.post(

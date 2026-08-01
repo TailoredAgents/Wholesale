@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, FileSearch, Gauge, ListChecks, MapPinned, Search } from "lucide-react";
+import { BarChart3, Bot, Clock3, FileSearch, Gauge, Hammer, ListChecks, MapPinned, Search } from "lucide-react";
 import Link from "next/link";
 
 import type { UnderwritingCalibration } from "../../../lib/api";
@@ -47,12 +47,20 @@ export function UnderwritingQuality({
       </section>
 
       {baseline ? (
-        <section className={styles.metricRibbon} aria-label="Underwriting operating baseline">
-          <div><Search size={17} /><span>Analysis runs</span><strong>{baseline.analysis_count}</strong></div>
-          <div><ListChecks size={17} /><span>Median selected comps</span><strong>{baseline.median_selected_comp_count ?? "--"}</strong></div>
-          <div><Gauge size={17} /><span>Median comp yield</span><strong>{percent(baseline.median_comp_yield_percentage)}</strong></div>
-          <div><Clock3 size={17} /><span>Median run time</span><strong>{baseline.median_duration_ms === null ? "--" : `${baseline.median_duration_ms.toFixed(0)} ms`}</strong></div>
-        </section>
+        <>
+          <section className={styles.metricRibbon} aria-label="Underwriting operating baseline">
+            <div><Search size={17} /><span>Analysis runs</span><strong>{baseline.analysis_count}</strong></div>
+            <div><ListChecks size={17} /><span>Median selected comps</span><strong>{baseline.median_selected_comp_count ?? "--"}</strong></div>
+            <div><Gauge size={17} /><span>Median comp yield</span><strong>{percent(baseline.median_comp_yield_percentage)}</strong></div>
+            <div><Clock3 size={17} /><span>Median run time</span><strong>{baseline.median_duration_ms === null ? "--" : `${baseline.median_duration_ms.toFixed(0)} ms`}</strong></div>
+          </section>
+          <section className={styles.metricRibbon} aria-label="Underwriting evidence quality">
+            <div><ListChecks size={17} /><span>Comp overrides</span><strong>{percent(baseline.comp_review_override_percentage)}</strong></div>
+            <div><Bot size={17} /><span>AI scope corrections</span><strong>{percent(baseline.ai_scope_correction_percentage)}</strong></div>
+            <div><Hammer size={17} /><span>Catalog repair error</span><strong>{percent(baseline.repair_catalog_median_absolute_error_percentage)}</strong></div>
+            <div><FileSearch size={17} /><span>Catalog outcomes</span><strong>{baseline.repair_catalog_case_count}</strong></div>
+          </section>
+        </>
       ) : null}
 
       <section className={styles.section}>
@@ -108,6 +116,48 @@ export function UnderwritingQuality({
                 ))
               ) : (
                 <tr><td colSpan={8}>Record verified outcomes to begin market calibration.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <header>
+          <div><span>Error attribution</span><h3>Evidence segment scorecards</h3></div>
+          <strong>{calibration.segments.length} segments</strong>
+        </header>
+        <div aria-label="Underwriting evidence segment scorecards" className={styles.tableWrap} tabIndex={0}>
+          <table>
+            <thead>
+              <tr>
+                <th>Dimension</th>
+                <th>Segment</th>
+                <th>Verified</th>
+                <th>ARV error</th>
+                <th>Range</th>
+                <th>Repair error</th>
+                <th>Comp overrides</th>
+              </tr>
+            </thead>
+            <tbody>
+              {calibration.segments.length ? (
+                calibration.segments.map((segment) => (
+                  <tr key={`${segment.dimension}-${segment.segment_key}`}>
+                    <td>{labelize(segment.dimension)}</td>
+                    <td><strong>{labelize(segment.segment_key)}</strong></td>
+                    <td>{segment.sample_count}</td>
+                    <td>{percent(segment.median_absolute_error_percentage)}</td>
+                    <td>{percent(segment.range_coverage_percentage)}</td>
+                    <td>
+                      {percent(segment.repair_median_absolute_error_percentage)}
+                      <small>{segment.repair_sample_count} outcome(s)</small>
+                    </td>
+                    <td>{percent(segment.comp_review_override_percentage)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr><td colSpan={7}>Record verified outcomes to attribute errors to saved evidence.</td></tr>
               )}
             </tbody>
           </table>

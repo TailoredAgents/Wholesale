@@ -161,6 +161,30 @@ class AppointmentRead(BaseModel):
     created_at: datetime
 
 
+class UnderwritingVersionCompSnapshot(BaseModel):
+    key: str
+    address: str
+    grade: str | None = None
+    search_level: str | None = None
+    condition: str | None = None
+    adjusted_value_cents: int | None = None
+
+
+class UnderwritingVersionRepairSnapshot(BaseModel):
+    category: str
+    scope_status: str
+    expected_cents: int | None = None
+    confirmation_status: str | None = None
+
+
+class UnderwritingVersionAdjustmentSnapshot(BaseModel):
+    status: str
+    shadow_arv_point_cents: int | None = None
+    point_delta_cents: int | None = None
+    supported_count: int = 0
+    withheld_count: int = 0
+
+
 class UnderwritingVersionRead(BaseModel):
     id: UUID
     version_number: int
@@ -181,6 +205,11 @@ class UnderwritingVersionRead(BaseModel):
     seller_contract_ceiling_cents: int | None = None
     report_stage: str | None = None
     repair_estimate_source: str | None = None
+    comp_search_level: str | None = None
+    repair_catalog_version: str | None = None
+    comp_snapshot: list[UnderwritingVersionCompSnapshot] = Field(default_factory=list)
+    repair_snapshot: list[UnderwritingVersionRepairSnapshot] = Field(default_factory=list)
+    adjustment_snapshot: UnderwritingVersionAdjustmentSnapshot | None = None
 
 
 class MarketComparableRead(BaseModel):

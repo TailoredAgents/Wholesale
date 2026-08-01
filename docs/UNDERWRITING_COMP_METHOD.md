@@ -939,7 +939,7 @@ parallel record, duplicate repair scope, or unexplained number change.
 
 #### U3.9: Reports, Explainability, And Calibration
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026; verified-outcome collection and operator acceptance remain.
 
 - Update investor and client PDFs for search levels, comp grades, supported adjustments, repair
   scenarios, unknowns, evidence sources, and report stage.
@@ -952,6 +952,29 @@ parallel record, duplicate repair scope, or unexplained number change.
 
 **Exit:** A saved report explains how Stonegate reached its conclusion, and later outcomes can show
 which data source, rule, category, or human assumption caused a miss.
+
+**Implementation record:**
+
+- The investor PDF now retains report stage, search conclusion, comp grades and search levels,
+  repair scenarios and unresolved work, evidence sources, and the complete V3 adjustment-shadow
+  review. Supported and withheld rates, local sample/pair counts, live-versus-shadow comparison,
+  and per-comp adjustment indications are labeled research-only and cannot change offer authority.
+- The client PDF now shows seller-safe evidence strength, comp fit, search reach, preparation range,
+  unresolved repair items, and the count of supported or withheld local adjustments. Internal buyer
+  economics, assignment assumptions, offer recommendations, and seller ceilings remain excluded.
+- Lead-detail underwriting versions now expose their linked immutable comp set, search level,
+  repair-category snapshot, catalog version, and adjustment summary. The existing comparison shows
+  added/removed comps, changed repair categories, adjustment support, and the headline dollar
+  changes without creating another version record.
+- Calibration now attributes verified outcomes by property type, adaptive search level, each comp
+  grade present in the selected set, each active repair category, verification stage, and repair
+  catalog version. Grade and repair-category segments may overlap because one analysis can contain
+  several of each.
+- The operating baseline now includes comp yield, operator override burden, reviewed Acquisitions
+  Copilot repair-scope correction rate, and repair-catalog total-budget error against verified actual
+  rehab outcomes.
+- All scorecards remain descriptive. Samples below the governed threshold cannot activate a formula,
+  provider, catalog, or autonomy change without the existing human methodology decision.
 
 #### U3.10: Shadow Validation And Controlled Rollout
 

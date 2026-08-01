@@ -486,6 +486,7 @@ def build_investor_story(
         Spacer(1, 0.06 * inch),
         investor_comp_table(analysis.rejected_comps, styles),
         Spacer(1, 0.18 * inch),
+        *adjustment_research_story(context, styles),
         *supporting_market_story(context, styles, include_listings=True),
         PageBreak(),
         section_heading("Subject property and diligence", styles),
@@ -672,6 +673,7 @@ def build_client_story(
         Spacer(1, 0.08 * inch),
         client_comp_table(analysis.selected_comps, styles),
         Spacer(1, 0.18 * inch),
+        *client_explainability_story(context, styles),
         *supporting_market_story(context, styles, include_listings=True),
         PageBreak(),
         section_heading("How to use this review", styles),
@@ -921,6 +923,254 @@ def evidence_audit_story(
                 )
             )
         story.append(Spacer(1, 0.14 * inch))
+    return story
+
+
+def adjustment_research_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    shadow = dict_value(metadata.get("adjustment_shadow"))
+    if not shadow:
+        return []
+    baseline = dict_value(shadow.get("baseline"))
+    conclusion = dict_value(shadow.get("conclusion"))
+    comparison = dict_value(shadow.get("comparison"))
+    rate_evidence = list_of_dicts(shadow.get("rate_evidence"))
+    comp_adjustments = list_of_dicts(shadow.get("comp_adjustments"))
+    supported = [item for item in rate_evidence if item.get("status") == "supported"]
+    withheld = [item for item in rate_evidence if item.get("status") != "supported"]
+    story: list[Flowable] = [
+        section_heading("Market-supported adjustment research", styles),
+        warning_box(
+            "SHADOW RESEARCH ONLY",
+            (
+                "This adjustment comparison is preserved for review and calibration. It is "
+                "excluded from the live ARV, buyer economics, seller ceiling, and offer authority."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+        key_value_table(
+            [
+                ("Research status", labelize(safe_string(shadow.get("status")))),
+                (
+                    "Live V2.2 ARV point",
+                    format_money(optional_int(baseline.get("arv_point_cents"))),
+                ),
+                (
+                    "Shadow adjusted ARV point",
+                    format_money(optional_int(conclusion.get("arv_point_cents"))),
+                ),
+                (
+                    "Shadow point difference",
+                    format_money(optional_int(comparison.get("point_delta_cents"))),
+                ),
+                (
+                    "Rate support",
+                    f"{len(supported)} supported; {len(withheld)} withheld",
+                ),
+                (
+                    "Adjusted sale evidence",
+                    f"{len(comp_adjustments)} closed sale(s)",
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+    ]
+    if rate_evidence:
+        rows: list[list[Paragraph]] = [
+            [
+                Paragraph("Adjustment", styles["table_header"]),
+                Paragraph("Status", styles["table_header"]),
+                Paragraph("Local rate", styles["table_header"]),
+                Paragraph("Evidence", styles["table_header"]),
+                Paragraph("Reason", styles["table_header"]),
+            ]
+        ]
+        for item in rate_evidence:
+            rows.append(
+                [
+                    Paragraph(
+                        escape(safe_string(item.get("label"))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(labelize(safe_string(item.get("status")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(format_adjustment_rate(item)),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            f"{optional_int(item.get('sample_count')) or 0} sales / "
+                            f"{optional_int(item.get('pair_count')) or 0} pairs"
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            first_string(item, ("reason", "method"))
+                            or "Local support threshold met."
+                        ),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        rate_table = LongTable(
+            rows,
+            colWidths=[1.35 * inch, 0.7 * inch, 1.0 * inch, 0.9 * inch, 3.45 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(rate_table)
+        story.extend([rate_table, Spacer(1, 0.12 * inch)])
+    if comp_adjustments:
+        rows = [
+            [
+                Paragraph("Comparable", styles["table_header"]),
+                Paragraph("Recorded sale", styles["table_header"]),
+                Paragraph("Net adjustment", styles["table_header"]),
+                Paragraph("Adjusted indication", styles["table_header"]),
+                Paragraph("Review", styles["table_header"]),
+            ]
+        ]
+        for item in comp_adjustments[:12]:
+            rows.append(
+                [
+                    Paragraph(
+                        escape(safe_string(item.get("formatted_address"))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(format_money(optional_int(item.get("sale_price_cents")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            format_money(optional_int(item.get("total_adjustment_cents")))
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            format_money(
+                                optional_int(item.get("adjusted_indication_cents"))
+                            )
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        "Required" if item.get("requires_review") else "Within controls",
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        adjustment_table = LongTable(
+            rows,
+            colWidths=[2.65 * inch, 1.1 * inch, 1.1 * inch, 1.25 * inch, 1.3 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(adjustment_table)
+        story.extend([adjustment_table, Spacer(1, 0.14 * inch)])
+    return story
+
+
+def client_explainability_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    inputs = dict_value(metadata.get("pre_meeting_inputs"))
+    repair_scenario = dict_value(inputs.get("repair_scenario"))
+    repair_items = list_of_dicts(inputs.get("repair_items"))
+    comp_search = dict_value(metadata.get("comp_search_summary"))
+    shadow = dict_value(metadata.get("adjustment_shadow"))
+    rate_evidence = list_of_dicts(shadow.get("rate_evidence"))
+    grade_counts: dict[str, int] = {}
+    for comp in list_of_dicts(context.analysis.selected_comps):
+        grade = safe_string(comp.get("comp_grade"))
+        if grade and grade != "Not available":
+            grade_counts[grade] = grade_counts.get(grade, 0) + 1
+    unresolved = [
+        item
+        for item in repair_items
+        if safe_string(item.get("scope_status")) in {"unknown", "specialist_review"}
+    ]
+    grade_summary = ", ".join(
+        f"{grade}: {count}" for grade, count in sorted(grade_counts.items())
+    ) or "Not graded"
+    supported = sum(item.get("status") == "supported" for item in rate_evidence)
+    withheld = sum(item.get("status") != "supported" for item in rate_evidence)
+    rows = [
+        (
+            "Review stage",
+            report_stage_label(safe_string(metadata.get("report_stage"))),
+        ),
+        (
+            "Closed-sale search",
+            labelize(safe_string(comp_search.get("final_level"))),
+        ),
+        ("Comparable fit", grade_summary),
+    ]
+    if repair_scenario:
+        rows.extend(
+            [
+                (
+                    "Property preparation range",
+                    format_money_range(
+                        optional_int(repair_scenario.get("total_low_cents")),
+                        optional_int(repair_scenario.get("total_high_cents")),
+                    ),
+                ),
+                (
+                    "Expected preparation scenario",
+                    format_money(
+                        optional_int(repair_scenario.get("total_expected_cents"))
+                    ),
+                ),
+                (
+                    "Items still to verify",
+                    str(len(unresolved)),
+                ),
+            ]
+        )
+    if shadow:
+        rows.append(
+            (
+                "Local adjustment support",
+                f"{supported} supported; {withheld} withheld rather than estimated",
+            )
+        )
+    story: list[Flowable] = [
+        section_heading("Evidence strength and preparation assumptions", styles),
+        key_value_table(rows, styles),
+        Spacer(1, 0.08 * inch),
+        body_paragraph(
+            (
+                "Unsupported adjustments are left out rather than guessed. Property preparation "
+                "figures are planning estimates and can change after a walkthrough or written bid. "
+                "Stonegate's internal acquisition calculations are intentionally excluded from "
+                "this owner-facing report."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.12 * inch),
+    ]
+    if unresolved:
+        story.append(
+            warning_box(
+                "ITEMS TO VERIFY",
+                ", ".join(
+                    labelize(first_string(item, ("category",))) for item in unresolved
+                ),
+                styles,
+            )
+        )
+        story.append(Spacer(1, 0.12 * inch))
     return story
 
 
@@ -2004,6 +2254,22 @@ def format_sale_date(value: object) -> str:
 def format_percentage(value: object) -> str:
     number = optional_float(value)
     return "N/A" if number is None else f"{number * 100:.0f}%"
+
+
+def format_adjustment_rate(item: dict[str, Any]) -> str:
+    rate = optional_float(item.get("rate"))
+    if rate is None:
+        return "Withheld"
+    unit = safe_string(item.get("unit"))
+    if unit == "monthly_compound_rate":
+        return f"{rate * 100:.2f}% / month"
+    if unit == "cents_per_square_foot":
+        return f"${rate / 100:,.0f} / sqft"
+    if unit == "cents_per_lot_square_foot":
+        return f"${rate / 100:,.2f} / lot sqft"
+    if unit == "cents_per_feature":
+        return format_money(round(rate))
+    return safe_string(rate)
 
 
 def format_ppsf(comp: dict[str, Any]) -> str:

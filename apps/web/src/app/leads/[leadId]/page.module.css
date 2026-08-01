@@ -1658,6 +1658,50 @@
   border-top: 1px solid #e4dfd5;
 }
 
+.versionEvidenceChanges {
+  padding: 12px;
+  border-top: 1px solid #e4dfd5;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.versionEvidenceChanges article {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #e1ddd4;
+  border-radius: 6px;
+  background: #faf9f6;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.versionEvidenceChanges article[data-changed="true"] {
+  border-color: #d8bd7d;
+  background: #fff9ea;
+}
+
+.versionEvidenceChanges span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.versionEvidenceChanges strong {
+  font-size: 12px;
+}
+
+.versionEvidenceChanges p,
+.versionEvidenceChanges small {
+  margin: 0;
+  color: #5f6769;
+  font-size: 10px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .valuationSummary {
   position: sticky;
   top: 62px;
@@ -5160,6 +5204,10 @@
   .offerPlanFooter {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .versionEvidenceChanges {
+    grid-template-columns: 1fr;
   }
 
   .repairEvidenceHeader select {

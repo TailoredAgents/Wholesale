@@ -113,7 +113,10 @@ from app.schemas.leads import (
     UnderwritingMethodologyControlRead,
     UnderwritingPreMeetingInputsRead,
     UnderwritingSupportingEvidenceRead,
+    UnderwritingVersionAdjustmentSnapshot,
+    UnderwritingVersionCompSnapshot,
     UnderwritingVersionRead,
+    UnderwritingVersionRepairSnapshot,
 )
 from app.services.inbox import (
     add_automatic_owner_watchers,
@@ -494,6 +497,23 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             .limit(20)
         ).all()
     )
+    underwriting_analyses_by_version = {
+        analysis.underwriting_version_id: analysis
+        for analysis in (
+            db.scalars(
+                select(UnderwritingMarketAnalysis).where(
+                    UnderwritingMarketAnalysis.organization_id
+                    == principal.organization_id,
+                    UnderwritingMarketAnalysis.underwriting_version_id.in_(
+                        [version.id for version in underwriting_versions]
+                    ),
+                )
+            ).all()
+            if underwriting_versions
+            else []
+        )
+        if analysis.underwriting_version_id is not None
+    }
     transactions = (
         []
         if restricted_assigned_access
@@ -667,6 +687,29 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                     dict_value(
                         (version.underwriting_metadata or {}).get("pre_meeting_inputs")
                     ).get("repair_estimate_source")
+                ),
+                comp_search_level=string_or_none(
+                    dict_value(
+                        (version.underwriting_metadata or {}).get(
+                            "comp_search_summary"
+                        )
+                    ).get("final_level")
+                ),
+                repair_catalog_version=string_or_none(
+                    dict_value(
+                        (version.underwriting_metadata or {}).get(
+                            "pre_meeting_inputs"
+                        )
+                    ).get("repair_catalog_version")
+                ),
+                comp_snapshot=underwriting_version_comp_snapshot(
+                    underwriting_analyses_by_version.get(version.id)
+                ),
+                repair_snapshot=underwriting_version_repair_snapshot(
+                    version.underwriting_metadata or {}
+                ),
+                adjustment_snapshot=underwriting_version_adjustment_snapshot(
+                    version.underwriting_metadata or {}
                 ),
             )
             for version in underwriting_versions
@@ -3870,6 +3913,85 @@ def legacy_comp_search_summary(
             }
         ],
     }
+
+
+def underwriting_version_comp_snapshot(
+    analysis: UnderwritingMarketAnalysis | None,
+) -> list[UnderwritingVersionCompSnapshot]:
+    if analysis is None:
+        return []
+    snapshot: list[UnderwritingVersionCompSnapshot] = []
+    for index, comp in enumerate(list_of_dicts(analysis.selected_comps)):
+        address = string_or_none(comp.get("formatted_address")) or "Unknown address"
+        key = (
+            string_or_none(comp.get("provider_id"))
+            or string_or_none(comp.get("source_reference"))
+            or address.lower()
+            or f"comp-{index + 1}"
+        )
+        snapshot.append(
+            UnderwritingVersionCompSnapshot(
+                key=key,
+                address=address,
+                grade=string_or_none(comp.get("comp_grade")),
+                search_level=string_or_none(comp.get("search_level")),
+                condition=string_or_none(comp.get("condition_classification")),
+                adjusted_value_cents=optional_int(comp.get("adjusted_value_cents")),
+            )
+        )
+    return snapshot
+
+
+def underwriting_version_repair_snapshot(
+    metadata: dict[str, Any],
+) -> list[UnderwritingVersionRepairSnapshot]:
+    inputs = dict_value(metadata.get("pre_meeting_inputs"))
+    repair_items = list_of_dicts(inputs.get("repair_items"))
+    snapshot: list[UnderwritingVersionRepairSnapshot] = []
+    for item in repair_items:
+        category = string_or_none(item.get("category"))
+        if category is None:
+            continue
+        snapshot.append(
+            UnderwritingVersionRepairSnapshot(
+                category=category,
+                scope_status=(
+                    string_or_none(item.get("scope_status")) or "priced_item"
+                ),
+                expected_cents=first_int(
+                    item,
+                    (
+                        "estimated_cost_cents",
+                        "system_expected_cents",
+                        "total_cost_cents",
+                    ),
+                ),
+                confirmation_status=string_or_none(item.get("confirmation_status")),
+            )
+        )
+    return snapshot
+
+
+def underwriting_version_adjustment_snapshot(
+    metadata: dict[str, Any],
+) -> UnderwritingVersionAdjustmentSnapshot | None:
+    shadow = dict_value(metadata.get("adjustment_shadow"))
+    if not shadow:
+        return None
+    rate_evidence = list_of_dicts(shadow.get("rate_evidence"))
+    conclusion = dict_value(shadow.get("conclusion"))
+    comparison = dict_value(shadow.get("comparison"))
+    return UnderwritingVersionAdjustmentSnapshot(
+        status=string_or_none(shadow.get("status")) or "unknown",
+        shadow_arv_point_cents=optional_int(conclusion.get("arv_point_cents")),
+        point_delta_cents=optional_int(comparison.get("point_delta_cents")),
+        supported_count=sum(
+            item.get("status") == "supported" for item in rate_evidence
+        ),
+        withheld_count=sum(
+            item.get("status") != "supported" for item in rate_evidence
+        ),
+    )
 
 
 def string_list(value: Any) -> list[str]:

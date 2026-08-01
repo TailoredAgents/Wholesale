@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.models.foundation import (
+    AcquisitionsCopilotRecommendation,
+    AcquisitionsCopilotReview,
     ActivityEvent,
     AuditEvent,
     Contact,
@@ -25,6 +27,7 @@ from app.schemas.underwriting import (
     CalibrationDecisionRead,
     CalibrationMetricSummary,
     CalibrationOverview,
+    CalibrationSegmentSummary,
     UnderwritingBaselineSummary,
 )
 
@@ -197,8 +200,28 @@ def get_calibration_overview(
         )
         or 0
     )
+    ai_scope_review_decisions = list(
+        db.scalars(
+            select(AcquisitionsCopilotReview.decision)
+            .join(
+                AcquisitionsCopilotRecommendation,
+                AcquisitionsCopilotRecommendation.id
+                == AcquisitionsCopilotReview.recommendation_id,
+            )
+            .where(
+                AcquisitionsCopilotReview.organization_id
+                == principal.organization_id,
+                AcquisitionsCopilotRecommendation.recommendation_type
+                == "repair_scope",
+            )
+        ).all()
+    )
     return CalibrationOverview(
-        baseline=baseline_summary(analyses),
+        baseline=baseline_summary(
+            analyses,
+            cases=cases,
+            ai_scope_review_decisions=ai_scope_review_decisions,
+        ),
         overall=metric_summary("All markets", cases, analyses_by_id),
         markets=[
             metric_summary(key, values, analyses_by_id)
@@ -208,6 +231,7 @@ def get_calibration_overview(
             metric_summary(market, values, analyses_by_id)
             for (market, _provider), values in sorted(provider_grouped.items())
         ],
+        segments=calibration_segments(cases, analyses_by_id),
         cases=[calibration_case_to_read(db, case) for case in cases],
         decisions=[calibration_decision_to_read(decision) for decision in decisions],
         uncalibrated_analysis_count=max(0, total_analyses - len(cases)),
@@ -216,7 +240,12 @@ def get_calibration_overview(
 
 def baseline_summary(
     analyses: list[UnderwritingMarketAnalysis],
+    *,
+    cases: list[UnderwritingCalibrationCase] | None = None,
+    ai_scope_review_decisions: list[str] | None = None,
 ) -> UnderwritingBaselineSummary:
+    cases = cases or []
+    ai_scope_review_decisions = ai_scope_review_decisions or []
     analyses_by_id = {analysis.id: analysis for analysis in analyses}
     instrumented = [
         analysis
@@ -261,6 +290,24 @@ def baseline_summary(
             )
         }
     )
+    repair_catalog_errors = [
+        error
+        for case in cases
+        if (
+            analysis := analyses_by_id.get(case.analysis_id)
+        ) is not None
+        and repair_catalog_version(analysis) is not None
+        and case.actual_rehab_cents is not None
+        and (
+            error := percentage_error(
+                case.predicted_rehab_cents,
+                case.actual_rehab_cents,
+            )
+        ) is not None
+    ]
+    ai_scope_corrections = sum(
+        decision == "edited" for decision in ai_scope_review_decisions
+    )
     return UnderwritingBaselineSummary(
         analysis_count=len(analyses),
         instrumented_analysis_count=len(instrumented),
@@ -293,6 +340,16 @@ def baseline_summary(
         comp_review_override_percentage=percentage_of(
             review_overrides,
             review_decisions,
+        ),
+        ai_scope_review_count=len(ai_scope_review_decisions),
+        ai_scope_correction_count=ai_scope_corrections,
+        ai_scope_correction_percentage=percentage_of(
+            ai_scope_corrections,
+            len(ai_scope_review_decisions),
+        ),
+        repair_catalog_case_count=len(repair_catalog_errors),
+        repair_catalog_median_absolute_error_percentage=rounded_median(
+            [abs(value) for value in repair_catalog_errors]
         ),
     )
 
@@ -419,6 +476,93 @@ def metric_summary(
         ),
         failure_patterns=failure_patterns,
         readiness=readiness(sample_count),
+    )
+
+
+def calibration_segments(
+    cases: list[UnderwritingCalibrationCase],
+    analyses_by_id: dict[UUID, UnderwritingMarketAnalysis],
+) -> list[CalibrationSegmentSummary]:
+    grouped: dict[
+        tuple[str, str], list[UnderwritingCalibrationCase]
+    ] = defaultdict(list)
+    for case in cases:
+        analysis = analyses_by_id.get(case.analysis_id)
+        if analysis is None:
+            continue
+        for dimension, segment_key in calibration_segment_keys(analysis):
+            grouped[(dimension, segment_key)].append(case)
+
+    segments: list[CalibrationSegmentSummary] = []
+    for (dimension, segment_key), segment_cases in sorted(grouped.items()):
+        metric = metric_summary(segment_key, segment_cases, analyses_by_id)
+        segments.append(
+            CalibrationSegmentSummary(
+                dimension=dimension,
+                segment_key=segment_key,
+                sample_count=metric.sample_count,
+                median_absolute_error_percentage=(
+                    metric.median_absolute_error_percentage
+                ),
+                range_coverage_percentage=metric.range_coverage_percentage,
+                repair_sample_count=metric.repair_sample_count,
+                repair_median_absolute_error_percentage=(
+                    metric.repair_median_absolute_error_percentage
+                ),
+                comp_review_override_percentage=(
+                    metric.comp_review_override_percentage
+                ),
+            )
+        )
+    return segments
+
+
+def calibration_segment_keys(
+    analysis: UnderwritingMarketAnalysis,
+) -> set[tuple[str, str]]:
+    metadata = analysis.analysis_metadata or {}
+    subject = analysis.subject_property or {}
+    search = metadata_dict(metadata.get("comp_search_summary"))
+    inputs = metadata_dict(metadata.get("pre_meeting_inputs"))
+    segments: set[tuple[str, str]] = set()
+
+    property_type = first_non_empty_string(
+        subject,
+        ("propertyType", "property_type"),
+    )
+    if property_type:
+        segments.add(("property_type", property_type))
+    search_level = string_value(search.get("final_level"))
+    if search_level:
+        segments.add(("search_level", search_level))
+    for comp in metadata_list_of_dicts(analysis.selected_comps):
+        grade = string_value(comp.get("comp_grade"))
+        if grade:
+            segments.add(("comp_grade", grade))
+    for item in metadata_list_of_dicts(inputs.get("repair_items")):
+        category = string_value(item.get("category"))
+        status = string_value(item.get("scope_status"))
+        if category and status not in {"no_work", "not_assessed"}:
+            segments.add(("repair_category", category))
+    report_stage = string_value(metadata.get("report_stage"))
+    if report_stage:
+        segments.add(("verification_stage", report_stage))
+    catalog_version = repair_catalog_version(analysis)
+    if catalog_version:
+        segments.add(("repair_catalog", catalog_version))
+    return segments
+
+
+def repair_catalog_version(
+    analysis: UnderwritingMarketAnalysis,
+) -> str | None:
+    metadata = analysis.analysis_metadata or {}
+    inputs = metadata_dict(metadata.get("pre_meeting_inputs"))
+    scenario = metadata_dict(inputs.get("repair_scenario")) or metadata_dict(
+        metadata.get("repair_scenario")
+    )
+    return string_value(inputs.get("repair_catalog_version")) or string_value(
+        scenario.get("version")
     )
 
 
@@ -794,6 +938,26 @@ def comparable_key(value: dict[str, object]) -> str | None:
     return string_value(value.get("provider_id")) or string_value(
         value.get("formatted_address")
     )
+
+
+def metadata_dict(value: object) -> dict[str, object]:
+    return value if isinstance(value, dict) else {}
+
+
+def metadata_list_of_dicts(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def first_non_empty_string(
+    values: dict[str, object],
+    keys: tuple[str, ...],
+) -> str | None:
+    for key in keys:
+        if value := string_value(values.get(key)):
+            return value
+    return None
 
 
 def string_value(value: object) -> str | None:

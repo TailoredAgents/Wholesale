@@ -1339,7 +1339,10 @@ Review the result from top to bottom:
 13. Repeat until the included set and assumptions reflect the evidence.
 14. Create a manual underwriting version only when an authorized person must preserve a separate
     judgment or scenario.
-15. Compare saved versions before requesting offer approval.
+15. Open **Advanced records** and compare saved versions before requesting offer approval. The
+    comparison shows headline dollar changes plus comps added or removed, repair categories that
+    changed, search reach, catalog version, and adjustment-research support. A shadow adjustment is
+    research evidence, not a change to the live ARV or offer authority.
 
 To correct a saved manual sale, select **Remove** and create a new verified record. Removal voids it
 for future analyses; it does not alter an analysis or PDF that was already saved.
@@ -1376,6 +1379,11 @@ After a completed analysis:
 - Use **Client PDF** for a cleaner seller discussion with appropriate explanations and
   disclosures.
 
+The Investor PDF contains Stonegate's acquisition math, seller ceiling, complete repair evidence,
+and shadow-adjustment research. The Client PDF contains seller-safe value evidence, preparation
+assumptions, comp fit, search reach, unresolved work, and source context; it intentionally excludes
+buyer economics, assignment assumptions, negotiation recommendations, and internal ceilings.
+
 Review every report before printing or sharing. Confirm seller, property, comparable, repair, and
 offer information is current.
 
@@ -1384,9 +1392,15 @@ preliminary labels remain in the report so the reviewer can see what still needs
 
 ### Calibration
 
-After verified evidence becomes available, record the actual benchmark in Underwriting. Track
-range coverage, point error, and market bias. Do not increase dependence on the comp engine until
-real-deal calibration is acceptable.
+After verified evidence becomes available, record the actual benchmark in Underwriting, including
+actual rehab when known. Open **Settings > Data & Quality** to review range coverage, point error,
+market bias, comp yield, operator overrides, AI repair-scope corrections, and catalog repair error.
+
+The segment table groups verified cases by property type, search level, comp grade, repair category,
+verification stage, and repair catalog. One case may appear in multiple grade or repair-category
+rows because one analysis can use several comp grades and repair categories. Small samples identify
+questions to investigate; they do not justify changing formulas. Do not increase dependence on the
+comp engine until real-deal calibration and the governed human decision are acceptable.
 
 ## 11. Offer Approval And Negotiation
 

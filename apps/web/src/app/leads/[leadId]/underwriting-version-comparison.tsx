@@ -44,6 +44,26 @@ function labelize(value: string | null) {
   return value ? value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Not recorded";
 }
 
+function changedEvidence(current: Version, baseline: Version) {
+  const currentComps = new Map(current.comp_snapshot.map((comp) => [comp.key, comp]));
+  const baselineComps = new Map(baseline.comp_snapshot.map((comp) => [comp.key, comp]));
+  const added = [...currentComps.values()].filter((comp) => !baselineComps.has(comp.key));
+  const removed = [...baselineComps.values()].filter((comp) => !currentComps.has(comp.key));
+  const currentRepairs = new Map(
+    current.repair_snapshot.map((item) => [item.category, item]),
+  );
+  const baselineRepairs = new Map(
+    baseline.repair_snapshot.map((item) => [item.category, item]),
+  );
+  const repairCategories = new Set([...currentRepairs.keys(), ...baselineRepairs.keys()]);
+  const changedRepairs = [...repairCategories].filter((category) => {
+    const next = currentRepairs.get(category);
+    const prior = baselineRepairs.get(category);
+    return JSON.stringify(next ?? null) !== JSON.stringify(prior ?? null);
+  });
+  return { added, removed, changedRepairs };
+}
+
 export function UnderwritingVersionComparison({ versions }: { versions: Version[] }) {
   const [currentId, setCurrentId] = useState(versions[0]?.id ?? "");
   const [baselineId, setBaselineId] = useState(versions[1]?.id ?? versions[0]?.id ?? "");
@@ -88,6 +108,9 @@ export function UnderwritingVersionComparison({ versions }: { versions: Version[
       baseline: baseline.recommended_offer_cents,
     },
   ];
+  const evidence = changedEvidence(current, baseline);
+  const adjustmentChanged =
+    JSON.stringify(current.adjustment_snapshot) !== JSON.stringify(baseline.adjustment_snapshot);
 
   return (
     <div className={styles.versionComparison}>
@@ -154,6 +177,46 @@ export function UnderwritingVersionComparison({ versions }: { versions: Version[
             </span>
           </div>
         ))}
+      </div>
+
+      <div className={styles.versionEvidenceChanges}>
+        <article>
+          <span>Comparable set</span>
+          <strong>
+            {current.comp_snapshot.length} selected / {labelize(current.comp_search_level)} search
+          </strong>
+          <p>
+            {evidence.added.length || evidence.removed.length
+              ? `${evidence.added.length} added; ${evidence.removed.length} removed.`
+              : "No selected-comp changes."}
+          </p>
+          {evidence.added.length ? <small>Added: {evidence.added.map((item) => item.address).join("; ")}</small> : null}
+          {evidence.removed.length ? <small>Removed: {evidence.removed.map((item) => item.address).join("; ")}</small> : null}
+        </article>
+        <article>
+          <span>Repair scope</span>
+          <strong>
+            {current.repair_snapshot.length} categories / {current.repair_catalog_version ?? "No catalog"}
+          </strong>
+          <p>
+            {evidence.changedRepairs.length
+              ? `${evidence.changedRepairs.length} changed: ${evidence.changedRepairs.map(labelize).join(", ")}.`
+              : "No repair-category changes."}
+          </p>
+        </article>
+        <article data-changed={adjustmentChanged}>
+          <span>Adjustment research</span>
+          <strong>
+            {current.adjustment_snapshot
+              ? `${labelize(current.adjustment_snapshot.status)} / ${current.adjustment_snapshot.supported_count} supported`
+              : "Not recorded"}
+          </strong>
+          <p>
+            {current.adjustment_snapshot
+              ? `${current.adjustment_snapshot.withheld_count} withheld; shadow ARV change ${formatMoney(current.adjustment_snapshot.point_delta_cents)}.`
+              : "No shadow adjustment evidence on this version."}
+          </p>
+        </article>
       </div>
     </div>
   );

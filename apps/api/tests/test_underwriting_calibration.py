@@ -14,7 +14,11 @@ from app.models.foundation import (
     User,
 )
 from app.services.bootstrap import bootstrap_foundation
-from app.services.underwriting_calibration import provider_adequacy
+from app.services.underwriting_calibration import (
+    baseline_summary,
+    calibration_segment_keys,
+    provider_adequacy,
+)
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -78,13 +82,41 @@ def seed_analysis(db: Session, client: TestClient) -> UnderwritingMarketAnalysis
         rejected_comp_count=1,
         selected_comps=[],
         rejected_comps=[],
-        subject_property={},
+        subject_property={"propertyType": "Single Family"},
         raw_response={},
         analysis_metadata={
             "arv_point_cents": 30_000_000,
             "total_rehab_cents": 5_000_000,
             "seller_contract_ceiling_cents": 16_000_000,
             "recommended_disposition_cents": 17_750_000,
+            "report_stage": "pre_meeting_reviewed",
+            "comp_search_summary": {
+                "strategy_version": "adaptive_v1",
+                "final_level": "preferred",
+                "sufficient_closed_sales": True,
+            },
+            "pre_meeting_inputs": {
+                "verification_status": "pre_meeting_reviewed",
+                "report_stage": "pre_meeting_reviewed",
+                "current_condition": "dated_livable",
+                "target_condition": "standard_flip",
+                "repair_level": "moderate",
+                "repair_estimate_source": "itemized",
+                "base_rehab_override_cents": None,
+                "repair_catalog_version": "ga-2026.07-v1",
+                "repair_scenario": {"version": "ga-2026.07-v1"},
+                "contingency_override_percentage": 10,
+                "holding_period_months": 6,
+                "repair_notes": "Calibration fixture.",
+                "custom_inputs_applied": True,
+                "repair_items": [
+                    {
+                        "category": "roof",
+                        "scope_status": "replace",
+                        "estimated_cost_cents": 5_000_000,
+                    }
+                ],
+            },
         },
     )
     db.add(analysis)
@@ -108,7 +140,7 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     assert legacy_read.status_code == 200
     assert legacy_read.json()["methodology_control"] is None
     assert legacy_read.json()["execution_metrics"] is None
-    assert legacy_read.json()["comp_search_summary"] is None
+    assert legacy_read.json()["comp_search_summary"]["final_level"] == "preferred"
 
     response = client.put(
         f"/api/v1/underwriting/calibration-cases/{analysis.id}",
@@ -173,6 +205,21 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     }
     assert overview["markets"][0]["market_key"] == "GA | Fulton"
     assert overview["provider_scorecards"][0]["providers"] == ["rentcast"]
+    segment_keys = {
+        (segment["dimension"], segment["segment_key"])
+        for segment in overview["segments"]
+    }
+    assert ("property_type", "Single Family") in segment_keys
+    assert ("search_level", "preferred") in segment_keys
+    assert ("repair_category", "roof") in segment_keys
+    assert ("verification_stage", "pre_meeting_reviewed") in segment_keys
+    assert ("repair_catalog", "ga-2026.07-v1") in segment_keys
+    assert overview["baseline"]["repair_catalog_case_count"] == 1
+    assert (
+        overview["baseline"]["repair_catalog_median_absolute_error_percentage"]
+        == 9.1
+    )
+    assert overview["baseline"]["ai_scope_review_count"] == 0
     assert overview["uncalibrated_analysis_count"] == 0
     assert overview["minimum_sample_for_formula_review"] == 50
     assert overview["automatic_formula_changes_enabled"] is False
@@ -196,6 +243,34 @@ def test_provider_adequacy_uses_minimum_sample_and_pilot_thresholds() -> None:
         provider_adequacy(sample_count=10, arv_mape=16, range_coverage=80)
         == "provider_review_required"
     )
+
+
+def test_baseline_reports_supervised_ai_scope_correction_rate() -> None:
+    baseline = baseline_summary(
+        [],
+        ai_scope_review_decisions=["accepted", "edited", "rejected", "edited"],
+    )
+
+    assert baseline.ai_scope_review_count == 4
+    assert baseline.ai_scope_correction_count == 2
+    assert baseline.ai_scope_correction_percentage == 50.0
+
+
+def test_calibration_segments_include_each_selected_comp_grade(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    analysis = seed_analysis(db_session, client)
+    analysis.selected_comps = [
+        {"provider_id": "comp-a", "comp_grade": "A"},
+        {"provider_id": "comp-b", "comp_grade": "B"},
+    ]
+
+    keys = calibration_segment_keys(analysis)
+
+    assert ("comp_grade", "A") in keys
+    assert ("comp_grade", "B") in keys
 
 
 def test_formula_and_provider_changes_require_evidence_and_human_decision(

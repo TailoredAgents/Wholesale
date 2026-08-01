@@ -688,6 +688,19 @@ redirect to their new owners.
 20. A persistent decision summary shows the current ARV, repairs, buyer target, opening, and seller
     ceiling and links to reports, the appointment/field workflow, approval, and contract signing.
     Version comparison and manual scenarios remain available under expandable advanced records.
+21. Version comparison reads the linked immutable analysis for each underwriting version and shows
+    added or removed comps, search reach, changed repair categories, catalog version, adjustment
+    support, ARV/repair/disposition/opening changes, and seller-ceiling changes.
+22. The investor PDF includes internal economics and reproducible shadow-adjustment research. The
+    client PDF uses the same analysis but exposes only seller-safe evidence strength, preparation
+    assumptions, unresolved work, comparable evidence, and public-source context.
+23. Verified outcomes feed calibration segments for market, provider, property type, search level,
+    selected comp grades, active repair categories, report stage, and repair catalog. A case can
+    appear in more than one comp-grade or repair-category segment because those dimensions describe
+    evidence present in the same analysis.
+24. Data & Quality shows comp yield, operator comp overrides, supervised AI repair-scope corrections,
+    and repair-catalog total-budget error. These measurements inform a human methodology decision;
+    they do not modify formulas automatically.
 
 ### 8.8 Contract And E-Signature
 

@@ -83,6 +83,17 @@ class CalibrationMetricSummary(BaseModel):
     readiness: str
 
 
+class CalibrationSegmentSummary(BaseModel):
+    dimension: str
+    segment_key: str
+    sample_count: int
+    median_absolute_error_percentage: float | None
+    range_coverage_percentage: float | None
+    repair_sample_count: int
+    repair_median_absolute_error_percentage: float | None
+    comp_review_override_percentage: float | None
+
+
 class UnderwritingBaselineSummary(BaseModel):
     analysis_count: int
     instrumented_analysis_count: int
@@ -100,6 +111,11 @@ class UnderwritingBaselineSummary(BaseModel):
     comp_review_decision_count: int
     comp_review_override_count: int
     comp_review_override_percentage: float | None
+    ai_scope_review_count: int
+    ai_scope_correction_count: int
+    ai_scope_correction_percentage: float | None
+    repair_catalog_case_count: int
+    repair_catalog_median_absolute_error_percentage: float | None
 
 
 class CalibrationDecisionCreate(BaseModel):
@@ -149,6 +165,7 @@ class CalibrationOverview(BaseModel):
     overall: CalibrationMetricSummary
     markets: list[CalibrationMetricSummary]
     provider_scorecards: list[CalibrationMetricSummary]
+    segments: list[CalibrationSegmentSummary]
     cases: list[CalibrationCaseRead]
     decisions: list[CalibrationDecisionRead]
     uncalibrated_analysis_count: int

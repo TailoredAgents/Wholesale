@@ -1034,6 +1034,10 @@ appraisal or permission to promise a seller a price.
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
 | **Client PDF** | Downloads the seller-safe presentation without internal negotiation details | Requires a saved analysis |
 | Re-run analysis | Creates a new analysis version using current inputs | Earlier versions remain auditable |
+| Version comparison | Compares ARV, repairs, disposition target, opening, seller ceiling, comp membership, repair categories, and adjustment research between two immutable versions | Requires at least two versions; shadow changes remain research-only |
+| Comparable changes | Lists selected sales added to or removed from the newer version | Uses provider ID, source reference, or saved address identity |
+| Repair-scope changes | Lists categories whose decision, expected cost, or confirmation changed | Uses the saved repair snapshot and catalog version |
+| Adjustment-research change | Shows supported/withheld rate counts and shadow ARV difference | Never changes live offer fields or approval authority |
 
 ### Comparable Review
 
@@ -1080,7 +1084,11 @@ appraisal or permission to promise a seller a price.
 | --- | --- | --- |
 | Underwriting queue | Opens leads needing analysis or review | Requires underwriting permission |
 | **Analyze comps** | Runs the same evidence workflow from the queue | Requires usable subject data |
-| Calibration scorecard | Compares prior valuation predictions with verified outcomes | Read-only |
+| Calibration performance ribbon | Shows ARV error, bias, range coverage, and tracked markets | Requires verified outcomes |
+| Operating baseline ribbon | Shows analysis volume, comp yield, run time, and selected-comp count | Uses every instrumented saved analysis |
+| Evidence-quality ribbon | Shows comp overrides, AI repair-scope corrections, catalog error, and catalog outcome count | Empty samples display as unavailable, not zero accuracy |
+| Provider and methodology scorecard | Compares verified outcomes by market and provider | Read-only; sample threshold still applies |
+| Evidence segment scorecards | Attributes outcomes by property type, search level, comp grade, repair category, verification stage, and catalog | Grade/category rows overlap when one case contains several values |
 | Decision review | Shows approvals, overrides, confidence, and result history | Manager access |
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |

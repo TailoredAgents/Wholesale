@@ -1460,6 +1460,29 @@ export type LeadDetail = LeadListItem & {
     seller_contract_ceiling_cents: number | null;
     report_stage: string | null;
     repair_estimate_source: string | null;
+    comp_search_level: string | null;
+    repair_catalog_version: string | null;
+    comp_snapshot: Array<{
+      key: string;
+      address: string;
+      grade: string | null;
+      search_level: string | null;
+      condition: string | null;
+      adjusted_value_cents: number | null;
+    }>;
+    repair_snapshot: Array<{
+      category: string;
+      scope_status: string;
+      expected_cents: number | null;
+      confirmation_status: string | null;
+    }>;
+    adjustment_snapshot: {
+      status: string;
+      shadow_arv_point_cents: number | null;
+      point_delta_cents: number | null;
+      supported_count: number;
+      withheld_count: number;
+    } | null;
   }>;
   transactions: Array<{
     id: string;
@@ -3052,6 +3075,17 @@ export type UnderwritingCalibrationMetric = {
   readiness: string;
 };
 
+export type UnderwritingCalibrationSegment = {
+  dimension: string;
+  segment_key: string;
+  sample_count: number;
+  median_absolute_error_percentage: number | null;
+  range_coverage_percentage: number | null;
+  repair_sample_count: number;
+  repair_median_absolute_error_percentage: number | null;
+  comp_review_override_percentage: number | null;
+};
+
 export type UnderwritingCalibrationDecision = {
   id: string;
   scope_key: string;
@@ -3091,6 +3125,11 @@ export type UnderwritingBaseline = {
   comp_review_decision_count: number;
   comp_review_override_count: number;
   comp_review_override_percentage: number | null;
+  ai_scope_review_count: number;
+  ai_scope_correction_count: number;
+  ai_scope_correction_percentage: number | null;
+  repair_catalog_case_count: number;
+  repair_catalog_median_absolute_error_percentage: number | null;
 };
 
 export type UnderwritingCalibration = {
@@ -3098,6 +3137,7 @@ export type UnderwritingCalibration = {
   overall: UnderwritingCalibrationMetric;
   markets: UnderwritingCalibrationMetric[];
   provider_scorecards: UnderwritingCalibrationMetric[];
+  segments: UnderwritingCalibrationSegment[];
   cases: UnderwritingCalibrationCase[];
   decisions: UnderwritingCalibrationDecision[];
   uncalibrated_analysis_count: number;
