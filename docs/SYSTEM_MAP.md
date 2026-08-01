@@ -60,7 +60,7 @@ must use Stonegate Home Buyers.
 | Clerk authentication | Implemented and active |
 | PostgreSQL data layer | Implemented and active |
 | Resend two-way email | Implemented and configured; controlled production acceptance remains |
-| Twilio SMS | Implemented; dedicated A2P campaign approval and acceptance remain |
+| Twilio SMS | Implemented; seller-inquiry A2P approved, number attachment and acceptance remain |
 | Twilio Voice | Implemented; dedicated number, credentials, and acceptance remain |
 | RentCast property data | Implemented; provider coverage varies by address |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
@@ -870,8 +870,9 @@ The Twilio SMS implementation supports:
 - number normalization
 - organization and permission scope
 
-Stonegate's dedicated A2P campaign remains externally pending. Do not use another company's
-Messaging Service, campaign, number, or consent description.
+Stonegate's dedicated seller-inquiry A2P campaign is approved. Its acquisitions number still needs
+provider attachment, Render configuration, and controlled acceptance. Do not use another
+company's Messaging Service, campaign, number, or consent description.
 
 ### 10.5 Voice
 
@@ -1248,7 +1249,7 @@ telemarketing, recording, or real-estate advice.
 | OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
 | RentCast | Subject and recorded-sale data | Implemented | Configured; address coverage varies |
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
-| Twilio | SMS, Voice, recordings | Implemented | Dedicated A2P/number acceptance pending |
+| Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Buyer discovery | Implemented adapter | Subscription/API intentionally deferred |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
@@ -1371,7 +1372,7 @@ DNS, webhook, carrier, mailbox, signing, data-provider, or advertising account c
 The major product workflows are implemented. The remaining risk is primarily production
 acceptance and evidence:
 
-- Twilio A2P approval and dedicated SMS/Voice end-to-end tests
+- Twilio acquisitions-number attachment and dedicated SMS/Voice end-to-end tests
 - Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
 - SignWell template, webhook, remote signature, and iPad signature acceptance
 - DealMachine subscription and buyer-data acceptance when deal volume justifies it
@@ -1382,7 +1383,8 @@ acceptance and evidence:
 - supervised Copilot pilots using redacted Stonegate cases
 - PropStream production export acceptance using Stonegate's implemented source membership,
   ranked-contact, refresh-safe, and deterministic cohort workflow
-- real-VA acceptance of the one-by-one calling, callback, and warm-handoff workflow
+- real-VA acceptance of the BatchDialer calling and idempotent Stonegate warm-handoff workflow;
+  Stonegate one-by-one calling remains the migration fallback
 - real backup restoration and optional monitoring-provider configuration
 
 These are tracked in `FINISHING_ROADMAP.md`.

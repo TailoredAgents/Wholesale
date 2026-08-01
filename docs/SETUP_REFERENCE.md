@@ -36,7 +36,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | AI | OpenAI | Configured; Copilot pilots pending |
 | Property data | RentCast | Active |
 | Operational email | Resend | Configured; controlled acceptance pending |
-| SMS | Twilio | A2P resubmission/approval pending |
+| SMS | Twilio | Seller-inquiry A2P approved; number attachment and acceptance pending |
 | Voice | Twilio | Configuration and acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Deferred until an active deal is near contract |
@@ -402,6 +402,15 @@ and recipient engagement. A successful API response alone does not establish inb
 
 ## Twilio SMS
 
+### Department Numbers
+
+- The approved seller-inquiry Messaging Service and A2P campaign belong to the shared acquisitions
+  number.
+- A future dispositions number needs its own accurate buyer/investor messaging registration when
+  its use differs from the seller-inquiry campaign.
+- BatchDialer owns VA cold-call numbers; those numbers are not added to Stonegate's Twilio
+  Messaging Service.
+
 ### Separation Rule
 
 Stonegate must use its own:
@@ -685,8 +694,8 @@ After a production deployment:
 | First genuine public proof acceptance | Stonegate owner/marketing | After a documented review or outcome exists |
 | First controlled homepage experiment acceptance | Stonegate owner/marketing | After a stable production baseline exists |
 | Approved public team content and photography | Stonegate owner/marketing | Before PC8 production acceptance |
-| Twilio A2P resubmission and approval | Stonegate owner | Provider application |
-| Dedicated Twilio SMS and Voice acceptance | Owner and developer | After A2P approval |
+| Attach approved acquisitions number and configure Messaging Service callbacks | Stonegate owner | Twilio Console |
+| Dedicated Twilio SMS and Voice acceptance | Owner and developer | After provider configuration |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
 | DealMachine subscription and acceptance | Owner and dispositions | Near first contracted deal |
 | CPA accounting acceptance | Owner, finance, CPA | Before relying on first closed period |

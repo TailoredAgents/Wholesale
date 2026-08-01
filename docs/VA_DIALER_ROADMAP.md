@@ -1,93 +1,224 @@
-# Stonegate VA Calling Roadmap
+# Stonegate Phone And VA Dialer Roadmap
 
-Last updated: July 30, 2026
+Last updated: August 1, 2026
 
 ## Decision
 
-Stonegate will not use BatchDialer, predictive dialing, or multi-line dialing. VAs and any other
-staff members explicitly enabled for cold calling will call one property owner at a time from
-their assigned Stonegate queues.
+Stonegate will use a deliberately split phone model:
 
-This file keeps its original name so existing documentation links do not break. It now governs the
-one-by-one VA calling workflow.
+- one shared Twilio acquisitions number for warm seller calls and consented seller SMS
+- one separate Twilio dispositions number for buyers and investors
+- BatchDialer-managed numbers and agent seats for VA cold calling
+- Stonegate as the source of truth after a seller becomes interested or an appointment is set
 
-## Operating Model
+This supersedes the July 30 decision to keep all VA calling one-by-one inside Stonegate. The
+existing Stonegate prospecting workflow remains available as a manual fallback until the external
+dialer handoff passes production acceptance. It will not become a second CRM or hold a competing
+warm-lead history.
 
-- PropStream remains the initial source for prospect lists.
-- Every caller has an individual Stonegate login and sees only assigned records unless their main
-  management role already grants broader operational oversight.
-- Cold calling is an explicit per-user capability. Enabling it does not change the person's main
-  role or expose unrelated workspaces.
-- Each call is made one at a time.
-- The VA records the outcome, notes, callback, qualification, and appointment in Stonegate.
-- Interested sellers move through the existing reviewed handoff to the Lead Manager.
-- Stonegate remains the source of truth for ownership, history, appointments, costs, and results.
-- Twilio may later provide company-owned one-to-one numbers and browser calling, but it will not
-  create predictive or simultaneous dialing.
+## Why This Model
 
-## Retired Scope
+- Sellers keep one recognizable acquisitions number even when responsibility moves between Austin,
+  Devon, and a future Lead Manager.
+- Buyers do not share the seller negotiation line or seller messaging purpose.
+- BatchDialer owns high-volume dialing, number pools, reputation monitoring, call-center controls,
+  and VA agent sessions.
+- Stonegate owns qualified leads, appointments, conversations, assignments, underwriting,
+  contracts, dispositions, accounting, and AI assistance.
+- Raw cold-call activity does not overwhelm the CRM. Only warm handoffs and the reporting facts
+  needed to measure campaigns cross into Stonegate.
 
-The following work is intentionally retired:
+## Existing Foundation To Reuse
 
-- BatchDialer accounts, API credentials, campaign synchronization, and webhooks
-- simultaneous or predictive outbound calls
-- provider campaign/contact reconciliation
-- power-versus-multi-line comparison pilots
-- annual external dialer subscriptions
+Stonegate already has:
 
-Migration `0075_dialer_provider` remains in the repository only because a published database
-revision cannot safely be deleted after a deployment may have applied it. The provider code and
-controls are removed. Its unused database structures are inert and do not send or receive data.
+1. A unified inbox and seller conversation timeline.
+2. Twilio SMS sending, signed inbound and delivery webhooks, idempotency, delivery state, and
+   STOP/START handling.
+3. Twilio browser Voice tokens, call intents, company voice-line records, inbound routing, missed
+   call handling, recordings, transcription, and AI call notes.
+4. Individual users, teams, assignments, watchers, and role permissions.
+5. Campaigns, PropStream imports, cohorts, VA labor costs, attempts, qualification, appointments,
+   and reviewed warm handoffs.
+6. Lead Manager and Prospecting Copilots operating in supervised mode.
 
-## Current Foundation
+The upgrade extends these records. It does not create replacement inbox, lead, campaign, or AI
+systems.
 
-Implemented capabilities retained from the prior phases:
+## Provider Boundaries
 
-1. PropStream CSV imports, reusable mappings, validation, duplicate handling, source evidence,
-   list refresh, and ranked contact methods.
-2. Campaign cohorts, work sessions, VA labor cost, and accepted-warm-lead measurement.
-3. Restricted VA Caller accounts plus per-user cold-calling eligibility for staff in other roles.
-4. A focused Prospecting workspace with due calls, callbacks, corrections, scheduled work, and
-   complete assigned queues.
-5. Approved scripts, qualification prompts, attempts, outcomes, notes, appointments, and
-   individual caller attribution.
-6. Reviewed handoffs into the Lead Manager and CRM without duplicating the prospect.
-7. Cost and performance foundations based on Lead Manager-accepted warm leads.
+### Twilio
 
-## Remaining Phases
+Twilio handles warm and established relationships:
 
-### VC1. One-By-One Calling Acceptance
+- acquisitions Voice and consented seller SMS
+- dispositions Voice and buyer SMS only under an accurately registered messaging use case
+- inbound and outbound event callbacks
+- browser calling for permanent Stonegate staff
+- recordings and call lifecycle events when recording is intentionally enabled
 
-Build status: implemented and covered by synthetic role, assignment, scoping, and attribution
-tests. A real staff shift is still required for operational acceptance.
+### BatchDialer
 
-- In **Operations > Team**, enable **Cold calling** for each person who may receive a batch.
-- In **Campaigns > Calling batches**, assign the batch to any active enabled caller.
-- Test a complete caller shift using assigned Stonegate records.
-- Confirm the VA can move quickly between attempts without losing notes or callbacks.
-- Confirm every outcome is attributed to the correct caller, campaign, and cohort.
-- Confirm restricted pages remain inaccessible.
+BatchDialer handles VA prospecting:
 
-### VC2. One-To-One Phone Connection
+- PropStream cold-list delivery
+- VA seats and assigned dialer campaigns
+- outbound number pools and number reputation
+- preview or predictive dialing selected by management
+- call dispositions, callbacks, recordings, and VA performance
+- one controlled handoff when the result is Interested or Appointment Set
 
-- Finish dedicated Twilio numbers after Stonegate's phone and messaging setup is approved.
-- Add company-owned one-to-one browser calling when ready.
-- Keep manual phone calling available as the fallback.
-- Attach recordings and transcripts only when recording is intentionally enabled.
+### Stonegate
 
-### VC3. Lead Manager Handoff Acceptance
+Stonegate remains authoritative for:
 
-- Test interested, appointment, correction, and rejected handoffs with actual staff accounts.
-- Confirm the Lead Manager receives enough context for immediate follow-up.
-- Confirm rejected handoffs do not count as accepted warm leads.
+- accepted warm leads and their complete history
+- seller ownership and appointments
+- acquisitions and dispositions conversations
+- tasks, underwriting, offers, contracts, and transactions
+- campaign attribution, accepted-warm-lead cost, and employee accountability
+- AI summaries, recommendations, and approved CRM changes
 
-### VC4. Reporting And Optimization
+## Phased Migration
 
-- Report calls, contacts, accepted warm leads, appointments, contracts, and cost by VA and list.
-- Record paid hours and actual list/phone costs.
-- Improve lists, scripts, schedules, and coaching from Stonegate's measured results.
+### PH1. Architecture And Line Ownership
 
-## Next Action
+Status: planned by this document; implementation acceptance remains.
 
-Run VC1 with a small controlled list and one enabled staff account. Improve the one-by-one
-workspace only where the real shift reveals unnecessary steps or missing information.
+- Designate the approved Twilio number as **Stonegate Acquisitions**.
+- Define acquisitions members, primary recipient, fallback recipient, business hours, missed-call
+  behavior, and voicemail behavior.
+- Reserve a separate **Stonegate Dispositions** number and messaging purpose.
+- Keep the current one-by-one Stonegate calling queue available as a fallback during migration.
+- Do not provision employee-specific Twilio numbers for Austin or Devon.
+
+Exit criteria: every phone number has one department, purpose, owner, fallback, and system of
+record.
+
+### PH2. Acquisitions SMS Activation
+
+- Attach the acquisitions number to the approved Stonegate Messaging Service and A2P campaign.
+- Configure Stonegate's inbound-message and delivery-status webhooks.
+- Enter the approved number, Messaging Service SID, Account SID, Auth Token, and webhook base URL
+  in Render.
+- Enable Twilio SMS and run controlled outbound, delivered, inbound, STOP, blocked-send, START,
+  HELP, reassignment, and duplicate-callback tests.
+- Keep purchased-list and unsolicited cold SMS out of this seller-inquiry campaign.
+
+Exit criteria: Austin and Devon can work one seller SMS thread from Stonegate without duplicate
+messages or broken assignment.
+
+### PH3. Shared Acquisitions Voice Routing
+
+- Extend the existing company voice-line records with department membership, primary and fallback
+  users, ring strategy, business hours, voicemail destination, and line-use permissions.
+- Allow Austin and Devon to place calls from the same acquisitions caller ID.
+- Route known callers to the conversation owner first, then the acquisitions fallback group.
+- Route new callers to the acquisitions group instead of a single hard-coded employee.
+- Preserve the existing browser Voice token and one-time call-intent controls.
+
+Exit criteria: both authorized users can call from the shared number, inbound calls reach the right
+person or fallback, and every call attaches to one conversation.
+
+### PH4. Acquisitions Voice Acceptance
+
+- Configure the TwiML App, API key, number Voice webhook, and Render Voice variables.
+- Test browser registration for Austin and Devon.
+- Test outbound caller ID, known-seller routing, unknown-caller routing, busy, no answer, fallback,
+  voicemail, and owner coverage.
+- Keep recording disabled until the recording disclosure and retention configuration is approved
+  for production use.
+
+Exit criteria: the acquisitions line can replace personal phones for warm seller work.
+
+### PH5. Dispositions Line
+
+- Purchase or designate a separate Twilio Voice/SMS-capable number.
+- Add it to Stonegate as **Stonegate Dispositions** with Devon as primary and Austin as fallback.
+- Use a separate Messaging Service/A2P campaign if buyer messaging does not match the approved
+  seller-inquiry campaign.
+- Add line selection and sender permission so buyer communication cannot accidentally use the
+  acquisitions number.
+- Route buyer replies into the existing inbox with dispositions visibility and ownership.
+
+Exit criteria: seller and buyer communication are operationally and visibly separated while still
+using Stonegate's unified timeline architecture.
+
+### PH6. BatchDialer Provider Connection
+
+- Obtain BatchDialer seats for active VAs only.
+- Confirm the account's available API, webhook, Zapier, recording, and disposition capabilities
+  before implementing a deep connector.
+- Add a Stonegate provider connection with health status and encrypted credentials only for the
+  capabilities actually available.
+- Map Stonegate campaigns, cohorts, employees, and external BatchDialer identifiers.
+- Start with webhook or Zapier handoff if the account does not expose stable public API endpoints.
+
+Exit criteria: Stonegate can identify the originating BatchDialer campaign and VA without copying
+all cold-call records into the CRM.
+
+### PH7. PropStream And VA Calling Workflow
+
+- Create the campaign shell and cost assumptions in Stonegate.
+- Push or import the PropStream list into BatchDialer.
+- Assign each VA an individual BatchDialer login and campaign access.
+- Configure scripts and final dispositions, including Interested and Appointment Set.
+- Keep raw cold prospects, no answers, and routine retries in BatchDialer.
+- Define how inbound callbacks to dialer numbers return to the assigned VA queue.
+
+Exit criteria: a VA can complete a full shift without using the Stonegate warm-lead inbox or seeing
+restricted company data.
+
+### PH8. Idempotent Warm Handoff
+
+- Receive only Interested and Appointment Set results from BatchDialer.
+- Match or create the Stonegate prospect using external record ID, normalized phone, and property
+  address.
+- Preserve seller/property facts, VA identity, campaign, disposition, qualification, notes,
+  recording reference, and appointment.
+- Create exactly one lead and conversation, assign the Lead Manager, follow the Owner, and notify
+  both.
+- Switch all future seller communication to the Twilio acquisitions number.
+- Reject or queue incomplete and duplicate handoffs for review.
+
+Exit criteria: replaying the same provider event cannot create duplicate leads, appointments, or
+conversations.
+
+### PH9. Recording, AI, And Reporting
+
+- Retrieve or link BatchDialer recordings for accepted warm leads when provider access permits.
+- Transcribe accepted calls and run the existing Prospecting and Lead Manager Copilots.
+- Require human approval before AI changes qualification, appointment, or CRM facts.
+- Report calls, contacts, interested sellers, accepted warm leads, appointments, contracts, and
+  cost by VA, list, campaign, and cohort.
+- Reconcile BatchDialer seats, numbers, list costs, and VA hours against Stonegate campaign costs.
+
+Exit criteria: management can calculate cost per accepted warm lead and audit the evidence behind
+every handoff.
+
+### PH10. Controlled Cutover
+
+- Pilot one VA, one campaign, and a small controlled list.
+- Run end-to-end callback, handoff, acquisitions follow-up, recording, and reporting tests.
+- Add the second and third VA only after the first workflow is stable.
+- Make BatchDialer the default VA workspace after acceptance.
+- Retain Stonegate's manual calling queue as a contingency tool, not a competing daily workflow.
+- Update the setup manual, user manuals, system map, and help-chat knowledge after final acceptance.
+
+Exit criteria: staff know exactly which system to use at every stage, and no seller is worked from
+two competing communication histories.
+
+## Immediate Order
+
+1. Complete the Twilio acquisitions SMS steps because the A2P campaign is already approved.
+2. Build PH3 shared acquisitions routing before relying on Voice for both Austin and Devon.
+3. Complete acquisitions Voice acceptance.
+4. Add the dispositions line and its correct messaging registration.
+5. Open BatchDialer and run PH6-PH8 with one VA before adding more seats.
+
+## External References
+
+- [Twilio Messaging Services](https://www.twilio.com/docs/messaging/services)
+- [Twilio Voice webhooks](https://www.twilio.com/docs/usage/webhooks/voice-webhooks)
+- [Twilio A2P multiple-use-case guidance](https://help.twilio.com/articles/4403014741403-I-have-multiple-messaging-use-cases-How-should-I-register-my-use-cases-for-A2P-10DLC)
+- [BatchDialer current plans and integration claims](https://batchdialer.com/pricing)

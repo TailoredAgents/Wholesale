@@ -47,7 +47,7 @@ The complete internal workflow is implemented:
 The following still require external configuration, approval, or production acceptance:
 
 - Controlled Resend production mailbox acceptance.
-- Dedicated Stonegate Twilio A2P approval and SMS production acceptance.
+- Approved Stonegate Twilio acquisitions-number attachment and SMS production acceptance.
 - Twilio browser Voice and inbound routing activation.
 - Call recording until disclosure and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.

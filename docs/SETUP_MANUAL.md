@@ -446,6 +446,15 @@ must not describe it as attorney-approved when it has not been reviewed.
 
 ## Twilio SMS
 
+### Stonegate Line Model
+
+- **Acquisitions:** shared warm-seller Voice and consented seller-inquiry SMS for Austin, Devon,
+  and future acquisitions staff.
+- **Dispositions:** separate buyer/investor Voice and SMS. Do not use the seller-inquiry A2P
+  campaign for buyer marketing unless the approved campaign accurately covers that traffic.
+- **VA cold calling:** BatchDialer numbers and agent seats. Warm handoffs move into Stonegate and
+  continue from the acquisitions number.
+
 ### Do Not Activate Before Approval
 
 Stonegate SMS should use its own A2P campaign, Messaging Service, and phone number. Do not attach
@@ -464,6 +473,9 @@ another company's number or campaign.
 7. Reveal and copy the separate Auth Token.
 8. Copy the Messaging Service SID.
 9. Copy the Stonegate number in `+1...` format.
+
+The currently approved seller-inquiry campaign should be attached to the acquisitions number. Do
+not attach the future dispositions number to that campaign merely to avoid a second registration.
 
 ### In Render
 

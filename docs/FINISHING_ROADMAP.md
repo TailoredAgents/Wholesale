@@ -52,7 +52,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3 is the single supervised live method; V2.2 is a technical rollback only | Collect verified Georgia outcomes, calibrate repair allowances, and monitor accuracy and operator corrections |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
-| F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
+| F9 Twilio communications | SMS, Voice, recording, and transcription code implemented; seller A2P approved | Number attachment, shared-line routing, and provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -62,8 +62,9 @@ Do not mark a phase finished from code alone when its exit criteria require prod
   the existing platform without authorizing a second CRM or duplicate business records.
 - `PUBLIC_SITE_CONVERSION_ROADMAP.md` owns the seller-site conversion program.
 - `AI_AUTOMATION_ROADMAP.md` owns the measured path from supervised Copilots to narrow automation.
-- `VA_DIALER_ROADMAP.md` now owns the one-by-one VA calling workflow. External multi-line dialing
-  and BatchDialer were retired by Owner decision on July 30, 2026.
+- `VA_DIALER_ROADMAP.md` owns the shared Twilio acquisitions/dispositions lines and external
+  BatchDialer VA workflow. It supersedes the July 30 one-by-one-only decision without creating a
+  second CRM or communication history.
 - `UNDERWRITING_COMP_METHOD.md` owns the live Stonegate Valuation method, historical V2.2
   compatibility, and ongoing measured calibration.
 
@@ -78,7 +79,7 @@ The practical order from the current state is:
 2. Finish F8 Resend controlled acceptance.
 3. Complete F2 actual staff setup as people join.
 4. Finish F4 SignWell and contract acceptance before the first live seller agreement.
-5. Resume F9 immediately after A2P approval.
+5. Resume F9 with the approved acquisitions-number attachment and shared-line acceptance.
 6. Run F5 buyer and disposition acceptance as the first contract approaches.
 7. Run F1 restore and access-revocation checks before broad employee use.
 8. Begin F7 outcome collection with every reviewed analysis.
@@ -440,20 +441,21 @@ Using company-controlled addresses:
 - recording callbacks, private media, disclosure state, retention, and deletion
 - OpenAI transcription, speaker segments, structured notes, and human review
 
-### Current Blocker
+### Current Status
 
-Stonegate's dedicated A2P campaign failed its initial provider review and requires correction,
-resubmission, approval, and number attachment. Another company's campaign, number, or webhooks must
-not be used.
+Stonegate's dedicated seller-inquiry A2P campaign is approved. Number attachment, Render
+configuration, controlled SMS acceptance, shared acquisitions Voice routing, and production Voice
+acceptance remain. Another company's campaign, number, or webhooks must not be used.
 
 ### Remaining SMS Actions
 
-1. Resubmit the A2P campaign using the current branded URLs and actual consent flow.
-2. Create or select Stonegate's dedicated Messaging Service.
-3. Attach the dedicated approved 10DLC number.
-4. Enter the values in Render.
-5. Configure the signed inbound and status callbacks.
-6. Test outbound, delivered, failed, inbound, STOP, blocked send, START, HELP, and callback replay.
+1. Open Stonegate's approved dedicated Messaging Service.
+2. Attach the dedicated acquisitions 10DLC number.
+3. Enter the values in Render.
+4. Configure the signed inbound and status callbacks.
+5. Test outbound, delivered, failed, inbound, STOP, blocked send, START, HELP, and callback replay.
+6. Keep the future buyer/dispositions messaging purpose separate unless its traffic is accurately
+   covered by an approved campaign.
 
 ### Remaining Voice Actions
 
