@@ -1,6 +1,7 @@
 from collections import defaultdict
 from datetime import UTC, datetime
 from statistics import median
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import func, select
@@ -28,7 +29,11 @@ from app.schemas.underwriting import (
     CalibrationMetricSummary,
     CalibrationOverview,
     CalibrationSegmentSummary,
+    ShadowReplayCaseRead,
+    ShadowReplayMetric,
     UnderwritingBaselineSummary,
+    UnderwritingRolloutGate,
+    UnderwritingShadowValidation,
 )
 
 FORMULA_REVIEW_SAMPLE = 50
@@ -37,6 +42,18 @@ ARV_ERROR_MONITOR_PERCENTAGE = 12
 ARV_ERROR_REVIEW_PERCENTAGE = 15
 RANGE_COVERAGE_MONITOR_PERCENTAGE = 70
 RANGE_COVERAGE_REVIEW_PERCENTAGE = 60
+SHADOW_TIE_TOLERANCE_PERCENTAGE_POINTS = 0.5
+MAXIMUM_OPERATOR_OVERRIDE_PERCENTAGE = 25
+REQUIRED_VALIDATION_SCENARIOS = (
+    "dense_market",
+    "suburban",
+    "rural",
+    "unique_property",
+    "low_comp",
+    "wrong_address",
+    "provider_failure",
+    "high_risk_repairs",
+)
 
 
 def get_calibration_case(
@@ -113,6 +130,7 @@ def upsert_calibration_case(
     )
     case.evidence_reference = payload.evidence_reference
     case.notes = payload.notes
+    case.validation_scenarios = list(dict.fromkeys(payload.validation_scenarios))
     db.add(case)
     db.flush()
 
@@ -216,6 +234,7 @@ def get_calibration_overview(
             )
         ).all()
     )
+    case_reads = [calibration_case_to_read(db, case) for case in cases]
     return CalibrationOverview(
         baseline=baseline_summary(
             analyses,
@@ -232,7 +251,13 @@ def get_calibration_overview(
             for (market, _provider), values in sorted(provider_grouped.items())
         ],
         segments=calibration_segments(cases, analyses_by_id),
-        cases=[calibration_case_to_read(db, case) for case in cases],
+        shadow_validation=shadow_validation_summary(
+            cases=cases,
+            case_reads=case_reads,
+            analyses_by_id=analyses_by_id,
+            decisions=decisions,
+        ),
+        cases=case_reads,
         decisions=[calibration_decision_to_read(decision) for decision in decisions],
         uncalibrated_analysis_count=max(0, total_analyses - len(cases)),
     )
@@ -620,6 +645,7 @@ def calibration_case_to_read(
         comp_review_applied=isinstance(analysis_metadata.get("comp_review"), dict),
         evidence_reference=case.evidence_reference,
         notes=case.notes,
+        validation_scenarios=list(case.validation_scenarios or []),
         recorded_by_user_id=case.recorded_by_user_id,
         created_at=case.created_at,
         updated_at=case.updated_at,
@@ -650,6 +676,25 @@ def create_calibration_decision(
         and not payload.proposed_changes
     ):
         raise ValueError("Describe the proposed formula or provider change.")
+    if payload.decision_type == "v3_rollout":
+        if payload.proposed_methodology_version != "v3":
+            raise ValueError("A V3 rollout decision must propose methodology version v3.")
+        required_confirmations = {
+            "owner_usability_accepted",
+            "internal_pilot_accepted",
+            "rollback_confirmed",
+            "human_authority_confirmed",
+        }
+        missing = sorted(
+            key
+            for key in required_confirmations
+            if payload.proposed_changes.get(key) is not True
+        )
+        if missing:
+            raise ValueError(
+                "V3 rollout requires Owner usability, internal pilot, rollback, and "
+                "human-authority confirmations."
+            )
 
     scoped_cases = (
         cases
@@ -657,11 +702,23 @@ def create_calibration_decision(
         else [case for case in cases if case.market_key == payload.scope_key]
     )
     metric = metric_summary(payload.scope_key, scoped_cases, analyses_by_id)
+    governed_changes = {"methodology_change", "provider_change", "v3_rollout"}
     minimum = (
-        FORMULA_REVIEW_SAMPLE
-        if payload.decision_type in {"methodology_change", "provider_change"}
-        else 0
+        FORMULA_REVIEW_SAMPLE if payload.decision_type in governed_changes else 0
     )
+    evidence_snapshot: dict[str, object] = metric.model_dump(mode="json")
+    if payload.decision_type == "v3_rollout":
+        case_reads = [calibration_case_to_read(db, case) for case in cases]
+        validation = shadow_validation_summary(
+            cases=cases,
+            case_reads=case_reads,
+            analyses_by_id=analyses_by_id,
+            decisions=[],
+        )
+        evidence_snapshot = {
+            "calibration": metric.model_dump(mode="json"),
+            "shadow_validation": validation.model_dump(mode="json"),
+        }
     decision = UnderwritingCalibrationDecision(
         organization_id=principal.organization_id,
         proposed_by_user_id=principal.user_id,
@@ -675,7 +732,7 @@ def create_calibration_decision(
         ),
         proposed_methodology_version=payload.proposed_methodology_version,
         proposed_changes=payload.proposed_changes,
-        evidence_snapshot=metric.model_dump(mode="json"),
+        evidence_snapshot=evidence_snapshot,
         sample_count=metric.sample_count,
         minimum_sample_required=minimum,
     )
@@ -734,12 +791,44 @@ def decide_calibration_decision(
             f"This change needs {decision.minimum_sample_required} verified cases "
             f"in {decision.scope_key}; {metric.sample_count} are available."
         )
+    if payload.status == "approved" and decision.decision_type == "v3_rollout":
+        case_reads = [calibration_case_to_read(db, case) for case in cases]
+        validation = shadow_validation_summary(
+            cases=cases,
+            case_reads=case_reads,
+            analyses_by_id=analyses_by_id,
+            decisions=[],
+        )
+        blockers = [
+            gate.label
+            for gate in validation.gates
+            if gate.key != "owner_acceptance" and gate.status != "passed"
+        ]
+        if blockers:
+            raise ValueError(
+                "V3 rollout cannot be approved until these gates pass: "
+                + ", ".join(blockers)
+                + "."
+            )
 
     decision.status = payload.status
     decision.decided_by_user_id = principal.user_id
     decision.decision_notes = payload.decision_notes.strip()
     decision.decided_at = datetime.now(UTC)
-    decision.evidence_snapshot = metric.model_dump(mode="json")
+    if decision.decision_type == "v3_rollout":
+        case_reads = [calibration_case_to_read(db, case) for case in cases]
+        validation = shadow_validation_summary(
+            cases=cases,
+            case_reads=case_reads,
+            analyses_by_id=analyses_by_id,
+            decisions=[decision] if payload.status == "approved" else [],
+        )
+        decision.evidence_snapshot = {
+            "calibration": metric.model_dump(mode="json"),
+            "shadow_validation": validation.model_dump(mode="json"),
+        }
+    else:
+        decision.evidence_snapshot = metric.model_dump(mode="json")
     decision.sample_count = metric.sample_count
     db.add(decision)
     db.add(
@@ -814,6 +903,331 @@ def calibration_decision_to_read(
         decided_at=decision.decided_at,
         created_at=decision.created_at,
         updated_at=decision.updated_at,
+    )
+
+
+def shadow_validation_summary(
+    *,
+    cases: list[UnderwritingCalibrationCase],
+    case_reads: list[CalibrationCaseRead],
+    analyses_by_id: dict[UUID, UnderwritingMarketAnalysis],
+    decisions: list[UnderwritingCalibrationDecision],
+) -> UnderwritingShadowValidation:
+    reads_by_analysis_id = {item.analysis_id: item for item in case_reads}
+    replay_cases = [
+        replay
+        for case in cases
+        if (read := reads_by_analysis_id.get(case.analysis_id)) is not None
+        and (analysis := analyses_by_id.get(case.analysis_id)) is not None
+        and (replay := shadow_replay_case(case, read, analysis)) is not None
+    ]
+    market_groups: dict[str, list[ShadowReplayCaseRead]] = defaultdict(list)
+    for replay in replay_cases:
+        market_groups[replay.market_key].append(replay)
+    scenario_coverage = {
+        scenario: sum(
+            scenario in replay.validation_scenarios for replay in replay_cases
+        )
+        for scenario in REQUIRED_VALIDATION_SCENARIOS
+    }
+    overall = shadow_replay_metric("All markets", replay_cases)
+    market_metrics = [
+        shadow_replay_metric(key, values)
+        for key, values in sorted(market_groups.items())
+    ]
+    approved_rollout = next(
+        (
+            decision
+            for decision in decisions
+            if decision.decision_type == "v3_rollout"
+            and decision.status == "approved"
+            and decision.proposed_methodology_version == "v3"
+        ),
+        None,
+    )
+    paired_analyses = [
+        analyses_by_id[case.analysis_id]
+        for case in replay_cases
+        if case.analysis_id in analyses_by_id
+    ]
+    _, review_decision_count, review_override_count = comp_review_metrics(
+        paired_analyses,
+        analyses_by_id,
+    )
+    override_percentage = percentage_of(review_override_count, review_decision_count)
+    gates = shadow_rollout_gates(
+        overall=overall,
+        markets=market_metrics,
+        scenario_coverage=scenario_coverage,
+        review_decision_count=review_decision_count,
+        override_percentage=override_percentage,
+        owner_accepted=approved_rollout is not None,
+    )
+    activation_allowed = all(gate.status == "passed" for gate in gates)
+    if activation_allowed:
+        rollout_status = "approved_for_controlled_pilot"
+    elif not replay_cases:
+        rollout_status = "collecting_verified_outcomes"
+    else:
+        rollout_status = "validation_blocked"
+    return UnderwritingShadowValidation(
+        rollout_status=rollout_status,
+        activation_allowed=activation_allowed,
+        overall=overall,
+        markets=market_metrics,
+        cases=sorted(
+            replay_cases,
+            key=lambda item: item.improvement_percentage_points,
+            reverse=True,
+        ),
+        gates=gates,
+        scenario_coverage=scenario_coverage,
+        approved_rollout_decision_id=(approved_rollout.id if approved_rollout else None),
+    )
+
+
+def shadow_replay_case(
+    case: UnderwritingCalibrationCase,
+    case_read: CalibrationCaseRead,
+    analysis: UnderwritingMarketAnalysis,
+) -> ShadowReplayCaseRead | None:
+    baseline_point = case.predicted_arv_point_cents
+    shadow = metadata_dict((analysis.analysis_metadata or {}).get("adjustment_shadow"))
+    conclusion = metadata_dict(shadow.get("conclusion"))
+    shadow_point = integer_value(conclusion.get("arv_point_cents"))
+    baseline_error = percentage_error(baseline_point, case.benchmark_arv_cents)
+    shadow_error = percentage_error(shadow_point, case.benchmark_arv_cents)
+    if (
+        baseline_point is None
+        or shadow_point is None
+        or baseline_error is None
+        or shadow_error is None
+    ):
+        return None
+    baseline_absolute = abs(baseline_error)
+    shadow_absolute = abs(shadow_error)
+    difference = baseline_absolute - shadow_absolute
+    winner: Literal["v2.2", "v3_shadow", "tie"]
+    if abs(difference) <= SHADOW_TIE_TOLERANCE_PERCENTAGE_POINTS:
+        winner = "tie"
+    elif difference > 0:
+        winner = "v3_shadow"
+    else:
+        winner = "v2.2"
+    shadow_status = string_value(shadow.get("status")) or "unknown"
+    shadow_confidence = integer_value(conclusion.get("confidence_score"))
+    risk_flags: list[str] = []
+    if shadow_status != "supported":
+        risk_flags.append(f"Shadow evidence is {shadow_status}.")
+    if shadow_confidence is not None and shadow_confidence < 60:
+        risk_flags.append("Shadow confidence is below 60%.")
+    warnings = shadow.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        risk_flags.append(f"Shadow analysis recorded {len(warnings)} warning(s).")
+    return ShadowReplayCaseRead(
+        analysis_id=case.analysis_id,
+        lead_id=case.lead_id,
+        property_address=case_read.property_address,
+        market_key=case.market_key,
+        benchmark_arv_cents=case.benchmark_arv_cents,
+        baseline_arv_cents=baseline_point,
+        shadow_arv_cents=shadow_point,
+        baseline_absolute_error_percentage=round(baseline_absolute, 1),
+        shadow_absolute_error_percentage=round(shadow_absolute, 1),
+        improvement_percentage_points=round(difference, 1),
+        winner=winner,
+        shadow_status=shadow_status,
+        shadow_confidence_score=shadow_confidence,
+        validation_scenarios=list(case.validation_scenarios or []),
+        risk_flags=risk_flags,
+    )
+
+
+def shadow_replay_metric(
+    scope_key: str,
+    cases: list[ShadowReplayCaseRead],
+) -> ShadowReplayMetric:
+    baseline_error = rounded_median(
+        [case.baseline_absolute_error_percentage for case in cases]
+    )
+    shadow_error = rounded_median(
+        [case.shadow_absolute_error_percentage for case in cases]
+    )
+    return ShadowReplayMetric(
+        scope_key=scope_key,
+        paired_case_count=len(cases),
+        baseline_median_absolute_error_percentage=baseline_error,
+        shadow_median_absolute_error_percentage=shadow_error,
+        median_improvement_percentage_points=(
+            round(baseline_error - shadow_error, 1)
+            if baseline_error is not None and shadow_error is not None
+            else None
+        ),
+        shadow_win_count=sum(case.winner == "v3_shadow" for case in cases),
+        tie_count=sum(case.winner == "tie" for case in cases),
+        baseline_win_count=sum(case.winner == "v2.2" for case in cases),
+        shadow_supported_count=sum(case.shadow_status == "supported" for case in cases),
+        shadow_partial_count=sum(case.shadow_status == "partial" for case in cases),
+        shadow_unsupported_count=sum(
+            case.shadow_status not in {"supported", "partial"} for case in cases
+        ),
+        unsafe_certainty_count=sum(
+            case.shadow_status != "supported"
+            and case.shadow_confidence_score is not None
+            and case.shadow_confidence_score >= 70
+            for case in cases
+        ),
+    )
+
+
+def shadow_rollout_gates(
+    *,
+    overall: ShadowReplayMetric,
+    markets: list[ShadowReplayMetric],
+    scenario_coverage: dict[str, int],
+    review_decision_count: int,
+    override_percentage: float | None,
+    owner_accepted: bool,
+) -> list[UnderwritingRolloutGate]:
+    sample_passed = overall.paired_case_count >= FORMULA_REVIEW_SAMPLE
+    georgia_markets = [market for market in markets if market.scope_key.startswith("GA |")]
+    market_passed = bool(georgia_markets) and all(
+        market.paired_case_count >= PRELIMINARY_PROVIDER_SAMPLE
+        for market in georgia_markets
+    )
+    uncovered_scenarios = [
+        key for key, count in scenario_coverage.items() if count == 0
+    ]
+    accuracy_measured = overall.paired_case_count >= PRELIMINARY_PROVIDER_SAMPLE
+    accuracy_passed = (
+        accuracy_measured
+        and overall.median_improvement_percentage_points is not None
+        and overall.median_improvement_percentage_points >= 0
+    )
+    operator_measured = review_decision_count >= PRELIMINARY_PROVIDER_SAMPLE
+    operator_passed = (
+        operator_measured
+        and override_percentage is not None
+        and override_percentage <= MAXIMUM_OPERATOR_OVERRIDE_PERCENTAGE
+    )
+    return [
+        rollout_gate(
+            "paired_sample",
+            "Paired verified sample",
+            sample_passed,
+            current=f"{overall.paired_case_count} cases",
+            required=f"{FORMULA_REVIEW_SAMPLE} cases",
+            detail=(
+                "The same known deal must contain a V2.2 result, V3 shadow result, "
+                "and verified ARV."
+            ),
+        ),
+        rollout_gate(
+            "georgia_market_sample",
+            "Georgia market depth",
+            market_passed,
+            pending=not georgia_markets,
+            current=(
+                ", ".join(
+                    f"{market.scope_key}: {market.paired_case_count}"
+                    for market in georgia_markets
+                )
+                or "No paired Georgia markets"
+            ),
+            required=f"At least {PRELIMINARY_PROVIDER_SAMPLE} per tracked Georgia market",
+            detail=(
+                "Each launch market needs enough local evidence to avoid applying "
+                "statewide anecdotes."
+            ),
+        ),
+        rollout_gate(
+            "scenario_coverage",
+            "Difficult-scenario coverage",
+            not uncovered_scenarios,
+            current=(
+                "All scenarios represented"
+                if not uncovered_scenarios
+                else f"Missing {len(uncovered_scenarios)}"
+            ),
+            required=f"All {len(REQUIRED_VALIDATION_SCENARIOS)} scenarios",
+            detail=(
+                "Missing: " + ", ".join(uncovered_scenarios)
+                if uncovered_scenarios
+                else (
+                    "Dense, suburban, rural, unique, thin-data, failure, and "
+                    "repair-risk cases are represented."
+                )
+            ),
+        ),
+        rollout_gate(
+            "accuracy",
+            "Shadow accuracy",
+            accuracy_passed,
+            pending=not accuracy_measured,
+            current=(
+                f"{overall.median_improvement_percentage_points:+.1f} points"
+                if overall.median_improvement_percentage_points is not None
+                else "Not measured"
+            ),
+            required="V3 median error no worse than V2.2",
+            detail="Positive improvement means the shadow method is closer to verified ARV.",
+        ),
+        rollout_gate(
+            "unsafe_certainty",
+            "Unsafe certainty",
+            overall.paired_case_count > 0 and overall.unsafe_certainty_count == 0,
+            pending=overall.paired_case_count == 0,
+            current=f"{overall.unsafe_certainty_count} flagged cases",
+            required="0 high-confidence unsupported cases",
+            detail="Unsupported adjustment evidence cannot be presented with high confidence.",
+        ),
+        rollout_gate(
+            "operator_burden",
+            "Operator review burden",
+            operator_passed,
+            pending=not operator_measured,
+            current=(
+                f"{override_percentage:.1f}% across {review_decision_count} decisions"
+                if override_percentage is not None
+                else f"{review_decision_count} review decisions"
+            ),
+            required=(
+                f"At least {PRELIMINARY_PROVIDER_SAMPLE} decisions and no more than "
+                f"{MAXIMUM_OPERATOR_OVERRIDE_PERCENTAGE}% overrides"
+            ),
+            detail="The method should not create more unexplained manual correction work.",
+        ),
+        rollout_gate(
+            "owner_acceptance",
+            "Owner rollout acceptance",
+            owner_accepted,
+            current="Approved" if owner_accepted else "Not approved",
+            required="Approved V3 rollout decision",
+            detail=(
+                "Owner acceptance must confirm usability, internal pilot, rollback, "
+                "and human authority."
+            ),
+        ),
+    ]
+
+
+def rollout_gate(
+    key: str,
+    label: str,
+    passed: bool,
+    *,
+    current: str,
+    required: str,
+    detail: str,
+    pending: bool = False,
+) -> UnderwritingRolloutGate:
+    return UnderwritingRolloutGate(
+        key=key,
+        label=label,
+        status="passed" if passed else "pending" if pending else "blocked",
+        current_value=current,
+        required_value=required,
+        detail=detail,
     )
 
 
@@ -964,6 +1378,10 @@ def string_value(value: object) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def integer_value(value: object) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
 def percentage_error(predicted: int | None, actual: int | None) -> float | None:
     if predicted is None or actual is None or actual <= 0:
         return None
@@ -1023,6 +1441,7 @@ def calibration_audit_value(
         "actual_disposition_cents": case.actual_disposition_cents,
         "evidence_reference": case.evidence_reference,
         "notes": case.notes,
+        "validation_scenarios": list(case.validation_scenarios or []),
     }
 
 

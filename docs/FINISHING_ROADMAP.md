@@ -50,7 +50,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.9 implemented | Complete U3.10 shadow validation, calibrate Georgia repair allowances, then collect verified outcomes and operator acceptance |
+| F7 Underwriting proof | V2.2 and U3.1-U3.10 code/controls implemented; V3 remains shadow-only | Collect 50 paired verified outcomes, complete Georgia/scenario/operator gates, calibrate repair allowances, run the internal pilot, and record Owner acceptance |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
@@ -372,7 +372,9 @@ For the V3 build:
    real walkthroughs; AI remains unable to confirm repairs or set prices.
 6. Validate the implemented U3.8 workspace and U3.9 reports/scorecards with real appointment and
    verified-outcome cases.
-7. Complete U3.10 shadow validation and record the methodology activation decision.
+7. Use the implemented U3.10 paired replay dashboard to collect 50 suitable verified cases,
+   complete every Georgia, scenario, accuracy, certainty, and operator gate, then record the Owner
+   rollout decision. V2.2 remains live until those external acceptance steps are complete.
 
 ### Exit Criteria
 

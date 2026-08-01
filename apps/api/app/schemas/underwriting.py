@@ -5,6 +5,18 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+ValidationScenario = Literal[
+    "dense_market",
+    "suburban",
+    "rural",
+    "unique_property",
+    "low_comp",
+    "wrong_address",
+    "provider_failure",
+    "high_risk_repairs",
+]
+
+
 class CalibrationCaseUpsert(BaseModel):
     benchmark_type: Literal[
         "expert_review",
@@ -21,6 +33,10 @@ class CalibrationCaseUpsert(BaseModel):
     actual_disposition_cents: int | None = Field(default=None, ge=0, le=1_000_000_000)
     evidence_reference: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=2000)
+    validation_scenarios: list[ValidationScenario] = Field(
+        default_factory=list,
+        max_length=8,
+    )
 
 
 class CalibrationCaseRead(BaseModel):
@@ -52,6 +68,7 @@ class CalibrationCaseRead(BaseModel):
     comp_review_applied: bool
     evidence_reference: str | None
     notes: str | None
+    validation_scenarios: list[str]
     recorded_by_user_id: UUID | None
     created_at: datetime
     updated_at: datetime
@@ -118,12 +135,70 @@ class UnderwritingBaselineSummary(BaseModel):
     repair_catalog_median_absolute_error_percentage: float | None
 
 
+class ShadowReplayCaseRead(BaseModel):
+    analysis_id: UUID
+    lead_id: UUID
+    property_address: str
+    market_key: str
+    benchmark_arv_cents: int
+    baseline_arv_cents: int
+    shadow_arv_cents: int
+    baseline_absolute_error_percentage: float
+    shadow_absolute_error_percentage: float
+    improvement_percentage_points: float
+    winner: Literal["v2.2", "v3_shadow", "tie"]
+    shadow_status: str
+    shadow_confidence_score: int | None
+    validation_scenarios: list[str]
+    risk_flags: list[str]
+
+
+class ShadowReplayMetric(BaseModel):
+    scope_key: str
+    paired_case_count: int
+    baseline_median_absolute_error_percentage: float | None
+    shadow_median_absolute_error_percentage: float | None
+    median_improvement_percentage_points: float | None
+    shadow_win_count: int
+    tie_count: int
+    baseline_win_count: int
+    shadow_supported_count: int
+    shadow_partial_count: int
+    shadow_unsupported_count: int
+    unsafe_certainty_count: int
+
+
+class UnderwritingRolloutGate(BaseModel):
+    key: str
+    label: str
+    status: Literal["passed", "blocked", "pending"]
+    current_value: str
+    required_value: str
+    detail: str
+
+
+class UnderwritingShadowValidation(BaseModel):
+    active_methodology_version: str = "v2.2"
+    shadow_methodology_version: str = "v3.0-adjustment-shadow"
+    rollout_status: str
+    activation_allowed: bool
+    rollback_available: bool = True
+    human_authority_required: bool = True
+    overall: ShadowReplayMetric
+    markets: list[ShadowReplayMetric]
+    cases: list[ShadowReplayCaseRead]
+    gates: list[UnderwritingRolloutGate]
+    scenario_coverage: dict[str, int]
+    approved_rollout_decision_id: UUID | None
+
+
 class CalibrationDecisionCreate(BaseModel):
     scope_key: str = Field(min_length=1, max_length=255)
     decision_type: Literal[
         "continue_current_method",
         "methodology_change",
         "provider_change",
+        "v3_rollout",
     ]
     title: str = Field(min_length=3, max_length=255)
     rationale: str = Field(min_length=10, max_length=3000)
@@ -166,6 +241,7 @@ class CalibrationOverview(BaseModel):
     markets: list[CalibrationMetricSummary]
     provider_scorecards: list[CalibrationMetricSummary]
     segments: list[CalibrationSegmentSummary]
+    shadow_validation: UnderwritingShadowValidation
     cases: list[CalibrationCaseRead]
     decisions: list[CalibrationDecisionRead]
     uncalibrated_analysis_count: int

@@ -539,12 +539,16 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 
 - `/os/settings/workflows` owns approved follow-up plans.
 - `/os/settings/data-quality` owns duplicate review plus underwriting operating baselines,
-  verified-outcome scorecards, and methodology decisions.
+  verified-outcome scorecards, paired V2.2/V3 shadow replay, rollout gates, and methodology
+  decisions.
 - Every newly created V2.2 market analysis stores its methodology control, run duration, provider
   and candidate counts, comp yield, cache reuse, review requirement, and operator override count in
   the existing immutable analysis metadata.
-- V3 is represented as a planned methodology behind disabled configuration controls. The API
-  rejects live or shadow V3 activation until the corresponding runner exists.
+- The V3 adjustment runner executes beside V2.2 as comparison-only shadow research. Each later
+  verified outcome can be classified into the governed validation cohort and compared against
+  both saved conclusions. The API continues to reject live V3 activation until the paired sample,
+  Georgia-market, difficult-scenario, accuracy, certainty, operator-review, and Owner-acceptance
+  gates pass.
 
 **Floating Help**
 
@@ -701,6 +705,12 @@ redirect to their new owners.
 24. Data & Quality shows comp yield, operator comp overrides, supervised AI repair-scope corrections,
     and repair-catalog total-budget error. These measurements inform a human methodology decision;
     they do not modify formulas automatically.
+25. U3.10 pairs each eligible verified outcome with the V2.2 and V3-shadow conclusions stored in
+    the same immutable analysis. The rollout dashboard reports case and market accuracy, scenario
+    coverage, unsupported high-confidence risk, operator burden, and every activation blocker.
+26. An authorized V3 rollout decision can be proposed only with explicit Owner usability, pilot,
+    rollback, and human-authority confirmations. Approval remains blocked until all measured gates
+    pass, and an approved decision still does not rewrite historical analyses or offer authority.
 
 ### 8.8 Contract And E-Signature
 

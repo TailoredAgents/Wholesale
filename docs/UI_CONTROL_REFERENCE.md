@@ -410,8 +410,12 @@ plans in **Settings > Workflows**.
 | --- | --- | --- |
 | Underwriting performance ribbon | Shows verified ARV error, bias, range coverage, and tracked markets | Read-only; requires calibration outcomes for accuracy metrics |
 | Underwriting operating baseline ribbon | Shows analysis count, median selected comps, comp yield, and run time | Read-only; older analyses without execution timing still count where their stored comp totals permit |
+| V2.2 versus V3 shadow metrics | Compares median verified error and improvement on paired immutable analyses | V3 remains comparison-only and cannot set offer authority |
+| Controlled-rollout readiness | Shows every sample, market, scenario, accuracy, certainty, operator, and Owner gate | A blocked or pending gate prevents rollout approval |
+| Difficult-scenario coverage | Counts verified cohort tags for dense, suburban, rural, unique, low-comp, recovery, and repair-risk cases | Tags are entered on the lead's verified outcome and do not change valuation math |
+| Paired replay ledger | Opens each source lead and shows V2.2 error, V3 error, winner, and risk flags | Requires a verified outcome plus a saved V3 shadow conclusion |
 | Provider and methodology scorecard | Breaks verified errors, range coverage, overrides, and adequacy down by market/provider | Read-only; small samples remain insufficient evidence |
-| Methodology decision controls | Records evidence-backed proposals and human approval/rejection | Formula/provider changes retain the configured sample threshold |
+| Methodology decision controls | Records evidence-backed proposals and human approval/rejection, including controlled V3 rollout | V3 approval also requires all measured gates and four Owner confirmations |
 | **Scan active leads** | Runs duplicate detection across active seller records | Does not merge automatically |
 | **Keep separate** | Marks the candidate pair as two legitimate records | Requires a pending duplicate candidate |
 | **Merge records** | Combines the supported records while retaining history | Requires management authority and a pending candidate |
@@ -1089,6 +1093,8 @@ appraisal or permission to promise a seller a price.
 | Evidence-quality ribbon | Shows comp overrides, AI repair-scope corrections, catalog error, and catalog outcome count | Empty samples display as unavailable, not zero accuracy |
 | Provider and methodology scorecard | Compares verified outcomes by market and provider | Read-only; sample threshold still applies |
 | Evidence segment scorecards | Attributes outcomes by property type, search level, comp grade, repair category, verification stage, and catalog | Grade/category rows overlap when one case contains several values |
+| Validation scenario checkboxes | Classifies a verified outcome for U3.10 cohort coverage | Select only scenarios actually represented; tags do not alter the analysis |
+| V2.2 versus V3 shadow validation | Shows paired accuracy, rollout gates, scenario coverage, and case-level risk | V2.2 remains live until every gate and Owner approval pass |
 | Decision review | Shows approvals, overrides, confidence, and result history | Manager access |
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |

@@ -1393,14 +1393,28 @@ preliminary labels remain in the report so the reviewer can see what still needs
 ### Calibration
 
 After verified evidence becomes available, record the actual benchmark in Underwriting, including
-actual rehab when known. Open **Settings > Data & Quality** to review range coverage, point error,
-market bias, comp yield, operator overrides, AI repair-scope corrections, and catalog repair error.
+actual rehab when known. Mark every validation scenario the case represents: dense market,
+suburban, rural, unique property, low comp count, wrong-address recovery, provider-failure
+recovery, or high-risk repairs. These labels measure cohort coverage; they do not change the saved
+valuation. Open **Settings > Data & Quality** to review range coverage, point error, market bias,
+comp yield, operator overrides, AI repair-scope corrections, and catalog repair error.
 
 The segment table groups verified cases by property type, search level, comp grade, repair category,
 verification stage, and repair catalog. One case may appear in multiple grade or repair-category
 rows because one analysis can use several comp grades and repair categories. Small samples identify
 questions to investigate; they do not justify changing formulas. Do not increase dependence on the
 comp engine until real-deal calibration and the governed human decision are acceptable.
+
+The **V2.2 versus V3 shadow validation** section uses the same verified outcome to score both saved
+methods. Positive shadow improvement means V3 was closer to the verified ARV; negative improvement
+means V2.2 was closer. Review each risk flag and never treat the V3 value as offer authority while
+the panel says comparison-only.
+
+The rollout gate list is the source of truth for what remains. Stonegate needs 50 paired outcomes,
+at least 10 in every tracked Georgia market, all difficult scenarios represented, acceptable
+accuracy and certainty, enough operator-review evidence, and a final Owner rollout decision. The
+Owner decision requires confirmation that the workflow was usable, the internal pilot was
+reviewed, V2.2 rollback remains available, and offer/contract authority stays human-controlled.
 
 ## 11. Offer Approval And Negotiation
 

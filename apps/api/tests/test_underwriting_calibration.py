@@ -13,11 +13,14 @@ from app.models.foundation import (
     UnderwritingMarketAnalysis,
     User,
 )
+from app.schemas.underwriting import ShadowReplayMetric
 from app.services.bootstrap import bootstrap_foundation
 from app.services.underwriting_calibration import (
+    REQUIRED_VALIDATION_SCENARIOS,
     baseline_summary,
     calibration_segment_keys,
     provider_adequacy,
+    shadow_rollout_gates,
 )
 
 OWNER_EMAIL = "owner@example.com"
@@ -95,6 +98,18 @@ def seed_analysis(db: Session, client: TestClient) -> UnderwritingMarketAnalysis
                 "final_level": "preferred",
                 "sufficient_closed_sales": True,
             },
+            "adjustment_shadow": {
+                "version": "v3.0-adjustment-shadow",
+                "status": "supported",
+                "valuation_use": "shadow_only_excluded_from_offer_math",
+                "conclusion": {
+                    "arv_low_cents": 28_000_000,
+                    "arv_point_cents": 29_000_000,
+                    "arv_high_cents": 30_000_000,
+                    "confidence_score": 75,
+                },
+                "warnings": [],
+            },
             "pre_meeting_inputs": {
                 "verification_status": "pre_meeting_reviewed",
                 "report_stage": "pre_meeting_reviewed",
@@ -154,6 +169,7 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
             "actual_disposition_cents": 17_500_000,
             "evidence_reference": "Broker price opinion dated 2026-07-21",
             "notes": "Reviewed after the walkthrough.",
+            "validation_scenarios": ["dense_market", "suburban"],
         },
     )
 
@@ -164,6 +180,7 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     assert recorded["arv_error_percentage"] == 5.3
     assert recorded["arv_absolute_error_percentage"] == 5.3
     assert recorded["arv_range_hit"] is True
+    assert recorded["validation_scenarios"] == ["dense_market", "suburban"]
 
     case_response = client.get(
         f"/api/v1/underwriting/calibration-cases/{analysis.id}",
@@ -224,6 +241,23 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     assert overview["minimum_sample_for_formula_review"] == 50
     assert overview["automatic_formula_changes_enabled"] is False
     assert overview["decisions"] == []
+    shadow = overview["shadow_validation"]
+    assert shadow["active_methodology_version"] == "v2.2"
+    assert shadow["rollout_status"] == "validation_blocked"
+    assert shadow["activation_allowed"] is False
+    assert shadow["overall"]["paired_case_count"] == 1
+    assert shadow["overall"]["baseline_median_absolute_error_percentage"] == 5.3
+    assert shadow["overall"]["shadow_median_absolute_error_percentage"] == 1.8
+    assert shadow["overall"]["median_improvement_percentage_points"] == 3.5
+    assert shadow["overall"]["shadow_win_count"] == 1
+    assert shadow["scenario_coverage"]["dense_market"] == 1
+    assert shadow["scenario_coverage"]["rural"] == 0
+    assert shadow["cases"][0]["winner"] == "v3_shadow"
+    assert shadow["cases"][0]["risk_flags"] == []
+    gates = {gate["key"]: gate for gate in shadow["gates"]}
+    assert gates["paired_sample"]["status"] == "blocked"
+    assert gates["accuracy"]["status"] == "pending"
+    assert gates["owner_acceptance"]["status"] == "blocked"
 
 
 def test_provider_adequacy_uses_minimum_sample_and_pilot_thresholds() -> None:
@@ -254,6 +288,37 @@ def test_baseline_reports_supervised_ai_scope_correction_rate() -> None:
     assert baseline.ai_scope_review_count == 4
     assert baseline.ai_scope_correction_count == 2
     assert baseline.ai_scope_correction_percentage == 50.0
+
+
+def test_shadow_rollout_gates_pass_only_after_complete_evidence() -> None:
+    overall = ShadowReplayMetric(
+        scope_key="All markets",
+        paired_case_count=50,
+        baseline_median_absolute_error_percentage=8.0,
+        shadow_median_absolute_error_percentage=6.0,
+        median_improvement_percentage_points=2.0,
+        shadow_win_count=30,
+        tie_count=5,
+        baseline_win_count=15,
+        shadow_supported_count=50,
+        shadow_partial_count=0,
+        shadow_unsupported_count=0,
+        unsafe_certainty_count=0,
+    )
+    market = overall.model_copy(
+        update={"scope_key": "GA | Fulton", "paired_case_count": 50}
+    )
+
+    gates = shadow_rollout_gates(
+        overall=overall,
+        markets=[market],
+        scenario_coverage={key: 1 for key in REQUIRED_VALIDATION_SCENARIOS},
+        review_decision_count=20,
+        override_percentage=10.0,
+        owner_accepted=True,
+    )
+
+    assert all(gate.status == "passed" for gate in gates)
 
 
 def test_calibration_segments_include_each_selected_comp_grade(
@@ -340,6 +405,79 @@ def test_formula_and_provider_changes_require_evidence_and_human_decision(
         headers=headers,
     ).json()
     assert overview["decisions"][0]["status"] == "rejected"
+
+
+def test_v3_rollout_requires_explicit_owner_controls_and_remains_sample_blocked(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    analysis = seed_analysis(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    response = client.put(
+        f"/api/v1/underwriting/calibration-cases/{analysis.id}",
+        headers=headers,
+        json={
+            "benchmark_type": "expert_review",
+            "evidence_date": "2026-07-21T12:00:00Z",
+            "benchmark_arv_cents": 28_500_000,
+            "validation_scenarios": ["dense_market"],
+        },
+    )
+    assert response.status_code == 200
+
+    incomplete = client.post(
+        "/api/v1/underwriting/calibration-decisions",
+        headers=headers,
+        json={
+            "scope_key": "All markets",
+            "decision_type": "v3_rollout",
+            "title": "V3 controlled rollout",
+            "rationale": "Review the shadow method after the governed pilot evidence is complete.",
+            "proposed_methodology_version": "v3",
+            "proposed_changes": {"owner_usability_accepted": True},
+        },
+    )
+    assert incomplete.status_code == 422
+    assert "requires Owner usability" in incomplete.json()["detail"]
+
+    draft = client.post(
+        "/api/v1/underwriting/calibration-decisions",
+        headers=headers,
+        json={
+            "scope_key": "All markets",
+            "decision_type": "v3_rollout",
+            "title": "V3 controlled rollout",
+            "rationale": "Review the shadow method after the governed pilot evidence is complete.",
+            "proposed_methodology_version": "v3",
+            "proposed_changes": {
+                "owner_usability_accepted": True,
+                "internal_pilot_accepted": True,
+                "rollback_confirmed": True,
+                "human_authority_confirmed": True,
+            },
+        },
+    )
+    assert draft.status_code == 201
+    assert draft.json()["minimum_sample_required"] == 50
+    assert draft.json()["approval_blocked"] is True
+    assert (
+        draft.json()["evidence_snapshot"]["shadow_validation"]["overall"][
+            "paired_case_count"
+        ]
+        == 1
+    )
+
+    approval = client.patch(
+        f"/api/v1/underwriting/calibration-decisions/{draft.json()['id']}",
+        headers=headers,
+        json={
+            "status": "approved",
+            "decision_notes": "Approve the controlled internal rollout.",
+        },
+    )
+    assert approval.status_code == 422
+    assert "needs 50 verified cases" in approval.json()["detail"]
 
 
 def test_calibration_update_preserves_one_case_and_writes_audit_event(

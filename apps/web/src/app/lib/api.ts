@@ -3044,6 +3044,7 @@ export type UnderwritingCalibrationCase = {
   comp_review_applied: boolean;
   evidence_reference: string | null;
   notes: string | null;
+  validation_scenarios: string[];
   recorded_by_user_id: string | null;
   created_at: string;
   updated_at: string;
@@ -3132,12 +3133,70 @@ export type UnderwritingBaseline = {
   repair_catalog_median_absolute_error_percentage: number | null;
 };
 
+export type UnderwritingShadowReplayMetric = {
+  scope_key: string;
+  paired_case_count: number;
+  baseline_median_absolute_error_percentage: number | null;
+  shadow_median_absolute_error_percentage: number | null;
+  median_improvement_percentage_points: number | null;
+  shadow_win_count: number;
+  tie_count: number;
+  baseline_win_count: number;
+  shadow_supported_count: number;
+  shadow_partial_count: number;
+  shadow_unsupported_count: number;
+  unsafe_certainty_count: number;
+};
+
+export type UnderwritingShadowReplayCase = {
+  analysis_id: string;
+  lead_id: string;
+  property_address: string;
+  market_key: string;
+  benchmark_arv_cents: number;
+  baseline_arv_cents: number;
+  shadow_arv_cents: number;
+  baseline_absolute_error_percentage: number;
+  shadow_absolute_error_percentage: number;
+  improvement_percentage_points: number;
+  winner: "v2.2" | "v3_shadow" | "tie";
+  shadow_status: string;
+  shadow_confidence_score: number | null;
+  validation_scenarios: string[];
+  risk_flags: string[];
+};
+
+export type UnderwritingRolloutGate = {
+  key: string;
+  label: string;
+  status: "passed" | "blocked" | "pending";
+  current_value: string;
+  required_value: string;
+  detail: string;
+};
+
+export type UnderwritingShadowValidation = {
+  active_methodology_version: string;
+  shadow_methodology_version: string;
+  rollout_status: string;
+  activation_allowed: boolean;
+  rollback_available: boolean;
+  human_authority_required: boolean;
+  overall: UnderwritingShadowReplayMetric;
+  markets: UnderwritingShadowReplayMetric[];
+  cases: UnderwritingShadowReplayCase[];
+  gates: UnderwritingRolloutGate[];
+  scenario_coverage: Record<string, number>;
+  approved_rollout_decision_id: string | null;
+};
+
 export type UnderwritingCalibration = {
   baseline?: UnderwritingBaseline;
   overall: UnderwritingCalibrationMetric;
   markets: UnderwritingCalibrationMetric[];
   provider_scorecards: UnderwritingCalibrationMetric[];
   segments: UnderwritingCalibrationSegment[];
+  shadow_validation: UnderwritingShadowValidation;
   cases: UnderwritingCalibrationCase[];
   decisions: UnderwritingCalibrationDecision[];
   uncalibrated_analysis_count: number;

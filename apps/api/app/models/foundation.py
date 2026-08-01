@@ -2430,6 +2430,9 @@ class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     predicted_disposition_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    validation_scenarios: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
 
 
 class UnderwritingCalibrationDecision(UuidPrimaryKeyMixin, TimestampMixin, Base):

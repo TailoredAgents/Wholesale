@@ -16,7 +16,19 @@ type CalibrationDraft = {
   dispositionPrice: string;
   evidenceReference: string;
   notes: string;
+  validationScenarios: string[];
 };
+
+const validationScenarios = [
+  ["dense_market", "Dense market"],
+  ["suburban", "Suburban"],
+  ["rural", "Rural"],
+  ["unique_property", "Unique property"],
+  ["low_comp", "Low comp count"],
+  ["wrong_address", "Wrong-address recovery"],
+  ["provider_failure", "Provider-failure recovery"],
+  ["high_risk_repairs", "High-risk repairs"],
+] as const;
 
 const emptyDraft: CalibrationDraft = {
   benchmarkType: "expert_review",
@@ -27,6 +39,7 @@ const emptyDraft: CalibrationDraft = {
   dispositionPrice: "",
   evidenceReference: "",
   notes: "",
+  validationScenarios: [],
 };
 
 function centsToDollars(value: number | null) {
@@ -51,6 +64,7 @@ function draftFromCase(value: UnderwritingCalibrationCase): CalibrationDraft {
     dispositionPrice: centsToDollars(value.actual_disposition_cents),
     evidenceReference: value.evidence_reference ?? "",
     notes: value.notes ?? "",
+    validationScenarios: value.validation_scenarios,
   };
 }
 
@@ -124,6 +138,16 @@ export function CalibrationOutcomeForm({ analysisId }: { analysisId: string }) {
     setMessage(null);
   }
 
+  function toggleScenario(value: string) {
+    setDraft((current) => ({
+      ...current,
+      validationScenarios: current.validationScenarios.includes(value)
+        ? current.validationScenarios.filter((item) => item !== value)
+        : [...current.validationScenarios, value],
+    }));
+    setMessage(null);
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const benchmarkArvCents = dollarsToCents(draft.benchmarkArv);
@@ -151,6 +175,7 @@ export function CalibrationOutcomeForm({ analysisId }: { analysisId: string }) {
             actual_disposition_cents: dollarsToCents(draft.dispositionPrice),
             evidence_reference: draft.evidenceReference.trim() || null,
             notes: draft.notes.trim() || null,
+            validation_scenarios: draft.validationScenarios,
           }),
         },
       );
@@ -264,6 +289,22 @@ export function CalibrationOutcomeForm({ analysisId }: { analysisId: string }) {
               value={draft.evidenceReference}
             />
           </label>
+          <fieldset className={`${styles.calibrationWide} ${styles.calibrationScenarios}`}>
+            <legend>Validation scenarios</legend>
+            <p>Select every difficult situation this verified case tests.</p>
+            <div>
+              {validationScenarios.map(([value, label]) => (
+                <label key={value}>
+                  <input
+                    checked={draft.validationScenarios.includes(value)}
+                    onChange={() => toggleScenario(value)}
+                    type="checkbox"
+                  />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className={styles.calibrationWide}>
             Notes
             <textarea

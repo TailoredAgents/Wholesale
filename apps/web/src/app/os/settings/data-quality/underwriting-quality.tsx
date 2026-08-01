@@ -6,6 +6,7 @@ import { StatusBadge } from "../../_components/design-system";
 import { labelize } from "../../os-utils";
 import styles from "../../_components/deal-workspaces.module.css";
 import { CalibrationGovernance } from "../../underwriting/calibration-governance";
+import { UnderwritingShadowValidationPanel } from "./underwriting-shadow-validation";
 
 function percent(value: number | null, signed = false) {
   if (value === null) return "--";
@@ -62,6 +63,8 @@ export function UnderwritingQuality({
           </section>
         </>
       ) : null}
+
+      <UnderwritingShadowValidationPanel validation={calibration.shadow_validation} />
 
       <section className={styles.section}>
         <header>

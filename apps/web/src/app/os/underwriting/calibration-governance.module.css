@@ -88,6 +88,29 @@
   grid-column: 1 / -1;
 }
 
+.confirmations {
+  padding: 9px;
+  border: 1px solid var(--sg-color-border);
+  border-radius: var(--sg-radius-md);
+  display: grid;
+  gap: 7px;
+  background: var(--sg-color-surface);
+}
+
+.confirmations label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sg-color-text);
+  font-size: 10px;
+}
+
+.confirmations input {
+  width: 15px;
+  min-height: 15px;
+  margin: 0;
+}
+
 .fields input,
 .fields select,
 .fields textarea,

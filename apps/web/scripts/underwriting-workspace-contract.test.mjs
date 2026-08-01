@@ -23,6 +23,14 @@ const qualityScorecards = readFileSync(
   resolve(webRoot, "src/app/os/settings/data-quality/underwriting-quality.tsx"),
   "utf8",
 );
+const shadowValidation = readFileSync(
+  resolve(webRoot, "src/app/os/settings/data-quality/underwriting-shadow-validation.tsx"),
+  "utf8",
+);
+const calibrationOutcome = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/calibration-outcome-form.tsx"),
+  "utf8",
+);
 const reportService = readFileSync(
   resolve(repositoryRoot, "apps/api/app/services/underwriting_reports.py"),
   "utf8",
@@ -94,4 +102,23 @@ test("U3.9 exposes segmented calibration and operating-quality scorecards", () =
   );
   assert.match(phase, /Status:\*\* Implemented/);
   assert.match(phase, /property type, adaptive search level/);
+});
+
+test("U3.10 exposes paired shadow replay and hard rollout gates", () => {
+  for (const label of [
+    "V2.2 versus V3 shadow validation",
+    "Controlled-rollout readiness",
+    "Difficult-scenario coverage",
+    "Case-by-case accuracy comparison",
+  ]) {
+    assert.match(shadowValidation, new RegExp(label));
+  }
+  assert.match(shadowValidation, /V3 is comparison-only/);
+  assert.match(calibrationOutcome, /validation_scenarios/);
+  assert.match(calibrationOutcome, /Wrong-address recovery/);
+  assert.match(calibrationOutcome, /Provider-failure recovery/);
+  const phase = roadmap.slice(roadmap.indexOf("#### U3.10:"));
+  assert.match(phase, /Status:\*\* Implemented controls/);
+  assert.match(phase, /50 paired verified cases/);
+  assert.match(phase, /V2\.2 remains the live method/);
 });

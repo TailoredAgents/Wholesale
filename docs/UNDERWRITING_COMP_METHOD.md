@@ -978,7 +978,8 @@ which data source, rule, category, or human assumption caused a miss.
 
 #### U3.10: Shadow Validation And Controlled Rollout
 
-**Status:** Planned.
+**Status:** Implemented controls July 31, 2026; paired production evidence, internal pilot
+acceptance, and Owner activation approval remain.
 
 - Replay V2.2 and V3 against redacted known deals before changing the default.
 - Review at least 50 suitable cases overall and enough cases per initial Georgia market to avoid
@@ -992,6 +993,26 @@ which data source, rule, category, or human assumption caused a miss.
 
 **Exit:** V3 becomes the default only after it demonstrates better evidence coverage or accuracy
 without increasing unexplained overrides, unsafe certainty, or operator effort.
+
+Implementation record:
+
+- Every verified outcome can now be tagged as dense-market, suburban, rural, unique-property,
+  low-comp, wrong-address recovery, provider-failure recovery, or high-risk-repair evidence.
+- Data & Quality pairs the immutable V2.2 conclusion and saved V3 adjustment shadow from the same
+  analysis with the later verified ARV. It reports baseline error, shadow error, improvement,
+  wins/ties/losses, evidence support, confidence risk, and market-level results.
+- Controlled-rollout gates require 50 paired verified cases, at least 10 paired cases in every
+  tracked Georgia market, all eight difficult scenarios, non-inferior median shadow accuracy,
+  zero high-confidence unsupported conclusions, and enough operator review evidence without an
+  override rate above 25%.
+- A V3 rollout decision separately requires Owner usability acceptance, internal-pilot review,
+  confirmed V2.2 rollback, and confirmation that offers, contracts, and methodology activation
+  remain human-controlled. The API rejects approval while any evidence gate is incomplete.
+- V2.2 remains the live method. V3 stays comparison-only until the real cohort passes and an
+  authorized rollout decision is recorded; configuration still rejects premature V3 activation.
+- Migration `0080_underwriting_shadow_replay` adds only validation-scenario evidence to the
+  existing calibration case. Analyses, versions, outcomes, decisions, and offers remain the same
+  authoritative records.
 
 ### Overall Definition Of Done
 
