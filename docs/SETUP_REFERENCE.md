@@ -430,7 +430,8 @@ Do not share another business's campaign or number.
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_MESSAGING_SERVICE_SID`
-- `TWILIO_SMS_FROM_NUMBER`
+- `TWILIO_SMS_FROM_NUMBER` (acquisitions/default rollout fallback; department lines are stored in
+  **Settings > Communications**)
 - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
 - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
 - SMS timezone and contact-hour variables
@@ -440,13 +441,14 @@ console.
 
 ### Webhooks
 
-Messaging Service incoming request:
+Each phone number's **A message comes in** webhook (with the Messaging Service configured to
+**Defer to sender's webhook**):
 
 ```text
 POST https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/incoming
 ```
 
-Delivery status callback:
+Delivery status callback supplied automatically by Stonegate on each outbound message:
 
 ```text
 POST https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/status

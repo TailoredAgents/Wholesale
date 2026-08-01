@@ -103,13 +103,23 @@ record.
 
 ### PH2. Acquisitions SMS Activation
 
+Status: line-aware sending and number-aware inbound routing are implemented; Twilio Console,
+Render, and live acceptance remain.
+
 - Attach the acquisitions number to the approved Stonegate Messaging Service and A2P campaign.
-- Configure Stonegate's inbound-message and delivery-status webhooks.
+- Set the Messaging Service to **Defer to sender's webhook** and configure the inbound webhook on
+  the acquisitions number itself. Stonegate supplies the delivery callback per outbound message.
 - Enter the approved number, Messaging Service SID, Account SID, Auth Token, and webhook base URL
   in Render.
 - Enable Twilio SMS and run controlled outbound, delivered, inbound, STOP, blocked-send, START,
   HELP, reassignment, and duplicate-callback tests.
 - Keep purchased-list and unsolicited cold SMS out of this seller-inquiry campaign.
+
+Stonegate now selects the active acquisitions number for seller conversations and preserves the
+selected line on dispatch and communication records. Both number-level webhooks may use the same
+endpoint because inbound routing reads Twilio's `To` number. Until PH5 creates buyer conversation
+routing, messages arriving on a dispositions-purpose number are deliberately prevented from being
+attached to a seller thread.
 
 Exit criteria: Austin and Devon can work one seller SMS thread from Stonegate without duplicate
 messages or broken assignment.
@@ -141,8 +151,9 @@ Exit criteria: the acquisitions line can replace personal phones for warm seller
 
 - Purchase or designate a separate Twilio Voice/SMS-capable number.
 - Add it to Stonegate as **Stonegate Dispositions** with Devon as primary and Austin as fallback.
-- Use a separate Messaging Service/A2P campaign if buyer messaging does not match the approved
-  seller-inquiry campaign.
+- Configure the number-level inbound webhook separately. It may share the approved Messaging
+  Service only when that campaign's approved message flow covers buyer communications; otherwise,
+  use a separate Messaging Service/A2P campaign.
 - Add line selection and sender permission so buyer communication cannot accidentally use the
   acquisitions number.
 - Route buyer replies into the existing inbox with dispositions visibility and ownership.

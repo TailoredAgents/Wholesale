@@ -56,6 +56,10 @@ class TwilioMessagingProvider:
         assert self.settings.twilio_messaging_service_sid is not None
         assert self.settings.twilio_sms_from_number is not None
         assert self.settings.twilio_webhook_base_url is not None
+        sender_number = (
+            request.metadata.get("sender_number", "").strip()
+            or self.settings.twilio_sms_from_number
+        )
         status_callback = (
             f"{self.settings.twilio_webhook_base_url.rstrip('/')}"
             "/api/v1/webhooks/twilio/messaging/status"
@@ -63,7 +67,7 @@ class TwilioMessagingProvider:
         try:
             message = self.client.messages.create(
                 to=request.recipient,
-                from_=self.settings.twilio_sms_from_number,
+                from_=sender_number,
                 messaging_service_sid=self.settings.twilio_messaging_service_sid,
                 body=request.body,
                 status_callback=status_callback,

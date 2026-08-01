@@ -26,6 +26,7 @@ from app.models.foundation import (
     Contact,
     Conversation,
     SuppressionRecord,
+    VoiceLine,
 )
 from app.services.bootstrap import bootstrap_foundation
 
@@ -189,6 +190,31 @@ def test_twilio_provider_uses_configured_stonegate_sender(
     assert result.raw_payload["from"] == STONEGATE_FROM_NUMBER
 
 
+def test_twilio_provider_uses_line_specific_sender(
+    twilio_settings: None,
+) -> None:
+    client = FakeTwilioClient()
+    provider = TwilioMessagingProvider(get_settings(), client=client)
+    acquisitions_number = "+14045550001"
+
+    provider.send(
+        OutboundMessageRequest(
+            lead_id="lead-1",
+            contact_id="contact-1",
+            channel="sms",
+            recipient="+14045551212",
+            body="Stonegate line-specific sender test.",
+            idempotency_key="sender-test-2",
+            metadata={"sender_number": acquisitions_number},
+        ),
+        dry_run=False,
+    )
+
+    assert client.messages.create_payload is not None
+    assert client.messages.create_payload["from_"] == acquisitions_number
+    assert client.messages.create_payload["messaging_service_sid"] == MESSAGING_SERVICE_SID
+
+
 def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(
     db_session: Session,
     api_db_override: None,
@@ -197,6 +223,27 @@ def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(
 ) -> None:
     client = TestClient(app)
     conversation = seed_consent_lead(db_session, client)
+    acquisitions_line = VoiceLine(
+        organization_id=conversation.organization_id,
+        assigned_user_id=None,
+        fallback_user_id=None,
+        provider="twilio",
+        provider_phone_number_id=None,
+        phone_number="+14045550001",
+        label="Stonegate Acquisitions",
+        department_key="acquisitions",
+        purpose_key="seller_conversations",
+        status="active",
+        is_default=True,
+        inbound_route="conversation_owner",
+        coverage_timezone="America/New_York",
+        coverage_start_hour=9,
+        coverage_end_hour=20,
+        missed_call_action="fallback_then_voicemail",
+        line_metadata={"source": "test"},
+    )
+    db_session.add(acquisitions_line)
+    db_session.commit()
     fake_provider = FakeTwilioProvider()
     monkeypatch.setattr(
         "app.services.messaging.get_twilio_messaging_provider",
@@ -224,6 +271,7 @@ def test_outbound_sms_is_compliance_gated_idempotent_and_status_tracked(
     assert first.json() == second.json()
     assert first.json()["recipient"] == "+14045551212"
     assert len(fake_provider.requests) == 1
+    assert fake_provider.requests[0].metadata["sender_number"] == "+14045550001"
     communication = db_session.scalar(
         select(CommunicationRecord).where(CommunicationRecord.provider == "twilio")
     )
@@ -390,6 +438,66 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     )
     assert latest_consent is not None
     assert latest_consent.status == "granted"
+
+
+def test_dispositions_number_does_not_attach_buyer_sms_to_seller_conversation(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    dispositions_number = "+14045550002"
+    db_session.add(
+        VoiceLine(
+            organization_id=conversation.organization_id,
+            assigned_user_id=None,
+            fallback_user_id=None,
+            provider="twilio",
+            provider_phone_number_id=None,
+            phone_number=dispositions_number,
+            label="Stonegate Dispositions",
+            department_key="dispositions",
+            purpose_key="buyer_relations",
+            status="active",
+            is_default=False,
+            inbound_route="assigned_user",
+            coverage_timezone="America/New_York",
+            coverage_start_hour=9,
+            coverage_end_hour=20,
+            missed_call_action="fallback_then_voicemail",
+            line_metadata={"source": "test"},
+        )
+    )
+    db_session.commit()
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        {
+            "From": "+14045551212",
+            "To": dispositions_number,
+            "MessagingServiceSid": MESSAGING_SERVICE_SID,
+            "Body": "I am interested in buying this property.",
+            "MessageSid": "SM00000000000000000000000000000012",
+        },
+    )
+
+    assert response.status_code == 200
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id
+            == "inbound:SM00000000000000000000000000000012"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "unmatched"
+    assert db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id
+            == "SM00000000000000000000000000000012"
+        )
+    ) is None
 
 
 def test_twilio_webhooks_reject_invalid_signatures_and_services(

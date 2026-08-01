@@ -29,6 +29,7 @@ from app.models.foundation import (
     Lead,
     Organization,
     SuppressionRecord,
+    VoiceLine,
 )
 from app.schemas.inbox import SmsSendRead, SmsSendRequest
 from app.services.communication_compliance import (
@@ -120,6 +121,18 @@ def send_conversation_sms(
 
     settings = get_settings()
     provider_name = "simulated" if settings.communication_simulation_enabled else "twilio"
+    sender_line = select_sms_sender_line(
+        db,
+        principal.organization_id,
+        conversation=conversation,
+    )
+    sender_number = (
+        sender_line.phone_number if sender_line is not None else settings.twilio_sms_from_number
+    )
+    if not settings.communication_simulation_enabled and not sender_number:
+        raise SmsConfigurationError(
+            "No active Stonegate SMS line is configured for this conversation."
+        )
     dispatch = CommunicationDispatch(
         organization_id=principal.organization_id,
         conversation_id=conversation.id,
@@ -137,7 +150,11 @@ def send_conversation_sms(
         error_code=None,
         error_message=None,
         completed_at=None,
-        dispatch_metadata={"compliance_checked_at": datetime.now(UTC).isoformat()},
+        dispatch_metadata={
+            "compliance_checked_at": datetime.now(UTC).isoformat(),
+            "sender_number": sender_number,
+            "voice_line_id": str(sender_line.id) if sender_line is not None else None,
+        },
     )
     db.add(dispatch)
     db.commit()
@@ -171,7 +188,11 @@ def send_conversation_sms(
                 recipient=eligibility.recipient,
                 body=body,
                 idempotency_key=payload.idempotency_key,
-                metadata={"conversation_id": str(conversation.id)},
+                metadata={
+                    "conversation_id": str(conversation.id),
+                    "sender_number": sender_number or "",
+                    "voice_line_id": str(sender_line.id) if sender_line is not None else "",
+                },
             ),
             dry_run=settings.communication_simulation_enabled,
         )
@@ -213,6 +234,8 @@ def send_conversation_sms(
             "source": "shared_inbox",
             "idempotency_key": payload.idempotency_key,
             "compliance_checked": True,
+            "sender_number": sender_number,
+            "voice_line_id": str(sender_line.id) if sender_line is not None else None,
         },
     )
     db.add(communication)
@@ -295,7 +318,12 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     sender = required_twilio_value(payload, "From")
     recipient = required_twilio_value(payload, "To")
     body = payload.get("Body", "").strip()
-    conversation = find_conversation_by_phone(db, organization.id, sender)
+    sender_line = find_sms_line_by_number(db, organization.id, recipient)
+    conversation = (
+        find_conversation_by_phone(db, organization.id, sender)
+        if sender_line is None or sender_line.purpose_key == "seller_conversations"
+        else None
+    )
     event = CommunicationProviderEvent(
         organization_id=organization.id,
         conversation_id=conversation.id if conversation else None,
@@ -341,8 +369,14 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             "to": recipient,
             "messaging_service_sid": payload.get("MessagingServiceSid"),
             "opt_out_type": opt_out_type,
+            "voice_line_id": str(sender_line.id) if sender_line is not None else None,
+            "department_key": sender_line.department_key if sender_line is not None else None,
         },
-        communication_metadata={"source": "twilio_webhook"},
+        communication_metadata={
+            "source": "twilio_webhook",
+            "sender_number": recipient,
+            "voice_line_id": str(sender_line.id) if sender_line is not None else None,
+        },
     )
     db.add(communication)
     update_conversation_activity(
@@ -549,6 +583,47 @@ def find_conversation_by_phone(
             Conversation.status == "closed",
             Conversation.last_activity_at.desc(),
             Conversation.created_at.desc(),
+        )
+    )
+
+
+def select_sms_sender_line(
+    db: Session,
+    organization_id: UUID,
+    *,
+    conversation: Conversation,
+) -> VoiceLine | None:
+    if conversation.conversation_type == "buyer":
+        department_key = "dispositions"
+        purpose_key = "buyer_relations"
+    else:
+        department_key = "acquisitions"
+        purpose_key = "seller_conversations"
+    return db.scalar(
+        select(VoiceLine)
+        .where(
+            VoiceLine.organization_id == organization_id,
+            VoiceLine.department_key == department_key,
+            VoiceLine.purpose_key == purpose_key,
+            VoiceLine.status == "active",
+        )
+        .order_by(VoiceLine.is_default.desc(), VoiceLine.created_at.asc())
+    )
+
+
+def find_sms_line_by_number(
+    db: Session,
+    organization_id: UUID,
+    phone_number: str,
+) -> VoiceLine | None:
+    formatted = format_e164(phone_number)
+    if formatted is None:
+        return None
+    return db.scalar(
+        select(VoiceLine).where(
+            VoiceLine.organization_id == organization_id,
+            VoiceLine.phone_number == formatted,
+            VoiceLine.status == "active",
         )
     )
 
