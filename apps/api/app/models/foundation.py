@@ -1757,13 +1757,34 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("users.id"), index=True
     )
+    fallback_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
     provider_phone_number_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str] = mapped_column(String(80), nullable=False)
     label: Mapped[str] = mapped_column(String(120), nullable=False)
+    department_key: Mapped[str] = mapped_column(
+        String(40), nullable=False, server_default="acquisitions"
+    )
+    purpose_key: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="seller_conversations"
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     inbound_route: Mapped[str] = mapped_column(String(80), nullable=False)
+    coverage_timezone: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="America/New_York"
+    )
+    coverage_start_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="9"
+    )
+    coverage_end_hour: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="20"
+    )
+    missed_call_action: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="fallback_then_voicemail"
+    )
     line_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 

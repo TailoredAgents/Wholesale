@@ -252,6 +252,12 @@
   gap: 12px;
 }
 
+.voiceLineHeading > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
 .voiceLineHeading strong {
   color: var(--text);
   font-size: 13px;
@@ -260,6 +266,26 @@
 .voiceLineHeading small {
   color: var(--muted);
   font-size: 10px;
+}
+
+.lineReady,
+.lineNeedsSetup {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 4px;
+  font-size: 9px !important;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.lineReady {
+  background: var(--brand-soft);
+  color: var(--brand-strong) !important;
+}
+
+.lineNeedsSetup {
+  background: var(--info-soft);
+  color: var(--info) !important;
 }
 
 .checkLabel {

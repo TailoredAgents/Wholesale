@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,8 +12,23 @@ class VoiceLineRead(BaseModel):
     status: str
     is_default: bool
     inbound_route: str
+    department_key: str
+    purpose_key: str
     assigned_user_id: UUID | None
     assigned_user_name: str | None
+    fallback_user_id: UUID | None
+    fallback_user_name: str | None
+    coverage_timezone: str
+    coverage_start_hour: int
+    coverage_end_hour: int
+    missed_call_action: str
+    ownership_complete: bool
+
+
+class VoiceLineUserRead(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
 
 
 class VoiceLineCreate(BaseModel):
@@ -20,20 +36,43 @@ class VoiceLineCreate(BaseModel):
     label: str = Field(min_length=1, max_length=120)
     provider_phone_number_id: str | None = Field(default=None, max_length=255)
     assigned_user_id: UUID | None = None
+    fallback_user_id: UUID | None = None
+    department_key: Literal["acquisitions", "dispositions", "general"] = "acquisitions"
+    purpose_key: Literal[
+        "seller_conversations", "buyer_relations", "company_general"
+    ] = "seller_conversations"
     is_default: bool = False
     inbound_route: str = Field(default="conversation_owner", max_length=80)
+    coverage_timezone: str = Field(default="America/New_York", min_length=3, max_length=80)
+    coverage_start_hour: int = Field(default=9, ge=0, le=23)
+    coverage_end_hour: int = Field(default=20, ge=1, le=24)
+    missed_call_action: Literal[
+        "fallback_then_voicemail", "voicemail", "task_only"
+    ] = "fallback_then_voicemail"
 
 
 class VoiceLineAssignmentUpdate(BaseModel):
     assigned_user_id: UUID | None = None
+    fallback_user_id: UUID | None = None
     label: str | None = Field(default=None, min_length=1, max_length=120)
+    department_key: Literal["acquisitions", "dispositions", "general"] | None = None
+    purpose_key: Literal[
+        "seller_conversations", "buyer_relations", "company_general"
+    ] | None = None
     status: str | None = Field(default=None, max_length=40)
     is_default: bool | None = None
     inbound_route: str | None = Field(default=None, max_length=80)
+    coverage_timezone: str | None = Field(default=None, min_length=3, max_length=80)
+    coverage_start_hour: int | None = Field(default=None, ge=0, le=23)
+    coverage_end_hour: int | None = Field(default=None, ge=1, le=24)
+    missed_call_action: Literal[
+        "fallback_then_voicemail", "voicemail", "task_only"
+    ] | None = None
 
 
 class VoiceLineListResponse(BaseModel):
     items: list[VoiceLineRead]
+    users: list[VoiceLineUserRead]
 
 
 class VoiceSessionRead(BaseModel):

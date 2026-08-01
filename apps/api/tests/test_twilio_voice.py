@@ -150,6 +150,112 @@ def test_sms_and_voice_contact_hours_are_independent(monkeypatch: MonkeyPatch) -
     get_settings.cache_clear()
 
 
+def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    seed_voice_lead(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    devon_response = client.post(
+        "/api/v1/operations/users",
+        headers=headers,
+        json={
+            "email": "devon@example.com",
+            "display_name": "Devon",
+            "role_key": "disposition_rep",
+        },
+    )
+    assert devon_response.status_code == 201, devon_response.text
+    devon = devon_response.json()
+
+    lines_response = client.get("/api/v1/voice/lines", headers=headers)
+    assert lines_response.status_code == 200, lines_response.text
+    line_payload = lines_response.json()
+    acquisitions_line = line_payload["items"][0]
+    owner = next(user for user in line_payload["users"] if user["email"] == OWNER_EMAIL)
+    assert any(user["id"] == devon["id"] for user in line_payload["users"])
+
+    update_response = client.patch(
+        f"/api/v1/voice/lines/{acquisitions_line['id']}",
+        headers=headers,
+        json={
+            "label": "Stonegate Acquisitions",
+            "department_key": "acquisitions",
+            "purpose_key": "seller_conversations",
+            "assigned_user_id": owner["id"],
+            "fallback_user_id": devon["id"],
+            "inbound_route": "conversation_owner",
+            "coverage_timezone": "America/New_York",
+            "coverage_start_hour": 8,
+            "coverage_end_hour": 21,
+            "missed_call_action": "fallback_then_voicemail",
+            "is_default": True,
+        },
+    )
+    assert update_response.status_code == 200, update_response.text
+    updated = update_response.json()
+    assert updated["department_key"] == "acquisitions"
+    assert updated["purpose_key"] == "seller_conversations"
+    assert updated["assigned_user_name"] == "Owner"
+    assert updated["fallback_user_name"] == "Devon"
+    assert updated["coverage_start_hour"] == 8
+    assert updated["coverage_end_hour"] == 21
+    assert updated["ownership_complete"] is True
+
+    duplicate_owner_response = client.patch(
+        f"/api/v1/voice/lines/{acquisitions_line['id']}",
+        headers=headers,
+        json={
+            "assigned_user_id": owner["id"],
+            "fallback_user_id": owner["id"],
+        },
+    )
+    assert duplicate_owner_response.status_code == 422
+    assert "different people" in duplicate_owner_response.json()["detail"]
+
+    dispositions_response = client.post(
+        "/api/v1/voice/lines",
+        headers=headers,
+        json={
+            "phone_number": "+14705550123",
+            "label": "Stonegate Dispositions",
+            "department_key": "dispositions",
+            "purpose_key": "buyer_relations",
+            "assigned_user_id": devon["id"],
+            "fallback_user_id": owner["id"],
+            "inbound_route": "assigned_user",
+            "coverage_timezone": "America/New_York",
+            "coverage_start_hour": 9,
+            "coverage_end_hour": 20,
+            "missed_call_action": "fallback_then_voicemail",
+        },
+    )
+    assert dispositions_response.status_code == 201, dispositions_response.text
+    dispositions = dispositions_response.json()
+    assert dispositions["department_key"] == "dispositions"
+    assert dispositions["purpose_key"] == "buyer_relations"
+    assert dispositions["assigned_user_name"] == "Devon"
+    assert dispositions["fallback_user_name"] == "Owner"
+    assert dispositions["ownership_complete"] is True
+
+    owner_record = db_session.get(User, UUID(owner["id"]))
+    assert owner_record is not None
+    owner_record.is_active = False
+    db_session.commit()
+    inbound_path = "/api/v1/webhooks/twilio/voice/incoming"
+    inbound_payload = {
+        "From": "+14045559876",
+        "To": STONEGATE_NUMBER,
+        "CallSid": "CA00000000000000000000000000000081",
+    }
+    inbound_response = post_signed(client, inbound_path, inbound_payload)
+    assert inbound_response.status_code == 200, inbound_response.text
+    assert f"stonegate_{str(devon['id']).replace('-', '')}" in inbound_response.text
+
+
 def test_voice_session_and_outbound_call_are_scoped_and_idempotent(
     db_session: Session,
     api_db_override: None,

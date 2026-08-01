@@ -933,6 +933,21 @@ When a provider is not active but an approved employee uses a manual phone:
 
 Logging a communication does not send a message or place a call.
 
+### Configure Company Phone-Line Ownership
+
+Owners manage department phone-line responsibility in **Settings > Communications**.
+
+1. Find the company-owned number or select **Add line**.
+2. Set the department to **Acquisitions**, **Dispositions**, or **Company general**.
+3. Select the primary owner and a different fallback owner.
+4. Choose whether known callers prefer their conversation owner or the line's primary owner.
+5. Record the staffed coverage window, timezone, and missed-call policy.
+6. Mark the acquisitions line as the default company line.
+7. Select **Save** and confirm the line shows **Ownership ready**.
+
+PH1 records ownership and uses the fallback when a preferred owner is unavailable. PH3 adds the
+full department ring sequence, coverage-hours enforcement, and voicemail execution.
+
 ### Use Browser Calling
 
 When Twilio Voice is active:

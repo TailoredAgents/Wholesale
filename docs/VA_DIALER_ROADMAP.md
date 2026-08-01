@@ -83,7 +83,7 @@ Stonegate remains authoritative for:
 
 ### PH1. Architecture And Line Ownership
 
-Status: planned by this document; implementation acceptance remains.
+Status: implemented in code; production number assignment remains.
 
 - Designate the approved Twilio number as **Stonegate Acquisitions**.
 - Define acquisitions members, primary recipient, fallback recipient, business hours, missed-call
@@ -91,6 +91,12 @@ Status: planned by this document; implementation acceptance remains.
 - Reserve a separate **Stonegate Dispositions** number and messaging purpose.
 - Keep the current one-by-one Stonegate calling queue available as a fallback during migration.
 - Do not provision employee-specific Twilio numbers for Austin or Devon.
+
+Implemented controls now store department, purpose, primary owner, fallback owner, coverage hours,
+timezone, inbound ownership preference, missed-call policy, provider, and default-line status on
+the existing company line record. Current inbound resolution can use the fallback when the
+conversation owner or primary owner is unavailable. PH3 adds shared department membership,
+sequential/simultaneous ring behavior, and enforcement of the stored hours and missed-call policy.
 
 Exit criteria: every phone number has one department, purpose, owner, fallback, and system of
 record.
@@ -210,11 +216,13 @@ two competing communication histories.
 
 ## Immediate Order
 
-1. Complete the Twilio acquisitions SMS steps because the A2P campaign is already approved.
-2. Build PH3 shared acquisitions routing before relying on Voice for both Austin and Devon.
-3. Complete acquisitions Voice acceptance.
-4. Add the dispositions line and its correct messaging registration.
-5. Open BatchDialer and run PH6-PH8 with one VA before adding more seats.
+1. In **Settings > Communications**, configure the approved number as Acquisitions, select Austin
+   and Devon as primary/fallback in the intended order, and save the coverage policy.
+2. Complete the Twilio acquisitions SMS steps because the A2P campaign is already approved.
+3. Build PH3 shared acquisitions routing before relying on Voice for both Austin and Devon.
+4. Complete acquisitions Voice acceptance.
+5. Add the dispositions line and its correct messaging registration.
+6. Open BatchDialer and run PH6-PH8 with one VA before adding more seats.
 
 ## External References
 

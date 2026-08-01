@@ -1,5 +1,6 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
@@ -40,6 +41,7 @@ from app.schemas.voice import (
     VoiceLineAssignmentUpdate,
     VoiceLineCreate,
     VoiceLineRead,
+    VoiceLineUserRead,
     VoiceRecordingRead,
     VoiceSessionRead,
 )
@@ -57,6 +59,16 @@ from app.services.inbox import (
 
 VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user"}
 VOICE_LINE_STATUSES = {"active", "inactive"}
+VOICE_LINE_DEPARTMENT_PURPOSES = {
+    "acquisitions": "seller_conversations",
+    "dispositions": "buyer_relations",
+    "general": "company_general",
+}
+VOICE_LINE_MISSED_CALL_ACTIONS = {
+    "fallback_then_voicemail",
+    "voicemail",
+    "task_only",
+}
 FINAL_CALL_STATUSES = {"completed", "busy", "failed", "no-answer", "canceled"}
 CALL_STATUS_RANK = {
     "queued": 0,
@@ -93,6 +105,21 @@ def list_voice_lines(db: Session, principal: Principal) -> list[VoiceLineRead]:
     return [voice_line_to_read(db, line) for line in lines]
 
 
+def list_voice_line_users(db: Session, principal: Principal) -> list[VoiceLineUserRead]:
+    users = db.scalars(
+        select(User)
+        .where(
+            User.organization_id == principal.organization_id,
+            User.is_active.is_(True),
+        )
+        .order_by(User.display_name.asc(), User.email.asc())
+    ).all()
+    return [
+        VoiceLineUserRead(id=user.id, display_name=user.display_name, email=user.email)
+        for user in users
+    ]
+
+
 def create_voice_line(
     db: Session,
     principal: Principal,
@@ -101,7 +128,18 @@ def create_voice_line(
     phone_number = format_e164(payload.phone_number)
     if phone_number is None:
         raise ValueError("Voice line must be a valid E.164 phone number.")
-    validate_line_assignment(db, principal.organization_id, payload.assigned_user_id)
+    validate_line_ownership(
+        db,
+        principal.organization_id,
+        assigned_user_id=payload.assigned_user_id,
+        fallback_user_id=payload.fallback_user_id,
+        department_key=payload.department_key,
+        purpose_key=payload.purpose_key,
+        coverage_timezone=payload.coverage_timezone,
+        coverage_start_hour=payload.coverage_start_hour,
+        coverage_end_hour=payload.coverage_end_hour,
+        missed_call_action=payload.missed_call_action,
+    )
     if payload.inbound_route not in VOICE_LINE_ROUTES:
         raise ValueError("Unsupported inbound voice route.")
     existing = db.scalar(
@@ -117,13 +155,20 @@ def create_voice_line(
     line = VoiceLine(
         organization_id=principal.organization_id,
         assigned_user_id=payload.assigned_user_id,
+        fallback_user_id=payload.fallback_user_id,
         provider="twilio",
         provider_phone_number_id=payload.provider_phone_number_id,
         phone_number=phone_number,
         label=payload.label.strip(),
+        department_key=payload.department_key,
+        purpose_key=payload.purpose_key,
         status="active",
         is_default=payload.is_default,
         inbound_route=payload.inbound_route,
+        coverage_timezone=payload.coverage_timezone,
+        coverage_start_hour=payload.coverage_start_hour,
+        coverage_end_hour=payload.coverage_end_hour,
+        missed_call_action=payload.missed_call_action,
         line_metadata={"source": "voice_line_api"},
     )
     db.add(line)
@@ -147,18 +192,59 @@ def update_voice_line(
     )
     if line is None:
         return None
-    if "assigned_user_id" in payload.model_fields_set:
-        validate_line_assignment(db, principal.organization_id, payload.assigned_user_id)
-        line.assigned_user_id = payload.assigned_user_id
+    if payload.status is not None and payload.status not in VOICE_LINE_STATUSES:
+        raise ValueError("Unsupported voice line status.")
+    if payload.inbound_route is not None and payload.inbound_route not in VOICE_LINE_ROUTES:
+        raise ValueError("Unsupported inbound voice route.")
+    assigned_user_id = (
+        payload.assigned_user_id
+        if "assigned_user_id" in payload.model_fields_set
+        else line.assigned_user_id
+    )
+    fallback_user_id = (
+        payload.fallback_user_id
+        if "fallback_user_id" in payload.model_fields_set
+        else line.fallback_user_id
+    )
+    department_key = payload.department_key or line.department_key
+    purpose_key = payload.purpose_key or line.purpose_key
+    coverage_timezone = payload.coverage_timezone or line.coverage_timezone
+    coverage_start_hour = (
+        payload.coverage_start_hour
+        if payload.coverage_start_hour is not None
+        else line.coverage_start_hour
+    )
+    coverage_end_hour = (
+        payload.coverage_end_hour
+        if payload.coverage_end_hour is not None
+        else line.coverage_end_hour
+    )
+    missed_call_action = payload.missed_call_action or line.missed_call_action
+    validate_line_ownership(
+        db,
+        principal.organization_id,
+        assigned_user_id=assigned_user_id,
+        fallback_user_id=fallback_user_id,
+        department_key=department_key,
+        purpose_key=purpose_key,
+        coverage_timezone=coverage_timezone,
+        coverage_start_hour=coverage_start_hour,
+        coverage_end_hour=coverage_end_hour,
+        missed_call_action=missed_call_action,
+    )
+    line.assigned_user_id = assigned_user_id
+    line.fallback_user_id = fallback_user_id
+    line.department_key = department_key
+    line.purpose_key = purpose_key
+    line.coverage_timezone = coverage_timezone
+    line.coverage_start_hour = coverage_start_hour
+    line.coverage_end_hour = coverage_end_hour
+    line.missed_call_action = missed_call_action
     if payload.label is not None:
         line.label = payload.label.strip()
     if payload.status is not None:
-        if payload.status not in VOICE_LINE_STATUSES:
-            raise ValueError("Unsupported voice line status.")
         line.status = payload.status
     if payload.inbound_route is not None:
-        if payload.inbound_route not in VOICE_LINE_ROUTES:
-            raise ValueError("Unsupported inbound voice route.")
         line.inbound_route = payload.inbound_route
     if payload.is_default is not None:
         if payload.is_default:
@@ -1075,9 +1161,17 @@ def resolve_inbound_user(
 ) -> UUID | None:
     conversation = db.get(Conversation, conversation_id)
     candidate_ids = (
-        [line.assigned_user_id, conversation.assigned_user_id if conversation else None]
+        [
+            line.assigned_user_id,
+            conversation.assigned_user_id if conversation else None,
+            line.fallback_user_id,
+        ]
         if line.inbound_route == "assigned_user"
-        else [conversation.assigned_user_id if conversation else None, line.assigned_user_id]
+        else [
+            conversation.assigned_user_id if conversation else None,
+            line.assigned_user_id,
+            line.fallback_user_id,
+        ]
     )
     for candidate_id in candidate_ids:
         if candidate_id is None:
@@ -1211,6 +1305,38 @@ def validate_line_assignment(
         raise ValueError("Voice line assignee must be an active Stonegate user.")
 
 
+def validate_line_ownership(
+    db: Session,
+    organization_id: UUID,
+    *,
+    assigned_user_id: UUID | None,
+    fallback_user_id: UUID | None,
+    department_key: str,
+    purpose_key: str,
+    coverage_timezone: str,
+    coverage_start_hour: int,
+    coverage_end_hour: int,
+    missed_call_action: str,
+) -> None:
+    validate_line_assignment(db, organization_id, assigned_user_id)
+    validate_line_assignment(db, organization_id, fallback_user_id)
+    if assigned_user_id is not None and assigned_user_id == fallback_user_id:
+        raise ValueError("Primary and fallback owners must be different people.")
+    expected_purpose = VOICE_LINE_DEPARTMENT_PURPOSES.get(department_key)
+    if expected_purpose is None:
+        raise ValueError("Unsupported phone-line department.")
+    if purpose_key != expected_purpose:
+        raise ValueError("Phone-line purpose must match its department.")
+    if missed_call_action not in VOICE_LINE_MISSED_CALL_ACTIONS:
+        raise ValueError("Unsupported missed-call action.")
+    if coverage_start_hour == coverage_end_hour:
+        raise ValueError("Coverage start and end hours must be different.")
+    try:
+        ZoneInfo(coverage_timezone)
+    except ZoneInfoNotFoundError as exc:
+        raise ValueError("Select a valid phone-line coverage timezone.") from exc
+
+
 def clear_default_lines(db: Session, organization_id: UUID) -> None:
     for line in db.scalars(
         select(VoiceLine).where(VoiceLine.organization_id == organization_id)
@@ -1220,6 +1346,7 @@ def clear_default_lines(db: Session, organization_id: UUID) -> None:
 
 def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
     assigned_user = db.get(User, line.assigned_user_id) if line.assigned_user_id else None
+    fallback_user = db.get(User, line.fallback_user_id) if line.fallback_user_id else None
     return VoiceLineRead(
         id=line.id,
         phone_number=line.phone_number,
@@ -1227,8 +1354,22 @@ def voice_line_to_read(db: Session, line: VoiceLine) -> VoiceLineRead:
         status=line.status,
         is_default=line.is_default,
         inbound_route=line.inbound_route,
+        department_key=line.department_key,
+        purpose_key=line.purpose_key,
         assigned_user_id=line.assigned_user_id,
         assigned_user_name=assigned_user.display_name if assigned_user else None,
+        fallback_user_id=line.fallback_user_id,
+        fallback_user_name=fallback_user.display_name if fallback_user else None,
+        coverage_timezone=line.coverage_timezone,
+        coverage_start_hour=line.coverage_start_hour,
+        coverage_end_hour=line.coverage_end_hour,
+        missed_call_action=line.missed_call_action,
+        ownership_complete=bool(
+            assigned_user
+            and assigned_user.is_active
+            and fallback_user
+            and fallback_user.is_active
+        ),
     )
 
 
@@ -1268,6 +1409,15 @@ def record_line_audit(
                 "assigned_user_id": (
                     str(line.assigned_user_id) if line.assigned_user_id else None
                 ),
+                "fallback_user_id": (
+                    str(line.fallback_user_id) if line.fallback_user_id else None
+                ),
+                "department_key": line.department_key,
+                "purpose_key": line.purpose_key,
+                "coverage_timezone": line.coverage_timezone,
+                "coverage_start_hour": line.coverage_start_hour,
+                "coverage_end_hour": line.coverage_end_hour,
+                "missed_call_action": line.missed_call_action,
                 "status": line.status,
                 "is_default": line.is_default,
             },

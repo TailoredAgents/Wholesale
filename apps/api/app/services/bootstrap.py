@@ -220,13 +220,20 @@ def ensure_default_voice_line(
         line = VoiceLine(
             organization_id=organization.id,
             assigned_user_id=admin_user.id if admin_user else None,
+            fallback_user_id=None,
             provider="twilio",
             provider_phone_number_id=None,
             phone_number=phone_number,
-            label="Stonegate primary line",
+            label="Stonegate Acquisitions",
+            department_key="acquisitions",
+            purpose_key="seller_conversations",
             status="active",
             is_default=True,
             inbound_route="conversation_owner",
+            coverage_timezone=settings.twilio_voice_timezone,
+            coverage_start_hour=settings.twilio_voice_allowed_start_hour,
+            coverage_end_hour=settings.twilio_voice_allowed_end_hour,
+            missed_call_action="fallback_then_voicemail",
             line_metadata={"source": "environment_bootstrap"},
         )
         db.add(line)

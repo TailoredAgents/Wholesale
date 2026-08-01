@@ -13,12 +13,51 @@ type VoiceLine = {
   status: string;
   is_default: boolean;
   inbound_route: string;
+  department_key: "acquisitions" | "dispositions" | "general";
+  purpose_key: "seller_conversations" | "buyer_relations" | "company_general";
+  assigned_user_id: string | null;
   assigned_user_name: string | null;
+  fallback_user_id: string | null;
+  fallback_user_name: string | null;
+  coverage_timezone: string;
+  coverage_start_hour: number;
+  coverage_end_hour: number;
+  missed_call_action: "fallback_then_voicemail" | "voicemail" | "task_only";
+  ownership_complete: boolean;
 };
+
+type VoiceLineUser = {
+  id: string;
+  display_name: string;
+  email: string;
+};
+
+const hourOptions = Array.from({ length: 25 }, (_, hour) => hour);
+
+function purposeForDepartment(department: string) {
+  if (department === "dispositions") return "buyer_relations";
+  if (department === "general") return "company_general";
+  return "seller_conversations";
+}
+
+function labelize(value: string) {
+  return value
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatHour(hour: number) {
+  if (hour === 24) return "Midnight (end of day)";
+  if (hour === 0) return "12 AM";
+  if (hour === 12) return "12 PM";
+  return `${hour > 12 ? hour - 12 : hour} ${hour > 12 ? "PM" : "AM"}`;
+}
 
 export function VoiceLineSettings() {
   const { getToken } = useAuth();
   const [lines, setLines] = useState<VoiceLine[]>([]);
+  const [users, setUsers] = useState<VoiceLineUser[]>([]);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -54,8 +93,11 @@ export function VoiceLineSettings() {
   );
 
   const load = useCallback(async () => {
-    const payload = await request<{ items: VoiceLine[] }>("/api/v1/voice/lines");
+    const payload = await request<{ items: VoiceLine[]; users: VoiceLineUser[] }>(
+      "/api/v1/voice/lines",
+    );
     setLines(payload.items);
+    setUsers(payload.users);
   }, [request]);
 
   useEffect(() => {
@@ -71,6 +113,7 @@ export function VoiceLineSettings() {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
+    const departmentKey = String(data.get("department_key") ?? "acquisitions");
     setBusyId("new");
     setMessage("");
     setError("");
@@ -80,7 +123,17 @@ export function VoiceLineSettings() {
         body: JSON.stringify({
           phone_number: String(data.get("phone_number") ?? "").trim(),
           label: String(data.get("label") ?? "").trim(),
+          department_key: departmentKey,
+          purpose_key: purposeForDepartment(departmentKey),
+          assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
+          fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
+          coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
+          coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
+          coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
+          missed_call_action: String(
+            data.get("missed_call_action") ?? "fallback_then_voicemail",
+          ),
           is_default: data.get("is_default") === "on",
         }),
       });
@@ -97,6 +150,7 @@ export function VoiceLineSettings() {
   async function saveLine(event: FormEvent<HTMLFormElement>, lineId: string) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
+    const departmentKey = String(data.get("department_key") ?? "acquisitions");
     setBusyId(lineId);
     setMessage("");
     setError("");
@@ -105,8 +159,18 @@ export function VoiceLineSettings() {
         method: "PATCH",
         body: JSON.stringify({
           label: String(data.get("label") ?? "").trim(),
+          department_key: departmentKey,
+          purpose_key: purposeForDepartment(departmentKey),
+          assigned_user_id: String(data.get("assigned_user_id") ?? "") || null,
+          fallback_user_id: String(data.get("fallback_user_id") ?? "") || null,
           status: String(data.get("status") ?? "active"),
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
+          coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
+          coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
+          coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
+          missed_call_action: String(
+            data.get("missed_call_action") ?? "fallback_then_voicemail",
+          ),
           is_default: data.get("is_default") === "on",
         }),
       });
@@ -139,12 +203,27 @@ export function VoiceLineSettings() {
         {lines.map((line) => (
           <form key={line.id} onSubmit={(event) => saveLine(event, line.id)}>
             <div className={styles.voiceLineHeading}>
-              <strong>{line.phone_number}</strong>
-              <small>{line.assigned_user_name ?? "Unassigned"}</small>
+              <div>
+                <strong>{line.phone_number}</strong>
+                <small>{labelize(line.department_key)} · {labelize(line.purpose_key)}</small>
+              </div>
+              <span
+                className={line.ownership_complete ? styles.lineReady : styles.lineNeedsSetup}
+              >
+                {line.ownership_complete ? "Ownership ready" : "Needs fallback"}
+              </span>
             </div>
             <label>
               <span>Label</span>
               <input defaultValue={line.label} name="label" required />
+            </label>
+            <label>
+              <span>Department</span>
+              <select defaultValue={line.department_key} name="department_key">
+                <option value="acquisitions">Acquisitions</option>
+                <option value="dispositions">Dispositions</option>
+                <option value="general">Company general</option>
+              </select>
             </label>
             <label>
               <span>Status</span>
@@ -154,11 +233,59 @@ export function VoiceLineSettings() {
               </select>
             </label>
             <label>
+              <span>Primary owner</span>
+              <select defaultValue={line.assigned_user_id ?? ""} name="assigned_user_id">
+                <option value="">Select primary</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Fallback owner</span>
+              <select defaultValue={line.fallback_user_id ?? ""} name="fallback_user_id">
+                <option value="">Select fallback</option>
+                {users.map((user) => (
+                  <option key={user.id} value={user.id}>{user.display_name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span>Inbound route</span>
               <select defaultValue={line.inbound_route} name="inbound_route">
                 <option value="conversation_owner">Conversation owner</option>
-                <option value="assigned_user">Assigned user</option>
+                <option value="assigned_user">Primary owner</option>
+              </select>
+            </label>
+            <label>
+              <span>Missed-call plan</span>
+              <select defaultValue={line.missed_call_action} name="missed_call_action">
+                <option value="fallback_then_voicemail">Fallback, then voicemail</option>
                 <option value="voicemail">Voicemail</option>
+                <option value="task_only">Create follow-up task</option>
+              </select>
+            </label>
+            <label>
+              <span>Coverage starts</span>
+              <select defaultValue={line.coverage_start_hour} name="coverage_start_hour">
+                {hourOptions.slice(0, 24).map((hour) => (
+                  <option key={hour} value={hour}>{formatHour(hour)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Coverage ends</span>
+              <select defaultValue={line.coverage_end_hour} name="coverage_end_hour">
+                {hourOptions.slice(1).map((hour) => (
+                  <option key={hour} value={hour}>{formatHour(hour)}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Coverage timezone</span>
+              <select defaultValue={line.coverage_timezone} name="coverage_timezone">
+                <option value="America/New_York">Eastern</option>
+                <option value="America/Chicago">Central</option>
               </select>
             </label>
             <label className={styles.checkLabel}>
@@ -186,11 +313,67 @@ export function VoiceLineSettings() {
             <input name="label" placeholder="Acquisitions main" required />
           </label>
           <label>
+            <span>Department</span>
+            <select defaultValue="acquisitions" name="department_key">
+              <option value="acquisitions">Acquisitions</option>
+              <option value="dispositions">Dispositions</option>
+              <option value="general">Company general</option>
+            </select>
+          </label>
+          <label>
+            <span>Primary owner</span>
+            <select defaultValue="" name="assigned_user_id">
+              <option value="">Select primary</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>{user.display_name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Fallback owner</span>
+            <select defaultValue="" name="fallback_user_id">
+              <option value="">Select fallback</option>
+              {users.map((user) => (
+                <option key={user.id} value={user.id}>{user.display_name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Inbound route</span>
             <select defaultValue="conversation_owner" name="inbound_route">
               <option value="conversation_owner">Conversation owner</option>
-              <option value="assigned_user">Assigned user</option>
+              <option value="assigned_user">Primary owner</option>
+            </select>
+          </label>
+          <label>
+            <span>Missed-call plan</span>
+            <select defaultValue="fallback_then_voicemail" name="missed_call_action">
+              <option value="fallback_then_voicemail">Fallback, then voicemail</option>
               <option value="voicemail">Voicemail</option>
+              <option value="task_only">Create follow-up task</option>
+            </select>
+          </label>
+          <label>
+            <span>Coverage starts</span>
+            <select defaultValue="9" name="coverage_start_hour">
+              {hourOptions.slice(0, 24).map((hour) => (
+                <option key={hour} value={hour}>{formatHour(hour)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Coverage ends</span>
+            <select defaultValue="20" name="coverage_end_hour">
+              {hourOptions.slice(1).map((hour) => (
+                <option key={hour} value={hour}>{formatHour(hour)}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Coverage timezone</span>
+            <select defaultValue="America/New_York" name="coverage_timezone">
+              <option value="America/New_York">Eastern</option>
+              <option value="America/Chicago">Central</option>
             </select>
           </label>
           <label className={styles.checkLabel}>
@@ -206,4 +389,3 @@ export function VoiceLineSettings() {
     </section>
   );
 }
-

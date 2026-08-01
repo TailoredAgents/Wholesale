@@ -105,6 +105,7 @@ USER_CLEAR_ACCESS_REFERENCES = {
     ("operating_seats", "primary_user_id"),
     ("teams", "manager_user_id"),
     ("voice_lines", "assigned_user_id"),
+    ("voice_lines", "fallback_user_id"),
 }
 
 
