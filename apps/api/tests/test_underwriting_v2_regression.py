@@ -200,6 +200,40 @@ def test_thin_market_remains_usable_but_preliminary(
     assert any("Fewer than three" in reason for reason in result.review_reasons)
 
 
+def test_guided_repair_scope_drives_expected_budget_and_uncertainty_range(
+    underwriting_settings: Settings,
+) -> None:
+    result = run_analysis(
+        underwriting_settings,
+        standard_sales(),
+        repair_items=[
+            {
+                "category": "roof",
+                "scope_status": "replace",
+                "severity": "standard",
+                "quantity": 20,
+                "pricing_method": "catalog",
+            },
+            {
+                "category": "foundation",
+                "scope_status": "unknown",
+                "quantity": 1,
+                "pricing_method": "catalog",
+            },
+        ],
+        contingency_override_percentage=20,
+    )
+
+    assert result.base_rehab_cents == 3_050_000
+    assert result.total_rehab_cents == 3_660_000
+    assert result.repair_low_cents == 1_080_000
+    assert result.repair_high_cents == 12_240_000
+    scenario = result.assumptions["repair_scenario"]
+    assert scenario["version"] == "ga-2026.07-v1"
+    assert scenario["unknown_reserve_cents"] == 1_800_000
+    assert scenario["specialist_item_count"] == 0
+
+
 def test_rural_older_sales_are_retained_with_visible_penalties(
     underwriting_settings: Settings,
 ) -> None:

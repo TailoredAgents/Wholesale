@@ -655,16 +655,23 @@ redirect to their new owners.
    condition, and material price or price-per-square-foot outliers.
 10. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
    exact shortage and manual-evidence next action; unsuitable properties are not substituted.
-11. V2.2 produces the live ARV range, as-is range, repair result, buyer economics, offer scenarios,
-   confidence tier, and review flags.
-12. When enabled, the V3 adjustment runner saves a shadow comparison from the same closed-sale set.
+11. For guided scopes, Stonegate applies the versioned Georgia component catalog to user-selected
+   repair, replace, unknown, no-work, or specialist-review decisions. It preserves quantities,
+   evidence, confirmations, manual override reasons, and low/expected/high scenarios on the
+   existing repair and analysis records. Unknown work creates an allowance and warning rather than
+   becoming zero; legacy totals and contractor bids remain valid.
+12. V2.2 produces the live ARV range, as-is range, expected repair result, buyer economics, offer
+   scenarios, confidence tier, and review flags.
+13. When enabled, the V3 adjustment runner saves a shadow comparison from the same closed-sale set.
    Time, marginal living area, lot, garage, pool, and basement adjustments require local pair
    support; collinear, unstable, missing, or extrapolated evidence is withheld or limited and every
    dollar remains reproducible. The shadow cannot write to live offer fields.
-13. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
-14. A human creates a negotiation plan tied to one saved underwriting version.
-15. Approval establishes opening, target, stretch, and hard-ceiling authority.
-16. Concessions and price discussions are appended to the negotiation ledger.
+14. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
+   Investor reports include guided repair decisions, ranges, evidence, catalog version, and items
+   to verify; PDFs remain available when repairs are not walkthrough-confirmed.
+15. A human creates a negotiation plan tied to one saved underwriting version.
+16. Approval establishes opening, target, stretch, and hard-ceiling authority.
+17. Concessions and price discussions are appended to the negotiation ledger.
 
 ### 8.8 Contract And E-Signature
 

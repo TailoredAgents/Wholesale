@@ -1284,6 +1284,58 @@ def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
     get_settings.cache_clear()
 
 
+def test_guided_repair_catalog_and_saved_scope_are_versioned(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead_response = client.post("/api/v1/leads", headers=headers, json=lead_payload())
+    assert lead_response.status_code == 201
+    lead_id = lead_response.json()["id"]
+
+    catalog_response = client.get(
+        f"/api/v1/leads/{lead_id}/repair-catalog",
+        headers=headers,
+    )
+    assert catalog_response.status_code == 200
+    catalog = catalog_response.json()
+    assert catalog["version"] == "ga-2026.07-v1"
+    assert catalog["status"] == "internal_planning_allowance"
+    assert len(catalog["items"]) == 15
+
+    estimate_response = client.post(
+        f"/api/v1/leads/{lead_id}/repair-estimates",
+        headers=headers,
+        json={
+            "source_type": "internal_scope",
+            "estimate_date": "2026-07-31T12:00:00Z",
+            "scope_items": [
+                {
+                    "category": "roof",
+                    "scope_status": "replace",
+                    "severity": "standard",
+                    "quantity": 20,
+                    "pricing_method": "catalog",
+                    "evidence_source": "staff_observation",
+                    "confirmation_status": "user_confirmed",
+                }
+            ],
+            "contingency_percentage": 10,
+        },
+    )
+    assert estimate_response.status_code == 201, estimate_response.text
+    estimate = estimate_response.json()
+    assert estimate["catalog_version"] == "ga-2026.07-v1"
+    assert estimate["subtotal_cents"] == 1_250_000
+    assert estimate["scenario_low_cents"] == 990_000
+    assert estimate["scenario_expected_cents"] == 1_375_000
+    assert estimate["scenario_high_cents"] == 1_870_000
+    assert estimate["scope_items"][0]["unit"] == "roof_square"
+    assert estimate["scope_items"][0]["estimated_cost_cents"] == 1_250_000
+
+
 def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     db_session: Session,
     api_db_override: None,

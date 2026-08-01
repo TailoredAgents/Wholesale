@@ -8,10 +8,26 @@ import styles from "./page.module.css";
 
 export type RepairEstimateItem = {
   category: string;
-  estimated_cost_cents: number;
+  estimated_cost_cents?: number | null;
   labor_cost_cents?: number | null;
   material_cost_cents?: number | null;
   details?: string | null;
+  scope_status?: "unknown" | "no_work" | "repair" | "replace" | "specialist_review";
+  severity?: "minor" | "standard" | "extensive";
+  quantity?: number | null;
+  unit?: string | null;
+  pricing_method?: "catalog" | "manual" | "contractor";
+  manual_override_cents?: number | null;
+  override_reason?: string | null;
+  system_low_cents?: number | null;
+  system_expected_cents?: number | null;
+  system_high_cents?: number | null;
+  evidence_source?: string;
+  evidence_reference?: string | null;
+  confirmation_status?: string;
+  inspection_status?: string;
+  catalog_version?: string | null;
+  uncertainty_note?: string | null;
 };
 
 export type RepairEstimate = {
@@ -26,6 +42,12 @@ export type RepairEstimate = {
   contingency_percentage: number;
   contingency_cents: number;
   total_cents: number;
+  scenario_low_cents?: number | null;
+  scenario_expected_cents?: number | null;
+  scenario_high_cents?: number | null;
+  unknown_reserve_cents?: number;
+  catalog_version?: string | null;
+  scenario_warnings?: string[];
   evidence_reference: string | null;
   notes: string | null;
   created_by_user_id: string | null;
@@ -61,7 +83,7 @@ export function RepairEstimateControl({
 }: Props) {
   const { getToken } = useAuth();
   const [estimates, setEstimates] = useState<RepairEstimate[]>([]);
-  const [sourceType, setSourceType] = useState("contractor_bid");
+  const [sourceType, setSourceType] = useState("internal_scope");
   const [contractorName, setContractorName] = useState("");
   const [estimateDate, setEstimateDate] = useState(() =>
     new Date().toISOString().slice(0, 10),
@@ -201,16 +223,24 @@ export function RepairEstimateControl({
             <dd>{selectedEstimate.contractor_name ?? selectedEstimate.source_type.replaceAll("_", " ")}</dd>
           </div>
           <div>
-            <dt>Subtotal</dt>
-            <dd>{formatMoney(selectedEstimate.subtotal_cents)}</dd>
+            <dt>Low</dt>
+            <dd>
+              {formatMoney(
+                selectedEstimate.scenario_low_cents ?? selectedEstimate.total_cents,
+              )}
+            </dd>
           </div>
           <div>
-            <dt>Contingency</dt>
-            <dd>{selectedEstimate.contingency_percentage}%</dd>
-          </div>
-          <div>
-            <dt>Total</dt>
+            <dt>Expected</dt>
             <dd>{formatMoney(selectedEstimate.total_cents)}</dd>
+          </div>
+          <div>
+            <dt>High</dt>
+            <dd>
+              {formatMoney(
+                selectedEstimate.scenario_high_cents ?? selectedEstimate.total_cents,
+              )}
+            </dd>
           </div>
         </dl>
       ) : null}
@@ -222,9 +252,9 @@ export function RepairEstimateControl({
             <label>
               <span>Evidence type</span>
               <select onChange={(event) => setSourceType(event.target.value)} value={sourceType}>
-                <option value="contractor_bid">Contractor bid</option>
-                <option value="walkthrough_scope">Walkthrough scope</option>
                 <option value="internal_scope">Internal scope</option>
+                <option value="walkthrough_scope">Walkthrough scope</option>
+                <option value="contractor_bid">Contractor bid</option>
               </select>
             </label>
             <label>

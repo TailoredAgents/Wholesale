@@ -127,6 +127,7 @@ from app.services.property_validation import (
     reset_property_validation,
     validate_provider_record,
 )
+from app.services.repair_catalog import prepare_new_scope_items
 from app.services.repair_estimates import get_repair_estimate
 from app.services.tasks import (
     create_deal_next_action,
@@ -1536,7 +1537,9 @@ def create_lead_market_analysis(
 
     repair_estimate = None
     effective_base_rehab_cents = payload.base_rehab_override_cents
-    effective_repair_items = [item.model_dump(mode="json") for item in payload.repair_items]
+    effective_repair_items = prepare_new_scope_items(
+        [item.model_dump(mode="json") for item in payload.repair_items]
+    )
     effective_contingency_percentage = payload.contingency_override_percentage
     effective_repair_notes = payload.repair_notes
     if payload.repair_estimate_id is not None:
@@ -1879,6 +1882,12 @@ def create_lead_market_analysis(
     report_stage = payload.input_verification_status
     if report_stage == "preliminary" and custom_inputs_applied:
         report_stage = "pre_meeting_reviewed"
+    normalized_repair_items_value = result.assumptions.get("repair_items")
+    normalized_repair_items = (
+        [item for item in normalized_repair_items_value if isinstance(item, dict)]
+        if isinstance(normalized_repair_items_value, list)
+        else effective_repair_items
+    )
     pre_meeting_inputs = UnderwritingPreMeetingInputsRead(
         verification_status=report_stage,
         report_stage=report_stage,
@@ -1894,7 +1903,7 @@ def create_lead_market_analysis(
         base_rehab_override_cents=effective_base_rehab_cents,
         repair_items=[
             RepairEstimateItemInput.model_validate(item)
-            for item in effective_repair_items
+            for item in normalized_repair_items
         ],
         contingency_override_percentage=effective_contingency_percentage,
         holding_period_months=payload.holding_period_months,
@@ -1907,6 +1916,12 @@ def create_lead_market_analysis(
         repair_estimate_date=repair_estimate.estimate_date if repair_estimate else None,
         repair_estimate_reference=(
             repair_estimate.evidence_reference if repair_estimate else None
+        ),
+        repair_catalog_version=string_or_none(
+            dict_value(result.assumptions.get("repair_scenario")).get("version")
+        ),
+        repair_scenario=(
+            dict_value(result.assumptions.get("repair_scenario")) or None
         ),
     )
     assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
@@ -2008,6 +2023,7 @@ def create_lead_market_analysis(
         "base_rehab_cents": result.base_rehab_cents,
         "rehab_contingency_percentage": result.rehab_contingency_percentage,
         "total_rehab_cents": result.total_rehab_cents,
+        "repair_scenario": result.assumptions.get("repair_scenario"),
         "flip_buyer_max_cents": result.flip_buyer_max_cents,
         "rental_buyer_max_cents": result.rental_buyer_max_cents,
         "recommended_disposition_cents": result.recommended_disposition_cents,
@@ -3636,6 +3652,11 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             metadata.get("rehab_contingency_percentage")
         ),
         total_rehab_cents=optional_int(metadata.get("total_rehab_cents")),
+        repair_scenario=(
+            dict_value(metadata.get("repair_scenario"))
+            if isinstance(metadata.get("repair_scenario"), dict)
+            else None
+        ),
         flip_buyer_max_cents=optional_int(metadata.get("flip_buyer_max_cents")),
         rental_buyer_max_cents=optional_int(metadata.get("rental_buyer_max_cents")),
         recommended_disposition_cents=optional_int(

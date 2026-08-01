@@ -1131,6 +1131,10 @@ def repair_input_story(
         if isinstance(repair_items_value, list)
         else []
     )
+    repair_scenario = dict_value(inputs.get("repair_scenario"))
+    catalog_version = first_string(inputs, ("repair_catalog_version",)) or first_string(
+        repair_scenario, ("version",)
+    )
     holding_months = optional_int(inputs.get("holding_period_months")) or optional_int(
         assumptions.get("holding_period_months")
     )
@@ -1192,15 +1196,65 @@ def repair_input_story(
             ),
         ]
     )
+    if repair_scenario:
+        repair_rows.extend(
+            [
+                (
+                    "Repair scenario range",
+                    f"{format_money(optional_int(repair_scenario.get('total_low_cents')))} to "
+                    f"{format_money(optional_int(repair_scenario.get('total_high_cents')))}",
+                ),
+                (
+                    "Expected repair scenario",
+                    format_money(
+                        optional_int(repair_scenario.get("total_expected_cents"))
+                    ),
+                ),
+                (
+                    "Unknown-work allowance",
+                    format_money(
+                        optional_int(repair_scenario.get("unknown_reserve_cents"))
+                    ),
+                ),
+            ]
+        )
+    if catalog_version:
+        repair_rows.append(("Cost catalog version", catalog_version))
     story: list[Flowable] = [
         section_heading("Repair scope and input record", styles),
         key_value_table(repair_rows, styles),
     ]
     if repair_items:
+        guided_scope = any(
+            item.get("catalog_version") or item.get("pricing_method") == "catalog"
+            for item in repair_items
+        )
         story.extend(
             [
                 Spacer(1, 0.12 * inch),
-                repair_item_table(repair_items, styles),
+                (
+                    guided_repair_item_table(repair_items, styles)
+                    if guided_scope
+                    else repair_item_table(repair_items, styles)
+                ),
+            ]
+        )
+    scenario_warnings = repair_scenario.get("warnings")
+    if isinstance(scenario_warnings, list) and scenario_warnings:
+        story.extend(
+            [
+                Spacer(1, 0.08 * inch),
+                Paragraph(
+                    "<b>Items to verify:</b> "
+                    + escape(
+                        " ".join(
+                            str(warning)
+                            for warning in scenario_warnings
+                            if isinstance(warning, str)
+                        )
+                    ),
+                    styles["disclaimer"],
+                ),
             ]
         )
     story.append(Spacer(1, 0.14 * inch))
@@ -1248,6 +1302,69 @@ def repair_item_table(
     table = LongTable(
         rows,
         colWidths=[1.25 * inch, 0.9 * inch, 0.9 * inch, 1.0 * inch, 3.35 * inch],
+        repeatRows=1,
+    )
+    apply_comp_table_style(table)
+    return table
+
+
+def guided_repair_item_table(
+    items: list[dict[str, Any]],
+    styles: dict[str, ParagraphStyle],
+) -> LongTable:
+    rows: list[list[Paragraph]] = [
+        [
+            Paragraph("Work item", styles["table_header"]),
+            Paragraph("Decision", styles["table_header"]),
+            Paragraph("Quantity", styles["table_header"]),
+            Paragraph("Planning range", styles["table_header"]),
+            Paragraph("Evidence and notes", styles["table_header"]),
+        ]
+    ]
+    for item in items:
+        quantity = optional_float(item.get("quantity"))
+        quantity_text = (
+            f"{quantity:g} {labelize(first_string(item, ('unit',)))}"
+            if quantity is not None
+            else "Not recorded"
+        )
+        range_text = (
+            f"{escape(format_money(optional_int(item.get('system_low_cents'))))} to "
+            f"{escape(format_money(optional_int(item.get('system_high_cents'))))}"
+            f"<br/><b>{escape(format_money(optional_int(item.get('estimated_cost_cents'))))} expected</b>"
+        )
+        evidence_parts = [
+            labelize(first_string(item, ("evidence_source",))) or "Not provided",
+            labelize(first_string(item, ("confirmation_status",))) or "Unconfirmed",
+        ]
+        for key in ("details", "uncertainty_note", "override_reason"):
+            value = first_string(item, (key,))
+            if value:
+                evidence_parts.append(value)
+        rows.append(
+            [
+                Paragraph(
+                    escape(labelize(first_string(item, ("category",)))),
+                    styles["table_cell_bold"],
+                ),
+                Paragraph(
+                    escape(
+                        f"{labelize(first_string(item, ('scope_status',)))} / "
+                        f"{labelize(first_string(item, ('severity',)))}"
+                    ),
+                    styles["table_cell"],
+                ),
+                Paragraph(escape(quantity_text), styles["table_cell"]),
+                Paragraph(range_text, styles["table_cell"]),
+                Paragraph(
+                    "<br/>".join(escape(part) for part in evidence_parts),
+                    styles["table_cell"],
+                ),
+            ]
+        )
+    table = LongTable(
+        rows,
+        colWidths=[1.1 * inch, 1.05 * inch, 0.8 * inch, 1.45 * inch, 3.0 * inch],
         repeatRows=1,
     )
     apply_comp_table_style(table)

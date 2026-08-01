@@ -7,6 +7,7 @@ from typing import Any
 from app.core.config import Settings
 from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
 from app.schemas.leads import MarketAnalysisCompRead
+from app.services.repair_catalog import evaluate_repair_scope
 from app.services.underwriting_methodology import ACTIVE_METHODOLOGY_VERSION
 
 MONEY = 100
@@ -819,12 +820,35 @@ def repair_assumptions(
     else:
         system_low, system_high = fallback_low, fallback_high
 
+    guided_scope = any(
+        item.get("pricing_method") == "catalog" or item.get("catalog_version")
+        for item in repair_items
+    )
     itemized_total = sum(
         cost
         for item in repair_items
         if (cost := optional_int(item.get("estimated_cost_cents"))) is not None
     )
-    if repair_items and itemized_total > 0:
+    contingency = (
+        contingency_override_percentage
+        if contingency_override_percentage is not None
+        else default_contingency
+    )
+    repair_scenario: dict[str, Any] | None = None
+    normalized_repair_items = repair_items
+    if guided_scope:
+        repair_scenario = evaluate_repair_scope(
+            repair_items,
+            contingency_percentage=contingency,
+            subject={"squareFootage": square_feet},
+        )
+        normalized_repair_items = list(repair_scenario["items"])
+        base_rehab = int(repair_scenario["subtotal_expected_cents"])
+        total_rehab = int(repair_scenario["total_expected_cents"])
+        repair_low = int(repair_scenario["total_low_cents"])
+        repair_high = int(repair_scenario["total_high_cents"])
+        repair_source = "guided_catalog"
+    elif repair_items and itemized_total > 0:
         base_rehab = itemized_total
         repair_source = "itemized"
     elif base_rehab_override_cents is not None:
@@ -834,16 +858,12 @@ def repair_assumptions(
         base_rehab = round((system_low + system_high) / 2)
         repair_source = "system_estimate"
 
-    contingency = (
-        contingency_override_percentage
-        if contingency_override_percentage is not None
-        else default_contingency
-    )
-    total_rehab = round(base_rehab * (1 + contingency / 100))
-    if repair_source == "system_estimate":
-        repair_low, repair_high = system_low, system_high
-    else:
-        repair_low, repair_high = base_rehab, total_rehab
+    if not guided_scope:
+        total_rehab = round(base_rehab * (1 + contingency / 100))
+        if repair_source == "system_estimate":
+            repair_low, repair_high = system_low, system_high
+        else:
+            repair_low, repair_high = base_rehab, total_rehab
     return {
         "repair_low_cents": repair_low,
         "repair_high_cents": repair_high,
@@ -853,7 +873,8 @@ def repair_assumptions(
         "repair_estimate_source": repair_source,
         "system_repair_low_cents": system_low,
         "system_repair_high_cents": system_high,
-        "repair_items": repair_items,
+        "repair_items": normalized_repair_items,
+        "repair_scenario": repair_scenario,
     }
 
 

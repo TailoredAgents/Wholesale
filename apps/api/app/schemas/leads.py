@@ -290,8 +290,48 @@ RepairCategory = Literal[
 
 class UnderwritingRepairItemInput(BaseModel):
     category: RepairCategory
-    estimated_cost_cents: int = Field(ge=1, le=100_000_000)
+    estimated_cost_cents: int | None = Field(default=None, ge=0, le=100_000_000)
     details: str | None = Field(default=None, max_length=500)
+    scope_status: Literal[
+        "unknown",
+        "no_work",
+        "repair",
+        "replace",
+        "specialist_review",
+    ] = "repair"
+    severity: Literal["minor", "standard", "extensive"] = "standard"
+    quantity: float | None = Field(default=None, gt=0, le=100_000)
+    unit: str | None = Field(default=None, max_length=80)
+    pricing_method: Literal["catalog", "manual", "contractor"] = "manual"
+    manual_override_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    override_reason: str | None = Field(default=None, max_length=500)
+    system_low_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    system_expected_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    system_high_cents: int | None = Field(default=None, ge=0, le=100_000_000)
+    evidence_source: Literal[
+        "not_provided",
+        "seller_report",
+        "staff_observation",
+        "walkthrough",
+        "contractor_bid",
+        "document",
+        "other",
+    ] = "not_provided"
+    evidence_reference: str | None = Field(default=None, max_length=500)
+    confirmation_status: Literal[
+        "unconfirmed",
+        "user_confirmed",
+        "walkthrough_verified",
+        "contractor_verified",
+    ] = "unconfirmed"
+    inspection_status: Literal[
+        "not_inspected",
+        "observed",
+        "specialist_needed",
+        "verified",
+    ] = "not_inspected"
+    catalog_version: str | None = Field(default=None, max_length=80)
+    uncertainty_note: str | None = Field(default=None, max_length=500)
 
 
 class RepairEstimateItemInput(UnderwritingRepairItemInput):
@@ -321,10 +361,47 @@ class RepairEstimateRead(BaseModel):
     contingency_percentage: int
     contingency_cents: int
     total_cents: int
+    scenario_low_cents: int | None = None
+    scenario_expected_cents: int | None = None
+    scenario_high_cents: int | None = None
+    unknown_reserve_cents: int = 0
+    catalog_version: str | None = None
+    scenario_warnings: list[str] = Field(default_factory=list)
     evidence_reference: str | None
     notes: str | None
     created_by_user_id: UUID | None
     created_at: datetime
+
+
+class RepairCatalogRateRead(BaseModel):
+    low_cents: int
+    expected_cents: int
+    high_cents: int
+
+
+class RepairCatalogItemRead(BaseModel):
+    category: RepairCategory
+    label: str
+    unit: str
+    default_quantity: float
+    quantity_basis: str
+    repair: RepairCatalogRateRead
+    replace: RepairCatalogRateRead
+    minimum_cents: int
+    specialist_recommended: bool
+    source_note: str
+
+
+class RepairCatalogRead(BaseModel):
+    version: str
+    market_key: str
+    market_label: str
+    effective_date: date
+    currency: Literal["USD"] = "USD"
+    status: Literal["internal_planning_allowance"] = "internal_planning_allowance"
+    source_note: str
+    subject_defaults: dict[str, float | int | None]
+    items: list[RepairCatalogItemRead]
 
 
 ManualComparableSource = Literal[
@@ -407,6 +484,8 @@ class UnderwritingPreMeetingInputsRead(BaseModel):
     repair_estimate_contractor_name: str | None = None
     repair_estimate_date: datetime | None = None
     repair_estimate_reference: str | None = None
+    repair_catalog_version: str | None = None
+    repair_scenario: dict[str, Any] | None = None
 
 
 class LeadMarketAnalysisCreate(BaseModel):
@@ -583,6 +662,7 @@ class LeadMarketAnalysisRead(BaseModel):
     base_rehab_cents: int | None = None
     rehab_contingency_percentage: int | None = None
     total_rehab_cents: int | None = None
+    repair_scenario: dict[str, Any] | None = None
     flip_buyer_max_cents: int | None = None
     rental_buyer_max_cents: int | None = None
     recommended_disposition_cents: int | None = None

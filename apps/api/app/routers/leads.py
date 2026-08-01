@@ -37,6 +37,7 @@ from app.schemas.leads import (
     LeadTransactionCreate,
     LeadUnderwritingCreate,
     PropertyValidationRead,
+    RepairCatalogRead,
     RepairEstimateCreate,
     RepairEstimateRead,
     UnderwritingManualComparableCreate,
@@ -74,7 +75,11 @@ from app.services.offer_concessions import (
     get_negotiation_ledger,
     present_concession,
 )
-from app.services.repair_estimates import create_repair_estimate, list_repair_estimates
+from app.services.repair_estimates import (
+    create_repair_estimate,
+    get_repair_catalog,
+    list_repair_estimates,
+)
 from app.services.underwriting_manual_comps import (
     create_manual_comparable,
     list_manual_comparables,
@@ -248,6 +253,18 @@ def read_repair_estimates(
     if estimates is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return estimates
+
+
+@router.get("/{lead_id}/repair-catalog")
+def read_repair_catalog(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> RepairCatalogRead:
+    catalog = get_repair_catalog(db, principal, lead_id)
+    if catalog is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return catalog
 
 
 @router.post("/{lead_id}/repair-estimates", status_code=201)

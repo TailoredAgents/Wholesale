@@ -19,6 +19,7 @@ import {
   type SubjectProperty,
 } from "./comparable-review-workbench";
 import { ManualCompControl } from "./manual-comp-control";
+import { GuidedRepairScope } from "./guided-repair-scope";
 import {
   RepairEstimate,
   RepairEstimateControl,
@@ -31,29 +32,6 @@ type VerificationStatus =
   | "preliminary"
   | "pre_meeting_reviewed"
   | "walkthrough_verified";
-type RepairCategory =
-  | "roof"
-  | "hvac"
-  | "plumbing"
-  | "electrical"
-  | "foundation"
-  | "kitchen"
-  | "bathrooms"
-  | "flooring"
-  | "paint_drywall"
-  | "windows_doors"
-  | "exterior"
-  | "landscaping"
-  | "permits"
-  | "cleanup"
-  | "other";
-
-type RepairItem = {
-  category: RepairCategory;
-  estimated_cost_cents: number;
-  details?: string | null;
-};
-
 type PreMeetingInputs = {
   verification_status: VerificationStatus;
   report_stage: VerificationStatus;
@@ -62,7 +40,7 @@ type PreMeetingInputs = {
   repair_level: string;
   repair_estimate_source: string;
   base_rehab_override_cents: number | null;
-  repair_items: RepairItem[];
+  repair_items: RepairEstimateItem[];
   contingency_override_percentage: number | null;
   holding_period_months: number;
   repair_notes: string | null;
@@ -71,6 +49,19 @@ type PreMeetingInputs = {
   repair_estimate_contractor_name?: string | null;
   repair_estimate_date?: string | null;
   repair_estimate_reference?: string | null;
+  repair_catalog_version?: string | null;
+  repair_scenario?: RepairScenario | null;
+};
+
+type RepairScenario = {
+  version?: string;
+  total_low_cents?: number;
+  total_expected_cents?: number;
+  total_high_cents?: number;
+  unknown_reserve_cents?: number;
+  unknown_item_count?: number;
+  specialist_item_count?: number;
+  warnings?: string[];
 };
 
 type ConfidenceFactor = {
@@ -191,6 +182,7 @@ type MarketValueEstimate = {
   base_rehab_cents?: number | null;
   rehab_contingency_percentage?: number | null;
   total_rehab_cents?: number | null;
+  repair_scenario?: RepairScenario | null;
   flip_buyer_max_cents?: number | null;
   rental_buyer_max_cents?: number | null;
   recommended_disposition_cents?: number | null;
@@ -229,96 +221,12 @@ type MarketValueEstimate = {
 type Status = "idle" | "loading" | "loaded" | "error";
 type ReportAudience = "investor" | "client";
 
-const REPAIR_CATEGORIES: { key: RepairCategory; label: string }[] = [
-  { key: "roof", label: "Roof" },
-  { key: "hvac", label: "HVAC" },
-  { key: "plumbing", label: "Plumbing" },
-  { key: "electrical", label: "Electrical" },
-  { key: "foundation", label: "Foundation" },
-  { key: "kitchen", label: "Kitchen" },
-  { key: "bathrooms", label: "Bathrooms" },
-  { key: "flooring", label: "Flooring" },
-  { key: "paint_drywall", label: "Paint / drywall" },
-  { key: "windows_doors", label: "Windows / doors" },
-  { key: "exterior", label: "Exterior" },
-  { key: "landscaping", label: "Landscaping" },
-  { key: "permits", label: "Permits" },
-  { key: "cleanup", label: "Cleanup" },
-  { key: "other", label: "Other" },
-];
-
-const REPAIR_PRESET_WEIGHTS: Record<
-  string,
-  Partial<Record<RepairCategory, number>>
-> = {
-  light: {
-    kitchen: 20,
-    bathrooms: 15,
-    flooring: 20,
-    paint_drywall: 25,
-    windows_doors: 5,
-    exterior: 8,
-    landscaping: 3,
-    cleanup: 4,
-  },
-  moderate: {
-    roof: 10,
-    hvac: 8,
-    plumbing: 5,
-    electrical: 5,
-    kitchen: 22,
-    bathrooms: 16,
-    flooring: 12,
-    paint_drywall: 10,
-    windows_doors: 4,
-    exterior: 4,
-    permits: 2,
-    cleanup: 2,
-  },
-  heavy: {
-    roof: 10,
-    hvac: 9,
-    plumbing: 9,
-    electrical: 9,
-    foundation: 12,
-    kitchen: 16,
-    bathrooms: 12,
-    flooring: 6,
-    paint_drywall: 5,
-    windows_doors: 4,
-    exterior: 4,
-    permits: 2,
-    cleanup: 2,
-  },
-  structural: {
-    roof: 10,
-    hvac: 8,
-    plumbing: 10,
-    electrical: 10,
-    foundation: 22,
-    kitchen: 12,
-    bathrooms: 8,
-    flooring: 4,
-    paint_drywall: 4,
-    windows_doors: 4,
-    exterior: 4,
-    permits: 2,
-    cleanup: 2,
-  },
-};
-
 const REPAIR_CONTINGENCY: Record<string, number> = {
   light: 10,
   moderate: 15,
   heavy: 20,
   structural: 25,
 };
-
-function emptyRepairAmounts() {
-  return Object.fromEntries(
-    REPAIR_CATEGORIES.map(({ key }) => [key, ""]),
-  ) as Record<RepairCategory, string>;
-}
 
 function formatMoney(cents: number | null | undefined) {
   if (cents === null || cents === undefined) {
@@ -358,6 +266,9 @@ function repairSourceLabel(value: PreMeetingInputs["repair_estimate_source"] | u
   if (value === "itemized") {
     return "Itemized estimate";
   }
+  if (value === "guided_catalog") {
+    return "Guided Georgia scope";
+  }
   if (value === "user_total") {
     return "User total";
   }
@@ -384,8 +295,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     useState<VerificationStatus>("preliminary");
   const [repairEntryMode, setRepairEntryMode] = useState<RepairEntryMode>("system");
   const [baseRehabInput, setBaseRehabInput] = useState("");
-  const [repairAmounts, setRepairAmounts] =
-    useState<Record<RepairCategory, string>>(emptyRepairAmounts);
+  const [repairItems, setRepairItems] = useState<RepairEstimateItem[]>([]);
   const [repairNotes, setRepairNotes] = useState("");
   const [contingencyInput, setContingencyInput] = useState("");
   const [selectedRepairEstimateId, setSelectedRepairEstimateId] = useState<string | null>(null);
@@ -463,13 +373,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       setSelectedRepairEstimateSource(
         inputs.repair_estimate_id ? inputs.repair_estimate_source : null,
       );
-      if (inputs.repair_estimate_id || inputs.repair_estimate_source === "itemized") {
+      if (
+        inputs.repair_estimate_id ||
+        inputs.repair_estimate_source === "itemized" ||
+        inputs.repair_estimate_source === "guided_catalog"
+      ) {
         setRepairEntryMode("itemized");
-        const nextAmounts = emptyRepairAmounts();
-        for (const item of inputs.repair_items) {
-          nextAmounts[item.category] = String(item.estimated_cost_cents / 100);
-        }
-        setRepairAmounts(nextAmounts);
+        setRepairItems(inputs.repair_items);
         setBaseRehabInput("");
       } else if (inputs.repair_estimate_source === "user_total") {
         setRepairEntryMode("total");
@@ -478,14 +388,15 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             ? ""
             : String(inputs.base_rehab_override_cents / 100),
         );
-        setRepairAmounts(emptyRepairAmounts());
+        setRepairItems([]);
       } else {
         setRepairEntryMode("system");
         setBaseRehabInput("");
-        setRepairAmounts(emptyRepairAmounts());
+        setRepairItems([]);
       }
     } else {
       setContingencyInput("");
+      setRepairItems([]);
       setSelectedRepairEstimateId(null);
       setSelectedRepairEstimateSource(null);
     }
@@ -501,43 +412,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   }
 
   function applySavedRepairEstimate(repairEstimate: RepairEstimate) {
-    const nextAmounts = emptyRepairAmounts();
-    for (const item of repairEstimate.scope_items) {
-      if (item.category in nextAmounts) {
-        const category = item.category as RepairCategory;
-        const currentCents = dollarsToCents(nextAmounts[category]) ?? 0;
-        nextAmounts[category] = String(
-          (currentCents + item.estimated_cost_cents) / 100,
-        );
-      }
-    }
     setRepairEntryMode("itemized");
-    setRepairAmounts(nextAmounts);
+    setRepairItems(repairEstimate.scope_items);
     setContingencyInput(String(repairEstimate.contingency_percentage));
     setRepairNotes(repairEstimate.notes ?? "");
     setSelectedRepairEstimateId(repairEstimate.id);
     setSelectedRepairEstimateSource(repairEstimate.source_type);
     markInputsReviewed();
-  }
-
-  function applyRepairPreset() {
-    const baseCents = estimate?.base_rehab_cents;
-    if (!baseCents || baseCents <= 0) {
-      setError("Run the system analysis once before building an itemized preset.");
-      return;
-    }
-    const weights = REPAIR_PRESET_WEIGHTS[repairLevel] ?? REPAIR_PRESET_WEIGHTS.moderate;
-    const nextAmounts = emptyRepairAmounts();
-    for (const [category, percentage] of Object.entries(weights)) {
-      const roundedCents = Math.round((baseCents * percentage) / 10000) * 100;
-      nextAmounts[category as RepairCategory] = String(roundedCents / 100);
-    }
-    setRepairAmounts(nextAmounts);
-    setRepairEntryMode("itemized");
-    setContingencyInput(String(REPAIR_CONTINGENCY[repairLevel] ?? 15));
-    detachSavedRepairEstimate();
-    markInputsReviewed();
-    setError(null);
   }
 
   useEffect(() => {
@@ -580,14 +461,9 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
   function buildAnalysisInputs() {
     const usingSavedEstimate = selectedRepairEstimateId !== null;
-    const repairItems =
+    const submittedRepairItems =
       repairEntryMode === "itemized" && !usingSavedEstimate
-        ? REPAIR_CATEGORIES.flatMap(({ key }) => {
-            const estimatedCostCents = dollarsToCents(repairAmounts[key]);
-            return estimatedCostCents && estimatedCostCents > 0
-              ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
-              : [];
-          })
+        ? repairItems
         : [];
     const baseRehabOverride =
       repairEntryMode === "total" && !usingSavedEstimate
@@ -598,10 +474,21 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     }
     if (
       repairEntryMode === "itemized" &&
-      repairItems.length === 0 &&
+      submittedRepairItems.length === 0 &&
       !usingSavedEstimate
     ) {
-      throw new Error("Enter at least one itemized repair cost.");
+      throw new Error("Assess at least one repair category.");
+    }
+    const unexplainedOverride = submittedRepairItems.find(
+      (item) =>
+        item.manual_override_cents !== null &&
+        item.manual_override_cents !== undefined &&
+        !item.override_reason?.trim(),
+    );
+    if (unexplainedOverride) {
+      throw new Error(
+        `Explain the manual amount for ${unexplainedOverride.category.replaceAll("_", " ")}.`,
+      );
     }
     const contingencyPercentage = contingencyInput.trim()
       ? Number(contingencyInput)
@@ -620,7 +507,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       repair_level: repairLevel,
       input_verification_status: verificationStatus,
       base_rehab_override_cents: baseRehabOverride,
-      repair_items: repairItems,
+      repair_items: submittedRepairItems,
       repair_estimate_id: selectedRepairEstimateId,
       contingency_override_percentage: usingSavedEstimate ? null : contingencyPercentage,
       holding_period_months: 6,
@@ -775,18 +662,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     ...(estimate?.review_reasons ?? []),
     ...(estimate?.data_disagreements ?? []),
   ];
-  const itemizedBaseCents = REPAIR_CATEGORIES.reduce(
-    (total, { key }) => total + (dollarsToCents(repairAmounts[key]) ?? 0),
-    0,
-  );
-  const currentRepairItems: RepairEstimateItem[] = REPAIR_CATEGORIES.flatMap(
-    ({ key }) => {
-      const estimatedCostCents = dollarsToCents(repairAmounts[key]);
-      return estimatedCostCents && estimatedCostCents > 0
-        ? [{ category: key, estimated_cost_cents: estimatedCostCents }]
-        : [];
-    },
-  );
+  const currentRepairItems = repairItems;
   const isLoading = status === "loading";
   const isV2 = estimate?.methodology_version?.startsWith("v2") ?? false;
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
@@ -800,6 +676,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
       : repairEntryMode === "total"
         ? "user_total"
         : "system_estimate");
+  const activeRepairScenario =
+    estimate?.repair_scenario ?? estimate?.pre_meeting_inputs?.repair_scenario;
 
   return (
     <section className={styles.marketValuePanel}>
@@ -911,50 +789,22 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           ) : null}
 
           {repairEntryMode === "itemized" ? (
-            <div className={styles.itemizedScope}>
-              <div className={styles.repairPresetBar}>
-                <div>
-                  <strong>{repairLevel.replaceAll("_", " ")} scope preset</strong>
-                  <span>
-                    Allocates the saved system base across common work categories.
-                  </span>
-                </div>
-                <button disabled={!estimate?.base_rehab_cents} onClick={applyRepairPreset} type="button">
-                  Apply preset
-                </button>
-              </div>
-              <div className={styles.itemizedRepairs}>
-                {REPAIR_CATEGORIES.map(({ key, label }) => (
-                  <label key={key}>
-                    <span>{label}</span>
-                    <div className={styles.moneyInput}>
-                      <span>$</span>
-                      <input
-                        aria-label={`${label} estimated cost`}
-                        inputMode="decimal"
-                        min="0"
-                        onChange={(event) => {
-                          setRepairAmounts((current) => ({
-                            ...current,
-                            [key]: event.target.value,
-                          }));
-                          detachSavedRepairEstimate();
-                          markInputsReviewed();
-                        }}
-                        placeholder="0"
-                        step="500"
-                        type="number"
-                        value={repairAmounts[key]}
-                      />
-                    </div>
-                  </label>
-                ))}
-                <div className={styles.itemizedTotal}>
-                  <span>Itemized base</span>
-                  <strong>{formatMoney(itemizedBaseCents)}</strong>
-                </div>
-              </div>
-            </div>
+            <GuidedRepairScope
+              contingencyPercentage={
+                contingencyInput.trim() === ""
+                  ? REPAIR_CONTINGENCY[repairLevel] || 15
+                  : Number(contingencyInput)
+              }
+              disabled={isLoading || selectedRepairEstimateId !== null}
+              items={repairItems}
+              leadId={leadId}
+              onChange={(nextItems) => {
+                setRepairItems(nextItems);
+                detachSavedRepairEstimate();
+                markInputsReviewed();
+              }}
+              repairLevel={repairLevel}
+            />
           ) : null}
 
           {repairEntryMode !== "system" ? (
@@ -1321,6 +1171,39 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <small>Negotiation starting point, not an approved offer</small>
             </div>
           </dl>
+
+          {activeRepairScenario ? (
+            <div className={styles.repairScenarioResult}>
+              <div>
+                <span>Repair range</span>
+                <strong>
+                  {formatMoney(activeRepairScenario.total_low_cents)} to{" "}
+                  {formatMoney(activeRepairScenario.total_high_cents)}
+                </strong>
+                <small>
+                  {formatMoney(activeRepairScenario.total_expected_cents)} expected ·{" "}
+                  {activeRepairScenario.version ?? "catalog version unavailable"}
+                </small>
+              </div>
+              <div>
+                <span>Unconfirmed work</span>
+                <strong>
+                  {formatMoney(activeRepairScenario.unknown_reserve_cents)} reserved
+                </strong>
+                <small>
+                  {activeRepairScenario.unknown_item_count ?? 0} unknown ·{" "}
+                  {activeRepairScenario.specialist_item_count ?? 0} specialist review
+                </small>
+              </div>
+              {activeRepairScenario.warnings?.length ? (
+                <ul>
+                  {activeRepairScenario.warnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
 
           {!hasVerifiedArv ? (
             <div className={styles.underwritingControls}>

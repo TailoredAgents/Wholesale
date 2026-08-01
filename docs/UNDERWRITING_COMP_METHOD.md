@@ -832,7 +832,7 @@ Implementation record:
 
 #### U3.6: Guided Repair Scope And Georgia Cost Catalog
 
-**Status:** Planned.
+**Status:** Implemented July 31, 2026; Georgia allowance calibration and operator acceptance remain.
 
 - Extend repair items compatibly with status, severity, quantity/unit, ranges, source, uncertainty,
   override, and confirmation fields.
@@ -843,6 +843,27 @@ Implementation record:
 
 **Exit:** A user who does not know repair prices can create a transparent initial budget by stating
 what needs work; manual estimates and immutable contractor evidence still work.
+
+**Implementation record:**
+
+- The existing repair-estimate record now accepts status, severity, quantity/unit, source,
+  confirmation, uncertainty, override reason, system range, and catalog-version evidence. Existing
+  manual items and contractor labor/material bids remain readable and retain their entered totals.
+- The first server-authoritative catalog is `ga-2026.07-v1` for Georgia / Metro Atlanta. Its
+  component allowances, minimums, quantity rules, and specialist flags are internal acquisition
+  planning assumptions, not contractor quotes.
+- Valuation & Offer provides touch-friendly `Not assessed`, `Unknown`, `No work`, `Repair`,
+  `Replace`, and `Specialist review` decisions. Subject square footage and bathroom count supply
+  explainable starting quantities where available.
+- Every guided run saves low, expected, and high repair scenarios. Unknown work contributes a
+  visible allowance and specialist warning instead of silently becoming zero.
+- A manual price can replace the expected catalog amount only with a reason; the original system
+  range remains attached for comparison.
+- Saved internal scopes, walkthrough scopes, and contractor bids all feed the existing analysis,
+  offer math, audit history, and PDF route. The investor PDF now prints the component decisions,
+  range, evidence status, version, and items to verify without gating report generation.
+- Regression coverage preserves the legacy V2.2 golden case and contractor report behavior while
+  testing catalog ranges, unknown reserves, overrides, persistence, and read-back.
 
 #### U3.7: AI Scope Assistance And iPad Walkthrough
 

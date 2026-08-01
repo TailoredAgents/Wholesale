@@ -3053,6 +3053,251 @@
   font-size: 15px;
 }
 
+.repairCatalogLoading {
+  margin: 0;
+  padding: 18px 0;
+  color: #687073;
+  font-size: 13px;
+}
+
+.guidedRepairScope {
+  border-top: 1px solid #e8e3d8;
+  display: grid;
+}
+
+.guidedRepairHeader {
+  min-height: 58px;
+  padding: 9px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.guidedRepairHeader > div {
+  display: grid;
+  gap: 2px;
+}
+
+.guidedRepairHeader strong {
+  color: #202426;
+  font-size: 13px;
+}
+
+.guidedRepairHeader span,
+.repairCatalogNote {
+  color: #687073;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.guidedRepairHeader button {
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #2f6f4e;
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guidedRepairHeader button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.repairScenarioStrip {
+  margin: 0;
+  border-top: 1px solid #dbe3e0;
+  border-bottom: 1px solid #dbe3e0;
+  background: #f4f8f6;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.repairScenarioStrip > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-left: 1px solid #dbe3e0;
+  display: grid;
+  gap: 2px;
+}
+
+.repairScenarioStrip > div:first-child {
+  border-left: 0;
+}
+
+.repairScenarioStrip dt,
+.guidedRepairPrimary label > span,
+.guidedRepairRange > span,
+.guidedRepairEvidence label > span {
+  color: #687073;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.repairScenarioStrip dd {
+  margin: 0;
+  color: #245f43;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.guidedRepairList {
+  display: grid;
+}
+
+.guidedRepairList > article {
+  border-bottom: 1px solid #ece7df;
+}
+
+.guidedRepairPrimary {
+  min-height: 70px;
+  padding: 9px 0;
+  display: grid;
+  grid-template-columns: minmax(110px, 0.9fr) minmax(140px, 1fr) minmax(110px, 0.8fr) minmax(150px, 1fr) minmax(155px, 1.1fr);
+  align-items: end;
+  gap: 9px;
+}
+
+.guidedRepairPrimary > strong {
+  align-self: center;
+  color: #202426;
+  font-size: 13px;
+}
+
+.guidedRepairPrimary label,
+.guidedRepairEvidence label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.guidedRepairPrimary select,
+.guidedRepairPrimary input,
+.guidedRepairEvidence select,
+.guidedRepairEvidence input {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 9px;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #202426;
+  font: inherit;
+  font-size: 12px;
+}
+
+.repairQuantityInput {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border: 1px solid #cbc6bc;
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.repairQuantityInput input {
+  border: 0;
+  border-radius: 0;
+}
+
+.repairQuantityInput span {
+  padding: 0 8px;
+  color: #687073;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.guidedRepairRange {
+  min-width: 0;
+  min-height: 40px;
+  display: grid;
+  align-content: center;
+  gap: 1px;
+}
+
+.guidedRepairRange strong {
+  color: #245f43;
+  font-size: 12px;
+}
+
+.guidedRepairRange small {
+  color: #687073;
+  font-size: 10px;
+}
+
+.guidedRepairEvidence summary {
+  width: max-content;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  color: #285b42;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.guidedRepairEvidence > div {
+  padding: 2px 0 12px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.guidedRepairEvidence .guidedRepairWide {
+  grid-column: 1 / -1;
+}
+
+.repairCatalogNote {
+  padding: 10px 0 2px;
+}
+
+.repairScenarioResult {
+  border-top: 1px solid #dbe3e0;
+  border-bottom: 1px solid #dbe3e0;
+  background: #f4f8f6;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.repairScenarioResult > div {
+  padding: 12px 14px;
+  display: grid;
+  gap: 3px;
+}
+
+.repairScenarioResult > div + div {
+  border-left: 1px solid #dbe3e0;
+}
+
+.repairScenarioResult span,
+.repairScenarioResult small {
+  color: #687073;
+  font-size: 11px;
+}
+
+.repairScenarioResult strong {
+  color: #245f43;
+  font-size: 14px;
+}
+
+.repairScenarioResult ul {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 10px 28px;
+  border-top: 1px solid #dbe3e0;
+  color: #765a1f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .contingencyInput {
   max-width: 220px;
   display: grid;
@@ -4743,6 +4988,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .guidedRepairPrimary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .guidedRepairPrimary > strong,
+  .guidedRepairRange {
+    grid-column: 1 / -1;
+  }
+
+  .guidedRepairEvidence > div {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .compList article,
   .compReviewControls {
     grid-template-columns: 1fr;
@@ -5271,13 +5529,15 @@
   }
 
   .repairPresetBar,
-  .repairEvidenceFooter {
+  .repairEvidenceFooter,
+  .guidedRepairHeader {
     align-items: stretch;
     flex-direction: column;
   }
 
   .repairPresetBar button,
   .repairEvidenceFooter button,
+  .guidedRepairHeader button,
   .offerPlanFooter button {
     width: 100%;
   }
@@ -5320,6 +5580,24 @@
 
   .itemizedRepairs {
     grid-template-columns: 1fr;
+  }
+
+  .repairScenarioStrip,
+  .repairScenarioResult,
+  .guidedRepairPrimary,
+  .guidedRepairEvidence > div {
+    grid-template-columns: 1fr;
+  }
+
+  .repairScenarioStrip > div,
+  .repairScenarioStrip > div:first-child,
+  .repairScenarioResult > div + div {
+    border-left: 0;
+    border-top: 1px solid #dbe3e0;
+  }
+
+  .repairScenarioStrip > div:first-child {
+    border-top: 0;
   }
 
   .propertyValidationHeader {

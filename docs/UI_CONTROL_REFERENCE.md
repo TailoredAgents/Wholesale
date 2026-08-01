@@ -966,10 +966,16 @@ appraisal or permission to promise a seller a price.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Repair method | Chooses system estimate, manual total, or itemized repair estimate | Affects offer math and report explanation |
+| Repair method | Chooses system estimate, manual total, or guided itemized repair estimate | Affects offer math and report explanation |
 | Manual repair total | Supplies a known working budget | Used only when the selected method allows it |
 | Contingency | Adds repair uncertainty allowance | Must be a valid percentage or amount |
-| Itemized repair row | Records category, description, quantity, unit cost, and total | Repeatable |
+| **Apply repair preset** | Prepares a starting set of category decisions for the selected light, moderate, heavy, or structural scope | Starting point only; review every selected category |
+| Work state | Sets a category to Not assessed, Unknown, No work, Repair, Replace, or Specialist review | Unknown adds an allowance; Not assessed is omitted; No work saves zero |
+| Scope | Sets Minor, Standard, or Extensive work intensity | Changes catalog range for Repair and Replace decisions |
+| Quantity | Sets systems, rooms, openings, roof squares, square feet, or project count | Starts from known subject facts where available; staff must verify |
+| Expected range | Shows catalog low/high and expected amount for the category | Read-only until status, scope, quantity, or catalog version changes |
+| Evidence and override | Opens evidence source, confirmation, manual amount, reason, and notes | Manual amount requires a reason and retains system comparison |
+| Repair scenario strip | Shows low, expected, high totals and unknown-work allowance | Includes the selected contingency in low/expected/high totals |
 | Repair notes | Captures assumptions and exclusions | Included in internal evidence |
 | Evidence/source | Links photos, walkthrough facts, contractor input, or staff observation | Improves reviewability |
 | **Save repair estimate** | Saves the current version used by underwriting | Disabled while saving |
@@ -1000,6 +1006,7 @@ appraisal or permission to promise a seller a price.
 | ARV range | Shows conservative low, central, and high after-repair value | Range width reflects evidence uncertainty |
 | Confidence | Summarizes evidence quality and unresolved gaps | Does not gate PDF generation |
 | Offer range | Shows policy-based low/high offer guidance after repairs and assignment fee | Staff must use current authority and approval rules |
+| Repair range / Unconfirmed work | Shows saved low, expected, and high repair totals, catalog version, unknown allowance, and specialist warnings | Expected amount drives the current analysis; range is decision support and does not block PDFs |
 | Provider evidence | Shows market-data source, retrieval result, and matching details | Read-only |
 | Closed-sale search summary | Shows the final Preferred, Expanded, Extended, or Manual evidence level, unique and duplicate counts, subdivision support, shortage, and next action | Read-only; Manual means the controlled provider search remained insufficient, not that the analysis disappeared |
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |

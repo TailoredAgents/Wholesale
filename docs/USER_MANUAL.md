@@ -1209,17 +1209,28 @@ Confirm:
 5. Choose a remodel estimate method:
    - **System:** Use Stonegate's size and scope estimate.
    - **Total:** Enter one expected base remodel amount.
-   - **Itemized:** Enter costs by repair category. After an initial analysis, **Apply preset** can
-     divide the system estimate across common categories for editing.
-6. When using Total or Itemized, set the contingency reserve and explain the estimate source under
+   - **Itemized:** Use the guided Georgia scope. Select **Apply preset** for a starting point or
+     assess only the categories you know. For each category choose Unknown, No work, Repair,
+     Replace, or Specialist review. Stonegate estimates a low, expected, and high cost from the
+     saved quantity and catalog version.
+6. Adjust quantity or scope when the property facts justify it. Open **Evidence and override** to
+   record who observed the issue, confirmation status, notes, or a known manual amount. A manual
+   amount requires a reason and does not erase the original system range.
+7. Leave an uncertain item as **Unknown** instead of No work. Unknown items add a visible allowance
+   and widen the repair range; they do not block the analysis or PDFs.
+8. When using Total or Itemized, set the contingency reserve and explain the estimate source under
    **Repair details and source notes**.
-7. Apply an existing saved repair estimate when one has already been prepared for this property.
-8. Open **Verified manual sales** only when you know a legitimate closing that RentCast missed.
+9. Save the current guided scope as Internal scope or Walkthrough scope when it should become
+   reusable evidence. Select Contractor bid only when written contractor pricing has been entered.
+   Applying any saved estimate uses that immutable evidence in the next analysis.
+10. Open **Verified manual sales** only when you know a legitimate closing that RentCast missed.
    Enter the complete address, closed date and price, property type, square footage, verification
    source and reference, and clear verification notes. Add condition evidence before calling a sale
    As-is or Renovated. Save the record and leave its checkbox selected when it should enter the next
    analysis.
-9. Select **Run complete analysis**.
+11. Select **Run complete analysis**. Review **Repair range**, **Unconfirmed work**, and each item to
+    verify before discussing an offer. The expected scenario drives current offer math; low/high
+    scenarios explain repair uncertainty.
 
 Stonegate first requests the exact address from RentCast. If that lookup fails or returns the wrong
 property, Stonegate tries normalized address variations and a matching property record. If the

@@ -4,12 +4,44 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
-from app.models.foundation import ActivityEvent, AuditEvent, Lead, RepairEstimate
+from app.models.foundation import (
+    ActivityEvent,
+    AuditEvent,
+    Lead,
+    RepairEstimate,
+    UnderwritingMarketAnalysis,
+)
 from app.schemas.leads import (
+    RepairCatalogRead,
     RepairEstimateCreate,
     RepairEstimateItemInput,
     RepairEstimateRead,
 )
+from app.services.repair_catalog import (
+    evaluate_repair_scope,
+    prepare_new_scope_items,
+    repair_catalog_payload,
+)
+
+
+def get_repair_catalog(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+) -> RepairCatalogRead | None:
+    lead = scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    analysis = db.scalar(
+        select(UnderwritingMarketAnalysis)
+        .where(
+            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+            UnderwritingMarketAnalysis.lead_id == lead.id,
+        )
+        .order_by(UnderwritingMarketAnalysis.created_at.desc())
+    )
+    subject = analysis.subject_property if analysis is not None else {}
+    return RepairCatalogRead.model_validate(repair_catalog_payload(subject))
 
 
 def list_repair_estimates(
@@ -45,8 +77,10 @@ def create_repair_estimate(
     ):
         raise ValueError("Contractor name is required for a contractor bid.")
 
-    scope_items = []
+    raw_scope_items = []
     for item in payload.scope_items:
+        if payload.source_type == "contractor_bid" and item.estimated_cost_cents is None:
+            raise ValueError("Every contractor work item needs a quoted amount.")
         if (
             item.labor_cost_cents is not None
             and item.material_cost_cents is not None
@@ -56,10 +90,15 @@ def create_repair_estimate(
             raise ValueError(
                 "Labor and material costs must add up to the work-item estimate."
             )
-        scope_items.append(item.model_dump(mode="json"))
+        raw_scope_items.append(item.model_dump(mode="json"))
 
-    subtotal_cents = sum(item.estimated_cost_cents for item in payload.scope_items)
-    contingency_cents = round(subtotal_cents * payload.contingency_percentage / 100)
+    scenario = evaluate_repair_scope(
+        prepare_new_scope_items(raw_scope_items),
+        contingency_percentage=payload.contingency_percentage,
+    )
+    scope_items = scenario["items"]
+    subtotal_cents = int(scenario["subtotal_expected_cents"])
+    contingency_cents = int(scenario["total_expected_cents"]) - subtotal_cents
     estimate = RepairEstimate(
         organization_id=principal.organization_id,
         lead_id=lead.id,
@@ -136,6 +175,10 @@ def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None
 
 
 def repair_estimate_to_read(estimate: RepairEstimate) -> RepairEstimateRead:
+    scenario = evaluate_repair_scope(
+        estimate.scope_items,
+        contingency_percentage=estimate.contingency_percentage,
+    )
     return RepairEstimateRead(
         id=estimate.id,
         lead_id=estimate.lead_id,
@@ -150,6 +193,16 @@ def repair_estimate_to_read(estimate: RepairEstimate) -> RepairEstimateRead:
         contingency_percentage=estimate.contingency_percentage,
         contingency_cents=estimate.contingency_cents,
         total_cents=estimate.total_cents,
+        scenario_low_cents=int(scenario["total_low_cents"]),
+        scenario_expected_cents=int(scenario["total_expected_cents"]),
+        scenario_high_cents=int(scenario["total_high_cents"]),
+        unknown_reserve_cents=int(scenario["unknown_reserve_cents"]),
+        catalog_version=(
+            str(scenario["version"])
+            if any(item.get("catalog_version") for item in estimate.scope_items)
+            else None
+        ),
+        scenario_warnings=[str(item) for item in scenario["warnings"]],
         evidence_reference=estimate.evidence_reference,
         notes=estimate.notes,
         created_by_user_id=estimate.created_by_user_id,

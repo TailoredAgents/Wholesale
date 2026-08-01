@@ -50,7 +50,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.5 implemented | Implement U3.6-U3.10, then collect verified Georgia outcomes and operator acceptance |
+| F7 Underwriting proof | V2.2, calibration, and V3 phases U3.1-U3.6 implemented | Implement U3.7-U3.10, calibrate Georgia repair allowances, then collect verified outcomes and operator acceptance |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented | A2P approval and dedicated provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
@@ -366,9 +366,11 @@ For the V3 build:
 2. Use implemented U3.2-U3.5 adaptive search, supporting evidence, manual comps, operator review,
    and shadow adjustment evidence before repair expansion.
 3. Collect V2.2-versus-shadow adjustment comparisons without granting V3 offer authority.
-4. Implement U3.6-U3.7 guided repairs and iPad evidence without duplicating field records.
-5. Implement U3.8-U3.9 workspace, report, and calibration updates.
-6. Complete U3.10 shadow validation and record the methodology activation decision.
+4. Validate implemented U3.6 guided repairs against walkthroughs, written bids, and completed
+   Georgia projects; adjust only through a new catalog version.
+5. Implement U3.7 iPad and AI-assisted evidence without duplicating field records.
+6. Implement U3.8-U3.9 workspace, report, and calibration updates.
+7. Complete U3.10 shadow validation and record the methodology activation decision.
 
 ### Exit Criteria
 
