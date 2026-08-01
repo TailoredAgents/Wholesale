@@ -300,6 +300,21 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
         .select_from(CommunicationRecord)
         .where(CommunicationRecord.provider == "openai_reviewed")
     ) == 1
+    approved_note = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider == "openai_reviewed"
+        )
+    )
+    assert approved_note is not None
+    assert approved_note.lead_id == lead.id
+    assert approved_note.contact_id == lead.contact_id
+    assert approved_note.conversation_id == conversation.id
+    lead_detail = client.get(
+        f"/api/v1/leads/{lead.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert lead_detail.status_code == 200, lead_detail.text
+    assert lead_detail.json()["communications"][0]["id"] == str(approved_note.id)
     db_session.refresh(transcript)
     review_metrics = (transcript.transcript_metadata or {}).get("review_metrics")
     assert isinstance(review_metrics, dict)

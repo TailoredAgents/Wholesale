@@ -635,7 +635,7 @@ def _approved_transcript(
             CallRecording.organization_id == attempt.organization_id,
             CallRecording.call_record_id == attempt.call_record_id,
             CallRecording.deleted_at.is_(None),
-            CallRecording.consent_status == "disclosed",
+            CallRecording.consent_status.in_(("disclosed", "one_party_consent")),
         )
     )
     if recording is None:

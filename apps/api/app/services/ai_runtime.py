@@ -2445,8 +2445,8 @@ def _call_quality_context(
     )
     if call is None or recording is None or transcript is None:
         raise ValueError("An approved transcript is required for call-quality analysis.")
-    if recording.consent_status != "disclosed":
-        raise ValueError("Recording disclosure evidence is required for call-quality analysis.")
+    if recording.consent_status not in {"disclosed", "one_party_consent"}:
+        raise ValueError("Recording authorization is required for call-quality analysis.")
     script = db.get(ProspectingScriptVersion, attempt.script_version_id)
     handoff = db.scalar(
         select(ProspectHandoff).where(

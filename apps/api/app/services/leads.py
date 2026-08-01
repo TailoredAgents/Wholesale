@@ -488,7 +488,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             CommunicationRecord.lead_id == lead.id,
         )
         .order_by(CommunicationRecord.occurred_at.desc(), CommunicationRecord.created_at.desc())
-        .limit(20)
+        .limit(100)
     ).all()
     appointments = db.scalars(
         select(Appointment)

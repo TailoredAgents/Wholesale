@@ -107,6 +107,16 @@ CALL_STATUS_RANK = {
 }
 
 
+def recording_consent_status(settings: Settings) -> str:
+    if not settings.twilio_voice_recording_configured:
+        return "not_requested"
+    return (
+        "disclosure_configured"
+        if settings.twilio_voice_recording_disclosure
+        else "one_party_consent"
+    )
+
+
 class VoiceComplianceError(RuntimeError):
     pass
 
@@ -318,9 +328,12 @@ def get_voice_provider_readiness(
                 "Call recording is intentionally disabled for initial Voice acceptance."
                 if not settings.twilio_voice_recording_enabled
                 else (
-                    "Recording disclosure and retention are configured."
+                    "Recording authorization policy and retention are configured."
                     if settings.twilio_voice_recording_configured
-                    else "Recording is enabled but its disclosure or retention is incomplete."
+                    else (
+                        "Recording is enabled but its authorization policy or retention "
+                        "is incomplete."
+                    )
                 )
             ),
         ),
@@ -590,11 +603,7 @@ def create_call_intent(
         idempotency_key=payload.idempotency_key,
         recipient=eligibility.recipient,
         status="pending",
-        recording_consent_status=(
-            "disclosure_configured"
-            if settings.twilio_voice_recording_configured
-            else "not_requested"
-        ),
+        recording_consent_status=recording_consent_status(settings),
         expires_at=now + timedelta(minutes=5),
         consumed_at=None,
         provider_call_id=None,
@@ -928,11 +937,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         status="ringing",
         from_number=format_e164(caller) or caller,
         to_number=line.phone_number,
-        recording_consent_status=(
-            "disclosure_configured"
-            if settings.twilio_voice_recording_configured
-            else "not_requested"
-        ),
+        recording_consent_status=recording_consent_status(settings),
     )
     communication.body = f"Inbound call from {format_e164(caller) or caller}"
     targets = resolve_inbound_targets(db, target_user_ids)

@@ -49,7 +49,7 @@ The following still require external configuration, approval, or production acce
 - Controlled Resend production mailbox acceptance.
 - Approved Stonegate Twilio acquisitions-number attachment and SMS production acceptance.
 - Twilio cellphone forwarding and inbound routing acceptance.
-- Call recording until disclosure and retention policy are approved.
+- Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
 - DealMachine buyer-data activation near the first contracted deal.
 - Live buyer-package and advertising conversion delivery.
@@ -2129,7 +2129,7 @@ Read the provider status in Settings first.
   and staff cellphone destinations pass acceptance.
 
 Log approved communication manually in Inbox when a provider is unavailable. Recording must remain
-off until disclosure, access, retention, and deletion settings are approved.
+off until market authorization, access, retention, and deletion settings are approved.
 
 ### An Email Went To Spam
 

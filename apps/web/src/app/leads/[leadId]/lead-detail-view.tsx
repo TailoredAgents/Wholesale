@@ -256,6 +256,36 @@ function RecentActivityPanel({ lead, limit = 6 }: { lead: LeadDetail; limit?: nu
   );
 }
 
+function InternalNotesPanel({ lead }: { lead: LeadDetail }) {
+  const allNotes = lead.communications.filter(
+    (item) => item.channel === "note" && item.direction === "internal",
+  );
+  const notes = allNotes.slice(0, 6);
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader title="Internal seller notes" meta={countLabel(allNotes.length, "note")} />
+      <div className={styles.communicationTimeline}>
+        {notes.length === 0 ? (
+          <p className={styles.emptyState}>No internal seller notes yet.</p>
+        ) : null}
+        {notes.map((note) => (
+          <article key={note.id}>
+            <div>
+              <strong>{note.subject ?? "Seller note"}</strong>
+              <span>{labelize(note.provider)}</span>
+            </div>
+            <p>{note.body}</p>
+            <small>{formatDate(note.occurred_at)}</small>
+          </article>
+        ))}
+      </div>
+      <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=activity`}>
+        View complete seller timeline
+      </Link>
+    </section>
+  );
+}
+
 function OverviewTab({
   activeAppointment,
   lead,
@@ -271,6 +301,7 @@ function OverviewTab({
       <div className={styles.mainColumn}>
         <TasksPanel lead={lead} />
         <QualificationPanel lead={lead} />
+        <InternalNotesPanel lead={lead} />
         <RecentActivityPanel lead={lead} />
       </div>
       <aside className={styles.sideColumn}>

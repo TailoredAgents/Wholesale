@@ -532,6 +532,11 @@ Voice, microphone access, API keys, and a TwiML App are not required.
 8. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
    forwarded-call testing** before acceptance begins.
 
+For Georgia-only recorded calls, set `TWILIO_VOICE_RECORDING_ENABLED=true` and leave
+`TWILIO_VOICE_RECORDING_DISCLOSURE` unset. Stonegate records the one-party policy on the call and
+does not play an announcement. Configure a disclosure before enabling recording in another market
+unless its approved operating policy also permits one-party recording.
+
 ### Acceptance
 
 1. Call each Stonegate number and confirm both Austin and Devon ring simultaneously.

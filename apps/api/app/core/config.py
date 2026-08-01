@@ -736,7 +736,6 @@ class Settings(BaseSettings):
         return bool(
             self.twilio_voice_configured
             and self.twilio_voice_recording_enabled
-            and self.twilio_voice_recording_disclosure
             and self.call_recording_retention_days
         )
 

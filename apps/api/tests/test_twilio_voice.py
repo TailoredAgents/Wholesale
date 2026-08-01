@@ -807,6 +807,63 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     assert call_item["transcript"]["status"] == "queued"
 
 
+def test_recording_can_use_georgia_one_party_policy_without_announcement(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TWILIO_VOICE_RECORDING_ENABLED", "true")
+    monkeypatch.delenv("TWILIO_VOICE_RECORDING_DISCLOSURE", raising=False)
+    get_settings.cache_clear()
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    intent = create_intent(client, conversation)
+    session = client.get(
+        "/api/v1/voice/session",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()
+    outbound_payload = {
+        "From": f"client:{session['identity']}",
+        "CallSid": "CA00000000000000000000000000000092",
+        "CallIntentId": str(intent["id"]),
+    }
+    outbound = post_signed(
+        client,
+        "/api/v1/webhooks/twilio/voice/outbound",
+        outbound_payload,
+    )
+
+    assert outbound.status_code == 200, outbound.text
+    assert 'record="record-from-answer-dual"' in outbound.text
+    assert "/voice/disclosure" not in outbound.text
+    call = db_session.scalar(select(CallRecord))
+    assert call is not None
+    assert call.recording_consent_status == "one_party_consent"
+
+    recording_path = (
+        f"/api/v1/webhooks/twilio/voice/recording?intent_id={intent['id']}"
+    )
+    recording = post_signed(
+        client,
+        recording_path,
+        {
+            "CallSid": outbound_payload["CallSid"],
+            "RecordingSid": "RE00000000000000000000000000000092",
+            "RecordingStatus": "completed",
+            "RecordingDuration": "60",
+            "RecordingChannels": "2",
+            "RecordingSource": "DialVerb",
+        },
+    )
+
+    assert recording.status_code == 204, recording.text
+    stored_recording = db_session.scalar(select(CallRecording))
+    assert stored_recording is not None
+    assert stored_recording.consent_status == "one_party_consent"
+    assert db_session.scalar(select(func.count()).select_from(CallTranscript)) == 1
+
+
 def test_recording_deletion_is_owner_only_audited_and_preserves_transcript(
     db_session: Session,
     api_db_override: None,

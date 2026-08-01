@@ -896,7 +896,7 @@ The Twilio Voice implementation supports:
 - call status and dial result callbacks
 - missed-call tasks
 - private recordings
-- disclosure state
+- recording-authorization state
 - transcript review
 
 Voice forwarding requires the Account SID, Auth Token, company number, inbound callback, active

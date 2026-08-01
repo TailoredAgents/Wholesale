@@ -487,13 +487,15 @@ After campaign approval and number attachment:
 - `TWILIO_WEBHOOK_BASE_URL`
 - token TTL, ring timeout, timezone, and calling-hour variables
 - `TWILIO_VOICE_RECORDING_ENABLED`
-- `TWILIO_VOICE_RECORDING_DISCLOSURE`
+- `TWILIO_VOICE_RECORDING_DISCLOSURE` (optional when the operating policy requires an announcement)
 - `CALL_RECORDING_RETENTION_DAYS`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
 keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
+With recording enabled and no disclosure value, Stonegate records under its documented Georgia
+one-party operating policy. Add a disclosure before calling markets where that policy is not valid.
 
 ### Webhooks
 

@@ -106,16 +106,17 @@ def outbound_call_twiml(
                 "recording_status_callback_method": "POST",
             }
         )
-        number_options.update(
-            {
-                "url": callback_url(
-                    settings,
-                    "/api/v1/webhooks/twilio/voice/disclosure",
-                    intent_id=intent_id,
-                ),
-                "method": "POST",
-            }
-        )
+        if settings.twilio_voice_recording_disclosure:
+            number_options.update(
+                {
+                    "url": callback_url(
+                        settings,
+                        "/api/v1/webhooks/twilio/voice/disclosure",
+                        intent_id=intent_id,
+                    ),
+                    "method": "POST",
+                }
+            )
     dial = response.dial(**dial_options)
     dial.number(recipient, **number_options)
     return str(response)
