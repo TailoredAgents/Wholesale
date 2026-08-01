@@ -14,6 +14,7 @@ from app.models.foundation import (
     AcquisitionsCopilotRecommendation,
     AcquisitionsCopilotReview,
     AiAgentDefinition,
+    AiCapabilityRuntimePolicy,
     Appointment,
     ApprovalRequest,
     AuditEvent,
@@ -45,7 +46,11 @@ from app.schemas.field_operations import (
     FieldInspectionRead,
 )
 from app.services.repair_catalog import evaluate_repair_scope
-from app.services.ai_runtime import execute_runtime, get_runtime_overview
+from app.services.ai_runtime import (
+    ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA,
+    execute_runtime,
+    get_runtime_overview,
+)
 
 CAPABILITY_BY_TYPE = {
     "preparation": ("appointment_preparation", "appointment.brief"),
@@ -151,6 +156,18 @@ def analyze_appointment(
     )
     if agent is None:
         raise ValueError("Install the governed AI agent portfolio first.")
+    if payload.recommendation_type == "repair_scope":
+        capability = db.scalar(
+            select(AiCapabilityRuntimePolicy).where(
+                AiCapabilityRuntimePolicy.organization_id == principal.organization_id,
+                AiCapabilityRuntimePolicy.agent_definition_id == agent.id,
+                AiCapabilityRuntimePolicy.capability_key == capability_key,
+            )
+        )
+        if capability is not None:
+            capability.output_schema = ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA
+            capability.updated_by_user_id = principal.user_id
+            db.flush()
     idempotency_key = payload.idempotency_key or _idempotency_key(
         appointment, payload.recommendation_type, facts
     )
