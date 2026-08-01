@@ -657,8 +657,9 @@ redirect to their new owners.
    rejected or suppressed; accepted records pass through the existing comp scorer.
 7. RentCast active sale listings and ZIP-level listing statistics are saved as supporting context.
    They are explicitly excluded from ARV and offer math.
-8. Optional bounded OpenAI web research can collect cited public-record evidence; it cannot set
-   ARV or offer values.
+8. Bounded OpenAI web research collects cited subject evidence and can propose nearby closed-sale
+   candidates. Stonegate admits only candidates with exact address, closed price/date, living area,
+   and consulted citations; deterministic scoring and human review still control valuation use.
 9. Comparable candidates are screened for geography, recency, property type, size, bed/bath,
    condition, and material price or price-per-square-foot outliers.
 10. Selected and rejected comps retain scores and reasons. A thin result remains visible with an
@@ -673,8 +674,9 @@ redirect to their new owners.
 13. V3 adjusts the selected closed-sale set using locally supported evidence.
    Time, marginal living area, lot, garage, pool, and basement adjustments require local pair
    support; collinear, unstable, missing, or extrapolated evidence is withheld or limited and every
-   dollar remains reproducible. The adjusted conclusion drives live offer fields only when at
-   least three usable indications exist; otherwise those fields remain unavailable for review.
+   dollar remains reproducible. Three usable indications are preferred. Two can produce clearly
+   labeled working guidance with confidence capped at 49 and mandatory review; fewer than two
+   leave ARV and offer fields unavailable.
 14. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
    Investor reports include guided repair decisions, ranges, evidence, catalog version, and items
    to verify; PDFs remain available when repairs are not walkthrough-confirmed.
@@ -684,9 +686,9 @@ redirect to their new owners.
 18. The seller's Valuation & Offer section presents Quick Comp, Desk Review, Walkthrough, and Offer
     Decision as progressive stages over these same records. It does not create a separate comp or
     repair workflow.
-19. **Prepare valuation** creates the first analysis. **Recalculate valuation** reuses retained
-    provider evidence with current saved inputs, while the separate **Refresh market data** action
-    intentionally requests a new provider snapshot.
+19. **Run Stonegate valuation** creates the first analysis; the same control becomes **Update
+    Stonegate valuation** afterward. The service automatically deepens old or missing research and
+    reuses current evidence for repair-only changes, so staff do not manage a separate refresh mode.
 20. A persistent decision summary shows the current ARV, repairs, buyer target, opening, and seller
     ceiling and links to reports, the appointment/field workflow, approval, and contract signing.
     Version comparison and manual scenarios remain available under expandable advanced records.

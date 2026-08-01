@@ -1011,9 +1011,7 @@ appraisal or permission to promise a seller a price.
 | --- | --- | --- |
 | Quick Comp / Desk Review / Walkthrough / Offer Decision | Shows the progressive status of the existing valuation, field evidence, and offer authority | Status is derived from saved records; selecting a stage opens its existing workspace |
 | Highest-value missing facts | Shows at most three lead facts most useful to the next valuation | Links to Property; absence does not mean every optional fact is known |
-| **Prepare valuation** | Validates the address, gathers property/comparable evidence, filters outliers, estimates ARV, applies repair and assignment assumptions, and creates the first reviewable analysis | Requires valid address; external provider failures may fall back to controlled evidence collection |
-| **Recalculate valuation** | Creates a new analysis from current saved inputs while reusing retained provider evidence | Requires a saved provider snapshot; does not silently perform another paid provider lookup |
-| **Refresh market data** | Explicitly requests a new provider snapshot and recalculates | Use only when evidence is stale, corrected, or incomplete; provider cost and availability apply |
+| **Run Stonegate valuation / Update Stonegate valuation** | Validates the subject, searches provider sales, deepens thin evidence with cited AI research, applies current repair inputs, and saves one reviewable result | Automatically reuses current evidence and refreshes old analyses that lack the current research marker |
 | Current decision | Keeps ARV, repairs, buyer target, opening, and seller ceiling visible and links to reports, appointment, approval, and signing | Values come from the latest saved underwriting version |
 | Advanced records | Expands version comparison, prior versions, and manual underwriting creation | Collapsed by default; normal comp review remains in the main analysis |
 | Subject facts | Shows bedrooms, bathrooms, size, year, lot, and property type used | Staff should correct material mismatches |
@@ -1026,11 +1024,11 @@ appraisal or permission to promise a seller a price.
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
 | Supporting listings and ZIP market context | Shows active asking prices, size, days on market, ZIP median asking price, asking price per square foot, inventory, and market timing | Supporting-only; asking prices are not closed comps |
-| Stonegate valuation adjustments | Shows the market-supported adjusted closed sales that drive the saved ARV and dependent offer math | Requires human review; unsupported evidence produces no recommendation instead of a fallback value |
+| Stonegate valuation adjustments | Shows the adjusted closed sales that drive the saved ARV and dependent offer math | Two sales produce labeled working guidance with confidence capped at 49; three are preferred; fewer than two produce no recommendation |
 | Supported local adjustments | Shows only time, living-area, lot, garage, pool, or basement rates that passed local evidence and double-count controls | A missing feature rate is withheld, not assumed to be zero market value |
 | Review rate support and withheld adjustments | Shows sample/pair counts and the exact reason each rate was supported or withheld | Read-only evidence |
 | Review comparable adjustment math | Shows recorded price, every sourced dollar component, extrapolation limit, total adjustment, and adjusted indication | Read-only; review flags require operator judgment |
-| Public evidence | Shows controlled secondary evidence and source links when used | Must be verified before relying on a material fact |
+| Public evidence | Shows controlled subject research, AI-discovered closed sales, source grade, and source links | Must be verified before relying on a material fact; one-source sales receive reduced weight |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
 | **Client PDF** | Downloads the seller-safe presentation without internal negotiation details | Requires a saved analysis |

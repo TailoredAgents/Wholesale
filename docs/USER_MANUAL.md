@@ -1244,10 +1244,9 @@ Confirm:
    source and reference, and clear verification notes. Add condition evidence before calling a sale
    As-is or Renovated. Save the record and leave its checkbox selected when it should enter the next
    analysis.
-13. Select **Prepare valuation** for the first result. After a result exists, use **Recalculate
-   valuation** to apply the latest saved evidence without paying for or waiting on another market
-   lookup. Use **Refresh market data** only when the property evidence is stale or the provider
-   needs to be queried again.
+13. Select **Run Stonegate valuation** for the first result. Afterward, the same button reads
+   **Update Stonegate valuation**. Stonegate automatically reuses current evidence for repair or
+   review changes and automatically deepens an old analysis when its market research is outdated.
 14. Review **Repair range**, **Unconfirmed work**, and each item to
    verify before discussing an offer. The expected scenario drives current offer math; low/high
    scenarios explain repair uncertainty.
@@ -1269,21 +1268,23 @@ Stonegate searches closed sales in controlled levels:
 1. **Preferred:** Tight physical match within 0.5 mile and 180 days.
 2. **Expanded:** Up to 1 mile and 365 days using the normal V2.2 physical limits.
 3. **Extended:** Up to 3 miles and 730 days with bounded additional size and age tolerance.
-4. **Manual:** The controlled provider search ended without enough market-area support or verified
-   operator-entered closed sales supplemented the result. Stonegate states exactly what was added
-   or remains missing; it does not insert a listing or AVM as a fake closed comp.
+4. **Manual / researched:** The provider search ended without enough market-area support, so
+   verified operator-entered sales or cited AI research supplemented it. Stonegate states exactly
+   what was added; it does not insert a listing or AVM as a fake closed comp.
 
 The search stops when at least three screened sales meet the available market-area check. When the
 subject subdivision and comparable subdivision data are available, Stonegate also seeks at least
 two selected sales from the same subdivision. Wider-query duplicates are removed automatically.
 
-When controlled public research is enabled, Stonegate may also use bounded internet search to
-corroborate the exact address, property facts, prior sales, permits, and visible condition clues.
+Stonegate also uses bounded internet research to corroborate the exact address, property facts,
+prior sales, permits, visible condition clues, and likely nearby closed sales.
 This research:
 
 - Shows its sources and conflicts in **Secondary public evidence**.
+- Can add a sale to the working comp set only when address, closed price/date, living area, and a
+  consulted source are present. One-source sales receive less weight than corroborated sales.
 - Cannot provide ARV, repair cost, offer amount, owner identity, or private contact information.
-- Does not replace recorded sales or human comp review.
+- Does not replace deterministic screening or human comp review.
 - May be unavailable without preventing the primary analysis from running.
 
 Stonegate also saves nearby active asking prices and ZIP listing statistics under **Supporting
@@ -1306,10 +1307,13 @@ Review the result from top to bottom:
    weak, Stonegate stops for manual review instead of substituting another method.
 6. Open **Why this confidence score** and read every factor.
 7. Open **Secondary public evidence** and investigate any conflict.
+   Review every **AI-discovered closed sale** link before using a material number with a seller.
 8. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
    prices and supporting-only evidence.
 9. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
    ceiling, and opening recommendation.
+   **Working guidance** means only two usable sales were available; confidence is capped and another
+   sale should be verified before final offer approval.
 10. Read every item under **Resolve before approval**.
 11. Review each comparable:
    - Keep the **Subject property** band visible as the comparison baseline. Correct the lead or run

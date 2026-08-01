@@ -778,7 +778,7 @@ def evidence_audit_story(
     comp_search = dict_value(metadata.get("comp_search_summary"))
     supporting_evidence = dict_value(metadata.get("supporting_evidence"))
     sources = list_of_dicts(secondary_evidence.get("sources"))
-    manual_sources = [
+    cited_comp_sources = [
         comp
         for comp in [*context.analysis.selected_comps, *context.analysis.rejected_comps]
         if isinstance(comp, dict)
@@ -889,8 +889,9 @@ def evidence_audit_story(
     if sources:
         story.append(
             body_paragraph(
-                "Secondary public research supports diligence only and does not set ARV or "
-                "offer amounts. Source pages may change after this report is saved.",
+                "Public research can supplement thin provider evidence only through cited, "
+                "screened closed-sale records. The AI does not set ARV or offer amounts. "
+                "Source pages may change after this report is saved.",
                 styles,
             )
         )
@@ -908,17 +909,17 @@ def evidence_audit_story(
                 )
             )
         story.append(Spacer(1, 0.14 * inch))
-    if manual_sources:
+    if cited_comp_sources:
         story.append(
             body_paragraph(
-                "Operator-entered closed sales retain their verification reference and source "
-                "link in the saved audit record.",
+                "Operator-entered and AI-discovered closed sales retain their verification "
+                "reference and source link in the saved audit record.",
                 styles,
             )
         )
-        for comp in manual_sources[:8]:
+        for comp in cited_comp_sources[:8]:
             url = first_string(comp, ("source_url",)) or ""
-            reference = first_string(comp, ("source_reference",)) or "Manual source"
+            reference = first_string(comp, ("source_reference",)) or "Cited sale source"
             story.append(
                 Paragraph(
                     (
@@ -946,6 +947,9 @@ def adjustment_research_story(
         return []
     baseline = dict_value(adjustment.get("baseline"))
     conclusion = dict_value(adjustment.get("conclusion"))
+    saved_arv_point = (
+        optional_int(metadata.get("arv_point_cents")) if is_live else None
+    )
     comparison = dict_value(adjustment.get("comparison"))
     rate_evidence = list_of_dicts(adjustment.get("rate_evidence"))
     comp_adjustments = list_of_dicts(adjustment.get("comp_adjustments"))
@@ -971,7 +975,11 @@ def adjustment_research_story(
                 ("Evidence status", labelize(safe_string(adjustment.get("status")))),
                 (
                     "Stonegate ARV point" if is_live else "Historical adjusted ARV point",
-                    format_money(optional_int(conclusion.get("arv_point_cents"))),
+                    format_money(
+                        saved_arv_point
+                        if is_live
+                        else optional_int(conclusion.get("arv_point_cents"))
+                    ),
                 ),
                 (
                     "Recorded-sale baseline" if is_live else "Historical baseline",

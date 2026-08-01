@@ -27,7 +27,7 @@ def promote_market_adjusted_result(
     status = text(market_adjustment.get("status")) or "unsupported"
     point = integer(conclusion.get("arv_point_cents"))
     comp_count = integer(conclusion.get("comp_count")) or 0
-    usable = status in SUPPORTED_STATUSES and point is not None and comp_count >= 3
+    usable = status in SUPPORTED_STATUSES and point is not None and comp_count >= 2
     if not usable:
         return unsupported_result(baseline, market_adjustment)
 
@@ -38,6 +38,9 @@ def promote_market_adjusted_result(
         fallback=baseline.confidence_score,
     )
     confidence_tier = text(conclusion.get("confidence_tier")) or "insufficient"
+    if comp_count == 2:
+        confidence_score = min(confidence_score, 49)
+        confidence_tier = "insufficient"
     conservative_arv = conservative_arv_cents(
         low=low,
         point=point,
@@ -98,6 +101,11 @@ def promote_market_adjusted_result(
             "Some property differences lack local adjustment support; review the "
             "comparable indications before approving value."
         )
+    if comp_count == 2:
+        review_reasons.append(
+            "This is working guidance from two usable closed sales. Confirm another sale or "
+            "have a person approve the evidence before presenting a final offer."
+        )
     warnings = strings(market_adjustment.get("warnings"))
     review_reasons.extend(warnings)
     if rental_max is None:
@@ -111,6 +119,9 @@ def promote_market_adjusted_result(
         "comp_value_method": "market_supported_adjusted_sale_indications",
         "adjustment_status": status,
         "adjustment_version": text(market_adjustment.get("version")),
+        "valuation_evidence_status": (
+            "working_two_sale_guidance" if comp_count == 2 else "supported"
+        ),
         "rollback_methodology_version": "v2.2",
         "rollback_arv_low_cents": baseline.arv_low_cents,
         "rollback_arv_point_cents": baseline.arv_point_cents,
@@ -133,7 +144,10 @@ def promote_market_adjusted_result(
         confidence_tier=confidence_tier,
         confidence_factors=confidence_factors,
         manual_review_required=(
-            baseline.manual_review_required or status != "supported" or confidence_score < 75
+            baseline.manual_review_required
+            or status != "supported"
+            or confidence_score < 75
+            or comp_count == 2
         ),
         review_reasons=dedupe(review_reasons),
         assumptions=assumptions,
@@ -154,7 +168,7 @@ def unsupported_result(
     )
     reasons = current_review_reasons(baseline.review_reasons)
     reasons.append(
-        "Stonegate Valuation could not support a live ARV from at least three usable "
+        "Stonegate Valuation could not support working ARV guidance from at least two usable "
         "closed-sale indications. Review or add comparable evidence."
     )
     reasons.extend(strings(market_adjustment.get("warnings")))

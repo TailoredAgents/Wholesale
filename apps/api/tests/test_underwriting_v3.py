@@ -1,5 +1,6 @@
+from app.core.config import Settings
 from app.services.underwriting_v2 import UnderwritingV2Result
-from app.services.underwriting_v3 import unsupported_result
+from app.services.underwriting_v3 import promote_market_adjusted_result, unsupported_result
 
 
 def baseline_result() -> UnderwritingV2Result:
@@ -53,4 +54,35 @@ def test_unsupported_v3_never_silently_uses_the_rollback_value() -> None:
     assert result.recommended_opening_offer_cents is None
     assert result.manual_review_required is True
     assert result.assumptions["rollback_arv_point_cents"] == 30_000_000
-    assert any("at least three usable" in reason for reason in result.review_reasons)
+    assert any("at least two usable" in reason for reason in result.review_reasons)
+
+
+def test_two_sale_v3_returns_working_guidance_with_capped_confidence() -> None:
+    result = promote_market_adjusted_result(
+        baseline=baseline_result(),
+        market_adjustment={
+            "version": "v3",
+            "status": "partial",
+            "conclusion": {
+                "arv_low_cents": 28_000_000,
+                "arv_point_cents": 30_000_000,
+                "arv_high_cents": 33_000_000,
+                "confidence_score": 72,
+                "confidence_tier": "review",
+                "comp_count": 2,
+            },
+            "warnings": [],
+            "confidence_factors": [],
+        },
+        rent_estimate=None,
+        local_property_type="single_family",
+        holding_period_months=6,
+        settings=Settings(_env_file=None),
+    )
+
+    assert result.arv_point_cents == 30_000_000
+    assert result.recommended_opening_offer_cents is not None
+    assert result.confidence_score == 49
+    assert result.confidence_tier == "insufficient"
+    assert result.manual_review_required is True
+    assert result.assumptions["valuation_evidence_status"] == "working_two_sale_guidance"

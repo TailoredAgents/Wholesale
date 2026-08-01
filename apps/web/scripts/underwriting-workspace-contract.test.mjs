@@ -49,11 +49,11 @@ test("valuation workspace preserves the four progressive stages", () => {
   assert.match(leadDetail, /lead\.intelligence\.missing_fields\.slice\(0, 3\)/);
 });
 
-test("normal recalculation reuses evidence and provider refresh is explicit", () => {
-  assert.match(marketValue, /onClick=\{\(\) => createAnalysis\(false\)\}/);
-  assert.match(marketValue, /Recalculate valuation/);
-  assert.match(marketValue, /onClick=\{\(\) => createAnalysis\(true\)\}/);
-  assert.match(marketValue, /Refresh market data/);
+test("one valuation action automatically reuses or deepens evidence", () => {
+  assert.match(marketValue, /onClick=\{createAnalysis\}/);
+  assert.match(marketValue, /Update Stonegate valuation/);
+  assert.match(marketValue, /Run Stonegate valuation/);
+  assert.doesNotMatch(marketValue, /Refresh market data/);
 });
 
 test("decision summary connects existing downstream workspaces", () => {
@@ -72,7 +72,7 @@ test("U3.8 is documented as one implemented workflow", () => {
   );
   assert.match(phase, /Status:\*\* Implemented/);
   assert.match(phase, /no parallel valuation record was\s+introduced/i);
-  assert.match(phase, /Refresh market\s+data/);
+  assert.match(phase, /automatically\s+refreshes old analyses/);
 });
 
 test("U3.9 compares immutable comp, repair, and adjustment evidence", () => {

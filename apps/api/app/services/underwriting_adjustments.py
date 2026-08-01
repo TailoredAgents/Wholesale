@@ -796,7 +796,8 @@ def _warnings(
     expansion_count: int,
 ) -> list[str]:
     warnings = [
-        "Shadow research does not change V2.2 ARV, buyer economics, or offer authority."
+        "Stonegate uses these adjustments in V3 valuation math; a person must review the "
+        "supporting sales before approving an offer."
     ]
     unsupported = [str(item["label"]) for item in evidence if item["status"] != "supported"]
     if unsupported:

@@ -105,7 +105,7 @@ services:
       - key: OPENAI_WEB_SEARCH_ENABLED
         value: true
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
-        value: 30
+        value: 75
       - key: OPENAI_PRICING_OVERRIDES_JSON
         value: ""
       - key: OPENAI_TRANSCRIPTION_MODEL
@@ -382,7 +382,7 @@ services:
       - key: OPENAI_REASONING_EFFORT
         value: medium
       - key: OPENAI_REQUEST_TIMEOUT_SECONDS
-        value: 30
+        value: 75
       - key: OPENAI_PRICING_OVERRIDES_JSON
         value: ""
       - key: OPENAI_TRANSCRIPTION_MODEL

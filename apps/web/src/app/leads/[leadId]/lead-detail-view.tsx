@@ -516,7 +516,7 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
           </dl>
           <nav>
             <a href={latestVersion ? "#valuation-reports" : "#valuation-analysis"}>
-              <FileText size={15} />{latestVersion ? "Reports" : "Prepare valuation"}
+              <FileText size={15} />{latestVersion ? "Reports" : "Run valuation"}
             </a>
             <Link href={appointmentHref}><CalendarDays size={15} />{activeAppointment ? "Appointment" : "Schedule"}</Link>
             <a href="#offer-decision"><ShieldCheck size={15} />Offer approval</a>

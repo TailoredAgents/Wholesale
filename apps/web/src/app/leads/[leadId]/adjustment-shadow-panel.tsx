@@ -63,8 +63,16 @@ export type MarketAdjustment = {
 
 export function MarketAdjustmentPanel({
   adjustment,
+  arvPointCents,
+  arvLowCents,
+  arvHighCents,
+  workingGuidance = false,
 }: {
   adjustment: MarketAdjustment;
+  arvPointCents?: number | null;
+  arvLowCents?: number | null;
+  arvHighCents?: number | null;
+  workingGuidance?: boolean;
 }) {
   const supportedRates = adjustment.rate_evidence.filter(
     (evidence) => evidence.status === "supported",
@@ -82,14 +90,13 @@ export function MarketAdjustmentPanel({
 
       <div className={styles.adjustmentShadowMetrics}>
         <div>
-          <span>Stonegate ARV</span>
-          <strong>{formatMoney(adjustment.conclusion.arv_point_cents)}</strong>
+          <span>{workingGuidance ? "Working ARV" : "Stonegate ARV"}</span>
+          <strong>{formatMoney(arvPointCents)}</strong>
         </div>
         <div>
-          <span>Supported range</span>
+          <span>{workingGuidance ? "Working range" : "Supported range"}</span>
           <strong>
-            {formatMoney(adjustment.conclusion.arv_low_cents)} to{" "}
-            {formatMoney(adjustment.conclusion.arv_high_cents)}
+            {formatMoney(arvLowCents)} to {formatMoney(arvHighCents)}
           </strong>
           <small>
             {adjustment.conclusion.comp_count} adjusted closed sales
@@ -102,8 +109,8 @@ export function MarketAdjustmentPanel({
         </div>
         <div>
           <span>Confidence</span>
-          <strong>{adjustment.conclusion.confidence_score}%</strong>
-          <small>{adjustment.conclusion.confidence_tier}</small>
+          <strong>{workingGuidance ? "Review" : `${adjustment.conclusion.confidence_score}%`}</strong>
+          <small>{workingGuidance ? "two-sale working guidance" : adjustment.conclusion.confidence_tier}</small>
         </div>
       </div>
 

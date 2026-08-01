@@ -305,8 +305,14 @@ Fresh analysis may use these RentCast endpoints:
 - `/markets` for ZIP-level sale-listing context only
 
 The active-listing and market-statistics calls consume provider requests and are cached with the
-analysis. Repair changes and comp review reuse that snapshot unless **Refresh complete analysis** is
-selected. Neither endpoint supplies closed-sale evidence to ARV or offer math.
+analysis. Repair changes and comp review reuse that snapshot. The single valuation action
+automatically replaces legacy evidence that lacks the current AI research marker. Neither endpoint
+supplies closed-sale evidence to ARV or offer math.
+
+Set `OPENAI_WEB_SEARCH_ENABLED=true` to allow the underwriting research agent to supplement thin
+RentCast results. It uses medium-context live search with a five-call ceiling, stores consulted
+citations, and never lets the model set ARV or an offer directly. Use
+`OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search request has time to finish.
 
 Acceptance:
 

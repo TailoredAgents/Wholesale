@@ -144,6 +144,7 @@ def test_grounded_structured_response_configures_bounded_web_search(
         },
         blocked_domains=["reddit.com"],
         max_tool_calls=2,
+        search_context_size="medium",
     )
 
     payload = captured["json"]
@@ -151,7 +152,7 @@ def test_grounded_structured_response_configures_bounded_web_search(
     assert payload["tools"] == [
         {
             "type": "web_search",
-            "search_context_size": "low",
+            "search_context_size": "medium",
             "external_web_access": True,
             "user_location": {
                 "type": "approximate",

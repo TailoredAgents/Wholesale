@@ -33,6 +33,16 @@ Recorded sale price and date are the core comp evidence. The `/avm/value` result
 as a benchmark and disagreement check; its comparable `price` fields are listing prices and
 are not treated as closed-sale prices.
 
+When the provider set is thin, the same valuation action also runs a bounded OpenAI web search.
+The research agent can propose nearby closed sales, but it cannot state ARV or choose an offer.
+Stonegate admits a proposed sale only when it has an exact address, closed price, closed date,
+living area, and a source URL the search actually consulted. A sale found in two or more consulted
+sources is marked `public_corroborated`; a one-source sale is marked
+`public_cited_single_source`, receives a larger score and weight penalty, and always requires
+human review. Provider records win when the same sale is found twice. The OpenAI Responses API
+returns both inline citations and the complete consulted source list for this validation step;
+see [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search).
+
 ## Address And Subject Validation
 
 Stonegate keeps the staff-entered address as the CRM record and stores RentCast's returned address
@@ -94,7 +104,8 @@ difference. The five best remaining records are saved; all excluded records reta
 including the renovated-group median used for a price-per-square-foot rejection.
 
 If the extended search remains insufficient, the final level becomes `manual`. Stonegate saves the
-best suitable labeled evidence, the exact shortage, and the next action. It does not silently use
+best suitable labeled evidence, automatically checks cited public research, records the exact
+shortage, and states the next action. It does not silently use
 an active listing, AVM value, subject sale, different property type, or otherwise rejected record
 to reach three comps. RentCast radius and subdivision fields remain evidence, not a definitive
 market boundary, so the reviewer must still evaluate school district, flood influence, traffic
@@ -118,6 +129,12 @@ are confirmed, selected recorded sales that are not classified as as-is still pr
 preliminary ARV, offer calculation, and report. Confirmation upgrades the conclusion from
 preliminary to comp-supported; it does not unlock the calculation. The AVM is displayed
 separately as a screening benchmark and cannot drive the seller ceiling.
+
+Two usable closed-sale indications may produce **working guidance** when three are not available.
+This keeps appointment preparation useful without pretending the evidence is final: confidence is
+capped at 49, the result is labeled Working ARV/Working range, and offer approval still requires a
+person. Zero or one usable sale produces no ARV or offer math. Three or more remain the preferred
+threshold for a final comp-supported conclusion.
 
 ## Value Conclusions
 
@@ -448,7 +465,7 @@ The system should help Austin answer five questions:
 
 #### Stage 1: Quick Comp
 
-From the lead, the closer selects **Prepare valuation**. Stonegate verifies the subject, runs the
+From the lead, the closer selects **Run Stonegate valuation**. Stonegate verifies the subject, runs the
 adaptive comp search, applies a preliminary repair scope from known seller information, and shows a
 working ARV and offer range. No itemized dollar knowledge is required. The result is explicitly
 `Preliminary` and lists the few facts that would most improve it.
@@ -909,7 +926,7 @@ and no AI suggestion becomes a confirmed repair fact silently.
 
 - Present Quick Comp, Desk Review, Walkthrough, and Offer Decision as progressive stages of one
   underwriting workspace.
-- Make **Prepare valuation** the simple first action and show only the most valuable missing facts.
+- Make **Run Stonegate valuation** the simple first action and show only the most valuable missing facts.
 - Recalculate from the latest immutable evidence without repeating provider calls unnecessarily.
 - Keep the focused offer summary visible while advanced math remains expandable.
 - Link directly to appointment preparation, field inspection, approved offer plan, reports, and
@@ -924,9 +941,10 @@ parallel record, duplicate repair scope, or unexplained number change.
   and Offer Decision as one progressive workflow. Status comes from the latest underwriting
   version, report stage, field evidence, and approved lead stage; no parallel valuation record was
   introduced.
-- **Prepare valuation** is the first-run action. **Recalculate valuation** applies current saved
-  repair and comp-review evidence while reusing the retained market snapshot; **Refresh market
-  data** is a separate explicit action when new provider evidence is actually needed.
+- **Run Stonegate valuation** is the first-run action and **Update Stonegate valuation** is the same
+  control afterward. Stonegate reuses current research for repair-only changes and automatically
+  refreshes old analyses that lack the current AI comp-discovery evidence marker. Staff do not
+  choose a provider mode or a separate refresh workflow.
 - The workspace surfaces only the first three highest-value missing lead facts above the analysis
   and links directly to the existing Property section for correction.
 - A sticky decision summary keeps the current ARV range, repair range, buyer target, opening

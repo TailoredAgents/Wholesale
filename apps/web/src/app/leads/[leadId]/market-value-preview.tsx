@@ -73,6 +73,7 @@ type ConfidenceFactor = {
 };
 
 type SecondaryEvidence = {
+  research_version?: string;
   status?: string;
   summary?: string;
   address_match?: string;
@@ -91,6 +92,15 @@ type SecondaryEvidence = {
   }[];
   limitations?: string[];
   sources?: { url: string; title: string }[];
+  comparable_candidates?: Array<{
+    formatted_address: string;
+    sale_price_dollars: number;
+    sale_date: string;
+    source_grade: "corroborated" | "cited_single_source";
+    valuation_eligible: boolean;
+    source_urls?: string[];
+  }>;
+  valuation_candidate_count?: number;
 };
 
 type CompSearchAttempt = {
@@ -127,6 +137,10 @@ type CompSearchSummary = {
   next_action: string | null;
   manual_verified_sale_count: number;
   manual_duplicate_count: number;
+  ai_research_sale_count?: number;
+  ai_research_duplicate_count?: number;
+  ai_research_selected_count?: number;
+  ai_research_source_count?: number;
   attempts: CompSearchAttempt[];
 };
 
@@ -518,7 +532,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     };
   }
 
-  async function createAnalysis(refreshMarketData = false) {
+  async function createAnalysis() {
     setStatus("loading");
     setError(null);
     try {
@@ -529,7 +543,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         {
           body: JSON.stringify({
             ...buildAnalysisInputs(),
-            refresh_market_data: refreshMarketData,
+            refresh_market_data: false,
           }),
           headers,
           method: "POST",
@@ -667,9 +681,12 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   const isLoading = status === "loading";
   const isCurrentMethod = estimate?.methodology_version === "v3";
   const hasSupportedArv = typeof estimate?.arv_point_cents === "number";
+  const isWorkingGuidance =
+    estimate?.assumptions?.valuation_evidence_status === "working_two_sale_guidance";
   const hasVerifiedArv =
-    estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales" ||
-    estimate?.assumptions?.arv_value_basis === "market_supported_adjusted_closed_sales";
+    !isWorkingGuidance &&
+    (estimate?.assumptions?.arv_value_basis === "verified_renovated_recorded_sales" ||
+      estimate?.assumptions?.arv_value_basis === "market_supported_adjusted_closed_sales");
   const activeReportStage = estimate?.report_stage ?? verificationStatus;
   const activeRepairSource =
     selectedRepairEstimateSource ??
@@ -692,25 +709,15 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         <div className={styles.marketValueActions}>
           <button
             disabled={isLoading}
-            onClick={() => createAnalysis(false)}
+            onClick={createAnalysis}
             type="button"
           >
             {isLoading
               ? "Preparing..."
               : estimate
-                ? "Recalculate valuation"
-                : "Prepare valuation"}
+                ? "Update Stonegate valuation"
+                : "Run Stonegate valuation"}
           </button>
-          {estimate ? (
-            <button
-              className={styles.secondaryButton}
-              disabled={isLoading}
-              onClick={() => createAnalysis(true)}
-              type="button"
-            >
-              Refresh market data
-            </button>
-          ) : null}
         </div>
       </div>
 
@@ -919,10 +926,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </div>
             <div>
               <span>Core valuation evidence</span>
-              <strong>{estimate.selected_comps?.length ?? 0} recorded sales</strong>
+              <strong>{estimate.selected_comps?.length ?? 0} usable closed sales</strong>
               <small>
                 {estimate.comp_search_summary
-                  ? `${estimate.comp_search_summary.final_level.replaceAll("_", " ")} search · ${estimate.comp_search_summary.total_unique_sales} unique sales`
+                  ? `${estimate.comp_search_summary.total_provider_results} provider results · ${estimate.comp_search_summary.ai_research_selected_count ?? 0} cited AI research sale(s)`
                   : "Screened by similarity and price per square foot"}
               </small>
             </div>
@@ -932,7 +939,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 {(estimate.secondary_evidence?.status ?? "unavailable").replaceAll("_", " ")}
               </strong>
               <small>
-                {estimate.secondary_evidence?.sources?.length ?? 0} cited public sources
+                {estimate.secondary_evidence?.sources?.length ?? 0} cited sources · {estimate.secondary_evidence?.valuation_candidate_count ?? 0} usable sale candidate(s)
               </small>
             </div>
             <div>
@@ -1061,7 +1068,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           ) : null}
 
           {estimate.market_adjustment ? (
-            <MarketAdjustmentPanel adjustment={estimate.market_adjustment} />
+            <MarketAdjustmentPanel
+              adjustment={estimate.market_adjustment}
+              arvHighCents={estimate.arv_high_cents}
+              arvLowCents={estimate.arv_low_cents}
+              arvPointCents={estimate.arv_point_cents}
+              workingGuidance={isWorkingGuidance}
+            />
           ) : null}
 
           {estimate.confidence_factors?.length ? (
@@ -1115,6 +1128,26 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                     </a>
                   </article>
                 ))}
+                {estimate.secondary_evidence.comparable_candidates?.length ? (
+                  <div className={styles.evidenceSources}>
+                    <span>AI-discovered closed sales</span>
+                    {estimate.secondary_evidence.comparable_candidates.map((candidate) => (
+                      <article key={`${candidate.formatted_address}-${candidate.sale_date}`}>
+                        <div>
+                          <strong>{candidate.formatted_address}</strong>
+                          <small>
+                            {formatMoney(Math.round(candidate.sale_price_dollars * 100))} · sold {candidate.sale_date} · {candidate.source_grade.replaceAll("_", " ")}
+                          </small>
+                        </div>
+                        {candidate.source_urls?.[0] ? (
+                          <a href={candidate.source_urls[0]} rel="noreferrer" target="_blank">
+                            Review sale source
+                          </a>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : null}
                 {estimate.secondary_evidence.sources?.length ? (
                   <div className={styles.evidenceSources}>
                     <span>Sources consulted</span>
@@ -1142,12 +1175,18 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               </small>
             </div>
             <div>
-              <dt>{hasVerifiedArv ? "Conservative ARV" : "Preliminary ARV"}</dt>
+              <dt>
+                {hasVerifiedArv
+                  ? "Conservative ARV"
+                  : isWorkingGuidance
+                    ? "Working ARV"
+                    : "Preliminary ARV"}
+              </dt>
               <dd>{formatMoney(estimate.conservative_arv_cents)}</dd>
               <small>
                 {!hasSupportedArv
                   ? "No usable recorded-sale evidence"
-                  : `${hasVerifiedArv ? "Comp-supported" : "Preliminary"} range ${formatMoney(
+                  : `${hasVerifiedArv ? "Comp-supported" : isWorkingGuidance ? "Working" : "Preliminary"} range ${formatMoney(
                       estimate.arv_low_cents,
                     )} to ${formatMoney(estimate.arv_high_cents)}`}
               </small>
@@ -1174,7 +1213,9 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <small>
                 {hasVerifiedArv
                   ? "Do not exceed without re-underwriting"
-                  : "Preliminary until comp condition is reviewed"}
+                  : isWorkingGuidance
+                    ? "Working limit; verify another sale before approval"
+                    : "Preliminary until comp condition is reviewed"}
               </small>
             </div>
             <div className={styles.primaryMetric}>
@@ -1221,7 +1262,13 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             <div className={styles.underwritingControls}>
               <div>
                 <span>ARV status</span>
-                <strong>{hasSupportedArv ? "Preliminary" : "Unavailable"}</strong>
+                <strong>
+                  {isWorkingGuidance
+                    ? "Working guidance"
+                    : hasSupportedArv
+                      ? "Preliminary"
+                      : "Unavailable"}
+                </strong>
               </div>
               <div>
                 <span>Provider AVM screen</span>

@@ -141,7 +141,7 @@ class Settings(BaseSettings):
         validation_alias="OPENAI_WEB_SEARCH_ENABLED",
     )
     openai_request_timeout_seconds: float = Field(
-        default=30.0,
+        default=75.0,
         validation_alias="OPENAI_REQUEST_TIMEOUT_SECONDS",
     )
     openai_pricing_overrides_raw: str = Field(

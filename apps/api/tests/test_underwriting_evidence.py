@@ -9,6 +9,8 @@ from app.integrations.rentcast_client import (
 from app.models.foundation import Property
 from app.services.underwriting_evidence import (
     address_candidates,
+    merge_research_comparable_sales,
+    research_comparable_sale_records,
     resolve_rentcast_subject,
     sanitize_grounded_evidence,
 )
@@ -193,3 +195,99 @@ def test_grounded_evidence_keeps_only_consulted_sources() -> None:
     assert len(evidence["facts"]) == 1
     assert evidence["facts"][0]["value"] == "2,400 square feet"
     assert len(evidence["sources"]) == 1
+
+
+def test_grounded_evidence_promotes_only_complete_cited_closed_sales() -> None:
+    parsed = {
+        "status": "completed",
+        "summary": "Two nearby sales were researched.",
+        "address_match": "confirmed",
+        "facts": [],
+        "conflicts": [],
+        "limitations": [],
+        "comparable_candidates": [
+            {
+                "formatted_address": "710 Parkside Dr, Woodstock, GA 30188",
+                "address_line1": "710 Parkside Dr",
+                "city": "Woodstock",
+                "state": "GA",
+                "postal_code": "30188",
+                "sale_price_dollars": 515000,
+                "sale_date": "2026-03-15",
+                "closed_sale_confirmed": True,
+                "property_type": "Single Family",
+                "bedrooms": 4,
+                "bathrooms": 3,
+                "square_footage": 2450,
+                "year_built": 2001,
+                "lot_size": 12000,
+                "subdivision": "Parkside",
+                "condition_classification": "renovated",
+                "condition_evidence": "Updated listing photos and description.",
+                "source_urls": [
+                    "https://broker.example/710-parkside",
+                    "https://records.example/710-parkside",
+                ],
+                "source_titles": ["Broker sale", "County record"],
+                "research_summary": "Public sources report the same closed sale.",
+            },
+            {
+                "formatted_address": "720 Parkside Dr, Woodstock, GA 30188",
+                "address_line1": "720 Parkside Dr",
+                "city": "Woodstock",
+                "state": "GA",
+                "postal_code": "30188",
+                "sale_price_dollars": 530000,
+                "sale_date": None,
+                "closed_sale_confirmed": False,
+                "property_type": "Single Family",
+                "bedrooms": 4,
+                "bathrooms": 3,
+                "square_footage": 2500,
+                "year_built": 2002,
+                "lot_size": None,
+                "subdivision": "Parkside",
+                "condition_classification": "unknown",
+                "condition_evidence": None,
+                "source_urls": ["https://broker.example/720-parkside"],
+                "source_titles": ["Broker listing"],
+                "research_summary": "No closed sale was confirmed.",
+            },
+        ],
+    }
+    sources = [
+        {"url": "https://broker.example/710-parkside", "title": "Broker sale"},
+        {"url": "https://records.example/710-parkside", "title": "County record"},
+        {"url": "https://broker.example/720-parkside", "title": "Broker listing"},
+    ]
+
+    evidence = sanitize_grounded_evidence(parsed, sources)
+    records = research_comparable_sale_records(evidence)
+
+    assert evidence["research_version"] == "ai_comp_discovery_v1"
+    assert evidence["valuation_candidate_count"] == 1
+    assert evidence["comparable_candidates"][0]["source_grade"] == "corroborated"
+    assert records[0]["_stonegateVerificationStatus"] == "public_corroborated"
+    assert records[0]["lastSalePrice"] == 515000
+    assert records[0]["_stonegateConditionClassification"] == "unknown"
+
+
+def test_provider_sale_wins_when_ai_research_finds_the_same_sale() -> None:
+    provider = [
+        {
+            "formattedAddress": "710 Parkside Dr, Woodstock, GA 30188",
+            "lastSaleDate": "2026-03-15",
+        }
+    ]
+    research = [
+        {
+            "formattedAddress": "710 Parkside Dr, Woodstock, GA 30188",
+            "lastSaleDate": "2026-03-15",
+            "_stonegateEvidenceSource": "ai_web_research",
+        }
+    ]
+
+    merged, duplicate_count = merge_research_comparable_sales(provider, research)
+
+    assert merged == provider
+    assert duplicate_count == 1

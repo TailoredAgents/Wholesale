@@ -171,11 +171,14 @@ class OpenAIResponsesClient:
         user_location: dict[str, str] | None = None,
         blocked_domains: list[str] | None = None,
         max_tool_calls: int = 3,
+        search_context_size: str = "low",
     ) -> tuple[dict[str, Any], dict[str, int | None], list[dict[str, str]]]:
         validate_strict_json_schema(json_schema)
+        if search_context_size not in {"low", "medium", "high"}:
+            raise ValueError("Web search context size must be low, medium, or high.")
         web_search: dict[str, Any] = {
             "type": "web_search",
-            "search_context_size": "low",
+            "search_context_size": search_context_size,
             "external_web_access": True,
         }
         if user_location:

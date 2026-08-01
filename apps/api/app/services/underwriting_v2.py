@@ -485,11 +485,31 @@ def score_recorded_sale(
         subdivision_match=subdivision_match,
     )
     is_manual = search_level == "manual"
+    verification_status = (
+        string(record.get("_stonegateVerificationStatus"))
+        or ("manual_verified" if is_manual else "recorded")
+    )
+    is_ai_research = verification_status in {
+        "public_corroborated",
+        "public_cited_single_source",
+    }
+    if verification_status == "public_corroborated":
+        evidence_status = "AI-corroborated public sale"
+        listing_type = "Cited public evidence"
+    elif verification_status == "public_cited_single_source":
+        evidence_status = "AI-found public sale"
+        listing_type = "Single-source public evidence"
+        search_warnings.append(
+            "AI-discovered sale has one cited public source and requires human review."
+        )
+    else:
+        evidence_status = "Verified manual sale" if is_manual else "Recorded sale"
+        listing_type = "Manual evidence" if is_manual else "Property record"
     base: dict[str, Any] = {
         "provider_id": provider_id,
         "formatted_address": address,
-        "status": "Verified manual sale" if is_manual else "Recorded sale",
-        "listing_type": "Manual evidence" if is_manual else "Property record",
+        "status": evidence_status,
+        "listing_type": listing_type,
         "property_type": string(record.get("propertyType")),
         "price_cents": dollars_to_cents(sale_price),
         "bedrooms": number(record.get("bedrooms")),
@@ -507,10 +527,7 @@ def score_recorded_sale(
         "last_seen_date": None,
         "sale_date": sale_date,
         "price_source": "recorded_sale",
-        "verification_status": (
-            string(record.get("_stonegateVerificationStatus"))
-            or ("manual_verified" if is_manual else "recorded")
-        ),
+        "verification_status": verification_status,
         "condition_classification": condition,
         "condition_evidence": (
             string(record.get("_stonegateConditionEvidence"))
@@ -610,11 +627,20 @@ def score_recorded_sale(
     elif subdivision_match is False:
         score -= 6
         reasons.append("different recorded subdivision")
+    if verification_status == "public_corroborated":
+        score -= 8
+        reasons.append("AI-discovered sale corroborated by cited public sources")
+    elif verification_status == "public_cited_single_source":
+        score -= 18
+        reasons.append("AI-discovered sale supported by one cited public source")
     bounded_score = max(1, min(100, score))
+    weight = bounded_score / 100
+    if is_ai_research:
+        weight *= 0.85 if verification_status == "public_corroborated" else 0.65
     return MarketAnalysisCompRead(
         **{
             **base,
-            "weight": round(bounded_score / 100, 3),
+            "weight": round(weight, 3),
             "comp_grade": grade_for_comp(bounded_score, search_level),
         },
         selection_status="candidate",
@@ -692,9 +718,7 @@ def comp_search_warnings(
     elif search_level == "extended":
         warnings.append("Found only in the extended distance, recency, or physical-fit search.")
     elif search_level == "manual":
-        warnings.append(
-            "Entered and source-verified by Stonegate; not independently returned by RentCast."
-        )
+        warnings.append("Not independently returned by RentCast; review its cited source.")
     if subdivision_match is False:
         warnings.append(
             f"Recorded subdivision {subdivision} differs from subject subdivision "
@@ -1324,8 +1348,8 @@ def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float
 def same_property(subject: dict[str, Any], record: dict[str, Any]) -> bool:
     subject_id = string(subject.get("id"))
     record_id = string(record.get("id"))
-    if subject_id and record_id:
-        return subject_id == record_id
+    if subject_id and record_id and subject_id == record_id:
+        return True
     return normalize_key(string(subject.get("formattedAddress"))) == normalize_key(
         string(record.get("formattedAddress"))
     )

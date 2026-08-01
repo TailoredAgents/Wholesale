@@ -147,6 +147,8 @@ from app.services.underwriting_comp_search import (
 )
 from app.services.underwriting_evidence import (
     collect_secondary_market_evidence,
+    merge_research_comparable_sales,
+    research_comparable_sale_records,
     resolve_rentcast_subject,
     secondary_conflict_warnings,
     unavailable_secondary_evidence,
@@ -1646,10 +1648,16 @@ def create_lead_market_analysis(
     )
     cached_avm = cached_raw.get("avm") if cached_raw else None
     cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
+    cached_secondary = cached_raw.get("secondary_evidence") if cached_raw else None
+    current_research_available = (
+        isinstance(cached_secondary, dict)
+        and cached_secondary.get("research_version") == "ai_comp_discovery_v1"
+    )
     reuse_market_data = (
         (payload.source_analysis_id is not None or not payload.refresh_market_data)
         and isinstance(cached_avm, dict)
         and isinstance(cached_sales, list)
+        and (payload.source_analysis_id is not None or current_research_available)
     )
     if payload.comp_review_decisions and not reuse_market_data:
         raise ValueError("Run a market analysis before reviewing comparable sales.")
@@ -1861,6 +1869,16 @@ def create_lead_market_analysis(
             "resolution": address_evidence,
         }
     provider_sale_records = sale_records
+    research_sale_records = research_comparable_sale_records(secondary_evidence)
+    sale_records, duplicate_research_sale_count = merge_research_comparable_sales(
+        provider_sale_records,
+        research_sale_records,
+    )
+    if research_sale_records:
+        provider_warnings.append(
+            "AI-discovered public closed sales supplement the provider search. Review each "
+            "cited source before approving seller-facing value or offer guidance."
+        )
     manual_sale_records, manual_comp_ids = resolve_manual_comparable_records(
         db,
         principal,
@@ -1869,7 +1887,7 @@ def create_lead_market_analysis(
         source_analysis=cached_analysis,
     )
     sale_records, duplicate_manual_comp_ids = merge_verified_manual_sales(
-        provider_sale_records,
+        sale_records,
         manual_sale_records,
     )
     result = analyze_underwriting_v2(
@@ -2022,6 +2040,8 @@ def create_lead_market_analysis(
     execution_metrics = {
         "duration_ms": max(0, round((perf_counter() - analysis_started_at) * 1000)),
         "provider_returned_comp_count": provider_returned_comp_count,
+        "ai_research_comp_count": len(research_sale_records),
+        "ai_research_duplicate_count": duplicate_research_sale_count,
         "candidate_comp_count": candidate_comp_count,
         "selected_comp_count": len(result.selected_comps),
         "rejected_comp_count": len(result.rejected_comps),
@@ -2042,6 +2062,14 @@ def create_lead_market_analysis(
             selected_count=len(result.selected_comps),
             rejected_count=len(result.rejected_comps),
         )
+    comp_search_summary = add_research_evidence_to_search_summary(
+        comp_search_summary,
+        research_sale_count=len(research_sale_records),
+        duplicate_count=duplicate_research_sale_count,
+        source_count=len(list_of_dicts(secondary_evidence.get("sources"))),
+        selected_comps=result.selected_comps,
+        rejected_comps=result.rejected_comps,
+    )
     comp_search_summary = add_manual_evidence_to_search_summary(
         comp_search_summary,
         manual_sale_count=len(manual_sale_records),
@@ -2184,6 +2212,7 @@ def create_lead_market_analysis(
             "avm": estimate.raw_response,
             "subject_record": subject_record,
             "recorded_sales": provider_sale_records,
+            "research_recorded_sales": research_sale_records,
             "manual_recorded_sales": manual_sale_records,
             "rent": rent_estimate.raw_response if rent_estimate else None,
             "property_record_error": property_record_error,
@@ -3853,7 +3882,7 @@ def add_manual_evidence_to_search_summary(
     manual_comps = [
         comp
         for comp in (*selected_comps, *rejected_comps)
-        if comp.search_level == "manual"
+        if comp.verification_status == "manual_verified"
     ]
     usable_manual_count = sum(comp.score > 0 for comp in manual_comps)
     usable_closed_sale_count = sum(
@@ -3908,6 +3937,60 @@ def add_manual_evidence_to_search_summary(
         updated["next_action"] = (
             "Add another source-verified closed sale or document the evidence shortage before "
             "approving the offer."
+        )
+    return updated
+
+
+def add_research_evidence_to_search_summary(
+    summary: dict[str, Any],
+    *,
+    research_sale_count: int,
+    duplicate_count: int,
+    source_count: int,
+    selected_comps: Sequence[MarketAnalysisCompRead],
+    rejected_comps: Sequence[MarketAnalysisCompRead],
+) -> dict[str, Any]:
+    updated = dict(summary)
+    if not research_sale_count and not source_count:
+        return updated
+    accepted_count = max(0, research_sale_count - duplicate_count)
+    research_comps = [
+        comp
+        for comp in (*selected_comps, *rejected_comps)
+        if comp.evidence_source == "ai_web_research"
+    ]
+    selected_research = [
+        comp for comp in research_comps if comp.selection_status != "rejected"
+    ]
+    updated["ai_research_sale_count"] = accepted_count
+    updated["ai_research_duplicate_count"] = duplicate_count
+    updated["ai_research_selected_count"] = len(selected_research)
+    updated["ai_research_source_count"] = source_count
+    updated["total_unique_sales"] = (
+        (optional_int(updated.get("total_unique_sales")) or 0) + accepted_count
+    )
+    usable_closed_sale_count = len(
+        [
+            comp
+            for comp in (*selected_comps, *rejected_comps)
+            if comp.selection_status != "rejected"
+        ]
+    )
+    minimum = optional_int(updated.get("minimum_closed_sales")) or 3
+    updated["sufficient_closed_sales"] = usable_closed_sale_count >= minimum
+    if selected_research:
+        updated["next_action"] = (
+            "Review the recommended sales and cited AI research, then approve or revise the "
+            "comparable set."
+        )
+    if usable_closed_sale_count < minimum:
+        updated["evidence_shortage_reason"] = (
+            f"Stonegate found {usable_closed_sale_count} usable closed sale(s) after provider "
+            "and cited public research; three are preferred for final confidence."
+        )
+        updated["next_action"] = (
+            "Use the working range for preparation, then verify another sale before presenting "
+            "a final value or approving an offer."
         )
     return updated
 
