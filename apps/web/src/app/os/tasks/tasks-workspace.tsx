@@ -124,7 +124,7 @@ type AiNextTask = {
 };
 
 function aiRecommendations(item: TaskWorkspaceItem): AiRecommendation[] {
-  const raw = item.ai_output.recommended_actions;
+  const raw = (item.ai_output ?? {}).recommended_actions;
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((value) => {
     if (!value || typeof value !== "object") return [];
@@ -140,12 +140,12 @@ function aiRecommendations(item: TaskWorkspaceItem): AiRecommendation[] {
 }
 
 function aiStringList(item: TaskWorkspaceItem, key: string) {
-  const raw = item.ai_output[key];
+  const raw = (item.ai_output ?? {})[key];
   return Array.isArray(raw) ? raw.filter((value): value is string => typeof value === "string") : [];
 }
 
 function aiNextTask(item: TaskWorkspaceItem): AiNextTask | null {
-  const raw = item.ai_output.next_task;
+  const raw = (item.ai_output ?? {}).next_task;
   if (!raw || typeof raw !== "object") return null;
   const candidate = raw as Record<string, unknown>;
   const title = typeof candidate.title === "string" ? candidate.title : "";
@@ -158,7 +158,7 @@ function aiNextTask(item: TaskWorkspaceItem): AiNextTask | null {
 }
 
 function aiConfidence(item: TaskWorkspaceItem) {
-  const raw = item.ai_output.confidence;
+  const raw = (item.ai_output ?? {}).confidence;
   return typeof raw === "number" ? raw : null;
 }
 
@@ -539,7 +539,7 @@ export function TasksWorkspace({
                   </div>
                 </section>
               ) : null}
-              {selected.item_type === "ai_work" && Object.keys(selected.ai_output).length ? (
+              {selected.item_type === "ai_work" && Object.keys(selected.ai_output ?? {}).length ? (
                 <section className={styles.aiOutput}>
                   <header>
                     <Bot aria-hidden="true" size={18} />
