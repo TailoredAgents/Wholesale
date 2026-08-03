@@ -5,11 +5,13 @@ import {
   AlertTriangle,
   ArrowRight,
   BadgeCheck,
+  Bot,
   Check,
   CheckCheck,
   Clock3,
   ExternalLink,
   Search,
+  Sparkles,
   UsersRound,
   X,
 } from "lucide-react";
@@ -30,6 +32,7 @@ export type TaskView =
   | "unscheduled"
   | "team"
   | "approvals"
+  | "ai_completed"
   | "exceptions"
   | "completed";
 
@@ -37,7 +40,7 @@ type MutationStatus = "idle" | "saving" | "error";
 
 const baseViews: Array<{ key: TaskView; label: string }> = [
   { key: "mine", label: "My Tasks" },
-  { key: "today", label: "Due Today" },
+  { key: "today", label: "Do Today" },
   { key: "overdue", label: "Overdue" },
   { key: "upcoming", label: "Upcoming" },
   { key: "unscheduled", label: "Unscheduled" },
@@ -56,6 +59,9 @@ function kindLabel(item: TaskWorkspaceItem) {
   if (item.work_kind === "primary_next_action") return "Primary action";
   if (item.work_kind === "operational_exception") return "Exception";
   if (item.work_kind === "approval") return "Approval";
+  if (item.work_kind === "ai_review") return "AI review";
+  if (item.work_kind === "ai_completed") return "AI completed";
+  if (item.work_kind === "ai_in_progress") return "AI working";
   return "Supporting task";
 }
 
@@ -64,6 +70,9 @@ function kindTone(
 ): "info" | "warning" | "danger" | "neutral" {
   if (item.work_kind === "primary_next_action") return "info";
   if (item.work_kind === "approval") return "warning";
+  if (item.work_kind === "ai_review") return "warning";
+  if (item.work_kind === "ai_completed") return "info";
+  if (item.work_kind === "ai_in_progress") return "info";
   if (item.work_kind === "operational_exception") return "danger";
   return "neutral";
 }
@@ -85,16 +94,72 @@ function matchesView(
   view: TaskView,
   currentUserId: string,
 ) {
-  if (view === "completed") return item.due_status === "completed";
+  if (view === "ai_completed") return item.work_kind === "ai_completed";
+  if (view === "completed") {
+    return item.due_status === "completed" && item.work_kind !== "ai_completed";
+  }
   if (item.due_status === "completed") return false;
   if (view === "mine") return item.assigned_user_id === currentUserId;
   if (view === "today") return item.due_status === "today";
   if (view === "overdue") return item.due_status === "overdue";
   if (view === "upcoming") return item.due_status === "upcoming";
   if (view === "unscheduled") return item.due_status === "unscheduled";
-  if (view === "approvals") return item.item_type === "approval";
+  if (view === "approvals") {
+    return item.work_kind === "approval" || item.work_kind === "ai_review";
+  }
   if (view === "exceptions") return item.attention_flags.length > 0;
-  return item.item_type === "task";
+  return true;
+}
+
+type AiRecommendation = {
+  action: string;
+  reason: string;
+  confidence: number | null;
+};
+
+type AiNextTask = {
+  title: string;
+  reason: string;
+  dueTiming: string;
+};
+
+function aiRecommendations(item: TaskWorkspaceItem): AiRecommendation[] {
+  const raw = item.ai_output.recommended_actions;
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const candidate = value as Record<string, unknown>;
+    const action = typeof candidate.action === "string" ? candidate.action : "";
+    if (!action) return [];
+    return [{
+      action,
+      reason: typeof candidate.reason === "string" ? candidate.reason : "",
+      confidence: typeof candidate.confidence === "number" ? candidate.confidence : null,
+    }];
+  });
+}
+
+function aiStringList(item: TaskWorkspaceItem, key: string) {
+  const raw = item.ai_output[key];
+  return Array.isArray(raw) ? raw.filter((value): value is string => typeof value === "string") : [];
+}
+
+function aiNextTask(item: TaskWorkspaceItem): AiNextTask | null {
+  const raw = item.ai_output.next_task;
+  if (!raw || typeof raw !== "object") return null;
+  const candidate = raw as Record<string, unknown>;
+  const title = typeof candidate.title === "string" ? candidate.title : "";
+  if (!title) return null;
+  return {
+    title,
+    reason: typeof candidate.reason === "string" ? candidate.reason : "",
+    dueTiming: typeof candidate.due_timing === "string" ? candidate.due_timing : "",
+  };
+}
+
+function aiConfidence(item: TaskWorkspaceItem) {
+  const raw = item.ai_output.confidence;
+  return typeof raw === "number" ? raw : null;
 }
 
 export function TasksWorkspace({
@@ -123,7 +188,10 @@ export function TasksWorkspace({
   const views = useMemo(() => {
     const result = [...baseViews];
     if (workspace.can_manage_team) result.push({ key: "team", label: "Team" });
-    if (workspace.can_decide_approvals) result.push({ key: "approvals", label: "Approvals" });
+    if (workspace.can_decide_approvals) {
+      result.push({ key: "approvals", label: "Needs Approval" });
+    }
+    result.push({ key: "ai_completed", label: "AI Completed" });
     result.push({ key: "exceptions", label: "Exceptions" });
     result.push({ key: "completed", label: "Completed" });
     return result;
@@ -180,12 +248,16 @@ export function TasksWorkspace({
     workspace.items.find((item) => item.id === selectedId) ??
     visibleItems[0] ??
     null;
+  const selectedAiNextTask = selected ? aiNextTask(selected) : null;
+  const selectedAiConfidence = selected ? aiConfidence(selected) : null;
   const openItems = workspace.items.filter((item) => item.due_status !== "completed");
   const metrics = {
     primary: openItems.filter((item) => item.work_kind === "primary_next_action").length,
     overdue: openItems.filter((item) => item.due_status === "overdue").length,
-    approvals: openItems.filter((item) => item.item_type === "approval").length,
-    exceptions: openItems.filter((item) => item.attention_flags.length > 0).length,
+    approvals: openItems.filter(
+      (item) => item.work_kind === "approval" || item.work_kind === "ai_review",
+    ).length,
+    aiCompleted: workspace.items.filter((item) => item.work_kind === "ai_completed").length,
   };
 
   async function headers() {
@@ -320,13 +392,43 @@ export function TasksWorkspace({
     }
   }
 
+  async function decideAiWork(decision: "accepted" | "rejected") {
+    if (!selected?.ai_event_id || status === "saving") return;
+    const notes = window.prompt(
+      decision === "accepted"
+        ? "Optional review notes"
+        : "Why should this AI result be rejected?",
+      "",
+    );
+    if (notes === null) return;
+    setStatus("saving");
+    setError("");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/tasks/ai-work/${selected.ai_event_id}/review`,
+        {
+          method: "PATCH",
+          headers: await headers(),
+          body: JSON.stringify({ decision, notes: notes || null }),
+        },
+      );
+      if (!response.ok) throw new Error(await responseMessage(response));
+      await refreshWorkspace();
+      setSelectedId("");
+      setStatus("idle");
+    } catch (reason) {
+      setStatus("error");
+      setError(reason instanceof Error ? reason.message : "The AI review could not be recorded.");
+    }
+  }
+
   return (
     <section className={styles.workspace}>
       <section className={styles.metrics} aria-label="Tasks summary">
         <div><CheckCheck size={17} /><span>Primary actions</span><strong>{metrics.primary}</strong></div>
         <div><Clock3 size={17} /><span>Overdue</span><strong>{metrics.overdue}</strong></div>
-        <div><BadgeCheck size={17} /><span>Approvals</span><strong>{metrics.approvals}</strong></div>
-        <div><AlertTriangle size={17} /><span>Exceptions</span><strong>{metrics.exceptions}</strong></div>
+        <div><BadgeCheck size={17} /><span>Needs approval</span><strong>{metrics.approvals}</strong></div>
+        <div><Sparkles size={17} /><span>AI completed</span><strong>{metrics.aiCompleted}</strong></div>
       </section>
 
       <nav className={styles.savedViews} aria-label="Task views">
@@ -437,6 +539,82 @@ export function TasksWorkspace({
                   </div>
                 </section>
               ) : null}
+              {selected.item_type === "ai_work" && Object.keys(selected.ai_output).length ? (
+                <section className={styles.aiOutput}>
+                  <header>
+                    <Bot aria-hidden="true" size={18} />
+                    <div>
+                      <strong>Prepared by Stonegate AI</strong>
+                      <span>{labelize(selected.capability_key ?? "AI assistance")}</span>
+                    </div>
+                    {selectedAiConfidence !== null ? (
+                      <strong>{selectedAiConfidence}% confidence</strong>
+                    ) : null}
+                  </header>
+                  {selectedAiNextTask ? (
+                    <div className={styles.aiRecommendations}>
+                      <strong>Recommended next step</strong>
+                      <article>
+                        <div>
+                          <strong>{selectedAiNextTask.title}</strong>
+                          {selectedAiNextTask.reason ? (
+                            <p>{selectedAiNextTask.reason}</p>
+                          ) : null}
+                        </div>
+                        {selectedAiNextTask.dueTiming ? (
+                          <span>{labelize(selectedAiNextTask.dueTiming)}</span>
+                        ) : null}
+                      </article>
+                    </div>
+                  ) : null}
+                  {aiRecommendations(selected).length ? (
+                    <div className={styles.aiRecommendations}>
+                      <strong>Recommended actions</strong>
+                      {aiRecommendations(selected).map((recommendation, index) => (
+                        <article key={`${recommendation.action}-${index}`}>
+                          <div>
+                            <strong>{recommendation.action}</strong>
+                            {recommendation.reason ? <p>{recommendation.reason}</p> : null}
+                          </div>
+                          {recommendation.confidence !== null ? (
+                            <span>{recommendation.confidence}%</span>
+                          ) : null}
+                        </article>
+                      ))}
+                    </div>
+                  ) : null}
+                  {aiStringList(selected, "risks").length ? (
+                    <div className={styles.aiEvidence}>
+                      <strong>Risks</strong>
+                      <p>{aiStringList(selected, "risks").join(" · ")}</p>
+                    </div>
+                  ) : null}
+                  {aiStringList(selected, "qualification_gaps").length ? (
+                    <div className={styles.aiEvidence}>
+                      <strong>Still need to confirm</strong>
+                      <p>{aiStringList(selected, "qualification_gaps").join(" · ")}</p>
+                    </div>
+                  ) : null}
+                  {aiStringList(selected, "recommended_questions").length ? (
+                    <div className={styles.aiEvidence}>
+                      <strong>Questions to ask</strong>
+                      <p>{aiStringList(selected, "recommended_questions").join(" · ")}</p>
+                    </div>
+                  ) : null}
+                  {aiStringList(selected, "uncertainties").length ? (
+                    <div className={styles.aiEvidence}>
+                      <strong>Still unknown</strong>
+                      <p>{aiStringList(selected, "uncertainties").join(" · ")}</p>
+                    </div>
+                  ) : null}
+                  {aiStringList(selected, "evidence").length ? (
+                    <div className={styles.aiEvidence}>
+                      <strong>Based on</strong>
+                      <p>{aiStringList(selected, "evidence").map(labelize).join(" · ")}</p>
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
               <div className={styles.detailActions}>
                 {selected.source_url ? (
                   <Link href={selected.source_url}>
@@ -486,6 +664,26 @@ export function TasksWorkspace({
                     <button
                       disabled={status === "saving"}
                       onClick={() => void decideApproval("rejected")}
+                      type="button"
+                    >
+                      Reject
+                    </button>
+                  </>
+                ) : null}
+                {selected.item_type === "ai_work" && selected.can_decide ? (
+                  <>
+                    <button
+                      className={styles.primaryButton}
+                      disabled={status === "saving"}
+                      onClick={() => void decideAiWork("accepted")}
+                      type="button"
+                    >
+                      <Check aria-hidden="true" size={15} />
+                      Accept brief
+                    </button>
+                    <button
+                      disabled={status === "saving"}
+                      onClick={() => void decideAiWork("rejected")}
                       type="button"
                     >
                       Reject

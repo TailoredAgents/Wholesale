@@ -242,7 +242,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Seller Leads: Pipeline | `/os/leads?display=board` |
 | Calendar: Appointment | `/os/calendar?view=appointment` |
 | Seller Leads: Underwriting | `/os/leads?view=underwriting` |
-| Tasks: Approvals | `/os/tasks?view=approvals` |
+| Tasks: Needs Approval | `/os/tasks?view=approvals` |
 | Legacy Approvals redirect | `/os/approvals` |
 | Deals: Transaction work | `/os/deals?view=closing-exceptions` |
 | Deals: Disposition work | `/os/deals?view=ready-for-disposition` |
@@ -322,7 +322,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 2. Open **Inbox > Needs reply** and confirm no qualified seller is waiting.
 3. Open **Tasks > Overdue** and assign or escalate blocked work.
 4. Open **Calendar** and confirm closer capacity and appointment coverage.
-5. Open **Tasks > Approvals** and make only evidence-supported decisions.
+5. Open **Tasks > Needs Approval** and make only evidence-supported decisions.
 6. Review exceptions in **Transactions**, **Dispositions**, and **Finance**.
 7. Review **Marketing** source economics at least weekly.
 
@@ -1041,12 +1041,13 @@ into Stonegate.
 Open **Tasks**. Saved views are:
 
 - **My Tasks**
-- **Due Today**
+- **Do Today**
 - **Overdue**
 - **Upcoming**
 - **Unscheduled**
 - **Team** for authorized managers
-- **Approvals** for authorized reviewers
+- **Needs Approval** for authorized reviewers
+- **AI Completed** for reviewed AI preparation
 - **Exceptions**
 - **Completed**
 
@@ -1060,7 +1061,14 @@ will not close a primary action without a successor while the seller lead or dea
 the terminal checkbox only when the source is already closed; the API verifies that state.
 
 Every active seller lead and deal must have one owner, one primary action, and one due date. Team,
-Approvals, and some decision controls appear only when the signed-in role has authority.
+Needs Approval and some decision controls appear only when the signed-in role has authority.
+
+New seller leads can also create an assigned AI brief. Open it in **Needs Approval** to review the
+summary, recommended next step, missing qualification facts, questions, risks, confidence, and
+evidence. **Accept brief** adds a labeled internal note to the seller timeline; **Reject** records
+that the draft should not be used. This review never messages the seller, overwrites lead facts,
+or replaces the employee's primary next action. Call-note reviews open in Inbox so the recording
+and transcript remain visible during the decision.
 
 ## 7. Calendar And Scheduling
 
@@ -1464,7 +1472,7 @@ offer and contract authority remains human-controlled.
 2. Create the offer plan with opening, target, stretch, and seller ceiling amounts.
 3. Provide the rationale and seller context.
 4. Submit for approval.
-5. The authorized reviewer opens **Tasks > Approvals** or the lead's Underwriting tab.
+5. The authorized reviewer opens **Tasks > Needs Approval** or the lead's Underwriting tab.
 6. The reviewer confirms the version is current and evidence supports the ceiling.
 7. Approve or reject with decision notes.
 8. Record every price discussion and seller counter.
@@ -1474,9 +1482,9 @@ offer and contract authority remains human-controlled.
 A newer underwriting version makes older authority stale. Generate a new offer plan instead of
 reusing stale approval.
 
-## 12. Approvals In Tasks
+## 12. Reviews And Approvals In Tasks
 
-Open **Tasks > Approvals** for governed decisions visible to your role. The old `/os/approvals`
+Open **Tasks > Needs Approval** for governed and AI decisions visible to your role. The old `/os/approvals`
 address redirects here.
 
 1. Select the request.

@@ -351,6 +351,9 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         lead,
         actor_user_id=principal.user_id,
     )
+    from app.services.ai_operations import enqueue_lead_created_ai_work
+
+    enqueue_lead_created_ai_work(db, lead, source="manual_entry")
 
     db.add(
         ActivityEvent(

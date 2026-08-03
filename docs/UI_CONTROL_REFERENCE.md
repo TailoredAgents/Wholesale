@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: July 31, 2026
+Last verified against the application: August 2, 2026
 
 ## Purpose
 
@@ -188,7 +188,7 @@ change staff-reviewed information.
 | `/` keyboard key | Focuses workspace search | Does not activate while typing in another field |
 | **New** | Opens direct Seller lead and Email actions | Each action appears only with its required permission |
 | **Recent destinations** | Shows up to five recently visited OS destinations stored in this browser | Empty until pages have been visited |
-| Approvals shortcut | Opens **Tasks > Approvals** and shows the pending count | Visible only to authorized reviewers |
+| Approvals shortcut | Opens **Tasks > Needs Approval** and shows the pending count | Visible only to authorized reviewers |
 | Notifications bell | Opens Calendar, where operational commitments and appointments are reviewed | Visible to users allowed operational notifications |
 | Notification count | Shows unread operational notification count, capped visually at 99 | Updates from the user profile |
 | Account control | Shows signed-in Clerk identity and sign-out controls | Requires a completed Clerk session |
@@ -221,15 +221,16 @@ An **API fallback view** warning means counts are empty fallback data, not proof
 | --- | --- | --- |
 | Primary actions metric | Counts visible open primary next actions | Read-only |
 | Overdue metric | Counts visible open work past due | Read-only |
-| Approvals metric | Counts visible pending governed decisions | Permission scoped |
-| Exceptions metric | Counts visible work with assignment, schedule, or workflow warnings | Read-only |
+| Needs approval metric | Counts visible pending governed and AI decisions | Permission scoped |
+| AI completed metric | Counts visible completed AI reviews | Read-only and role scoped |
 | My Tasks | Shows open work assigned to the signed-in user | Requires an assigned user match |
-| Due Today | Shows work due today | Filter only |
+| Do Today | Shows work due today | Filter only |
 | Overdue | Shows tasks past their due time | Filter only |
 | Upcoming | Shows future dated work | Filter only |
 | Unscheduled | Shows tasks missing a due date | Filter only |
 | Team | Shows visible team tasks | Authorized managers only |
-| Approvals | Shows governed decisions in the same queue | Authorized reviewers only |
+| Needs Approval | Shows governed decisions and assigned AI briefs in the same queue | Authorized reviewers only |
+| AI Completed | Shows accepted or rejected AI work with its recorded outcome | Visibility remains role scoped |
 | Exceptions | Shows work with attention flags | Filter only |
 | Completed | Shows completed work and recorded outcomes | Visibility remains role scoped |
 | Search work | Filters title, seller, property, deal, and task type | Applies to the selected view |
@@ -244,6 +245,9 @@ An **API fallback view** warning means counts are empty fallback data, not proof
 | Action type / Due / Priority | Classifies and schedules the replacement action | Due is required for an active source |
 | Source already closed | Requests completion without a successor | API rejects this unless the source is terminal |
 | Approve / Reject | Records a direct governed decision | Only shown when the approval can be safely decided in Tasks |
+| AI result panel | Shows the summary, next step, missing qualification facts, questions, risks, confidence, and evidence | Appears after the governed model run finishes |
+| **Accept brief** | Adds the reviewed AI brief as an internal seller note and completes the AI work item | Does not message the seller, overwrite lead facts, or complete the human task |
+| AI **Reject** | Records that the draft should not be used | Preserves the run and review evidence without changing the seller |
 
 Approvals that require full source evidence show **Open source** instead of inline decision
 buttons. The originating workspace remains authoritative for that decision.
@@ -1109,18 +1113,18 @@ appraisal or permission to promise a seller a price.
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |
 
-## Approvals In Tasks
+## Reviews And Approvals In Tasks
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Tasks > Approvals view | Limits the unified work queue to governed requests | Visible only to authorized reviewers |
+| Tasks > Needs Approval view | Limits the unified work queue to governed requests and AI review | Visible only to authorized reviewers |
 | Approval row | Shows source, deadline, owner, status, and warnings | Requires approval permission for that domain |
 | Source link | Opens the underlying lead, transaction, finance record, or AI review | Used when the decision needs full context |
 | Decision note | Records reasoning for approval or rejection | Required by some approval types |
 | **Approve** | Authorizes the requested governed action | Only authorized approvers; may be blocked if source review is required |
 | **Reject** | Rejects the request and records the reason | Only authorized approvers |
 | Review-at-source state | Directs the approver to decide in the originating workspace | Used when inline approval would omit required context |
-| Legacy `/os/approvals` route | Redirects to Tasks > Approvals and preserves a selected approval | Compatibility only |
+| Legacy `/os/approvals` route | Redirects to Tasks > Needs Approval and preserves a selected approval | Compatibility only |
 
 ## Deals
 

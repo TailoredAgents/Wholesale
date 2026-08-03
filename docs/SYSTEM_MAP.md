@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: July 31, 2026
+Last verified against the repository: August 2, 2026
 
 ## 1. Document Authority
 
@@ -353,12 +353,14 @@ not presented as competing navigation.
 **Tasks (`/os/tasks`)**
 
 - Unified daily work center for primary next actions, supporting tasks, governed approvals, and
-  operational exceptions.
-- Saved views include My Tasks, Due Today, Overdue, Upcoming, Unscheduled, Team, Approvals,
-  Exceptions, and Completed, with role-aware visibility.
+  operational exceptions, plus assigned AI preparation and review.
+- Saved views include My Tasks, Do Today, Overdue, Upcoming, Unscheduled, Team, Needs Approval,
+  AI Completed, Exceptions, and Completed, with role-aware visibility.
 - Completing a primary action requires an outcome and a successor when its seller lead or deal
   remains active.
 - Home, Seller Leads, seller records, and Tasks read the same primary next-action record.
+- Lead briefs created from new seller events are reviewed inline. Transcript-grounded call notes
+  open in Inbox so the reviewer can hear and inspect their source evidence.
 
 **Calendar (`/os/calendar`)**
 
@@ -464,7 +466,7 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Calibration scorecards, verified outcomes, provider adequacy, and methodology decisions.
 - Restricted to users with data-quality or underwriting authority.
 
-**Approvals (`/os/tasks?view=approvals`)**
+**Needs Approval (`/os/tasks?view=approvals`)**
 
 - Permission-filtered Tasks view for human decisions such as offer ceilings and contract release.
 - Approval records keep their domain-specific authority, evidence, decision, and audit rules.
@@ -809,6 +811,9 @@ approval needs.
 
 Workers can create escalation evidence, but staff remain responsible for resolving the underlying
 work. Approvals are aggregated into Tasks for discovery but remain separate governed records.
+New lead events also enter the AI Operations queue. The worker prepares a Lead Manager brief, then
+routes it to the assigned employee for acceptance or rejection. Acceptance logs an internal note;
+it does not contact the seller, change lead facts, or complete the human's primary action.
 
 ### 9.4 Duplicate Handling
 
@@ -913,7 +918,8 @@ When recording is deliberately enabled:
 4. structured notes identify motivation, condition, timeline, occupancy, price, objections,
    commitments, and next action.
 5. a human reviews the transcript and notes before critical CRM fields change.
-6. retention and early deletion are tracked.
+6. the AI run and orchestrator event close with the same human decision.
+7. retention and early deletion are tracked.
 
 ## 11. Underwriting System
 

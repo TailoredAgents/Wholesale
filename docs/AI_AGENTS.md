@@ -1,6 +1,6 @@
 # AI Agent System
 
-Last updated: July 28, 2026
+Last updated: August 2, 2026
 
 Stonegate uses one governed, event-driven AI system with specialized capabilities. It does not use
 fourteen independent chatbots with separate memory or authority.
@@ -53,6 +53,26 @@ The target operating loop is:
 
 PostgreSQL remains the durable memory and business source of truth. Model conversation state is
 temporary execution context, not an independent customer record.
+
+### AI Operations Queue
+
+The first production event loop is active for Lead Manager preparation and Call Intelligence:
+
+1. A website inquiry, manual lead, accepted VA prospecting handoff, or unknown inbound caller
+   creates one idempotent `lead.created` orchestrator event.
+2. The background worker runs the existing governed `lead.next_action` capability with read-only
+   lead context and no external communication tool.
+3. The assigned Lead Manager or authorized manager sees the result in **Tasks > Needs Approval**.
+4. The review card shows the seller summary, next step, qualification gaps, suggested questions,
+   risk, confidence, and evidence.
+5. **Accept brief** stores a clearly labeled, human-approved internal note on the existing seller
+   conversation. **Reject** preserves the run and review outcome without changing the seller.
+6. Completed reviews remain in **Tasks > AI Completed** for operating history and measurement.
+
+Recorded seller calls use the same event history, but their decision remains in the Inbox where
+the recording and transcript are visible. Approving call notes may apply only the explicitly
+selected empty CRM fields and may create the selected follow-up task. Neither workflow sends a
+message, changes an offer, creates a contract, or contacts a seller autonomously.
 
 ## Architecture
 

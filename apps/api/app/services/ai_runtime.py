@@ -2585,6 +2585,7 @@ def _new_runtime_run(
         agent_definition_id=agent.id,
         prompt_version_id=prompt.id,
         lead_id=payload.lead_id,
+        orchestrator_event_id=payload.orchestrator_event_id,
         status=status,
         model_name=model_name,
         input_summary=input_summary[:4000],

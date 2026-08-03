@@ -8,6 +8,8 @@ from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.tasks import (
+    AiOperationReviewRead,
+    AiOperationReviewRequest,
     PrimaryNextActionCreate,
     SpeedToLeadQueueResponse,
     TaskCompleteRequest,
@@ -15,6 +17,7 @@ from app.schemas.tasks import (
     TaskRead,
     TaskWorkspaceRead,
 )
+from app.services.ai_operations import review_ai_operation
 from app.services.tasks import (
     complete_task,
     create_primary_next_action,
@@ -64,6 +67,27 @@ def read_open_task_queue(
     principal: Annotated[Principal, Depends(view_leads_dependency)],
 ) -> TaskQueueResponse:
     return TaskQueueResponse(items=list_open_task_queue(db, principal))
+
+
+@router.patch("/ai-work/{event_id}/review")
+def review_ai_work_item(
+    event_id: UUID,
+    payload: AiOperationReviewRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_tasks_dependency)],
+) -> AiOperationReviewRead:
+    try:
+        result = review_ai_operation(db, principal, event_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="AI work not found.")
+    return result
 
 
 @router.patch("/{task_id}/complete")

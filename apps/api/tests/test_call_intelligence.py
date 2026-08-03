@@ -10,6 +10,7 @@ from app.integrations.openai_client import OpenAIAudioTranscript
 from app.integrations.twilio_recordings import TwilioRecordingMedia
 from app.main import app
 from app.models.foundation import (
+    AiOrchestratorEvent,
     AiRunLog,
     ApprovalRequest,
     CallRecord,
@@ -250,6 +251,14 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert ai_run.cost_cents == 3
     assert ai_run.run_metadata is not None
     assert ai_run.run_metadata["pricing_status"] == "priced"
+    operation_event = db_session.scalar(
+        select(AiOrchestratorEvent).where(
+            AiOrchestratorEvent.event_key == f"call.notes:{transcript.id}"
+        )
+    )
+    assert operation_event is not None
+    assert operation_event.status == "needs_review"
+    assert ai_run.orchestrator_event_id == operation_event.id
 
     client = TestClient(app)
     approval = db_session.scalar(select(ApprovalRequest))
@@ -290,6 +299,9 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     )
     assert review_response.status_code == 200
     assert review_response.json()["status"] == "approved"
+    db_session.refresh(operation_event)
+    assert operation_event.status == "completed"
+    assert (operation_event.payload or {})["review_outcome"] == "approved"
     db_session.refresh(lead)
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"

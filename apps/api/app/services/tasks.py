@@ -1,3 +1,4 @@
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -10,6 +11,8 @@ from app.core.config import get_settings
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
+    AiOrchestratorEvent,
+    AiRunLog,
     ApprovalRequest,
     AuditEvent,
     Contact,
@@ -298,7 +301,12 @@ def list_task_workspace(db: Session, principal: Principal) -> TaskWorkspaceRead:
             can_manage_team=can_manage_team,
         )
     ]
-    can_access_approvals = bool(APPROVAL_PERMISSION_KEYS & principal.permission_keys)
+    has_broad_approval_access = bool(APPROVAL_PERMISSION_KEYS & principal.permission_keys)
+    can_review_call_notes = (
+        PermissionKeys.ACCESS_RECORDINGS in principal.permission_keys
+        and PermissionKeys.EDIT_LEADS in principal.permission_keys
+    )
+    can_access_approvals = has_broad_approval_access or can_review_call_notes
     if can_access_approvals:
         approval_rows = db.execute(
             select(ApprovalRequest, User)
@@ -315,7 +323,22 @@ def list_task_workspace(db: Session, principal: Principal) -> TaskWorkspaceRead:
         items.extend(
             approval_workspace_item(request, assigned_user, principal, now)
             for request, assigned_user in approval_rows
+            if approval_visible_to_principal(
+                db,
+                request,
+                principal,
+                can_manage_team=can_manage_team,
+                has_broad_access=has_broad_approval_access,
+            )
         )
+    items.extend(
+        list_ai_workspace_items(
+            db,
+            principal,
+            now=now,
+            can_manage_team=can_manage_team,
+        )
+    )
     items.sort(key=workspace_sort_key)
     return TaskWorkspaceRead(
         items=items,
@@ -424,10 +447,11 @@ def approval_workspace_item(
         flags.append("unscheduled")
     if request.status == "pending" and request.due_at and as_utc(request.due_at) < now:
         flags.append("overdue")
+    is_ai_review = request.request_type == "call_notes_review"
     return TaskWorkspaceItemRead(
         id=f"approval:{request.id}",
         item_type="approval",
-        work_kind="approval",
+        work_kind="ai_review" if is_ai_review else "approval",
         source_record_type=request.entity_type,
         source_record_id=request.entity_id,
         source_record_label=source_label,
@@ -457,6 +481,213 @@ def approval_workspace_item(
         review_url=approval.review_url,
         approval_metadata=approval.approval_metadata,
     )
+
+
+def approval_visible_to_principal(
+    db: Session,
+    request: ApprovalRequest,
+    principal: Principal,
+    *,
+    can_manage_team: bool,
+    has_broad_access: bool,
+) -> bool:
+    if request.request_type != "call_notes_review":
+        return has_broad_access
+    if (
+        PermissionKeys.ACCESS_RECORDINGS not in principal.permission_keys
+        or PermissionKeys.EDIT_LEADS not in principal.permission_keys
+    ):
+        return False
+    if request.assigned_to_user_id == principal.user_id:
+        return True
+    lead_id = parsed_uuid((request.approval_metadata or {}).get("lead_id"))
+    lead = db.get(Lead, lead_id) if lead_id else None
+    if lead is not None and lead.assigned_user_id == principal.user_id:
+        return True
+    return can_manage_team
+
+
+def list_ai_workspace_items(
+    db: Session,
+    principal: Principal,
+    *,
+    now: datetime,
+    can_manage_team: bool,
+) -> list[TaskWorkspaceItemRead]:
+    events = list(
+        db.scalars(
+            select(AiOrchestratorEvent)
+            .where(
+                AiOrchestratorEvent.organization_id == principal.organization_id,
+                AiOrchestratorEvent.event_type.in_(("lead.created", "call.notes.ready")),
+                AiOrchestratorEvent.status.in_(
+                    (
+                        "queued",
+                        "processing",
+                        "needs_review",
+                        "completed",
+                        "failed",
+                        "blocked",
+                    )
+                ),
+            )
+            .order_by(AiOrchestratorEvent.created_at.desc())
+            .limit(150)
+        ).all()
+    )
+    if not events:
+        return []
+    event_ids = [event.id for event in events]
+    runs_by_event: dict[UUID, AiRunLog] = {}
+    for run in db.scalars(
+        select(AiRunLog)
+        .where(AiRunLog.orchestrator_event_id.in_(event_ids))
+        .order_by(AiRunLog.created_at.desc())
+    ).all():
+        if run.orchestrator_event_id is not None:
+            runs_by_event.setdefault(run.orchestrator_event_id, run)
+
+    items: list[TaskWorkspaceItemRead] = []
+    for event in events:
+        payload = event.payload or {}
+        if (
+            event.event_type == "call.notes.ready"
+            and event.status == "needs_review"
+            and payload.get("approval_request_id")
+        ):
+            continue
+        lead = db.get(Lead, event.entity_id) if event.entity_type == "lead" else None
+        if lead is None or lead.archived_at is not None:
+            continue
+        assigned_user_id = parsed_uuid(payload.get("assigned_user_id"))
+        if not ai_event_visible_to_principal(
+            principal,
+            lead,
+            assigned_user_id=assigned_user_id,
+            can_manage_team=can_manage_team,
+        ):
+            continue
+        contact = db.get(Contact, lead.contact_id)
+        property_record = db.get(Property, lead.property_id)
+        assigned_user = db.get(User, assigned_user_id) if assigned_user_id else None
+        run = runs_by_event.get(event.id)
+        output = parse_ai_run_output(run.output_summary if run else None)
+        due_at = parsed_datetime(payload.get("due_at"))
+        work_kind = ai_work_kind(event.status)
+        event_is_complete = work_kind == "ai_completed"
+        summary = output.get("summary") or payload.get("summary")
+        flags: list[str] = []
+        if event.status in {"failed", "blocked"}:
+            flags.extend(("operational_exception", f"ai_{event.status}"))
+        elif assigned_user_id is None:
+            flags.append("unassigned")
+        source_label = contact.legal_name if contact else "Seller lead"
+        detail = format_property_address(property_record) if property_record else None
+        can_review = (
+            event.status == "needs_review"
+            and event.event_type == "lead.created"
+            and PermissionKeys.EDIT_LEADS in principal.permission_keys
+            and (
+                assigned_user_id == principal.user_id
+                or lead.assigned_user_id == principal.user_id
+                or can_manage_team
+            )
+        )
+        items.append(
+            TaskWorkspaceItemRead(
+                id=f"ai:{event.id}",
+                item_type="ai_work",
+                work_kind=work_kind,
+                source_record_type="lead",
+                source_record_id=lead.id,
+                source_record_label=source_label,
+                source_record_detail=detail,
+                source_url=str(payload.get("source_url") or f"/os/leads/{lead.id}"),
+                ai_event_id=event.id,
+                ai_run_id=run.id if run else None,
+                capability_key=str(payload.get("capability_key") or "") or None,
+                ai_output=output,
+                task_type=str(payload.get("capability_key") or event.event_type),
+                title=str(payload.get("title") or "AI operations work"),
+                summary=str(summary) if summary else event.last_error,
+                status=event.status,
+                priority=str(payload.get("priority") or "normal"),
+                due_at=due_at,
+                due_status=(
+                    "completed"
+                    if event_is_complete
+                    else workspace_due_status("open", due_at, now)
+                ),
+                created_at=event.created_at,
+                completed_at=event.processed_at if event_is_complete else None,
+                assigned_user_id=assigned_user_id,
+                assigned_user_name=assigned_user.display_name if assigned_user else None,
+                assigned_user_email=assigned_user.email if assigned_user else None,
+                outcome=str(payload.get("review_outcome"))
+                if payload.get("review_outcome")
+                else None,
+                completion_notes=str(payload.get("review_notes"))
+                if payload.get("review_notes")
+                else None,
+                attention_flags=flags,
+                can_decide=can_review,
+                approval_metadata={},
+            )
+        )
+    return items
+
+
+def ai_event_visible_to_principal(
+    principal: Principal,
+    lead: Lead,
+    *,
+    assigned_user_id: UUID | None,
+    can_manage_team: bool,
+) -> bool:
+    return (
+        assigned_user_id == principal.user_id
+        or lead.assigned_user_id == principal.user_id
+        or can_manage_team
+    )
+
+
+def ai_work_kind(status: str) -> str:
+    if status == "needs_review":
+        return "ai_review"
+    if status == "completed":
+        return "ai_completed"
+    if status in {"failed", "blocked"}:
+        return "operational_exception"
+    return "ai_in_progress"
+
+
+def parse_ai_run_output(raw_output: str | None) -> dict[str, object]:
+    if not raw_output:
+        return {}
+    try:
+        output = json.loads(raw_output)
+    except json.JSONDecodeError:
+        return {"summary": raw_output}
+    return output if isinstance(output, dict) else {"summary": raw_output}
+
+
+def parsed_uuid(value: object) -> UUID | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        return UUID(value)
+    except ValueError:
+        return None
+
+
+def parsed_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def can_decide_approval(request: ApprovalRequest, principal: Principal) -> bool:

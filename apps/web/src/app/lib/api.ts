@@ -3234,8 +3234,15 @@ export type SpeedToLeadTask = {
 
 export type TaskWorkspaceItem = {
   id: string;
-  item_type: "task" | "approval";
-  work_kind: "primary_next_action" | "supporting" | "operational_exception" | "approval";
+  item_type: "task" | "approval" | "ai_work";
+  work_kind:
+    | "primary_next_action"
+    | "supporting"
+    | "operational_exception"
+    | "approval"
+    | "ai_in_progress"
+    | "ai_review"
+    | "ai_completed";
   source_record_type: string;
   source_record_id: string | null;
   source_record_label: string;
@@ -3243,6 +3250,10 @@ export type TaskWorkspaceItem = {
   source_url: string | null;
   task_id: string | null;
   approval_id: string | null;
+  ai_event_id: string | null;
+  ai_run_id: string | null;
+  capability_key: string | null;
+  ai_output: Record<string, unknown>;
   task_type: string;
   title: string;
   summary: string | null;

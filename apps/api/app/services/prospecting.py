@@ -730,6 +730,9 @@ def convert_prospect_to_lead(
     update_lead_qualification(lead, answers)
     db.add(lead)
     db.flush()
+    from app.services.ai_operations import enqueue_lead_created_ai_work
+
+    enqueue_lead_created_ai_work(db, lead, source="prospecting_handoff")
     prospect.converted_lead_id = lead.id
     db.add(
         AttributionTouch(

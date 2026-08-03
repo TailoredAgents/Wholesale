@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: July 28, 2026
+Last updated: August 2, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -97,6 +97,14 @@ Delivered:
 - All eight staff-facing copilots now use the same compact launcher and responsive right-side
   drawer. Operational work remains the primary page content, while deterministic warnings stay
   visible outside the drawer.
+- The shared AI Operations queue now turns website inquiries, manual leads, accepted prospecting
+  handoffs, and unknown inbound callers into governed Lead Manager briefs. The Render worker runs
+  the existing `lead.next_action` capability, routes the result to the responsible employee in
+  Tasks, and requires acceptance or rejection before an approved brief is added to the seller
+  timeline.
+- Call Intelligence runs now link to the same orchestrator-event history. Transcript review closes
+  the corresponding AI work item while preserving the recording, transcript, structured draft,
+  reviewer decision, field updates, cost, and evidence as separate records.
 - Lead-intake summaries.
 - Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
   proposals.
@@ -231,6 +239,8 @@ Build:
 - Handoff preparation for Acquisitions.
 - Clear evidence, confidence, and reason for every recommendation.
 - Role dashboard for acceptance, correction, response time, appointments, time saved, and cost.
+- Event-driven preparation for every production lead-entry path, with a shared Tasks review queue
+  and no automatic seller contact or CRM-field overwrite.
 
 The human Lead Manager:
 

@@ -60,14 +60,30 @@ class PrimaryNextActionCreate(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
 
 
+class AiOperationReviewRequest(BaseModel):
+    decision: Literal["accepted", "rejected"]
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class AiOperationReviewRead(BaseModel):
+    event_id: UUID
+    run_id: UUID
+    status: str
+    outcome: str
+    reviewed_at: datetime
+
+
 class TaskWorkspaceItemRead(BaseModel):
     id: str
-    item_type: Literal["task", "approval"]
+    item_type: Literal["task", "approval", "ai_work"]
     work_kind: Literal[
         "primary_next_action",
         "supporting",
         "operational_exception",
         "approval",
+        "ai_in_progress",
+        "ai_review",
+        "ai_completed",
     ]
     source_record_type: str
     source_record_id: UUID | None
@@ -76,6 +92,10 @@ class TaskWorkspaceItemRead(BaseModel):
     source_url: str | None
     task_id: UUID | None = None
     approval_id: UUID | None = None
+    ai_event_id: UUID | None = None
+    ai_run_id: UUID | None = None
+    capability_key: str | None = None
+    ai_output: dict[str, object] = Field(default_factory=dict)
     task_type: str
     title: str
     summary: str | None

@@ -400,6 +400,88 @@
   font-size: var(--sg-font-size-xs);
 }
 
+.aiOutput {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid var(--sg-color-border-soft);
+  border-bottom: 1px solid var(--sg-color-border-soft);
+  background: var(--sg-color-surface-soft);
+  display: grid;
+  gap: 14px;
+}
+
+.aiOutput > header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--sg-color-brand-strong);
+}
+
+.aiOutput > header div {
+  flex: 1;
+  display: grid;
+  gap: 1px;
+}
+
+.aiOutput > header > strong {
+  color: var(--sg-color-brand-strong);
+  font-size: var(--sg-font-size-xs);
+  white-space: nowrap;
+}
+
+.aiOutput > header strong,
+.aiRecommendations > strong,
+.aiEvidence strong {
+  color: var(--sg-color-text);
+  font-size: var(--sg-font-size-sm);
+}
+
+.aiOutput > header span,
+.aiEvidence p {
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-xs);
+}
+
+.aiRecommendations {
+  display: grid;
+  gap: 7px;
+}
+
+.aiRecommendations article {
+  padding-top: 8px;
+  border-top: 1px solid var(--sg-color-border-soft);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.aiRecommendations article > div {
+  min-width: 0;
+}
+
+.aiRecommendations article strong {
+  font-size: var(--sg-font-size-sm);
+}
+
+.aiRecommendations article p,
+.aiEvidence p {
+  margin: 3px 0 0;
+  line-height: 1.45;
+}
+
+.aiRecommendations article p {
+  color: var(--sg-color-text-muted);
+  font-size: var(--sg-font-size-xs);
+}
+
+.aiRecommendations article > span {
+  color: var(--sg-color-brand-strong);
+  font-size: var(--sg-font-size-xs);
+  font-weight: var(--sg-font-weight-bold);
+  white-space: nowrap;
+}
+
 .detailActions {
   padding: 16px;
   display: grid;

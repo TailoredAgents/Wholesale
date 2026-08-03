@@ -37,6 +37,11 @@ from app.schemas.voice import (
     StructuredCallNotes,
 )
 from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
+from app.services.ai_operations import (
+    enqueue_call_intelligence_ai_work,
+    mark_call_intelligence_ai_work,
+    mark_call_intelligence_reviewed,
+)
 
 CALL_INTELLIGENCE_AGENT_KEY = "call_intelligence"
 CALL_INTELLIGENCE_PROMPT = """You prepare factual real-estate acquisition call notes.
@@ -188,6 +193,7 @@ def process_call_transcript(
     started_monotonic = time.perf_counter()
     run: AiRunLog | None = None
     run_id: UUID | None = None
+    operation_event_id: UUID | None = None
     try:
         if not settings.call_transcription_enabled:
             raise CallIntelligenceError("Call transcription is disabled.")
@@ -200,6 +206,15 @@ def process_call_transcript(
         if call is None:
             raise CallIntelligenceError("The call record is unavailable.")
         lead = db.get(Lead, call.lead_id) if call.lead_id is not None else None
+        if lead is not None:
+            operation_event = enqueue_call_intelligence_ai_work(
+                db,
+                transcript_id=transcript.id,
+                lead=lead,
+                actor_user_id=call.actor_user_id,
+                conversation_id=call.conversation_id,
+            )
+            operation_event_id = operation_event.id
 
         agent, prompt = ensure_call_intelligence_agent(
             db,
@@ -211,6 +226,7 @@ def process_call_transcript(
             agent_definition_id=agent.id,
             prompt_version_id=prompt.id,
             lead_id=lead.id if lead is not None else None,
+            orchestrator_event_id=operation_event_id,
             status="running",
             model_name=agent.model_name,
             input_summary=f"Recorded call {call.id} queued for transcription and note review.",
@@ -221,6 +237,9 @@ def process_call_transcript(
             started_at=started_at,
             completed_at=None,
             error_message=None,
+            execution_mode="production",
+            capability_key="call.summarize",
+            idempotency_key=f"call-notes:{transcript.id}",
         )
         db.add(run)
         db.flush()
@@ -301,9 +320,13 @@ def process_call_transcript(
             "conversation_context": "seller" if lead is not None else "buyer",
             "evidence_coverage_percent": evidence_coverage_percent(notes),
         }
+        approval: ApprovalRequest | None = None
         if lead is not None:
             approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
-            transcript.transcript_metadata["approval_request_id"] = str(approval.id)
+            transcript.transcript_metadata = {
+                **(transcript.transcript_metadata or {}),
+                "approval_request_id": str(approval.id),
+            }
             run.status = "needs_review"
         else:
             run.status = "completed"
@@ -328,7 +351,19 @@ def process_call_transcript(
         }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
-        transcript.transcript_metadata["ai_run_id"] = str(run.id)
+        transcript.transcript_metadata = {
+            **(transcript.transcript_metadata or {}),
+            "ai_run_id": str(run.id),
+        }
+        if operation_event_id is not None:
+            mark_call_intelligence_ai_work(
+                db,
+                event_id=operation_event_id,
+                status="needs_review" if lead is not None else "completed",
+                run_id=run.id,
+                summary=notes.summary,
+                approval_request_id=approval.id if approval is not None else None,
+            )
         db.commit()
         db.refresh(transcript)
         return transcript
@@ -358,6 +393,14 @@ def process_call_transcript(
                     (time.perf_counter() - started_monotonic) * 1000
                 )
                 persisted_run.completed_at = datetime.now(UTC)
+        if operation_event_id is not None:
+            mark_call_intelligence_ai_work(
+                db,
+                event_id=operation_event_id,
+                status="failed",
+                run_id=run_id,
+                error_message=str(exc),
+            )
         db.commit()
         db.refresh(transcript)
         return transcript
@@ -431,7 +474,13 @@ def review_call_transcript(
         approval.status = payload.status
         approval.decision_notes = payload.decision_notes
         approval.decided_at = datetime.now(UTC)
-    mark_ai_run_reviewed(db, transcript, payload.status)
+    reviewed_run_id = mark_ai_run_reviewed(db, transcript, payload.status)
+    mark_call_intelligence_reviewed(
+        db,
+        run_id=reviewed_run_id,
+        decision=payload.status,
+        reviewer_user_id=principal.user_id,
+    )
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
@@ -746,14 +795,19 @@ def parse_follow_up_at(value: str | None) -> datetime | None:
     return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
 
 
-def mark_ai_run_reviewed(db: Session, transcript: CallTranscript, status: str) -> None:
+def mark_ai_run_reviewed(
+    db: Session,
+    transcript: CallTranscript,
+    status: str,
+) -> UUID | None:
     run_id = (transcript.transcript_metadata or {}).get("ai_run_id")
     if not isinstance(run_id, str):
-        return
+        return None
     try:
-        run = db.get(AiRunLog, UUID(run_id))
+        parsed_run_id = UUID(run_id)
     except ValueError:
-        return
+        return None
+    run = db.get(AiRunLog, parsed_run_id)
     if run is not None:
         run.status = status
         run.run_metadata = {
@@ -761,6 +815,7 @@ def mark_ai_run_reviewed(db: Session, transcript: CallTranscript, status: str) -
             "human_review_status": status,
             "review_metrics": (transcript.transcript_metadata or {}).get("review_metrics"),
         }
+    return parsed_run_id
 
 
 def calculate_review_metrics(

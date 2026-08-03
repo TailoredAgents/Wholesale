@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: July 31, 2026
+Last updated: August 2, 2026
 
 ## Purpose
 
@@ -490,6 +490,10 @@ acceptance remain. Another company's campaign, number, or webhooks must not be u
 - draft-only Prospecting, Lead Manager, Acquisitions, Transaction, Disposition, Finance, Tax,
   Marketing, and Executive assistance
 - external-action contracts and zero-delivery simulations
+- event-driven Lead Manager preparation for website, manual, prospecting-handoff, and inbound-call
+  leads, with assigned review in Tasks and accepted briefs logged as internal notes
+- Call Intelligence linkage from recording and transcript processing through human review to the
+  shared orchestrator-event and run history
 
 ### Remaining Actions
 

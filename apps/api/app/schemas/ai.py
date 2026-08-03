@@ -367,6 +367,7 @@ class AiRuntimeExecuteCreate(BaseModel):
     prospect_id: UUID | None = None
     prospecting_entry_id: UUID | None = None
     prospecting_attempt_id: UUID | None = None
+    orchestrator_event_id: UUID | None = None
 
 
 class AiRuntimePolicyRead(BaseModel):

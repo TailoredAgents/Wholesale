@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
+    AiOrchestratorEvent,
     AuditEvent,
     CallRecord,
     CallRecording,
@@ -729,6 +730,29 @@ def test_unknown_inbound_caller_creates_one_lead_and_conversation(
         select(Contact).where(Contact.legal_name == "Inbound caller +14705550199")
     )
     assert contact is not None
+    inbound_lead = db_session.scalar(
+        select(Lead).where(Lead.contact_id == contact.id)
+    )
+    assert inbound_lead is not None
+    ai_event = db_session.scalar(
+        select(AiOrchestratorEvent).where(
+            AiOrchestratorEvent.event_key == f"lead.created:{inbound_lead.id}"
+        )
+    )
+    assert ai_event is not None
+    assert ai_event.status == "queued"
+    assert (ai_event.payload or {}).get("trigger_source") == "inbound_call"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AiOrchestratorEvent)
+                .where(AiOrchestratorEvent.event_key == ai_event.event_key)
+            )
+            or 0
+        )
+        == 1
+    )
 
 
 def test_recording_callback_is_private_idempotent_and_visible_in_timeline(

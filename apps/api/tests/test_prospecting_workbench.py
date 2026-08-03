@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    AiOrchestratorEvent,
     Appointment,
     AuditEvent,
     CallRecord,
@@ -526,6 +527,14 @@ def test_phase_four_guided_queue_handoff_review_and_scorecards(
     prospect = db_session.scalar(select(Prospect).where(Prospect.legal_name == "Interested Seller"))
     assert lead is not None and lead.stage_key == "appointment_scheduled"
     assert prospect is not None and prospect.status == "converted"
+    ai_event = db_session.scalar(
+        select(AiOrchestratorEvent).where(
+            AiOrchestratorEvent.event_key == f"lead.created:{lead.id}"
+        )
+    )
+    assert ai_event is not None
+    assert ai_event.status == "queued"
+    assert (ai_event.payload or {}).get("trigger_source") == "prospecting_handoff"
 
     lead_manager_overview = client.get("/api/v1/lead-manager", headers=owner_headers)
     assert lead_manager_overview.status_code == 200, lead_manager_overview.text

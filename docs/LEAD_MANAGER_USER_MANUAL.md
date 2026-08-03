@@ -1,6 +1,6 @@
 # Stonegate Lead Manager User Manual
 
-Last verified: July 29, 2026
+Last verified: August 2, 2026
 
 ## Who This Guide Is For
 
@@ -77,7 +77,7 @@ Follow this order every workday:
 6. Review today's appointments.
 7. Resolve neglected leads.
 8. Open **Inbox > Needs reply**.
-9. Open **Tasks > My work**.
+9. Open **Tasks > My Tasks** and check **Needs Approval**.
 10. Check **Calendar** before offering appointment times.
 
 Work new warm leads before routine follow-up. Fast response matters.
@@ -347,13 +347,23 @@ For each conversation:
 
 Open **Tasks** and use:
 
-- **My work:** Tasks assigned to you.
+- **My Tasks:** Tasks and AI preparation assigned to you.
 - **Overdue:** Tasks already late.
-- **Due next:** Tasks that need attention soon.
+- **Do Today:** Tasks that need attention today.
 - **Unscheduled:** Tasks missing a proper date.
-- **All work:** Team work you are allowed to see.
+- **Needs Approval:** Decisions and AI briefs waiting for you.
+- **AI Completed:** AI briefs already accepted or rejected.
+- **Team:** Team work you are allowed to see.
 
-Start with **Overdue**, then work **Due next**.
+Start with **Overdue**, then **Do Today**, then **Needs Approval**.
+
+For a new lead brief, read the summary, recommended next step, missing information, questions,
+risks, confidence, and evidence. Select **Accept brief** when it is useful and accurate. Stonegate
+adds it as an internal note on that seller's existing timeline. Select **Reject** when it is wrong
+or unhelpful. Neither choice contacts the seller or completes your actual follow-up task.
+
+Call-note reviews open in Inbox because you must compare the draft with the recording and
+transcript before approving any CRM updates.
 
 Communication tasks open the conversation. Appointment tasks open the calendar. Other tasks open
 the full lead.

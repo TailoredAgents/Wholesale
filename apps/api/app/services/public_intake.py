@@ -34,6 +34,7 @@ from app.schemas.public_intake import (
     SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
 )
+from app.services.ai_operations import enqueue_lead_created_ai_work
 from app.services.bootstrap import bootstrap_foundation
 from app.services.conversion_events import record_conversion_event
 from app.services.inbox import ensure_primary_conversation
@@ -87,6 +88,8 @@ def create_public_seller_lead(
     apply_public_intake_context(lead, property_record, payload)
     ensure_primary_conversation(db, lead)
     matched_existing_lead = duplicate_match.lead is not None
+    if not matched_existing_lead:
+        enqueue_lead_created_ai_work(db, lead, source="public_website")
     ensure_inbound_case(
         db,
         organization_id=organization.id,

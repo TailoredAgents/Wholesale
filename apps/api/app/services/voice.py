@@ -1711,6 +1711,9 @@ def create_inbound_call_lead(
     )
     db.add(lead)
     db.flush()
+    from app.services.ai_operations import enqueue_lead_created_ai_work
+
+    enqueue_lead_created_ai_work(db, lead, source="inbound_call")
     conversation = ensure_primary_conversation(db, lead)
     db.add(
         ActivityEvent(

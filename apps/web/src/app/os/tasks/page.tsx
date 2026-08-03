@@ -15,6 +15,7 @@ const taskViews = new Set<TaskView>([
   "unscheduled",
   "team",
   "approvals",
+  "ai_completed",
   "exceptions",
   "completed",
 ]);

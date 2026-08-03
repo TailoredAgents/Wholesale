@@ -12,6 +12,7 @@ from app.core.database import SessionLocal
 from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
+from app.services.ai_operations import process_next_ai_operation
 from app.services.call_intelligence import process_next_call_transcript
 from app.services.email import sync_next_email_account
 from app.services.lead_manager import process_next_escalation
@@ -55,6 +56,7 @@ def run_worker(stop_event: threading.Event) -> None:
         poll_seconds=settings.call_transcription_poll_seconds,
     )
     operations: tuple[tuple[str, WorkerOperation], ...] = (
+        ("ai_operations", process_next_ai_operation),
         ("call_transcription", process_next_call_transcript),
         ("recording_retention", purge_next_expired_recording),
         ("email_sync", sync_next_email_account),
