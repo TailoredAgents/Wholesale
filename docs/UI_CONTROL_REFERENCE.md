@@ -1030,15 +1030,16 @@ appraisal or permission to promise a seller a price.
 | --- | --- | --- |
 | Quick Comp / Desk Review / Walkthrough / Offer Decision | Shows the progressive status of the existing valuation, field evidence, and offer authority | Status is derived from saved records; selecting a stage opens its existing workspace |
 | Highest-value missing facts | Shows at most three lead facts most useful to the next valuation | Links to Property; absence does not mean every optional fact is known |
-| **Run Stonegate valuation / Update Stonegate valuation** | Validates the subject, searches provider sales, deepens thin evidence with cited AI research, applies current repair inputs, and saves one reviewable result | Automatically reuses current evidence and refreshes old analyses that lack the current research marker |
+| **Run Stonegate valuation / Update Stonegate valuation** | Run performs the first provider retrieval; Update applies current repair and review inputs to the saved same-address market snapshot and saves a new reviewable result | Update makes zero paid provider calls, including when the saved provider attempt failed or returned no match |
+| **Refresh market evidence (may use credits)** | Explicitly replaces the provider snapshot, retries configured providers, and then recalculates | Available after an analysis exists; review the capture time and credit warning before selecting it |
 | Current decision | Keeps ARV, repairs, buyer target, opening, and seller ceiling visible and links to reports, appointment, approval, and signing | Values come from the latest saved underwriting version |
 | Advanced records | Expands version comparison, prior versions, and manual underwriting creation | Collapsed by default; normal comp review remains in the main analysis |
 | Subject facts | Shows bedrooms, bathrooms, size, year, lot, and property type used | Staff should correct material mismatches |
-| ARV range | Shows conservative low, central, and high after-repair value | Range width reflects evidence uncertainty |
+| Stonegate ARV / Supported range | Shows the weighted adjusted-sale point and Q25-Q75 range before repair or offer math | Primary valuation result; provider AVMs do not control it |
 | Confidence | Summarizes evidence quality and unresolved gaps | Does not gate PDF generation |
 | Offer range | Shows policy-based low/high offer guidance after repairs and assignment fee | Staff must use current authority and approval rules |
 | Repair range / Unconfirmed work | Shows saved low, expected, and high repair totals, catalog version, unknown allowance, and specialist warnings | Expected amount drives the current analysis; range is decision support and does not block PDFs |
-| Provider evidence | Shows market-data source, retrieval result, and matching details | Read-only |
+| Provider evidence | Shows RentCast/DealMachine status, returned and usable counts, net-new and overlapping transfers, drops, internal duplicates, ineligible transfers, conflicts, current-run credits/latency, and original source credits/latency for reused evidence | Read-only; DealMachine shadow evidence cannot affect valuation and failed calls may show conservative estimated credits |
 | Closed-sale search summary | Shows the final Preferred, Expanded, Extended, or Manual evidence level, unique and duplicate counts, subdivision support, shortage, and next action | Read-only; Manual means the controlled provider search remained insufficient, not that the analysis disappeared |
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
@@ -1047,11 +1048,14 @@ appraisal or permission to promise a seller a price.
 | Supported local adjustments | Shows only time, living-area, lot, garage, pool, or basement rates that passed local evidence and double-count controls | A missing feature rate is withheld, not assumed to be zero market value |
 | Review rate support and withheld adjustments | Shows sample/pair counts and the exact reason each rate was supported or withheld | Read-only evidence |
 | Review comparable adjustment math | Shows recorded price, every sourced dollar component, extrapolation limit, total adjustment, and adjusted indication | Read-only; review flags require operator judgment |
+| What is driving this range | Shows adjusted-sale dispersion, condition uncertainty, withheld adjustments, expanded-market sales, provider conflicts, and magnitude review | Uses deterministic diagnostics; no generic percentage envelope is added |
+| External benchmarks | Expands RentCast or DealMachine provider value estimates | Collapsed secondary context; explicitly excluded from ARV and offer math |
+| AI Comp Analyst draft | Shows evidence-cited include/exclude/review suggestions, condition hypotheses, micro-market concerns, missing questions, and range explanations | Draft-only; cannot mutate comps, set weights or prices, or confirm condition |
 | Public evidence | Shows controlled subject research, AI-discovered closed sales, source grade, and source links | Must be verified before relying on a material fact; one-source sales receive reduced weight |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
 | **Investor PDF** | Downloads the detailed internal/agent-facing valuation report | Requires a saved analysis |
 | **Client PDF** | Downloads the seller-safe presentation without internal negotiation details | Requires a saved analysis |
-| Re-run analysis | Creates a new analysis version using current inputs | Earlier versions remain auditable |
+| Update analysis | Creates a new analysis version from current inputs and the saved provider snapshot | Earlier versions remain auditable; use the explicit refresh control only when new market evidence is needed |
 | Version comparison | Compares ARV, repairs, disposition target, opening, seller ceiling, comp membership, repair categories, and adjustment evidence between two immutable versions | Requires at least two saved versions |
 | Comparable changes | Lists selected sales added to or removed from the newer version | Uses provider ID, source reference, or saved address identity |
 | Repair-scope changes | Lists categories whose decision, expected cost, or confirmation changed | Uses the saved repair snapshot and catalog version |
@@ -1066,13 +1070,15 @@ appraisal or permission to promise a seller a price.
 | Included / Excluded / Draft changes | Keeps the complete draft decision count visible | Draft changes include inclusion, weight, or condition changes from the loaded analysis |
 | **Restore system set** | Restores the engine's original included/excluded recommendation and 100% reviewer weights | Does not erase condition classifications or change the source analysis |
 | Search / decision / grade / level filters | Narrows the visible workbench without dropping hidden candidates from the review payload | Display-only filters |
-| Sort | Orders by best fit, nearest, most recent, or highest subject-size indication | Display-only; does not alter weight |
+| Sort | Orders by best fit, nearest, most recent, or highest adjusted indication | Display-only; does not alter weight |
 | Comparable candidate | Shows raw closed price, adjusted indication, price per square foot, sale date, distance/direction, physical comparison, source, A-D grade, search level, and subdivision | Read-only source facts |
 | System pick / System excluded | Preserves the engine's original recommendation | Remains visible after human overrides |
 | Reviewer changed | Shows that the draft include/exclude choice differs from the engine recommendation | Reviewer retains authority and must supply a reason |
 | Comp grade | Summarizes physical, location, recency, and market-area fit; Extended-only records cannot receive A or B | A grade does not prove renovated condition |
 | Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, Extended, or Manual evidence step | Wider-query duplicates retain their earliest level; Manual identifies operator-entered evidence |
 | Evidence source / **Open source** | Shows provider or manual verification origin and opens a retained source link | Manual reference is always retained; link appears when supplied |
+| Source badges / Cross-sourced / Corroborated / Conflict | Shows RentCast, DealMachine, manual, or public provenance. Cross-sourced means more than one source reported the transfer; Corroborated requires explicit agreement; Conflict identifies material disagreement | Duplicate transfers count once; cross-sourcing alone is not corroboration and conflicts require review |
+| AI draft badge | Shows the Comp Analyst's recommendation for the same comp | Advisory only; the reviewer still controls inclusion, reason, condition, and weight |
 | Include | Allows a comparable to contribute to the estimate | Staff judgment; exclusion reason recommended when changed |
 | Condition | Marks renovated, average, distressed, unknown, or other supported state | Unconfirmed renovation reduces confidence but does not block results |
 | Exclusion reason | Explains why a comp should not be used | Required by review workflow when excluded |

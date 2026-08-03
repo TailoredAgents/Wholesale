@@ -3,7 +3,7 @@ import json
 import httpx
 import pytest
 
-from app.integrations.openai_client import OpenAIResponsesClient
+from app.integrations.openai_client import OpenAIClientError, OpenAIResponsesClient
 
 STRICT_SCHEMA = {
     "type": "object",
@@ -82,6 +82,33 @@ def test_structured_response_rejects_non_strict_schema_before_network() -> None:
         )
 
 
+def test_structured_response_wraps_malformed_success_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_post(url: str, **_kwargs: object) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=httpx.Request("POST", url),
+            content=b"not-json",
+        )
+
+    monkeypatch.setattr("app.integrations.openai_client.httpx.post", fake_post)
+    client = OpenAIResponsesClient(
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+        timeout_seconds=30,
+    )
+
+    with pytest.raises(OpenAIClientError, match="invalid JSON"):
+        client.create_structured_response(
+            model="gpt-5.6-sol",
+            system_prompt="test",
+            user_prompt="{}",
+            schema_name="stonegate_test",
+            json_schema=STRICT_SCHEMA,
+        )
+
+
 def test_grounded_structured_response_configures_bounded_web_search(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -113,9 +140,7 @@ def test_grounded_structured_response_configures_bounded_web_search(
                         "content": [
                             {
                                 "type": "output_text",
-                                "text": json.dumps(
-                                    {"summary": "Verified.", "risks": []}
-                                ),
+                                "text": json.dumps({"summary": "Verified.", "risks": []}),
                                 "annotations": [],
                             }
                         ],

@@ -1,6 +1,6 @@
 # AI Copilot Build Roadmap
 
-Last updated: August 2, 2026
+Last updated: August 3, 2026
 
 This is the definitive build plan for completing Stonegate's AI system from its current state.
 The product model is:
@@ -78,6 +78,10 @@ Delivered:
 - AI6 Acquisitions Copilot embedded in Field Operations with deterministic readiness, approved
   authority controls, governed appointment and follow-up drafts, human correction, and pilot
   metrics.
+- AI6 U4 Comp Intelligence extension with normalized RentCast and DealMachine closed-sale
+  evidence, source conflict and provenance review, deterministic adjusted-sale range diagnostics,
+  and a supplied-evidence-only AI Comp Analyst draft with no valuation or offer authority. Both
+  DealMachine comp admission and the analyst remain behind default-safe rollout modes.
 - AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
   deterministic closing readiness, deadline risk, duplicate-file protection, source-page
   confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
@@ -302,7 +306,8 @@ Exit criteria:
 
 ## Phase AI6: Acquisitions Copilot
 
-Implementation status: **complete in code. Production model replay, activation, and the measured
+Implementation status: **complete in code, including the U4 Comp Intelligence extension. The
+DealMachine shadow-to-candidate review, AI Comp Analyst production replay, activation, and measured
 draft-only pilot remain operator checkpoints.**
 
 Goal: Prepare the closer for seller conversations, appointments, underwriting review, and
@@ -314,7 +319,13 @@ Build:
 - Appointment brief with motivation, timeline, condition, occupancy, price history, unresolved
   questions, objections, tasks, and logistics.
 - Walkthrough evidence organization and missing-evidence detection.
-- Comp similarity, outlier, recency, price-per-square-foot, condition, and source explanations.
+- Cross-provider comp similarity, outlier, recency, condition, source provenance, duplicate, and
+  conflict explanations.
+- Deterministic weighted adjusted-sale range diagnostics without a generic confidence envelope;
+  external provider AVMs remain context only and cannot control Stonegate ARV or offer math.
+- A structured AI Comp Analyst draft that uses supplied evidence, cites its recommendations, asks
+  for missing review inputs, and cannot return ARV, offer, seller-ceiling, or dollar-adjustment
+  decisions.
 - Repair-evidence comparison and missing-input questions.
 - Investor and client report quality checks.
 - Negotiation questions, objection preparation, and approved-ceiling warnings.
@@ -332,6 +343,7 @@ APIs required:
 
 - OpenAI.
 - RentCast.
+- DealMachine in disabled, shadow, or candidate mode with a per-analysis property-data credit cap.
 - Optional licensed MLS/RESO or ATTOM adapter after measured need.
 - Twilio recording/transcription and internal calendar.
 - Optional route estimates only if operating data justifies them.
@@ -341,6 +353,10 @@ Exit criteria:
 - Backtesting uses verified outcomes and human-reviewed comp sets.
 - ARV error, range coverage, provider disagreement, reviewer overrides, and report corrections are
   measured.
+- DealMachine candidate admission occurs only after shadow evidence establishes useful coverage,
+  acceptable conflict and failure rates, and acceptable credit cost for the named market.
+- AI Comp Analyst replay and draft-only pilot measure citation coverage, prohibited-output blocks,
+  correction burden, latency, cost, and time saved.
 - Meeting briefs are reviewed for accuracy and usefulness.
 - AI cannot present, approve, or change a binding offer.
 

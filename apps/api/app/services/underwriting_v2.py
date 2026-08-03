@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.integrations.rentcast_client import RentCastRentEstimate, RentCastValueEstimate
 from app.schemas.leads import MarketAnalysisCompRead
 from app.services.repair_catalog import evaluate_repair_scope
+from app.services.underwriting_comparable_evidence import normalize_address_key
+
 MONEY = 100
 METHODOLOGY_VERSION = "v2.2"
 
@@ -93,28 +95,16 @@ def analyze_underwriting_v2(
             "Entered address differs from the provider property record and needs review."
         )
     elif address_validation_status == "not_found":
-        data_disagreements.append(
-            "No provider property record was found for the entered address."
-        )
+        data_disagreements.append("No provider property record was found for the entered address.")
 
-    renovated = [
-        comp for comp in selected_comps if comp.condition_classification == "renovated"
-    ]
+    renovated = [comp for comp in selected_comps if comp.condition_classification == "renovated"]
     as_is = [comp for comp in selected_comps if comp.condition_classification == "as_is"]
     if len(renovated) >= 3:
         arv_evidence = renovated
         arv_value_basis = "verified_renovated_recorded_sales"
     else:
-        arv_evidence = [
-            comp
-            for comp in selected_comps
-            if comp.condition_classification != "as_is"
-        ]
-        arv_value_basis = (
-            "provisional_unverified_recorded_sales"
-            if arv_evidence
-            else "unsupported"
-        )
+        arv_evidence = [comp for comp in selected_comps if comp.condition_classification != "as_is"]
+        arv_value_basis = "provisional_unverified_recorded_sales" if arv_evidence else "unsupported"
     arv_low, arv_point, arv_high = weighted_value_range(arv_evidence)
     if arv_point is None:
         arv_value_basis = "unsupported"
@@ -125,9 +115,7 @@ def analyze_underwriting_v2(
         as_is_low = dollars_to_cents(estimate.price_range_low)
         as_is_point = dollars_to_cents(estimate.price)
         as_is_high = dollars_to_cents(estimate.price_range_high)
-        as_is_value_basis = (
-            "provider_avm_benchmark" if as_is_point is not None else "unsupported"
-        )
+        as_is_value_basis = "provider_avm_benchmark" if as_is_point is not None else "unsupported"
 
     repair_level = normalize_repair_level(
         repair_level_override or current_condition_override or lead_condition
@@ -190,10 +178,7 @@ def analyze_underwriting_v2(
     opening_offer = (
         max(
             0,
-            round(
-                seller_ceiling
-                * (1 - settings.underwriting_negotiation_reserve_percentage)
-            ),
+            round(seller_ceiling * (1 - settings.underwriting_negotiation_reserve_percentage)),
         )
         if seller_ceiling is not None
         else None
@@ -222,9 +207,7 @@ def analyze_underwriting_v2(
         "arv_comp_count": len(arv_evidence),
         "subject_square_feet": subject_square_feet,
         "canonical_subject_facts": {
-            key: value
-            for key, value in subject.items()
-            if key not in {"propertyTaxes"}
+            key: value for key, value in subject.items() if key not in {"propertyTaxes"}
         },
         "subject_fact_provenance": subject_fact_provenance,
         "selected_median_price_per_square_foot_cents": median_optional_int(
@@ -235,15 +218,12 @@ def analyze_underwriting_v2(
             ]
         ),
         "ppsf_outlier_count": sum(
-            "Price-per-square-foot outlier" in comp.selection_reason
-            for comp in rejected_comps
+            "Price-per-square-foot outlier" in comp.selection_reason for comp in rejected_comps
         ),
         "comp_value_method": "subject_size_ppsf_indicator",
         "comp_review_applied": bool(comp_review_decisions),
         "manual_weight_method": (
-            "engine_match_weight_times_reviewer_percentage"
-            if comp_review_decisions
-            else None
+            "engine_match_weight_times_reviewer_percentage" if comp_review_decisions else None
         ),
         "ppsf_outlier_method": "verified_renovated_median_mad_and_35_percent_guardrail",
         "secondary_evidence_status": secondary_evidence.get("status"),
@@ -261,9 +241,7 @@ def analyze_underwriting_v2(
         **buyer_economics["assumptions"],
     }
     manual_review_required = confidence_score < 75 or any(
-        reason
-        for reason in review_reasons
-        if not reason.startswith("Rental exit could not")
+        reason for reason in review_reasons if not reason.startswith("Rental exit could not")
     )
     return UnderwritingV2Result(
         selected_comps=selected_comps,
@@ -339,6 +317,13 @@ def apply_comp_review(
                 )
             if comp.selection_reason.startswith("Subject property sale"):
                 raise ValueError("The subject property cannot be included as its own comparable.")
+            if normalize_key(comp.transaction_eligibility) == "ineligible" or (
+                comp.price_cents is not None and 0 < comp.price_cents < 1_000_000
+            ):
+                raise ValueError(
+                    f"{comp.formatted_address or key} is a non-market or nominal transfer "
+                    "and cannot be included in valuation evidence."
+                )
             engine_weight = comp.weight or max(comp.score / 100, 0.5)
             included.append(
                 comp.model_copy(
@@ -408,9 +393,7 @@ def analyze_recorded_sales(
                 )
             )
         else:
-            engine_reason = (
-                "Eligible recorded sale, but ranked below the five strongest matches."
-            )
+            engine_reason = "Eligible recorded sale, but ranked below the five strongest matches."
             rejected.append(
                 comp.model_copy(
                     update={
@@ -471,6 +454,7 @@ def score_recorded_sale(
     raw_features = record.get("features")
     features: dict[str, Any] = raw_features if isinstance(raw_features, dict) else {}
     foundation_type = string(features.get("foundationType"))
+    explicit_basement = boolean(features.get("basement"))
     subject_subdivision = string(subject.get("subdivision"))
     subdivision = string(record.get("subdivision"))
     subdivision_match = (
@@ -485,10 +469,44 @@ def score_recorded_sale(
         subdivision_match=subdivision_match,
     )
     is_manual = search_level == "manual"
-    verification_status = (
-        string(record.get("_stonegateVerificationStatus"))
-        or ("manual_verified" if is_manual else "recorded")
+    verification_status = string(record.get("_stonegateVerificationStatus")) or (
+        "manual_verified" if is_manual else "recorded"
     )
+    transaction_type = string(
+        record.get("transaction_type")
+        or record.get("_stonegateTransactionType")
+        or record.get("lastSaleDocumentType")
+    )
+    transaction_eligibility = string(
+        record.get("transaction_eligibility") or record.get("_stonegateTransactionEligibility")
+    )
+    transaction_review_reason = string(
+        record.get("transaction_review_reason") or record.get("_stonegateTransactionReviewReason")
+    )
+    if transaction_eligibility == "unverified":
+        search_warnings.append(
+            transaction_review_reason
+            or "Arm's-length status is not available from the provider record."
+        )
+    source_providers = string_list(
+        record.get("source_providers") or record.get("_stonegateSourceProviders")
+    )
+    evidence_provenance = dictionary_list(
+        record.get("evidence_provenance") or record.get("_stonegateProvenance")
+    )
+    field_conflicts = dictionary_list(
+        record.get("field_conflicts") or record.get("_stonegateFieldConflicts")
+    )
+    has_material_conflict = any(
+        conflict.get("material") is not False for conflict in field_conflicts
+    )
+    corroborated = not has_material_conflict and (
+        record.get("corroborated") is True
+        or record.get("_stonegateCorroborated") is True
+        or verification_status == "public_corroborated"
+        or len(source_providers) > 1
+    )
+    source_overlap_count = max(1, len(source_providers))
     is_ai_research = verification_status in {
         "public_corroborated",
         "public_cited_single_source",
@@ -538,7 +556,9 @@ def score_recorded_sale(
         "garage_spaces": number(features.get("garageSpaces")),
         "pool": boolean(features.get("pool")),
         "basement": (
-            "basement" in foundation_type.lower() if foundation_type else None
+            explicit_basement
+            if explicit_basement is not None
+            else foundation_basement(foundation_type)
         ),
         "adjusted_value_cents": subject_size_value_cents,
         "price_per_square_foot_cents": price_per_square_foot_cents,
@@ -556,6 +576,18 @@ def score_recorded_sale(
         "source_reference": string(record.get("_stonegateSourceReference")),
         "source_url": string(record.get("_stonegateSourceUrl")),
         "verification_notes": string(record.get("_stonegateVerificationNotes")),
+        "evidence_sources": source_providers,
+        "source_observations": evidence_provenance,
+        "source_conflicts": field_conflicts,
+        "corroboration_count": source_overlap_count if corroborated else 1,
+        "source_overlap_count": source_overlap_count,
+        "source_providers": source_providers,
+        "evidence_provenance": evidence_provenance,
+        "field_conflicts": field_conflicts,
+        "corroborated": corroborated,
+        "transaction_type": transaction_type,
+        "transaction_eligibility": transaction_eligibility,
+        "transaction_review_reason": transaction_review_reason,
     }
     rejection = recorded_sale_rejection_reason(
         subject,
@@ -661,6 +693,9 @@ def recorded_sale_rejection_reason(
         return "Subject property sale; excluded from comparable set."
     if sale_price is None or sale_price <= 0:
         return "Missing recorded sale price."
+    transaction_rejection = non_market_transfer_rejection_reason(record, sale_price)
+    if transaction_rejection:
+        return transaction_rejection
     if not sale_date:
         return "Missing recorded sale date."
     subject_type = normalize_key(string(subject.get("propertyType")))
@@ -696,13 +731,51 @@ def recorded_sale_rejection_reason(
     return None
 
 
+def non_market_transfer_rejection_reason(
+    record: dict[str, Any],
+    sale_price: int,
+) -> str | None:
+    eligibility = normalize_key(
+        string(
+            record.get("transaction_eligibility") or record.get("_stonegateTransactionEligibility")
+        )
+    )
+    saved_reason = string(
+        record.get("transaction_review_reason") or record.get("_stonegateTransactionReviewReason")
+    )
+    if eligibility == "ineligible":
+        return saved_reason or "Non-market transfer; excluded from comparable set."
+    if sale_price < 10_000:
+        return "Recorded consideration is nominal and is not treated as an ordinary market sale."
+    transaction_type = normalize_key(
+        string(
+            record.get("transaction_type")
+            or record.get("_stonegateTransactionType")
+            or record.get("lastSaleDocumentType")
+        )
+    )
+    blocked_fragments = (
+        "quit_claim",
+        "quitclaim",
+        "gift_deed",
+        "family_transfer",
+        "intra_family",
+        "foreclosure",
+        "sheriff_deed",
+        "tax_deed",
+        "tax_sale",
+        "deed_in_lieu",
+        "corrective_deed",
+        "correction_deed",
+    )
+    if any(fragment in transaction_type for fragment in blocked_fragments):
+        return "Recorded document type indicates a non-market transfer."
+    return None
+
+
 def normalize_search_level(value: object) -> str | None:
     normalized = normalize_key(string(value))
-    return (
-        normalized
-        if normalized in {"preferred", "expanded", "extended", "manual"}
-        else None
-    )
+    return normalized if normalized in {"preferred", "expanded", "extended", "manual"} else None
 
 
 def comp_search_warnings(
@@ -916,9 +989,7 @@ def calculate_buyer_economics(
         return {
             "flip_buyer_max_cents": None,
             "rental_buyer_max_cents": None,
-            "monthly_rent_cents": dollars_to_cents(rent_estimate.rent)
-            if rent_estimate
-            else None,
+            "monthly_rent_cents": dollars_to_cents(rent_estimate.rent) if rent_estimate else None,
             "assumptions": {},
         }
     profit_rules = {
@@ -929,19 +1000,13 @@ def calculate_buyer_economics(
     }
     minimum_profit, profit_percentage = profit_rules[repair_level]
     required_profit = max(minimum_profit, round(conservative_arv_cents * profit_percentage))
-    purchase_costs = round(
-        conservative_arv_cents * settings.underwriting_purchase_cost_percentage
-    )
+    purchase_costs = round(conservative_arv_cents * settings.underwriting_purchase_cost_percentage)
     financing_holding_percentage = round(
-        settings.underwriting_financing_holding_percentage
-        * holding_period_months
-        / 6,
+        settings.underwriting_financing_holding_percentage * holding_period_months / 6,
         4,
     )
     financing_holding = round(conservative_arv_cents * financing_holding_percentage)
-    resale_costs = round(
-        conservative_arv_cents * settings.underwriting_resale_cost_percentage
-    )
+    resale_costs = round(conservative_arv_cents * settings.underwriting_resale_cost_percentage)
     flip_max = max(
         0,
         conservative_arv_cents
@@ -963,11 +1028,7 @@ def calculate_buyer_economics(
         maintenance = round(annual_rent * 0.08)
         management = round(annual_rent * 0.08)
         recorded_taxes = latest_mapping_amount(subject_record.get("propertyTaxes")) * MONEY
-        taxes = (
-            recorded_taxes
-            if recorded_taxes > 0
-            else round(conservative_arv_cents * 0.012)
-        )
+        taxes = recorded_taxes if recorded_taxes > 0 else round(conservative_arv_cents * 0.012)
         insurance = round(conservative_arv_cents * 0.01)
         rental_noi = max(0, annual_rent - vacancy - maintenance - management - taxes - insurance)
         if settings.underwriting_rental_target_cap_rate > 0:
@@ -1001,9 +1062,7 @@ def calculate_buyer_economics(
             "rental_management_percentage": 0.08,
             "rental_insurance_percentage": 0.01,
             "annual_property_taxes_cents": taxes if monthly_rent else None,
-            "property_tax_source": (
-                "provider_record" if recorded_taxes > 0 else "1.2% fallback"
-            )
+            "property_tax_source": ("provider_record" if recorded_taxes > 0 else "1.2% fallback")
             if monthly_rent
             else None,
         },
@@ -1026,9 +1085,7 @@ def confidence_and_review_reasons(
 ) -> tuple[int, str, list[dict[str, Any]], list[str]]:
     reasons: list[str] = []
     average_score = (
-        sum(comp.score for comp in selected_comps) / len(selected_comps)
-        if selected_comps
-        else 0
+        sum(comp.score for comp in selected_comps) / len(selected_comps) if selected_comps else 0
     )
     address_points = 0
     if address_validation_status == "provider_confirmed" and (address_match_score or 0) >= 90:
@@ -1149,10 +1206,7 @@ def confidence_and_review_reasons(
                 (
                     "No material conflicts were detected across the available evidence."
                     if secondary_evidence.get("status") in {"completed", "insufficient"}
-                    else (
-                        "No material conflicts were detected in the available "
-                        "provider evidence."
-                    )
+                    else ("No material conflicts were detected in the available provider evidence.")
                 )
                 if conflict_count == 0
                 else f"{conflict_count} source conflict(s) require review."
@@ -1296,12 +1350,7 @@ def record_distance(subject: dict[str, Any], record: dict[str, Any]) -> float | 
     if any(value is None for value in coordinates):
         return None
     subject_lat, subject_lng, comp_lat, comp_lng = coordinates
-    if (
-        subject_lat is None
-        or subject_lng is None
-        or comp_lat is None
-        or comp_lng is None
-    ):
+    if subject_lat is None or subject_lng is None or comp_lat is None or comp_lng is None:
         return None
     return round(haversine_miles(subject_lat, subject_lng, comp_lat, comp_lng), 3)
 
@@ -1325,9 +1374,9 @@ def direction_from_subject(
     origin_latitude = radians(subject_latitude)
     destination_latitude = radians(comp_latitude)
     x_axis = sin(longitude_delta) * cos(destination_latitude)
-    y_axis = cos(origin_latitude) * sin(destination_latitude) - sin(
-        origin_latitude
-    ) * cos(destination_latitude) * cos(longitude_delta)
+    y_axis = cos(origin_latitude) * sin(destination_latitude) - sin(origin_latitude) * cos(
+        destination_latitude
+    ) * cos(longitude_delta)
     bearing = (degrees(atan2(x_axis, y_axis)) + 360) % 360
     directions = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
     return directions[round(bearing / 45) % len(directions)]
@@ -1339,8 +1388,7 @@ def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float
     origin_lat = radians(lat1)
     destination_lat = radians(lat2)
     value = (
-        sin(delta_lat / 2) ** 2
-        + cos(origin_lat) * cos(destination_lat) * sin(delta_lng / 2) ** 2
+        sin(delta_lat / 2) ** 2 + cos(origin_lat) * cos(destination_lat) * sin(delta_lng / 2) ** 2
     )
     return 2 * 3958.8 * asin(sqrt(value))
 
@@ -1350,9 +1398,9 @@ def same_property(subject: dict[str, Any], record: dict[str, Any]) -> bool:
     record_id = string(record.get("id"))
     if subject_id and record_id and subject_id == record_id:
         return True
-    return normalize_key(string(subject.get("formattedAddress"))) == normalize_key(
-        string(record.get("formattedAddress"))
-    )
+    subject_address = normalize_address_key(string(subject.get("formattedAddress")))
+    record_address = normalize_address_key(string(record.get("formattedAddress")))
+    return bool(subject_address and subject_address == record_address)
 
 
 def days_since(value: str | None) -> int | None:
@@ -1433,11 +1481,7 @@ def latest_mapping_amount(value: Any) -> int:
             return 0
         latest_value = value[latest_key]
         if isinstance(latest_value, dict):
-            return (
-                integer(latest_value.get("total"))
-                or integer(latest_value.get("amount"))
-                or 0
-            )
+            return integer(latest_value.get("total")) or integer(latest_value.get("amount")) or 0
         return integer(latest_value) or 0
     return integer(value) or 0
 
@@ -1457,6 +1501,24 @@ def number(value: Any) -> float | None:
 
 def boolean(value: Any) -> bool | None:
     return value if isinstance(value, bool) else None
+
+
+def foundation_basement(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = " ".join(value.casefold().replace("/", " ").split())
+    if normalized in {
+        "unknown",
+        "n a",
+        "na",
+        "not available",
+        "unspecified",
+        "not reported",
+    }:
+        return None
+    if normalized.startswith(("no basement", "without basement")):
+        return False
+    return "basement" in normalized
 
 
 def integer(value: Any) -> int | None:
@@ -1479,6 +1541,20 @@ def optional_int(value: Any) -> int | None:
 
 def optional_float(value: Any) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def string_list(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return list(
+        dict.fromkeys(item.strip() for item in value if isinstance(item, str) and item.strip())
+    )
+
+
+def dictionary_list(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
 
 
 def comp_key(comp: MarketAnalysisCompRead) -> str:

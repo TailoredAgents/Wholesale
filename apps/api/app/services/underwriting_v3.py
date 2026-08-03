@@ -75,10 +75,7 @@ def promote_market_adjusted_result(
     opening_offer = (
         max(
             0,
-            round(
-                seller_ceiling
-                * (1 - settings.underwriting_negotiation_reserve_percentage)
-            ),
+            round(seller_ceiling * (1 - settings.underwriting_negotiation_reserve_percentage)),
         )
         if seller_ceiling is not None
         else None
@@ -148,6 +145,7 @@ def promote_market_adjusted_result(
             or status != "supported"
             or confidence_score < 75
             or comp_count == 2
+            or market_adjustment.get("requires_manual_review") is True
         ),
         review_reasons=dedupe(review_reasons),
         assumptions=assumptions,
@@ -198,9 +196,7 @@ def unsupported_result(
         legacy_rule_cents=None,
         confidence_score=confidence_score,
         confidence_tier="insufficient",
-        confidence_factors=dictionaries(
-            market_adjustment.get("confidence_factors")
-        ),
+        confidence_factors=dictionaries(market_adjustment.get("confidence_factors")),
         manual_review_required=True,
         review_reasons=dedupe(reasons),
         assumptions=assumptions,
@@ -213,11 +209,7 @@ def current_review_reasons(values: list[str]) -> list[str]:
         "RentCast AVM falls outside the recorded-sale range",
         "Rental exit could not be supported",
     )
-    return [
-        value
-        for value in values
-        if not any(fragment in value for fragment in stale_fragments)
-    ]
+    return [value for value in values if not any(fragment in value for fragment in stale_fragments)]
 
 
 def bounded_confidence(value: int | None, *, fallback: int) -> int:

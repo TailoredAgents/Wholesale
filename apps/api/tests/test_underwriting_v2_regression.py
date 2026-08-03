@@ -251,7 +251,9 @@ def test_rural_older_sales_are_retained_with_visible_penalties(
     assert len(result.selected_comps) == 3
     assert result.arv_point_cents is not None
     assert all(comp.score < 100 for comp in result.selected_comps)
-    assert all("outside initial 0.5-mile area" in comp.selection_reason for comp in result.selected_comps)
+    assert all(
+        "outside initial 0.5-mile area" in comp.selection_reason for comp in result.selected_comps
+    )
     assert all("older than 180 days" in comp.selection_reason for comp in result.selected_comps)
 
 
@@ -285,6 +287,23 @@ def test_unique_or_adversarial_sales_do_not_create_an_arv(
     assert "Missing recorded sale price." in reasons
 
 
+def test_subject_sale_address_variants_are_excluded_even_when_provider_ids_differ(
+    underwriting_settings: Settings,
+) -> None:
+    subject_variant = sale(
+        "different-provider-id",
+        300000,
+        formattedAddress="123 Peachtree Street, Atlanta, GA 30303-1234",
+    )
+
+    result = run_analysis(underwriting_settings, [subject_variant])
+
+    assert result.selected_comps == []
+    assert result.rejected_comps[0].selection_reason == (
+        "Subject property sale; excluded from comparable set."
+    )
+
+
 def test_conflicting_subject_sources_are_visible_and_require_review(
     underwriting_settings: Settings,
 ) -> None:
@@ -301,7 +320,10 @@ def test_conflicting_subject_sources_are_visible_and_require_review(
         },
     )
 
-    assert "Property type differs between seller/CRM and provider records." in result.data_disagreements
+    assert (
+        "Property type differs between seller/CRM and provider records."
+        in result.data_disagreements
+    )
     assert "Provider sources disagree on living area." in result.data_disagreements
     assert "Provider sources disagree on bedroom count." in result.data_disagreements
     assert result.manual_review_required is True

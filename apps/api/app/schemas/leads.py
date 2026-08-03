@@ -263,6 +263,18 @@ class MarketComparableRead(BaseModel):
     source_reference: str | None = None
     source_url: str | None = None
     verification_notes: str | None = None
+    evidence_sources: list[str] = Field(default_factory=list)
+    source_observations: list[dict[str, Any]] = Field(default_factory=list)
+    source_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    corroboration_count: int = Field(default=1, ge=1)
+    source_overlap_count: int = Field(default=1, ge=1)
+    source_providers: list[str] = Field(default_factory=list)
+    evidence_provenance: list[dict[str, Any]] = Field(default_factory=list)
+    field_conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    corroborated: bool = False
+    transaction_type: str | None = None
+    transaction_eligibility: str | None = None
+    transaction_review_reason: str | None = None
 
 
 class LeadMarketValueEstimateRead(BaseModel):
@@ -456,7 +468,10 @@ class UnderwritingManualComparableCreate(BaseModel):
     state: str = Field(min_length=2, max_length=2)
     postal_code: str = Field(min_length=5, max_length=20)
     sale_date: date
-    sale_price_cents: int = Field(ge=100_000, le=100_000_000_000)
+    sale_price_cents: int = Field(ge=1_000_000, le=100_000_000_000)
+    transaction_type: str | None = Field(default=None, max_length=160)
+    arms_length_verified: Literal[True]
+    arms_length_evidence: str = Field(min_length=10, max_length=1000)
     property_type: str = Field(min_length=2, max_length=80)
     bedrooms: int | None = Field(default=None, ge=0, le=30)
     bathrooms: float | None = Field(default=None, ge=0, le=30)
@@ -485,6 +500,9 @@ class UnderwritingManualComparableRead(BaseModel):
     formatted_address: str
     sale_date: date
     sale_price_cents: int
+    transaction_type: str | None
+    arms_length_verified: bool
+    arms_length_evidence: str | None
     property_type: str
     bedrooms: int | None
     bathrooms: float | None
@@ -574,6 +592,16 @@ class UnderwritingExecutionMetricsRead(BaseModel):
     comp_review_decision_count: int = Field(default=0, ge=0)
     comp_review_override_count: int = Field(default=0, ge=0)
     manual_review_required: bool
+    provider_duplicate_count: int = Field(default=0, ge=0)
+    provider_conflict_count: int = Field(default=0, ge=0)
+    dealmachine_returned_comp_count: int = Field(default=0, ge=0)
+    # Retained for response compatibility; this is the net-new DM coverage count.
+    dealmachine_unique_comp_count: int = Field(default=0, ge=0)
+    dealmachine_usable_comp_count: int = Field(default=0, ge=0)
+    dealmachine_overlap_comp_count: int = Field(default=0, ge=0)
+    dealmachine_credits_used: int | None = Field(default=None, ge=0)
+    dealmachine_latency_ms: int | None = Field(default=None, ge=0)
+    ai_comp_analyst_latency_ms: int | None = Field(default=None, ge=0)
 
 
 class UnderwritingCompSearchAttemptRead(BaseModel):
@@ -690,6 +718,9 @@ class LeadMarketAnalysisRead(BaseModel):
     rejected_comps: list[MarketAnalysisCompRead]
     source_note: str
     created_at: datetime
+    market_data_captured_at: datetime | None = None
+    market_data_reused: bool = False
+    source_analysis_id: UUID | None = None
     methodology_version: str = "v1"
     as_is_value_low_cents: int | None = None
     as_is_value_cents: int | None = None
@@ -725,6 +756,8 @@ class LeadMarketAnalysisRead(BaseModel):
     market_adjustment: dict[str, Any] | None = None
     adjustment_shadow: dict[str, Any] | None = None
     manual_comp_ids: list[UUID] = Field(default_factory=list)
+    comp_intelligence: dict[str, Any] | None = None
+    ai_comp_analyst: dict[str, Any] | None = None
 
 
 class TransactionChecklistItemRead(BaseModel):

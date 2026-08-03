@@ -27,6 +27,10 @@ const marketAdjustment = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/adjustment-shadow-panel.tsx"),
   "utf8",
 );
+const comparableReview = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/comparable-review-workbench.tsx"),
+  "utf8",
+);
 const calibrationOutcome = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/calibration-outcome-form.tsx"),
   "utf8",
@@ -49,11 +53,13 @@ test("valuation workspace preserves the four progressive stages", () => {
   assert.match(leadDetail, /lead\.intelligence\.missing_fields\.slice\(0, 3\)/);
 });
 
-test("one valuation action automatically reuses or deepens evidence", () => {
-  assert.match(marketValue, /onClick=\{createAnalysis\}/);
+test("valuation updates reuse evidence and market refresh stays explicit", () => {
+  assert.match(marketValue, /createAnalysis\(false\)/);
+  assert.match(marketValue, /createAnalysis\(true\)/);
   assert.match(marketValue, /Update Stonegate valuation/);
   assert.match(marketValue, /Run Stonegate valuation/);
-  assert.doesNotMatch(marketValue, /Refresh market data/);
+  assert.match(marketValue, /Refresh market evidence/);
+  assert.match(marketValue, /paid provider credits/);
 });
 
 test("decision summary connects existing downstream workspaces", () => {
@@ -72,7 +78,9 @@ test("U3.8 is documented as one implemented workflow", () => {
   );
   assert.match(phase, /Status:\*\* Implemented/);
   assert.match(phase, /no parallel valuation record was\s+introduced/i);
-  assert.match(phase, /automatically\s+refreshes old analyses/);
+  assert.match(phase, /recalculates from the saved same-address market snapshot/);
+  assert.match(phase, /makes no paid provider call/);
+  assert.match(phase, /Refresh market evidence[\s\S]*separate intentional action/);
 });
 
 test("U3.9 compares immutable comp, repair, and adjustment evidence", () => {
@@ -107,7 +115,7 @@ test("U3.9 exposes segmented calibration and operating-quality scorecards", () =
 test("Stonegate Valuation is the single live user-facing method", () => {
   assert.match(marketValue, /Stonegate Valuation/);
   assert.match(marketValue, /market_adjustment/);
-  assert.match(marketAdjustment, /Stonegate valuation adjustments/);
+  assert.match(marketAdjustment, /Stonegate valuation conclusion/);
   assert.doesNotMatch(marketAdjustment, /V2\.2 still controls/);
   assert.doesNotMatch(marketValue, /Underwriting V2\.2/);
   assert.match(calibrationOutcome, /validation_scenarios/);
@@ -115,4 +123,51 @@ test("Stonegate Valuation is the single live user-facing method", () => {
   assert.match(phase, /Status:\*\* Superseded by owner decision/);
   assert.match(phase, /V3 is the single live method/);
   assert.match(phase, /V2\.2 remains\s+available only as a technical rollback/);
+});
+
+test("U4 makes adjusted closed-sale valuation the primary conclusion", () => {
+  assert.match(marketAdjustment, /Stonegate valuation conclusion/);
+  assert.match(marketAdjustment, /Stonegate ARV/);
+  assert.match(marketAdjustment, /Supported range/);
+  assert.match(marketAdjustment, /Weighted conclusion from adjusted closed sales/);
+  assert.match(marketAdjustment, /Provider AVMs do not control this conclusion or offer math/);
+  assert.ok(
+    marketValue.indexOf("<MarketAdjustmentPanel") < marketValue.indexOf("className={styles.evidenceSummary}"),
+    "the Stonegate conclusion must appear before supporting evidence summaries",
+  );
+});
+
+test("U4 keeps provider AVMs in a collapsed external benchmark disclosure", () => {
+  assert.match(marketValue, /function ExternalBenchmarkPanel/);
+  assert.match(marketValue, /<details className=\{styles\.externalBenchmarks\}>/);
+  assert.match(marketValue, /External benchmarks/);
+  assert.match(marketValue, /excluded from Stonegate ARV/);
+  assert.match(marketValue, /Excluded from offer math/);
+  assert.doesNotMatch(marketValue, /Provider AVM screen/);
+  assert.match(marketValue, /providerControlsAsIs/);
+});
+
+test("U4 explains range width and the auditable adjusted indication math", () => {
+  assert.match(marketAdjustment, /range_diagnostics/);
+  assert.match(marketAdjustment, /range_drivers/);
+  assert.match(marketAdjustment, /Why this supported range is broad/);
+  assert.match(marketAdjustment, /relative_weight_percentage/);
+  assert.match(marketAdjustment, /Review comparable adjustment math/);
+  assert.match(comparableReview, /Adjusted indication/);
+  assert.match(comparableReview, /Recorded sale plus locally supported adjustments/);
+});
+
+test("U4 presents provider provenance, conflicts, and AI recommendations as review evidence", () => {
+  assert.match(comparableReview, /source_providers/);
+  assert.match(comparableReview, /field_conflicts/);
+  assert.match(comparableReview, /Corroborated/);
+  assert.match(comparableReview, /Source conflict/);
+  assert.match(comparableReview, /AI draft:/);
+  assert.match(marketValue, /ai_comp_analyst/);
+  assert.match(marketValue, /AI comp analyst/);
+  assert.match(marketValue, /Draft analysis only\. AI cannot change the comp set/);
+  assert.match(marketValue, /range_explanations/);
+  assert.match(marketValue, /comp_intelligence/);
+  assert.match(marketValue, /Comp source coverage/);
+  assert.match(marketValue, /deduplicated before weighting/);
 });

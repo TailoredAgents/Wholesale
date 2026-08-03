@@ -31,10 +31,31 @@ type CompAdjustment = {
   gross_adjustment_percentage: number;
   requires_review: boolean;
   components: AdjustmentComponent[];
+  relative_weight_percentage?: number | null;
+  distance_from_point_cents?: number | null;
+  distance_from_point_percentage?: number | null;
+  range_position?: string | null;
+  evidence_source?: string | null;
+  verification_status?: string | null;
 };
+
+type RangeDriver =
+  | string
+  | {
+      key?: string | null;
+      label?: string | null;
+      summary?: string | null;
+      explanation?: string | null;
+      impact?: string | null;
+      impact_cents?: number | null;
+      comp_keys?: string[];
+      evidence_keys?: string[];
+      severity?: "info" | "review" | "high" | string;
+    };
 
 export type MarketAdjustment = {
   version: string;
+  calculation_version?: string;
   status: "supported" | "partial" | "unsupported";
   valuation_use:
     | "live_human_reviewed_underwriting"
@@ -58,6 +79,18 @@ export type MarketAdjustment = {
   };
   rate_evidence: RateEvidence[];
   comp_adjustments: CompAdjustment[];
+  range_drivers?: RangeDriver[];
+  range_diagnostics?: {
+    version?: string;
+    policy?: string;
+    artificial_padding_applied?: boolean;
+    raw_sale_span_cents?: number | null;
+    adjusted_indication_span_cents?: number | null;
+    adjustment_span_change_cents?: number | null;
+    supported_range_width_cents?: number | null;
+    supported_range_percentage?: number | null;
+    drivers?: RangeDriver[];
+  } | null;
   warnings: string[];
 };
 
@@ -77,24 +110,31 @@ export function MarketAdjustmentPanel({
   const supportedRates = adjustment.rate_evidence.filter(
     (evidence) => evidence.status === "supported",
   );
+  const rangeDrivers = rangeDriverItems(adjustment, arvPointCents, arvLowCents, arvHighCents);
+  const pointLabel = workingGuidance ? "Working ARV" : "Stonegate ARV";
+  const rangeLabel = workingGuidance ? "Working range" : "Supported range";
 
   return (
     <section className={styles.adjustmentShadow} aria-label="Market-supported valuation adjustments">
       <header className={styles.adjustmentShadowHeader}>
         <div>
-          <span>Stonegate valuation adjustments</span>
-          <strong>{statusLabel(adjustment.status)}</strong>
+          <span>Stonegate valuation conclusion</span>
+          <strong>{workingGuidance ? "Adjusted-sales working guidance" : "Adjusted closed-sale ARV"}</strong>
         </div>
-        <small>Local evidence used to support the saved ARV and offer calculations.</small>
+        <div className={styles.adjustmentStatus}>
+          <span>{statusLabel(adjustment.status)}</span>
+          <small>Provider AVMs do not control this conclusion or offer math.</small>
+        </div>
       </header>
 
       <div className={styles.adjustmentShadowMetrics}>
-        <div>
-          <span>{workingGuidance ? "Working ARV" : "Stonegate ARV"}</span>
+        <div className={styles.adjustmentPrimaryMetric}>
+          <span>{pointLabel}</span>
           <strong>{formatMoney(arvPointCents)}</strong>
+          <small>Weighted conclusion from adjusted closed sales</small>
         </div>
-        <div>
-          <span>{workingGuidance ? "Working range" : "Supported range"}</span>
+        <div className={styles.adjustmentRangeMetric}>
+          <span>{rangeLabel}</span>
           <strong>
             {formatMoney(arvLowCents)} to {formatMoney(arvHighCents)}
           </strong>
@@ -113,6 +153,43 @@ export function MarketAdjustmentPanel({
           <small>{workingGuidance ? "two-sale working guidance" : adjustment.conclusion.confidence_tier}</small>
         </div>
       </div>
+
+      {rangeDrivers.length ? (
+        <details className={styles.rangeDriverDetails}>
+          <summary>{rangeSummaryLabel(arvPointCents, arvLowCents, arvHighCents)}</summary>
+          {adjustment.range_diagnostics ? (
+            <div className={styles.rangeDiagnosticMetrics}>
+              <span>
+                Raw sale span
+                <strong>{formatMoney(adjustment.range_diagnostics.raw_sale_span_cents)}</strong>
+              </span>
+              <span>
+                Adjusted indication span
+                <strong>
+                  {formatMoney(adjustment.range_diagnostics.adjusted_indication_span_cents)}
+                </strong>
+              </span>
+              <span>
+                Supported range width
+                <strong>
+                  {formatMoney(adjustment.range_diagnostics.supported_range_width_cents)}
+                </strong>
+              </span>
+            </div>
+          ) : null}
+          <div className={styles.rangeDriverList}>
+            {rangeDrivers.map((driver, index) => (
+              <article data-severity={driver.severity} key={`${driver.key}-${index}`}>
+                <div>
+                  <strong>{driver.label}</strong>
+                  {driver.impact ? <span>{driver.impact}</span> : null}
+                </div>
+                <small>{driver.summary}</small>
+              </article>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <div className={styles.adjustmentRateSummary}>
         <strong>Supported local adjustments</strong>
@@ -158,11 +235,22 @@ export function MarketAdjustmentPanel({
               <div className={styles.adjustmentCompHeader}>
                 <div>
                   <strong>{comp.formatted_address ?? comp.comp_key}</strong>
-                  <small>Recorded sale {formatMoney(comp.sale_price_cents)}</small>
+                  <small>
+                    Recorded sale {formatMoney(comp.sale_price_cents)} · {sourceLabel(comp.evidence_source)}
+                  </small>
                 </div>
                 <div>
                   <span>{formatSignedMoney(comp.total_adjustment_cents)}</span>
                   <strong>{formatMoney(comp.adjusted_indication_cents)}</strong>
+                  <small>
+                    {typeof comp.relative_weight_percentage === "number"
+                      ? `${comp.relative_weight_percentage.toFixed(1)}% conclusion weight`
+                      : "Saved evidence weight"}
+                    {comp.range_position ? ` · ${comp.range_position.replaceAll("_", " ")}` : ""}
+                    {typeof comp.distance_from_point_cents === "number"
+                      ? ` · ${formatSignedMoney(comp.distance_from_point_cents)} from ARV`
+                      : ""}
+                  </small>
                 </div>
               </div>
               {comp.components.length ? (
@@ -196,6 +284,122 @@ function statusLabel(status: MarketAdjustment["status"]) {
   if (status === "supported") return "Locally supported";
   if (status === "partial") return "Partial support";
   return "Insufficient evidence";
+}
+
+function rangeDriverItems(
+  adjustment: MarketAdjustment,
+  arvPointCents?: number | null,
+  arvLowCents?: number | null,
+  arvHighCents?: number | null,
+) {
+  const explicitDrivers =
+    adjustment.range_drivers ?? adjustment.range_diagnostics?.drivers ?? [];
+  const explicit = explicitDrivers.map((driver, index) => {
+    if (typeof driver === "string") {
+      return {
+        key: `saved-${index}`,
+        label: "Saved range diagnostic",
+        summary: driver,
+        impact: null,
+        severity: "info",
+      };
+    }
+    return {
+      key: driver.key ?? `saved-${index}`,
+      label: driver.label ?? "Range driver",
+      summary: driver.summary ?? driver.explanation ?? "Review the saved valuation evidence.",
+      impact:
+        typeof driver.impact_cents === "number"
+          ? formatMoney(driver.impact_cents)
+          : driver.impact
+            ? driver.impact.replaceAll("_", " ")
+            : null,
+      severity: driver.severity ?? "info",
+    };
+  });
+  if (explicit.length) {
+    return explicit;
+  }
+
+  const derived: Array<{
+    key: string;
+    label: string;
+    summary: string;
+    impact: string | null;
+    severity: string;
+  }> = [];
+  if (
+    typeof arvLowCents === "number" &&
+    typeof arvHighCents === "number" &&
+    arvHighCents >= arvLowCents
+  ) {
+    const width = arvHighCents - arvLowCents;
+    const percentage =
+      typeof arvPointCents === "number" && arvPointCents > 0
+        ? Math.round((width / arvPointCents) * 100)
+        : null;
+    derived.push({
+      key: "adjusted-spread",
+      label: "Adjusted-sale dispersion",
+      summary: `The selected adjusted indications span ${formatMoney(width)}${
+        percentage === null ? "" : `, or ${percentage}% of the Stonegate ARV`
+      }.`,
+      impact: "Observed spread",
+      severity: percentage !== null && percentage > 15 ? "high" : "info",
+    });
+  }
+
+  const withheld = adjustment.rate_evidence.filter(
+    (evidence) => evidence.status === "unsupported",
+  );
+  if (withheld.length) {
+    derived.push({
+      key: "withheld-adjustments",
+      label: "Withheld adjustments",
+      summary: `${withheld.length} property difference${withheld.length === 1 ? " was" : "s were"} not assigned a dollar adjustment because local evidence did not meet the support threshold.`,
+      impact: "Preserves uncertainty",
+      severity: "review",
+    });
+  }
+
+  const reviewCount = adjustment.comp_adjustments.filter((comp) => comp.requires_review).length;
+  if (reviewCount) {
+    derived.push({
+      key: "review-required",
+      label: "Comparable review",
+      summary: `${reviewCount} adjusted sale${reviewCount === 1 ? " requires" : "s require"} human review before the conclusion should be approved.`,
+      impact: "Review needed",
+      severity: "high",
+    });
+  }
+  return derived;
+}
+
+function sourceLabel(value?: string | null) {
+  if (!value) return "source saved";
+  const normalized = value.toLowerCase();
+  if (normalized.includes("rentcast")) return "RentCast";
+  if (normalized.includes("dealmachine")) return "DealMachine";
+  if (normalized.includes("manual")) return "manual verified";
+  if (normalized.includes("ai_web") || normalized.includes("public")) return "public cited";
+  return value.replaceAll("_", " ");
+}
+
+function rangeSummaryLabel(
+  arvPointCents?: number | null,
+  arvLowCents?: number | null,
+  arvHighCents?: number | null,
+) {
+  if (
+    typeof arvPointCents === "number" &&
+    arvPointCents > 0 &&
+    typeof arvLowCents === "number" &&
+    typeof arvHighCents === "number" &&
+    (arvHighCents - arvLowCents) / arvPointCents >= 0.15
+  ) {
+    return "Why this supported range is broad";
+  }
+  return "What drives this supported range";
 }
 
 function formatMoney(value?: number | null) {

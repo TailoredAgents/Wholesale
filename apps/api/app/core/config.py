@@ -511,6 +511,20 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="UNDERWRITING_V3_SHADOW_ENABLED",
     )
+    underwriting_dealmachine_comps_mode: Literal["disabled", "shadow", "candidate"] = Field(
+        default="disabled",
+        validation_alias="UNDERWRITING_DEALMACHINE_COMPS_MODE",
+    )
+    underwriting_dealmachine_max_credits_per_analysis: int = Field(
+        default=2,
+        ge=0,
+        le=25,
+        validation_alias="UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS",
+    )
+    underwriting_ai_comp_analyst_mode: Literal["disabled", "draft"] = Field(
+        default="disabled",
+        validation_alias="UNDERWRITING_AI_COMP_ANALYST_MODE",
+    )
     underwriting_offer_low_percentage: float = Field(
         default=0.65,
         validation_alias="UNDERWRITING_OFFER_LOW_PERCENTAGE",

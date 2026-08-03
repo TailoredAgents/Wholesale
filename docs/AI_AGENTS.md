@@ -1,6 +1,6 @@
 # AI Agent System
 
-Last updated: August 2, 2026
+Last updated: August 3, 2026
 
 Stonegate uses one governed, event-driven AI system with specialized capabilities. It does not use
 fourteen independent chatbots with separate memory or authority.
@@ -171,7 +171,7 @@ after prompts, tools, schemas, retrieval, and representative evals have plateaue
 | Lead Manager Support | Find qualification gaps, stale leads, and next actions for the human Lead Manager | CRM, tasks, inbox, calendar, approved scripts | Low-risk internal tasks |
 | Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Approved structured CRM updates after pilot |
 | Appointment Preparation | Produce seller brief, questions, logistics, and risk flags | CRM, qualification, underwriting, internal calendar, optional routes | Internal brief |
-| Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
+| Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, controlled DealMachine evidence, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
 | Negotiation Coach | Prepare questions, objections, options, and ceiling warnings | Approved underwriting, offer authority, seller history | Internal coaching only |
 | Transaction Coordinator | Detect missing documents, deadlines, and closing risks | Transaction records, object storage, e-signature, operational email | Low-risk internal tasks |
 | Disposition | Match buyers and draft approved deal packages and outreach | Buyer CRM, deal facts, documents, approved channels | Draft campaign; human selects buyer |
@@ -224,6 +224,12 @@ Only an approved offer plan is exposed as authority; otherwise the runtime instr
 to recommend or present a final price. Every output remains an appointment-linked draft until a
 staff member accepts, corrects, or rejects it, and review never applies CRM or seller-facing
 actions.
+
+The U4 AI Comp Analyst is a narrower underwriting draft within that boundary. It may organize only
+the comparable evidence supplied by Stonegate, cite inclusion or exclusion concerns, identify
+provider conflicts, and ask missing-evidence questions. The deterministic V3.1 calculator owns the
+adjusted-sale range and downstream economics; the analyst cannot browse for new facts, set ARV,
+propose an offer or seller ceiling, or apply dollar adjustments.
 
 ### Transaction Coordination
 

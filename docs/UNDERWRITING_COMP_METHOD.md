@@ -3,7 +3,8 @@
 ## Version Status
 
 - **Current implemented method:** Stonegate Valuation, methodology `v3`, with adaptive closed-sale
-  discovery, locally supported comparable adjustments, repair scope, and buyer economics.
+  discovery, locally supported comparable adjustments, repair scope, and buyer economics. Fresh
+  analyses use calculation contract `v3.1-adjusted-distribution`.
 - **Current operating authority:** V3 is the single live calculation method. Staff do not choose
   between valuation engines.
 - **Technical rollback:** V2.2 remains readable and can be restored through deployment
@@ -28,10 +29,42 @@ The engine keeps three conclusions separate:
 2. **After-repair value (ARV):** the supported retail value after a defined renovation.
 3. **Contract recommendation:** the amount Stonegate can pay while preserving a viable exit.
 
-RentCast's `/properties` endpoint supplies property records and recorded sale history.
-Recorded sale price and date are the core comp evidence. The `/avm/value` result is retained
-as a benchmark and disagreement check; its comparable `price` fields are listing prices and
-are not treated as closed-sale prices.
+RentCast supplies the canonical subject record, recorded-sale history, rent evidence, and an
+external AVM benchmark. When its underwriting mode is enabled, DealMachine performs a
+property-only subject lookup to resolve the provider property ID and returns a second pool of
+comparable-sale observations. Stonegate normalizes the comparable observations, deduplicates the
+same transfer, preserves both providers' provenance, and exposes comp-field conflicts; the same
+sale never receives double weight. The DealMachine subject lookup is retained for provider audit
+but does not silently replace canonical RentCast subject facts. In `shadow` mode DealMachine cannot
+affect ARV. In `candidate` mode its unique closed sales enter the same deterministic screening and
+human-review workflow as every other provider sale.
+
+DealMachine identity is fail-closed: the property-only lookup must return the exact normalized
+requested address with no fuzzy-match warning before Stonegate requests comps. The two-call credit
+audit stores property and people-credit totals. The subject lookup must explicitly report zero
+people credits; the comp response may omit that field under the provider contract. Any positive
+people-credit report or missing lookup telemetry excludes DealMachine evidence and raises a
+high-severity provider warning. Underwriting never requests owner or contact records.
+
+Recorded sale price and date are the core comp evidence. RentCast and DealMachine value estimates
+are retained only as external benchmarks and disagreement checks. Provider listing prices, active
+listings, estimates, and foreclosure transfers are not treated as ordinary closed-sale prices and
+never enter ARV or seller-ceiling math.
+
+Structured sales also pass a transfer screen before scoring. Explicit foreclosure or
+non-arm's-length flags, quitclaim/gift/family transfers, sheriff/tax sales, deeds in lieu,
+corrective deeds, and nominal consideration below $10,000 are retained for audit but are ineligible
+for valuation. Neither a human review decision nor the AI draft can re-include them. When a
+provider supplies no document or arm's-length field, the sale remains visibly `unverified` and
+requires human diligence rather than being silently described as verified.
+
+Every cross-provider difference is preserved, but only a material difference affects confidence
+or review. Current nonmaterial tolerances are: sale-date span up to seven days; sale-price span up
+to the greater of $1,000 or 1%; living-area span below the greater of 50 square feet or 2%; lot span
+below the greater of 500 square feet or 5%; coordinate span below 0.001 degree; year-built span up
+to two years; and sub-half-room or sub-one-garage-space rounding. Differences beyond policy are
+classified as review or high severity by field. High conflicts force manual review; minor
+differences remain in provenance without reducing source-agreement confidence.
 
 When the provider set is thin, the same valuation action also runs a bounded OpenAI web search.
 The research agent can propose nearby closed sales, but it cannot state ARV or choose an offer.
@@ -39,7 +72,8 @@ Stonegate admits a proposed sale only when it has an exact address, closed price
 living area, and a source URL the search actually consulted. A sale found in two or more consulted
 sources is marked `public_corroborated`; a one-source sale is marked
 `public_cited_single_source`, receives a larger score and weight penalty, and always requires
-human review. Provider records win when the same sale is found twice. The OpenAI Responses API
+human review. Structured provider observations take priority over public-research facts when the
+same sale is found twice. The OpenAI Responses API
 returns both inline citations and the complete consulted source list for this validation step;
 see [OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search).
 
@@ -138,35 +172,43 @@ threshold for a final comp-supported conclusion.
 
 ## Value Conclusions
 
-For each physically similar sale, the engine stores:
+For each physically similar sale, the V3 engine stores the unmodified recorded sale price, sale
+date, price per square foot, source provenance, fit grade, weight, every supported adjustment,
+every withheld adjustment, the net adjustment, and the final adjusted indication. Historical
+V2.2 records may also retain a subject-size indicator, but full price-per-square-foot scaling does
+not control a fresh V3 conclusion.
 
-- The unmodified recorded sale price.
-- Recorded sale price per square foot.
-- A subject-size indicator: sale price / comp living area x subject living area.
+Stonegate derives adjustment rates only from sufficiently stable local evidence. Depending on the
+available paired sales, this can include market time, living area, lot size, garage, pool, and
+basement. It withholds condition, room-count, or feature adjustments when the local sample,
+stability, or collinearity controls are not met. A missing adjustment is visible review work; it is
+not replaced with a national rule of thumb or an AI-generated amount.
 
-The subject-size indicator is an investor screening calculation, not an appraisal adjustment
-or claim that every square foot has equal contributory value. It is used only after property
-type and physical similarity screens, and the raw sale remains visible for review.
-
-The engine uses score-weighted subject-size indicator quartiles:
+The engine uses interpolated score-weighted adjusted-sale quantiles:
 
 - 25th percentile: supported low.
-- 50th percentile: point estimate.
+- 50th percentile: Stonegate ARV point.
 - 75th percentile: supported high.
+
+The supported range is the middle distribution of the actual adjusted indications. Calculation
+contract `v3.1-adjusted-distribution` does not add a generic AVM, confidence, or fixed-percentage
+envelope after those quantiles. It instead records the raw-sale span, adjusted span, range width,
+range width as a percentage of the point, anchor comps, unknown conditions, expanded-market sales,
+withheld adjustments, provider conflicts, and large or extrapolated adjustments. A material range
+or source conflict forces review rather than manufacturing precision.
 
 ARV uses confirmed renovated comps when at least three exist. Before that threshold, it uses
 selected recorded sales that have not been confirmed as as-is and clearly labels the result
-preliminary. As-is value uses confirmed as-is comps when at least two exist. The conservative
-ARV applies a confidence haircut to the point estimate while remaining inside the calculated
-range:
+preliminary. As-is value uses confirmed as-is comps when at least two exist. The conservative ARV
+applies a confidence haircut to the point estimate while remaining inside the calculated range:
 
 - 2% at confidence 80 or higher.
 - 5% at confidence 60-79.
 - 8% below confidence 60.
 
-No time, bed/bath, condition, quality, or feature dollar adjustment is fabricated. Material
-differences reduce score or reject the comp. A licensed appraisal-grade adjustment model
-would require market-supported paired-sales evidence rather than a rule-of-thumb rate.
+No AI model, provider AVM, active listing, or uncited public estimate can set a sale adjustment,
+ARV, buyer maximum, seller ceiling, or offer. Material unsupported differences reduce weight,
+force review, or reject the comp.
 
 ## Repair Scope
 
@@ -269,6 +311,21 @@ Manual review is required when:
 
 Even when evidence thresholds are met, a human must approve the acquisition decision.
 
+## AI Comp Analyst
+
+When `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`, Stonegate can run one bounded structured review of
+the saved subject, candidate comps, provider conflicts, cited evidence, and deterministic range
+diagnostics. The Comp Analyst may recommend include, exclude, or review; propose an unconfirmed
+condition hypothesis; identify likely duplicates and micro-market concerns; explain range drivers;
+and draft missing-evidence questions. Every material statement must cite a supplied evidence ID or
+source URL, and all recommendations remain pending human review.
+
+The Comp Analyst output contract contains no ARV, offer, value-range, or dollar-adjustment fields.
+It cannot mutate the selected comp set, confirm condition, change a weight, modify provider facts,
+or affect valuation and offer math. Invalid evidence references or price-authority language reject
+the entire draft. Disabled, failed, rejected, and insufficient runs leave the deterministic
+analysis available and record their status without blocking underwriting.
+
 ## Controlled Secondary Research
 
 On a fresh complete analysis, the existing OpenAI Responses API integration may run one bounded
@@ -301,19 +358,22 @@ underwriting version; it never edits the source result. The complete decision se
 timestamp, source analysis ID, and resulting values are retained in analysis metadata and the
 audit log.
 
-The investor PDF includes the report stage, structured repair inputs, itemized costs and
-notes, buyer economics, repair contingency, seller ceiling, opening recommendation, raw comp
-prices, price per square foot, subject-size indicators, comp rationale, confidence factors,
-resolved-address evidence, cited public sources, and decision controls.
+The investor PDF includes the report stage, structured repair inputs, itemized costs and notes,
+buyer economics, repair contingency, seller ceiling, opening recommendation, raw comp prices,
+every supported and withheld adjustment, adjusted indications, weights, range drivers, provider
+provenance and conflicts, comp rationale, confidence factors, resolved-address evidence, cited
+public sources, and decision controls. Provider AVMs appear only in the secondary audit record and
+are labeled as excluded from ARV and offer math.
 The client PDF shows the report stage but excludes
 Stonegate's repair budget, assignment, profit, and negotiation assumptions; it presents only
 property facts, as-is/renovated value evidence, comparable sales, cited public sources, and
 limitations.
 
-Applying a comp review reuses its chosen immutable analysis. The primary `Run complete analysis`
-or `Refresh complete analysis` action performs address resolution, provider retrieval, secondary
-research when enabled, comp screening, confidence scoring, repair math, and buyer economics in one
-workflow.
+Applying a comp review reuses its chosen immutable analysis. **Run Stonegate valuation** performs
+the initial address resolution, provider retrieval, secondary research when enabled, comp
+screening, confidence scoring, repair math, and buyer economics. **Update Stonegate valuation**
+recalculates from the saved provider snapshot and makes no new paid provider call. **Refresh market
+evidence (may use credits)** is the explicit action that replaces the snapshot before recalculating.
 
 ## Repair Evidence And Presets
 
@@ -452,8 +512,9 @@ The system should help Austin answer five questions:
 6. **AI interprets evidence; governed math prices it.** AI may suggest scope from seller answers,
    transcripts, notes, and photos. A versioned cost catalog and deterministic formulas calculate the
    dollars. A human confirms consequential inputs.
-7. **No fabricated precision.** When local evidence cannot support an adjustment, V3 widens the
-   range and lowers confidence instead of inventing a dollar adjustment.
+7. **No fabricated precision.** When local evidence cannot support an adjustment, V3 leaves it
+   unapplied, exposes the resulting uncertainty, lowers confidence, and requires review instead of
+   inventing a dollar adjustment or padding the range by a generic percentage.
 8. **Every recommendation is explainable.** Raw values, adjustments, sources, search tiers,
    overrides, assumptions, and uncertainty remain visible and auditable.
 9. **Existing approvals remain authoritative.** V3 does not send an offer, sign a contract, or permit
@@ -518,8 +579,14 @@ inherit the same confidence as preferred results merely because they pass a wide
 
 Every search attempt stores its parameters, returned count, accepted count, provider cost metadata
 when available, timestamp, and reason for expansion. Results are deduplicated across levels. Fresh
-provider retrieval is cached with the immutable analysis so comp review and repair changes do not
-repeat paid requests.
+provider retrieval is cached with the immutable analysis. Ordinary updates, repair changes, and
+comp reviews reuse the same-address snapshot regardless of its age or prior provider outcome and
+make no background paid retry. If the saved comp-intelligence version or DealMachine admission mode
+no longer matches, Stonegate safely rebuilds from the cached RentCast evidence and warns that an
+explicit refresh is needed; it does not spend credits silently. **Refresh market evidence (may use
+credits)** is the only post-analysis action that replaces the provider snapshot. A reuse run records
+zero new credits and preserves the original source credits, estimated-cost marker, and latency for
+audit.
 
 If fewer than three defensible closed sales remain, V3 still produces a clearly provisional range
 when evidence permits. It offers manual comp entry and identifies the exact missing support instead
@@ -546,7 +613,7 @@ Each closed-sale candidate receives a grade:
 - **Excluded:** not a credible indicator for the selected conclusion, with a retained reason.
 
 The user can add, include, exclude, or reweight a comp, but every manual decision requires a reason
-and creates a new immutable analysis as V2.2 does today.
+and creates a new immutable analysis through the same versioned workflow.
 
 ### V3 Value Adjustment Contract
 
@@ -563,11 +630,22 @@ Recorded sale price
 = adjusted comparable indication
 ```
 
-An adjustment is used only when its source market has enough relevant observations, the method is
-stable under replay, and the rate and evidence are stored with the analysis. Candidate methods may
-include matched pairs, a robust local model, or a documented market index. The model-development
-sample is separate from the final selected comp set so three selected comps are not misrepresented
-as a statistically sufficient adjustment model.
+An adjustment is used only when its local matched-pair evidence is sufficiently controlled, stable
+under replay, and stored with the analysis. Time pairs require living area and lot size within 1%,
+year built within three years, and exact room and known feature parity. They must form a connected
+cohort with at least four participating sales, three qualifying pairs, and 120 days of sale-date
+span. The common anchor is the newest participating sale; an implied monthly change above 3% is
+withheld. Living-area, lot, garage, pool, and basement effects use similarly controlled local pairs.
+A supported nuisance adjustment may normalize a pair only when both observations are inside that
+rate's own evidence cohort.
+
+The evidence record names only the sales that actually participated in a supported rate. If the
+subject or a selected comp lies outside that cohort, Stonegate applies `$0`, marks the adjustment as
+extrapolation-limited, and routes the case to review. Unknown feature controls cannot masquerade as
+matched facts, stable negative feature effects remain eligible, and a material cross-provider
+conflict withholds the affected sale from adjustment math. The model-development sample remains
+separate from the final selected comp set so a small selected set is never presented as a
+statistically sufficient adjustment model.
 
 V3 must guard against double counting. For example, bedroom count normally overlaps with living
 area, and a renovated-condition adjustment must not duplicate an item already reflected in the
@@ -650,8 +728,9 @@ Implementation record:
 - Regression cases cover ordinary, thin-market, rural/older, unique-property, conflicting-source,
   provider-failure, adversarial-sale, and repair-entry behavior.
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v2.2` pins the active runner.
-- `UNDERWRITING_V3_SHADOW_ENABLED=true` now runs the implemented adjustment method beside V2.2;
-  `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3` remains rejected until controlled rollout.
+- The original controlled-rollout build used `UNDERWRITING_V3_SHADOW_ENABLED=true` beside V2.2.
+  The later owner promotion made `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3` the normal live
+  configuration while retaining the shadow and V2.2 paths for calibration and engineering rollback.
 - New analyses store methodology control, execution duration, provider/candidate/selected/rejected
   counts, comp yield, cache reuse, manual-review state, and comp-review override counts in existing
   immutable analysis metadata.
@@ -815,10 +894,11 @@ wider range instead of fabricated precision.
 
 Implementation record:
 
-- Every new analysis keeps the unchanged V2.2 ARV and offer calculation as live authority and saves
-  a `v3.0-adjustment-shadow` comparison in analysis metadata. The shadow has no write path into
-  ARV, buyer maximum, seller ceiling, opening offer, approvals, or contracts.
-- The shadow begins each indication at the recorded closed-sale price. It does not use V2.2's full
+- The original July 31 rollout kept V2.2 as live authority and saved a
+  `v3.0-adjustment-shadow` comparison. After owner promotion, fresh V3 analyses make the supported
+  adjusted-sale conclusion live and retain the V2.2 result only as immutable rollback/calibration
+  metadata. Unsupported V3 evidence clears ARV and offer guidance instead of falling back.
+- Each adjusted indication begins at the recorded closed-sale price. It does not use V2.2's full
   price-per-square-foot scaling as its controlling transformation.
 - A market-conditions rate is applied only when at least four physically similar sales provide at
   least three local time-pair observations across at least 120 days. The saved evidence includes
@@ -838,11 +918,13 @@ Implementation record:
 - Time and physical differences cannot be extrapolated beyond the observed local pair range. Every
   comp stores the source rate, raw difference, applied difference, dollar component, total
   adjustment, adjusted indication, gross adjustment percentage, and review flag.
-- Shadow confidence separately scores closed-sale depth, A/B comp quality, supported adjustment
-  rates, search expansion, and indications needing extrapolation or magnitude review. Weak or
-  expanded evidence widens the displayed shadow range instead of inventing a precise rate.
-- The original comparison build showed V2.2 and adjusted ARV side by side, supported/withheld rates, and
-  expandable per-comp dollar math. The interface repeatedly labels the result as research only.
+- V3 confidence separately scores closed-sale depth, A/B comp quality, supported adjustment rates,
+  search expansion, adjusted-range precision, cross-source agreement, source conflicts, and
+  indications needing extrapolation or magnitude review. Weak evidence lowers confidence and adds
+  explicit range drivers; it does not trigger a generic percentage envelope.
+- The original comparison build showed V2.2 and adjusted ARV side by side. The current workspace
+  makes the V3 adjusted closed-sale point and supported range primary while retaining expandable
+  per-comp dollar math and rollback evidence for internal audit.
 - Regression coverage proves the V2.2 golden results remain unchanged and covers supported living
   area/time rates, collinearity blocking, thin-market continuity, methodology control, API
   persistence, and read-back.
@@ -941,10 +1023,11 @@ parallel record, duplicate repair scope, or unexplained number change.
   and Offer Decision as one progressive workflow. Status comes from the latest underwriting
   version, report stage, field evidence, and approved lead stage; no parallel valuation record was
   introduced.
-- **Run Stonegate valuation** is the first-run action and **Update Stonegate valuation** is the same
-  control afterward. Stonegate reuses current research for repair-only changes and automatically
-  refreshes old analyses that lack the current AI comp-discovery evidence marker. Staff do not
-  choose a provider mode or a separate refresh workflow.
+- **Run Stonegate valuation** performs the initial provider retrieval. **Update Stonegate valuation**
+  recalculates from the saved same-address market snapshot and makes no paid provider call, even
+  when that snapshot is old, failed, or returned no DealMachine match. **Refresh market evidence
+  (may use credits)** is the separate intentional action for replacing the snapshot and retrying
+  providers. Provider mode remains an owner configuration rather than a staff choice.
 - The workspace surfaces only the first three highest-value missing lead facts above the analysis
   and links directly to the existing Property section for correction.
 - A sticky decision summary keeps the current ARV range, repair range, buyer target, opening
@@ -974,9 +1057,10 @@ which data source, rule, category, or human assumption caused a miss.
 **Implementation record:**
 
 - The investor PDF now retains report stage, search conclusion, comp grades and search levels,
-  repair scenarios and unresolved work, evidence sources, and the complete V3 adjustment-shadow
-  review. Supported and withheld rates, local sample/pair counts, live-versus-shadow comparison,
-  and per-comp adjustment indications are labeled research-only and cannot change offer authority.
+  repair scenarios and unresolved work, evidence sources, the live V3 adjusted-sale math, range
+  drivers, and an internal multi-provider audit. Supported and withheld rates, local sample/pair
+  counts, per-comp indications, conflicts, credits, and external benchmarks remain auditable;
+  external AVMs and the AI Comp Analyst draft cannot change offer authority.
 - The client PDF now shows seller-safe evidence strength, comp fit, search reach, preparation range,
   unresolved repair items, and the count of supported or withheld local adjustments. Internal buyer
   economics, assignment assumptions, offer recommendations, and seller ceilings remain excluded.

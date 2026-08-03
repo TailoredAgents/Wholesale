@@ -11,6 +11,9 @@ export type ManualComparable = {
   formatted_address: string;
   sale_date: string;
   sale_price_cents: number;
+  transaction_type: string | null;
+  arms_length_verified: boolean;
+  arms_length_evidence: string | null;
   property_type: string;
   bedrooms: number | null;
   bathrooms: number | null;
@@ -46,6 +49,9 @@ const EMPTY_FORM = {
   postal_code: "",
   sale_date: "",
   sale_price: "",
+  transaction_type: "",
+  arms_length_verified: "false",
+  arms_length_evidence: "",
   property_type: "Single Family",
   bedrooms: "",
   bathrooms: "",
@@ -109,12 +115,14 @@ export function ManualCompControl({
         }
         const records = (await response.json()) as ManualComparable[];
         setComparables(records);
+        const eligibleIds = new Set(
+          records.filter((record) => record.arms_length_verified).map((record) => record.id),
+        );
         const currentSelection = selectedIdsRef.current;
         if (currentSelection === null) {
-          onSelectedIdsChange(records.map((record) => record.id));
+          onSelectedIdsChange(Array.from(eligibleIds));
         } else {
-          const activeIds = new Set(records.map((record) => record.id));
-          const validSelection = currentSelection.filter((id) => activeIds.has(id));
+          const validSelection = currentSelection.filter((id) => eligibleIds.has(id));
           if (validSelection.length !== currentSelection.length) {
             onSelectedIdsChange(validSelection);
           }
@@ -158,6 +166,9 @@ export function ManualCompControl({
             postal_code: form.postal_code,
             sale_date: form.sale_date,
             sale_price_cents: Math.round(Number(form.sale_price.replaceAll(",", "")) * 100),
+            transaction_type: form.transaction_type || null,
+            arms_length_verified: form.arms_length_verified === "true",
+            arms_length_evidence: form.arms_length_evidence,
             property_type: form.property_type,
             bedrooms: optionalNumber(form.bedrooms),
             bathrooms: optionalNumber(form.bathrooms),
@@ -231,11 +242,13 @@ export function ManualCompControl({
           <div className={styles.manualCompList}>
             {comparables.map((comparable) => {
               const checked = selectedIds?.includes(comparable.id) ?? false;
+              const eligible = comparable.arms_length_verified;
               return (
                 <article key={comparable.id}>
                   <label>
                     <input
                       checked={checked}
+                      disabled={!eligible}
                       onChange={(event) => {
                         const next = event.target.checked
                           ? [...(selectedIds ?? []), comparable.id]
@@ -254,6 +267,12 @@ export function ManualCompControl({
                       <small>
                         {comparable.source_type.replaceAll("_", " ")} · {" "}
                         {comparable.source_reference}
+                      </small>
+                      <small>
+                        {eligible
+                          ? "Arm's-length verified"
+                          : "Arm's-length verification required before inclusion"}
+                        {comparable.transaction_type ? ` · ${comparable.transaction_type}` : ""}
                       </small>
                     </span>
                   </label>
@@ -298,7 +317,11 @@ export function ManualCompControl({
             </label>
             <label>
               <span>Closed price</span>
-              <input min="1000" required step="100" type="number" value={form.sale_price} onChange={(event) => update("sale_price", event.target.value)} />
+              <input min="10000" required step="100" type="number" value={form.sale_price} onChange={(event) => update("sale_price", event.target.value)} />
+            </label>
+            <label>
+              <span>Deed / transaction type</span>
+              <input placeholder="Warranty deed (if known)" value={form.transaction_type} onChange={(event) => update("transaction_type", event.target.value)} />
             </label>
             <label>
               <span>Property type</span>
@@ -354,6 +377,29 @@ export function ManualCompControl({
           <label>
             <span>Verification notes</span>
             <textarea minLength={10} required rows={2} value={form.verification_notes} onChange={(event) => update("verification_notes", event.target.value)} />
+          </label>
+          <label>
+            <span>Arm&apos;s-length evidence</span>
+            <textarea
+              minLength={10}
+              placeholder="Describe the deed, MLS, closing statement, or broker evidence confirming an ordinary market transfer."
+              required
+              rows={2}
+              value={form.arms_length_evidence}
+              onChange={(event) => update("arms_length_evidence", event.target.value)}
+            />
+          </label>
+          <label>
+            <input
+              checked={form.arms_length_verified === "true"}
+              onChange={(event) => update("arms_length_verified", event.target.checked ? "true" : "false")}
+              required
+              type="checkbox"
+            />
+            <span>
+              I verified this is an arm&apos;s-length market transfer, not a foreclosure,
+              quitclaim, gift, family, tax, corrective, or nominal transfer.
+            </span>
           </label>
           <button disabled={saving} type="submit">
             {saving ? "Saving..." : "Save verified sale"}

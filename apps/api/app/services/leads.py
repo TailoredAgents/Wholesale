@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal
 from app.core.config import get_settings
 from app.domain.rbac import PermissionKeys
+from app.integrations.openai_client import OpenAIResponsesClient
 from app.integrations.rentcast_client import (
     RentCastClient,
     RentCastClientError,
@@ -54,8 +55,8 @@ from app.models.foundation import (
     RepairEstimate,
     RevenueRecord,
     RoleAssignment,
-    RolePermission,
     RoleCredit,
+    RolePermission,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -80,8 +81,8 @@ from app.schemas.leads import (
     ContactMethodRead,
     DashboardSummary,
     LeadAiReadySummary,
-    LeadAssignableUserRead,
     LeadAppointmentCreate,
+    LeadAssignableUserRead,
     LeadBuyerOfferCreate,
     LeadCommunicationCreate,
     LeadContactMethodUpdate,
@@ -126,10 +127,6 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
-from app.services.underwriting_adjustments import (
-    build_adjustment_shadow,
-    build_market_adjusted_conclusion,
-)
 from app.services.property_validation import (
     canonical_address_key,
     reset_property_validation,
@@ -143,10 +140,20 @@ from app.services.tasks import (
     get_primary_next_action,
     supersede_open_primary_tasks,
 )
+from app.services.underwriting_adjustments import (
+    build_adjustment_shadow,
+    build_market_adjusted_conclusion,
+)
+from app.services.underwriting_comp_analyst import (
+    analyze_comparable_set,
+    build_saved_comp_context_evidence,
+    unavailable_comp_analyst,
+)
 from app.services.underwriting_comp_search import (
     search_adaptive_closed_sales,
     warnings_from_search_summary,
 )
+from app.services.underwriting_comparable_evidence import normalize_address_key
 from app.services.underwriting_evidence import (
     collect_secondary_market_evidence,
     merge_research_comparable_sales,
@@ -160,12 +167,18 @@ from app.services.underwriting_manual_comps import (
     resolve_manual_comparable_records,
 )
 from app.services.underwriting_methodology import resolve_underwriting_methodology
+from app.services.underwriting_provider_pipeline import (
+    COMP_INTELLIGENCE_VERSION,
+    build_comparable_intelligence,
+    reuse_cached_comparable_intelligence,
+)
 from app.services.underwriting_supporting_evidence import (
     collect_supporting_market_evidence,
     unavailable_supporting_evidence,
 )
 from app.services.underwriting_v2 import (
     UnderwritingV2Result,
+    analyze_recorded_sales,
     analyze_underwriting_v2,
 )
 from app.services.underwriting_v3 import (
@@ -174,6 +187,7 @@ from app.services.underwriting_v3 import (
 )
 
 logger = structlog.get_logger()
+
 
 PAID_LEAD_SOURCES = ("google_ppc", "meta_ads", "facebook_ads", "instagram_ads", "website")
 COMMUNICATION_DIRECTIONS = {"inbound", "outbound", "internal"}
@@ -527,8 +541,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         for analysis in (
             db.scalars(
                 select(UnderwritingMarketAnalysis).where(
-                    UnderwritingMarketAnalysis.organization_id
-                    == principal.organization_id,
+                    UnderwritingMarketAnalysis.organization_id == principal.organization_id,
                     UnderwritingMarketAnalysis.underwriting_version_id.in_(
                         [version.id for version in underwriting_versions]
                     ),
@@ -584,15 +597,19 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         ).all()
     )
     buyer_ids = [offer.buyer_id for offer in buyer_offers]
-    buyers_by_id = {
-        buyer.id: buyer
-        for buyer in db.scalars(
-            select(Buyer).where(
-                Buyer.organization_id == principal.organization_id,
-                Buyer.id.in_(buyer_ids),
-            )
-        ).all()
-    } if buyer_ids else {}
+    buyers_by_id = (
+        {
+            buyer.id: buyer
+            for buyer in db.scalars(
+                select(Buyer).where(
+                    Buyer.organization_id == principal.organization_id,
+                    Buyer.id.in_(buyer_ids),
+                )
+            ).all()
+        }
+        if buyer_ids
+        else {}
+    )
 
     return LeadDetail(
         **base.model_dump(),
@@ -705,36 +722,28 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
                     (version.underwriting_metadata or {}).get("total_rehab_cents")
                 ),
                 recommended_disposition_cents=optional_int(
-                    (version.underwriting_metadata or {}).get(
-                        "recommended_disposition_cents"
-                    )
+                    (version.underwriting_metadata or {}).get("recommended_disposition_cents")
                 ),
                 seller_contract_ceiling_cents=optional_int(
-                    (version.underwriting_metadata or {}).get(
-                        "seller_contract_ceiling_cents"
-                    )
+                    (version.underwriting_metadata or {}).get("seller_contract_ceiling_cents")
                 ),
                 report_stage=string_or_none(
                     (version.underwriting_metadata or {}).get("report_stage")
                 ),
                 repair_estimate_source=string_or_none(
-                    dict_value(
-                        (version.underwriting_metadata or {}).get("pre_meeting_inputs")
-                    ).get("repair_estimate_source")
+                    dict_value((version.underwriting_metadata or {}).get("pre_meeting_inputs")).get(
+                        "repair_estimate_source"
+                    )
                 ),
                 comp_search_level=string_or_none(
                     dict_value(
-                        (version.underwriting_metadata or {}).get(
-                            "comp_search_summary"
-                        )
+                        (version.underwriting_metadata or {}).get("comp_search_summary")
                     ).get("final_level")
                 ),
                 repair_catalog_version=string_or_none(
-                    dict_value(
-                        (version.underwriting_metadata or {}).get(
-                            "pre_meeting_inputs"
-                        )
-                    ).get("repair_catalog_version")
+                    dict_value((version.underwriting_metadata or {}).get("pre_meeting_inputs")).get(
+                        "repair_catalog_version"
+                    )
                 ),
                 comp_snapshot=underwriting_version_comp_snapshot(
                     underwriting_analyses_by_version.get(version.id)
@@ -1217,8 +1226,7 @@ def add_lead_communication(
     db.flush()
 
     summary = (
-        f"{payload.direction.title()} {payload.channel} {payload.status}: "
-        f"{payload.body[:160]}"
+        f"{payload.direction.title()} {payload.channel} {payload.status}: {payload.body[:160]}"
     )
     db.add(
         ActivityEvent(
@@ -1279,9 +1287,7 @@ def create_lead_appointment(
     conversation = ensure_primary_conversation(db, lead)
     previous_values = {
         "appointment_status": lead.appointment_status,
-        "next_follow_up_at": lead.next_follow_up_at.isoformat()
-        if lead.next_follow_up_at
-        else None,
+        "next_follow_up_at": lead.next_follow_up_at.isoformat() if lead.next_follow_up_at else None,
         "stage_key": lead.stage_key,
     }
     appointment = Appointment(
@@ -1590,6 +1596,18 @@ def validate_lead_property_address(
     return property_validation_to_read(property_record)
 
 
+def cached_market_data_snapshot_is_reusable(
+    analysis: UnderwritingMarketAnalysis | None,
+    *,
+    current_address: str,
+) -> bool:
+    """Allow saved market evidence only for the same canonical property address."""
+    if analysis is None:
+        return False
+    cached_address = normalize_address_key(analysis.requested_address)
+    return bool(cached_address and cached_address == normalize_address_key(current_address))
+
+
 def create_lead_market_analysis(
     db: Session,
     principal: Principal,
@@ -1644,21 +1662,27 @@ def create_lead_market_analysis(
     address = format_property_address(property_record)
     if payload.source_analysis_id is not None and payload.refresh_market_data:
         raise ValueError("A comp review cannot refresh market data at the same time.")
-    analysis_query = select(UnderwritingMarketAnalysis).where(
-        UnderwritingMarketAnalysis.organization_id == principal.organization_id,
-        UnderwritingMarketAnalysis.lead_id == lead.id,
+    analysis_query = (
+        select(UnderwritingMarketAnalysis)
+        .outerjoin(
+            UnderwritingVersion,
+            UnderwritingMarketAnalysis.underwriting_version_id == UnderwritingVersion.id,
+        )
+        .where(
+            UnderwritingMarketAnalysis.organization_id == principal.organization_id,
+            UnderwritingMarketAnalysis.lead_id == lead.id,
+        )
     )
     if payload.source_analysis_id is not None:
         cached_analysis = db.scalar(
-            analysis_query.where(
-                UnderwritingMarketAnalysis.id == payload.source_analysis_id
-            )
+            analysis_query.where(UnderwritingMarketAnalysis.id == payload.source_analysis_id)
         )
         if cached_analysis is None:
             raise ValueError("The source market analysis was not found for this lead.")
     else:
         cached_analysis = db.scalar(
             analysis_query.order_by(
+                func.coalesce(UnderwritingVersion.version_number, 0).desc(),
                 UnderwritingMarketAnalysis.created_at.desc(),
                 UnderwritingMarketAnalysis.id.desc(),
             )
@@ -1674,16 +1698,15 @@ def create_lead_market_analysis(
     )
     cached_avm = cached_raw.get("avm") if cached_raw else None
     cached_sales = cached_raw.get("recorded_sales") if cached_raw else None
-    cached_secondary = cached_raw.get("secondary_evidence") if cached_raw else None
-    current_research_available = (
-        isinstance(cached_secondary, dict)
-        and cached_secondary.get("research_version") == "ai_comp_discovery_v1"
+    reusable_snapshot = cached_market_data_snapshot_is_reusable(
+        cached_analysis,
+        current_address=address,
     )
     reuse_market_data = (
-        (payload.source_analysis_id is not None or not payload.refresh_market_data)
+        not payload.refresh_market_data
         and isinstance(cached_avm, dict)
         and isinstance(cached_sales, list)
-        and (payload.source_analysis_id is not None or current_research_available)
+        and reusable_snapshot
     )
     if payload.comp_review_decisions and not reuse_market_data:
         raise ValueError("Run a market analysis before reviewing comparable sales.")
@@ -1701,28 +1724,23 @@ def create_lead_market_analysis(
     avm_error: str | None = None
     comp_search_summary: dict[str, Any] | None = None
     provider_returned_comp_count = 0
+    rentcast_sale_records: list[dict[str, Any]] = []
+    comp_intelligence: dict[str, Any] = {}
+    dealmachine_provider_payload: dict[str, Any] = {}
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
         cached_subject = cached_raw.get("subject_record") if cached_raw else None
         cached_rent = cached_raw.get("rent") if cached_raw else None
-        cached_address_evidence = (
-            cached_raw.get("address_evidence") if cached_raw else None
-        )
-        cached_secondary_evidence = (
-            cached_raw.get("secondary_evidence") if cached_raw else None
-        )
-        cached_supporting_evidence = (
-            cached_raw.get("supporting_evidence") if cached_raw else None
-        )
+        cached_address_evidence = cached_raw.get("address_evidence") if cached_raw else None
+        cached_secondary_evidence = cached_raw.get("secondary_evidence") if cached_raw else None
+        cached_supporting_evidence = cached_raw.get("supporting_evidence") if cached_raw else None
         cached_avm_error = cached_raw.get("avm_error") if cached_raw else None
         cached_property_record_error = (
             cached_raw.get("property_record_error") if cached_raw else None
         )
         address_evidence = (
-            cached_address_evidence
-            if isinstance(cached_address_evidence, dict)
-            else {}
+            cached_address_evidence if isinstance(cached_address_evidence, dict) else {}
         )
         secondary_evidence = (
             cached_secondary_evidence
@@ -1735,25 +1753,56 @@ def create_lead_market_analysis(
             else supporting_evidence
         )
         avm_error = (
-            cached_avm_error
-            if isinstance(cached_avm_error, str) and cached_avm_error
-            else None
+            cached_avm_error if isinstance(cached_avm_error, str) and cached_avm_error else None
         )
         subject_record = cached_subject if isinstance(cached_subject, dict) else {}
-        sale_records = (
+        rentcast_sale_records = (
             [record for record in cached_sales if isinstance(record, dict)]
             if isinstance(cached_sales, list)
             else []
         )
+        cached_normalized_sales = (
+            cached_raw.get("normalized_provider_sales") if cached_raw else None
+        )
+        cached_comp_intelligence = cached_raw.get("comp_intelligence") if cached_raw else None
+        if not isinstance(cached_comp_intelligence, dict) and cached_analysis is not None:
+            cached_comp_intelligence = (cached_analysis.analysis_metadata or {}).get(
+                "comp_intelligence"
+            )
+        current_comp_intelligence = (
+            cached_comp_intelligence
+            if isinstance(cached_comp_intelligence, dict)
+            and cached_comp_intelligence.get("version") == COMP_INTELLIGENCE_VERSION
+            else None
+        )
+        cached_dealmachine_payload = cached_raw.get("dealmachine") if cached_raw else None
+        cached_intelligence = reuse_cached_comparable_intelligence(
+            configured_mode=settings.underwriting_dealmachine_comps_mode,
+            rentcast_records=rentcast_sale_records,
+            normalized_provider_records=(
+                [record for record in cached_normalized_sales if isinstance(record, dict)]
+                if isinstance(cached_normalized_sales, list)
+                and current_comp_intelligence is not None
+                else None
+            ),
+            cached_metadata=current_comp_intelligence,
+            cached_provider_payload=(
+                cached_dealmachine_payload if isinstance(cached_dealmachine_payload, dict) else None
+            ),
+            rentcast_estimated_value_cents=dollars_to_cents(estimate.price),
+            rentcast_estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
+            rentcast_estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
+        )
+        sale_records = cached_intelligence.analysis_records
+        comp_intelligence = cached_intelligence.metadata
+        dealmachine_provider_payload = cached_intelligence.provider_payload
         cached_search_summary = (
             (cached_analysis.analysis_metadata or {}).get("comp_search_summary")
             if cached_analysis is not None
             else None
         )
         comp_search_summary = (
-            cached_search_summary
-            if isinstance(cached_search_summary, dict)
-            else None
+            cached_search_summary if isinstance(cached_search_summary, dict) else None
         )
         cached_execution_metrics = (
             (cached_analysis.analysis_metadata or {}).get("execution_metrics")
@@ -1766,9 +1815,7 @@ def create_lead_market_analysis(
             else None
         ) or len(sale_records)
         rent_estimate = (
-            rent_estimate_from_payload(cached_rent)
-            if isinstance(cached_rent, dict)
-            else None
+            rent_estimate_from_payload(cached_rent) if isinstance(cached_rent, dict) else None
         )
         if isinstance(cached_property_record_error, str) and cached_property_record_error:
             property_record_error = cached_property_record_error
@@ -1782,9 +1829,7 @@ def create_lead_market_analysis(
                 "sales only."
             )
         if comp_search_summary is not None:
-            provider_warnings.extend(
-                warnings_from_search_summary(comp_search_summary)
-            )
+            provider_warnings.extend(warnings_from_search_summary(comp_search_summary))
     else:
         client = RentCastClient(
             api_key=settings.rentcast_api_key,
@@ -1852,10 +1897,23 @@ def create_lead_market_analysis(
                 error_message=str(exc),
             )
             raise RuntimeError(str(exc)) from exc
-        sale_records = search_result.records
+        rentcast_sale_records = search_result.records
         comp_search_summary = search_result.summary
         provider_returned_comp_count = search_result.provider_returned_count
         provider_warnings.extend(search_result.warnings)
+        intelligence_result = build_comparable_intelligence(
+            settings,
+            address=resolved_address,
+            rentcast_records=rentcast_sale_records,
+            comp_search_summary=comp_search_summary,
+            rentcast_estimated_value_cents=dollars_to_cents(estimate.price),
+            rentcast_estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
+            rentcast_estimated_value_high_cents=dollars_to_cents(estimate.price_range_high),
+            subject_facts=subject_facts,
+        )
+        sale_records = intelligence_result.analysis_records
+        comp_intelligence = intelligence_result.metadata
+        dealmachine_provider_payload = intelligence_result.provider_payload
 
         try:
             rent_estimate = client.get_rent_estimate(
@@ -1873,12 +1931,23 @@ def create_lead_market_analysis(
                 error_message=str(exc),
             )
             rent_error = str(exc)
-        secondary_evidence = collect_secondary_market_evidence(
-            settings,
-            property_record,
-            requested_address=resolved_address,
-            subject_facts=subject_facts,
+        structured_selected_comps, _structured_rejected_comps = analyze_recorded_sales(
+            subject_facts,
+            sale_records,
+            condition_overrides=payload.comp_condition_overrides,
         )
+        if len(structured_selected_comps) >= 3:
+            secondary_evidence = unavailable_secondary_evidence(
+                "Structured provider evidence met the closed-sale threshold, so web comp "
+                "discovery was not requested."
+            )
+        else:
+            secondary_evidence = collect_secondary_market_evidence(
+                settings,
+                property_record,
+                requested_address=resolved_address,
+                subject_facts=subject_facts,
+            )
         provider_warnings.extend(secondary_conflict_warnings(secondary_evidence))
         supporting_evidence = collect_supporting_market_evidence(
             client,
@@ -1894,6 +1963,7 @@ def create_lead_market_analysis(
             **(property_record.address_validation_metadata or {}),
             "resolution": address_evidence,
         }
+    provider_warnings.extend(comp_intelligence_valuation_warnings(comp_intelligence))
     provider_sale_records = sale_records
     research_sale_records = research_comparable_sale_records(secondary_evidence)
     sale_records, duplicate_research_sale_count = merge_research_comparable_sales(
@@ -1932,16 +2002,13 @@ def create_lead_market_analysis(
         holding_period_months=payload.holding_period_months,
         condition_overrides=payload.comp_condition_overrides,
         comp_review_decisions=[
-            decision.model_dump(mode="json")
-            for decision in payload.comp_review_decisions
+            decision.model_dump(mode="json") for decision in payload.comp_review_decisions
         ],
         provider_warnings=provider_warnings,
         address_validation_status=property_record.address_validation_status,
         address_match_score=(
             optional_int(address_evidence.get("match_score"))
-            or optional_int(
-                (property_record.address_validation_metadata or {}).get("match_score")
-            )
+            or optional_int((property_record.address_validation_metadata or {}).get("match_score"))
         ),
         secondary_evidence=secondary_evidence,
         settings=settings,
@@ -1977,6 +2044,40 @@ def create_lead_market_analysis(
             holding_period_months=payload.holding_period_months,
             settings=settings,
         )
+    ai_comp_analyst: dict[str, Any] | None = None
+    if settings.underwriting_ai_comp_analyst_mode == "draft":
+        if not settings.ai_enabled:
+            analyst_result = unavailable_comp_analyst(
+                "AI_ENABLED must be true before the draft Comp Analyst can run.",
+                model=settings.openai_default_model,
+            )
+        elif not settings.openai_api_key:
+            analyst_result = unavailable_comp_analyst(
+                "OPENAI_API_KEY is not configured for the draft Comp Analyst.",
+                model=settings.openai_default_model,
+            )
+        else:
+            analyst_client = OpenAIResponsesClient(
+                api_key=settings.openai_api_key,
+                base_url=settings.openai_base_url,
+                timeout_seconds=settings.openai_request_timeout_seconds,
+            )
+            analyst_result = analyze_comparable_set(
+                subject=dict_value(result.assumptions.get("canonical_subject_facts")),
+                selected_comps=result.selected_comps,
+                rejected_comps=result.rejected_comps,
+                market_adjustment=market_adjustment,
+                additional_evidence=build_saved_comp_context_evidence(
+                    selected_comps=result.selected_comps,
+                    rejected_comps=result.rejected_comps,
+                    secondary_evidence=secondary_evidence,
+                ),
+                client=analyst_client,
+                model=settings.openai_default_model,
+                reasoning_effort=settings.openai_reasoning_effort,
+                safety_identifier=f"underwriting-comp-{lead.id}",
+            )
+        ai_comp_analyst = analyst_result.model_dump(mode="json")
     custom_inputs_applied = any(
         (
             payload.current_condition,
@@ -2015,8 +2116,7 @@ def create_lead_market_analysis(
         ),
         base_rehab_override_cents=effective_base_rehab_cents,
         repair_items=[
-            RepairEstimateItemInput.model_validate(item)
-            for item in normalized_repair_items
+            RepairEstimateItemInput.model_validate(item) for item in normalized_repair_items
         ],
         contingency_override_percentage=effective_contingency_percentage,
         holding_period_months=payload.holding_period_months,
@@ -2027,15 +2127,11 @@ def create_lead_market_analysis(
             repair_estimate.contractor_name if repair_estimate else None
         ),
         repair_estimate_date=repair_estimate.estimate_date if repair_estimate else None,
-        repair_estimate_reference=(
-            repair_estimate.evidence_reference if repair_estimate else None
-        ),
+        repair_estimate_reference=(repair_estimate.evidence_reference if repair_estimate else None),
         repair_catalog_version=string_or_none(
             dict_value(result.assumptions.get("repair_scenario")).get("version")
         ),
-        repair_scenario=(
-            dict_value(result.assumptions.get("repair_scenario")) or None
-        ),
+        repair_scenario=(dict_value(result.assumptions.get("repair_scenario")) or None),
     )
     assignment_fee_cents = settings.underwriting_default_assignment_fee_cents
     reviewed_at = datetime.now(UTC)
@@ -2044,15 +2140,12 @@ def create_lead_market_analysis(
             "source_analysis_id": str(cached_analysis.id),
             "reviewed_by_user_id": str(principal.user_id) if principal.user_id else None,
             "reviewed_at": reviewed_at.isoformat(),
-            "included_count": sum(
-                decision.included for decision in payload.comp_review_decisions
-            ),
+            "included_count": sum(decision.included for decision in payload.comp_review_decisions),
             "excluded_count": sum(
                 not decision.included for decision in payload.comp_review_decisions
             ),
             "decisions": [
-                decision.model_dump(mode="json")
-                for decision in payload.comp_review_decisions
+                decision.model_dump(mode="json") for decision in payload.comp_review_decisions
             ],
         }
         if payload.comp_review_decisions and cached_analysis is not None
@@ -2062,6 +2155,14 @@ def create_lead_market_analysis(
     comp_review_override_count = count_comp_review_overrides(
         cached_analysis,
         payload.comp_review_decisions,
+    )
+    dealmachine_metrics = next(
+        (
+            provider
+            for provider in list_of_dicts(comp_intelligence.get("providers"))
+            if provider.get("provider") == "dealmachine"
+        ),
+        {},
     )
     execution_metrics = {
         "duration_ms": max(0, round((perf_counter() - analysis_started_at) * 1000)),
@@ -2081,6 +2182,25 @@ def create_lead_market_analysis(
         "comp_review_decision_count": len(payload.comp_review_decisions),
         "comp_review_override_count": comp_review_override_count,
         "manual_review_required": result.manual_review_required,
+        "provider_duplicate_count": (optional_int(comp_intelligence.get("duplicate_count")) or 0),
+        "provider_conflict_count": (optional_int(comp_intelligence.get("conflict_count")) or 0),
+        "dealmachine_returned_comp_count": (
+            optional_int(dealmachine_metrics.get("returned_count")) or 0
+        ),
+        "dealmachine_unique_comp_count": (
+            optional_int(dealmachine_metrics.get("net_new_count")) or 0
+        ),
+        "dealmachine_usable_comp_count": (
+            optional_int(dealmachine_metrics.get("usable_count")) or 0
+        ),
+        "dealmachine_overlap_comp_count": (
+            optional_int(dealmachine_metrics.get("overlap_count")) or 0
+        ),
+        "dealmachine_credits_used": optional_int(dealmachine_metrics.get("credits_used")),
+        "dealmachine_latency_ms": optional_int(dealmachine_metrics.get("latency_ms")),
+        "ai_comp_analyst_latency_ms": (
+            optional_int(ai_comp_analyst.get("latency_ms")) if ai_comp_analyst is not None else None
+        ),
     }
     if comp_search_summary is None:
         comp_search_summary = legacy_comp_search_summary(
@@ -2103,6 +2223,20 @@ def create_lead_market_analysis(
         selected_comps=result.selected_comps,
         rejected_comps=result.rejected_comps,
     )
+    cached_capture_value = (
+        (cached_analysis.analysis_metadata or {}).get("market_data_captured_at")
+        if reuse_market_data and cached_analysis is not None
+        else None
+    )
+    market_data_captured_at = (
+        cached_capture_value
+        if isinstance(cached_capture_value, str) and cached_capture_value
+        else (
+            cached_analysis.created_at.isoformat()
+            if reuse_market_data and cached_analysis is not None
+            else datetime.now(UTC).isoformat()
+        )
+    )
     analysis_metadata = {
         "methodology_version": methodology_control.active_version,
         "methodology_control": methodology_control.as_dict(),
@@ -2122,6 +2256,7 @@ def create_lead_market_analysis(
         "arv_value_basis": result.assumptions.get("arv_value_basis"),
         "as_is_value_basis": result.assumptions.get("as_is_value_basis"),
         "market_data_reused": reuse_market_data,
+        "market_data_captured_at": market_data_captured_at,
         "source_analysis_id": (
             str(cached_analysis.id) if reuse_market_data and cached_analysis else None
         ),
@@ -2134,6 +2269,8 @@ def create_lead_market_analysis(
         "supporting_evidence": supporting_evidence,
         "market_adjustment": market_adjustment,
         "adjustment_shadow": adjustment_shadow,
+        "comp_intelligence": comp_intelligence,
+        "ai_comp_analyst": ai_comp_analyst,
         "manual_comp_ids": [str(record_id) for record_id in manual_comp_ids],
         "manual_duplicate_comp_ids": duplicate_manual_comp_ids,
         "confidence_tier": result.confidence_tier,
@@ -2199,9 +2336,7 @@ def create_lead_market_analysis(
                 if methodology_control.active_version == METHODOLOGY_VERSION
                 else "recorded_sales_and_buyer_economics"
             ),
-            "offer_formula": (
-                "buyer maximum minus assignment target minus transaction reserve"
-            ),
+            "offer_formula": ("buyer maximum minus assignment target minus transaction reserve"),
         },
     )
     db.add(version)
@@ -2237,7 +2372,10 @@ def create_lead_market_analysis(
         raw_response={
             "avm": estimate.raw_response,
             "subject_record": subject_record,
-            "recorded_sales": provider_sale_records,
+            "recorded_sales": rentcast_sale_records,
+            "normalized_provider_sales": provider_sale_records,
+            "dealmachine": dealmachine_provider_payload,
+            "comp_intelligence": comp_intelligence,
             "research_recorded_sales": research_sale_records,
             "manual_recorded_sales": manual_sale_records,
             "rent": rent_estimate.raw_response if rent_estimate else None,
@@ -2246,6 +2384,7 @@ def create_lead_market_analysis(
             "address_evidence": address_evidence,
             "secondary_evidence": secondary_evidence,
             "supporting_evidence": supporting_evidence,
+            "ai_comp_analyst": ai_comp_analyst,
         },
         analysis_metadata=analysis_metadata,
     )
@@ -2265,9 +2404,7 @@ def create_lead_market_analysis(
             entity_type="lead",
             entity_id=lead.id,
             event_type=(
-                "lead.comp_review_applied"
-                if comp_review
-                else "lead.market_analysis_created"
+                "lead.comp_review_applied" if comp_review else "lead.market_analysis_created"
             ),
             summary=(
                 (
@@ -2335,11 +2472,16 @@ def get_latest_lead_market_analysis(
 
     analysis = db.scalar(
         select(UnderwritingMarketAnalysis)
+        .outerjoin(
+            UnderwritingVersion,
+            UnderwritingMarketAnalysis.underwriting_version_id == UnderwritingVersion.id,
+        )
         .where(
             UnderwritingMarketAnalysis.organization_id == principal.organization_id,
             UnderwritingMarketAnalysis.lead_id == lead.id,
         )
         .order_by(
+            func.coalesce(UnderwritingVersion.version_number, 0).desc(),
             UnderwritingMarketAnalysis.created_at.desc(),
             UnderwritingMarketAnalysis.id.desc(),
         )
@@ -2463,8 +2605,7 @@ def create_lead_transaction(
             entity_id=lead.id,
             event_type="lead.transaction_opened",
             summary=(
-                f"Transaction opened at {payload.purchase_price_cents / 100:.0f} "
-                "purchase price."
+                f"Transaction opened at {payload.purchase_price_cents / 100:.0f} purchase price."
             ),
         )
     )
@@ -2806,20 +2947,29 @@ def update_lead_staff_details(
 
 
 def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary:
-    total_leads = count_scalar(db, select(func.count(Lead.id)).where(
-        Lead.organization_id == principal.organization_id,
-        Lead.archived_at.is_(None),
-    ))
-    new_paid_leads = count_scalar(db, select(func.count(Lead.id)).where(
-        Lead.organization_id == principal.organization_id,
-        Lead.archived_at.is_(None),
-        Lead.stage_key == "new",
-        Lead.source.in_(PAID_LEAD_SOURCES),
-    ))
-    active_contracts = count_scalar(db, select(func.count(Deal.id)).where(
-        Deal.organization_id == principal.organization_id,
-        Deal.stage_key == "under_contract",
-    ))
+    total_leads = count_scalar(
+        db,
+        select(func.count(Lead.id)).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+        ),
+    )
+    new_paid_leads = count_scalar(
+        db,
+        select(func.count(Lead.id)).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.archived_at.is_(None),
+            Lead.stage_key == "new",
+            Lead.source.in_(PAID_LEAD_SOURCES),
+        ),
+    )
+    active_contracts = count_scalar(
+        db,
+        select(func.count(Deal.id)).where(
+            Deal.organization_id == principal.organization_id,
+            Deal.stage_key == "under_contract",
+        ),
+    )
     collected_revenue_cents = int(
         db.scalar(
             select(func.coalesce(func.sum(RevenueRecord.amount_cents), 0)).where(
@@ -3060,9 +3210,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
     deal_ids = list(db.scalars(select(Deal.id).where(Deal.lead_id == lead.id)))
     transaction_ids = list(db.scalars(select(Transaction.id).where(Transaction.lead_id == lead.id)))
     offer_plan_ids = list(
-        db.scalars(
-            select(OfferNegotiationPlan.id).where(OfferNegotiationPlan.lead_id == lead.id)
-        )
+        db.scalars(select(OfferNegotiationPlan.id).where(OfferNegotiationPlan.lead_id == lead.id))
     )
 
     finance_filter = [RevenueRecord.lead_id == lead.id]
@@ -3110,9 +3258,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                     )
                 )
                 db.execute(
-                    delete(DealReconciliation).where(
-                        DealReconciliation.id.in_(reconciliation_ids)
-                    )
+                    delete(DealReconciliation).where(DealReconciliation.id.in_(reconciliation_ids))
                 )
             for disposition_model in (
                 BuyerEngagement,
@@ -3124,11 +3270,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
                         disposition_model.disposition_case_id.in_(disposition_case_ids)
                     )
                 )
-            db.execute(
-                delete(DispositionCase).where(
-                    DispositionCase.id.in_(disposition_case_ids)
-                )
-            )
+            db.execute(delete(DispositionCase).where(DispositionCase.id.in_(disposition_case_ids)))
         package_ids = list(
             db.scalars(
                 select(ContractPackage.id).where(
@@ -3139,25 +3281,19 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
         recommendation_ids = list(
             db.scalars(
                 select(TransactionCopilotRecommendation.id).where(
-                    TransactionCopilotRecommendation.transaction_id.in_(
-                        transaction_ids
-                    )
+                    TransactionCopilotRecommendation.transaction_id.in_(transaction_ids)
                 )
             )
         )
         if recommendation_ids:
             db.execute(
                 delete(TransactionCopilotReview).where(
-                    TransactionCopilotReview.recommendation_id.in_(
-                        recommendation_ids
-                    )
+                    TransactionCopilotReview.recommendation_id.in_(recommendation_ids)
                 )
             )
             db.execute(
                 delete(TransactionCopilotRecommendation).where(
-                    TransactionCopilotRecommendation.id.in_(
-                        recommendation_ids
-                    )
+                    TransactionCopilotRecommendation.id.in_(recommendation_ids)
                 )
             )
         db.execute(
@@ -3181,14 +3317,10 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
             )
         )
         db.execute(
-            delete(TransactionParty).where(
-                TransactionParty.transaction_id.in_(transaction_ids)
-            )
+            delete(TransactionParty).where(TransactionParty.transaction_id.in_(transaction_ids))
         )
         db.execute(
-            delete(TransactionEvent).where(
-                TransactionEvent.transaction_id.in_(transaction_ids)
-            )
+            delete(TransactionEvent).where(TransactionEvent.transaction_id.in_(transaction_ids))
         )
         if package_ids:
             db.execute(
@@ -3205,9 +3337,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
             )
             db.execute(delete(ContractPackage).where(ContractPackage.id.in_(package_ids)))
     if offer_plan_ids:
-        db.execute(
-            delete(OfferNegotiationPlan).where(OfferNegotiationPlan.id.in_(offer_plan_ids))
-        )
+        db.execute(delete(OfferNegotiationPlan).where(OfferNegotiationPlan.id.in_(offer_plan_ids)))
         db.execute(
             delete(ApprovalRequest).where(
                 ApprovalRequest.organization_id == principal.organization_id,
@@ -3431,9 +3561,7 @@ def update_contact_method(
         return False
 
     normalized_value = (
-        normalize_email(cleaned_value)
-        if method_type == "email"
-        else normalize_phone(cleaned_value)
+        normalize_email(cleaned_value) if method_type == "email" else normalize_phone(cleaned_value)
     )
     if not normalized_value:
         return False
@@ -3530,48 +3658,59 @@ def sync_lead_contact_methods(
     if not normalized:
         raise ValueError("Keep at least one phone number or email address on the lead.")
     for method_type in ("phone", "email"):
-        group = [item for item in normalized if item["method_type"] == method_type]
+        group = [
+            normalized_item
+            for normalized_item in normalized
+            if normalized_item["method_type"] == method_type
+        ]
         if not group:
             continue
         # Older intake paths may have left multiple primary rows. Retain the
         # first selected method so an unrelated lead edit repairs the record.
-        primary = next((item for item in group if item["is_primary"]), group[0])
-        for item in group:
-            item["is_primary"] = item is primary
+        primary = next(
+            (normalized_item for normalized_item in group if normalized_item["is_primary"]),
+            group[0],
+        )
+        for normalized_item in group:
+            normalized_item["is_primary"] = normalized_item is primary
 
     before = sorted(
         (contact_method_audit_value(method) for method in existing_methods),
         key=contact_method_audit_sort_key,
     )
-    submitted_ids = {item["id"] for item in normalized if item["id"] is not None}
-    for method in existing_methods:
-        if method.id not in submitted_ids:
-            db.delete(method)
-    for item in normalized:
-        method = existing_by_id.get(item["id"]) if item["id"] is not None else None
+    submitted_ids = {
+        normalized_item["id"] for normalized_item in normalized if normalized_item["id"] is not None
+    }
+    for existing_method in existing_methods:
+        if existing_method.id not in submitted_ids:
+            db.delete(existing_method)
+    for normalized_item in normalized:
+        method = (
+            existing_by_id.get(normalized_item["id"]) if normalized_item["id"] is not None else None
+        )
         if method is None:
             method = ContactMethod(
                 organization_id=principal.organization_id,
                 contact_id=contact.id,
-                method_type=item["method_type"],
-                value=item["value"],
-                normalized_value=item["normalized_value"],
-                is_primary=item["is_primary"],
+                method_type=normalized_item["method_type"],
+                value=normalized_item["value"],
+                normalized_value=normalized_item["normalized_value"],
+                is_primary=normalized_item["is_primary"],
             )
             db.add(method)
         else:
-            method.method_type = item["method_type"]
-            method.value = item["value"]
-            method.normalized_value = item["normalized_value"]
-            method.is_primary = item["is_primary"]
+            method.method_type = normalized_item["method_type"]
+            method.value = normalized_item["value"]
+            method.normalized_value = normalized_item["normalized_value"]
+            method.is_primary = normalized_item["is_primary"]
     after = sorted(
         (
             {
-                "method_type": item["method_type"],
-                "value": item["value"],
-                "is_primary": item["is_primary"],
+                "method_type": normalized_item["method_type"],
+                "value": normalized_item["value"],
+                "is_primary": normalized_item["is_primary"],
             }
-            for item in normalized
+            for normalized_item in normalized
         ),
         key=contact_method_audit_sort_key,
     )
@@ -3743,8 +3882,7 @@ def analyze_rentcast_comps(
     eligible = [
         comp
         for comp in scored_comps
-        if comp.price_cents is not None
-        and comp.selection_reason != "Active listing; context only."
+        if comp.price_cents is not None and comp.selection_reason != "Active listing; context only."
     ]
     selected = sorted(
         [comp for comp in eligible if comp.score >= 55],
@@ -3767,14 +3905,8 @@ def analyze_rentcast_comps(
         for comp in scored_comps
         if comp.provider_id not in selected_ids or comp.formatted_address not in selected_addresses
     ]
-    selected = [
-        comp.model_copy(update={"selection_status": "selected"})
-        for comp in selected
-    ]
-    rejected = [
-        comp.model_copy(update={"selection_status": "rejected"})
-        for comp in rejected
-    ]
+    selected = [comp.model_copy(update={"selection_status": "selected"}) for comp in selected]
+    rejected = [comp.model_copy(update={"selection_status": "rejected"}) for comp in rejected]
     return selected, rejected
 
 
@@ -3800,9 +3932,7 @@ def score_rentcast_comp(comp: dict[str, Any]) -> MarketAnalysisCompRead:
 
     if comparable.correlation is not None:
         correlation = (
-            comparable.correlation
-            if comparable.correlation <= 1
-            else comparable.correlation / 100
+            comparable.correlation if comparable.correlation <= 1 else comparable.correlation / 100
         )
         score += round(max(0, min(correlation, 1)) * 25)
         reasons.append("provider similarity score")
@@ -3915,9 +4045,7 @@ def calculate_confidence_score(
         return 20
     base = 35 + min(len(selected_comps), 5) * 8
     average_comp_score = (
-        sum(comp.score for comp in selected_comps) / len(selected_comps)
-        if selected_comps
-        else 0
+        sum(comp.score for comp in selected_comps) / len(selected_comps) if selected_comps else 0
     )
     spread_penalty = 0
     if arv_high_cents > 0:
@@ -4023,6 +4151,9 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             )
         ),
         created_at=analysis.created_at,
+        market_data_captured_at=metadata_datetime(metadata.get("market_data_captured_at")),
+        market_data_reused=metadata.get("market_data_reused") is True,
+        source_analysis_id=metadata_uuid(metadata.get("source_analysis_id")),
         methodology_version=string_or_none(metadata.get("methodology_version")) or "v1",
         as_is_value_low_cents=optional_int(metadata.get("as_is_value_low_cents")),
         as_is_value_cents=optional_int(metadata.get("as_is_value_cents")),
@@ -4030,9 +4161,7 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         arv_point_cents=optional_int(metadata.get("arv_point_cents")),
         conservative_arv_cents=optional_int(metadata.get("conservative_arv_cents")),
         base_rehab_cents=optional_int(metadata.get("base_rehab_cents")),
-        rehab_contingency_percentage=optional_int(
-            metadata.get("rehab_contingency_percentage")
-        ),
+        rehab_contingency_percentage=optional_int(metadata.get("rehab_contingency_percentage")),
         total_rehab_cents=optional_int(metadata.get("total_rehab_cents")),
         repair_scenario=(
             dict_value(metadata.get("repair_scenario"))
@@ -4041,12 +4170,8 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         ),
         flip_buyer_max_cents=optional_int(metadata.get("flip_buyer_max_cents")),
         rental_buyer_max_cents=optional_int(metadata.get("rental_buyer_max_cents")),
-        recommended_disposition_cents=optional_int(
-            metadata.get("recommended_disposition_cents")
-        ),
-        seller_contract_ceiling_cents=optional_int(
-            metadata.get("seller_contract_ceiling_cents")
-        ),
+        recommended_disposition_cents=optional_int(metadata.get("recommended_disposition_cents")),
+        seller_contract_ceiling_cents=optional_int(metadata.get("seller_contract_ceiling_cents")),
         transaction_reserve_cents=optional_int(metadata.get("transaction_reserve_cents")),
         monthly_rent_cents=optional_int(metadata.get("monthly_rent_cents")),
         manual_review_required=bool(metadata.get("human_review_required", True)),
@@ -4059,9 +4184,7 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         assumptions=dict_value(metadata.get("assumptions")),
         report_stage=string_or_none(metadata.get("report_stage")) or "preliminary",
         pre_meeting_inputs=(
-            UnderwritingPreMeetingInputsRead.model_validate(
-                metadata.get("pre_meeting_inputs")
-            )
+            UnderwritingPreMeetingInputsRead.model_validate(metadata.get("pre_meeting_inputs"))
             if isinstance(metadata.get("pre_meeting_inputs"), dict)
             else None
         ),
@@ -4072,30 +4195,22 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
         ),
         subject_square_feet=optional_int(metadata.get("subject_square_feet")),
         methodology_control=(
-            UnderwritingMethodologyControlRead.model_validate(
-                metadata.get("methodology_control")
-            )
+            UnderwritingMethodologyControlRead.model_validate(metadata.get("methodology_control"))
             if isinstance(metadata.get("methodology_control"), dict)
             else None
         ),
         execution_metrics=(
-            UnderwritingExecutionMetricsRead.model_validate(
-                metadata.get("execution_metrics")
-            )
+            UnderwritingExecutionMetricsRead.model_validate(metadata.get("execution_metrics"))
             if isinstance(metadata.get("execution_metrics"), dict)
             else None
         ),
         comp_search_summary=(
-            UnderwritingCompSearchSummaryRead.model_validate(
-                metadata.get("comp_search_summary")
-            )
+            UnderwritingCompSearchSummaryRead.model_validate(metadata.get("comp_search_summary"))
             if isinstance(metadata.get("comp_search_summary"), dict)
             else None
         ),
         supporting_evidence=(
-            UnderwritingSupportingEvidenceRead.model_validate(
-                metadata.get("supporting_evidence")
-            )
+            UnderwritingSupportingEvidenceRead.model_validate(metadata.get("supporting_evidence"))
             if isinstance(metadata.get("supporting_evidence"), dict)
             else None
         ),
@@ -4110,6 +4225,16 @@ def market_analysis_to_read(analysis: UnderwritingMarketAnalysis) -> LeadMarketA
             else None
         ),
         manual_comp_ids=uuid_list(metadata.get("manual_comp_ids")),
+        comp_intelligence=(
+            dict_value(metadata.get("comp_intelligence"))
+            if isinstance(metadata.get("comp_intelligence"), dict)
+            else None
+        ),
+        ai_comp_analyst=(
+            dict_value(metadata.get("ai_comp_analyst"))
+            if isinstance(metadata.get("ai_comp_analyst"), dict)
+            else None
+        ),
     )
 
 
@@ -4120,15 +4245,13 @@ def count_comp_review_overrides(
     if source is None or not decisions:
         return 0
     source_included = {
-        string_or_none(comp.get("provider_id"))
-        or string_or_none(comp.get("formatted_address"))
+        string_or_none(comp.get("provider_id")) or string_or_none(comp.get("formatted_address"))
         for comp in source.selected_comps
         if isinstance(comp, dict)
     }
     source_included.discard(None)
     return sum(
-        decision.included != (decision.comp_key in source_included)
-        for decision in decisions
+        decision.included != (decision.comp_key in source_included) for decision in decisions
     )
 
 
@@ -4153,16 +4276,14 @@ def add_manual_evidence_to_search_summary(
         if comp.verification_status == "manual_verified"
     ]
     usable_manual_count = sum(comp.score > 0 for comp in manual_comps)
-    usable_closed_sale_count = sum(
-        comp.score > 0 for comp in (*selected_comps, *rejected_comps)
-    )
+    usable_closed_sale_count = sum(comp.score > 0 for comp in (*selected_comps, *rejected_comps))
     minimum = optional_int(updated.get("minimum_closed_sales")) or 3
     was_sufficient = bool(updated.get("sufficient_closed_sales"))
     is_sufficient = usable_closed_sale_count >= minimum
     updated["sufficient_closed_sales"] = is_sufficient
     updated["total_unique_sales"] = (
-        (optional_int(updated.get("total_unique_sales")) or 0) + accepted_count
-    )
+        optional_int(updated.get("total_unique_sales")) or 0
+    ) + accepted_count
     if accepted_count and not was_sufficient:
         updated["final_level"] = "manual"
     attempts = list_of_dicts(updated.get("attempts"))
@@ -4227,22 +4348,16 @@ def add_research_evidence_to_search_summary(
         for comp in (*selected_comps, *rejected_comps)
         if comp.evidence_source == "ai_web_research"
     ]
-    selected_research = [
-        comp for comp in research_comps if comp.selection_status != "rejected"
-    ]
+    selected_research = [comp for comp in research_comps if comp.selection_status != "rejected"]
     updated["ai_research_sale_count"] = accepted_count
     updated["ai_research_duplicate_count"] = duplicate_count
     updated["ai_research_selected_count"] = len(selected_research)
     updated["ai_research_source_count"] = source_count
     updated["total_unique_sales"] = (
-        (optional_int(updated.get("total_unique_sales")) or 0) + accepted_count
-    )
+        optional_int(updated.get("total_unique_sales")) or 0
+    ) + accepted_count
     usable_closed_sale_count = len(
-        [
-            comp
-            for comp in (*selected_comps, *rejected_comps)
-            if comp.selection_status != "rejected"
-        ]
+        [comp for comp in (*selected_comps, *rejected_comps) if comp.selection_status != "rejected"]
     )
     minimum = optional_int(updated.get("minimum_closed_sales")) or 3
     updated["sufficient_closed_sales"] = usable_closed_sale_count >= minimum
@@ -4353,9 +4468,7 @@ def underwriting_version_repair_snapshot(
         snapshot.append(
             UnderwritingVersionRepairSnapshot(
                 category=category,
-                scope_status=(
-                    string_or_none(item.get("scope_status")) or "priced_item"
-                ),
+                scope_status=(string_or_none(item.get("scope_status")) or "priced_item"),
                 expected_cents=first_int(
                     item,
                     (
@@ -4385,12 +4498,8 @@ def underwriting_version_adjustment_snapshot(
         status=string_or_none(shadow.get("status")) or "unknown",
         shadow_arv_point_cents=optional_int(conclusion.get("arv_point_cents")),
         point_delta_cents=optional_int(comparison.get("point_delta_cents")),
-        supported_count=sum(
-            item.get("status") == "supported" for item in rate_evidence
-        ),
-        withheld_count=sum(
-            item.get("status") != "supported" for item in rate_evidence
-        ),
+        supported_count=sum(item.get("status") == "supported" for item in rate_evidence),
+        withheld_count=sum(item.get("status") != "supported" for item in rate_evidence),
     )
 
 
@@ -4398,6 +4507,24 @@ def string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def metadata_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def metadata_uuid(value: Any) -> UUID | None:
+    try:
+        return UUID(str(value)) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def uuid_list(value: Any) -> list[UUID]:
@@ -4457,6 +4584,26 @@ def format_cents_for_note(value: int | None) -> str:
 
 def string_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
+
+
+def comp_intelligence_valuation_warnings(metadata: dict[str, Any]) -> list[str]:
+    """Expose only candidate-mode material fact conflicts to valuation review."""
+    if metadata.get("mode") != "candidate":
+        return []
+    warnings: list[str] = []
+    for conflict in list_of_dicts(metadata.get("source_conflicts")):
+        if conflict.get("material") is False:
+            continue
+        field = string_or_none(conflict.get("field")) or "sale fact"
+        address = string_or_none(conflict.get("formatted_address"))
+        summary = string_or_none(conflict.get("summary"))
+        warning = (
+            f"Material cross-provider {field.replace('_', ' ')} conflict"
+            + (f" for {address}" if address else "")
+            + (f": {summary}" if summary else ".")
+        )
+        warnings.append(warning[:500])
+    return list(dict.fromkeys(warnings))[:20]
 
 
 def optional_float(value: Any) -> float | None:

@@ -101,7 +101,12 @@ class OpenAIResponsesClient:
         except httpx.HTTPError as exc:
             raise OpenAIClientError("OpenAI request failed.") from exc
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise OpenAIClientError("OpenAI returned an invalid JSON response.") from exc
+        if not isinstance(payload, dict):
+            raise OpenAIClientError("OpenAI returned an invalid response.")
         usage = extract_usage(payload)
         return OpenAITextResponse(
             text=extract_response_text(payload),
@@ -219,9 +224,7 @@ class OpenAIResponsesClient:
         try:
             parsed = json.loads(raw_text)
         except json.JSONDecodeError as exc:
-            raise OpenAIClientError(
-                "OpenAI returned invalid structured web evidence."
-            ) from exc
+            raise OpenAIClientError("OpenAI returned invalid structured web evidence.") from exc
         if not isinstance(parsed, dict):
             raise OpenAIClientError("OpenAI returned an invalid web-evidence object.")
         return parsed, extract_usage(payload), extract_web_sources(payload)
@@ -253,14 +256,19 @@ class OpenAIResponsesClient:
         except httpx.HTTPError as exc:
             raise OpenAIClientError("OpenAI transcription request failed.") from exc
 
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise OpenAIClientError("OpenAI returned an invalid JSON response.") from exc
+        if not isinstance(payload, dict):
+            raise OpenAIClientError("OpenAI returned an invalid response.")
         text = payload.get("text")
         raw_segments = payload.get("segments")
-        segments = [
-            segment
-            for segment in raw_segments
-            if isinstance(segment, dict)
-        ] if isinstance(raw_segments, list) else []
+        segments = (
+            [segment for segment in raw_segments if isinstance(segment, dict)]
+            if isinstance(raw_segments, list)
+            else []
+        )
         language = payload.get("language")
         usage = extract_usage(payload)
         return OpenAIAudioTranscript(
@@ -289,7 +297,10 @@ class OpenAIResponsesClient:
             raise OpenAIClientError(detail) from exc
         except httpx.HTTPError as exc:
             raise OpenAIClientError("OpenAI request failed.") from exc
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise OpenAIClientError("OpenAI returned an invalid JSON response.") from exc
         if not isinstance(payload, dict):
             raise OpenAIClientError("OpenAI returned an invalid response.")
         return payload

@@ -367,9 +367,7 @@ class ProspectSourceMembership(UuidPrimaryKeyMixin, TimestampMixin, Base):
     first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     appearance_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
-    relationship_state_at_latest_import: Mapped[str] = mapped_column(
-        String(40), nullable=False
-    )
+    relationship_state_at_latest_import: Mapped[str] = mapped_column(String(40), nullable=False)
     source_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
@@ -677,9 +675,7 @@ class ProspectingAttempt(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default="manual_outcome",
         server_default="manual_outcome",
     )
-    dial_started_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    dial_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     right_party_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -1188,9 +1184,7 @@ class MarketingExperiment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     minimum_sessions_per_variant: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="50"
     )
-    minimum_runtime_days: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="14"
-    )
+    minimum_runtime_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="14")
     decision_rule: Mapped[str] = mapped_column(String(1000), nullable=False)
     status: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default="draft", index=True
@@ -1228,9 +1222,7 @@ class MarketingExperimentAssignment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     device_category: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="unknown"
     )
-    lead_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("leads.id"), index=True
-    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -1257,9 +1249,7 @@ class ConversionEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     experiment_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("marketing_experiments.id"), nullable=True, index=True
     )
-    experiment_variant: Mapped[str | None] = mapped_column(
-        String(80), nullable=True, index=True
-    )
+    experiment_variant: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     device_category: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="unknown", index=True
     )
@@ -1653,9 +1643,7 @@ class EmailSenderAlias(UuidPrimaryKeyMixin, TimestampMixin, Base):
     outbound_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     signature_text: Mapped[str | None] = mapped_column(String(4000), nullable=True)
-    routing_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        "metadata", JSON, nullable=True
-    )
+    routing_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class EmailSenderGrant(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -1740,9 +1728,7 @@ class EmailAttachment(UuidPrimaryKeyMixin, TimestampMixin, Base):
     storage_provider: Mapped[str | None] = mapped_column(String(40), nullable=True)
     storage_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     malware_scan_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    retention_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    retention_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attachment_metadata: Mapped[dict[str, Any] | None] = mapped_column(
         "metadata", JSON, nullable=True
     )
@@ -1789,12 +1775,8 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     coverage_timezone: Mapped[str] = mapped_column(
         String(80), nullable=False, server_default="America/New_York"
     )
-    coverage_start_hour: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="9"
-    )
-    coverage_end_hour: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="20"
-    )
+    coverage_start_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="9")
+    coverage_end_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
     missed_call_action: Mapped[str] = mapped_column(
         String(80), nullable=False, server_default="fallback_then_voicemail"
     )
@@ -2138,9 +2120,7 @@ class AcquisitionsCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Bas
         Index("ix_acq_copilot_run", "ai_run_log_id"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     appointment_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("appointments.id", ondelete="CASCADE")
     )
@@ -2161,9 +2141,7 @@ class AcquisitionsCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Bas
     offer_negotiation_plan_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("offer_negotiation_plans.id", ondelete="SET NULL")
     )
-    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
     )
@@ -2189,16 +2167,12 @@ class AcquisitionsCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_acq_copilot_review_decision", "decision"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     recommendation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("acquisitions_copilot_recommendations.id", ondelete="CASCADE"),
     )
-    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     decision: Mapped[str] = mapped_column(String(40), nullable=False)
     original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -2413,6 +2387,11 @@ class UnderwritingManualComparable(UuidPrimaryKeyMixin, TimestampMixin, Base):
     normalized_address_key: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
     sale_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     sale_price_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    transaction_type: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    arms_length_verified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    arms_length_evidence: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     property_type: Mapped[str] = mapped_column(String(80), nullable=False)
     bedrooms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bathrooms_hundredths: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -2468,9 +2447,7 @@ class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
     predicted_disposition_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     evidence_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    validation_scenarios: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    validation_scenarios: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
 
 class UnderwritingCalibrationDecision(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2498,20 +2475,14 @@ class UnderwritingCalibrationDecision(UuidPrimaryKeyMixin, TimestampMixin, Base)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     rationale: Mapped[str] = mapped_column(String(3000), nullable=False)
-    current_methodology_version: Mapped[str | None] = mapped_column(
-        String(80), nullable=True
-    )
-    proposed_methodology_version: Mapped[str | None] = mapped_column(
-        String(80), nullable=True
-    )
+    current_methodology_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    proposed_methodology_version: Mapped[str | None] = mapped_column(String(80), nullable=True)
     proposed_changes: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     evidence_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
     minimum_sample_required: Mapped[int] = mapped_column(Integer, nullable=False)
     decision_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    decided_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class RepairEstimate(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -2877,9 +2848,7 @@ class EsignEnvelope(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     provider: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_document_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    delivery_mode: Mapped[str] = mapped_column(
-        String(40), nullable=False, server_default="email"
-    )
+    delivery_mode: Mapped[str] = mapped_column(String(40), nullable=False, server_default="email")
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str | None] = mapped_column(String(2000))
@@ -2981,9 +2950,7 @@ class TransactionDocumentFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_transaction_document_facts_status", "organization_id", "status"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     transaction_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("transactions.id", ondelete="CASCADE")
     )
@@ -2998,9 +2965,7 @@ class TransactionDocumentFact(UuidPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(40), nullable=False)
     confidence_score: Mapped[int | None] = mapped_column(Integer)
     created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
-    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -3054,16 +3019,12 @@ class TransactionCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base
         Index("ix_transaction_copilot_org_status", "organization_id", "status"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     transaction_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("transactions.id", ondelete="CASCADE")
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
-    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
     )
@@ -3088,16 +3049,12 @@ class TransactionCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_transaction_copilot_reviewer", "reviewed_by_user_id"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     recommendation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("transaction_copilot_recommendations.id", ondelete="CASCADE"),
     )
-    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     decision: Mapped[str] = mapped_column(String(40), nullable=False)
     original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -3372,19 +3329,13 @@ class DispositionCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base
         Index("ix_disposition_copilot_org_status", "organization_id", "status"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     disposition_case_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("disposition_cases.id", ondelete="CASCADE")
     )
-    transaction_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("transactions.id")
-    )
+    transaction_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("transactions.id"))
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"))
-    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
     )
@@ -3412,16 +3363,12 @@ class DispositionCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_disposition_copilot_reviewer", "reviewed_by_user_id"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     recommendation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("disposition_copilot_recommendations.id", ondelete="CASCADE"),
     )
-    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     decision: Mapped[str] = mapped_column(String(40), nullable=False)
     original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -3449,14 +3396,10 @@ class ManagementCopilotRecommendation(UuidPrimaryKeyMixin, TimestampMixin, Base)
         Index("ix_management_copilot_run", "ai_run_log_id"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     capability_key: Mapped[str] = mapped_column(String(120), nullable=False)
     reporting_period_days: Mapped[int] = mapped_column(Integer, nullable=False)
-    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    generated_for_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     ai_run_log_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("ai_run_logs.id", ondelete="SET NULL")
     )
@@ -3480,16 +3423,12 @@ class ManagementCopilotReview(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_management_copilot_reviewer", "reviewed_by_user_id"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("organizations.id")
-    )
+    organization_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("organizations.id"))
     recommendation_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("management_copilot_recommendations.id", ondelete="CASCADE"),
     )
-    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reviewed_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     decision: Mapped[str] = mapped_column(String(40), nullable=False)
     original_output: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     final_output: Mapped[dict[str, Any] | None] = mapped_column(JSON)
@@ -4043,15 +3982,11 @@ class PublicProofRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source_type: Mapped[str] = mapped_column(String(60), nullable=False)
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     source_reference: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    show_source_link: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    show_source_link: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     permission_status: Mapped[str] = mapped_column(
         String(40), nullable=False, server_default="pending"
     )
-    permission_evidence_notes: Mapped[str | None] = mapped_column(
-        String(2000), nullable=True
-    )
+    permission_evidence_notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
     material_connection: Mapped[str | None] = mapped_column(String(500), nullable=True)
     disclosure: Mapped[str | None] = mapped_column(String(500), nullable=True)
     publication_status: Mapped[str] = mapped_column(
@@ -4168,17 +4103,11 @@ class AccountingPeriod(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("users.id")
     )
     review_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    closed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    locked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    locked_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    reopened_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    reopened_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     reopened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reopen_reason: Mapped[str | None] = mapped_column(String(2000))
 
@@ -4234,18 +4163,10 @@ class JournalEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     total_debits_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     total_credits_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    prepared_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    posted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    reversed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    prepared_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    posted_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
+    reversed_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     reverses_entry_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("journal_entries.id"), index=True
     )
@@ -4268,8 +4189,7 @@ class JournalLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
             name="ck_journal_lines_nonnegative",
         ),
         CheckConstraint(
-            "(debit_cents > 0 AND credit_cents = 0) OR "
-            "(credit_cents > 0 AND debit_cents = 0)",
+            "(debit_cents > 0 AND credit_cents = 0) OR (credit_cents > 0 AND debit_cents = 0)",
             name="ck_journal_lines_single_side",
         ),
     )
@@ -4284,16 +4204,10 @@ class JournalLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("accounting_accounts.id"), index=True
     )
     line_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    debit_cents: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, server_default="0"
-    )
-    credit_cents: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, server_default="0"
-    )
+    debit_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    credit_cents: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
     memo: Mapped[str | None] = mapped_column(String(1000))
-    deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("deals.id"), index=True
-    )
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("transactions.id"), index=True
     )
@@ -4329,12 +4243,8 @@ class AccountingPostingRule(UuidPrimaryKeyMixin, TimestampMixin, Base):
     evidence_required: Mapped[bool] = mapped_column(Boolean, nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
-    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     effective_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     superseded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -4372,12 +4282,8 @@ class AccountingSourceLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     exception_detail: Mapped[str | None] = mapped_column(String(2000))
-    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    generated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class FinancialObligation(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -4407,9 +4313,7 @@ class FinancialObligation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source_type: Mapped[str | None] = mapped_column(String(120))
     source_id: Mapped[str | None] = mapped_column(String(255))
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     payment_reference: Mapped[str | None] = mapped_column(String(255))
@@ -4441,23 +4345,15 @@ class VendorProfile(UuidPrimaryKeyMixin, TimestampMixin, Base):
     vendor_type: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     default_expense_account_key: Mapped[str | None] = mapped_column(String(120))
-    payment_terms_days: Mapped[int] = mapped_column(
-        Integer, nullable=False, server_default="0"
-    )
-    tax_reportable: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    payment_terms_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    tax_reportable: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     w9_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     w9_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     w9_received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     w9_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    w9_verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    w9_verified_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     remittance_address: Mapped[str | None] = mapped_column(String(1000))
-    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     notes: Mapped[str | None] = mapped_column(String(2000))
 
 
@@ -4491,9 +4387,7 @@ class VendorBill(UuidPrimaryKeyMixin, TimestampMixin, Base):
     financial_obligation_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("financial_obligations.id"), index=True
     )
-    deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("deals.id"), index=True
-    )
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("transactions.id"), index=True
     )
@@ -4504,12 +4398,8 @@ class VendorBill(UuidPrimaryKeyMixin, TimestampMixin, Base):
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
-    created_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
-    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     payment_reference: Mapped[str | None] = mapped_column(String(255))
@@ -4540,9 +4430,7 @@ class VendorBillLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
     amount_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
     expense_account_key: Mapped[str] = mapped_column(String(120), nullable=False)
-    deal_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid, ForeignKey("deals.id"), index=True
-    )
+    deal_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("deals.id"), index=True)
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("transactions.id"), index=True
     )
@@ -4574,15 +4462,11 @@ class FinanceDocument(UuidPrimaryKeyMixin, TimestampMixin, Base):
     transaction_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("transactions.id"), index=True
     )
-    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id")
-    )
+    uploaded_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
     document_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
-    is_sensitive: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false"
-    )
+    is_sensitive: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     content_type: Mapped[str] = mapped_column(String(120), nullable=False)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -4702,9 +4586,7 @@ class BankTransaction(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class BankTransactionMatch(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "bank_transaction_matches"
     __table_args__ = (
-        UniqueConstraint(
-            "bank_transaction_id", name="uq_bank_transaction_matches_transaction"
-        ),
+        UniqueConstraint("bank_transaction_id", name="uq_bank_transaction_matches_transaction"),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -5194,9 +5076,7 @@ class AiExternalActionPolicy(UuidPrimaryKeyMixin, TimestampMixin, Base):
     channel: Mapped[str] = mapped_column(String(40), nullable=False)
     provider_key: Mapped[str] = mapped_column(String(120), nullable=False)
     owner_role_key: Mapped[str] = mapped_column(String(120), nullable=False)
-    status: Mapped[str] = mapped_column(
-        String(40), nullable=False, server_default="control_only"
-    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, server_default="control_only")
     audience_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     consent_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     template_policy: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)

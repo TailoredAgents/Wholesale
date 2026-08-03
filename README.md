@@ -12,8 +12,8 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   the Render worker service.
 - `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
 - Clerk authentication and organization-scoped RBAC are live.
-- CRM, shared inbox, underwriting V2.2, reports, transactions, buyers, finance, marketing, and AI
-  control foundations are implemented.
+- CRM, shared inbox, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
+  transactions, buyers, finance, marketing, and AI control foundations are implemented.
 - The branded web domain is live. Stonegate's dedicated A2P Campaign requires resubmission and
   approval; final Twilio SMS and Voice acceptance remains pending.
 - Resend sending, receiving, aliases, shared mailboxes, routing, attachments, notifications, and

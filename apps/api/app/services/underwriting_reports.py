@@ -325,9 +325,7 @@ def build_investor_story(
         "market_supported_adjusted_closed_sales",
     }
     arv_range_label = (
-        "Comp-supported ARV range"
-        if arv_verified
-        else "Preliminary recorded-sale ARV range"
+        "Comp-supported ARV range" if arv_verified else "Preliminary recorded-sale ARV range"
     )
     review_reasons = string_list(metadata.get("review_reasons"))
     data_disagreements = string_list(metadata.get("data_disagreements"))
@@ -359,8 +357,12 @@ def build_investor_story(
         metric_table(
             [
                 (
-                    "As-is benchmark",
-                    format_money(optional_int(metadata.get("as_is_value_cents"))),
+                    "Comp-supported as-is",
+                    format_primary_as_is_value(
+                        metadata,
+                        assumptions,
+                        as_range=False,
+                    ),
                 ),
                 (
                     "Conservative ARV" if arv_verified else "Preliminary ARV",
@@ -404,21 +406,10 @@ def build_investor_story(
         key_value_table(
             [
                 (
-                    (
-                        arv_range_label
-                        if is_v2_1
-                        else "Legacy value range (recalculate)"
-                    ),
+                    (arv_range_label if is_v2_1 else "Legacy value range (recalculate)"),
                     format_money_range(
                         analysis.arv_low_cents,
                         analysis.arv_high_cents,
-                    ),
-                ),
-                (
-                    "Provider AVM screening range",
-                    format_money_range(
-                        analysis.estimated_value_low_cents,
-                        analysis.estimated_value_high_cents,
                     ),
                 ),
                 (
@@ -490,7 +481,9 @@ def build_investor_story(
         Spacer(1, 0.06 * inch),
         investor_comp_table(analysis.rejected_comps, styles),
         Spacer(1, 0.18 * inch),
+        *comp_intelligence_story(context, styles),
         *adjustment_research_story(context, styles),
+        *comp_analyst_story(context, styles),
         *supporting_market_story(context, styles, include_listings=True),
         PageBreak(),
         section_heading("Subject property and diligence", styles),
@@ -501,7 +494,10 @@ def build_investor_story(
         section_heading("Methodology and audit record", styles),
         key_value_table(
             [
-                ("Data provider", analysis.provider.title()),
+                (
+                    "Market evidence providers",
+                    market_provider_label(metadata, analysis.provider),
+                ),
                 ("Requested address", analysis.requested_address),
                 ("Analysis reference", context.analysis_reference),
                 ("Full analysis ID", str(analysis.id)),
@@ -509,7 +505,23 @@ def build_investor_story(
                     "Underwriting version ID",
                     str(analysis.underwriting_version_id or "Not linked"),
                 ),
-                ("Saved at", format_datetime(analysis.created_at)),
+                ("Analysis saved at", format_datetime(analysis.created_at)),
+                (
+                    "Market evidence captured",
+                    format_market_capture(metadata, analysis.created_at),
+                ),
+                (
+                    "Market evidence reuse",
+                    market_reuse_label(metadata),
+                ),
+                (
+                    "External provider AVM benchmark",
+                    format_money_range(
+                        analysis.estimated_value_low_cents,
+                        analysis.estimated_value_high_cents,
+                    )
+                    + " (excluded from ARV and offer math)",
+                ),
                 (
                     "Method",
                     (
@@ -558,8 +570,7 @@ def build_client_story(
     pre_meeting_inputs = dict_value(metadata.get("pre_meeting_inputs"))
     report_stage = safe_string(metadata.get("report_stage"))
     current_condition = labelize(
-        first_string(pre_meeting_inputs, ("current_condition",))
-        or context.lead.property_condition
+        first_string(pre_meeting_inputs, ("current_condition",)) or context.lead.property_condition
     ).lower()
     return [
         hero_block(
@@ -586,10 +597,11 @@ def build_client_story(
         metric_table(
             [
                 (
-                    "Current as-is benchmark",
-                    format_money_range(
-                        optional_int(metadata.get("as_is_value_low_cents")),
-                        optional_int(metadata.get("as_is_value_high_cents")),
+                    "Comp-supported current as-is range",
+                    format_primary_as_is_value(
+                        metadata,
+                        assumptions,
+                        as_range=True,
                     ),
                 ),
                 (
@@ -603,13 +615,6 @@ def build_client_story(
                         else "Legacy renovated value"
                     ),
                     format_money_range(analysis.arv_low_cents, analysis.arv_high_cents),
-                ),
-                (
-                    "Provider market screen",
-                    format_money_range(
-                        analysis.estimated_value_low_cents,
-                        analysis.estimated_value_high_cents,
-                    ),
                 ),
                 ("Comparable properties", str(analysis.selected_comp_count)),
                 ("Market evidence", confidence_label(analysis.confidence_score)),
@@ -713,10 +718,17 @@ def build_client_story(
             [
                 ("Prepared by", "Stonegate Home Buyers"),
                 ("Property", context.address),
-                ("Market data source", analysis.provider.title()),
+                (
+                    "Market evidence providers",
+                    market_provider_label(metadata, analysis.provider),
+                ),
                 ("Review status", report_stage_label(report_stage)),
                 ("Analysis reference", context.analysis_reference),
-                ("Market data saved", format_datetime(analysis.created_at)),
+                (
+                    "Market data captured",
+                    format_market_capture(metadata, analysis.created_at),
+                ),
+                ("Market evidence reuse", market_reuse_label(metadata)),
             ],
             styles,
         ),
@@ -947,10 +959,10 @@ def adjustment_research_story(
         return []
     baseline = dict_value(adjustment.get("baseline"))
     conclusion = dict_value(adjustment.get("conclusion"))
-    saved_arv_point = (
-        optional_int(metadata.get("arv_point_cents")) if is_live else None
-    )
+    saved_arv_point = optional_int(metadata.get("arv_point_cents")) if is_live else None
     comparison = dict_value(adjustment.get("comparison"))
+    range_diagnostics = dict_value(adjustment.get("range_diagnostics"))
+    range_drivers = list_of_dicts(adjustment.get("range_drivers"))
     rate_evidence = list_of_dicts(adjustment.get("rate_evidence"))
     comp_adjustments = list_of_dicts(adjustment.get("comp_adjustments"))
     supported = [item for item in rate_evidence if item.get("status") == "supported"]
@@ -996,6 +1008,17 @@ def adjustment_research_story(
                 (
                     "Adjusted sale evidence",
                     f"{len(comp_adjustments)} closed sale(s)",
+                ),
+                (
+                    "Supported adjusted-sale range",
+                    format_money_range(
+                        optional_int(conclusion.get("arv_low_cents")),
+                        optional_int(conclusion.get("arv_high_cents")),
+                    ),
+                ),
+                (
+                    "Range width",
+                    format_range_width(range_diagnostics),
                 ),
             ],
             styles,
@@ -1072,17 +1095,11 @@ def adjustment_research_story(
                         styles["table_cell"],
                     ),
                     Paragraph(
-                        escape(
-                            format_money(optional_int(item.get("total_adjustment_cents")))
-                        ),
+                        escape(format_money(optional_int(item.get("total_adjustment_cents")))),
                         styles["table_cell"],
                     ),
                     Paragraph(
-                        escape(
-                            format_money(
-                                optional_int(item.get("adjusted_indication_cents"))
-                            )
-                        ),
+                        escape(format_money(optional_int(item.get("adjusted_indication_cents")))),
                         styles["table_cell"],
                     ),
                     Paragraph(
@@ -1098,6 +1115,556 @@ def adjustment_research_story(
         )
         apply_comp_table_style(adjustment_table)
         story.extend([adjustment_table, Spacer(1, 0.14 * inch)])
+    if range_drivers:
+        rows = [
+            [
+                Paragraph("Range driver", styles["table_header"]),
+                Paragraph("Priority", styles["table_header"]),
+                Paragraph("What it means", styles["table_header"]),
+            ]
+        ]
+        for item in range_drivers:
+            rows.append(
+                [
+                    Paragraph(
+                        escape(safe_string(item.get("label"))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(labelize(safe_string(item.get("severity")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(safe_string(item.get("summary"))),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        driver_table = LongTable(
+            rows,
+            colWidths=[1.65 * inch, 0.85 * inch, 4.9 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(driver_table)
+        story.extend(
+            [
+                section_heading("What is driving the supported range", styles),
+                body_paragraph(
+                    "Stonegate reports the weighted middle distribution of adjusted closed "
+                    "sales without adding a generic provider or confidence envelope.",
+                    styles,
+                ),
+                driver_table,
+                Spacer(1, 0.14 * inch),
+            ]
+        )
+    return story
+
+
+def comp_intelligence_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    intelligence = dict_value(metadata.get("comp_intelligence"))
+    if not intelligence:
+        return []
+    providers = list_of_dicts(intelligence.get("providers"))
+    conflicts = list_of_dicts(intelligence.get("source_conflicts"))
+    benchmarks = list_of_dicts(intelligence.get("external_benchmarks"))
+    warnings = string_list(intelligence.get("warnings"))
+    duplicate_count = optional_int(intelligence.get("duplicate_count"))
+    if duplicate_count is None:
+        duplicate_count = optional_int(intelligence.get("provider_duplicate_count"))
+    conflict_count = optional_int(intelligence.get("conflict_count"))
+    if conflict_count is None:
+        conflict_count = optional_int(intelligence.get("provider_conflict_count"))
+    story: list[Flowable] = [
+        section_heading("Comparable-source audit", styles),
+        warning_box(
+            "INTERNAL PROVIDER AUDIT",
+            (
+                "This section records source coverage, overlap, conflicts, and provider cost. "
+                "External AVM benchmarks are context only and are excluded from Stonegate ARV, "
+                "adjustment, offer, and seller-ceiling math."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+        key_value_table(
+            [
+                ("Comp-intelligence mode", labelize(first_string(intelligence, ("mode",)))),
+                (
+                    "Evidence snapshot",
+                    "Reused from a prior capture"
+                    if intelligence.get("evidence_reused") is True
+                    else "Captured for this analysis",
+                ),
+                (
+                    "Corroborated closed sales",
+                    str(optional_int(intelligence.get("corroborated_sale_count")) or 0),
+                ),
+                (
+                    "Cross-sourced closed sales",
+                    str(optional_int(intelligence.get("cross_sourced_sale_count")) or 0),
+                ),
+                (
+                    "Provider duplicates merged",
+                    str(duplicate_count or 0),
+                ),
+                (
+                    "Material source conflicts",
+                    str(conflict_count if conflict_count is not None else len(conflicts)),
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+    ]
+    if providers:
+        rows: list[list[Paragraph]] = [
+            [
+                Paragraph("Provider", styles["table_header"]),
+                Paragraph("Status", styles["table_header"]),
+                Paragraph("Valuation use", styles["table_header"]),
+                Paragraph("Returned / usable / new / overlap", styles["table_header"]),
+                Paragraph("Dropped / dup / ineligible / conflict", styles["table_header"]),
+                Paragraph("Current / source cost", styles["table_header"]),
+                Paragraph("Provider note", styles["table_header"]),
+            ]
+        ]
+        for provider in providers:
+            credit_metadata = dict_value(provider.get("credit_metadata"))
+            returned_count = optional_int(provider.get("returned_count"))
+            if returned_count is None:
+                returned_count = optional_int(provider.get("raw_count"))
+            usable_count = optional_int(provider.get("usable_count"))
+            if usable_count is None:
+                usable_count = optional_int(provider.get("valuation_eligible_count"))
+            net_new_count = optional_int(provider.get("net_new_count"))
+            overlap_count = optional_int(provider.get("overlap_count"))
+            dropped_count = optional_int(provider.get("dropped_count"))
+            ineligible_count = optional_int(provider.get("ineligible_transfer_count"))
+            credits_used = optional_int(provider.get("credits_used"))
+            if credits_used is None:
+                credits_used = optional_int(credit_metadata.get("used"))
+            latency_ms = optional_int(provider.get("latency_ms"))
+            source_credits_used = optional_int(provider.get("source_credits_used"))
+            source_latency_ms = optional_int(provider.get("source_latency_ms"))
+            provider_duplicate_count = optional_int(provider.get("duplicate_count"))
+            provider_conflict_count = optional_int(provider.get("conflict_count"))
+            returned_text = str(returned_count) if returned_count is not None else "N/A"
+            usable_text = str(usable_count) if usable_count is not None else "N/A"
+            net_new_text = str(net_new_count) if net_new_count is not None else "N/A"
+            overlap_text = str(overlap_count) if overlap_count is not None else "N/A"
+            dropped_text = str(dropped_count) if dropped_count is not None else "N/A"
+            ineligible_text = str(ineligible_count) if ineligible_count is not None else "N/A"
+            duplicate_text = (
+                str(provider_duplicate_count) if provider_duplicate_count is not None else "N/A"
+            )
+            conflict_text = (
+                str(provider_conflict_count) if provider_conflict_count is not None else "N/A"
+            )
+            credits_estimated = provider.get("credits_estimated") is True
+            credits_text = (
+                f"{credits_used}{' est.' if credits_estimated else ''}"
+                if credits_used is not None
+                else "N/A"
+            )
+            latency_text = f"{latency_ms:,} ms" if latency_ms is not None else "N/A"
+            source_credits_estimated = provider.get("source_credits_estimated") is True
+            source_credits_text = (
+                f"{source_credits_used}{' est.' if source_credits_estimated else ''}"
+                if source_credits_used is not None
+                else "N/A"
+            )
+            source_latency_text = (
+                f"{source_latency_ms:,} ms" if source_latency_ms is not None else "N/A"
+            )
+            cost_text = f"Run {credits_text} / {latency_text}"
+            if provider.get("evidence_reused") is True:
+                cost_text += f"; source {source_credits_text} / {source_latency_text}"
+            note = first_string(provider, ("error",)) or "; ".join(
+                string_list(provider.get("warnings"))
+            )
+            rows.append(
+                [
+                    Paragraph(
+                        escape(provider_display_name(first_string(provider, ("provider",)))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(labelize(first_string(provider, ("status",)))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            labelize(first_string(provider, ("valuation_use",)))
+                            if first_string(provider, ("valuation_use",))
+                            else "Evidence audit"
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            f"{returned_text} / {usable_text} / {net_new_text} / {overlap_text}"
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            f"{dropped_text} / {duplicate_text} / "
+                            f"{ineligible_text} / {conflict_text}"
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(cost_text),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(note or "No provider exception recorded."),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        provider_table = LongTable(
+            rows,
+            colWidths=[
+                0.75 * inch,
+                0.65 * inch,
+                1.05 * inch,
+                0.8 * inch,
+                0.9 * inch,
+                0.8 * inch,
+                2.45 * inch,
+            ],
+            repeatRows=1,
+        )
+        apply_comp_table_style(provider_table)
+        story.extend([provider_table, Spacer(1, 0.12 * inch)])
+    if conflicts:
+        rows = [
+            [
+                Paragraph("Comparable", styles["table_header"]),
+                Paragraph("Field", styles["table_header"]),
+                Paragraph("Selected record", styles["table_header"]),
+                Paragraph("Provider observations", styles["table_header"]),
+            ]
+        ]
+        for conflict in conflicts[:20]:
+            observations = list_of_dicts(conflict.get("observations"))
+            observation_summary = "; ".join(
+                (
+                    f"{provider_display_name(first_string(observation, ('provider',)))}: "
+                    f"{safe_string(observation.get('value'))}"
+                )
+                for observation in observations[:4]
+            )
+            rows.append(
+                [
+                    Paragraph(
+                        escape(
+                            first_string(
+                                conflict,
+                                ("formatted_address", "comp_key", "canonical_evidence_id"),
+                            )
+                            or "Merged sale evidence"
+                        ),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(labelize(first_string(conflict, ("field",)))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(safe_string(conflict.get("selected_value"))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(observation_summary or "Observation detail unavailable."),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        conflict_table = LongTable(
+            rows,
+            colWidths=[2.0 * inch, 1.0 * inch, 1.4 * inch, 3.0 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(conflict_table)
+        story.extend(
+            [
+                body_paragraph(
+                    "Conflicting provider fields remain visible for human review; the selected "
+                    "canonical value follows the saved provider-priority and consensus rules.",
+                    styles,
+                ),
+                conflict_table,
+                Spacer(1, 0.12 * inch),
+            ]
+        )
+    if benchmarks:
+        rows = [
+            [
+                Paragraph("External benchmark", styles["table_header"]),
+                Paragraph("Point", styles["table_header"]),
+                Paragraph("Published range", styles["table_header"]),
+                Paragraph("Use", styles["table_header"]),
+            ]
+        ]
+        for benchmark in benchmarks:
+            rows.append(
+                [
+                    Paragraph(
+                        escape(
+                            first_string(benchmark, ("label",))
+                            or provider_display_name(first_string(benchmark, ("provider",)))
+                        ),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(format_money(optional_int(benchmark.get("point_cents")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            format_money_range(
+                                optional_int(benchmark.get("low_cents")),
+                                optional_int(benchmark.get("high_cents")),
+                            )
+                        ),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        "Context only; excluded from all Stonegate valuation and offer math.",
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        benchmark_table = LongTable(
+            rows,
+            colWidths=[1.3 * inch, 1.1 * inch, 1.7 * inch, 3.3 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(benchmark_table)
+        story.extend([benchmark_table, Spacer(1, 0.12 * inch)])
+    if warnings:
+        story.append(
+            warning_box(
+                "PROVIDER REVIEW NOTES",
+                " ".join(warnings),
+                styles,
+            )
+        )
+        story.append(Spacer(1, 0.14 * inch))
+    return story
+
+
+def comp_analyst_story(
+    context: ReportContext,
+    styles: dict[str, ParagraphStyle],
+) -> list[Flowable]:
+    metadata = context.analysis.analysis_metadata or {}
+    analyst = dict_value(metadata.get("ai_comp_analyst"))
+    if not analyst:
+        return []
+    recommendations = list_of_dicts(analyst.get("comp_recommendations"))
+    duplicates = list_of_dicts(analyst.get("duplicate_candidates"))
+    conflicts = list_of_dicts(analyst.get("conflicts"))
+    concerns = list_of_dicts(analyst.get("micro_market_concerns"))
+    questions = list_of_dicts(analyst.get("missing_questions"))
+    range_explanations = list_of_dicts(analyst.get("range_explanations"))
+    story: list[Flowable] = [
+        section_heading("AI Comp Analyst draft", styles),
+        warning_box(
+            "DRAFT REVIEW SUPPORT / NO PRICE AUTHORITY",
+            (
+                "This structured draft can organize evidence and recommend review work. It is "
+                "excluded from ARV, adjustment, offer, and seller-ceiling math; a person must "
+                "accept, correct, or reject every recommendation."
+            ),
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+        key_value_table(
+            [
+                ("Status", labelize(safe_string(analyst.get("status")))),
+                ("Model", first_string(analyst, ("model",)) or "Not run"),
+                (
+                    "Summary",
+                    first_string(analyst, ("summary",)) or "No analyst summary is available.",
+                ),
+                (
+                    "Model result",
+                    first_string(analyst, ("error",)) or "Structured draft accepted",
+                ),
+            ],
+            styles,
+        ),
+        Spacer(1, 0.1 * inch),
+    ]
+    if recommendations:
+        rows: list[list[Paragraph]] = [
+            [
+                Paragraph("Comparable", styles["table_header"]),
+                Paragraph("Draft", styles["table_header"]),
+                Paragraph("Condition hypothesis", styles["table_header"]),
+                Paragraph("Reason", styles["table_header"]),
+                Paragraph("Evidence IDs", styles["table_header"]),
+            ]
+        ]
+        for item in recommendations:
+            citations = list_of_dicts(item.get("citations"))
+            rows.append(
+                [
+                    Paragraph(
+                        escape(safe_string(item.get("comp_key"))),
+                        styles["table_cell_bold"],
+                    ),
+                    Paragraph(
+                        escape(labelize(safe_string(item.get("recommendation")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(labelize(safe_string(item.get("condition_hypothesis")))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(safe_string(item.get("reason"))),
+                        styles["table_cell"],
+                    ),
+                    Paragraph(
+                        escape(
+                            ", ".join(
+                                safe_string(citation.get("evidence_id"))
+                                for citation in citations
+                                if safe_string(citation.get("evidence_id"))
+                            )
+                        ),
+                        styles["table_cell"],
+                    ),
+                ]
+            )
+        recommendation_table = LongTable(
+            rows,
+            colWidths=[1.45 * inch, 0.7 * inch, 1.0 * inch, 3.25 * inch, 1.0 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(recommendation_table)
+        story.extend([recommendation_table, Spacer(1, 0.12 * inch)])
+    evidence_checks = (
+        [
+            (
+                "Potential duplicate",
+                ", ".join(string_list(item.get("comp_keys"))),
+                safe_string(item.get("reason")),
+                citation_ids(item),
+            )
+            for item in duplicates
+        ]
+        + [
+            (
+                f"Source conflict: {labelize(first_string(item, ('field',)))}",
+                ", ".join(string_list(item.get("comp_keys"))),
+                safe_string(item.get("description")),
+                citation_ids(item),
+            )
+            for item in conflicts
+        ]
+        + [
+            (
+                "Micro-market concern",
+                ", ".join(string_list(item.get("comp_keys"))),
+                " ".join(
+                    (
+                        safe_string(item.get("concern")),
+                        safe_string(item.get("why_it_matters")),
+                    )
+                ),
+                citation_ids(item),
+            )
+            for item in concerns
+        ]
+    )
+    if evidence_checks:
+        rows = [
+            [
+                Paragraph("Evidence check", styles["table_header"]),
+                Paragraph("Affected comps", styles["table_header"]),
+                Paragraph("Issue", styles["table_header"]),
+                Paragraph("Evidence IDs", styles["table_header"]),
+            ]
+        ]
+        rows.extend(
+            [
+                Paragraph(escape(label), styles["table_cell_bold"]),
+                Paragraph(escape(comp_keys or "Subject / set"), styles["table_cell"]),
+                Paragraph(escape(issue), styles["table_cell"]),
+                Paragraph(escape(evidence_ids), styles["table_cell"]),
+            ]
+            for label, comp_keys, issue, evidence_ids in evidence_checks
+        )
+        evidence_table = LongTable(
+            rows,
+            colWidths=[1.35 * inch, 1.35 * inch, 3.65 * inch, 1.05 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(evidence_table)
+        story.extend([evidence_table, Spacer(1, 0.12 * inch)])
+    review_work = [
+        (
+            safe_string(item.get("question")),
+            ", ".join(string_list(item.get("related_comp_keys"))),
+            safe_string(item.get("why_it_matters")),
+            citation_ids(item),
+        )
+        for item in questions
+    ] + [
+        (
+            safe_string(item.get("driver")),
+            ", ".join(string_list(item.get("affected_comp_keys"))),
+            " ".join(
+                value
+                for value in (
+                    safe_string(item.get("explanation")),
+                    (
+                        f"Resolve: {safe_string(item.get('resolution_question'))}"
+                        if item.get("resolution_question")
+                        else ""
+                    ),
+                )
+                if value
+            ),
+            citation_ids(item),
+        )
+        for item in range_explanations
+    ]
+    if review_work:
+        rows = [
+            [
+                Paragraph("Review item", styles["table_header"]),
+                Paragraph("Affected comps", styles["table_header"]),
+                Paragraph("Why it matters", styles["table_header"]),
+                Paragraph("Evidence IDs", styles["table_header"]),
+            ]
+        ]
+        rows.extend(
+            [
+                Paragraph(escape(label), styles["table_cell_bold"]),
+                Paragraph(escape(comp_keys or "Subject / set"), styles["table_cell"]),
+                Paragraph(escape(explanation), styles["table_cell"]),
+                Paragraph(escape(evidence_ids), styles["table_cell"]),
+            ]
+            for label, comp_keys, explanation, evidence_ids in review_work
+        )
+        review_table = LongTable(
+            rows,
+            colWidths=[1.8 * inch, 1.25 * inch, 3.3 * inch, 1.05 * inch],
+            repeatRows=1,
+        )
+        apply_comp_table_style(review_table)
+        story.extend([review_table, Spacer(1, 0.14 * inch)])
     return story
 
 
@@ -1124,9 +1691,10 @@ def client_explainability_story(
         for item in repair_items
         if safe_string(item.get("scope_status")) in {"unknown", "specialist_review"}
     ]
-    grade_summary = ", ".join(
-        f"{grade}: {count}" for grade, count in sorted(grade_counts.items())
-    ) or "Not graded"
+    grade_summary = (
+        ", ".join(f"{grade}: {count}" for grade, count in sorted(grade_counts.items()))
+        or "Not graded"
+    )
     supported = sum(item.get("status") == "supported" for item in rate_evidence)
     withheld = sum(item.get("status") != "supported" for item in rate_evidence)
     rows = [
@@ -1152,9 +1720,7 @@ def client_explainability_story(
                 ),
                 (
                     "Expected preparation scenario",
-                    format_money(
-                        optional_int(repair_scenario.get("total_expected_cents"))
-                    ),
+                    format_money(optional_int(repair_scenario.get("total_expected_cents"))),
                 ),
                 (
                     "Items still to verify",
@@ -1188,9 +1754,7 @@ def client_explainability_story(
         story.append(
             warning_box(
                 "ITEMS TO VERIFY",
-                ", ".join(
-                    labelize(first_string(item, ("category",))) for item in unresolved
-                ),
+                ", ".join(labelize(first_string(item, ("category",))) for item in unresolved),
                 styles,
             )
         )
@@ -1234,9 +1798,7 @@ def supporting_market_story(
                         (
                             "Median asking price / sqft",
                             format_ppsf_cents(
-                                optional_int(
-                                    market.get("median_price_per_square_foot_cents")
-                                )
+                                optional_int(market.get("median_price_per_square_foot_cents"))
                             ),
                         ),
                         (
@@ -1270,9 +1832,7 @@ def supporting_market_story(
                         styles["table_cell_bold"],
                     ),
                     Paragraph(
-                        escape(
-                            format_money(optional_int(listing.get("asking_price_cents")))
-                        ),
+                        escape(format_money(optional_int(listing.get("asking_price_cents")))),
                         styles["table_cell"],
                     ),
                     Paragraph(
@@ -1420,8 +1980,7 @@ def repair_input_story(
         (
             "Current condition",
             labelize(
-                first_string(inputs, ("current_condition",))
-                or context.lead.property_condition
+                first_string(inputs, ("current_condition",)) or context.lead.property_condition
             ),
         ),
         (
@@ -1465,8 +2024,7 @@ def repair_input_story(
             ("Holding period", f"{holding_months or 6} months"),
             (
                 "Repair notes",
-                first_string(inputs, ("repair_notes",))
-                or "No additional notes recorded.",
+                first_string(inputs, ("repair_notes",)) or "No additional notes recorded.",
             ),
         ]
     )
@@ -1480,15 +2038,11 @@ def repair_input_story(
                 ),
                 (
                     "Expected repair scenario",
-                    format_money(
-                        optional_int(repair_scenario.get("total_expected_cents"))
-                    ),
+                    format_money(optional_int(repair_scenario.get("total_expected_cents"))),
                 ),
                 (
                     "Unknown-work allowance",
-                    format_money(
-                        optional_int(repair_scenario.get("unknown_reserve_cents"))
-                    ),
+                    format_money(optional_int(repair_scenario.get("unknown_reserve_cents"))),
                 ),
             ]
         )
@@ -1605,7 +2159,9 @@ def guided_repair_item_table(
         range_text = (
             f"{escape(format_money(optional_int(item.get('system_low_cents'))))} to "
             f"{escape(format_money(optional_int(item.get('system_high_cents'))))}"
-            f"<br/><b>{escape(format_money(optional_int(item.get('estimated_cost_cents'))))} expected</b>"
+            "<br/><b>"
+            f"{escape(format_money(optional_int(item.get('estimated_cost_cents'))))} expected"
+            "</b>"
         )
         evidence_parts = [
             labelize(first_string(item, ("evidence_source",))) or "Not provided",
@@ -2154,9 +2710,7 @@ def page_decorator(
 ) -> Callable[[Canvas, BaseDocTemplate], None]:
     report_label = "INTERNAL INVESTMENT ANALYSIS" if audience == "investor" else "PROPERTY REVIEW"
     confidentiality = (
-        "CONFIDENTIAL - INTERNAL USE"
-        if audience == "investor"
-        else "PREPARED FOR PROPERTY OWNER"
+        "CONFIDENTIAL - INTERNAL USE" if audience == "investor" else "PREPARED FOR PROPERTY OWNER"
     )
 
     def decorate(canvas: Canvas, document: BaseDocTemplate) -> None:
@@ -2239,6 +2793,34 @@ def format_money_range(low_cents: int | None, high_cents: int | None) -> str:
     return f"{format_money(low_cents)} - {format_money(high_cents)}"
 
 
+def format_primary_as_is_value(
+    metadata: dict[str, Any],
+    assumptions: dict[str, Any],
+    *,
+    as_range: bool,
+) -> str:
+    value_basis = first_string(assumptions, ("as_is_value_basis",))
+    if value_basis != "verified_as_is_recorded_sales":
+        return "Not comp-supported"
+    if as_range:
+        return format_money_range(
+            optional_int(metadata.get("as_is_value_low_cents")),
+            optional_int(metadata.get("as_is_value_high_cents")),
+        )
+    return format_money(optional_int(metadata.get("as_is_value_cents")))
+
+
+def format_range_width(diagnostics: dict[str, Any]) -> str:
+    width = optional_int(diagnostics.get("supported_range_width_cents"))
+    percentage = optional_float(diagnostics.get("supported_range_percentage"))
+    if width is None and percentage is None:
+        return "Not available"
+    parts = [format_money(width)] if width is not None else []
+    if percentage is not None:
+        parts.append(f"{percentage:.1f}% of Stonegate ARV")
+    return " / ".join(parts)
+
+
 def format_ppsf_cents(cents: int | None) -> str:
     if cents is None:
         return "N/A"
@@ -2309,6 +2891,44 @@ def format_datetime(value: datetime) -> str:
     return rendered.replace(" 0", " ")
 
 
+def format_market_capture(metadata: dict[str, Any], fallback: datetime) -> str:
+    value = metadata.get("market_data_captured_at")
+    if isinstance(value, datetime):
+        return format_datetime(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return value.strip()
+        timezone_label = parsed.tzname() or parsed.strftime("%z")
+        return " ".join(value for value in (format_datetime(parsed), timezone_label) if value)
+    return format_datetime(fallback)
+
+
+def market_reuse_label(metadata: dict[str, Any]) -> str:
+    if metadata.get("market_data_reused") is not True:
+        return "Fresh provider capture"
+    source_analysis_id = safe_string(metadata.get("source_analysis_id"))
+    return (
+        f"Reused snapshot from analysis {source_analysis_id}"
+        if source_analysis_id and source_analysis_id != "Not available"
+        else "Reused prior provider snapshot"
+    )
+
+
+def market_provider_label(metadata: dict[str, Any], fallback: str) -> str:
+    intelligence = dict_value(metadata.get("comp_intelligence"))
+    providers = list_of_dicts(intelligence.get("providers"))
+    active = [
+        provider_display_name(first_string(provider, ("provider",)))
+        for provider in providers
+        if first_string(provider, ("status",)) == "completed"
+        and (optional_int(provider.get("usable_count")) or 0) > 0
+    ]
+    distinct = list(dict.fromkeys(value for value in active if value != "Unknown"))
+    return " + ".join(distinct) if distinct else provider_display_name(fallback)
+
+
 def format_subject_number(subject: dict[str, Any], keys: tuple[str, ...]) -> str:
     for key in keys:
         value = subject.get(key)
@@ -2332,6 +2952,16 @@ def labelize(value: str | None) -> str:
     return " ".join(word.capitalize() for word in value.replace("-", "_").split("_"))
 
 
+def provider_display_name(value: str | None) -> str:
+    normalized = (value or "").strip().lower().replace("-", "_")
+    names = {
+        "dealmachine": "DealMachine",
+        "openai": "OpenAI",
+        "rentcast": "RentCast",
+    }
+    return names.get(normalized, labelize(value))
+
+
 def slugify(value: str) -> str:
     slug = "".join(character.lower() if character.isalnum() else "-" for character in value)
     return "-".join(part for part in slug.split("-") if part)[:60] or "property"
@@ -2351,6 +2981,14 @@ def string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []
     return [item for item in value if isinstance(item, str)]
+
+
+def citation_ids(item: dict[str, Any]) -> str:
+    values = [
+        first_string(citation, ("evidence_id",))
+        for citation in list_of_dicts(item.get("citations"))
+    ]
+    return ", ".join(value for value in values if value) or "None recorded"
 
 
 def dict_value(value: object) -> dict[str, Any]:

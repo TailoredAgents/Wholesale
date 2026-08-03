@@ -696,9 +696,10 @@ redirect to their new owners.
 18. The seller's Valuation & Offer section presents Quick Comp, Desk Review, Walkthrough, and Offer
     Decision as progressive stages over these same records. It does not create a separate comp or
     repair workflow.
-19. **Run Stonegate valuation** creates the first analysis; the same control becomes **Update
-    Stonegate valuation** afterward. The service automatically deepens old or missing research and
-    reuses current evidence for repair-only changes, so staff do not manage a separate refresh mode.
+19. **Run Stonegate valuation** creates the first provider snapshot; the same control becomes
+    **Update Stonegate valuation** afterward and recalculates from that saved same-address snapshot
+    with zero paid provider calls. **Refresh market evidence (may use credits)** is a separate,
+    explicit action that replaces the snapshot and retries providers when newer evidence is needed.
 20. A persistent decision summary shows the current ARV, repairs, buyer target, opening, and seller
     ceiling and links to reports, the appointment/field workflow, approval, and contract signing.
     Version comparison and manual scenarios remain available under expandable advanced records.
@@ -930,7 +931,7 @@ Stonegate separates:
 
 - CRM-entered subject facts
 - provider-returned subject facts
-- recorded-sale comparables
+- provider-neutral recorded-sale observations with field-level provenance and conflicts
 - operator condition and repair evidence
 - cited secondary public evidence
 - verified outcomes such as appraisals, expert reviews, resales, and closed values
@@ -945,22 +946,24 @@ The one complete-analysis workflow performs:
 1. address normalization and identity validation
 2. provider-safe address retries
 3. subject fact reconciliation
-4. adaptive preferred, expanded, and extended recorded-sale search
-5. sale deduplication, subdivision comparison, A-D grading, screening, and scoring
-6. subject-versus-candidate review data, engine recommendation, and location direction
-7. optional bounded public-record research
-8. comparable weighting
-9. ARV and as-is range calculation
-10. repair and contingency math
-11. buyer economics and Stonegate offer scenarios
-12. confidence factors and review flags
-13. immutable analysis storage
+4. adaptive preferred, expanded, and extended RentCast recorded-sale search
+5. optional credit-controlled DealMachine shadow or candidate comp retrieval
+6. cross-provider normalization, transfer deduplication, conflict retention, subdivision
+   comparison, A-D grading, screening, and scoring
+7. subject-versus-candidate review data, engine recommendation, and location direction
+8. optional bounded public-record research and draft-only AI Comp Analyst review
+9. locally supported adjustments and comparable weighting
+10. interpolated weighted adjusted-sale Q25/Q50/Q75 ARV conclusion and range diagnostics
+11. repair and contingency math
+12. buyer economics and Stonegate offer scenarios
+13. confidence factors and review flags
+14. immutable analysis storage
 
 The search stops when at least three screened closed sales satisfy available market-area evidence.
 If the complete provider search remains thin, the result is labeled `manual`, records the exact
-shortage and next action, and preserves every suitable sale found. Repair-only reruns and comp
-reviews reuse this immutable provider snapshot unless the operator explicitly refreshes market
-data.
+shortage and next action, and preserves every suitable sale found. Ordinary updates, repair-only
+reruns, and comp reviews reuse this immutable provider snapshot—even after a provider failure or no
+match—and make no paid retry unless the operator explicitly refreshes market data.
 
 The Comparable Review workbench consumes the saved subject snapshot and complete candidate set.
 Filters and sorting affect only the display. Every apply request still carries one include/exclude
@@ -970,9 +973,11 @@ system originally suggested. Applying creates another immutable analysis and aud
 
 ### 11.3 Offer Math
 
-The configured baseline uses a low and high percentage of ARV, normally 65% and 70%, then accounts
-for repairs, assignment fee, transaction reserve, and configured buyer costs. The result is a
-scenario and authority range, not a guaranteed appraisal or mandatory seller offer.
+V3 begins with the conservative point from locally adjusted closed-sale evidence, then subtracts
+repair, purchase, financing/holding, resale, buyer-profit, assignment-fee, and transaction-reserve
+requirements. The historical 65-70% calculation remains comparison context and does not control
+the seller ceiling. The result is a scenario and authority range, not a guaranteed appraisal or
+mandatory seller offer.
 
 The exact method and controls live in `UNDERWRITING_COMP_METHOD.md`.
 
@@ -1274,7 +1279,7 @@ telemarketing, recording, or real-estate advice.
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
 | Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
-| DealMachine | Buyer discovery | Implemented adapter with cost preview and credit readiness | Subscription purchased; API key/configuration and controlled acceptance pending |
+| DealMachine | Buyer discovery plus property-only underwriting comp evidence | Implemented adapter with cost preview, credit controls, provenance, conflict handling, and shadow/candidate modes | Subscription purchased; API key/configuration and controlled acceptance pending |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |

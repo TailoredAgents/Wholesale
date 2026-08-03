@@ -50,7 +50,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
 | F5 Buyers and dispositions | Buyer CRM and cost-governed DealMachine adapter implemented; subscription purchased | API-key activation, controlled search acceptance, and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | Stonegate Valuation V3 is the single supervised live method; V2.2 is a technical rollback only | Collect verified Georgia outcomes, calibrate repair allowances, and monitor accuracy and operator corrections |
+| F7 Underwriting proof | Stonegate Valuation V3.1 and U4 Comp Intelligence are implemented behind supervised rollout flags; V2.2 is a technical rollback only | Run DealMachine shadow and AI Comp Analyst pilots, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
 | F9 Twilio communications | SMS, Voice, recording, and transcription code implemented; seller A2P approved | Number attachment, shared-line routing, and provider acceptance |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
@@ -336,6 +336,13 @@ quality and credit-use acceptance test before staff rely on it.
 - provisional closed-sale continuity when the AVM is unavailable
 - verified outcome records
 - market scorecards and methodology decision ledger
+- weighted interpolated adjusted-sale ranges with explicit range drivers and no generic percentage
+  padding
+- normalized RentCast and DealMachine closed-sale evidence with cross-provider deduplication,
+  field provenance, conflict visibility, provider-failure isolation, and credit accounting
+- internal provider-audit reporting that keeps external AVMs out of Stonegate ARV and offer math
+- a bounded AI Comp Analyst draft that cites saved evidence, identifies review work, and has no
+  price or seller authority
 
 ### Implemented In-Place V3 Upgrade
 
@@ -352,6 +359,23 @@ and calibration records. Its target capabilities are:
 - human-confirmed AI repair assistance and an upgraded iPad walkthrough
 - one progressive Quick Comp, Desk Review, Walkthrough, and Offer Decision workflow
 - updated reports, calibration, internal rollback comparison, and supervised operation
+
+### Implemented U4 Comp Intelligence Extension
+
+U4 is implemented behind default-safe controls. DealMachine comparable evidence can be disabled,
+observed in shadow mode without changing valuation math, or admitted as candidate closed-sale
+evidence after a measured promotion decision. A per-analysis credit ceiling and property-only
+requests bound cost and data scope. Provider failures do not prevent RentCast-backed analysis.
+
+The optional AI Comp Analyst runs only in draft mode against evidence already supplied by
+Stonegate. Its structured output can explain comp inclusion, source conflict, uncertainty, and
+missing review questions. It cannot browse for facts, invent evidence, set ARV, calculate an offer,
+recommend a seller ceiling, or apply a dollar adjustment. The deterministic V3.1 calculator
+continues to own the supported adjusted-sale range and all dependent economics.
+
+Both capabilities default to disabled until configured. Internal reports retain provider status,
+overlap, conflicts, credit use, latency, external benchmarks, and the AI draft. Client reports do
+not expose provider operations, model details, or internal review notes.
 
 ### Remaining Actions
 
@@ -382,13 +406,31 @@ For ongoing V3 validation:
 7. Monitor verified cases by Georgia market and retain V2.2 only as an engineering rollback while
    V3 remains supervised and human-approved.
 
+For the U4 controlled rollout:
+
+1. Start DealMachine in shadow mode and compare sale coverage, duplicate matching, material field
+   conflicts, latency, and actual credits with the same RentCast-backed analyses.
+2. Review every cross-provider conflict and confirm that canonical values and source provenance
+   remain reproducible from the saved record.
+3. Promote DealMachine to candidate evidence only for a named market after shadow results show a
+   useful evidence gain without unacceptable error, operator burden, or credit cost.
+4. Run the AI Comp Analyst only in draft mode after fixed-case replay confirms evidence citations,
+   prohibited-price controls, incomplete-evidence behavior, and human-review routing.
+5. Measure operator acceptance, correction, rejection, latency, and time saved before any broader
+   enablement decision.
+
 ### Exit Criteria
 
 - V3 remains the default only while unsupported cases stop for review and measured outcomes do not
   show a material accuracy or operator-burden regression.
 - The first market has enough verified cases for the approved review threshold.
 - Material bias and failure patterns are documented.
-- Stonegate has decided whether RentCast is adequate for that market.
+- Stonegate has decided whether RentCast alone or RentCast plus DealMachine candidate evidence is
+  adequate for that market.
+- The DealMachine shadow pilot documents coverage gain, conflicts, provider failures, latency, and
+  credit use before candidate promotion.
+- The AI Comp Analyst pilot shows evidence-bound drafts with no prohibited valuation or offer
+  authority and an acceptable human-correction burden.
 - Formula and provider decisions are evidence-backed, versioned, and human approved.
 
 Calibration continues after launch.

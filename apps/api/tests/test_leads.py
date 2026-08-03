@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -6,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.integrations.dealmachine_client import DealMachinePropertyLookup
 from app.integrations.rentcast_client import (
     RentCastClientError,
     RentCastRentEstimate,
@@ -35,8 +37,31 @@ from app.models.foundation import (
     UnderwritingVersion,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.leads import cached_market_data_snapshot_is_reusable
 
 OWNER_EMAIL = "owner@example.com"
+
+
+def test_cached_market_snapshot_reuse_depends_on_property_not_provider_status() -> None:
+    failed_snapshot = SimpleNamespace(
+        requested_address="123 Peachtree Street, Atlanta, GA 30303-1234",
+        analysis_metadata={
+            "comp_intelligence": {
+                "version": "comp_intelligence_v1",
+                "mode": "candidate",
+                "providers": [{"provider": "dealmachine", "status": "failed"}],
+            }
+        },
+    )
+
+    assert cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
+        failed_snapshot,
+        current_address="123 Peachtree St, Atlanta, GA 30303",
+    )
+    assert not cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
+        failed_snapshot,
+        current_address="999 Different St, Atlanta, GA 30303",
+    )
 
 
 def seed_owner(db_session: Session) -> None:
@@ -127,20 +152,23 @@ def test_create_and_list_lead(
     assert len(items) == 1
     assert items[0]["id"] == created["id"]
     assert int(db_session.scalar(select(func.count()).select_from(ActivityEvent)) or 0) == 2
-    methods = db_session.scalars(
-        select(ContactMethod).order_by(ContactMethod.method_type)
-    ).all()
+    methods = db_session.scalars(select(ContactMethod).order_by(ContactMethod.method_type)).all()
     assert [(method.method_type, method.normalized_value) for method in methods] == [
         ("email", "jane@example.com"),
         ("phone", "4045550114"),
     ]
     assert sum(method.is_primary for method in methods) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "lead.create")
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.create")
+            )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_validate_property_address_preserves_crm_address_and_provider_provenance(
@@ -179,6 +207,16 @@ def test_validate_property_address_preserves_crm_address_and_provider_provenance
             }
 
     monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
+
+    def unexpected_web_comp_discovery(*_: object, **__: object) -> dict[str, object]:
+        raise AssertionError(
+            "Web comp discovery must not run after structured evidence meets the threshold."
+        )
+
+    monkeypatch.setattr(
+        "app.services.leads.collect_secondary_market_evidence",
+        unexpected_web_comp_discovery,
+    )
     client = TestClient(app)
     create_payload = lead_payload()
     assert isinstance(create_payload["property"], dict)
@@ -221,14 +259,17 @@ def test_validate_property_address_preserves_crm_address_and_provider_provenance
     )
     assert update_response.status_code == 200
     assert update_response.json()["property_validation"]["status"] == "unverified"
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "property.address.validate"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "property.address.validate")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
     get_settings.cache_clear()
 
 
@@ -255,9 +296,7 @@ def test_archive_restore_and_permanently_delete_lead(
         json={
             "source_type": "walkthrough_scope",
             "estimate_date": "2026-07-21T12:00:00Z",
-            "scope_items": [
-                {"category": "roof", "estimated_cost_cents": 1500000}
-            ],
+            "scope_items": [{"category": "roof", "estimated_cost_cents": 1500000}],
             "contingency_percentage": 15,
         },
     )
@@ -287,17 +326,18 @@ def test_archive_restore_and_permanently_delete_lead(
     )
     assert archive_response.status_code == 200
     assert archive_response.json()["archived_at"] is not None
-    assert client.get(
-        "/api/v1/leads", headers={"X-Dev-User-Email": OWNER_EMAIL}
-    ).json()["items"] == []
+    assert (
+        client.get("/api/v1/leads", headers={"X-Dev-User-Email": OWNER_EMAIL}).json()["items"] == []
+    )
     archived_items = client.get(
         "/api/v1/leads?archived=true",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     ).json()["items"]
     assert [item["id"] for item in archived_items] == [lead_id]
-    assert client.get(
-        "/api/v1/tasks/open", headers={"X-Dev-User-Email": OWNER_EMAIL}
-    ).json()["items"] == []
+    assert (
+        client.get("/api/v1/tasks/open", headers={"X-Dev-User-Email": OWNER_EMAIL}).json()["items"]
+        == []
+    )
 
     restore_response = client.post(
         f"/api/v1/leads/{lead_id}/restore",
@@ -331,21 +371,22 @@ def test_archive_restore_and_permanently_delete_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(RepairEstimate)) or 0) == 0
-    assert int(
-        db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0
-    ) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0) == 0
     assert int(db_session.scalar(select(func.count()).select_from(ApprovalRequest)) or 0) == 0
     task = db_session.scalar(select(Task))
     assert task is not None
     assert task.lead_id is None
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "lead.delete_permanently"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.delete_permanently")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_dashboard_summary_counts_leads(
@@ -443,14 +484,17 @@ def test_read_lead_detail_and_update_stage(
     assert "lead.stage_changed" in [
         activity["event_type"] for activity in updated["recent_activity"]
     ]
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "lead.stage_update"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.stage_update")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_update_lead_stage_rejects_unknown_stage(
@@ -529,24 +573,24 @@ def test_update_lead_staff_details_records_audit(
     assert updated["appointment_status"] == "appointment_requested"
     assert updated["property_address"] == "500 Edgewood Ave, Atlanta, GA 30312"
     assert updated["property_type"] == "duplex"
-    assert {
-        (method["method_type"], method["value"])
-        for method in updated["contact_methods"]
-    } == {
+    assert {(method["method_type"], method["value"]) for method in updated["contact_methods"]} == {
         ("email", "JANET@example.com"),
         ("phone", "(404) 555-0101"),
     }
     assert "lead.staff_updated" in [
         activity["event_type"] for activity in updated["recent_activity"]
     ]
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "lead.staff_update"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "lead.staff_update")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_edit_lead_manages_multiple_contacts_and_assignment(
@@ -620,30 +664,36 @@ def test_edit_lead_manages_multiple_contacts_and_assignment(
     assert updated["assigned_user_id"] == assignee_id
     assert updated["assigned_user_email"] == "devon@example.com"
     assert len(updated["contact_methods"]) == 4
-    assert sum(
-        method["is_primary"]
-        for method in updated["contact_methods"]
-        if method["method_type"] == "phone"
-    ) == 1
+    assert (
+        sum(
+            method["is_primary"]
+            for method in updated["contact_methods"]
+            if method["method_type"] == "phone"
+        )
+        == 1
+    )
     assert {
-        method["value"]
-        for method in updated["contact_methods"]
-        if method["method_type"] == "phone"
+        method["value"] for method in updated["contact_methods"] if method["method_type"] == "phone"
     } == {"+14045550111", "+16785550122"}
-    conversation = db_session.scalar(select(Conversation).where(Conversation.lead_id == UUID(lead_id)))
+    conversation = db_session.scalar(
+        select(Conversation).where(Conversation.lead_id == UUID(lead_id))
+    )
     assert conversation is not None
     assert str(conversation.assigned_user_id) == assignee_id
-    assert db_session.scalar(
-        select(func.count()).select_from(ConversationAssignmentEvent).where(
-            ConversationAssignmentEvent.conversation_id == conversation.id,
-            ConversationAssignmentEvent.assigned_user_id == UUID(assignee_id),
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ConversationAssignmentEvent)
+            .where(
+                ConversationAssignmentEvent.conversation_id == conversation.id,
+                ConversationAssignmentEvent.assigned_user_id == UUID(assignee_id),
+            )
         )
-    ) == 1
+        == 1
+    )
 
     retained_methods = [
-        method
-        for method in updated["contact_methods"]
-        if method["value"] != "+16785550122"
+        method for method in updated["contact_methods"] if method["value"] != "+16785550122"
     ]
     delete_response = client.patch(
         f"/api/v1/leads/{lead_id}",
@@ -692,15 +742,12 @@ def test_edit_lead_normalizes_multiple_primary_contact_methods(
 
     assert response.status_code == 200, response.text
     emails = [
-        method
-        for method in response.json()["contact_methods"]
-        if method["method_type"] == "email"
+        method for method in response.json()["contact_methods"] if method["method_type"] == "email"
     ]
     assert len(emails) == 2
     assert sum(method["is_primary"] for method in emails) == 1
     assert (
-        next(method for method in emails if method["is_primary"])["value"]
-        == "seller@example.com"
+        next(method for method in emails if method["is_primary"])["value"] == "seller@example.com"
     )
 
 
@@ -837,14 +884,17 @@ def test_add_lead_communication_records_audit_and_activity(
         activity["event_type"] for activity in payload["recent_activity"]
     ]
     assert int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "communication.log"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "communication.log")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_add_lead_communication_rejects_unknown_channel(
@@ -913,14 +963,17 @@ def test_schedule_lead_appointment_updates_lead_and_records_audit(
         activity["event_type"] for activity in payload["recent_activity"]
     ]
     assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "appointment.create"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "appointment.create")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_schedule_lead_appointment_rejects_invalid_time_window(
@@ -990,14 +1043,17 @@ def test_create_lead_underwriting_version_updates_stage_and_records_audit(
         activity["event_type"] for activity in payload["recent_activity"]
     ]
     assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "underwriting.create"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "underwriting.create")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
     second_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting",
@@ -1150,7 +1206,7 @@ def test_preview_lead_market_value_requires_rentcast_key(
     get_settings.cache_clear()
 
 
-def test_market_analysis_continues_without_separate_property_record(
+def test_market_analysis_reuses_failed_and_no_match_dealmachine_snapshots_until_refresh(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
@@ -1158,14 +1214,41 @@ def test_market_analysis_continues_without_separate_property_record(
     seed_owner(db_session)
     monkeypatch.setenv("PROPERTY_DATA_PROVIDER", "rentcast")
     monkeypatch.setenv("RENTCAST_API_KEY", "test-rentcast-key")
+    monkeypatch.setenv("DEALMACHINE_API_KEY", "test-dealmachine-key")
+    monkeypatch.setenv("UNDERWRITING_DEALMACHINE_COMPS_MODE", "candidate")
+    monkeypatch.setenv("UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS", "2")
     get_settings.cache_clear()
     sales_request: dict[str, object] = {}
+    provider_call_counts = {"avm": 0, "property": 0, "sales": 0}
+    dealmachine_call_counts = {"init": 0, "lookup": 0, "comps": 0}
+
+    class FailedThenNoMatchDealMachineClient:
+        def __init__(self, *_: object, **__: object) -> None:
+            dealmachine_call_counts["init"] += 1
+
+        def lookup_underwriting_property(self, *, address: str) -> DealMachinePropertyLookup:
+            dealmachine_call_counts["lookup"] += 1
+            if dealmachine_call_counts["lookup"] == 1:
+                raise RuntimeError("simulated DealMachine timeout")
+            return DealMachinePropertyLookup(
+                matched=False,
+                property=None,
+                credits={"used": 1, "properties": 1, "people": 0},
+                match_warning=None,
+                match_failure={"reason": "no_match", "requested_address": address},
+                raw_response={},
+            )
+
+        def get_underwriting_comparables(self, **_: object) -> object:
+            dealmachine_call_counts["comps"] += 1
+            raise AssertionError("A no-match subject must not trigger DealMachine comp retrieval.")
 
     class MissingPropertyRecordRentCastClient:
         def __init__(self, **_: object) -> None:
             pass
 
         def get_value_estimate(self, **_: object) -> RentCastValueEstimate:
+            provider_call_counts["avm"] += 1
             subject = {
                 "id": "subject-1",
                 "formattedAddress": "123 Peachtree St, Atlanta, GA 30303",
@@ -1194,15 +1277,16 @@ def test_market_analysis_continues_without_separate_property_record(
             )
 
         def get_property_record(self, **_: object) -> dict[str, object]:
+            provider_call_counts["property"] += 1
             raise RentCastClientError(
-                "RentCast property record failed "
-                "(HTTP 404, resource/not-found): No data found.",
+                "RentCast property record failed (HTTP 404, resource/not-found): No data found.",
                 operation="property record",
                 status_code=404,
                 error_code="resource/not-found",
             )
 
         def get_recent_sales(self, **kwargs: object) -> list[dict[str, object]]:
+            provider_call_counts["sales"] += 1
             sales_request.update(kwargs)
             return [
                 {
@@ -1238,6 +1322,10 @@ def test_market_analysis_continues_without_separate_property_record(
         "app.services.leads.RentCastClient",
         MissingPropertyRecordRentCastClient,
     )
+    monkeypatch.setattr(
+        "app.services.underwriting_provider_pipeline.DealMachineClient",
+        FailedThenNoMatchDealMachineClient,
+    )
     client = TestClient(app)
     created_response = client.post(
         "/api/v1/leads",
@@ -1264,6 +1352,16 @@ def test_market_analysis_continues_without_separate_property_record(
     ]
     assert sales_request["latitude"] == 33.749
     assert sales_request["longitude"] == -84.388
+    first_dealmachine = next(
+        provider
+        for provider in analysis["comp_intelligence"]["providers"]
+        if provider["provider"] == "dealmachine"
+    )
+    assert first_dealmachine["status"] == "failed"
+    assert first_dealmachine["credits_used"] == 1
+    assert first_dealmachine["credits_estimated"] is True
+    first_run_call_counts = dict(provider_call_counts)
+    first_run_dealmachine_call_counts = dict(dealmachine_call_counts)
     cached_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -1271,9 +1369,67 @@ def test_market_analysis_continues_without_separate_property_record(
     )
     assert cached_response.status_code == 201
     assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
-    assert cached_response.json()["data_disagreements"] == analysis[
-        "data_disagreements"
-    ]
+    assert cached_response.json()["data_disagreements"] == analysis["data_disagreements"]
+    assert provider_call_counts == first_run_call_counts
+    assert dealmachine_call_counts == first_run_dealmachine_call_counts
+    cached_dealmachine = next(
+        provider
+        for provider in cached_response.json()["comp_intelligence"]["providers"]
+        if provider["provider"] == "dealmachine"
+    )
+    assert cached_dealmachine["status"] == "failed"
+    assert cached_dealmachine["credits_used"] == 0
+    assert cached_dealmachine["source_credits_used"] == 1
+    assert cached_dealmachine["source_credits_estimated"] is True
+
+    refreshed_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "light", "refresh_market_data": True},
+    )
+    assert refreshed_response.status_code == 201
+    assert refreshed_response.json()["market_data_reused"] is False
+    assert provider_call_counts["avm"] == first_run_call_counts["avm"] + 1
+    assert provider_call_counts["sales"] > first_run_call_counts["sales"]
+    refreshed_dealmachine = next(
+        provider
+        for provider in refreshed_response.json()["comp_intelligence"]["providers"]
+        if provider["provider"] == "dealmachine"
+    )
+    assert refreshed_dealmachine["status"] == "no_match"
+    assert dealmachine_call_counts["lookup"] == first_run_dealmachine_call_counts["lookup"] + 1
+    assert dealmachine_call_counts["comps"] == 0
+
+    no_match_provider_call_counts = dict(provider_call_counts)
+    no_match_dealmachine_call_counts = dict(dealmachine_call_counts)
+    no_match_cached_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "moderate"},
+    )
+    assert no_match_cached_response.status_code == 201
+    assert no_match_cached_response.json()["market_data_reused"] is True
+    assert provider_call_counts == no_match_provider_call_counts
+    assert dealmachine_call_counts == no_match_dealmachine_call_counts
+    no_match_cached_dealmachine = next(
+        provider
+        for provider in no_match_cached_response.json()["comp_intelligence"]["providers"]
+        if provider["provider"] == "dealmachine"
+    )
+    assert no_match_cached_dealmachine["status"] == "no_match"
+    assert no_match_cached_dealmachine["credits_used"] == 0
+    assert no_match_cached_dealmachine["source_credits_used"] == 1
+
+    second_refresh_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"repair_level": "moderate", "refresh_market_data": True},
+    )
+    assert second_refresh_response.status_code == 201
+    assert second_refresh_response.json()["market_data_reused"] is False
+    assert provider_call_counts["avm"] == no_match_provider_call_counts["avm"] + 1
+    assert dealmachine_call_counts["lookup"] == no_match_dealmachine_call_counts["lookup"] + 1
+    assert dealmachine_call_counts["comps"] == 0
 
 
 def test_market_analysis_records_provider_failure_without_partial_results(
@@ -1356,9 +1512,10 @@ def test_market_analysis_records_provider_failure_without_partial_results(
 
     assert response.status_code == 502
     assert "provider unavailable" in response.json()["detail"]
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
-    ) == 0
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0)
+        == 0
+    )
     assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 0
     get_settings.cache_clear()
 
@@ -1406,9 +1563,7 @@ def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
             return [
                 {
                     "id": f"comp-{index}",
-                    "formattedAddress": (
-                        f"{123 + index * 2} Peachtree St, Atlanta, GA 30303"
-                    ),
+                    "formattedAddress": (f"{123 + index * 2} Peachtree St, Atlanta, GA 30303"),
                     "propertyType": "Single Family",
                     "lastSalePrice": 285000 + index * 10000,
                     "lastSaleDate": "2026-05-01T00:00:00Z",
@@ -1460,8 +1615,7 @@ def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
     assert analysis["comp_search_summary"]["final_level"] == "preferred"
     assert analysis["comp_search_summary"]["sufficient_closed_sales"] is True
     assert analysis["data_disagreements"] == [
-        "The RentCast AVM was unavailable; value conclusions use screened recorded "
-        "sales only."
+        "The RentCast AVM was unavailable; value conclusions use screened recorded sales only."
     ]
     assert analysis["assumptions"]["as_is_value_basis"] == "unsupported"
     assert analysis["as_is_value_cents"] is None
@@ -1472,9 +1626,7 @@ def test_market_analysis_uses_verified_closed_sales_when_avm_is_unavailable(
     )
     assert cached_response.status_code == 201
     assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
-    assert cached_response.json()["data_disagreements"] == analysis[
-        "data_disagreements"
-    ]
+    assert cached_response.json()["data_disagreements"] == analysis["data_disagreements"]
     assert cached_response.json()["as_is_value_cents"] is None
     get_settings.cache_clear()
 
@@ -1542,6 +1694,8 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     monkeypatch.setenv("UNDERWRITING_DEFAULT_ASSIGNMENT_FEE_CENTS", "1500000")
     monkeypatch.setenv("UNDERWRITING_ACTIVE_METHODOLOGY_VERSION", "v3")
     monkeypatch.setenv("UNDERWRITING_V3_SHADOW_ENABLED", "false")
+    monkeypatch.setenv("UNDERWRITING_DEALMACHINE_COMPS_MODE", "disabled")
+    monkeypatch.setenv("UNDERWRITING_AI_COMP_ANALYST_MODE", "disabled")
     get_settings.cache_clear()
     provider_calls: list[str] = []
 
@@ -1772,11 +1926,19 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         "shadow_enabled": False,
     }
     assert payload["adjustment_shadow"] is None
-    assert payload["market_adjustment"]["valuation_use"] == (
-        "live_human_reviewed_underwriting"
-    )
+    assert payload["market_adjustment"]["valuation_use"] == ("live_human_reviewed_underwriting")
     assert payload["market_adjustment"]["baseline"]["arv_point_cents"] == 30000000
     assert payload["market_adjustment"]["conclusion"]["arv_point_cents"] is not None
+    assert payload["market_adjustment"]["calculation_version"] == ("v3.1-adjusted-distribution")
+    assert payload["market_adjustment"]["range_diagnostics"]["artificial_padding_applied"] is False
+    assert payload["comp_intelligence"]["version"] == "comp_intelligence_v1"
+    assert payload["comp_intelligence"]["mode"] == "disabled"
+    assert payload["comp_intelligence"]["providers"][1]["status"] == "disabled"
+    assert (
+        payload["comp_intelligence"]["external_benchmarks"][0]["valuation_use"]
+        == "excluded_from_arv_and_offer_math"
+    )
+    assert payload["ai_comp_analyst"] is None
     assert payload["execution_metrics"]["duration_ms"] >= 0
     assert payload["execution_metrics"]["provider_returned_comp_count"] == 7
     assert payload["execution_metrics"]["candidate_comp_count"] == 7
@@ -1827,7 +1989,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["as_is_value_cents"] == 23351400
     assert payload["as_is_value_high_cents"] == 23657100
     assert payload["arv_low_cents"] == payload["market_adjustment"]["conclusion"]["arv_low_cents"]
-    assert payload["arv_point_cents"] == payload["market_adjustment"]["conclusion"]["arv_point_cents"]
+    assert (
+        payload["arv_point_cents"] == payload["market_adjustment"]["conclusion"]["arv_point_cents"]
+    )
     assert payload["arv_high_cents"] == payload["market_adjustment"]["conclusion"]["arv_high_cents"]
     assert payload["repair_low_cents"] == 5000000
     assert payload["repair_high_cents"] == 6000000
@@ -1848,9 +2012,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["pre_meeting_inputs"]["holding_period_months"] == 9
     assert len(payload["pre_meeting_inputs"]["repair_items"]) == 3
     assert payload["assumptions"]["financing_holding_percentage"] == 0.09
-    assert payload["assumptions"]["arv_value_basis"] == (
-        "market_supported_adjusted_closed_sales"
-    )
+    assert payload["assumptions"]["arv_value_basis"] == ("market_supported_adjusted_closed_sales")
     assert payload["assumptions"]["comp_value_method"] == (
         "market_supported_adjusted_sale_indications"
     )
@@ -1868,16 +2030,17 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["selected_comps"][0]["comp_grade"] in {"A", "B"}
     assert payload["selected_comps"][0]["engine_selection_status"] == "selected"
     assert payload["selected_comps"][0]["engine_selection_reason"]
+    assert payload["selected_comps"][0]["source_providers"] == ["rentcast"]
+    assert payload["selected_comps"][0]["corroborated"] is False
     price_outlier = next(
-        comp
-        for comp in payload["rejected_comps"]
-        if comp["provider_id"] == "reject-price-outlier"
+        comp for comp in payload["rejected_comps"] if comp["provider_id"] == "reject-price-outlier"
     )
     assert "Price-per-square-foot outlier" in price_outlier["selection_reason"]
     assert payload["underwriting_version_id"] is not None
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0
-    ) == 1
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0)
+        == 1
+    )
     assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 1
     saved_version = db_session.scalar(select(UnderwritingVersion))
     assert saved_version is not None
@@ -1901,9 +2064,10 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
 
     assert investor_report_response.status_code == 200
     assert investor_report_response.headers["content-type"] == "application/pdf"
-    assert "stonegate-investor-property-report" in investor_report_response.headers[
-        "content-disposition"
-    ]
+    assert (
+        "stonegate-investor-property-report"
+        in investor_report_response.headers["content-disposition"]
+    )
     assert investor_report_response.content.startswith(b"%PDF")
     assert b"Assignment fee assumption" in investor_report_response.content
     assert b"Repair scope and input record" in investor_report_response.content
@@ -1926,9 +2090,9 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
 
     assert client_report_response.status_code == 200
     assert client_report_response.headers["content-type"] == "application/pdf"
-    assert "stonegate-client-property-report" in client_report_response.headers[
-        "content-disposition"
-    ]
+    assert (
+        "stonegate-client-property-report" in client_report_response.headers["content-disposition"]
+    )
     assert client_report_response.content.startswith(b"%PDF")
     assert b"Assignment fee assumption" not in client_report_response.content
     assert b"Offer ceiling" not in client_report_response.content
@@ -1991,10 +2155,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert cached_response.json()["base_rehab_cents"] == 4000000
     assert cached_response.json()["total_rehab_cents"] == 4400000
     assert cached_response.json()["execution_metrics"]["market_data_reused"] is True
-    assert (
-        cached_response.json()["pre_meeting_inputs"]["repair_estimate_source"]
-        == "user_total"
-    )
+    assert cached_response.json()["pre_meeting_inputs"]["repair_estimate_source"] == "user_total"
     itemized_precedence_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -2023,9 +2184,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert itemized_precedence_response.json()["base_rehab_cents"] == 2000000
     assert itemized_precedence_response.json()["total_rehab_cents"] == 2200000
     assert (
-        itemized_precedence_response.json()["pre_meeting_inputs"][
-            "repair_estimate_source"
-        ]
+        itemized_precedence_response.json()["pre_meeting_inputs"]["repair_estimate_source"]
         == "itemized"
     )
 
@@ -2035,9 +2194,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
         json={
             "source_type": "contractor_bid",
             "estimate_date": "2026-07-21T12:00:00Z",
-            "scope_items": [
-                {"category": "roof", "estimated_cost_cents": 1500000}
-            ],
+            "scope_items": [{"category": "roof", "estimated_cost_cents": 1500000}],
         },
     )
     assert missing_contractor_response.status_code == 422
@@ -2108,24 +2265,16 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert provider_calls == ["init", "value", "subject", "sales", "rent"]
     assert estimate_analysis["base_rehab_cents"] == 5000000
     assert estimate_analysis["total_rehab_cents"] == 6000000
-    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_source"] == (
-        "contractor_bid"
-    )
-    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_id"] == (
-        saved_estimate["id"]
-    )
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_source"] == ("contractor_bid")
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_id"] == (saved_estimate["id"])
     assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_contractor_name"] == (
         "Peachtree Renovations"
     )
-    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_reference"] == (
-        "Bid PR-2048"
+    assert estimate_analysis["pre_meeting_inputs"]["repair_estimate_reference"] == ("Bid PR-2048")
+    assert estimate_analysis["pre_meeting_inputs"]["repair_items"][0]["labor_cost_cents"] == 600000
+    assert (
+        estimate_analysis["pre_meeting_inputs"]["repair_items"][0]["material_cost_cents"] == 900000
     )
-    assert estimate_analysis["pre_meeting_inputs"]["repair_items"][0][
-        "labor_cost_cents"
-    ] == 600000
-    assert estimate_analysis["pre_meeting_inputs"]["repair_items"][0][
-        "material_cost_cents"
-    ] == 900000
 
     contractor_report_response = client.get(
         (
@@ -2177,8 +2326,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
             "source_analysis_id": payload["id"],
             "repair_level": "moderate",
             "comp_condition_overrides": {
-                comp["provider_id"]: comp["condition_classification"]
-                for comp in source_comps
+                comp["provider_id"]: comp["condition_classification"] for comp in source_comps
             },
             "comp_review_decisions": [
                 {
@@ -2187,13 +2335,10 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
                     in {"comp-1", "comp-2", "comp-3", "comp-4", "comp-5"},
                     "reason": (
                         "Strong subject match"
-                        if comp["provider_id"]
-                        in {"comp-1", "comp-2", "comp-3", "comp-4", "comp-5"}
+                        if comp["provider_id"] in {"comp-1", "comp-2", "comp-3", "comp-4", "comp-5"}
                         else "Size or design mismatch"
                     ),
-                    "weight_percentage": 150
-                    if comp["provider_id"] == "comp-2"
-                    else 100,
+                    "weight_percentage": 150 if comp["provider_id"] == "comp-2" else 100,
                 }
                 for comp in source_comps
             ],
@@ -2212,21 +2357,22 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert weighted_comp["manual_weight_percentage"] == 150
     assert weighted_comp["review_decision"] == "included"
     assert weighted_comp["weight"] == 1.5
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "underwriting.comp_review.apply"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "underwriting.comp_review.apply")
             )
+            or 0
         )
-        or 0
-    ) == 1
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis))
-        or 0
-    ) == 6
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0
-    ) == 6
+        == 1
+    )
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(UnderwritingMarketAnalysis)) or 0)
+        == 6
+    )
+    assert int(db_session.scalar(select(func.count()).select_from(UnderwritingVersion)) or 0) == 6
     baseline = client.get(
         "/api/v1/underwriting/calibration",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -2290,17 +2436,20 @@ def test_open_lead_transaction_creates_deal_checklist_and_audit(
     ]
     assert int(db_session.scalar(select(func.count()).select_from(Deal)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Transaction)) or 0) == 1
-    assert int(
-        db_session.scalar(select(func.count()).select_from(TransactionChecklistItem)) or 0
-    ) == 8
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "transaction.create"
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(TransactionChecklistItem)) or 0) == 8
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "transaction.create")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_open_lead_transaction_rejects_duplicate_active_transaction(
@@ -2395,14 +2544,17 @@ def test_record_lead_buyer_offer_creates_offer_and_audit(
         activity["event_type"] for activity in payload["recent_activity"]
     ]
     assert int(db_session.scalar(select(func.count()).select_from(BuyerOffer)) or 0) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "buyer_offer.create"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "buyer_offer.create")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_update_lead_staff_details_requires_permission(api_db_override: None) -> None:
@@ -2501,18 +2653,14 @@ def test_offer_ceiling_approval_uses_immutable_negotiation_plan(
         "pending",
         "cancelled",
     ]
-    assert int(
-        db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0
-    ) == 2
+    assert int(db_session.scalar(select(func.count()).select_from(OfferNegotiationPlan)) or 0) == 2
 
     approval_response = client.get(
         "/api/v1/approvals",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
     latest_approval = approval_response.json()["items"][0]
-    assert latest_approval["review_url"] == (
-        f"/os/leads/{lead_id}?tab=underwriting#offer-approval"
-    )
+    assert latest_approval["review_url"] == (f"/os/leads/{lead_id}?tab=underwriting#offer-approval")
     assert latest_approval["approval_metadata"]["seller_ceiling_cents"] == 20000000
 
     missing_notes = client.patch(
@@ -2540,19 +2688,24 @@ def test_offer_ceiling_approval_uses_immutable_negotiation_plan(
     assert decided_plan is not None
     assert decided_plan.status == "approved"
     assert int(db_session.scalar(select(func.count()).select_from(ApprovalRequest)) or 0) == 2
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action.in_(
-                    {
-                        "underwriting.offer_approval.request",
-                        "underwriting.offer_approval.decide",
-                    }
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.action.in_(
+                        {
+                            "underwriting.offer_approval.request",
+                            "underwriting.offer_approval.decide",
+                        }
+                    )
                 )
             )
+            or 0
         )
-        or 0
-    ) == 3
+        == 3
+    )
 
     duplicate_decision = client.patch(
         f"/api/v1/approvals/{second['approval_request_id']}/decision",
@@ -2739,6 +2892,9 @@ def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
             "postal_code": "30303",
             "sale_date": "2026-04-15",
             "sale_price_cents": 30000000,
+            "transaction_type": "Warranty Deed",
+            "arms_length_verified": True,
+            "arms_length_evidence": "MLS and recorded warranty deed confirm a market sale.",
             "property_type": "Single Family",
             "bedrooms": 3,
             "bathrooms": 2,
@@ -2760,6 +2916,9 @@ def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
             "postal_code": "30303",
             "sale_date": "2026-03-20",
             "sale_price_cents": 31000000,
+            "transaction_type": "Warranty Deed",
+            "arms_length_verified": True,
+            "arms_length_evidence": "Broker and closing record confirm a market sale.",
             "property_type": "Single Family",
             "bedrooms": 3,
             "bathrooms": 2,
@@ -2792,6 +2951,19 @@ def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
     assert duplicate_response.status_code == 422
     assert "already saved" in duplicate_response.json()["detail"]
 
+    non_market_payload = {
+        **manual_payloads[0],
+        "street_address": "131 Peachtree St",
+        "transaction_type": "Quit Claim Deed",
+    }
+    non_market_response = client.post(
+        f"/api/v1/leads/{lead_id}/underwriting/manual-comps",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=non_market_payload,
+    )
+    assert non_market_response.status_code == 422
+    assert "non-market transfer" in non_market_response.json()["detail"]
+
     analysis_response = client.post(
         f"/api/v1/leads/{lead_id}/underwriting/market-analysis",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -2807,9 +2979,7 @@ def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
     assert analysis["comp_search_summary"]["sufficient_closed_sales"] is True
     assert analysis["comp_search_summary"]["manual_verified_sale_count"] == 2
     assert analysis["manual_comp_ids"] == [record["id"] for record in manual_records]
-    manual_comps = [
-        comp for comp in analysis["selected_comps"] if comp["search_level"] == "manual"
-    ]
+    manual_comps = [comp for comp in analysis["selected_comps"] if comp["search_level"] == "manual"]
     assert len(manual_comps) == 2
     assert manual_comps[0]["verification_status"] == "manual_verified"
     assert manual_comps[0]["source_reference"] in {
@@ -2817,22 +2987,15 @@ def test_verified_manual_sales_and_supporting_context_complete_sparse_analysis(
         "Broker email 2026-07-30",
     }
     assert analysis["supporting_evidence"]["status"] == "completed"
-    assert analysis["supporting_evidence"]["valuation_use"] == (
-        "excluded_from_arv_and_offer_math"
-    )
-    assert analysis["supporting_evidence"]["sale_listings"][0][
-        "asking_price_cents"
-    ] == 34000000
+    assert analysis["supporting_evidence"]["valuation_use"] == ("excluded_from_arv_and_offer_math")
+    assert analysis["supporting_evidence"]["sale_listings"][0]["asking_price_cents"] == 34000000
     assert all(
         comp["provider_id"] != "active-listing-1"
         for comp in [*analysis["selected_comps"], *analysis["rejected_comps"]]
     )
 
     report_response = client.get(
-        (
-            f"/api/v1/leads/{lead_id}/underwriting/market-analysis/"
-            f"{analysis['id']}/report.pdf"
-        ),
+        (f"/api/v1/leads/{lead_id}/underwriting/market-analysis/{analysis['id']}/report.pdf"),
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
     assert report_response.status_code == 200

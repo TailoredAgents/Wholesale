@@ -20,6 +20,8 @@ from app.schemas.leads import (
     UnderwritingManualComparableRead,
 )
 from app.services.property_validation import canonical_address_key
+from app.services.underwriting_comparable_evidence import same_recorded_sale
+from app.services.underwriting_v2 import non_market_transfer_rejection_reason
 
 
 def list_manual_comparables(
@@ -59,12 +61,19 @@ def create_manual_comparable(
         raise ValueError("Lead is missing a property record.")
     if payload.sale_date > datetime.now(UTC).date():
         raise ValueError("A comparable sale date cannot be in the future.")
-    if payload.condition_classification != "unknown" and not clean(
-        payload.condition_evidence
-    ):
+    if payload.condition_classification != "unknown" and not clean(payload.condition_evidence):
         raise ValueError(
             "Condition evidence is required when a manual sale is classified as as-is or renovated."
         )
+    transfer_rejection = non_market_transfer_rejection_reason(
+        {
+            "transaction_type": payload.transaction_type,
+            "transaction_eligibility": "not_flagged",
+        },
+        round(payload.sale_price_cents / 100),
+    )
+    if transfer_rejection:
+        raise ValueError(transfer_rejection)
 
     normalized_key = canonical_address_key(
         payload.street_address,
@@ -121,6 +130,9 @@ def create_manual_comparable(
         normalized_address_key=normalized_key,
         sale_date=payload.sale_date,
         sale_price_cents=payload.sale_price_cents,
+        transaction_type=clean(payload.transaction_type),
+        arms_length_verified=payload.arms_length_verified,
+        arms_length_evidence=payload.arms_length_evidence.strip(),
         property_type=payload.property_type.strip(),
         bedrooms=payload.bedrooms,
         bathrooms_hundredths=(
@@ -130,9 +142,7 @@ def create_manual_comparable(
         year_built=payload.year_built,
         lot_size=payload.lot_size,
         distance_hundredths=(
-            round(payload.distance_miles * 100)
-            if payload.distance_miles is not None
-            else None
+            round(payload.distance_miles * 100) if payload.distance_miles is not None else None
         ),
         subdivision=clean(payload.subdivision),
         condition_classification=payload.condition_classification,
@@ -279,16 +289,13 @@ def merge_verified_manual_sales(
     manual_records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[str]]:
     merged = list(provider_records)
-    seen = {sale_identity(record) for record in provider_records}
     duplicate_ids: list[str] = []
     for record in manual_records:
-        identity = sale_identity(record)
-        if identity in seen:
+        if any(same_recorded_sale(record, existing) for existing in merged):
             manual_id = clean(record.get("_stonegateManualComparableId"))
             if manual_id:
                 duplicate_ids.append(manual_id)
             continue
-        seen.add(identity)
         merged.append(record)
     return merged, duplicate_ids
 
@@ -306,19 +313,22 @@ def manual_comparable_to_sale_record(
         "propertyType": record.property_type,
         "lastSalePrice": round(record.sale_price_cents / 100),
         "lastSaleDate": record.sale_date.isoformat(),
+        "transaction_type": record.transaction_type,
+        "transaction_eligibility": ("not_flagged" if record.arms_length_verified else "ineligible"),
+        "transaction_review_reason": (
+            None
+            if record.arms_length_verified
+            else "Manual sale lacks the required arm's-length verification."
+        ),
         "bedrooms": record.bedrooms,
         "bathrooms": (
-            record.bathrooms_hundredths / 100
-            if record.bathrooms_hundredths is not None
-            else None
+            record.bathrooms_hundredths / 100 if record.bathrooms_hundredths is not None else None
         ),
         "squareFootage": record.square_footage,
         "yearBuilt": record.year_built,
         "lotSize": record.lot_size,
         "distance": (
-            record.distance_hundredths / 100
-            if record.distance_hundredths is not None
-            else None
+            record.distance_hundredths / 100 if record.distance_hundredths is not None else None
         ),
         "subdivision": record.subdivision,
         "_stonegateSearchLevel": "manual",
@@ -328,6 +338,16 @@ def manual_comparable_to_sale_record(
         "_stonegateSourceReference": record.source_reference,
         "_stonegateSourceUrl": record.source_url,
         "_stonegateVerificationNotes": record.verification_notes,
+        "_stonegateTransactionType": record.transaction_type,
+        "_stonegateTransactionEligibility": (
+            "not_flagged" if record.arms_length_verified else "ineligible"
+        ),
+        "_stonegateTransactionReviewReason": (
+            None
+            if record.arms_length_verified
+            else "Manual sale lacks the required arm's-length verification."
+        ),
+        "_stonegateArmsLengthEvidence": record.arms_length_evidence,
         "_stonegateConditionClassification": record.condition_classification,
         "_stonegateConditionEvidence": record.condition_evidence,
     }
@@ -344,20 +364,19 @@ def manual_comparable_to_read(
         formatted_address=record.formatted_address,
         sale_date=record.sale_date,
         sale_price_cents=record.sale_price_cents,
+        transaction_type=record.transaction_type,
+        arms_length_verified=record.arms_length_verified,
+        arms_length_evidence=record.arms_length_evidence,
         property_type=record.property_type,
         bedrooms=record.bedrooms,
         bathrooms=(
-            record.bathrooms_hundredths / 100
-            if record.bathrooms_hundredths is not None
-            else None
+            record.bathrooms_hundredths / 100 if record.bathrooms_hundredths is not None else None
         ),
         square_footage=record.square_footage,
         year_built=record.year_built,
         lot_size=record.lot_size,
         distance_miles=(
-            record.distance_hundredths / 100
-            if record.distance_hundredths is not None
-            else None
+            record.distance_hundredths / 100 if record.distance_hundredths is not None else None
         ),
         subdivision=record.subdivision,
         condition_classification=cast(
@@ -417,10 +436,6 @@ def provider_address_key(record: dict[str, Any]) -> str:
     return compact_address(clean(record.get("formattedAddress")))
 
 
-def sale_identity(record: dict[str, Any]) -> tuple[str, str]:
-    return provider_address_key(record), sale_date_key(record.get("lastSaleDate"))
-
-
 def sale_date_key(value: Any) -> str:
     return value[:10] if isinstance(value, str) else ""
 
@@ -452,6 +467,9 @@ def manual_comparable_audit_value(
         "formatted_address": record.formatted_address,
         "sale_date": record.sale_date.isoformat(),
         "sale_price_cents": record.sale_price_cents,
+        "transaction_type": record.transaction_type,
+        "arms_length_verified": record.arms_length_verified,
+        "arms_length_evidence": record.arms_length_evidence,
         "property_type": record.property_type,
         "square_footage": record.square_footage,
         "condition_classification": record.condition_classification,

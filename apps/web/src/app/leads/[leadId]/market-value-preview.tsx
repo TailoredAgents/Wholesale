@@ -13,6 +13,7 @@ import {
   ComparableReviewWorkbench,
   COMPARABLE_EXCLUDED_REASONS,
   COMPARABLE_INCLUDED_REASONS,
+  type CompAnalystRecommendation,
   type CompCondition,
   type CompReviewDraft,
   type MarketComparable,
@@ -175,6 +176,128 @@ type SupportingEvidence = {
   errors: string[];
 };
 
+type EvidenceCitation = {
+  evidence_id?: string | null;
+  source_url?: string | null;
+};
+
+type AiCompRecommendation = CompAnalystRecommendation & {
+  comp_key: string;
+  condition_reason?: string | null;
+  micro_market_concerns?: string[];
+  citations?: EvidenceCitation[];
+};
+
+type AiRangeExplanation = {
+  driver: string;
+  affected_comp_keys?: string[];
+  explanation: string;
+  resolution_question?: string | null;
+  citations?: EvidenceCitation[];
+};
+
+type AiDuplicateCandidate = {
+  comp_keys?: string[];
+  reason?: string;
+  citations?: EvidenceCitation[];
+};
+
+type AiEvidenceConflict = {
+  comp_keys?: string[];
+  field?: string;
+  description?: string;
+  citations?: EvidenceCitation[];
+};
+
+type AiMicroMarketConcern = {
+  comp_keys?: string[];
+  concern: string;
+  why_it_matters?: string;
+  citations?: EvidenceCitation[];
+};
+
+type AiMissingQuestion = {
+  question: string;
+  why_it_matters?: string;
+  related_comp_keys?: string[];
+  citations?: EvidenceCitation[];
+};
+
+type AiCompAnalystContent = {
+  status?: string;
+  summary?: string;
+  comp_recommendations?: AiCompRecommendation[];
+  duplicate_candidates?: AiDuplicateCandidate[];
+  conflicts?: AiEvidenceConflict[];
+  micro_market_concerns?: AiMicroMarketConcern[];
+  missing_questions?: AiMissingQuestion[];
+  range_explanations?: AiRangeExplanation[];
+  limitations?: string[];
+};
+
+type AiCompAnalystEnvelope = AiCompAnalystContent & {
+  version?: string;
+  status: "completed" | "insufficient" | "unavailable" | "rejected";
+  mode?: string | null;
+  valuation_use?: string | null;
+  human_review_required?: boolean;
+  model?: string | null;
+  error?: string | null;
+  analysis?: AiCompAnalystContent | null;
+};
+
+type ExternalBenchmark = {
+  provider: string;
+  label?: string | null;
+  point_cents?: number | null;
+  low_cents?: number | null;
+  high_cents?: number | null;
+  status?: string | null;
+  source_url?: string | null;
+  captured_at?: string | null;
+  valuation_use?: string | null;
+};
+
+type CompIntelligence = {
+  version?: string;
+  mode?: "disabled" | "shadow" | "candidate" | string;
+  valuation_use?: string | null;
+  providers?: Array<{
+    provider: string;
+    status: string;
+    valuation_use?: string | null;
+    returned_count?: number;
+    normalized_count?: number;
+    retained_count?: number;
+    unique_count?: number;
+    usable_count?: number;
+    net_new_count?: number;
+    overlap_count?: number;
+    dropped_count?: number;
+    duplicate_count?: number;
+    valuation_eligible_count?: number;
+    ineligible_transfer_count?: number;
+    conflict_count?: number;
+    credits_used?: number | null;
+    credits_estimated?: boolean | null;
+    credit_cost_status?: string | null;
+    latency_ms?: number | null;
+    evidence_reused?: boolean;
+    source_credits_used?: number | null;
+    source_credits_estimated?: boolean | null;
+    source_latency_ms?: number | null;
+    error?: string | null;
+  }>;
+  corroborated_sale_count?: number;
+  duplicate_count?: number;
+  conflict_count?: number;
+  source_conflicts?: unknown[];
+  external_benchmarks?: ExternalBenchmark[];
+  shadow_comps?: MarketComparable[];
+  warnings?: string[];
+  evidence_reused?: boolean;
+};
+
 type MarketValueEstimate = {
   id?: string;
   provider: string;
@@ -229,8 +352,15 @@ type MarketValueEstimate = {
   supporting_evidence?: SupportingEvidence | null;
   market_adjustment?: MarketAdjustment | null;
   adjustment_shadow?: MarketAdjustment | null;
+  ai_comp_analyst?: AiCompAnalystEnvelope | null;
+  comp_intelligence?: CompIntelligence | null;
+  external_benchmarks?: ExternalBenchmark[];
   manual_comp_ids?: string[];
   source_note: string;
+  created_at?: string;
+  market_data_captured_at?: string | null;
+  market_data_reused?: boolean;
+  source_analysis_id?: string | null;
 };
 
 type Status = "idle" | "loading" | "loaded" | "error";
@@ -296,6 +426,306 @@ function dollarsToCents(value: string) {
   }
   const amount = Number(value.replace(/,/g, ""));
   return Number.isFinite(amount) && amount >= 0 ? Math.round(amount * 100) : null;
+}
+
+function formatTimestamp(value: string | null | undefined) {
+  if (!value) return "Not recorded";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+}
+
+function titleCaseValue(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function providerLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes("rentcast")) return "RentCast";
+  if (normalized.includes("dealmachine")) return "DealMachine";
+  return titleCaseValue(value || "Provider");
+}
+
+function externalBenchmarksFor(estimate: MarketValueEstimate | null) {
+  if (!estimate) return [];
+  if (estimate.external_benchmarks?.length) return estimate.external_benchmarks;
+  if (estimate.comp_intelligence?.external_benchmarks?.length) {
+    return estimate.comp_intelligence.external_benchmarks;
+  }
+  if (
+    typeof estimate.estimated_value_cents !== "number" &&
+    typeof estimate.estimated_value_low_cents !== "number" &&
+    typeof estimate.estimated_value_high_cents !== "number"
+  ) {
+    return [];
+  }
+  return [
+    {
+      provider: estimate.provider,
+      label: `${providerLabel(estimate.provider)} AVM`,
+      point_cents: estimate.estimated_value_cents,
+      low_cents: estimate.estimated_value_low_cents,
+      high_cents: estimate.estimated_value_high_cents,
+      valuation_use: "excluded_from_arv_and_offer_math",
+    },
+  ];
+}
+
+function aiCompAnalystFor(estimate: MarketValueEstimate | null) {
+  if (!estimate) return null;
+  if (estimate.ai_comp_analyst) return estimate.ai_comp_analyst;
+  const saved = estimate.assumptions?.ai_comp_analyst;
+  return saved && typeof saved === "object" ? (saved as AiCompAnalystEnvelope) : null;
+}
+
+function citationLinks(citations: EvidenceCitation[] | undefined) {
+  const visible = (citations ?? []).filter(
+    (citation) => citation.evidence_id || citation.source_url,
+  );
+  if (!visible.length) return null;
+  return (
+    <span className={styles.aiCitationList}>
+      {visible.map((citation, index) => {
+        const label = citation.evidence_id ?? `Evidence ${index + 1}`;
+        return citation.source_url ? (
+          <a
+            href={citation.source_url}
+            key={`${label}-${index}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {label}
+          </a>
+        ) : (
+          <span key={`${label}-${index}`}>{label}</span>
+        );
+      })}
+    </span>
+  );
+}
+
+function AiCompAnalystPanel({ envelope }: { envelope: AiCompAnalystEnvelope }) {
+  const analysis = envelope.analysis ?? envelope;
+  const recommendations = analysis?.comp_recommendations ?? [];
+  const rangeExplanations = analysis?.range_explanations ?? [];
+  const duplicates = analysis?.duplicate_candidates ?? [];
+  const conflicts = analysis?.conflicts ?? [];
+  const concerns = analysis?.micro_market_concerns ?? [];
+  const questions = analysis?.missing_questions ?? [];
+  const limitations = analysis?.limitations ?? [];
+
+  return (
+    <details className={styles.aiAnalystPanel} open={envelope.status === "completed"}>
+      <summary>
+        <span>AI comp analyst</span>
+        <strong>{titleCaseValue(envelope.status)}</strong>
+        <small>{recommendations.length} comp recommendation(s)</small>
+      </summary>
+      <div className={styles.aiAnalystBody}>
+        <p className={styles.aiAnalystGuardrail}>
+          Draft analysis only. AI cannot change the comp set, create a fact or adjustment, set ARV,
+          or alter offer math.
+        </p>
+        {analysis?.summary ? <p>{analysis.summary}</p> : null}
+        {recommendations.length ? (
+          <section>
+            <h4>Comp recommendations</h4>
+            <div className={styles.aiRecommendationList}>
+              {recommendations.map((recommendation, index) => (
+                <article key={`${recommendation.comp_key}-${index}`}>
+                  <div>
+                    <strong>{recommendation.comp_key}</strong>
+                    <span data-recommendation={recommendation.recommendation}>
+                      Draft {recommendation.recommendation}
+                    </span>
+                  </div>
+                  <p>{recommendation.reason}</p>
+                  <small>
+                    Condition hypothesis: {titleCaseValue(recommendation.condition_hypothesis ?? "unknown")}
+                    {typeof recommendation.confidence === "number"
+                      ? ` · ${Math.round(recommendation.confidence)}% confidence`
+                      : ""}
+                  </small>
+                  {citationLinks(recommendation.citations)}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {rangeExplanations.length ? (
+          <section>
+            <h4>AI range explanations</h4>
+            <div className={styles.aiRangeList}>
+              {rangeExplanations.map((explanation, index) => (
+                <article key={`${explanation.driver}-${index}`}>
+                  <strong>{explanation.driver}</strong>
+                  <p>{explanation.explanation}</p>
+                  {explanation.resolution_question ? (
+                    <small>Resolve by answering: {explanation.resolution_question}</small>
+                  ) : null}
+                  {explanation.affected_comp_keys?.length ? (
+                    <small>Affected comps: {explanation.affected_comp_keys.join(", ")}</small>
+                  ) : null}
+                  {citationLinks(explanation.citations)}
+                </article>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {duplicates.length || conflicts.length || concerns.length ? (
+          <section>
+            <h4>Evidence checks</h4>
+            <ul>
+              {duplicates.map((duplicate, index) => (
+                <li key={`duplicate-${index}`}>
+                  Potential duplicate: {duplicate.reason ?? "review these sales"}
+                  {duplicate.comp_keys?.length ? ` (${duplicate.comp_keys.join(", ")})` : ""}
+                  {citationLinks(duplicate.citations)}
+                </li>
+              ))}
+              {conflicts.map((conflict, index) => (
+                <li key={`conflict-${index}`}>
+                  Potential conflict{conflict.field ? ` in ${titleCaseValue(conflict.field)}` : ""}: {conflict.description ?? "review provider evidence"}
+                  {conflict.comp_keys?.length ? ` (${conflict.comp_keys.join(", ")})` : ""}
+                  {citationLinks(conflict.citations)}
+                </li>
+              ))}
+              {concerns.map((concern, index) => (
+                <li key={`${concern.concern}-${index}`}>
+                  {concern.concern}
+                  {concern.why_it_matters ? `: ${concern.why_it_matters}` : ""}
+                  {concern.comp_keys?.length ? ` (${concern.comp_keys.join(", ")})` : ""}
+                  {citationLinks(concern.citations)}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {questions.length ? (
+          <section>
+            <h4>Questions that could tighten the analysis</h4>
+            <ul>
+              {questions.map((question, index) => (
+                <li key={`${question.question}-${index}`}>
+                  {question.question}
+                  {question.related_comp_keys?.length
+                    ? ` (${question.related_comp_keys.join(", ")})`
+                    : ""}
+                  {citationLinks(question.citations)}
+                  {question.why_it_matters ? ` — ${question.why_it_matters}` : ""}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {limitations.length ? <small>{limitations.join(" ")}</small> : null}
+        {envelope.error ? <small>{envelope.error}</small> : null}
+      </div>
+    </details>
+  );
+}
+
+function ExternalBenchmarkPanel({ benchmarks }: { benchmarks: ExternalBenchmark[] }) {
+  if (!benchmarks.length) return null;
+  return (
+    <details className={styles.externalBenchmarks}>
+      <summary>
+        <span>External benchmarks</span>
+        <strong>{benchmarks.length}</strong>
+        <small>Secondary value opinions</small>
+      </summary>
+      <div className={styles.externalBenchmarkBody}>
+        <p>
+          Provider AVMs are disagreement screens only. They are excluded from Stonegate ARV,
+          buyer economics, seller ceiling, and offer math.
+        </p>
+        <div className={styles.externalBenchmarkGrid}>
+          {benchmarks.map((benchmark, index) => (
+            <article key={`${benchmark.provider}-${benchmark.label ?? "benchmark"}-${index}`}>
+              <div>
+                <span>{benchmark.label ?? `${providerLabel(benchmark.provider)} benchmark`}</span>
+                <strong>{formatMoney(benchmark.point_cents)}</strong>
+              </div>
+              <small>
+                Provider range {formatMoney(benchmark.low_cents)} to {formatMoney(benchmark.high_cents)}
+              </small>
+              <small>Excluded from offer math</small>
+              {benchmark.source_url ? (
+                <a href={benchmark.source_url} rel="noreferrer" target="_blank">
+                  Open provider source
+                </a>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function CompIntelligencePanel({ intelligence }: { intelligence: CompIntelligence }) {
+  const providers = intelligence.providers ?? [];
+  const activeProviderCount = providers.filter(
+    (provider) =>
+      provider.status === "completed" &&
+      (provider.usable_count ?? provider.valuation_eligible_count ?? 0) > 0,
+  ).length;
+  return (
+    <details className={styles.compIntelligencePanel}>
+      <summary>
+        <span>Comp source coverage</span>
+        <strong>{activeProviderCount} evidence provider(s)</strong>
+        <small>
+          {intelligence.corroborated_sale_count ?? 0} corroborated · {intelligence.duplicate_count ?? 0} duplicate(s) · {intelligence.conflict_count ?? 0} conflict(s)
+        </small>
+      </summary>
+      <div className={styles.compIntelligenceBody}>
+        <p>
+          {titleCaseValue(intelligence.mode ?? "disabled")} mode. Cross-provider matches are
+          deduplicated before weighting, so the same sale never counts twice.
+          {intelligence.evidence_reused
+            ? " This run reused a previously captured provider snapshot."
+            : ""}
+        </p>
+        <div className={styles.compProviderGrid}>
+          {providers.map((provider) => (
+            <article key={provider.provider}>
+              <div>
+                <strong>{providerLabel(provider.provider)}</strong>
+                <span>{titleCaseValue(provider.status)}</span>
+              </div>
+              <small>
+                {provider.returned_count ?? 0} returned · {provider.usable_count ?? provider.valuation_eligible_count ?? 0} usable · {provider.net_new_count ?? 0} net-new · {provider.overlap_count ?? 0} overlap
+              </small>
+              {provider.evidence_reused ? (
+                <small>
+                  Source capture: {provider.source_credits_used ?? "unknown"} credit(s)
+                  {provider.source_credits_estimated ? " (estimated)" : ""}
+                  {typeof provider.source_latency_ms === "number"
+                    ? ` · ${provider.source_latency_ms.toLocaleString()} ms`
+                    : ""}
+                </small>
+              ) : null}
+              <small>
+                {provider.dropped_count ?? 0} dropped · {provider.duplicate_count ?? 0} internal duplicate(s) · {provider.ineligible_transfer_count ?? 0} ineligible transfer(s) · {provider.conflict_count ?? 0} conflict(s)
+              </small>
+              <small>
+                {typeof provider.credits_used === "number"
+                  ? `${provider.credits_used} credit(s)${provider.credits_estimated ? " (estimated)" : ""}`
+                  : "Credit use unavailable"}
+                {typeof provider.latency_ms === "number"
+                  ? ` · ${provider.latency_ms.toLocaleString()} ms`
+                  : ""}
+              </small>
+              {provider.error ? <small>{provider.error}</small> : null}
+            </article>
+          ))}
+        </div>
+        {intelligence.warnings?.length ? <small>{intelligence.warnings.join(" ")}</small> : null}
+      </div>
+    </details>
+  );
 }
 
 export function MarketValuePreview({ leadId }: { leadId: string }) {
@@ -532,7 +962,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     };
   }
 
-  async function createAnalysis() {
+  async function createAnalysis(refreshMarketData = false) {
     setStatus("loading");
     setError(null);
     try {
@@ -543,7 +973,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         {
           body: JSON.stringify({
             ...buildAnalysisInputs(),
-            refresh_market_data: false,
+            refresh_market_data: refreshMarketData,
           }),
           headers,
           method: "POST",
@@ -673,6 +1103,25 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
   const selectedComps = estimate?.selected_comps ?? estimate?.comparables ?? [];
   const reviewComps = [...selectedComps, ...(estimate?.rejected_comps ?? [])];
+  const activeAdjustment = [estimate?.market_adjustment, estimate?.adjustment_shadow].find(
+    (adjustment) => adjustment?.valuation_use === "live_human_reviewed_underwriting",
+  ) ?? null;
+  const adjustedIndications = Object.fromEntries(
+    (activeAdjustment?.comp_adjustments ?? []).map((comp) => [
+      comp.comp_key,
+      comp.adjusted_indication_cents,
+    ]),
+  );
+  const aiCompAnalyst = aiCompAnalystFor(estimate);
+  const analystRecommendations = Object.fromEntries(
+    (aiCompAnalyst?.comp_recommendations ?? aiCompAnalyst?.analysis?.comp_recommendations ?? []).map((recommendation) => [
+      recommendation.comp_key,
+      recommendation,
+    ]),
+  );
+  const externalBenchmarks = externalBenchmarksFor(estimate);
+  const providerControlsAsIs =
+    estimate?.assumptions?.as_is_value_basis === "provider_avm_benchmark";
   const reviewItems = [
     ...(estimate?.review_reasons ?? []),
     ...(estimate?.data_disagreements ?? []),
@@ -709,7 +1158,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
         <div className={styles.marketValueActions}>
           <button
             disabled={isLoading}
-            onClick={createAnalysis}
+            onClick={() => void createAnalysis(false)}
             type="button"
           >
             {isLoading
@@ -718,6 +1167,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
                 ? "Update Stonegate valuation"
                 : "Run Stonegate valuation"}
           </button>
+          {estimate ? (
+            <button
+              disabled={isLoading}
+              onClick={() => void createAnalysis(true)}
+              title="Fetch a new provider snapshot; this may use paid provider credits."
+              type="button"
+            >
+              Refresh market evidence (may use credits)
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -914,7 +1373,52 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </span>
           </div>
 
+          {activeAdjustment ? (
+            <MarketAdjustmentPanel
+              adjustment={activeAdjustment}
+              arvHighCents={estimate.arv_high_cents}
+              arvLowCents={estimate.arv_low_cents}
+              arvPointCents={estimate.arv_point_cents}
+              workingGuidance={isWorkingGuidance}
+            />
+          ) : (
+            <section
+              aria-label="Stonegate valuation conclusion"
+              className={`${styles.adjustmentShadow} ${styles.adjustmentUnavailable}`}
+            >
+              <header className={styles.adjustmentShadowHeader}>
+                <div>
+                  <span>Stonegate valuation conclusion</span>
+                  <strong>{hasSupportedArv ? "Saved historical ARV" : "ARV not supported"}</strong>
+                </div>
+                <small>Recalculate with the current method to review adjusted closed-sale math.</small>
+              </header>
+              <div className={styles.adjustmentShadowMetrics}>
+                <div className={styles.adjustmentPrimaryMetric}>
+                  <span>Stonegate ARV</span>
+                  <strong>{formatMoney(estimate.arv_point_cents)}</strong>
+                </div>
+                <div className={styles.adjustmentRangeMetric}>
+                  <span>Supported range</span>
+                  <strong>
+                    {formatMoney(estimate.arv_low_cents)} to {formatMoney(estimate.arv_high_cents)}
+                  </strong>
+                </div>
+                <div>
+                  <span>Valuation status</span>
+                  <strong>Recalculation required</strong>
+                  <small>Provider AVMs excluded from offer math</small>
+                </div>
+              </div>
+            </section>
+          )}
+
           <div className={styles.evidenceSummary}>
+            <div>
+              <span>Market evidence snapshot</span>
+              <strong>{estimate.market_data_reused ? "Reused snapshot" : "Fresh capture"}</strong>
+              <small>{formatTimestamp(estimate.market_data_captured_at)}</small>
+            </div>
             <div>
               <span>Subject match</span>
               <strong>
@@ -952,6 +1456,10 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               </small>
             </div>
           </div>
+
+          {estimate.comp_intelligence ? (
+            <CompIntelligencePanel intelligence={estimate.comp_intelligence} />
+          ) : null}
 
           {estimate.comp_search_summary ? (
             <details className={styles.evidenceDetails}>
@@ -1067,16 +1575,6 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </details>
           ) : null}
 
-          {estimate.market_adjustment ? (
-            <MarketAdjustmentPanel
-              adjustment={estimate.market_adjustment}
-              arvHighCents={estimate.arv_high_cents}
-              arvLowCents={estimate.arv_low_cents}
-              arvPointCents={estimate.arv_point_cents}
-              workingGuidance={isWorkingGuidance}
-            />
-          ) : null}
-
           {estimate.confidence_factors?.length ? (
             <details className={styles.evidenceDetails}>
               <summary>Why this confidence score</summary>
@@ -1166,14 +1664,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           ) : null}
 
           <dl className={styles.decisionMetrics}>
-            <div>
-              <dt>As-is benchmark</dt>
-              <dd>{formatMoney(estimate.as_is_value_cents)}</dd>
-              <small>
-                {formatMoney(estimate.as_is_value_low_cents)} to{" "}
-                {formatMoney(estimate.as_is_value_high_cents)}
-              </small>
-            </div>
+            {!providerControlsAsIs ? (
+              <div>
+                <dt>Closed-sale as-is estimate</dt>
+                <dd>{formatMoney(estimate.as_is_value_cents)}</dd>
+                <small>
+                  {formatMoney(estimate.as_is_value_low_cents)} to{" "}
+                  {formatMoney(estimate.as_is_value_high_cents)}
+                </small>
+              </div>
+            ) : null}
             <div>
               <dt>
                 {hasVerifiedArv
@@ -1258,32 +1758,6 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             </div>
           ) : null}
 
-          {!hasVerifiedArv ? (
-            <div className={styles.underwritingControls}>
-              <div>
-                <span>ARV status</span>
-                <strong>
-                  {isWorkingGuidance
-                    ? "Working guidance"
-                    : hasSupportedArv
-                      ? "Preliminary"
-                      : "Unavailable"}
-                </strong>
-              </div>
-              <div>
-                <span>Provider AVM screen</span>
-                <strong>
-                  {formatMoney(estimate.estimated_value_low_cents)} to{" "}
-                  {formatMoney(estimate.estimated_value_high_cents)}
-                </strong>
-              </div>
-              <div>
-                <span>AVM use in offer math</span>
-                <strong>No</strong>
-              </div>
-            </div>
-          ) : null}
-
           <div className={styles.underwritingControls}>
             <div>
               <span>Report stage</span>
@@ -1310,6 +1784,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
               <strong>{formatMoney(estimate.transaction_reserve_cents)}</strong>
             </div>
           </div>
+
+          <ExternalBenchmarkPanel benchmarks={externalBenchmarks} />
 
           {reviewItems.length ? (
             <div className={styles.reviewReasons}>
@@ -1344,7 +1820,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
           {estimate.id ? <CalibrationOutcomeForm analysisId={estimate.id} /> : null}
 
+          {aiCompAnalyst ? <AiCompAnalystPanel envelope={aiCompAnalyst} /> : null}
+
           <ComparableReviewWorkbench
+            adjustedIndications={adjustedIndications}
+            analystRecommendations={analystRecommendations}
             comparables={reviewComps}
             conditionOverrides={conditionOverrides}
             disabled={isLoading}

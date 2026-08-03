@@ -291,6 +291,9 @@ Variables:
 - `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3`
 - `UNDERWRITING_V3_SHADOW_ENABLED=false`
+- `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled`
+- `UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS=2`
+- `UNDERWRITING_AI_COMP_ANALYST_MODE=disabled`
 - optional `ATTOM_API_KEY` placeholder
 
 V3 is the single live Stonegate Valuation method. V2.2 is retained only for historical reads and an
@@ -305,14 +308,35 @@ Fresh analysis may use these RentCast endpoints:
 - `/markets` for ZIP-level sale-listing context only
 
 The active-listing and market-statistics calls consume provider requests and are cached with the
-analysis. Repair changes and comp review reuse that snapshot. The single valuation action
-automatically replaces legacy evidence that lacks the current AI research marker. Neither endpoint
-supplies closed-sale evidence to ARV or offer math.
+analysis. **Update Stonegate valuation**, repair changes, and comp review reuse that same-address
+snapshot without a paid retry. **Refresh market evidence (may use credits)** explicitly replaces
+the snapshot. Neither endpoint supplies closed-sale evidence to ARV or offer math.
 
 Set `OPENAI_WEB_SEARCH_ENABLED=true` to allow the underwriting research agent to supplement thin
 RentCast results. It uses medium-context live search with a five-call ceiling, stores consulted
 citations, and never lets the model set ARV or an offer directly. Use
 `OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search request has time to finish.
+
+After the DealMachine API key passes its own acceptance test, set
+`UNDERWRITING_DEALMACHINE_COMPS_MODE=shadow`. Shadow mode saves normalized DealMachine comparable
+evidence, provider overlap, conflicts, external benchmarks, credits, and latency but cannot affect
+ARV or offer math. Use `candidate` only after reviewed Georgia cases show that its unique closed
+sales improve evidence quality; candidate sales still pass the same deterministic screen and human
+review. The default two-credit ceiling covers a first-time property-only address resolution and
+one subject comp request. Stonegate never requests owner contacts for underwriting.
+The subject lookup must explicitly report zero people credits; the comp endpoint may omit that field
+under its property-only contract, but any positive people-credit report excludes the evidence. The
+provider audit distinguishes returned, usable, overlapping, net-new, duplicate, ineligible, dropped,
+and conflicting sales. Failed calls without final billing telemetry receive a conservative estimated
+credit count. Reused snapshots show zero current-run credits while preserving original source cost
+and latency. An exact normalized subject address with no fuzzy-match warning is required before the
+comp request. Changing the mode invalidates the cached admission decision: Stonegate falls back to
+cached RentCast-only math until an operator explicitly refreshes; Update never spends credits to
+resolve the mismatch.
+
+Set `UNDERWRITING_AI_COMP_ANALYST_MODE=draft` only after OpenAI is configured. The draft analyst
+can organize comp review work and explain deterministic range drivers, but its strict output
+contract excludes ARV, offers, value ranges, weights, and dollar adjustments.
 
 Acceptance:
 

@@ -14,6 +14,7 @@ from app.services.underwriting_evidence import (
     resolve_rentcast_subject,
     sanitize_grounded_evidence,
 )
+from app.services.underwriting_manual_comps import merge_verified_manual_sales
 
 
 def property_record() -> Property:
@@ -215,6 +216,11 @@ def test_grounded_evidence_promotes_only_complete_cited_closed_sales() -> None:
                 "sale_price_dollars": 515000,
                 "sale_date": "2026-03-15",
                 "closed_sale_confirmed": True,
+                "transaction_type": "Warranty Deed",
+                "arms_length_status": "verified",
+                "arms_length_evidence": (
+                    "The cited MLS closed record and county deed identify an ordinary sale."
+                ),
                 "property_type": "Single Family",
                 "bedrooms": 4,
                 "bathrooms": 3,
@@ -240,6 +246,9 @@ def test_grounded_evidence_promotes_only_complete_cited_closed_sales() -> None:
                 "sale_price_dollars": 530000,
                 "sale_date": None,
                 "closed_sale_confirmed": False,
+                "transaction_type": None,
+                "arms_length_status": "unverified",
+                "arms_length_evidence": None,
                 "property_type": "Single Family",
                 "bedrooms": 4,
                 "bathrooms": 3,
@@ -272,6 +281,55 @@ def test_grounded_evidence_promotes_only_complete_cited_closed_sales() -> None:
     assert records[0]["_stonegateConditionClassification"] == "unknown"
 
 
+def test_public_foreclosure_is_retained_for_review_but_never_enters_valuation() -> None:
+    url = "https://records.example/730-parkside"
+    parsed = {
+        "status": "completed",
+        "summary": "One recorded transfer was researched.",
+        "address_match": "confirmed",
+        "facts": [],
+        "conflicts": [],
+        "limitations": [],
+        "comparable_candidates": [
+            {
+                "formatted_address": "730 Parkside Dr, Woodstock, GA 30188",
+                "address_line1": "730 Parkside Dr",
+                "city": "Woodstock",
+                "state": "GA",
+                "postal_code": "30188",
+                "sale_price_dollars": 315000,
+                "sale_date": "2026-02-01",
+                "closed_sale_confirmed": True,
+                "transaction_type": "Foreclosure deed",
+                "arms_length_status": "verified",
+                "arms_length_evidence": "The cited deed identifies a foreclosure transfer.",
+                "property_type": "Single Family",
+                "bedrooms": 4,
+                "bathrooms": 3,
+                "square_footage": 2400,
+                "year_built": 2001,
+                "lot_size": 12000,
+                "subdivision": "Parkside",
+                "condition_classification": "unknown",
+                "condition_evidence": None,
+                "source_urls": [url],
+                "source_titles": ["County deed"],
+                "research_summary": "Recorded foreclosure transfer.",
+            }
+        ],
+    }
+
+    evidence = sanitize_grounded_evidence(
+        parsed,
+        [{"url": url, "title": "County deed"}],
+    )
+
+    assert evidence["valuation_candidate_count"] == 0
+    assert evidence["comparable_candidates"][0]["valuation_eligible"] is False
+    assert "non-market" in evidence["comparable_candidates"][0]["transfer_review_reason"]
+    assert research_comparable_sale_records(evidence) == []
+
+
 def test_provider_sale_wins_when_ai_research_finds_the_same_sale() -> None:
     provider = [
         {
@@ -291,3 +349,36 @@ def test_provider_sale_wins_when_ai_research_finds_the_same_sale() -> None:
 
     assert merged == provider
     assert duplicate_count == 1
+
+
+def test_provider_public_and_manual_variants_never_double_weight_same_transfer() -> None:
+    provider = [
+        {
+            "formattedAddress": "123 Main Street, Atlanta, GA 30303",
+            "lastSaleDate": "2026-03-15",
+            "lastSalePrice": 250_000,
+        }
+    ]
+    research = [
+        {
+            "formattedAddress": "123 Main St., Atlanta, GA 30303",
+            "lastSaleDate": "2026-03-17",
+            "lastSalePrice": 250_500,
+            "_stonegateEvidenceSource": "ai_web_research",
+        }
+    ]
+    manual = [
+        {
+            "formattedAddress": "123 Main St, Atlanta, GA 30303",
+            "lastSaleDate": "2026-03-14",
+            "lastSalePrice": 249_000,
+            "_stonegateManualComparableId": "manual-1",
+        }
+    ]
+
+    after_research, research_duplicates = merge_research_comparable_sales(provider, research)
+    merged, manual_duplicates = merge_verified_manual_sales(after_research, manual)
+
+    assert merged == provider
+    assert research_duplicates == 1
+    assert manual_duplicates == ["manual-1"]

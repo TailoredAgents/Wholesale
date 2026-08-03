@@ -20,6 +20,7 @@ from app.services.property_validation import (
     normalize_street,
     provider_address_components,
 )
+from app.services.underwriting_comparable_evidence import same_recorded_sale
 
 WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -98,6 +99,12 @@ WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
                     "sale_price_dollars": {"type": ["number", "null"]},
                     "sale_date": {"type": ["string", "null"]},
                     "closed_sale_confirmed": {"type": "boolean"},
+                    "transaction_type": {"type": ["string", "null"]},
+                    "arms_length_status": {
+                        "type": "string",
+                        "enum": ["verified", "unverified", "non_market"],
+                    },
+                    "arms_length_evidence": {"type": ["string", "null"]},
                     "property_type": {"type": ["string", "null"]},
                     "bedrooms": {"type": ["number", "null"]},
                     "bathrooms": {"type": ["number", "null"]},
@@ -129,6 +136,9 @@ WEB_EVIDENCE_SCHEMA: dict[str, Any] = {
                     "sale_price_dollars",
                     "sale_date",
                     "closed_sale_confirmed",
+                    "transaction_type",
+                    "arms_length_status",
+                    "arms_length_evidence",
                     "property_type",
                     "bedrooms",
                     "bathrooms",
@@ -201,8 +211,7 @@ def resolve_rentcast_subject(
             return RentCastSubjectResolution(
                 estimate=estimate,
                 subject_record=subject_record,
-                resolved_address=provider_formatted_address(subject_evidence)
-                or requested_address,
+                resolved_address=provider_formatted_address(subject_evidence) or requested_address,
                 address_evidence=build_address_evidence(
                     requested_address=requested_address,
                     resolved_address=provider_formatted_address(subject_evidence)
@@ -269,8 +278,7 @@ def resolve_rentcast_subject(
             estimate = client.get_value_estimate(
                 address=resolved_address,
                 property_type=(
-                    string_value(record.get("propertyType"))
-                    or property_record.property_type
+                    string_value(record.get("propertyType")) or property_record.property_type
                 ),
             )
         except RentCastClientError as exc:
@@ -472,6 +480,12 @@ def collect_secondary_market_evidence(
                 "portals. A comparable candidate must have an exact street address, a closed "
                 "sale price, a closed sale date, living area, and cited source URLs. Never "
                 "represent a list price, estimate, pending price, or tax assessment as a sale. "
+                "Only mark arms_length_status verified when a cited deed, MLS closed-sale "
+                "record, closing record, or other consulted source affirmatively supports an "
+                "ordinary arm's-length market transfer; explain that support in "
+                "arms_length_evidence. Mark foreclosures, sheriff/tax sales, quitclaims, gifts, "
+                "family transfers, deeds in lieu, and corrective deeds non_market. If transfer "
+                "status is not supported, mark it unverified. "
                 "Search within roughly three miles and two years, preferring the same property "
                 "type, subdivision, size, age, and renovated condition. Do not identify owners, "
                 "occupants, tenants, phone numbers, emails, or other personal information. "
@@ -562,13 +576,10 @@ def sanitize_grounded_evidence(
         "conflicts": conflicts,
         "comparable_candidates": comparable_candidates,
         "valuation_candidate_count": sum(
-            candidate.get("valuation_eligible") is True
-            for candidate in comparable_candidates
+            candidate.get("valuation_eligible") is True for candidate in comparable_candidates
         ),
         "limitations": [
-            item
-            for item in parsed.get("limitations", [])
-            if isinstance(item, str) and item.strip()
+            item for item in parsed.get("limitations", []) if isinstance(item, str) and item.strip()
         ][:6],
         "sources": list(consulted.values())[:24],
     }
@@ -597,6 +608,9 @@ def sanitize_comparable_candidates(
         state = string_value(raw.get("state"))
         postal_code = string_value(raw.get("postal_code"))
         property_type = string_value(raw.get("property_type"))
+        transaction_type = string_value(raw.get("transaction_type"))
+        arms_length_status = string_value(raw.get("arms_length_status"))
+        arms_length_evidence = string_value(raw.get("arms_length_evidence"))
         if (
             not address
             or not address_line1
@@ -616,6 +630,12 @@ def sanitize_comparable_candidates(
             continue
         seen.add(identity)
         source_grade = "corroborated" if len(urls) >= 2 else "cited_single_source"
+        transfer_rejection = public_transfer_rejection_reason(
+            transaction_type=transaction_type,
+            arms_length_status=arms_length_status,
+            arms_length_evidence=arms_length_evidence,
+            sale_price=sale_price,
+        )
         candidates.append(
             {
                 **raw,
@@ -623,11 +643,13 @@ def sanitize_comparable_candidates(
                 "sale_date": sale_date,
                 "square_footage": square_footage,
                 "source_urls": urls,
-                "source_titles": [
-                    string_value(consulted[url].get("title")) or url for url in urls
-                ],
+                "source_titles": [string_value(consulted[url].get("title")) or url for url in urls],
                 "source_grade": source_grade,
-                "valuation_eligible": True,
+                "transaction_type": transaction_type,
+                "arms_length_status": arms_length_status or "unverified",
+                "arms_length_evidence": arms_length_evidence,
+                "transfer_review_reason": transfer_rejection,
+                "valuation_eligible": transfer_rejection is None,
             }
         )
     return candidates[:8]
@@ -635,14 +657,10 @@ def sanitize_comparable_candidates(
 
 def research_comparable_sale_records(evidence: dict[str, Any]) -> list[dict[str, Any]]:
     records: list[dict[str, Any]] = []
-    for index, candidate in enumerate(
-        list_of_dicts(evidence.get("comparable_candidates"))
-    ):
+    for index, candidate in enumerate(list_of_dicts(evidence.get("comparable_candidates"))):
         if candidate.get("valuation_eligible") is not True:
             continue
-        source_urls = [
-            url for url in candidate.get("source_urls", []) if isinstance(url, str)
-        ]
+        source_urls = [url for url in candidate.get("source_urls", []) if isinstance(url, str)]
         source_grade = string_value(candidate.get("source_grade")) or "cited_single_source"
         records.append(
             {
@@ -655,6 +673,9 @@ def research_comparable_sale_records(evidence: dict[str, Any]) -> list[dict[str,
                 "propertyType": candidate.get("property_type"),
                 "lastSalePrice": candidate.get("sale_price_dollars"),
                 "lastSaleDate": candidate.get("sale_date"),
+                "transaction_type": candidate.get("transaction_type"),
+                "transaction_eligibility": "not_flagged",
+                "transaction_review_reason": None,
                 "bedrooms": candidate.get("bedrooms"),
                 "bathrooms": candidate.get("bathrooms"),
                 "squareFootage": candidate.get("square_footage"),
@@ -688,9 +709,47 @@ def research_comparable_sale_records(evidence: dict[str, Any]) -> list[dict[str,
                 ),
                 "_stonegateConditionClassification": "unknown",
                 "_stonegateConditionEvidence": candidate.get("condition_evidence"),
+                "_stonegateTransactionType": candidate.get("transaction_type"),
+                "_stonegateTransactionEligibility": "not_flagged",
+                "_stonegateTransactionReviewReason": None,
+                "_stonegateArmsLengthEvidence": candidate.get("arms_length_evidence"),
             }
         )
     return records
+
+
+def public_transfer_rejection_reason(
+    *,
+    transaction_type: str | None,
+    arms_length_status: str | None,
+    arms_length_evidence: str | None,
+    sale_price: float,
+) -> str | None:
+    """Require affirmative, cited arm's-length support for AI-discovered sales."""
+    if sale_price < 10_000:
+        return "Recorded consideration is nominal, not an ordinary market sale."
+    normalized_type = compact_text(transaction_type)
+    blocked_terms = (
+        "quit claim",
+        "quitclaim",
+        "gift deed",
+        "family transfer",
+        "intra family",
+        "foreclosure",
+        "sheriff deed",
+        "tax deed",
+        "tax sale",
+        "deed in lieu",
+        "corrective deed",
+        "correction deed",
+    )
+    if arms_length_status == "non_market" or any(
+        compact_text(term) in normalized_type for term in blocked_terms
+    ):
+        return "Public evidence indicates a non-market transfer."
+    if arms_length_status != "verified" or not arms_length_evidence:
+        return "Public evidence does not affirmatively verify an arm's-length transfer."
+    return None
 
 
 def merge_research_comparable_sales(
@@ -698,14 +757,11 @@ def merge_research_comparable_sales(
     research_records: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], int]:
     merged = list(provider_records)
-    seen = {sale_record_identity(record) for record in provider_records}
     duplicate_count = 0
     for record in research_records:
-        identity = sale_record_identity(record)
-        if identity in seen:
+        if any(same_recorded_sale(record, existing) for existing in merged):
             duplicate_count += 1
             continue
-        seen.add(identity)
         merged.append(record)
     return merged, duplicate_count
 
@@ -713,15 +769,12 @@ def merge_research_comparable_sales(
 def secondary_conflict_warnings(evidence: dict[str, Any]) -> list[str]:
     warnings: list[str] = []
     if evidence.get("address_match") == "conflicting":
-        warnings.append(
-            "Secondary public sources conflict with the subject property address."
-        )
+        warnings.append("Secondary public sources conflict with the subject property address.")
     for conflict in list_of_dicts(evidence.get("conflicts"))[:4]:
         field = string_value(conflict.get("field")) or "property fact"
         explanation = string_value(conflict.get("explanation"))
         warnings.append(
-            f"Secondary evidence conflicts on {field}: "
-            f"{explanation or 'review the cited source.'}"
+            f"Secondary evidence conflicts on {field}: {explanation or 'review the cited source.'}"
         )
     return warnings
 
@@ -839,11 +892,3 @@ def iso_date_value(value: Any) -> str | None:
 def compact_text(value: Any) -> str:
     text = string_value(value) or ""
     return "".join(character for character in text.lower() if character.isalnum())
-
-
-def sale_record_identity(record: dict[str, Any]) -> tuple[str, str]:
-    address = record.get("formattedAddress") or " ".join(
-        str(record.get(key) or "")
-        for key in ("addressLine1", "city", "state", "zipCode")
-    )
-    return compact_text(address), (string_value(record.get("lastSaleDate")) or "")[:10]

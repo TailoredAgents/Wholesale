@@ -548,7 +548,7 @@ unless its approved operating policy also permits one-party recording.
    seller sees the Stonegate company number.
 6. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
 
-## DealMachine Buyer Data
+## DealMachine Buyer And Underwriting Data
 
 Stonegate has purchased DealMachine. Connect it now and test buyer quality and credit use before
 marketing a live deal.
@@ -570,6 +570,30 @@ When ready:
 11. Review candidates before importing them.
 12. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
     cost.
+
+For underwriting acceptance:
+
+1. Leave `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` until the key and account usage endpoint
+   pass.
+2. Set the mode to `shadow` and keep
+   `UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS=2` for the first reviewed cases.
+3. Select **Refresh market evidence (may use credits)** on a known Georgia analysis. Confirm the
+   provider summary reports property-only access, property credits (measured or conservatively
+   estimated), zero people credits from the subject lookup, overlap, usable sales, net-new sales,
+   material conflicts, and latency. The comp endpoint may omit people-credit telemetry; a positive
+   people-credit report from either call must exclude its evidence.
+4. Confirm a DealMachine failure does not prevent the RentCast analysis from completing.
+5. Confirm a wrong-address or fuzzy subject match stops before the paid comp request.
+6. Confirm duplicate transfers appear once and retain both provider observations. Small recording
+   and rounding differences must remain auditable without being counted as material conflicts.
+7. Select **Update Stonegate valuation** and re-run comp review without refreshing market data.
+   Confirm both use zero new DealMachine credits while retaining the original source-credit and
+   latency audit, even after a failed or no-match provider result.
+8. Confirm DealMachine's provider value estimate appears only under external benchmarks and is
+   excluded from ARV and offer math.
+9. Compare the shadow evidence with expert-reviewed comp sets and verified outcomes.
+10. Change the mode to `candidate` only after the owner approves the measured provider decision.
+   Candidate mode does not bypass deterministic screening or human offer approval.
 
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.

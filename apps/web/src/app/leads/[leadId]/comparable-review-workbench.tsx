@@ -57,6 +57,38 @@ export type MarketComparable = {
   source_reference?: string | null;
   source_url?: string | null;
   verification_notes?: string | null;
+  source_providers?: string[];
+  corroborating_sources?: string[];
+  corroborated?: boolean | null;
+  source_overlap_count?: number | null;
+  field_conflicts?: Array<{
+    field: string;
+    selected_value?: unknown;
+    material?: boolean;
+    severity?: "info" | "review" | "high";
+    summary?: string;
+    observations?: Array<{
+      provider?: string;
+      value?: unknown;
+    }>;
+  }>;
+  source_conflicts?: Array<
+    | string
+    | {
+        field?: string | null;
+        summary?: string | null;
+        explanation?: string | null;
+        material?: boolean | null;
+        severity?: "info" | "review" | "high" | null;
+      }
+  >;
+};
+
+export type CompAnalystRecommendation = {
+  recommendation: "include" | "exclude" | "review";
+  reason: string;
+  confidence?: number | null;
+  condition_hypothesis?: CompCondition | "mixed" | null;
 };
 
 export type CompReviewDraft = {
@@ -100,6 +132,8 @@ type ReviewView = "compare" | "location";
 type ReviewSort = "fit" | "distance" | "recent" | "value";
 
 type ComparableReviewWorkbenchProps = {
+  adjustedIndications?: Record<string, number | null | undefined>;
+  analystRecommendations?: Record<string, CompAnalystRecommendation>;
   comparables: MarketComparable[];
   conditionOverrides: Record<string, CompCondition>;
   disabled: boolean;
@@ -114,6 +148,8 @@ type ComparableReviewWorkbenchProps = {
 };
 
 export function ComparableReviewWorkbench({
+  adjustedIndications = {},
+  analystRecommendations = {},
   comparables,
   conditionOverrides,
   disabled,
@@ -160,8 +196,8 @@ export function ComparableReviewWorkbench({
         }
         return true;
       })
-      .sort((left, right) => compareComps(left, right, sort));
-  }, [comparables, gradeFilter, levelFilter, query, review, reviewFilter, sort]);
+      .sort((left, right) => compareComps(left, right, sort, adjustedIndications));
+  }, [adjustedIndications, comparables, gradeFilter, levelFilter, query, review, reviewFilter, sort]);
 
   const includedCount = comparables.filter(
     (comp, index) => reviewDraftFor(review, comp, index).included,
@@ -307,6 +343,8 @@ export function ComparableReviewWorkbench({
             const condition = conditionOverrides[compKey] ?? "unknown";
             return (
               <ComparableCandidate
+                adjustedIndicationCents={adjustedIndications[compKey]}
+                analystRecommendation={analystRecommendations[compKey]}
                 comp={comp}
                 compKey={compKey}
                 condition={condition}
@@ -394,6 +432,8 @@ function Fact({ label, value }: { label: string; value: string }) {
 }
 
 function ComparableCandidate({
+  adjustedIndicationCents,
+  analystRecommendation,
   comp,
   compKey,
   condition,
@@ -402,6 +442,8 @@ function ComparableCandidate({
   onReviewChange,
   subject,
 }: {
+  adjustedIndicationCents?: number | null;
+  analystRecommendation?: CompAnalystRecommendation;
   comp: MarketComparable;
   compKey: string;
   condition: CompCondition;
@@ -415,6 +457,9 @@ function ComparableCandidate({
     : COMPARABLE_EXCLUDED_REASONS;
   const recommended = engineRecommended(comp);
   const overridden = recommended !== decision.included;
+  const sourceBadges = comparableSourceBadges(comp);
+  const sourceConflicts = comparableSourceConflicts(comp);
+  const usesAdjustedIndication = typeof adjustedIndicationCents === "number";
 
   return (
     <article
@@ -435,6 +480,24 @@ function ComparableCandidate({
             </span>
           </div>
           <div className={styles.compBadges}>
+            {sourceBadges.map((source) => (
+              <span className={styles.compSourceBadge} key={source}>
+                {source}
+              </span>
+            ))}
+            {comp.corroborated === true ? (
+              <span className={styles.compOverlapBadge}>Corroborated</span>
+            ) : sourceBadges.length > 1 || (comp.source_overlap_count ?? 0) > 1 ? (
+              <span className={styles.compOverlapBadge}>Cross-sourced</span>
+            ) : null}
+            {sourceConflicts.length ? (
+              <span className={styles.compConflictBadge}>Source conflict</span>
+            ) : null}
+            {analystRecommendation ? (
+              <span className={styles.compAiBadge}>
+                AI draft: {titleCase(analystRecommendation.recommendation)}
+              </span>
+            ) : null}
             <span className={recommended ? styles.systemPick : styles.systemReject}>
               {recommended ? "System pick" : "System excluded"}
             </span>
@@ -467,9 +530,17 @@ function ComparableCandidate({
           <small>{formatDate(comp.sale_date)}</small>
         </div>
         <div>
-          <span>Subject-size indication</span>
-          <strong>{formatMoney(comp.adjusted_value_cents)}</strong>
-          <small>{formatMoney(comp.price_per_square_foot_cents)} / sqft</small>
+          <span>{usesAdjustedIndication ? "Adjusted indication" : "Subject-size indication"}</span>
+          <strong>
+            {formatMoney(
+              usesAdjustedIndication ? adjustedIndicationCents : comp.adjusted_value_cents,
+            )}
+          </strong>
+          <small>
+            {usesAdjustedIndication
+              ? "Recorded sale plus locally supported adjustments"
+              : `${formatMoney(comp.price_per_square_foot_cents)} / sqft`}
+          </small>
         </div>
         <div>
           <span>Location</span>
@@ -585,7 +656,9 @@ function ComparableCandidate({
           <section>
             <span>Source</span>
             <p>
-              {titleCase(comp.evidence_source ?? "provider record")}
+              {sourceBadges.length
+                ? sourceBadges.join(" / ")
+                : titleCase(comp.evidence_source ?? "provider record")}
               {comp.source_reference ? ` / ${comp.source_reference}` : ""}
               {comp.source_url ? (
                 <a href={comp.source_url} rel="noreferrer" target="_blank">
@@ -594,6 +667,27 @@ function ComparableCandidate({
               ) : null}
             </p>
           </section>
+          {sourceConflicts.length ? (
+            <section>
+              <span>Source conflicts</span>
+              <ul>
+                {sourceConflicts.map((conflict, index) => (
+                  <li key={`${conflict}-${index}`}>{conflict}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+          {analystRecommendation ? (
+            <section>
+              <span>AI analyst draft</span>
+              <p>
+                {titleCase(analystRecommendation.recommendation)}: {analystRecommendation.reason}
+                {typeof analystRecommendation.confidence === "number"
+                  ? ` (${Math.round(analystRecommendation.confidence)}% confidence)`
+                  : ""}
+              </p>
+            </section>
+          ) : null}
           {comp.verification_notes ? (
             <section>
               <span>Verification notes</span>
@@ -776,7 +870,12 @@ function engineRecommended(comp: MarketComparable) {
   return comp.selection_status !== "rejected";
 }
 
-function compareComps(left: MarketComparable, right: MarketComparable, sort: ReviewSort) {
+function compareComps(
+  left: MarketComparable,
+  right: MarketComparable,
+  sort: ReviewSort,
+  adjustedIndications: Record<string, number | null | undefined>,
+) {
   if (sort === "distance") {
     return nullableNumber(left.distance_miles, Number.MAX_SAFE_INTEGER) -
       nullableNumber(right.distance_miles, Number.MAX_SAFE_INTEGER);
@@ -786,10 +885,66 @@ function compareComps(left: MarketComparable, right: MarketComparable, sort: Rev
       nullableNumber(right.days_old, Number.MAX_SAFE_INTEGER);
   }
   if (sort === "value") {
-    return nullableNumber(right.adjusted_value_cents, -1) -
-      nullableNumber(left.adjusted_value_cents, -1);
+    return nullableNumber(comparableIndication(right, adjustedIndications), -1) -
+      nullableNumber(comparableIndication(left, adjustedIndications), -1);
   }
   return nullableNumber(right.score, -1) - nullableNumber(left.score, -1);
+}
+
+function comparableIndication(
+  comp: MarketComparable,
+  adjustedIndications: Record<string, number | null | undefined>,
+) {
+  const key = comp.provider_id ?? comp.formatted_address;
+  return (key ? adjustedIndications[key] : undefined) ?? comp.adjusted_value_cents;
+}
+
+function comparableSourceBadges(comp: MarketComparable) {
+  const labels = [
+    ...(comp.source_providers ?? []),
+    ...(comp.corroborating_sources ?? []),
+    comp.evidence_source,
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map(sourceLabel);
+  return [...new Set(labels)];
+}
+
+function comparableSourceConflicts(comp: MarketComparable) {
+  const savedConflicts = (comp.source_conflicts ?? []).map((conflict) => {
+    if (typeof conflict === "string") {
+      return conflict;
+    }
+    const explanation = conflict.summary ?? conflict.explanation ?? "Provider observations disagree.";
+    const detail = conflict.field ? `${titleCase(conflict.field)}: ${explanation}` : explanation;
+    return conflict.material === false ? `Minor provider variance: ${detail}` : detail;
+  });
+  const fieldConflicts = (comp.field_conflicts ?? []).map((conflict) => {
+    const observedProviders = [
+      ...new Set(
+        (conflict.observations ?? [])
+          .map((observation) => observation.provider)
+          .filter((provider): provider is string => Boolean(provider)),
+      ),
+    ].map(sourceLabel);
+    const scope = observedProviders.length
+      ? ` across ${observedProviders.join(" and ")}`
+      : " across providers";
+    const explanation = conflict.summary ?? `${titleCase(conflict.field)} differs${scope}.`;
+    const detail = conflict.summary ? `${titleCase(conflict.field)}: ${explanation}` : explanation;
+    return conflict.material === false ? `Minor provider variance: ${detail}` : detail;
+  });
+  return [...new Set([...savedConflicts, ...fieldConflicts])];
+}
+
+function sourceLabel(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes("rentcast")) return "RentCast";
+  if (normalized.includes("dealmachine")) return "DealMachine";
+  if (normalized.includes("manual")) return "Manual verified";
+  if (normalized.includes("ai_web") || normalized.includes("public")) return "Public cited";
+  if (normalized === "provider_record") return "Provider record";
+  return titleCase(value);
 }
 
 function nullableNumber(value: number | null | undefined, fallback: number) {

@@ -57,6 +57,20 @@ def read_integration_status(
     if not settings.dealmachine_api_key:
         buyer_blockers.append("DEALMACHINE_API_KEY")
 
+    dealmachine_comp_blockers = []
+    if settings.underwriting_dealmachine_comps_mode == "disabled":
+        dealmachine_comp_blockers.append("UNDERWRITING_DEALMACHINE_COMPS_MODE=shadow or candidate")
+    if not settings.dealmachine_api_key:
+        dealmachine_comp_blockers.append("DEALMACHINE_API_KEY")
+
+    comp_analyst_blockers = []
+    if settings.underwriting_ai_comp_analyst_mode == "disabled":
+        comp_analyst_blockers.append("UNDERWRITING_AI_COMP_ANALYST_MODE=draft")
+    if not settings.ai_enabled:
+        comp_analyst_blockers.append("AI_ENABLED=true")
+    if not settings.openai_api_key:
+        comp_analyst_blockers.append("OPENAI_API_KEY")
+
     storage_blockers = list(settings.document_storage_configuration_blockers)
     monitoring_blockers = [] if settings.sentry_dsn else ["SENTRY_DSN"]
 
@@ -117,6 +131,22 @@ def read_integration_status(
                 mode=settings.buyer_data_provider,
                 enabled=settings.buyer_data_provider == "dealmachine",
                 blockers=buyer_blockers,
+            ),
+            _status(
+                key="dealmachine-underwriting",
+                name="DealMachine comps",
+                category="Underwriting",
+                mode=settings.underwriting_dealmachine_comps_mode,
+                enabled=settings.underwriting_dealmachine_comps_mode != "disabled",
+                blockers=dealmachine_comp_blockers,
+            ),
+            _status(
+                key="ai-comp-analyst",
+                name="AI Comp Analyst",
+                category="Underwriting",
+                mode=settings.underwriting_ai_comp_analyst_mode,
+                enabled=settings.underwriting_ai_comp_analyst_mode != "disabled",
+                blockers=comp_analyst_blockers,
             ),
             _status(
                 key="document-storage",

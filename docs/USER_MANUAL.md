@@ -1299,8 +1299,10 @@ Confirm:
    As-is or Renovated. Save the record and leave its checkbox selected when it should enter the next
    analysis.
 13. Select **Run Stonegate valuation** for the first result. Afterward, the same button reads
-   **Update Stonegate valuation**. Stonegate automatically reuses current evidence for repair or
-   review changes and automatically deepens an old analysis when its market research is outdated.
+   **Update Stonegate valuation** and recalculates from the saved same-address market evidence with
+   zero paid provider calls. Select **Refresh market evidence (may use credits)** only when you
+   intentionally need a newer snapshot or provider retry; review the capture time and source-cost
+   audit first.
 14. Review **Repair range**, **Unconfirmed work**, and each item to
    verify before discussing an offer. The expected scenario drives current offer math; low/high
    scenarios explain repair uncertainty.
@@ -1316,6 +1318,26 @@ property, Stonegate tries normalized address variations and a matching property 
 provider has a matching subject but no AVM, the system can still use its recorded-sale evidence.
 The **Subject match** status and resolved address show which property was used. Stop and correct the
 record if that address is not the subject property.
+
+When the owner has enabled DealMachine underwriting in **shadow** mode, Stonegate also retrieves a
+property-only DealMachine comp set, records the credits used, and compares it with RentCast without
+changing ARV. In **candidate** mode, unique DealMachine closed sales may enter the same screen as
+other provider sales. A transfer returned by both providers appears once with both source badges;
+material price, date, or property-fact conflicts remain visible and require review. Small
+recording-date, coordinate, or rounding differences remain visible as minor provider variances but
+do not reduce confidence or force review. A wrong/fuzzy DealMachine subject match is rejected before
+comp retrieval, and provider billing must show zero people credits.
+
+Ordinary valuation updates reuse the saved DealMachine result even when it is old, failed, or had no
+match; they do not retry a paid call in the background. The provider panel shows zero current-run
+credits on reuse while retaining the original source credits and latency. A failed call whose final
+billing response was unavailable is labeled with a conservative estimated credit count. Use the
+explicit refresh control when a retry is worth the potential cost.
+
+Foreclosures, quitclaim/gift/family transfers, sheriff/tax sales, corrective transfers, and nominal
+consideration are shown only for audit and cannot be included in value math. A sale whose
+arm's-length status is unavailable is labeled unverified and should be checked against deed/MLS or
+closing evidence before approval.
 
 Stonegate searches closed sales in controlled levels:
 
@@ -1359,17 +1381,28 @@ Review the result from top to bottom:
    adjusted closed-sale indications. **Supported** means the local pair threshold passed;
    **Withheld** means Stonegate applied zero dollars rather than guessing. If the evidence is too
    weak, Stonegate stops for manual review instead of substituting another method.
-6. Open **Why this confidence score** and read every factor.
-7. Open **Secondary public evidence** and investigate any conflict.
+6. Review **What is driving this range**. Stonegate uses the weighted middle distribution of the
+   adjusted closed-sale indications without adding a generic provider or confidence envelope.
+   Resolve unknown condition, wide adjusted-sale dispersion, expanded-market comps, withheld
+   adjustments, large extrapolations, and provider conflicts when shown.
+7. Open **External benchmarks** only when comparison context is useful. RentCast and DealMachine
+   estimates in this section are excluded from ARV and offer math.
+8. When **AI Comp Analyst draft** is present, review its include/exclude/review suggestions,
+   condition hypotheses, micro-market concerns, missing questions, range explanations, and cited
+   evidence IDs. Accept, correct, or reject the suggestions through the normal comp review; the AI
+   cannot change the set, set a weight, confirm condition, or calculate a price.
+9. Open **Why this confidence score** and read every factor.
+10. Open **Secondary public evidence** and investigate any conflict.
    Review every **AI-discovered closed sale** link before using a material number with a seller.
-8. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
+11. Open **Supporting listings and ZIP market context**. Confirm these records are labeled as asking
    prices and supporting-only evidence.
-9. Review the as-is benchmark, ARV status and range, total rehab, buyer maximum, seller contract
+12. Review the comp-supported as-is indication (or **Not comp-supported**), ARV status and range,
+   total rehab, buyer maximum, seller contract
    ceiling, and opening recommendation.
    **Working guidance** means only two usable sales were available; confidence is capped and another
    sale should be verified before final offer approval.
-10. Read every item under **Resolve before approval**.
-11. Review each comparable:
+13. Read every item under **Resolve before approval**.
+14. Review each comparable:
    - Keep the **Subject property** band visible as the comparison baseline. Correct the lead or run
      a new analysis if its physical facts are wrong.
    - Use **All**, **Included**, **Excluded**, grade, search-level, address/subdivision, and sort
@@ -1393,11 +1426,11 @@ Review the result from top to bottom:
      is not a parcel, school-boundary, or neighborhood-boundary map.
    - Use **Restore system set** only to return inclusion choices and weights to the engine's saved
      recommendation; it does not erase condition classifications.
-12. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
-13. Repeat until the included set and assumptions reflect the evidence.
-14. Create a manual underwriting version only when an authorized person must preserve a separate
+15. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
+16. Repeat until the included set and assumptions reflect the evidence.
+17. Create a manual underwriting version only when an authorized person must preserve a separate
     judgment or scenario.
-15. Open **Advanced records** and compare saved versions before requesting offer approval. The
+18. Open **Advanced records** and compare saved versions before requesting offer approval. The
     comparison shows headline dollar changes plus comps added or removed, repair categories that
     changed, search reach, catalog version, and adjustment support.
 
@@ -1409,8 +1442,8 @@ renovation status is unconfirmed, but confidence and warnings should affect judg
 
 **Preliminary ARV** means the available recorded sales have not been verified as renovated
 comparables. **Conservative ARV** means renovated recorded-sale evidence supports the range. The
-provider AVM is shown as a screen but is not used as offer math when recorded-sale support is
-insufficient.
+provider AVM is shown only as an external benchmark and never replaces insufficient closed-sale
+support or enters offer math.
 
 ### Use The Result In A Seller Meeting
 
@@ -2199,6 +2232,19 @@ off until market authorization, access, retention, and deletion settings are app
 - When configured, confirm the provider panel says live search is enabled before previewing cost.
 - Provider candidates are not buyers in Stonegate until a person selects and imports them.
 
+### DealMachine Underwriting Comps Are Unavailable
+
+- Confirm `DEALMACHINE_API_KEY` and the paid account credit balance.
+- Confirm `UNDERWRITING_DEALMACHINE_COMPS_MODE` is `shadow` or `candidate` and production was
+  redeployed.
+- Read the provider summary for the address-match, credit-limit, quota, timeout, or response error.
+- Treat a people-credit charge, missing people-credit telemetry, wrong-address match, or fuzzy-match
+  warning as a provider-boundary issue; DealMachine evidence should remain excluded.
+- A DealMachine failure does not invalidate an otherwise complete RentCast analysis. Continue the
+  review and retry DealMachine only when its evidence is needed.
+- Never promote DealMachine from shadow to candidate merely because it returned more records;
+  review overlap, conflicts, comp quality, operator time, cost, and verified outcomes first.
+
 ### PDF Buttons Are Missing
 
 Complete and save a market analysis first. Open the lead's **Underwriting** tab and review the
@@ -2209,6 +2255,9 @@ report area. Role authorization and API health must also be valid.
 - Confirm the runtime and capability are installed and enabled.
 - Confirm the OpenAI provider is configured.
 - Confirm the source record satisfies the capability's evidence gate.
+- For the Comp Analyst, confirm `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`. A rejected result means
+  the structured output crossed an evidence or price-authority boundary and was intentionally not
+  shown as advice.
 - Review the visible blocker.
 - External-action simulations are expected to remain blocked by the AI10 release lock.
 
