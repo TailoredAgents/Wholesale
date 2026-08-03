@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 2, 2026
+Last verified against the repository: August 3, 2026
 
 ## 1. Document Authority
 
@@ -65,7 +65,7 @@ must use Stonegate Home Buyers.
 | RentCast property data | Implemented; provider coverage varies by address |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
 | SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
-| DealMachine buyer discovery | Implemented adapter; subscription/API activation intentionally deferred |
+| DealMachine buyer discovery | Implemented adapter; subscription purchased, API key/configuration and controlled acceptance remain |
 | Internal accounting | Implemented; CPA acceptance and first real close remain |
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
 
@@ -745,7 +745,8 @@ redirect to their new owners.
 1. The disposition case is opened from the contracted transaction.
 2. Staff approve the property package before marketing.
 3. Buyers are matched against markets, property criteria, price, capacity, activity, and proof.
-4. DealMachine can provide external buyer candidates when its adapter is activated.
+4. DealMachine can provide external buyer candidates after its purchased account is connected and
+   accepted.
 5. Candidates are reviewed before import; external data does not overwrite trusted buyer records.
 6. Staff record outreach, engagement, offers, deposits, and proof.
 7. Buyer selection is a human approval.
@@ -1038,14 +1039,19 @@ Buyer records can retain:
 
 DealMachine is the selected first external buyer-data adapter. The workflow:
 
-1. Runs discovery for an active disposition case.
-2. Stores the provider query and raw candidate evidence.
-3. Normalizes, scores, and explains candidates.
-4. Requires a human to review before import.
-5. Links imported records to the existing buyer CRM.
+1. Verifies the configured account and displays the paid plan, billing-cycle reset, and available
+   credits without exposing the API key.
+2. Previews the matching-result count and maximum property/contact credit use without consuming
+   credits.
+3. Requires a second explicit action before running discovery for an active disposition case.
+4. Stores the provider query, actual credit summary, and raw candidate evidence.
+5. Normalizes current multi-select property fields, excludes provider-DNC phone numbers from the
+   imported contact suggestion, scores candidates, and explains the evidence.
+6. Requires a human to review before import.
+7. Links imported records to the existing buyer CRM without sending outreach.
 
-The subscription can remain off until Stonegate is close to having a contract to disposition.
-Provider activation should not require rebuilding the buyer workflow.
+The subscription has been purchased. API-key configuration and controlled production acceptance
+remain before staff should depend on the results.
 
 ### 13.3 Disposition Authority
 
@@ -1268,7 +1274,7 @@ telemarketing, recording, or real-estate advice.
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
 | Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
-| DealMachine | Buyer discovery | Implemented adapter | Subscription/API intentionally deferred |
+| DealMachine | Buyer discovery | Implemented adapter with cost preview and credit readiness | Subscription purchased; API key/configuration and controlled acceptance pending |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |
@@ -1392,7 +1398,7 @@ acceptance and evidence:
 - Twilio acquisitions-number attachment and dedicated SMS/Voice end-to-end tests
 - Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
 - SignWell template, webhook, remote signature, and iPad signature acceptance
-- DealMachine subscription and buyer-data acceptance when deal volume justifies it
+- DealMachine API-key configuration and controlled buyer-data acceptance
 - real Georgia underwriting outcomes and operator calibration
 - first CPA-reviewed opening balances, bank reconciliation, month close, and report package
 - ad-provider credential setup and offline conversion acceptance

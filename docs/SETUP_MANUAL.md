@@ -55,7 +55,7 @@ Follow this order for a new environment or a complete production review:
 6. Configure SignWell and contract templates.
 7. Activate Twilio SMS only after A2P approval.
 8. Configure Twilio Voice.
-9. Activate DealMachine when the first contracted deal is close.
+9. Connect and accept the purchased DealMachine account before depending on external buyer data.
 10. Configure bank, vendor, accounting, and compensation policy.
 11. Test backups and production health.
 12. Train each employee using **My Setup** and the role manuals.
@@ -550,20 +550,26 @@ unless its approved operating policy also permits one-party recording.
 
 ## DealMachine Buyer Data
 
-Do not purchase DealMachine solely to finish a settings screen. Activate it when Stonegate is near
-its first contracted deal and has time to test buyer quality before marketing that deal.
+Stonegate has purchased DealMachine. Connect it now and test buyer quality and credit use before
+marketing a live deal.
 
 When ready:
 
-1. Buy the package that includes the required API access.
-2. Create a DealMachine API key.
-3. Add it to `DEALMACHINE_API_KEY`.
+1. Sign in to the paid Stonegate DealMachine account as the account owner.
+2. Open the developer/API settings and create an API key.
+3. Add it to `DEALMACHINE_API_KEY` in the Render API service. Never paste it into chat,
+   documentation, source code, or browser settings.
 4. Set `BUYER_DATA_PROVIDER=dealmachine`.
-5. Redeploy.
-6. Open the test disposition case.
-7. Select **Find buyers with DealMachine**.
-8. Review candidates before importing them.
-9. Check duplicates, contact quality, market fit, and provider cost.
+5. Keep `DEALMACHINE_BASE_URL=https://api.v2.dealmachine.com/v1` and redeploy.
+6. Open a test disposition case and the Buyers section.
+7. Confirm Stonegate shows the expected paid plan, billing-cycle reset, and available credits.
+8. Select **Preview search cost**. This validates the same request without consuming credits.
+9. Review the match count and maximum property/contact credit estimate, then select **Run buyer
+   search** only when the amount is acceptable.
+10. Compare the actual credit summary with the estimate.
+11. Review candidates before importing them.
+12. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
+    cost.
 
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.
@@ -667,7 +673,7 @@ makes failures difficult to identify.
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
 - [ ] Recording after disclosure and retention approval.
-- [ ] DealMachine near the first contracted deal.
+- [ ] DealMachine API key, production connection, and controlled buyer-search acceptance.
 - [ ] Google/Meta conversion delivery after ad-account setup.
 - [ ] S3-compatible private storage as document volume grows.
 - [ ] Sentry and separate worker alerts when the owner wants external monitoring.

@@ -51,7 +51,7 @@ The following still require external configuration, approval, or production acce
 - Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
-- DealMachine buyer-data activation near the first contracted deal.
+- DealMachine API-key connection and controlled buyer-search acceptance for the purchased account.
 - Live buyer-package and advertising conversion delivery.
 - CPA acceptance of opening balances and the first Stonegate month close.
 - Real Georgia underwriting calibration and supervised Copilot pilots.
@@ -1635,19 +1635,21 @@ Use Stonegate's existing Buyer CRM first:
 
 When DealMachine is configured, **External buyer intelligence** adds deal-specific candidates:
 
-1. Confirm the provider message says live search is available.
-2. Select **Find investors**.
-3. Review the ranked candidates, observed purchase count, no-mortgage signal, last purchase date,
-   market, property type, and available contact information.
-4. Check only the candidates worth keeping.
-5. Select **Import selected**.
-6. Review the imported buyer in the Buyer CRM and complete missing criteria or proof information.
-7. Refresh the case's buyer ranking.
+1. Confirm the expected paid plan, billing-cycle reset, and available credits are visible.
+2. Select **Preview search cost**. The preview validates the request without consuming credits.
+3. Review the matching-property count and maximum property/contact credit estimate.
+4. Select **Run buyer search** only when the estimate is acceptable.
+5. Compare the actual credit summary with the preview, then review the ranked candidates, observed
+   purchase count, no-mortgage signal, last purchase date, market, property type, and available
+   contact information.
+6. Check only the candidates worth keeping.
+7. Select **Import selected**.
+8. Review the imported buyer in the Buyer CRM and complete missing criteria or proof information.
+9. Refresh the case's buyer ranking.
 
 The search does not send outreach and does not automatically add every result. Candidates remain
 outside the Buyer CRM until a person approves their import. If DealMachine is not configured,
-maintain buyers manually and activate the provider when Stonegate is close to needing live
-disposition coverage.
+maintain buyers manually until the purchased account passes controlled acceptance.
 
 ### Offers
 
@@ -2191,10 +2193,10 @@ off until market authorization, access, retention, and deletion settings are app
 
 ### DealMachine Buyer Search Is Unavailable
 
-- This is expected until Stonegate purchases and configures DealMachine API access.
+- The subscription is purchased; this message now means the API key, provider setting, account
+  credit balance, or production redeploy still needs attention.
 - Continue using the internal Buyer CRM and manually maintained criteria.
-- When configured, confirm the provider panel says live search is enabled before selecting **Find
-  investors**.
+- When configured, confirm the provider panel says live search is enabled before previewing cost.
 - Provider candidates are not buyers in Stonegate until a person selects and imports them.
 
 ### PDF Buttons Are Missing

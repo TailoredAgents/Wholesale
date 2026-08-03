@@ -106,10 +106,12 @@
 .discoveryPanel > header span { display: flex; align-items: center; gap: 6px; color: var(--brand-strong); font-size: 10px; font-weight: 850; text-transform: uppercase; }
 .discoveryPanel > header h4 { margin: 0; font-size: 15px; }
 .discoveryPanel > header p { margin: 0; color: var(--muted); font-size: 10px; }
+.discoveryPanel > header small { color: var(--muted); font-size: 9px; font-weight: 700; }
 .discoveryActions { display: flex; gap: 8px; }
 .discoveryActions button { min-height: 36px; padding: 0 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--brand-strong); font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
 .discoveryActions button:first-child { border-color: var(--brand); background: var(--brand); color: #fff; }
 .discoveryActions button:disabled { opacity: .45; cursor: not-allowed; }
+.discoveryEstimate { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line-soft); background: var(--brand-soft); color: var(--brand-strong); font-size: 10px; line-height: 1.5; }
 .candidateList { display: grid; }
 .candidate, .importedCandidate { min-height: 62px; padding: 9px 14px; display: grid; grid-template-columns: 18px 26px minmax(180px, 1.4fr) minmax(180px, 1fr) minmax(150px, .9fr); gap: 10px; align-items: center; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
 .importedCandidate { background: var(--surface-soft); cursor: default; }

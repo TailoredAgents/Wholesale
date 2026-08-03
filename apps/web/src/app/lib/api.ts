@@ -1585,6 +1585,26 @@ export type BuyerDataProvider = {
   configured: boolean;
   live_search_enabled: boolean;
   message: string;
+  connected: boolean | null;
+  plan_name: string | null;
+  is_paid: boolean | null;
+  billing_cycle_end: string | null;
+  credits_remaining: number | null;
+  credits_used: number | null;
+  credits_total: number | null;
+};
+
+export type BuyerDiscoveryEstimate = {
+  disposition_case_id: string;
+  requested_candidates: number;
+  provider_result_limit: number;
+  total_matching_properties: number;
+  estimated_credits: number;
+  estimated_property_credits: number;
+  estimated_people_credits: number;
+  credits_remaining: number;
+  enough_credits: boolean;
+  message: string;
 };
 
 export type BuyerDiscoveryCandidate = {

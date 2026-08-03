@@ -25,6 +25,8 @@ from app.schemas.buyers import (
     BuyerDataProviderRead,
     BuyerDiscoveryCandidateRead,
     BuyerDiscoveryCreate,
+    BuyerDiscoveryEstimateCreate,
+    BuyerDiscoveryEstimateRead,
     BuyerDiscoveryImport,
     BuyerDiscoveryRunRead,
 )
@@ -84,6 +86,81 @@ def provider_status(settings: Settings | None = None) -> BuyerDataProviderRead:
     )
 
 
+def provider_readiness(
+    settings: Settings | None = None,
+    *,
+    client: DealMachineClient | None = None,
+) -> BuyerDataProviderRead:
+    settings = settings or get_settings()
+    status = provider_status(settings)
+    if not status.configured:
+        return status
+    try:
+        usage = (client or DealMachineClient(settings)).get_usage()
+    except DealMachineError as exc:
+        return status.model_copy(
+            update={
+                "connected": False,
+                "live_search_enabled": False,
+                "message": str(exc),
+            }
+        )
+    plan = _dictionary(usage.get("plan"))
+    billing_cycle = _dictionary(usage.get("billing_cycle"))
+    credits = _dictionary(usage.get("credits"))
+    remaining = _integer(credits.get("total_available"))
+    paid = plan.get("is_paid") if isinstance(plan.get("is_paid"), bool) else None
+    enabled = bool(paid is not False and remaining is not None and remaining > 0)
+    if enabled:
+        message = "DealMachine is connected and ready for cost-previewed buyer discovery."
+    elif paid is False:
+        message = "DealMachine is connected, but the account does not have a paid API plan."
+    else:
+        message = "DealMachine is connected, but the account has no available data credits."
+    return status.model_copy(
+        update={
+            "connected": True,
+            "live_search_enabled": enabled,
+            "message": message,
+            "plan_name": _string(plan.get("name")) or None,
+            "is_paid": paid,
+            "billing_cycle_end": _parse_datetime(billing_cycle.get("end")),
+            "credits_remaining": remaining,
+            "credits_used": _integer(credits.get("used")),
+            "credits_total": _integer(credits.get("total_cap")),
+        }
+    )
+
+
+def estimate_buyer_discovery(
+    db: Session,
+    principal: Principal,
+    payload: BuyerDiscoveryEstimateCreate,
+    *,
+    settings: Settings | None = None,
+    client: DealMachineClient | None = None,
+) -> BuyerDiscoveryEstimateRead:
+    settings = settings or get_settings()
+    status = provider_status(settings)
+    if not status.configured:
+        raise ValueError(status.message)
+    case, property_record, provider_request = _discovery_context(
+        db, principal, payload, settings
+    )
+    provider_client = client or DealMachineClient(settings)
+    try:
+        _add_property_type_filter(
+            provider_request,
+            property_record=property_record,
+            filters=provider_client.list_property_filters(),
+        )
+        usage = provider_client.get_usage()
+        estimate = provider_client.estimate_property_search(provider_request)
+    except DealMachineError as exc:
+        raise ValueError(str(exc)) from exc
+    return _estimate_read(case.id, payload, provider_request, estimate, usage)
+
+
 def latest_discovery_run(
     db: Session,
     principal: Principal,
@@ -113,27 +190,35 @@ def discover_buyers(
     status = provider_status(settings)
     if not status.configured:
         raise ValueError(status.message)
-    case = db.scalar(
-        select(DispositionCase).where(
-            DispositionCase.id == payload.disposition_case_id,
-            DispositionCase.organization_id == principal.organization_id,
-        )
+    case, property_record, provider_request = _discovery_context(
+        db, principal, payload, settings
     )
-    if case is None:
-        raise ValueError("Disposition case not found.")
-    property_record = db.scalar(
-        select(Property).where(
-            Property.id == case.property_id,
-            Property.organization_id == principal.organization_id,
+    postal_code = property_record.postal_code.strip()[:5]
+    provider_client = client or DealMachineClient(settings)
+    try:
+        _add_property_type_filter(
+            provider_request,
+            property_record=property_record,
+            filters=provider_client.list_property_filters(),
         )
+        usage = provider_client.get_usage()
+        estimate = provider_client.estimate_property_search(provider_request)
+    except DealMachineError as exc:
+        raise ValueError(str(exc)) from exc
+    estimate_read = _estimate_read(
+        case.id,
+        payload,
+        provider_request,
+        estimate,
+        usage,
     )
-    if property_record is None:
-        raise ValueError("The disposition case has no property record.")
-    postal_code = (property_record.postal_code or "").strip()[:5]
-    if not re.fullmatch(r"\d{5}", postal_code):
-        raise ValueError("A five-digit property ZIP code is required for buyer discovery.")
-
-    provider_request = _provider_request(case, property_record, payload, settings)
+    if not estimate_read.enough_credits:
+        raise ValueError(estimate_read.message)
+    if payload.confirmed_estimated_credits != estimate_read.estimated_credits:
+        raise ValueError(
+            "DealMachine's estimated credit use changed. Preview the search again "
+            "before running it."
+        )
     run = BuyerDiscoveryRun(
         organization_id=principal.organization_id,
         disposition_case_id=case.id,
@@ -157,9 +242,7 @@ def discover_buyers(
     db.add(run)
     db.flush()
     try:
-        response = (client or DealMachineClient(settings)).search_properties(
-            provider_request
-        )
+        response = provider_client.search_properties(provider_request)
         candidates = _candidate_groups(
             response.get("data", []),
             case=case,
@@ -466,10 +549,85 @@ def run_to_read(
     )
 
 
+def _discovery_context(
+    db: Session,
+    principal: Principal,
+    payload: BuyerDiscoveryEstimateCreate,
+    settings: Settings,
+) -> tuple[DispositionCase, Property, dict[str, Any]]:
+    case = db.scalar(
+        select(DispositionCase).where(
+            DispositionCase.id == payload.disposition_case_id,
+            DispositionCase.organization_id == principal.organization_id,
+        )
+    )
+    if case is None:
+        raise ValueError("Disposition case not found.")
+    property_record = db.scalar(
+        select(Property).where(
+            Property.id == case.property_id,
+            Property.organization_id == principal.organization_id,
+        )
+    )
+    if property_record is None:
+        raise ValueError("The disposition case has no property record.")
+    postal_code = (property_record.postal_code or "").strip()[:5]
+    if not re.fullmatch(r"\d{5}", postal_code):
+        raise ValueError("A five-digit property ZIP code is required for buyer discovery.")
+    return case, property_record, _provider_request(case, property_record, payload, settings)
+
+
+def _estimate_read(
+    case_id: UUID,
+    payload: BuyerDiscoveryEstimateCreate,
+    provider_request: dict[str, Any],
+    estimate: dict[str, Any],
+    usage: dict[str, Any],
+) -> BuyerDiscoveryEstimateRead:
+    estimated = _dictionary(estimate.get("estimated_credits"))
+    breakdown = _dictionary(estimated.get("breakdown"))
+    pagination = _dictionary(estimate.get("pagination"))
+    totals = _dictionary(estimate.get("totals"))
+    credits = _dictionary(usage.get("credits"))
+    plan = _dictionary(usage.get("plan"))
+    estimated_credits = _integer(estimated.get("this_page")) or 0
+    credits_remaining = _integer(credits.get("total_available")) or 0
+    paid = plan.get("is_paid")
+    enough_credits = paid is not False and credits_remaining >= estimated_credits
+    if paid is False:
+        message = "The connected DealMachine account does not have a paid API plan."
+    elif enough_credits:
+        message = (
+            f"This search can use up to {estimated_credits} DealMachine credits; "
+            f"{credits_remaining} are currently available."
+        )
+    else:
+        message = (
+            f"This search can use up to {estimated_credits} DealMachine credits, but only "
+            f"{credits_remaining} are currently available. Reduce the search or add credits."
+        )
+    return BuyerDiscoveryEstimateRead(
+        disposition_case_id=case_id,
+        requested_candidates=payload.max_candidates,
+        provider_result_limit=_integer(provider_request.get("per_page")) or 0,
+        total_matching_properties=(
+            _integer(pagination.get("total_results"))
+            or _integer(totals.get("properties"))
+            or 0
+        ),
+        estimated_credits=estimated_credits,
+        estimated_property_credits=_integer(breakdown.get("properties")) or 0,
+        estimated_people_credits=_integer(breakdown.get("people")) or 0,
+        credits_remaining=credits_remaining,
+        enough_credits=enough_credits,
+        message=message,
+    )
+
+
 def _provider_request(
     case: DispositionCase,
     property_record: Property,
-    payload: BuyerDiscoveryCreate,
+    payload: BuyerDiscoveryEstimateCreate,
     settings: Settings,
 ) -> dict[str, Any]:
     target_dollars = max(round(case.asking_price_cents / 100), 1)
@@ -484,21 +642,12 @@ def _provider_request(
             },
         },
     ]
-    provider_type = PROPERTY_TYPE_MAP.get(
-        (property_record.property_type or "").strip().lower()
-    )
-    if provider_type:
-        filters.append(
-            {
-                "filter_id": "property_type",
-                "operator": "contains_any",
-                "value": [provider_type],
-            }
-        )
     return {
         "locations": [
             {"type": "zip_code", "code": property_record.postal_code.strip()[:5]}
         ],
+        "anchor": "properties",
+        "contact_audience": "owners",
         "filters": filters,
         "fields": [
             "owner_1_full_name",
@@ -517,6 +666,48 @@ def _provider_request(
     }
 
 
+def _add_property_type_filter(
+    request: dict[str, Any],
+    *,
+    property_record: Property,
+    filters: list[object],
+) -> None:
+    target_label = PROPERTY_TYPE_MAP.get(
+        (property_record.property_type or "").strip().lower()
+    )
+    if not target_label:
+        return
+    target_key = _normalized_option_label(target_label)
+    for item in filters:
+        if not isinstance(item, dict) or item.get("filter_id") != "property_type":
+            continue
+        options = item.get("options")
+        if not isinstance(options, list):
+            return
+        for option in options:
+            if not isinstance(option, dict):
+                continue
+            if _normalized_option_label(_string(option.get("label"))) != target_key:
+                continue
+            option_id = option.get("option_id")
+            if not isinstance(option_id, (str, int)) or isinstance(option_id, bool):
+                return
+            request_filters = request.get("filters")
+            if isinstance(request_filters, list):
+                request_filters.append(
+                    {
+                        "filter_id": "property_type",
+                        "operator": "contains_any",
+                        "value": [option_id],
+                    }
+                )
+            return
+
+
+def _normalized_option_label(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
+
+
 def _candidate_groups(
     records: list[object],
     *,
@@ -529,14 +720,20 @@ def _candidate_groups(
     for raw in records:
         if not isinstance(raw, dict):
             continue
-        name = _string(raw.get("owner_1_full_name") or raw.get("owner_name"))
-        if not name:
-            continue
-        key = _normalized_name(name)
-        if not key:
-            continue
-        grouped[key].append(raw)
-        display_names.setdefault(key, name)
+        owner_names = {
+            name
+            for name in (
+                _string(raw.get("owner_1_full_name") or raw.get("owner_name")),
+                _string(raw.get("owner_2_full_name")),
+            )
+            if name
+        }
+        for name in owner_names:
+            key = _normalized_name(name)
+            if not key:
+                continue
+            grouped[key].append(raw)
+            display_names.setdefault(key, name)
 
     result: list[dict[str, Any]] = []
     target = case.asking_price_cents
@@ -556,9 +753,9 @@ def _candidate_groups(
         prices = [value for _, value in purchases if value is not None]
         property_types = sorted(
             {
-                _string(item.get("property_type"))
+                property_type
                 for item in evidence
-                if _string(item.get("property_type"))
+                for property_type in _strings(item.get("property_type"))
             }
         )
         no_mortgage = sum(_integer(item.get("num_mortgages")) == 0 for item in evidence)
@@ -685,19 +882,30 @@ def _contact_details(
         emails = contact.get("emails")
         phones = contact.get("phones")
         email = _first_contact_value(emails, ("email", "address", "value"))
-        phone = _first_contact_value(phones, ("number", "phone", "value"))
+        phone = _first_contact_value(
+            phones,
+            ("number", "phone", "value"),
+            skip_do_not_call=True,
+        )
         if email or phone:
             return email, phone
     return None, None
 
 
-def _first_contact_value(value: object, fields: tuple[str, ...]) -> str | None:
+def _first_contact_value(
+    value: object,
+    fields: tuple[str, ...],
+    *,
+    skip_do_not_call: bool = False,
+) -> str | None:
     if not isinstance(value, list):
         return None
     for item in value:
         if isinstance(item, str) and item.strip():
             return item.strip()
         if isinstance(item, dict):
+            if skip_do_not_call and item.get("do_not_call") is True:
+                continue
             for field in fields:
                 result = _string(item.get(field))
                 if result:
@@ -718,6 +926,15 @@ def _parse_date(value: object) -> date | None:
         return None
     try:
         return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
 
@@ -748,8 +965,22 @@ def _integer(value: object) -> int | None:
     return None
 
 
+def _dictionary(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): item for key, item in value.items()}
+
+
 def _string(value: object) -> str:
     return value.strip() if isinstance(value, str) else ""
+
+
+def _strings(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value.strip()] if value.strip() else []
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return []
 
 
 def _record_address(record: dict[str, Any]) -> str:

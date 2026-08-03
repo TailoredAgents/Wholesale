@@ -39,7 +39,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | SMS | Twilio | Seller-inquiry A2P approved; number attachment and acceptance pending |
 | Voice | Twilio | Configuration and acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
-| Buyer data | DealMachine | Deferred until an active deal is near contract |
+| Buyer data | DealMachine | Subscription purchased; API key and controlled acceptance pending |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
 | Error monitoring | Sentry | Optional/deferred |
 | Ad conversion delivery | Google and Meta | Pending |
@@ -578,9 +578,13 @@ Variables:
 - request timeout
 - maximum discovery results
 
-Current decision: keep the adapter ready, but purchase API access when Stonegate is close to a
-contracted deal. Acceptance must test provider result quality, field mapping, scoring, candidate
-review, import, duplicates, and cost before recurring dependence.
+The subscription is purchased. Create the API key from the Stonegate DealMachine developer/API
+settings, store it only in Render, set the provider to `dealmachine`, and redeploy. The Buyer
+workspace readiness check must show the expected paid plan and available credits. Every search
+first uses DealMachine's zero-credit estimate mode and requires explicit confirmation of the
+current maximum credit use. Acceptance must compare estimated and actual credits and test provider
+result quality, multi-select field mapping, DNC-safe contact suggestion, scoring, candidate review,
+import, duplicates, and cost before recurring dependence.
 
 ## Marketing Conversion Delivery
 
@@ -697,7 +701,7 @@ After a production deployment:
 | Attach approved acquisitions number and configure Messaging Service callbacks | Stonegate owner | Twilio Console |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After provider configuration |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
-| DealMachine subscription and acceptance | Owner and dispositions | Near first contracted deal |
+| DealMachine API key, production connection, and acceptance | Owner and dispositions | Now that the subscription is purchased |
 | CPA accounting acceptance | Owner, finance, CPA | Before relying on first closed period |
 | Underwriting calibration | Owner/acquisitions | As real outcomes accumulate |
 | Google/Meta conversion activation | Owner/marketing | When ad accounts are ready |

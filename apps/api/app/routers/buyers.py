@@ -9,10 +9,12 @@ from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import Buyer
 from app.schemas.buyers import (
-    BuyerCreate,
     BuyerConversationRead,
+    BuyerCreate,
     BuyerDataProviderRead,
     BuyerDiscoveryCreate,
+    BuyerDiscoveryEstimateCreate,
+    BuyerDiscoveryEstimateRead,
     BuyerDiscoveryImport,
     BuyerDiscoveryRunRead,
     BuyerListResponse,
@@ -76,6 +78,14 @@ def read_buyer_data_provider(
     return buyer_discovery.provider_status()
 
 
+@router.get("/provider/readiness")
+def read_buyer_data_provider_readiness(
+    principal: Annotated[Principal, Depends(view_buyers_dependency)],
+) -> BuyerDataProviderRead:
+    del principal
+    return buyer_discovery.provider_readiness()
+
+
 @router.get("/discovery-runs/latest")
 def read_latest_buyer_discovery(
     case_id: UUID,
@@ -93,6 +103,21 @@ def create_buyer_discovery(
 ) -> BuyerDiscoveryRunRead:
     try:
         return buyer_discovery.discover_buyers(db, principal, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/discovery-runs/estimate")
+def estimate_buyer_discovery(
+    payload: BuyerDiscoveryEstimateCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_buyers_dependency)],
+) -> BuyerDiscoveryEstimateRead:
+    try:
+        return buyer_discovery.estimate_buyer_discovery(db, principal, payload)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

@@ -12,8 +12,51 @@ from tests.test_dispositions import HEADERS, setup_case_foundation
 
 
 class FakeDealMachineClient:
+    def list_property_filters(self) -> list[object]:
+        return [
+            {
+                "filter_id": "property_type",
+                "options": [
+                    {"option_id": 1, "label": "Single Family"},
+                    {"option_id": 2, "label": "Multi-Family"},
+                ],
+            }
+        ]
+
+    def get_usage(self) -> dict[str, Any]:
+        return {
+            "plan": {"name": "Pro", "is_paid": True},
+            "billing_cycle": {"end": "2026-09-01T00:00:00.000Z"},
+            "credits": {
+                "total_cap": 20000,
+                "total_available": 19477,
+                "used": 523,
+            },
+        }
+
+    def estimate_property_search(self, request: dict[str, Any]) -> dict[str, Any]:
+        assert request["anchor"] == "properties"
+        assert request["contact_audience"] == "owners"
+        assert request["filters"][-1] == {
+            "filter_id": "property_type",
+            "operator": "contains_any",
+            "value": [1],
+        }
+        return {
+            "totals": {"properties": 3, "people": 1},
+            "pagination": {"total_results": 3},
+            "estimated_credits": {
+                "this_page": 4,
+                "total_all_pages": 4,
+                "breakdown": {"properties": 3, "people": 1},
+            },
+        }
+
     def search_properties(self, request: dict[str, Any]) -> dict[str, Any]:
         assert request["locations"] == [{"type": "zip_code", "code": "30303"}]
+        assert request["anchor"] == "properties"
+        assert request["contact_audience"] == "owners"
+        assert request["filters"][-1]["value"] == [1]
         assert request["filters"][0] == {
             "filter_id": "is_recently_sold",
             "value": True,
@@ -30,12 +73,15 @@ class FakeDealMachineClient:
                     "last_sale_date": "2026-07-01",
                     "last_sale_price": 185000,
                     "num_mortgages": 0,
-                    "property_type": "Single Family",
+                    "property_type": ["Single Family"],
                     "contacts": [
                         {
                             "full_name": "Peachtree Capital LLC",
-                            "phones": [{"number": "4045550101"}],
-                            "emails": [{"email": "buyer@peachtree.example"}],
+                            "phones": [
+                                {"number": "4045550199", "do_not_call": True},
+                                {"number": "4045550101", "do_not_call": False},
+                            ],
+                            "emails": [{"address": "buyer@peachtree.example"}],
                         }
                     ],
                 },
@@ -49,7 +95,7 @@ class FakeDealMachineClient:
                     "last_sale_date": "2026-06-15",
                     "last_sale_price": 205000,
                     "num_mortgages": 1,
-                    "property_type": "Single Family",
+                    "property_type": ["Single Family"],
                     "contacts": [],
                 },
                 {
@@ -62,7 +108,7 @@ class FakeDealMachineClient:
                     "last_sale_date": "2026-04-01",
                     "last_sale_price": 165000,
                     "num_mortgages": 1,
-                    "property_type": "Single Family",
+                    "property_type": ["Single Family"],
                     "contacts": [],
                 },
             ],
@@ -104,10 +150,41 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert provider.status_code == 200
     assert provider.json()["configured"] is True
 
+    readiness = client.get("/api/v1/buyers/provider/readiness", headers=HEADERS)
+    assert readiness.status_code == 200
+    assert readiness.json()["connected"] is True
+    assert readiness.json()["plan_name"] == "Pro"
+    assert readiness.json()["credits_remaining"] == 19477
+
+    estimate = client.post(
+        "/api/v1/buyers/discovery-runs/estimate",
+        headers=HEADERS,
+        json={"disposition_case_id": case_id, "max_candidates": 25},
+    )
+    assert estimate.status_code == 200, estimate.text
+    assert estimate.json()["estimated_credits"] == 4
+    assert estimate.json()["enough_credits"] is True
+
+    stale_confirmation = client.post(
+        "/api/v1/buyers/discovery-runs",
+        headers=HEADERS,
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 3,
+        },
+    )
+    assert stale_confirmation.status_code == 422
+    assert "Preview the search again" in stale_confirmation.json()["detail"]
+
     discovery = client.post(
         "/api/v1/buyers/discovery-runs",
         headers=HEADERS,
-        json={"disposition_case_id": case_id, "max_candidates": 25},
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 4,
+        },
     )
     assert discovery.status_code == 201, discovery.text
     payload = discovery.json()
@@ -149,7 +226,11 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     second_run = client.post(
         "/api/v1/buyers/discovery-runs",
         headers=HEADERS,
-        json={"disposition_case_id": case_id, "max_candidates": 25},
+        json={
+            "disposition_case_id": case_id,
+            "max_candidates": 25,
+            "confirmed_estimated_credits": 4,
+        },
     ).json()
     duplicate = client.post(
         f"/api/v1/buyers/discovery-runs/{second_run['id']}/import",

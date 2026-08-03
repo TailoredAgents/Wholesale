@@ -18,6 +18,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 import type {
   BuyerDataProvider,
+  BuyerDiscoveryEstimate,
   BuyerDiscoveryRun,
   DispositionCopilotOverview,
   DispositionCopilotRecommendation,
@@ -44,6 +45,14 @@ function cents(value: FormDataEntryValue | null) {
   return Math.round(Number(String(value ?? "").replace(/[$,]/g, "")) * 100);
 }
 
+function creditSummary(summary: Record<string, unknown> | null) {
+  if (!summary) return "Credit use unavailable";
+  const properties = typeof summary.properties === "number" ? summary.properties : null;
+  const people = typeof summary.people === "number" ? summary.people : null;
+  if (properties == null && people == null) return "Credit use recorded by DealMachine";
+  return `${properties ?? 0} property + ${people ?? 0} owner credits used`;
+}
+
 export function DispositionWorkspace({
   initialCaseId,
   initialData,
@@ -64,6 +73,7 @@ export function DispositionWorkspace({
   const [copilot, setCopilot] = useState<DispositionCopilotOverview | null>(null);
   const [copilotCaseId, setCopilotCaseId] = useState<string | null>(null);
   const [buyerProvider, setBuyerProvider] = useState<BuyerDataProvider | null>(null);
+  const [discoveryEstimate, setDiscoveryEstimate] = useState<BuyerDiscoveryEstimate | null>(null);
   const [discovery, setDiscovery] = useState<BuyerDiscoveryRun | null>(null);
   const [selectedCandidates, setSelectedCandidates] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -99,8 +109,11 @@ export function DispositionWorkspace({
         }
       });
     void request<BuyerDataProvider>("/api/v1/buyers/provider")
-      .then((result) => {
-        if (active) setBuyerProvider(result);
+      .then(async (result) => {
+        const provider = result.configured
+          ? await request<BuyerDataProvider>("/api/v1/buyers/provider/readiness")
+          : result;
+        if (active) setBuyerProvider(provider);
       })
       .catch(() => {
         if (active) setBuyerProvider(null);
@@ -111,12 +124,14 @@ export function DispositionWorkspace({
       .then((result) => {
         if (active) {
           setDiscovery(result);
+          setDiscoveryEstimate(null);
           setSelectedCandidates([]);
         }
       })
       .catch(() => {
         if (active) {
           setDiscovery(null);
+          setDiscoveryEstimate(null);
           setSelectedCandidates([]);
         }
       });
@@ -253,7 +268,7 @@ export function DispositionWorkspace({
   }
 
   async function discoverExternalBuyers() {
-    if (!selected) return;
+    if (!selected || !discoveryEstimate?.enough_credits) return;
     setBusy(true);
     setMessage(null);
     try {
@@ -262,9 +277,14 @@ export function DispositionWorkspace({
         body: JSON.stringify({
           disposition_case_id: selected.id,
           max_candidates: 25,
+          confirmed_estimated_credits: discoveryEstimate.estimated_credits,
         }),
       });
       setDiscovery(result);
+      void request<BuyerDataProvider>("/api/v1/buyers/provider/readiness")
+        .then(setBuyerProvider)
+        .catch(() => undefined);
+      setDiscoveryEstimate(null);
       setSelectedCandidates(
         result.candidates
           .filter((item) => item.status === "review")
@@ -276,6 +296,31 @@ export function DispositionWorkspace({
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Buyer discovery failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewExternalBuyerCost() {
+    if (!selected) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      const result = await request<BuyerDiscoveryEstimate>(
+        "/api/v1/buyers/discovery-runs/estimate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            disposition_case_id: selected.id,
+            max_candidates: 25,
+          }),
+        },
+      );
+      setDiscoveryEstimate(result);
+      setMessage(result.message);
+    } catch (error) {
+      setDiscoveryEstimate(null);
+      setMessage(error instanceof Error ? error.message : "Credit preview failed.");
     } finally {
       setBusy(false);
     }
@@ -429,12 +474,14 @@ export function DispositionWorkspace({
               {tab === "buyers" ? <div className={styles.buyerTab}>
                 <section className={styles.discoveryPanel}>
                   <header>
-                    <div><span><DatabaseZap size={14} />External buyer intelligence</span><h4>DealMachine candidate search</h4><p>{buyerProvider?.message ?? "Checking buyer-data connection."}</p></div>
+                    <div><span><DatabaseZap size={14} />External buyer intelligence</span><h4>DealMachine candidate search</h4><p>{buyerProvider?.message ?? "Checking buyer-data connection."}</p>{buyerProvider?.connected ? <small>{buyerProvider.plan_name ?? "DealMachine"} plan · {buyerProvider.credits_remaining?.toLocaleString() ?? "Unknown"} credits available{buyerProvider.billing_cycle_end ? ` · resets ${new Date(buyerProvider.billing_cycle_end).toLocaleDateString()}` : ""}</small> : null}</div>
                     <div className={styles.discoveryActions}>
-                      <button disabled={busy || !buyerProvider?.live_search_enabled} onClick={discoverExternalBuyers} type="button"><SearchCheck size={15} />Find investors</button>
+                      <button disabled={busy || !buyerProvider?.live_search_enabled} onClick={previewExternalBuyerCost} type="button"><SearchCheck size={15} />Preview search cost</button>
+                      <button disabled={busy || !discoveryEstimate?.enough_credits} onClick={discoverExternalBuyers} type="button"><DatabaseZap size={15} />{discoveryEstimate ? `Run search (up to ${discoveryEstimate.estimated_credits} credits)` : "Run buyer search"}</button>
                       <button disabled={busy || !selectedCandidates.length} onClick={importExternalBuyers} type="button"><UserPlus size={15} />Import selected ({selectedCandidates.length})</button>
                     </div>
                   </header>
+                  {discoveryEstimate ? <p className={styles.discoveryEstimate}>{discoveryEstimate.total_matching_properties.toLocaleString()} matching recent purchases · samples up to {discoveryEstimate.provider_result_limit} properties · estimates {discoveryEstimate.estimated_property_credits} property and {discoveryEstimate.estimated_people_credits} owner credits. Running the search requires the explicit confirmation button above.</p> : null}
                   {discovery?.candidates.length ? <div className={styles.candidateList}>
                     {discovery.candidates.map((candidate, index) => {
                       const selectable = candidate.status === "review";
@@ -447,7 +494,7 @@ export function DispositionWorkspace({
                       </label>;
                     })}
                   </div> : <p className={styles.emptyRow}>Run a deal-specific search to find recent local purchasers. Only candidates you approve are added to Stonegate.</p>}
-                  {discovery ? <footer><span>{discovery.result_count} ranked candidates</span><span>{discovery.imported_count} imported</span><span>No outreach sent</span></footer> : null}
+                  {discovery ? <footer><span>{discovery.result_count} ranked candidates</span><span>{creditSummary(discovery.credit_summary)}</span><span>{discovery.imported_count} imported</span><span>No outreach sent</span></footer> : null}
                 </section>
                 <div className={styles.sectionGrid}>
                   <section className={styles.section}><div className={styles.sectionTitle}><div><span>Evidence-backed ranking</span><h4>Buyer match list</h4></div><strong>{selected.matches.filter((item) => item.qualification_status === "qualified").length} qualified</strong></div><div className={styles.matchList}>{selected.matches.length ? selected.matches.map((match) => <article key={match.id}><div className={styles.matchTop}><span className={styles.rank}>{match.rank}</span><div><strong>{match.buyer_name}</strong><small>{labelize(match.qualification_status)} · POF {labelize(match.proof_status)}</small></div><b>{(match.score_basis_points / 100).toFixed(0)}%</b></div>{!match.latest_proof_document_id ? <form className={styles.proofForm} onSubmit={(event) => uploadProof(event, match.buyer_id)}><input aria-label="Institution" name="institution" placeholder="Bank or lender" required /><input aria-label="Verified amount" name="verified_amount" inputMode="decimal" placeholder="Verified funds" required /><input aria-label="Expires" name="expires_at" type="date" required /><input aria-label="Proof document" name="file" type="file" required /><button disabled={busy} title="Verify proof of funds" type="submit"><Upload size={14} />Verify POF</button></form> : <p className={styles.verified}><ShieldCheck size={14} />Verified evidence attached{match.proof_expires_at ? ` · expires ${new Date(match.proof_expires_at).toLocaleDateString()}` : ""}</p>}</article>) : <p className={styles.emptyRow}>Approve the package, then generate buyer matches.</p>}</div></section>

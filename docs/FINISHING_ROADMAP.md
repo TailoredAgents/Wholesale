@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 2, 2026
+Last updated: August 3, 2026
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM and DealMachine adapter implemented | Provider activation near first deal and full placement simulation |
+| F5 Buyers and dispositions | Buyer CRM and cost-governed DealMachine adapter implemented; subscription purchased | API-key activation, controlled search acceptance, and full placement simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3 is the single supervised live method; V2.2 is a technical rollback only | Collect verified Georgia outcomes, calibrate repair allowances, and monitor accuracy and operator corrections |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
@@ -244,25 +244,31 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - buyer CRM, criteria, proof, capacity, engagement, and offers
 - disposition cases, package approval, matching, campaigns, selection, and reconciliation
 - deterministic buyer ranking
-- DealMachine adapter, provider status, discovery runs, candidates, evidence, and selective import
+- DealMachine adapter, live plan/credit readiness, zero-credit cost preview, discovery runs,
+  candidates, evidence, DNC-safe contact suggestion, and selective import
 - duplicate protection and audit history
 - Disposition Copilot in supervised draft-only mode
 
 ### Current Provider Decision
 
-DealMachine is the selected first buyer-data provider. Subscription and API activation are
-deliberately deferred until Stonegate is close to a contracted deal so monthly cost is not wasted.
+DealMachine is the selected first buyer-data provider and the subscription has been purchased.
+Stonegate still requires the account API key, production configuration, and a controlled result-
+quality and credit-use acceptance test before staff rely on it.
 
 ### Remaining Actions
 
-1. Activate the appropriate DealMachine API access near the first deal.
-2. Run controlled buyer discovery for a known market and property.
-3. Review data quality, contacts, activity, score explanations, duplicates, and cost.
-4. Import only approved candidates into the existing buyer CRM.
-5. Verify initial buyer criteria and proof.
-6. Send one approved deal package after operational email is accepted.
-7. Record engagement, offers, deposits, primary buyer, and backup buyer.
-8. Complete one contract-to-buyer-to-reconciliation simulation.
+1. Create an API key in the paid Stonegate DealMachine account.
+2. Configure the production variables and redeploy.
+3. Confirm the readiness check shows the expected paid plan, billing-cycle reset, and available
+   credits.
+4. Preview and run controlled buyer discovery for a known market and property.
+5. Compare the preview with actual credits and review data quality, contacts, DNC handling,
+   activity, score explanations, and duplicates.
+6. Import only approved candidates into the existing buyer CRM.
+7. Verify initial buyer criteria and proof.
+8. Send one approved deal package after operational email is accepted.
+9. Record engagement, offers, deposits, primary buyer, and backup buyer.
+10. Complete one contract-to-buyer-to-reconciliation simulation.
 
 ### Exit Criteria
 

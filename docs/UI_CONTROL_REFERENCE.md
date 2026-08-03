@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 2, 2026
+Last verified against the application: August 3, 2026
 
 ## Purpose
 
@@ -1287,9 +1287,11 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | Internal match list | Ranks stored buyers against market, property, price, strategy, funding, and performance | Requires buyer profiles |
 | Match explanation | Shows why a buyer ranked highly or poorly | Read-only |
 | **Rank buyers** | Refreshes the buyer recommendation using current case facts | AI output remains reviewable |
-| **Find buyers with DealMachine** | Requests external buyer candidates for the subject market | Requires enabled DealMachine API credentials |
-| Candidate result | Shows provider data and match context before import | Not yet a Stonegate buyer record |
-| **Import buyer** | Creates or updates an internal buyer from a reviewed candidate | Staff approval required |
+| DealMachine plan and credits | Shows whether the paid account is reachable, the active plan, available credits, and billing reset | Requires enabled DealMachine API credentials |
+| **Preview search cost** | Validates the deal-specific search and estimates property and owner credits without consuming them | Requires a connected paid plan with available credits |
+| **Run search (up to N credits)** | Confirms the displayed estimate, requests recent local purchaser candidates, and records actual provider credit use | Disabled until a current preview succeeds; the run is rejected if the estimate changes or credits are insufficient |
+| Candidate result | Shows provider evidence and match context before import; DNC-tagged phone numbers are excluded | Not yet a Stonegate buyer record |
+| **Import selected** | Creates or updates internal buyers from the reviewed, checked candidates | Staff selection and approval required; does not send outreach |
 | Proof of funds upload | Attaches funding evidence | Requires supported document |
 | **Verify / Reject proof of funds** | Records staff review of funding evidence | Authorized role only |
 | Buyer activity | Logs contact, interest, showing, pass reason, and follow-up | Requires selected buyer |

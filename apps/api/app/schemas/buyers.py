@@ -69,11 +69,35 @@ class BuyerDataProviderRead(BaseModel):
     configured: bool
     live_search_enabled: bool
     message: str
+    connected: bool | None = None
+    plan_name: str | None = None
+    is_paid: bool | None = None
+    billing_cycle_end: datetime | None = None
+    credits_remaining: int | None = None
+    credits_used: int | None = None
+    credits_total: int | None = None
 
 
-class BuyerDiscoveryCreate(BaseModel):
+class BuyerDiscoveryEstimateCreate(BaseModel):
     disposition_case_id: UUID
     max_candidates: int = Field(default=25, ge=5, le=100)
+
+
+class BuyerDiscoveryCreate(BuyerDiscoveryEstimateCreate):
+    confirmed_estimated_credits: int = Field(ge=0)
+
+
+class BuyerDiscoveryEstimateRead(BaseModel):
+    disposition_case_id: UUID
+    requested_candidates: int
+    provider_result_limit: int
+    total_matching_properties: int
+    estimated_credits: int
+    estimated_property_credits: int
+    estimated_people_credits: int
+    credits_remaining: int
+    enough_credits: bool
+    message: str
 
 
 class BuyerDiscoveryCandidateRead(BaseModel):
