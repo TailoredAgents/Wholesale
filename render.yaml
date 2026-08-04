@@ -209,7 +209,7 @@ services:
       - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: UNDERWRITING_DEALMACHINE_COMPS_MODE
-        value: shadow
+        value: candidate
       - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
         value: 2
       - key: BUYER_DISCOVERY_MAX_RESULTS
