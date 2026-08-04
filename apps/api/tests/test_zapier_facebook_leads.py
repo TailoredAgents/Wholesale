@@ -1,4 +1,3 @@
-import json
 from collections.abc import Iterator
 from typing import cast
 
@@ -28,7 +27,6 @@ from app.services.meta_lead_ads import (
     process_next_staff_lead_alert,
 )
 
-WEBHOOK_SECRET = "zapier-test-secret-with-at-least-32-characters"
 PAGE_ID = "123456789"
 PROVIDER_LEAD_ID = "987654321012345"
 ENDPOINT = "/api/v1/webhooks/zapier/facebook-leads"
@@ -38,7 +36,6 @@ ENDPOINT = "/api/v1/webhooks/zapier/facebook-leads"
 def zapier_settings(monkeypatch: MonkeyPatch) -> Iterator[Settings]:
     values = {
         "ZAPIER_FACEBOOK_LEADS_ENABLED": "true",
-        "ZAPIER_FACEBOOK_LEADS_SECRET": WEBHOOK_SECRET,
         "ZAPIER_FACEBOOK_PAGE_ID": PAGE_ID,
         "STAFF_LEAD_ALERT_SMS_MODE": "simulate",
     }
@@ -94,17 +91,10 @@ def webhook_payload(lead_id: str = PROVIDER_LEAD_ID) -> dict[str, object]:
 
 
 def post_lead(client: TestClient, payload: dict[str, object]) -> Response:
-    return cast(
-        Response,
-        client.post(
-            ENDPOINT,
-            json=payload,
-            headers={"X-Stonegate-Webhook-Secret": WEBHOOK_SECRET},
-        ),
-    )
+    return cast(Response, client.post(ENDPOINT, json=payload))
 
 
-def test_zapier_webhook_requires_enabled_mode_and_valid_secret(
+def test_zapier_webhook_requires_enabled_mode(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
@@ -116,18 +106,14 @@ def test_zapier_webhook_requires_enabled_mode_and_valid_secret(
     disabled = client.post(ENDPOINT, json=webhook_payload())
 
     monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_ENABLED", "true")
-    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_SECRET", WEBHOOK_SECRET)
     monkeypatch.setenv("ZAPIER_FACEBOOK_PAGE_ID", PAGE_ID)
     get_settings.cache_clear()
-    rejected = client.post(
-        ENDPOINT,
-        json=webhook_payload(),
-        headers={"X-Stonegate-Webhook-Secret": "wrong-secret"},
-    )
+    accepted = client.post(ENDPOINT, json=webhook_payload())
     retired = client.post("/api/v1/webhooks/meta/lead-ads", json={})
 
     assert disabled.status_code == 503
-    assert rejected.status_code == 401
+    assert accepted.status_code == 200
+    assert accepted.json() == {"received": True, "accepted": 1}
     assert retired.status_code == 404
     get_settings.cache_clear()
 
@@ -176,7 +162,6 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     assert event.ingestion_method == "zapier"
     assert event.status == "processed"
     assert event.lead_id is not None
-    assert WEBHOOK_SECRET not in json.dumps(event.webhook_payload)
     assert event.webhook_payload["selling_reason"] == "Inherited property"
     lead = db_session.get(Lead, event.lead_id)
     assert lead is not None

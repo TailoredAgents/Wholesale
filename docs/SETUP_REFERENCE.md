@@ -660,16 +660,13 @@ does not use a Meta developer app, Graph access token, or direct Meta webhook fo
 Variables on both **oakwell-api** and **oakwell-worker**:
 
 - `ZAPIER_FACEBOOK_LEADS_ENABLED`
-- `ZAPIER_FACEBOOK_LEADS_SECRET`
 - `ZAPIER_FACEBOOK_PAGE_ID`
 - `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
 - `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
 - `STAFF_LEAD_ALERT_SMS_MODE` plus its retry values
 
-Generate a unique random secret containing at least 32 characters. Store it only in Render and the
-Zapier action; never place it in chat, documentation, a query string, or a screenshot. The endpoint
-is:
+The endpoint is:
 
 ```text
 https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads
@@ -694,7 +691,6 @@ Add **Webhooks by Zapier > Custom Request** as the Zap's only action:
 - Data Pass-Through: `false`
 - Unflatten: `false`
 - Header `Content-Type`: `application/json`
-- Header `X-Stonegate-Webhook-Secret`: the same secret stored in Render
 
 Use a JSON body with Zapier field tokens in place of the example labels:
 
@@ -739,7 +735,7 @@ underscores, or hyphens; Stonegate preserves them even when they are not part of
 
 ### Activation And Acceptance
 
-1. Store the secret and numeric Page ID on both Render services. Leave
+1. Store the numeric Page ID on both Render services. Leave
    `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
 2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
    Zapier action test.
@@ -753,11 +749,11 @@ underscores, or hyphens; Stonegate preserves them even when they are not part of
 7. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
-The endpoint authenticates before parsing, rejects the wrong Page, limits request size, and returns
-quickly after durable storage. The worker performs CRM intake and retries temporary internal
-failures with backoff. Facebook lead IDs are unique per organization, so Zapier replays are safe.
-If a Zap fails, correct the mapping and replay the original run; do not manually invent another
-provider lead ID.
+The endpoint is publicly reachable and does not authenticate requests. It rejects the wrong Page,
+limits request size, and returns quickly after durable storage. The worker performs CRM intake and
+retries temporary internal failures with backoff. Facebook lead IDs are unique per organization,
+so Zapier replays are safe. If a Zap fails, correct the mapping and replay the original run; do not
+manually invent another provider lead ID.
 
 Facebook form submission authorizes Stonegate to respond by the channels stated on that form. It
 does **not** create seller SMS marketing consent. Stonegate records phone and email contact basis

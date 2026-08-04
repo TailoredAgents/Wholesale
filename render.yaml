@@ -248,8 +248,6 @@ services:
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: false
-      - key: ZAPIER_FACEBOOK_LEADS_SECRET
-        sync: false
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
@@ -479,8 +477,6 @@ services:
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: false
-      - key: ZAPIER_FACEBOOK_LEADS_SECRET
-        sync: false
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES

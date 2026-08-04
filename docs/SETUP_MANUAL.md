@@ -604,7 +604,7 @@ Facebook lead forms use a different connection from the website Pixel. The Pixel
 activity; Zapier delivers each instant-form submission to Stonegate, and the worker performs the
 normal CRM intake. No Meta developer app or Graph API token is required.
 
-1. Finish the Zapier connection, one-action mapping, Render secret, and Page-ID steps in
+1. Finish the Zapier connection, one-action mapping, and Render Page-ID steps in
    [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#zapier-facebook-lead-ads-intake-and-staff-alerts).
 2. Use this Stonegate action URL:
    `https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads`.
