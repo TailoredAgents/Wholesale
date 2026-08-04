@@ -217,7 +217,7 @@ services:
       - key: BUYER_DISCOVERY_MAX_RESULTS
         value: 100
       - key: MARKETING_CONVERSION_MODE
-        value: disabled
+        value: live
       - key: MARKETING_CONVERSION_WINDOW_DAYS
         value: 90
       - key: MARKETING_CONVERSION_MAX_ATTEMPTS
@@ -430,7 +430,7 @@ services:
       - key: GOOGLE_OAUTH_REDIRECT_URI
         sync: false
       - key: MARKETING_CONVERSION_MODE
-        value: disabled
+        value: live
       - key: MARKETING_CONVERSION_WINDOW_DAYS
         value: 90
       - key: MARKETING_CONVERSION_MAX_ATTEMPTS
