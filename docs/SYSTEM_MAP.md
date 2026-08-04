@@ -1143,13 +1143,14 @@ identifiers are normalized and hashed, event keys are stable, and retries are au
 and Conversions API delivery passed controlled acceptance; Google delivery remains behind its
 account credentials and acceptance tests.
 
-Meta Lead Ads intake is a separate signed webhook workflow. It acknowledges and deduplicates the
-provider event, retrieves the full instant-form record from the Graph API in the worker, maps it
-through the normal public seller intake, records campaign/ad attribution, and queues an internal
-SMS alert for each explicitly opted-in employee. Retrieval and alert delivery retry with backoff.
-The system records requested phone/email contact basis but never infers seller SMS consent from a
-Meta phone field. Staff SMS delivery remains disabled until Twilio approves and accepts that
-internal alert use case.
+Meta Lead Ads intake uses one Zapier action to send a secret-authenticated, Page-bound payload to
+Stonegate. The API validates and deduplicates the Facebook lead ID, durably stores the original and
+normalized payloads, and lets the worker run normal public seller intake, campaign/ad attribution,
+and internal SMS alert queuing. CRM intake and alert delivery retry with backoff. Stonegate does
+not use a Meta developer app, Graph token, or direct Meta webhook for this workflow. The system
+records requested phone/email contact basis but never infers seller SMS consent from a Meta phone
+field. Staff SMS delivery remains disabled until Twilio approves and accepts that internal alert
+use case.
 
 Marketing also owns the public trust-proof library. `marketing:manage_public_proof` allows Owner
 and Marketing Manager roles to prepare, review, publish, unpublish, and retire proof. Other
@@ -1293,7 +1294,7 @@ telemarketing, recording, or real-estate advice.
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
-| Meta Lead Ads | Facebook instant-form CRM intake | Implemented signed webhook, retrieval worker, deduplication, attribution, and retries | Meta app, Page access, credentials, and controlled acceptance pending |
+| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented authenticated Zapier endpoint, deduplication, attribution, audit payloads, and retries | Zapier connection, Page Leads Access, secret, form mapping, and controlled acceptance pending |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Disabled until approved use case and controlled acceptance |
 
 ## 21. Data Domain Map

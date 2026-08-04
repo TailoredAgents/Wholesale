@@ -13,7 +13,6 @@ from app.integrations.communications import (
     OutboundMessageRequest,
     SimulatedCommunicationProvider,
 )
-from app.integrations.meta_lead_ads import MetaLeadAdsClient, MetaLeadAdsError
 from app.integrations.twilio_messaging import (
     TwilioMessagingError,
     get_twilio_messaging_provider,
@@ -27,6 +26,7 @@ from app.models.foundation import (
     User,
 )
 from app.schemas.public_intake import SellerIntakeCreate
+from app.schemas.zapier import ZapierFacebookLeadCreate
 from app.services.communication_compliance import format_e164
 from app.services.public_intake import create_public_seller_lead, get_default_organization
 
@@ -71,86 +71,57 @@ class MetaLeadNeedsReview(ValueError):
     pass
 
 
-def receive_meta_lead_webhook(
+def receive_zapier_facebook_lead(
     db: Session,
-    payload: dict[str, object],
+    payload: ZapierFacebookLeadCreate,
     settings: Settings,
 ) -> int:
-    if payload.get("object") != "page":
-        return 0
     organization = get_default_organization(db)
-    accepted = 0
-    entries = payload.get("entry")
-    if not isinstance(entries, list):
+    if payload.page_id != settings.zapier_facebook_page_id:
+        raise ValueError("Zapier Facebook lead does not belong to the configured Page.")
+    existing = db.scalar(
+        select(MetaLeadEvent.id).where(
+            MetaLeadEvent.organization_id == organization.id,
+            MetaLeadEvent.provider_lead_id == payload.provider_lead_id,
+        )
+    )
+    if existing is not None:
         return 0
-    for entry in entries:
-        if not isinstance(entry, dict):
-            continue
-        entry_page_id = str(entry.get("id") or "")
-        changes = entry.get("changes")
-        if not isinstance(changes, list):
-            continue
-        for change in changes:
-            if not isinstance(change, dict) or change.get("field") != "leadgen":
-                continue
-            value = change.get("value")
-            if not isinstance(value, dict):
-                continue
-            page_id = str(value.get("page_id") or entry_page_id)
-            if settings.meta_lead_ads_page_id and page_id != settings.meta_lead_ads_page_id:
-                continue
-            provider_lead_id = str(value.get("leadgen_id") or "")
-            if not provider_lead_id.isdigit():
-                continue
-            existing = db.scalar(
-                select(MetaLeadEvent.id).where(
-                    MetaLeadEvent.organization_id == organization.id,
-                    MetaLeadEvent.provider_lead_id == provider_lead_id,
-                )
-            )
-            if existing is not None:
-                continue
-            received_at = datetime.now(UTC)
-            db.add(
-                MetaLeadEvent(
-                    organization_id=organization.id,
-                    lead_id=None,
-                    provider_lead_id=provider_lead_id,
-                    page_id=page_id,
-                    form_id=string_or_none(value.get("form_id")),
-                    ad_id=string_or_none(value.get("ad_id")),
-                    campaign_id=None,
-                    status="pending",
-                    attempt_count=0,
-                    received_at=received_at,
-                    lead_created_at=None,
-                    last_attempt_at=None,
-                    next_attempt_at=None,
-                    processed_at=None,
-                    webhook_payload={
-                        "entry_id": entry_page_id,
-                        "entry_time": entry.get("time"),
-                        "field": "leadgen",
-                        "value": value,
-                    },
-                    lead_payload=None,
-                    last_error=None,
-                )
-            )
-            accepted += 1
+    lead_payload = payload.normalized_lead_payload()
+    db.add(
+        MetaLeadEvent(
+            organization_id=organization.id,
+            lead_id=None,
+            provider_lead_id=payload.provider_lead_id,
+            ingestion_method="zapier",
+            page_id=payload.page_id,
+            form_id=payload.form_id,
+            ad_id=payload.ad_id,
+            campaign_id=payload.campaign_id,
+            status="pending",
+            attempt_count=0,
+            received_at=datetime.now(UTC),
+            lead_created_at=parse_meta_datetime(payload.created_time),
+            last_attempt_at=None,
+            next_attempt_at=None,
+            processed_at=None,
+            webhook_payload=payload.raw_payload(),
+            lead_payload=lead_payload,
+            last_error=None,
+        )
+    )
     db.commit()
-    return accepted
+    return 1
 
 
 def process_next_meta_lead_event(
     db: Session,
     settings: Settings,
-    client: MetaLeadAdsClient | None = None,
 ) -> UUID | None:
-    if not settings.meta_lead_ads_enabled:
+    if not settings.zapier_facebook_leads_enabled:
         return None
     now = datetime.now(UTC)
-    configured = settings.meta_lead_ads_configured
+    configured = settings.zapier_facebook_leads_configured
     event = db.scalar(
         select(MetaLeadEvent)
         .where(
@@ -176,28 +147,23 @@ def process_next_meta_lead_event(
         event.status = "blocked"
         event.last_error = (
             "Missing configuration: "
-            + ", ".join(settings.meta_lead_ads_configuration_blockers)
+            + ", ".join(settings.zapier_facebook_leads_configuration_blockers)
         )
         db.commit()
         return event.id
 
     event.status = "processing"
     db.commit()
-    provider = client or MetaLeadAdsClient(settings)
     try:
-        lead_payload = provider.fetch_lead(event.provider_lead_id)
-        event.lead_payload = lead_payload
-        event.form_id = string_or_none(lead_payload.get("form_id")) or event.form_id
-        event.ad_id = string_or_none(lead_payload.get("ad_id")) or event.ad_id
-        event.campaign_id = string_or_none(lead_payload.get("campaign_id"))
-        event.lead_created_at = parse_meta_datetime(lead_payload.get("created_time"))
-        db.flush()
+        lead_payload = event.lead_payload
+        if not isinstance(lead_payload, dict):
+            raise MetaLeadNeedsReview("Zapier event does not contain normalized lead data.")
         intake = meta_lead_to_intake(event, lead_payload)
         response = create_public_seller_lead(
             db,
             intake,
             ip_address=None,
-            user_agent="Meta Lead Ads Graph API",
+            user_agent="Zapier Facebook Lead Ads",
             intake_source="facebook_lead_ads",
             contact_consent_wording_version=META_CONTACT_CONSENT_VERSION,
             contact_consent_wording=META_CONTACT_CONSENT_WORDING,
@@ -212,16 +178,10 @@ def process_next_meta_lead_event(
             refreshed.processed_at = datetime.now(UTC)
             db.commit()
         return event.id
-    except MetaLeadAdsError as exc:
-        mark_meta_lead_failure(db, event.id, settings, str(exc))
-        return event.id
     except Exception as exc:
         db.rollback()
         mark_meta_lead_failure(db, event.id, settings, str(exc))
         return event.id
-    finally:
-        if client is None:
-            provider.close()
 
     refreshed = db.get(MetaLeadEvent, event.id)
     if refreshed is None:
@@ -245,13 +205,13 @@ def mark_meta_lead_failure(
     if event is None:
         return
     event.last_error = error[:2000]
-    if event.attempt_count >= settings.meta_lead_ads_max_attempts:
+    if event.attempt_count >= settings.facebook_lead_intake_max_attempts:
         event.status = "exhausted"
         event.next_attempt_at = None
     else:
         event.status = "retry"
         event.next_attempt_at = datetime.now(UTC) + timedelta(
-            seconds=settings.meta_lead_ads_retry_base_seconds
+            seconds=settings.facebook_lead_intake_retry_base_seconds
             * (2 ** max(0, event.attempt_count - 1))
         )
     db.commit()

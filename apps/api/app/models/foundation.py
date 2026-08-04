@@ -4722,6 +4722,9 @@ class MetaLeadEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     provider_lead_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    ingestion_method: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="zapier", index=True
+    )
     page_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     form_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     ad_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

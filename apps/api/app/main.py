@@ -23,7 +23,6 @@ from app.routers import (
     leads,
     marketing,
     me,
-    meta_webhooks,
     operating_model,
     operations,
     prospecting,
@@ -34,6 +33,7 @@ from app.routers import (
     underwriting,
     voice,
     webhooks,
+    zapier_webhooks,
 )
 
 
@@ -73,7 +73,6 @@ def create_app() -> FastAPI:
     app.include_router(lead_manager.router)
     app.include_router(leads.router)
     app.include_router(marketing.router)
-    app.include_router(meta_webhooks.router)
     app.include_router(me.router)
     app.include_router(operating_model.router)
     app.include_router(operations.router)
@@ -85,6 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(underwriting.router)
     app.include_router(voice.router)
     app.include_router(webhooks.router)
+    app.include_router(zapier_webhooks.router)
     return app
 
 

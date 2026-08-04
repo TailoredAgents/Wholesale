@@ -1066,9 +1066,9 @@ def get_measurement_summary(
                 blockers=list(settings.meta_conversion_configuration_blockers),
             ),
             MarketingProviderReadiness(
-                platform="meta_lead_ads",
-                configured=settings.meta_lead_ads_configured,
-                blockers=list(settings.meta_lead_ads_configuration_blockers),
+                platform="zapier_facebook_leads",
+                configured=settings.zapier_facebook_leads_configured,
+                blockers=list(settings.zapier_facebook_leads_configuration_blockers),
             ),
             MarketingProviderReadiness(
                 platform="staff_lead_alert_sms",

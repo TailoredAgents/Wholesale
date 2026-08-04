@@ -651,50 +651,113 @@ Meta rejects events older than seven days; the worker expires those instead of r
 request. Delivery remains one event per request so one invalid event cannot reject unrelated
 events.
 
-## Meta Lead Ads Intake And Staff Alerts
+## Zapier Facebook Lead Ads Intake And Staff Alerts
 
 This is separate from the Pixel and Conversions API. The Pixel reports activity back to Meta;
-Lead Ads intake moves a submitted Facebook instant form into Stonegate as a real CRM lead.
+Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead. Stonegate
+does not use a Meta developer app, Graph access token, or direct Meta webhook for lead intake.
 
 Variables on both **oakwell-api** and **oakwell-worker**:
 
-- `META_LEAD_ADS_ENABLED`
-- `META_LEAD_ADS_APP_SECRET`
-- `META_LEAD_ADS_VERIFY_TOKEN`
-- `META_LEAD_ADS_PAGE_ID`
-- `META_LEAD_ADS_ACCESS_TOKEN`
-- `META_LEAD_ADS_API_VERSION`
-- Lead retrieval retry and timeout values
+- `ZAPIER_FACEBOOK_LEADS_ENABLED`
+- `ZAPIER_FACEBOOK_LEADS_SECRET`
+- `ZAPIER_FACEBOOK_PAGE_ID`
+- `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
+- `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
+- `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
 - `STAFF_LEAD_ALERT_SMS_MODE` plus its retry values
 
-Do not reuse the Conversions API access token as the app secret or webhook verification token.
-Generate a long random verification token and store all three server credentials only in Render.
-The callback is:
+Generate a unique random secret containing at least 32 characters. Store it only in Render and the
+Zapier action; never place it in chat, documentation, a query string, or a screenshot. The endpoint
+is:
 
 ```text
-https://api.stonegatehb.com/api/v1/webhooks/meta/lead-ads
+https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads
 ```
 
-Meta setup and acceptance:
+### Zapier Connection And Trigger
 
-1. In the Stonegate Meta developer app, connect the Stonegate Facebook Page and grant the app the
-   permissions and Page lead access required to retrieve instant-form leads.
-2. Add a Page Webhooks subscription using the callback above and the value stored in
-   `META_LEAD_ADS_VERIFY_TOKEN`; subscribe the Page to the `leadgen` field.
-3. Store the app secret, Page ID, and long-lived Page access token on both Render services.
-4. Keep `META_LEAD_ADS_ENABLED=false` until those settings are present, then set it to `true` on
-   both services and redeploy.
-5. Submit a Meta test lead. Confirm exactly one new CRM lead, seller conversation, five-minute
-   speed-to-lead task, inbound case, notification, and AI intake job appear. Re-sending the same
-   provider lead ID must not create another lead.
-6. Confirm source is `facebook_lead_ads`, campaign and ad attribution are present, and the original
-   provider payload remains auditable. A submission without email and phone stops in
+1. In Meta Page settings or Business Settings, grant Zapier CRM/Leads Access to the Stonegate Page.
+2. In Zapier, add the **Facebook Lead Ads** connection using the Facebook account that controls the
+   Page. The integration requires a paid Zapier plan.
+3. Create one Zap with **Facebook Lead Ads > New Lead** as the instant trigger.
+4. Select the Stonegate Page and the production instant form. Use a separate Zap for another form
+   unless its output fields are identical and intentionally mapped.
+5. Generate a Facebook test lead and confirm Zapier loads all required trigger fields.
+
+### One Stonegate Action
+
+Add **Webhooks by Zapier > Custom Request** as the Zap's only action:
+
+- Method: `POST`
+- URL: `https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads`
+- Data Pass-Through: `false`
+- Unflatten: `false`
+- Header `Content-Type`: `application/json`
+- Header `X-Stonegate-Webhook-Secret`: the same secret stored in Render
+
+Use a JSON body with Zapier field tokens in place of the example labels:
+
+```json
+{
+  "provider_lead_id": "{{Lead ID}}",
+  "page_id": "{{Page ID or the configured Stonegate Page ID}}",
+  "form_id": "{{Form ID}}",
+  "form_name": "{{Form Name}}",
+  "created_time": "{{Created Time}}",
+  "ad_id": "{{Ad ID}}",
+  "ad_name": "{{Ad Name}}",
+  "adset_id": "{{Ad Set ID}}",
+  "adset_name": "{{Ad Set Name}}",
+  "campaign_id": "{{Campaign ID}}",
+  "campaign_name": "{{Campaign Name}}",
+  "platform": "{{Platform}}",
+  "is_organic": false,
+  "full_name": "{{Full Name}}",
+  "email": "{{Email}}",
+  "phone_number": "{{Phone Number}}",
+  "property_address": "{{Property Address answer}}",
+  "property_city": "{{Property City answer}}",
+  "property_state": "{{Property State answer}}",
+  "property_zip_code": "{{Property ZIP answer}}",
+  "property_type": "{{Property Type answer}}",
+  "reason_for_selling": "{{Reason for Selling answer}}",
+  "desired_timeline": "{{Selling Timeline answer}}",
+  "property_condition": "{{Property Condition answer}}",
+  "occupancy_status": "{{Occupancy answer}}",
+  "asking_price": "{{Asking Price answer}}",
+  "mortgage_balance": "{{Mortgage Balance answer}}",
+  "comments": "{{Comments answer}}"
+}
+```
+
+`provider_lead_id` and `page_id` are required and must be the numeric Facebook values. At least
+one of `email` or `phone_number` is required for usable CRM intake. Remove optional JSON properties
+that are not present on the form rather than inserting descriptive placeholder text. Custom
+question keys may also be sent as flat scalar fields using letters, numbers, spaces, periods,
+underscores, or hyphens; Stonegate preserves them even when they are not part of CRM qualification.
+
+### Activation And Acceptance
+
+1. Store the secret and numeric Page ID on both Render services. Leave
+   `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
+2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
+   Zapier action test.
+3. Confirm the action returns `received: true` and `accepted: 1`.
+4. Confirm exactly one CRM lead, seller conversation, five-minute speed-to-lead task, inbound case,
+   notification, and AI intake job appear.
+5. Re-test the same Zapier sample. It must return `accepted: 0` and create no duplicate records.
+6. Confirm source is `facebook_lead_ads`, campaign/ad attribution is present, ingestion method is
+   `zapier`, and the original payload is auditable. A submission without email and phone stops in
    `needs_review` instead of creating an unusable lead.
+7. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
+   Marketing readiness during the first campaign.
 
-The worker retrieves the full lead after acknowledging Meta's signed webhook. Temporary Graph API
-failures retry with backoff. Provider lead IDs are unique per organization, so Meta retries are
-safe. Marketing readiness shows configuration blockers and the counts for Meta lead and staff
-alert queue states.
+The endpoint authenticates before parsing, rejects the wrong Page, limits request size, and returns
+quickly after durable storage. The worker performs CRM intake and retries temporary internal
+failures with backoff. Facebook lead IDs are unique per organization, so Zapier replays are safe.
+If a Zap fails, correct the mapping and replay the original run; do not manually invent another
+provider lead ID.
 
 Facebook form submission authorizes Stonegate to respond by the channels stated on that form. It
 does **not** create seller SMS marketing consent. Stonegate records phone and email contact basis
@@ -711,7 +774,7 @@ should receive them:
    Messaging Service cover this internal notification use case and each employee has agreed to
    receive the alerts.
 5. Run a non-production `simulate` test, then set the API and worker to `live`, redeploy, and submit
-   one controlled Meta test lead.
+   one controlled Zapier test lead.
 6. Confirm each opted-in employee receives one minimal alert and the delivery callback becomes
    `delivered`. The alert contains the seller name, market, and a Stonegate lead link, but excludes
    the seller's phone number and street address.

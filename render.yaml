@@ -246,23 +246,17 @@ services:
         value: v25.0
       - key: META_TEST_EVENT_CODE
         sync: false
-      - key: META_LEAD_ADS_ENABLED
+      - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: false
-      - key: META_LEAD_ADS_APP_SECRET
+      - key: ZAPIER_FACEBOOK_LEADS_SECRET
         sync: false
-      - key: META_LEAD_ADS_VERIFY_TOKEN
+      - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
-      - key: META_LEAD_ADS_PAGE_ID
-        sync: false
-      - key: META_LEAD_ADS_ACCESS_TOKEN
-        sync: false
-      - key: META_LEAD_ADS_API_VERSION
-        value: v25.0
-      - key: META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS
-        value: 30
-      - key: META_LEAD_ADS_MAX_ATTEMPTS
+      - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
+        value: 65536
+      - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
-      - key: META_LEAD_ADS_RETRY_BASE_SECONDS
+      - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
         value: 30
       - key: STAFF_LEAD_ALERT_SMS_MODE
         value: disabled
@@ -483,23 +477,17 @@ services:
         value: v25.0
       - key: META_TEST_EVENT_CODE
         sync: false
-      - key: META_LEAD_ADS_ENABLED
+      - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: false
-      - key: META_LEAD_ADS_APP_SECRET
+      - key: ZAPIER_FACEBOOK_LEADS_SECRET
         sync: false
-      - key: META_LEAD_ADS_VERIFY_TOKEN
+      - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
-      - key: META_LEAD_ADS_PAGE_ID
-        sync: false
-      - key: META_LEAD_ADS_ACCESS_TOKEN
-        sync: false
-      - key: META_LEAD_ADS_API_VERSION
-        value: v25.0
-      - key: META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS
-        value: 30
-      - key: META_LEAD_ADS_MAX_ATTEMPTS
+      - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
+        value: 65536
+      - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
-      - key: META_LEAD_ADS_RETRY_BASE_SECONDS
+      - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
         value: 30
       - key: STAFF_LEAD_ALERT_SMS_MODE
         value: disabled

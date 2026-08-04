@@ -410,47 +410,35 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="META_TEST_EVENT_CODE",
     )
-    meta_lead_ads_enabled: bool = Field(
+    zapier_facebook_leads_enabled: bool = Field(
         default=False,
-        validation_alias="META_LEAD_ADS_ENABLED",
+        validation_alias="ZAPIER_FACEBOOK_LEADS_ENABLED",
     )
-    meta_lead_ads_app_secret: str | None = Field(
+    zapier_facebook_leads_secret: str | None = Field(
         default=None,
-        validation_alias="META_LEAD_ADS_APP_SECRET",
+        validation_alias="ZAPIER_FACEBOOK_LEADS_SECRET",
     )
-    meta_lead_ads_verify_token: str | None = Field(
+    zapier_facebook_page_id: str | None = Field(
         default=None,
-        validation_alias="META_LEAD_ADS_VERIFY_TOKEN",
+        validation_alias="ZAPIER_FACEBOOK_PAGE_ID",
     )
-    meta_lead_ads_page_id: str | None = Field(
-        default=None,
-        validation_alias="META_LEAD_ADS_PAGE_ID",
+    zapier_facebook_leads_max_payload_bytes: int = Field(
+        default=65_536,
+        ge=4096,
+        le=1_000_000,
+        validation_alias="ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES",
     )
-    meta_lead_ads_access_token: str | None = Field(
-        default=None,
-        validation_alias="META_LEAD_ADS_ACCESS_TOKEN",
-    )
-    meta_lead_ads_api_version: str = Field(
-        default="v25.0",
-        validation_alias="META_LEAD_ADS_API_VERSION",
-    )
-    meta_lead_ads_request_timeout_seconds: float = Field(
-        default=30,
-        ge=5,
-        le=120,
-        validation_alias="META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS",
-    )
-    meta_lead_ads_max_attempts: int = Field(
+    facebook_lead_intake_max_attempts: int = Field(
         default=8,
         ge=1,
         le=25,
-        validation_alias="META_LEAD_ADS_MAX_ATTEMPTS",
+        validation_alias="FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS",
     )
-    meta_lead_ads_retry_base_seconds: int = Field(
+    facebook_lead_intake_retry_base_seconds: int = Field(
         default=30,
         ge=5,
         le=3600,
-        validation_alias="META_LEAD_ADS_RETRY_BASE_SECONDS",
+        validation_alias="FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS",
     )
     staff_lead_alert_sms_mode: Literal["disabled", "simulate", "live"] = Field(
         default="disabled",
@@ -862,23 +850,21 @@ class Settings(BaseSettings):
         return tuple(blockers)
 
     @property
-    def meta_lead_ads_configuration_blockers(self) -> tuple[str, ...]:
+    def zapier_facebook_leads_configuration_blockers(self) -> tuple[str, ...]:
         blockers: list[str] = []
-        if not self.meta_lead_ads_enabled:
-            blockers.append("META_LEAD_ADS_ENABLED=true")
-        if not self.meta_lead_ads_app_secret:
-            blockers.append("META_LEAD_ADS_APP_SECRET")
-        if not self.meta_lead_ads_verify_token:
-            blockers.append("META_LEAD_ADS_VERIFY_TOKEN")
-        if not self.meta_lead_ads_page_id:
-            blockers.append("META_LEAD_ADS_PAGE_ID")
-        if not self.meta_lead_ads_access_token:
-            blockers.append("META_LEAD_ADS_ACCESS_TOKEN")
+        if not self.zapier_facebook_leads_enabled:
+            blockers.append("ZAPIER_FACEBOOK_LEADS_ENABLED=true")
+        if not self.zapier_facebook_leads_secret:
+            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET")
+        elif len(self.zapier_facebook_leads_secret) < 32:
+            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET must contain at least 32 characters")
+        if not self.zapier_facebook_page_id:
+            blockers.append("ZAPIER_FACEBOOK_PAGE_ID")
         return tuple(blockers)
 
     @property
-    def meta_lead_ads_configured(self) -> bool:
-        return not self.meta_lead_ads_configuration_blockers
+    def zapier_facebook_leads_configured(self) -> bool:
+        return not self.zapier_facebook_leads_configuration_blockers
 
     @property
     def staff_lead_alert_configuration_blockers(self) -> tuple[str, ...]:
