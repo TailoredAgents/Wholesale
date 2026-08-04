@@ -201,13 +201,17 @@ services:
       - key: RENTCAST_BASE_URL
         value: https://api.rentcast.io/v1
       - key: BUYER_DATA_PROVIDER
-        sync: false
+        value: dealmachine
       - key: DEALMACHINE_API_KEY
         sync: false
       - key: DEALMACHINE_BASE_URL
         value: https://api.v2.dealmachine.com/v1
       - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
         value: 30
+      - key: UNDERWRITING_DEALMACHINE_COMPS_MODE
+        value: shadow
+      - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
+        value: 2
       - key: BUYER_DISCOVERY_MAX_RESULTS
         value: 100
       - key: MARKETING_CONVERSION_MODE
