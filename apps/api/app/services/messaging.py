@@ -29,6 +29,7 @@ from app.models.foundation import (
     ConversationContextLink,
     Lead,
     Organization,
+    StaffLeadAlert,
     SuppressionRecord,
     TeamMembership,
     VoiceLine,
@@ -458,9 +459,14 @@ def process_twilio_status(db: Session, payload: dict[str, str]) -> str:
             CommunicationRecord.provider_message_id == message_sid,
         )
     )
+    staff_alert = db.scalar(
+        select(StaffLeadAlert).where(StaffLeadAlert.provider_message_id == message_sid)
+    )
     organization = (
         db.get(Organization, communication.organization_id)
         if communication is not None
+        else db.get(Organization, staff_alert.organization_id)
+        if staff_alert is not None
         else get_default_organization(db)
     )
     if organization is None:
@@ -483,9 +489,25 @@ def process_twilio_status(db: Session, payload: dict[str, str]) -> str:
         error_message=None,
     )
     db.add(event)
-    if communication is None:
+    if communication is None and staff_alert is None:
         event.processing_status = "unmatched"
+    elif staff_alert is not None:
+        if staff_alert.status != "delivered" or message_status == "delivered":
+            staff_alert.status = message_status
+        staff_alert.last_error = payload.get("ErrorMessage") or (
+            f"Twilio error {payload.get('ErrorCode')}" if payload.get("ErrorCode") else None
+        )
+        staff_alert.provider_response = {
+            **(staff_alert.provider_response or {}),
+            "message_status": message_status,
+            "error_code": payload.get("ErrorCode"),
+            "error_message": payload.get("ErrorMessage"),
+        }
+        if message_status == "delivered":
+            staff_alert.delivered_at = datetime.now(UTC)
+        event.processing_status = "processed"
     else:
+        assert communication is not None
         communication.status = message_status
         communication.external_payload = {
             **(communication.external_payload or {}),

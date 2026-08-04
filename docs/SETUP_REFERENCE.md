@@ -651,6 +651,74 @@ Meta rejects events older than seven days; the worker expires those instead of r
 request. Delivery remains one event per request so one invalid event cannot reject unrelated
 events.
 
+## Meta Lead Ads Intake And Staff Alerts
+
+This is separate from the Pixel and Conversions API. The Pixel reports activity back to Meta;
+Lead Ads intake moves a submitted Facebook instant form into Stonegate as a real CRM lead.
+
+Variables on both **oakwell-api** and **oakwell-worker**:
+
+- `META_LEAD_ADS_ENABLED`
+- `META_LEAD_ADS_APP_SECRET`
+- `META_LEAD_ADS_VERIFY_TOKEN`
+- `META_LEAD_ADS_PAGE_ID`
+- `META_LEAD_ADS_ACCESS_TOKEN`
+- `META_LEAD_ADS_API_VERSION`
+- Lead retrieval retry and timeout values
+- `STAFF_LEAD_ALERT_SMS_MODE` plus its retry values
+
+Do not reuse the Conversions API access token as the app secret or webhook verification token.
+Generate a long random verification token and store all three server credentials only in Render.
+The callback is:
+
+```text
+https://api.stonegatehb.com/api/v1/webhooks/meta/lead-ads
+```
+
+Meta setup and acceptance:
+
+1. In the Stonegate Meta developer app, connect the Stonegate Facebook Page and grant the app the
+   permissions and Page lead access required to retrieve instant-form leads.
+2. Add a Page Webhooks subscription using the callback above and the value stored in
+   `META_LEAD_ADS_VERIFY_TOKEN`; subscribe the Page to the `leadgen` field.
+3. Store the app secret, Page ID, and long-lived Page access token on both Render services.
+4. Keep `META_LEAD_ADS_ENABLED=false` until those settings are present, then set it to `true` on
+   both services and redeploy.
+5. Submit a Meta test lead. Confirm exactly one new CRM lead, seller conversation, five-minute
+   speed-to-lead task, inbound case, notification, and AI intake job appear. Re-sending the same
+   provider lead ID must not create another lead.
+6. Confirm source is `facebook_lead_ads`, campaign and ad attribution are present, and the original
+   provider payload remains auditable. A submission without email and phone stops in
+   `needs_review` instead of creating an unusable lead.
+
+The worker retrieves the full lead after acknowledging Meta's signed webhook. Temporary Graph API
+failures retry with backoff. Provider lead IDs are unique per organization, so Meta retries are
+safe. Marketing readiness shows configuration blockers and the counts for Meta lead and staff
+alert queue states.
+
+Facebook form submission authorizes Stonegate to respond by the channels stated on that form. It
+does **not** create seller SMS marketing consent. Stonegate records phone and email contact basis
+from the instant form while leaving `sms_consent=false`; any seller texting workflow still requires
+its own approved consent evidence.
+
+Staff alerts are an internal operational message, not a text to the seller. For each employee who
+should receive them:
+
+1. Open **Settings > Communications > Staff ring settings**.
+2. Enter the employee's personal cellphone in `+1...` format.
+3. Select **Text new Facebook leads** and save.
+4. Leave `STAFF_LEAD_ALERT_SMS_MODE=disabled` until Stonegate confirms its Twilio registration and
+   Messaging Service cover this internal notification use case and each employee has agreed to
+   receive the alerts.
+5. Run a non-production `simulate` test, then set the API and worker to `live`, redeploy, and submit
+   one controlled Meta test lead.
+6. Confirm each opted-in employee receives one minimal alert and the delivery callback becomes
+   `delivered`. The alert contains the seller name, market, and a Stonegate lead link, but excludes
+   the seller's phone number and street address.
+
+Production forbids staff-alert `simulate` mode. Keep it `disabled` until Twilio acceptance is
+complete; disabling alerts never disables Meta lead ingestion.
+
 ## Public Trust Proof Acceptance
 
 The trust-and-proof system is internal and does not require another provider account or secret.

@@ -34,11 +34,13 @@ class VoiceLineUserRead(BaseModel):
     email: str
     voice_forwarding_number: str | None
     voice_forwarding_enabled: bool
+    lead_alert_sms_enabled: bool
 
 
 class VoiceForwardingUpdate(BaseModel):
     voice_forwarding_number: str | None = Field(default=None, max_length=80)
     voice_forwarding_enabled: bool = False
+    lead_alert_sms_enabled: bool = False
 
 
 class VoiceLineTeamRead(BaseModel):

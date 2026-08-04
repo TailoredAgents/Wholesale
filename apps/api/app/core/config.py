@@ -410,6 +410,64 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="META_TEST_EVENT_CODE",
     )
+    meta_lead_ads_enabled: bool = Field(
+        default=False,
+        validation_alias="META_LEAD_ADS_ENABLED",
+    )
+    meta_lead_ads_app_secret: str | None = Field(
+        default=None,
+        validation_alias="META_LEAD_ADS_APP_SECRET",
+    )
+    meta_lead_ads_verify_token: str | None = Field(
+        default=None,
+        validation_alias="META_LEAD_ADS_VERIFY_TOKEN",
+    )
+    meta_lead_ads_page_id: str | None = Field(
+        default=None,
+        validation_alias="META_LEAD_ADS_PAGE_ID",
+    )
+    meta_lead_ads_access_token: str | None = Field(
+        default=None,
+        validation_alias="META_LEAD_ADS_ACCESS_TOKEN",
+    )
+    meta_lead_ads_api_version: str = Field(
+        default="v25.0",
+        validation_alias="META_LEAD_ADS_API_VERSION",
+    )
+    meta_lead_ads_request_timeout_seconds: float = Field(
+        default=30,
+        ge=5,
+        le=120,
+        validation_alias="META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS",
+    )
+    meta_lead_ads_max_attempts: int = Field(
+        default=8,
+        ge=1,
+        le=25,
+        validation_alias="META_LEAD_ADS_MAX_ATTEMPTS",
+    )
+    meta_lead_ads_retry_base_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=3600,
+        validation_alias="META_LEAD_ADS_RETRY_BASE_SECONDS",
+    )
+    staff_lead_alert_sms_mode: Literal["disabled", "simulate", "live"] = Field(
+        default="disabled",
+        validation_alias="STAFF_LEAD_ALERT_SMS_MODE",
+    )
+    staff_lead_alert_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        validation_alias="STAFF_LEAD_ALERT_MAX_ATTEMPTS",
+    )
+    staff_lead_alert_retry_base_seconds: int = Field(
+        default=30,
+        ge=5,
+        le=3600,
+        validation_alias="STAFF_LEAD_ALERT_RETRY_BASE_SECONDS",
+    )
     attom_api_key: str | None = Field(default=None, validation_alias="ATTOM_API_KEY")
     rentcast_api_key: str | None = Field(default=None, validation_alias="RENTCAST_API_KEY")
     rentcast_base_url: str = Field(
@@ -599,6 +657,8 @@ class Settings(BaseSettings):
             raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
         if self.app_env.lower() == "production" and self.marketing_conversion_mode == "simulate":
             raise ValueError("MARKETING_CONVERSION_MODE=simulate is forbidden in production.")
+        if self.app_env.lower() == "production" and self.staff_lead_alert_sms_mode == "simulate":
+            raise ValueError("STAFF_LEAD_ALERT_SMS_MODE=simulate is forbidden in production.")
         if (
             self.app_env.lower() == "production"
             and self.email_enabled
@@ -800,6 +860,33 @@ class Settings(BaseSettings):
         if not self.meta_pixel_id:
             blockers.append("META_PIXEL_ID")
         return tuple(blockers)
+
+    @property
+    def meta_lead_ads_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if not self.meta_lead_ads_enabled:
+            blockers.append("META_LEAD_ADS_ENABLED=true")
+        if not self.meta_lead_ads_app_secret:
+            blockers.append("META_LEAD_ADS_APP_SECRET")
+        if not self.meta_lead_ads_verify_token:
+            blockers.append("META_LEAD_ADS_VERIFY_TOKEN")
+        if not self.meta_lead_ads_page_id:
+            blockers.append("META_LEAD_ADS_PAGE_ID")
+        if not self.meta_lead_ads_access_token:
+            blockers.append("META_LEAD_ADS_ACCESS_TOKEN")
+        return tuple(blockers)
+
+    @property
+    def meta_lead_ads_configured(self) -> bool:
+        return not self.meta_lead_ads_configuration_blockers
+
+    @property
+    def staff_lead_alert_configuration_blockers(self) -> tuple[str, ...]:
+        if self.staff_lead_alert_sms_mode == "disabled":
+            return ("STAFF_LEAD_ALERT_SMS_MODE=live",)
+        if self.staff_lead_alert_sms_mode == "simulate":
+            return ()
+        return self.twilio_sms_configuration_blockers
 
 
 @lru_cache

@@ -246,6 +246,30 @@ services:
         value: v25.0
       - key: META_TEST_EVENT_CODE
         sync: false
+      - key: META_LEAD_ADS_ENABLED
+        value: false
+      - key: META_LEAD_ADS_APP_SECRET
+        sync: false
+      - key: META_LEAD_ADS_VERIFY_TOKEN
+        sync: false
+      - key: META_LEAD_ADS_PAGE_ID
+        sync: false
+      - key: META_LEAD_ADS_ACCESS_TOKEN
+        sync: false
+      - key: META_LEAD_ADS_API_VERSION
+        value: v25.0
+      - key: META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS
+        value: 30
+      - key: META_LEAD_ADS_MAX_ATTEMPTS
+        value: 8
+      - key: META_LEAD_ADS_RETRY_BASE_SECONDS
+        value: 30
+      - key: STAFF_LEAD_ALERT_SMS_MODE
+        value: disabled
+      - key: STAFF_LEAD_ALERT_MAX_ATTEMPTS
+        value: 5
+      - key: STAFF_LEAD_ALERT_RETRY_BASE_SECONDS
+        value: 30
       - key: BRIDGE_API_BASE_URL
         sync: false
       - key: BRIDGE_API_KEY
@@ -459,6 +483,30 @@ services:
         value: v25.0
       - key: META_TEST_EVENT_CODE
         sync: false
+      - key: META_LEAD_ADS_ENABLED
+        value: false
+      - key: META_LEAD_ADS_APP_SECRET
+        sync: false
+      - key: META_LEAD_ADS_VERIFY_TOKEN
+        sync: false
+      - key: META_LEAD_ADS_PAGE_ID
+        sync: false
+      - key: META_LEAD_ADS_ACCESS_TOKEN
+        sync: false
+      - key: META_LEAD_ADS_API_VERSION
+        value: v25.0
+      - key: META_LEAD_ADS_REQUEST_TIMEOUT_SECONDS
+        value: 30
+      - key: META_LEAD_ADS_MAX_ATTEMPTS
+        value: 8
+      - key: META_LEAD_ADS_RETRY_BASE_SECONDS
+        value: 30
+      - key: STAFF_LEAD_ALERT_SMS_MODE
+        value: disabled
+      - key: STAFF_LEAD_ALERT_MAX_ATTEMPTS
+        value: 5
+      - key: STAFF_LEAD_ALERT_RETRY_BASE_SECONDS
+        value: 30
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN

@@ -35,6 +35,7 @@ type VoiceLineUser = {
   email: string;
   voice_forwarding_number: string | null;
   voice_forwarding_enabled: boolean;
+  lead_alert_sms_enabled: boolean;
 };
 
 type VoiceLineTeam = {
@@ -239,10 +240,11 @@ export function VoiceLineSettings() {
           voice_forwarding_number:
             String(data.get("voice_forwarding_number") ?? "").trim() || null,
           voice_forwarding_enabled: data.get("voice_forwarding_enabled") === "on",
+          lead_alert_sms_enabled: data.get("lead_alert_sms_enabled") === "on",
         }),
       });
       await load();
-      setMessage("Staff call destination updated.");
+      setMessage("Staff call destination and lead alerts updated.");
     } catch (saveError) {
       setError(
         saveError instanceof Error
@@ -336,7 +338,7 @@ export function VoiceLineSettings() {
         <div className={styles.forwardingGrid}>
           {users.map((user) => (
             <form
-              key={`${user.id}:${user.voice_forwarding_number ?? ""}:${user.voice_forwarding_enabled}`}
+              key={`${user.id}:${user.voice_forwarding_number ?? ""}:${user.voice_forwarding_enabled}:${user.lead_alert_sms_enabled}`}
               onSubmit={(event) => saveForwarding(event, user.id)}
             >
               <div>
@@ -359,6 +361,14 @@ export function VoiceLineSettings() {
                   type="checkbox"
                 />
                 <span>Ring cellphone</span>
+              </label>
+              <label className={styles.checkLabel}>
+                <input
+                  defaultChecked={user.lead_alert_sms_enabled}
+                  name="lead_alert_sms_enabled"
+                  type="checkbox"
+                />
+                <span>Text new Facebook leads</span>
               </label>
               <button disabled={busyId === `user:${user.id}`} type="submit">
                 <Save aria-hidden="true" size={15} />

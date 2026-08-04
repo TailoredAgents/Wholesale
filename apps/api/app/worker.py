@@ -18,6 +18,10 @@ from app.services.email import sync_next_email_account
 from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
+from app.services.meta_lead_ads import (
+    process_next_meta_lead_event,
+    process_next_staff_lead_alert,
+)
 from app.services.operations import (
     COMMUNICATIONS_WORKER,
     operation_retry_due,
@@ -65,6 +69,8 @@ def run_worker(stop_event: threading.Event) -> None:
         ("mailbox_notifications", process_next_mailbox_notification),
         ("acquisition_reminders", process_next_acquisition_reminder),
         ("lead_manager_escalations", process_next_escalation),
+        ("meta_lead_ads", process_next_meta_lead_event),
+        ("staff_lead_alerts", process_next_staff_lead_alert),
         ("marketing_conversions", process_next_marketing_conversion),
     )
     while not stop_event.is_set():

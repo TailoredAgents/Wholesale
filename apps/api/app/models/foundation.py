@@ -55,6 +55,12 @@ class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=False,
         server_default="false",
     )
+    lead_alert_sms_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
 
 class Role(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -4693,6 +4699,85 @@ class OfflineConversionExport(UuidPrimaryKeyMixin, TimestampMixin, Base):
     provider_request_id: Mapped[str | None] = mapped_column(String(255))
     provider_response: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     last_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+
+class MetaLeadEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "meta_lead_events"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "provider_lead_id",
+            name="uq_meta_lead_events_org_provider_lead",
+        ),
+        Index(
+            "ix_meta_lead_events_org_status_due",
+            "organization_id",
+            "status",
+            "next_attempt_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    provider_lead_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    page_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    form_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    ad_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    campaign_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lead_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    webhook_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    lead_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "staff_lead_alerts"
+    __table_args__ = (
+        UniqueConstraint(
+            "meta_lead_event_id",
+            "recipient_user_id",
+            name="uq_staff_lead_alerts_event_recipient",
+        ),
+        Index(
+            "ix_staff_lead_alerts_org_status_due",
+            "organization_id",
+            "status",
+            "next_attempt_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    meta_lead_event_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("meta_lead_events.id", ondelete="CASCADE"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    recipient_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("users.id"), index=True
+    )
+    recipient_phone: Mapped[str] = mapped_column(String(40), nullable=False)
+    message_body: Mapped[str] = mapped_column(String(1000), nullable=False)
+    status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    provider_message_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, index=True
+    )
+    provider_response: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
 class ApprovalRequest(UuidPrimaryKeyMixin, TimestampMixin, Base):

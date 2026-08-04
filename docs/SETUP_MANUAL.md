@@ -598,6 +598,28 @@ For underwriting acceptance:
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.
 
+## Facebook Lead Forms And Staff Text Alerts
+
+Facebook lead forms use a different connection from the website Pixel. The Pixel measures site
+activity; this connection imports a submitted instant form into the Stonegate CRM within the
+worker's normal polling cycle.
+
+1. Finish the Meta developer-app, Page access, webhook, and Render credential steps in
+   [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#meta-lead-ads-intake-and-staff-alerts).
+2. Use this Meta callback:
+   `https://api.stonegatehb.com/api/v1/webhooks/meta/lead-ads`.
+3. Submit one test lead containing name, phone or email, property address, city, state, ZIP,
+   motivation, and timeline.
+4. Confirm the lead appears once in Stonegate with source **Facebook Lead Ads**, attribution,
+   speed-to-lead work, and the normal intake notifications.
+5. Under **Settings > Communications**, save each alert recipient's cellphone and enable
+   **Text new Facebook leads**.
+6. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
+   alert per enabled employee using a controlled test lead.
+
+Stonegate never treats a Facebook lead-form phone field as seller SMS consent. The form may permit
+a requested phone call, but automated or marketing texts to that seller need separate consent.
+
 ## Accounting And Banking
 
 ### Initial Setup

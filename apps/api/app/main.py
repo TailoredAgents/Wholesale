@@ -23,6 +23,7 @@ from app.routers import (
     leads,
     marketing,
     me,
+    meta_webhooks,
     operating_model,
     operations,
     prospecting,
@@ -72,6 +73,7 @@ def create_app() -> FastAPI:
     app.include_router(lead_manager.router)
     app.include_router(leads.router)
     app.include_router(marketing.router)
+    app.include_router(meta_webhooks.router)
     app.include_router(me.router)
     app.include_router(operating_model.router)
     app.include_router(operations.router)

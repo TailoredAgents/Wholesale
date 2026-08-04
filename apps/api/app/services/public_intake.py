@@ -76,6 +76,11 @@ def create_public_seller_lead(
     *,
     ip_address: str | None,
     user_agent: str | None,
+    intake_source: str = "seller_website",
+    contact_consent_wording_version: str = CONSENT_WORDING_VERSION,
+    contact_consent_wording: str = CONSENT_WORDING,
+    provider_record_id: str | None = None,
+    notification_source_label: str = "public website",
 ) -> SellerIntakeResponse:
     submitted_at = datetime.now(UTC)
     enrichment_token = secrets.token_urlsafe(32)
@@ -89,8 +94,9 @@ def create_public_seller_lead(
     apply_public_intake_context(lead, property_record, payload)
     ensure_primary_conversation(db, lead)
     matched_existing_lead = duplicate_match.lead is not None
+    event_namespace = "public" if intake_source == "seller_website" else intake_source
     if not matched_existing_lead:
-        enqueue_lead_created_ai_work(db, lead, source="public_website")
+        enqueue_lead_created_ai_work(db, lead, source=intake_source)
     ensure_inbound_case(
         db,
         organization_id=organization.id,
@@ -112,9 +118,9 @@ def create_public_seller_lead(
                 contact_id=contact.id,
                 channel=channel,
                 status="granted",
-                source="seller_website",
-                wording_version=CONSENT_WORDING_VERSION,
-                wording=CONSENT_WORDING,
+                source=intake_source,
+                wording_version=contact_consent_wording_version,
+                wording=contact_consent_wording,
                 captured_ip=ip_address,
                 user_agent=user_agent,
             )
@@ -141,7 +147,11 @@ def create_public_seller_lead(
             referrer=payload.attribution.referrer,
             ip_address=ip_address,
             user_agent=user_agent,
-            raw_payload=payload.model_dump(mode="json"),
+            raw_payload={
+                **payload.model_dump(mode="json"),
+                "_intake_source": intake_source,
+                "_provider_record_id": provider_record_id,
+            },
             enrichment_token_hash=hash_enrichment_token(enrichment_token),
             enrichment_expires_at=enrichment_expires_at,
         )
@@ -190,14 +200,15 @@ def create_public_seller_lead(
             entity_type="lead",
             entity_id=lead.id,
             event_type=(
-                "lead.public_duplicate_submitted"
+                f"lead.{event_namespace}_duplicate_submitted"
                 if matched_existing_lead
-                else "lead.public_form_submitted"
+                else f"lead.{event_namespace}_form_submitted"
             ),
             summary=(
-                f"Duplicate website seller form matched {contact.legal_name}."
+                f"Duplicate {notification_source_label} seller form matched {contact.legal_name}."
                 if matched_existing_lead
-                else f"Website seller form submitted by {contact.legal_name}."
+                else f"{notification_source_label.title()} seller form submitted by "
+                f"{contact.legal_name}."
             ),
         )
     )
@@ -205,22 +216,26 @@ def create_public_seller_lead(
         AuditEvent(
             organization_id=organization.id,
             actor_user_id=None,
-            actor_type="public",
-            action="lead.public_duplicate" if matched_existing_lead else "lead.public_create",
+            actor_type="provider" if provider_record_id else "public",
+            action=(
+                f"lead.{event_namespace}_duplicate"
+                if matched_existing_lead
+                else f"lead.{event_namespace}_create"
+            ),
             entity_type="lead",
             entity_id=lead.id,
             previous_value=None,
             new_value={
                 "source": lead.source,
                 "stage_key": lead.stage_key,
-                "consent_wording_version": CONSENT_WORDING_VERSION,
+                "consent_wording_version": contact_consent_wording_version,
                 "sms_consent": payload.sms_consent,
                 "sms_consent_wording_version": (
                     SMS_CONSENT_WORDING_VERSION if payload.sms_consent else None
                 ),
                 "matched_existing_lead": matched_existing_lead,
             },
-            reason="Public seller website form submission",
+            reason=f"Seller form submission from {notification_source_label}",
         )
     )
     from app.services.acquisition_operations import create_notification
@@ -241,13 +256,22 @@ def create_public_seller_lead(
             organization_id=organization.id,
             recipient_user_id=recipient.id,
             notification_type="new_lead" if not matched_existing_lead else "duplicate_submission",
-            title="New seller lead" if not matched_existing_lead else "Seller submitted again",
-            body=f"{contact.legal_name} submitted property information from the public website.",
+            title=(
+                f"New {notification_source_label} seller lead"
+                if not matched_existing_lead
+                else f"{notification_source_label.title()} lead matched an existing seller"
+            ),
+            body=(
+                f"{contact.legal_name} submitted property information from "
+                f"the {notification_source_label}."
+            ),
             entity_type="lead",
             entity_id=lead.id,
             action_url=f"/os/leads/{lead.id}",
             dedupe_key=(
-                f"new-public-lead:{lead.id}"
+                f"{intake_source}-lead:{provider_record_id}"
+                if provider_record_id
+                else f"new-public-lead:{lead.id}"
                 if not matched_existing_lead
                 else f"duplicate-public-lead:{lead.id}:{uuid.uuid4()}"
             ),
@@ -259,7 +283,7 @@ def create_public_seller_lead(
         property_id=property_record.id,
         duplicate_status="matched_existing_lead" if matched_existing_lead else "created",
         matched_existing_lead=matched_existing_lead,
-        consent_wording_version=CONSENT_WORDING_VERSION,
+        consent_wording_version=contact_consent_wording_version,
         enrichment_token=enrichment_token,
         enrichment_expires_at=enrichment_expires_at,
         message=(

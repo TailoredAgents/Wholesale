@@ -26,8 +26,10 @@ from app.models.foundation import (
     ConversionEvent,
     Lead,
     MarketingSpend,
+    MetaLeadEvent,
     OfflineConversionExport,
     RevenueRecord,
+    StaffLeadAlert,
     Transaction,
 )
 from app.schemas.marketing import (
@@ -1028,10 +1030,24 @@ def get_measurement_summary(
         .where(OfflineConversionExport.organization_id == principal.organization_id)
         .group_by(OfflineConversionExport.event_name)
     ).all()
+    meta_lead_rows = db.execute(
+        select(MetaLeadEvent.status, func.count(MetaLeadEvent.id))
+        .where(MetaLeadEvent.organization_id == principal.organization_id)
+        .group_by(MetaLeadEvent.status)
+    ).all()
+    staff_alert_rows = db.execute(
+        select(StaffLeadAlert.status, func.count(StaffLeadAlert.id))
+        .where(StaffLeadAlert.organization_id == principal.organization_id)
+        .group_by(StaffLeadAlert.status)
+    ).all()
     event_counts = {
         "total": sum(int(count) for _, count in status_rows),
         **{str(status): int(count) for status, count in status_rows},
         **{f"event:{event_name}": int(count) for event_name, count in event_rows},
+        "meta_leads:total": sum(int(count) for _, count in meta_lead_rows),
+        **{f"meta_leads:{status}": int(count) for status, count in meta_lead_rows},
+        "staff_alerts:total": sum(int(count) for _, count in staff_alert_rows),
+        **{f"staff_alerts:{status}": int(count) for status, count in staff_alert_rows},
     }
     return MarketingMeasurementSummary(
         mode=settings.marketing_conversion_mode,
@@ -1048,6 +1064,16 @@ def get_measurement_summary(
                 platform="meta",
                 configured=not settings.meta_conversion_configuration_blockers,
                 blockers=list(settings.meta_conversion_configuration_blockers),
+            ),
+            MarketingProviderReadiness(
+                platform="meta_lead_ads",
+                configured=settings.meta_lead_ads_configured,
+                blockers=list(settings.meta_lead_ads_configuration_blockers),
+            ),
+            MarketingProviderReadiness(
+                platform="staff_lead_alert_sms",
+                configured=not settings.staff_lead_alert_configuration_blockers,
+                blockers=list(settings.staff_lead_alert_configuration_blockers),
             ),
         ],
         event_counts=event_counts,
