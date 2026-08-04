@@ -826,6 +826,9 @@ def dispatch_appointment(
     )
     db.add(appointment)
     db.flush()
+    from app.services.marketing import enqueue_meta_schedule_conversion
+
+    enqueue_meta_schedule_conversion(db, appointment=appointment, lead=lead)
     territory = resolve_lead_territory(db, lead)
     dispatch = AppointmentDispatchRecord(
         organization_id=principal.organization_id,

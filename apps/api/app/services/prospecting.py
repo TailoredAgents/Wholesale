@@ -809,6 +809,9 @@ def create_handoff_appointment(
     )
     db.add(appointment)
     db.flush()
+    from app.services.marketing import enqueue_meta_schedule_conversion
+
+    enqueue_meta_schedule_conversion(db, appointment=appointment, lead=lead)
     upsert_internal_calendar_event(db, appointment)
     lead.appointment_status = "scheduled"
     lead.next_follow_up_at = appointment_start_at

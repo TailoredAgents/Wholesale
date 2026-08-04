@@ -12,6 +12,27 @@ export type ConversionAttribution = {
   fbclid: string | null;
 };
 
+export type MetaBrowserEvent = {
+  event_id: string;
+  event_source_url: string;
+  fbc: string | null;
+  fbp: string | null;
+};
+
+type MetaPixelFunction = ((...args: unknown[]) => void) & {
+  callMethod?: (...args: unknown[]) => void;
+  queue: unknown[][];
+  loaded: boolean;
+  version: string;
+};
+
+declare global {
+  interface Window {
+    fbq?: MetaPixelFunction;
+    _fbq?: MetaPixelFunction;
+  }
+}
+
 export type PublicExperimentVariant = {
   key: string;
   label: string;
@@ -102,6 +123,66 @@ export function getDeviceCategory() {
   if (window.innerWidth <= 720) return "mobile";
   if (window.innerWidth <= 1024) return "tablet";
   return "desktop";
+}
+
+function readCookie(name: string) {
+  const prefix = `${name}=`;
+  const value = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
+  return value ? decodeURIComponent(value.slice(prefix.length)) : null;
+}
+
+function newEventId() {
+  return typeof window.crypto.randomUUID === "function"
+    ? window.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export function createMetaBrowserEvent(): MetaBrowserEvent {
+  const attribution = getConversionAttribution();
+  const storedFbc = readCookie("_fbc");
+  const fbc =
+    storedFbc ??
+    (attribution.fbclid
+      ? `fb.1.${Math.floor(Date.now() / 1000)}.${attribution.fbclid}`
+      : null);
+  return {
+    event_id: newEventId(),
+    event_source_url: `${window.location.origin}${window.location.pathname}`.slice(0, 500),
+    fbc,
+    fbp: readCookie("_fbp"),
+  };
+}
+
+export function initializeMetaPixel() {
+  const pixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID?.trim();
+  if (!pixelId || window.fbq) return;
+  const fbq = function (...args: unknown[]) {
+    if (fbq.callMethod) fbq.callMethod(...args);
+    else fbq.queue.push(args);
+  } as MetaPixelFunction;
+  fbq.queue = [];
+  fbq.loaded = true;
+  fbq.version = "2.0";
+  window.fbq = fbq;
+  window._fbq = fbq;
+  const script = document.createElement("script");
+  script.async = true;
+  script.src = "https://connect.facebook.net/en_US/fbevents.js";
+  document.head.appendChild(script);
+  fbq("init", pixelId);
+}
+
+export function trackMetaPixelEvent(
+  eventName: "PageView" | "ViewContent" | "Contact",
+  eventId?: string,
+) {
+  initializeMetaPixel();
+  if (!window.fbq) return;
+  if (eventId) window.fbq("track", eventName, {}, { eventID: eventId });
+  else window.fbq("track", eventName);
 }
 
 export async function getConversionExperimentContext(
@@ -214,6 +295,7 @@ export async function recordConversionEvent(
   apiBaseUrl: string,
   eventType: string,
   metadata?: Record<string, unknown>,
+  metaBrowserEvent?: MetaBrowserEvent,
 ) {
   try {
     const experiment = await getConversionExperimentContext(apiBaseUrl);
@@ -228,10 +310,21 @@ export async function recordConversionEvent(
         device_category: getDeviceCategory(),
         metadata: metadata ?? null,
         attribution: getConversionAttribution(),
+        meta_browser_event: metaBrowserEvent ?? null,
       }),
       keepalive: true,
     });
   } catch {
     // Conversion tracking must never block seller intake.
   }
+}
+
+
+export async function recordMetaViewContent(
+  apiBaseUrl: string,
+  metadata?: Record<string, unknown>,
+) {
+  const metaBrowserEvent = createMetaBrowserEvent();
+  trackMetaPixelEvent("ViewContent", metaBrowserEvent.event_id);
+  await recordConversionEvent(apiBaseUrl, "page_view", metadata, metaBrowserEvent);
 }

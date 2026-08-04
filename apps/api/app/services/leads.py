@@ -1326,6 +1326,9 @@ def create_lead_appointment(
         lead.stage_key = "appointment_scheduled"
 
     db.flush()
+    from app.services.marketing import enqueue_meta_schedule_conversion
+
+    enqueue_meta_schedule_conversion(db, appointment=appointment, lead=lead)
     from app.services.acquisition_operations import (
         create_notification,
         upsert_internal_calendar_event,

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 
-import { recordConversionEvent } from "./lib/conversion-events";
+import { recordConversionEvent, recordMetaViewContent } from "./lib/conversion-events";
 
 type PublicConversionTrackerProps = {
   eventType?: string;
@@ -19,7 +19,11 @@ export function PublicConversionTracker({
   );
 
   useEffect(() => {
-    void recordConversionEvent(apiBaseUrl, eventType, metadata);
+    if (eventType === "page_view") {
+      void recordMetaViewContent(apiBaseUrl, metadata);
+    } else {
+      void recordConversionEvent(apiBaseUrl, eventType, metadata);
+    }
   }, [apiBaseUrl, eventType, metadata]);
 
   return null;

@@ -184,32 +184,32 @@ def test_marketing_overview_and_offline_export_generation(
     assert duplicate_generate_response.status_code == 201
     assert duplicate_generate_response.json() == {"created": 0}
     assert updated_overview_response.json()["summary"]["pending_offline_exports"] == 1
-    assert int(
-        db_session.scalar(select(func.count()).select_from(OfflineConversionExport)) or 0
-    ) == 1
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(OfflineConversionExport)) or 0) == 1
+    )
     export = db_session.scalar(select(OfflineConversionExport))
     assert export is not None
     assert export.platform == "google_ads"
     assert export.click_id == "test-gclid-123"
     assert export.value_cents == 2500000
     assert export.event_name == "funded_deal"
-    assert (
-        export.payload_snapshot["landing_page"]
-        == "https://www.stonegatehb.com/get-a-cash-offer"
-    )
+    assert export.payload_snapshot["landing_page"] == "https://www.stonegatehb.com/get-a-cash-offer"
     assert export.payload_snapshot["phone_hashes"]
     assert "4045551212" not in str(export.payload_snapshot)
     measurement = updated_overview_response.json()["measurement"]
     assert measurement["mode"] == "disabled"
     assert measurement["event_counts"]["event:funded_deal"] == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "marketing.offline_exports_generate"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "marketing.offline_exports_generate")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
 
 def test_conversion_queue_covers_each_outcome_and_platform(
@@ -371,6 +371,7 @@ def test_conversion_queue_covers_each_outcome_and_platform(
     assert google_payload["events"][0]["adIdentifiers"]["gclid"] == "google-click-456"
     assert meta_payload["data"][0]["event_id"] == meta_export.event_key
     assert meta_payload["data"][0]["user_data"]["fbc"].endswith("meta-click-456")
+    assert meta_payload["data"][0]["user_data"]["client_user_agent"]
     assert "alex.seller@example.com" not in json.dumps(google_payload)
     assert "4045558989" not in json.dumps(meta_payload)
 
@@ -385,3 +386,54 @@ def test_conversion_queue_covers_each_outcome_and_platform(
     assert failed.status == "retry"
     assert failed.attempt_count == 1
     assert failed.next_attempt_at is not None
+
+
+def test_scheduling_a_lead_automatically_queues_meta_schedule(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    intake = client.post(
+        "/api/v1/public/seller-leads",
+        json={
+            "property_address": "789 Edgewood Ave",
+            "property_city": "Atlanta",
+            "property_state": "GA",
+            "property_postal_code": "30307",
+            "name": "Taylor Seller",
+            "email": "taylor@example.com",
+            "preferred_contact_method": "email",
+            "consent_to_contact": True,
+            "attribution": {
+                "landing_page": "/get-a-cash-offer",
+                "utm_source": "meta_ads",
+                "utm_medium": "paid_social",
+                "fbclid": "schedule-click-789",
+            },
+        },
+    )
+    assert intake.status_code == 201
+
+    response = client.post(
+        f"/api/v1/leads/{intake.json()['lead_id']}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "appointment_type": "walkthrough",
+            "status": "scheduled",
+            "scheduled_start_at": "2026-08-10T15:00:00Z",
+            "scheduled_end_at": "2026-08-10T16:00:00Z",
+            "location_type": "property",
+        },
+    )
+
+    assert response.status_code == 201
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    assert export.platform == "meta"
+    assert export.event_name == "appointment_scheduled"
+    assert export.click_id == "schedule-click-789"
+    assert export.status == "pending"
+    meta_payload = build_meta_payload(export, Settings())
+    assert meta_payload["data"][0]["event_name"] == "Schedule"
+    assert meta_payload["data"][0]["user_data"]["client_user_agent"]

@@ -36,9 +36,10 @@ from app.schemas.public_intake import (
 )
 from app.services.ai_operations import enqueue_lead_created_ai_work
 from app.services.bootstrap import bootstrap_foundation
-from app.services.conversion_events import record_conversion_event
+from app.services.conversion_events import record_conversion_event, with_meta_browser_metadata
 from app.services.inbox import ensure_primary_conversation
 from app.services.lead_manager import ensure_inbound_case
+from app.services.marketing import enqueue_meta_web_conversion
 from app.services.property_validation import canonical_address_key
 from app.services.tasks import ensure_speed_to_lead_task
 
@@ -151,7 +152,7 @@ def create_public_seller_lead(
             create_attribution_touch(organization.id, lead.id, "lead_creation", payload),
         ]
     )
-    record_conversion_event(
+    conversion_event = record_conversion_event(
         db,
         organization_id=organization.id,
         lead_id=lead.id,
@@ -163,8 +164,25 @@ def create_public_seller_lead(
         experiment_key=payload.experiment_key,
         experiment_variant=payload.experiment_variant,
         device_category=payload.device_category,
-        metadata={"matched_existing_lead": matched_existing_lead},
+        metadata=with_meta_browser_metadata(
+            {"matched_existing_lead": matched_existing_lead},
+            payload.meta_browser_event,
+        ),
     )
+    if payload.meta_browser_event is not None:
+        enqueue_meta_web_conversion(
+            db,
+            event=conversion_event,
+            event_name="Contact",
+            event_id=payload.meta_browser_event.event_id,
+            event_source_url=payload.meta_browser_event.event_source_url,
+            fbc=payload.meta_browser_event.fbc,
+            fbp=payload.meta_browser_event.fbp,
+            email=str(payload.email) if payload.email else None,
+            phone=payload.phone,
+            external_id=f"{organization.id}:{lead.id}",
+            occurred_at=submitted_at,
+        )
     db.add(
         ActivityEvent(
             organization_id=organization.id,

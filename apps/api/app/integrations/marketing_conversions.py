@@ -1,3 +1,4 @@
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -14,6 +15,8 @@ META_EVENT_NAMES = {
     "appointment_scheduled": "Schedule",
     "contract_signed": "ContractSigned",
     "funded_deal": "Purchase",
+    "ViewContent": "ViewContent",
+    "Contact": "Contact",
 }
 
 
@@ -99,9 +102,12 @@ class MarketingConversionClient:
             f"{self.settings.meta_pixel_id}/events"
         )
         payload = build_meta_payload(export, self.settings)
-        payload["access_token"] = self.settings.meta_conversions_access_token
         try:
-            response = self.client.post(url, json=payload)
+            response = self.client.post(
+                url,
+                params={"access_token": self.settings.meta_conversions_access_token},
+                json=payload,
+            )
             response.raise_for_status()
             body = sanitize_response(response.json())
         except (httpx.HTTPError, TypeError, ValueError) as exc:
@@ -176,39 +182,44 @@ def build_meta_payload(
 ) -> dict[str, Any]:
     snapshot = export.payload_snapshot
     user_data: dict[str, Any] = {}
-    email_hashes = [
-        value for value in snapshot.get("email_hashes", []) if isinstance(value, str)
-    ]
-    phone_hashes = [
-        value for value in snapshot.get("phone_hashes", []) if isinstance(value, str)
-    ]
+    email_hashes = [value for value in snapshot.get("email_hashes", []) if isinstance(value, str)]
     if email_hashes:
         user_data["em"] = email_hashes
-    if phone_hashes:
-        user_data["ph"] = phone_hashes
     external_id_hash = snapshot.get("external_id_hash")
     if isinstance(external_id_hash, str):
         user_data["external_id"] = [external_id_hash]
+    client_ip_address = snapshot.get("client_ip_address")
+    if isinstance(client_ip_address, str) and client_ip_address:
+        user_data["client_ip_address"] = client_ip_address
+    client_user_agent = snapshot.get("client_user_agent")
+    if isinstance(client_user_agent, str) and client_user_agent:
+        user_data["client_user_agent"] = client_user_agent
+    fbc = snapshot.get("fbc")
+    if isinstance(fbc, str) and fbc:
+        user_data["fbc"] = fbc
+    fbp = snapshot.get("fbp")
+    if isinstance(fbp, str) and fbp:
+        user_data["fbp"] = fbp
     if export.click_id_type == "fbclid":
         click_timestamp = export.occurred_at
         captured_at = snapshot.get("click_captured_at")
         if isinstance(captured_at, str):
-            try:
+            with suppress(ValueError):
                 click_timestamp = datetime.fromisoformat(captured_at)
-            except ValueError:
-                pass
-        user_data["fbc"] = (
-            export.click_id
-            if export.click_id.startswith("fb.")
-            else f"fb.1.{int(click_timestamp.timestamp())}.{export.click_id}"
+        user_data.setdefault(
+            "fbc",
+            (
+                export.click_id
+                if export.click_id.startswith("fb.")
+                else f"fb.1.{int(click_timestamp.timestamp())}.{export.click_id}"
+            ),
         )
     event: dict[str, Any] = {
         "event_name": META_EVENT_NAMES.get(export.event_name, export.event_name),
         "event_time": int(export.occurred_at.timestamp()),
         "event_id": export.event_key,
         "action_source": "website",
-        "event_source_url": snapshot.get("landing_page")
-        or settings.marketing_website_base_url,
+        "event_source_url": snapshot.get("landing_page") or settings.marketing_website_base_url,
         "user_data": user_data,
     }
     if export.value_cents is not None:
@@ -229,9 +240,11 @@ def response_json(response: httpx.Response | None) -> dict[str, Any] | None:
         body = response.json()
     except (TypeError, ValueError):
         text = response.text.strip()
-        return {"status_code": response.status_code, "detail": text[:500]} if text else {
-            "status_code": response.status_code
-        }
+        return (
+            {"status_code": response.status_code, "detail": text[:500]}
+            if text
+            else {"status_code": response.status_code}
+        )
     sanitized = sanitize_response(body)
     sanitized["status_code"] = response.status_code
     return sanitized

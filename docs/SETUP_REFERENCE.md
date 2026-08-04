@@ -619,9 +619,37 @@ Variables include:
 - Google Data Manager client, refresh token, account, and conversion action values
 - Meta access token, pixel ID, API version, and optional test event code
 
-Keep delivery disabled until ad accounts and conversion actions are approved. Test with provider
-test modes, verify hashed contact data, confirm event deduplication, and reconcile accepted events
-to CRM outcomes.
+The direct Meta integration combines the browser Pixel with server-side Conversions API events:
+
+- The web service uses `NEXT_PUBLIC_META_PIXEL_ID`; this ID is public by design.
+- The API and worker use the same value in `META_PIXEL_ID`.
+- Only the API and worker receive `META_CONVERSIONS_ACCESS_TOKEN`; never expose it as a
+  `NEXT_PUBLIC_` variable.
+- `META_TEST_EVENT_CODE` is temporary and should be removed after Events Manager acceptance.
+- `MARKETING_CONVERSION_MODE=disabled` stores events without delivery. Use `live` only after the
+  Pixel ID and access token are present on both the API and worker services.
+
+Implemented events are `PageView` from the Pixel, deduplicated browser/server `ViewContent` and
+`Contact`, and server-side `Schedule` from the CRM appointment outcome. Browser and server copies
+of `ViewContent` and `Contact` use the same event name and event ID. Server delivery includes the
+source URL and user agent; Contact also uses hashed email and external ID plus IP, `fbc`, and `fbp`
+when available. The phone hash is deliberately withheld from Meta because the current mobile
+privacy promise excludes sharing mobile information for third-party marketing.
+
+Acceptance sequence:
+
+1. Generate the Conversions API access token in Meta Events Manager and store it in Render.
+2. Add the Pixel ID to the web, API, and worker variables described above.
+3. Add Meta's Test Events code to the API and worker, switch delivery to `live`, and redeploy.
+4. Visit a public page and submit one controlled seller test lead.
+5. In Test Events, confirm browser and server `ViewContent` and `Contact` arrive and deduplicate.
+6. Confirm Event Match Quality includes the expected non-phone match keys.
+7. Remove the test event code, redeploy, and monitor deduplication, freshness, coverage, and match
+   quality during the first campaigns.
+
+Meta rejects events older than seven days; the worker expires those instead of retrying an invalid
+request. Delivery remains one event per request so one invalid event cannot reject unrelated
+events.
 
 ## Public Trust Proof Acceptance
 

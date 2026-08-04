@@ -13,11 +13,13 @@ import {
 import Link from "next/link";
 
 import {
+  createMetaBrowserEvent,
   getConversionAttribution,
   getConversionExperimentContext,
   getConversionSessionId,
   getDeviceCategory,
   recordConversionEvent,
+  trackMetaPixelEvent,
 } from "../lib/conversion-events";
 import { siteConfig } from "../site-config";
 import { TrackedEmailLink } from "../tracked-email-link";
@@ -312,6 +314,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     });
 
     const experiment = await getConversionExperimentContext(apiBaseUrl);
+    const metaBrowserEvent = createMetaBrowserEvent();
     const payload = {
       property_address: values.property_address.trim(),
       property_city: values.property_city.trim(),
@@ -338,6 +341,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       experiment_variant: experiment?.experiment_variant ?? null,
       device_category: getDeviceCategory(),
       attribution: getConversionAttribution(),
+      meta_browser_event: metaBrowserEvent,
     };
 
     try {
@@ -372,6 +376,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         enriched: false,
       };
       hasSubmitted.current = true;
+      trackMetaPixelEvent("Contact", metaBrowserEvent.event_id);
       isSubmitting.current = false;
       setConfirmation(nextConfirmation);
       setSubmitState({ status: "idle", message: "" });

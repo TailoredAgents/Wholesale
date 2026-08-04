@@ -10,7 +10,12 @@ from app.models.foundation import (
     MarketingExperimentAssignment,
     Organization,
 )
-from app.schemas.public_intake import ConversionEventCreate, SellerIntakeAttribution
+from app.schemas.public_intake import (
+    ConversionEventCreate,
+    MetaBrowserEvent,
+    SellerIntakeAttribution,
+)
+from app.services.marketing import enqueue_meta_web_conversion
 
 
 def record_public_conversion_event(
@@ -32,8 +37,18 @@ def record_public_conversion_event(
         experiment_key=payload.experiment_key,
         experiment_variant=payload.experiment_variant,
         device_category=payload.device_category,
-        metadata=payload.metadata,
+        metadata=with_meta_browser_metadata(payload.metadata, payload.meta_browser_event),
     )
+    if payload.event_type == "page_view" and payload.meta_browser_event is not None:
+        enqueue_meta_web_conversion(
+            db,
+            event=event,
+            event_name="ViewContent",
+            event_id=payload.meta_browser_event.event_id,
+            event_source_url=payload.meta_browser_event.event_source_url,
+            fbc=payload.meta_browser_event.fbc,
+            fbp=payload.meta_browser_event.fbp,
+        )
     db.commit()
     db.refresh(event)
     return event
@@ -141,6 +156,22 @@ def resolve_experiment_assignment(
 
 def normalize_device_category(value: str) -> str:
     return value if value in {"desktop", "tablet", "mobile"} else "unknown"
+
+
+def with_meta_browser_metadata(
+    metadata: dict[str, object] | None,
+    meta_browser_event: MetaBrowserEvent | None,
+) -> dict[str, object] | None:
+    if meta_browser_event is None:
+        return metadata
+    result = dict(metadata or {})
+    result["meta_browser_event"] = {
+        "event_id": meta_browser_event.event_id,
+        "event_source_url": meta_browser_event.event_source_url,
+        "fbc": meta_browser_event.fbc,
+        "fbp": meta_browser_event.fbp,
+    }
+    return result
 
 
 def get_default_organization(db: Session) -> Organization:

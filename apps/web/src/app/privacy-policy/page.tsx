@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>
         <h1>Privacy Policy</h1>
-        <p className={styles.effective}>Effective July 18, 2026</p>
+        <p className={styles.effective}>Effective August 4, 2026</p>
         <p className={styles.intro}>
           This Privacy Policy explains how Stonegate Home Buyers collects, uses, discloses, and
           protects information when you visit our website, request a property offer, call us, or
@@ -95,10 +95,13 @@ export default function PrivacyPolicyPage() {
         <section>
           <h2>Cookies and analytics</h2>
           <p>
-            We may use cookies or similar technologies to keep the website working, understand
-            traffic, remember attribution information, and measure advertising performance. You
-            can limit cookies through your browser settings, although parts of the website may not
-            function as intended.
+            We may use cookies or similar technologies, including the Meta Pixel, to keep the
+            website working, understand traffic, remember attribution information, and measure
+            advertising performance. For advertising measurement, we may provide Meta with event
+            details and identifiers such as a hashed email address, an internal hashed identifier,
+            IP address, browser details, and Meta browser or click identifiers. We do not provide
+            Meta with text-message opt-in data or consent. You can limit cookies through your
+            browser settings, although parts of the website may not function as intended.
           </p>
         </section>
 

@@ -32,6 +32,13 @@ class SellerIntakeAttribution(BaseModel):
     fbclid: str | None = Field(default=None, max_length=255)
 
 
+class MetaBrowserEvent(BaseModel):
+    event_id: str = Field(min_length=8, max_length=255)
+    event_source_url: str = Field(min_length=1, max_length=500)
+    fbc: str | None = Field(default=None, max_length=255)
+    fbp: str | None = Field(default=None, max_length=255)
+
+
 class ConversionEventCreate(BaseModel):
     event_type: str = Field(min_length=1, max_length=80)
     session_id: str | None = Field(default=None, max_length=120)
@@ -40,6 +47,7 @@ class ConversionEventCreate(BaseModel):
     device_category: str = Field(default="unknown", max_length=20)
     metadata: dict[str, object] | None = None
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
+    meta_browser_event: MetaBrowserEvent | None = None
 
 
 class ConversionEventResponse(BaseModel):
@@ -77,6 +85,7 @@ class SellerIntakeCreate(BaseModel):
     experiment_variant: str | None = Field(default=None, max_length=80)
     device_category: str = Field(default="unknown", max_length=20)
     attribution: SellerIntakeAttribution = Field(default_factory=SellerIntakeAttribution)
+    meta_browser_event: MetaBrowserEvent | None = None
 
     @model_validator(mode="after")
     def require_contact_channel(self) -> "SellerIntakeCreate":

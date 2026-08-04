@@ -4,6 +4,7 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 from uuid import UUID
 
 from sqlalchemy import and_, func, or_, select
@@ -43,6 +44,8 @@ from app.schemas.marketing import (
 ATTRIBUTION_MODEL = "last_eligible_platform_click"
 MEASUREMENT_POLICY_VERSION = "stonegate-marketing-measurement-v1"
 CONSENT_BASIS = "privacy_notice_first_party_measurement"
+META_WEB_ATTRIBUTION_MODEL = "meta_browser_server_deduplicated_v1"
+META_WEB_CONSENT_BASIS = "website_contact_and_measurement_notice_v1"
 QUALIFIED_STAGES = {
     "qualified",
     "appointment_scheduled",
@@ -79,6 +82,156 @@ class ConversionOutcome:
     occurred_at: datetime
     value_cents: int | None = None
     revenue_record_id: UUID | None = None
+
+
+def enqueue_meta_web_conversion(
+    db: Session,
+    *,
+    event: ConversionEvent,
+    event_name: str,
+    event_id: str,
+    event_source_url: str,
+    fbc: str | None,
+    fbp: str | None,
+    email: str | None = None,
+    phone: str | None = None,
+    external_id: str | None = None,
+    occurred_at: datetime | None = None,
+) -> OfflineConversionExport | None:
+    """Queue a Meta server event that shares its ID with the browser Pixel event."""
+    if event_name not in {"ViewContent", "Contact"}:
+        raise ValueError(f"Unsupported immediate Meta web event: {event_name}")
+    existing = db.scalar(
+        select(OfflineConversionExport.id).where(
+            OfflineConversionExport.organization_id == event.organization_id,
+            OfflineConversionExport.platform == "meta",
+            OfflineConversionExport.event_key == event_id,
+        )
+    )
+    if existing is not None:
+        return None
+    settings = get_settings()
+    normalized_email = normalize_email(email) if email else ""
+    normalized_phone = normalize_phone(phone) if phone else ""
+    snapshot: dict[str, object] = {
+        "policy_version": MEASUREMENT_POLICY_VERSION,
+        "event_name": event_name,
+        "occurred_at": (occurred_at or datetime.now(UTC)).isoformat(),
+        "landing_page": safe_meta_event_source_url(
+            event_source_url,
+            website_base_url=settings.marketing_website_base_url,
+        ),
+        "client_ip_address": event.ip_address,
+        "client_user_agent": event.user_agent,
+        "fbc": fbc,
+        "fbp": fbp,
+        "email_hashes": [sha256(normalized_email)] if normalized_email else [],
+        "phone_hashes": [sha256(normalized_phone)] if normalized_phone else [],
+        "external_id_hash": sha256(external_id) if external_id else None,
+    }
+    export = OfflineConversionExport(
+        organization_id=event.organization_id,
+        platform="meta",
+        conversion_event_id=event.id,
+        lead_id=event.lead_id,
+        revenue_record_id=None,
+        event_key=event_id,
+        source_record_type="conversion_event",
+        source_record_id=event.id,
+        event_name=event_name,
+        occurred_at=occurred_at or datetime.now(UTC),
+        attribution_model=META_WEB_ATTRIBUTION_MODEL,
+        consent_basis=META_WEB_CONSENT_BASIS,
+        click_id=fbc or fbp or "",
+        click_id_type="meta_browser",
+        value_cents=None,
+        currency="USD",
+        payload_hash=payload_hash(snapshot),
+        payload_snapshot=snapshot,
+        delivery_mode=settings.marketing_conversion_mode,
+        status="pending",
+        attempt_count=0,
+        exported_at=None,
+        last_error=None,
+    )
+    db.add(export)
+    db.flush()
+    return export
+
+
+def enqueue_meta_schedule_conversion(
+    db: Session,
+    *,
+    appointment: Appointment,
+    lead: Lead,
+) -> OfflineConversionExport | None:
+    """Queue a new seller appointment for Meta without requiring a manual export run."""
+    if appointment.status in {"cancelled", "canceled"}:
+        return None
+    settings = get_settings()
+    occurred_at = appointment.created_at
+    click_event = get_best_click_event(
+        db,
+        organization_id=appointment.organization_id,
+        lead_id=lead.id,
+        click_id_type="fbclid",
+        occurred_at=occurred_at,
+        window_days=settings.marketing_conversion_window_days,
+    )
+    if click_event is None or not click_event.fbclid:
+        return None
+    event_key = f"appointment_scheduled:{appointment.id}:meta:v1"
+    existing = db.scalar(
+        select(OfflineConversionExport.id).where(
+            OfflineConversionExport.organization_id == appointment.organization_id,
+            OfflineConversionExport.platform == "meta",
+            OfflineConversionExport.event_key == event_key,
+        )
+    )
+    if existing is not None:
+        return None
+    outcome = ConversionOutcome(
+        event_name="appointment_scheduled",
+        source_record_type="appointment",
+        source_record_id=appointment.id,
+        lead_id=lead.id,
+        occurred_at=occurred_at,
+    )
+    snapshot = build_payload_snapshot(
+        db,
+        organization_id=appointment.organization_id,
+        outcome=outcome,
+        click_event=click_event,
+        website_base_url=settings.marketing_website_base_url,
+    )
+    export = OfflineConversionExport(
+        organization_id=appointment.organization_id,
+        platform="meta",
+        conversion_event_id=click_event.id,
+        lead_id=lead.id,
+        revenue_record_id=None,
+        event_key=event_key,
+        source_record_type="appointment",
+        source_record_id=appointment.id,
+        event_name="appointment_scheduled",
+        occurred_at=occurred_at,
+        attribution_model=ATTRIBUTION_MODEL,
+        consent_basis=CONSENT_BASIS,
+        click_id=click_event.fbclid,
+        click_id_type="fbclid",
+        value_cents=None,
+        currency="USD",
+        payload_hash=payload_hash(snapshot),
+        payload_snapshot=snapshot,
+        delivery_mode=settings.marketing_conversion_mode,
+        status="pending",
+        attempt_count=0,
+        exported_at=None,
+        last_error=None,
+    )
+    db.add(export)
+    db.flush()
+    return export
 
 
 def get_marketing_overview(
@@ -250,8 +403,8 @@ def generate_offline_conversion_exports(
         for platform, click_id_type in (("google_ads", "gclid"), ("meta", "fbclid")):
             click_event = get_best_click_event(
                 db,
-                principal,
-                outcome.lead_id,
+                organization_id=principal.organization_id,
+                lead_id=outcome.lead_id,
                 click_id_type=click_id_type,
                 occurred_at=outcome.occurred_at,
                 window_days=settings.marketing_conversion_window_days,
@@ -261,9 +414,7 @@ def generate_offline_conversion_exports(
             click_id = getattr(click_event, click_id_type)
             if not click_id:
                 continue
-            event_key = (
-                f"{outcome.event_name}:{outcome.source_record_id}:{platform}:v1"
-            )
+            event_key = f"{outcome.event_name}:{outcome.source_record_id}:{platform}:v1"
             existing = db.scalar(
                 select(OfflineConversionExport.id).where(
                     OfflineConversionExport.organization_id == principal.organization_id,
@@ -275,9 +426,9 @@ def generate_offline_conversion_exports(
                 continue
             snapshot = build_payload_snapshot(
                 db,
-                principal,
-                outcome,
-                click_event,
+                organization_id=principal.organization_id,
+                outcome=outcome,
+                click_event=click_event,
                 website_base_url=settings.marketing_website_base_url,
             )
             db.add(
@@ -421,22 +572,22 @@ def get_conversion_outcomes(
 
 def build_payload_snapshot(
     db: Session,
-    principal: Principal,
+    *,
+    organization_id: UUID,
     outcome: ConversionOutcome,
     click_event: ConversionEvent,
-    *,
     website_base_url: str,
 ) -> dict[str, object]:
     lead = db.scalar(
         select(Lead).where(
-            Lead.organization_id == principal.organization_id,
+            Lead.organization_id == organization_id,
             Lead.id == outcome.lead_id,
         )
     )
     methods = (
         db.scalars(
             select(ContactMethod).where(
-                ContactMethod.organization_id == principal.organization_id,
+                ContactMethod.organization_id == organization_id,
                 ContactMethod.contact_id == lead.contact_id,
             )
         ).all()
@@ -457,6 +608,11 @@ def build_payload_snapshot(
             if method.method_type == "phone" and normalize_phone(method.normalized_value)
         }
     )
+    meta_context = (
+        click_event.event_metadata.get("meta_browser_event")
+        if isinstance(click_event.event_metadata, dict)
+        else None
+    )
     return {
         "policy_version": MEASUREMENT_POLICY_VERSION,
         "event_name": outcome.event_name,
@@ -468,9 +624,11 @@ def build_payload_snapshot(
         ),
         "email_hashes": email_hashes,
         "phone_hashes": phone_hashes,
-        "external_id_hash": sha256(
-            f"{principal.organization_id}:{outcome.lead_id}"
-        ),
+        "external_id_hash": sha256(f"{organization_id}:{outcome.lead_id}"),
+        "client_ip_address": click_event.ip_address,
+        "client_user_agent": click_event.user_agent,
+        "fbc": meta_context.get("fbc") if isinstance(meta_context, dict) else None,
+        "fbp": meta_context.get("fbp") if isinstance(meta_context, dict) else None,
     }
 
 
@@ -516,7 +674,18 @@ def process_next_marketing_conversion(
     export.attempt_count += 1
     export.last_attempt_at = now
     previous_status = export.status
-    if settings.marketing_conversion_mode == "simulate":
+    occurred_at = export.occurred_at
+    if occurred_at.tzinfo is None:
+        occurred_at = occurred_at.replace(tzinfo=UTC)
+    if (
+        settings.marketing_conversion_mode == "live"
+        and export.platform == "meta"
+        and occurred_at < now - timedelta(days=7)
+    ):
+        export.status = "exhausted"
+        export.next_attempt_at = None
+        export.last_error = "Meta rejects events more than 7 days after they occurred."
+    elif settings.marketing_conversion_mode == "simulate":
         export.status = "simulated"
         export.exported_at = now
         export.next_attempt_at = None
@@ -742,8 +911,7 @@ def add_spend(
         matching_rows = [
             row
             for row in rows.values()
-            if row.source == (source or "direct")
-            and row.campaign == (campaign or "uncategorized")
+            if row.source == (source or "direct") and row.campaign == (campaign or "uncategorized")
         ]
         if not matching_rows:
             matching_rows = [ensure_row(rows, source, None, campaign)]
@@ -753,20 +921,18 @@ def add_spend(
 
 def get_best_click_event(
     db: Session,
-    principal: Principal,
-    lead_id: UUID,
     *,
+    organization_id: UUID,
+    lead_id: UUID,
     click_id_type: str,
     occurred_at: datetime,
     window_days: int,
 ) -> ConversionEvent | None:
-    click_column = (
-        ConversionEvent.gclid if click_id_type == "gclid" else ConversionEvent.fbclid
-    )
+    click_column = ConversionEvent.gclid if click_id_type == "gclid" else ConversionEvent.fbclid
     return db.scalar(
         select(ConversionEvent)
         .where(
-            ConversionEvent.organization_id == principal.organization_id,
+            ConversionEvent.organization_id == organization_id,
             ConversionEvent.lead_id == lead_id,
             click_column.is_not(None),
             ConversionEvent.created_at <= occurred_at,
@@ -915,6 +1081,17 @@ def absolute_landing_page(value: str | None, *, website_base_url: str) -> str:
     if value.startswith(("https://", "http://")):
         return value
     return f"{base_url}/{value.lstrip('/')}"
+
+
+def safe_meta_event_source_url(value: str | None, *, website_base_url: str) -> str:
+    candidate = absolute_landing_page(value, website_base_url=website_base_url)
+    candidate_url = urlparse(candidate)
+    website_url = urlparse(website_base_url)
+    candidate_host = (candidate_url.hostname or "").removeprefix("www.")
+    website_host = (website_url.hostname or "").removeprefix("www.")
+    if candidate_url.scheme in {"http", "https"} and candidate_host == website_host:
+        return candidate
+    return website_base_url.rstrip("/")
 
 
 def mask_click_id(value: str) -> str:

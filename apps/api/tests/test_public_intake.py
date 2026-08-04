@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
+from app.integrations.marketing_conversions import build_meta_payload
 from app.main import app
 from app.models.foundation import (
     ActivityEvent,
@@ -15,6 +17,7 @@ from app.models.foundation import (
     Lead,
     LeadFormSubmission,
     LeadManagementCase,
+    OfflineConversionExport,
     Property,
     Task,
 )
@@ -211,9 +214,7 @@ def test_public_intake_enrichment_updates_same_lead_without_overwriting_staff_va
     assert submission.raw_payload["comments"] == "Older roof and kitchen updates are likely."
     assert submission.enriched_at is not None
     enrichment_event = db_session.scalar(
-        select(ConversionEvent).where(
-            ConversionEvent.event_type == "form_enrichment_submit"
-        )
+        select(ConversionEvent).where(ConversionEvent.event_type == "form_enrichment_submit")
     )
     assert enrichment_event is not None
     assert enrichment_event.event_metadata == {
@@ -300,6 +301,85 @@ def test_public_conversion_event_endpoint_records_attribution(
     assert event.source == "meta_ads"
     assert event.medium == "paid_social"
     assert event.event_metadata == {"field": "property_address"}
+
+
+def test_public_page_view_queues_deduplicated_meta_view_content(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/v1/public/conversion-events",
+        json={
+            "event_type": "page_view",
+            "session_id": "session-meta-view",
+            "attribution": {"landing_page": "/contact", "fbclid": "click-123"},
+            "meta_browser_event": {
+                "event_id": "meta-view-event-123",
+                "event_source_url": "https://www.stonegatehb.com/contact",
+                "fbc": "fb.1.1785875287.click-123",
+                "fbp": "fb.1.1785875287.987654321",
+            },
+        },
+        headers={"User-Agent": "pytest-browser", "X-Forwarded-For": "203.0.113.12"},
+    )
+
+    assert response.status_code == 201
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    assert export.event_name == "ViewContent"
+    assert export.event_key == "meta-view-event-123"
+    assert export.payload_snapshot["client_ip_address"] == "203.0.113.12"
+    assert export.payload_snapshot["client_user_agent"] == "pytest-browser"
+    assert export.payload_snapshot["fbp"] == "fb.1.1785875287.987654321"
+
+
+def test_public_seller_intake_queues_hashed_meta_contact(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["meta_browser_event"] = {
+        "event_id": "meta-contact-event-123",
+        "event_source_url": "https://stonegatehb.com/get-a-cash-offer",
+        "fbc": "fb.1.1785875287.contact-click",
+        "fbp": "fb.1.1785875287.123456789",
+    }
+
+    response = client.post(
+        "/api/v1/public/seller-leads",
+        json=payload,
+        headers={"User-Agent": "pytest-browser", "X-Forwarded-For": "203.0.113.13"},
+    )
+
+    assert response.status_code == 201
+    export = db_session.scalar(select(OfflineConversionExport))
+    assert export is not None
+    assert export.event_name == "Contact"
+    assert export.event_key == "meta-contact-event-123"
+    assert export.lead_id is not None
+    assert export.payload_snapshot["email_hashes"]
+    assert export.payload_snapshot["phone_hashes"]
+    assert export.payload_snapshot["external_id_hash"]
+    assert "sam@example.com" not in str(export.payload_snapshot)
+    assert "4045551212" not in str(export.payload_snapshot)
+    meta_payload = build_meta_payload(export, Settings())
+    meta_event = meta_payload["data"][0]
+    assert meta_event["event_name"] == "Contact"
+    assert meta_event["event_id"] == "meta-contact-event-123"
+    assert meta_event["action_source"] == "website"
+    assert meta_event["event_source_url"].endswith("/get-a-cash-offer")
+    assert meta_event["user_data"]["em"]
+    assert meta_event["user_data"]["external_id"]
+    assert meta_event["user_data"]["client_ip_address"] == "203.0.113.13"
+    assert meta_event["user_data"]["client_user_agent"] == "pytest-browser"
+    assert meta_event["user_data"]["fbc"] == "fb.1.1785875287.contact-click"
+    assert meta_event["user_data"]["fbp"] == "fb.1.1785875287.123456789"
+    assert "ph" not in meta_event["user_data"]
 
 
 def test_public_conversion_event_endpoint_records_form_abandonment(
@@ -518,20 +598,28 @@ def test_speed_to_lead_queue_and_completion(
     assert complete_response.status_code == 200
     assert complete_response.json()["status"] == "completed"
     assert complete_response.json()["successor_task_id"] is not None
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "task.complete")
-        )
-        or 0
-    ) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(ActivityEvent).where(
-                ActivityEvent.event_type == "task.completed"
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "task.complete")
             )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(ActivityEvent)
+                .where(ActivityEvent.event_type == "task.completed")
+            )
+            or 0
+        )
+        == 1
+    )
 
     completed_queue_response = client.get(
         "/api/v1/tasks/speed-to-lead",

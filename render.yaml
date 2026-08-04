@@ -10,6 +10,8 @@ services:
         value: https://api.stonegatehb.com
       - key: NEXT_PUBLIC_API_BASE_URL
         value: https://api.stonegatehb.com
+      - key: NEXT_PUBLIC_META_PIXEL_ID
+        sync: false
       - key: NEXT_PUBLIC_SITE_URL
         value: https://www.stonegatehb.com
       - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
