@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 import httpx
 
@@ -35,19 +36,74 @@ class DealMachineComparableSearch:
 
 
 UNDERWRITING_PROPERTY_FIELDS = [
+    "estimated_value",
+    "estimated_equity_amount",
+    "estimated_equity_percentage",
     "num_bedrooms",
     "num_bathrooms",
     "living_area_sqft",
     "year_built",
+    "num_units",
+    "num_buildings",
+    "building_style",
+    "stories",
+    "property_construction_type",
     "property_type",
+    "property_class",
+    "school_district_name",
+    "num_mortgages",
+    "estimated_loan_to_value_percentage",
+    "total_estimated_loan_balance",
+    "mortgage_1_loan_balance",
+    "mortgage_1_loan_interest_rate",
+    "mortgage_1_loan_type",
+    "mortgage_1_loan_due_date",
+    "mortgage_1_loan_recording_date",
+    "market_status",
+    "mls_current_listing_price",
+    "mls_days_on_market",
+    "mls_last_initial_listing_date",
     "last_sale_date",
     "last_sale_price",
     "last_sale_doc_type",
+    "tax_amount",
+    "tax_delinquent_year",
+    "tax_year",
+    "assessed_total_value",
+    "assessed_improvement_value",
+    "assessed_land_value",
+    "tax_assessment_year",
+    "num_total_active_liens",
+    "num_total_open_liens",
+    "hoa_1_fee_amount",
     "lot_size_acres",
+    "lot_size_frontage_feet",
+    "lot_size_depth_feet",
+    "zoning",
+    "parcel_number_raw",
+    "legal_description",
+    "lot_number",
+    "municipality_name",
     "subdivision_name",
     "pool",
     "garage_type",
     "basement",
+    "patio",
+    "porch",
+    "driveway",
+    "air_conditioning",
+    "heating_type",
+    "heating_fuel",
+    "sewer",
+    "water",
+    "has_fireplaces",
+    "exterior_walls",
+    "roof_type",
+    "roof_cover",
+    "floor_cover",
+    "building_condition",
+    "building_quality",
+    "flood_zone",
 ]
 COMPARABLE_TIMEFRAMES = {"3months", "6months", "12months", "all"}
 COMPARABLE_SORT_FIELDS = {"distance", "price", "date", "match"}
@@ -253,6 +309,29 @@ class DealMachineClient:
         if not isinstance(payload, dict):
             raise DealMachineError("DealMachine returned an unexpected response.")
         return payload
+
+
+def get_dealmachine_image(
+    image_url: str,
+    *,
+    timeout_seconds: float = 20,
+) -> tuple[bytes, str]:
+    if not is_dealmachine_image_url(image_url):
+        raise DealMachineError("DealMachine returned an invalid property image URL.")
+    try:
+        response = httpx.get(image_url, timeout=timeout_seconds, follow_redirects=False)
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise DealMachineError("DealMachine property imagery is unavailable.") from exc
+    content_type = response.headers.get("content-type", "image/jpeg").split(";", 1)[0]
+    if not content_type.startswith("image/"):
+        raise DealMachineError("DealMachine returned a non-image property response.")
+    return response.content, content_type
+
+
+def is_dealmachine_image_url(image_url: str) -> bool:
+    parsed = urlparse(image_url)
+    return parsed.scheme == "https" and parsed.hostname == "img.dealmachine.com"
 
 
 def _error_message(response: httpx.Response) -> str:

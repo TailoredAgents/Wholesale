@@ -949,6 +949,25 @@ changing ownership or stage does not create a second record.
 | **Use this address** | Replaces the working address with the confirmed normalized value | Requires lead edit access |
 | Manual correction | Lets staff fix the address when no provider match is reliable | Staff remains responsible for correctness |
 
+### Property Intelligence
+
+The top of the **Property** section is the reusable research profile for the physical property.
+It is shared by leads that resolve to the same normalized address and does not replace the seller's
+contact, qualification, or activity history.
+
+| Control or result | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Property image | Shows the latest field-inspection photo first; otherwise uses DealMachine property imagery, optional Google Street View fallback, or a placeholder | DealMachine imagery requires a successful subject lookup; Google is optional |
+| **Street / Satellite / Roadmap** | Switches among the DealMachine image views saved with the property snapshot | Only available views are shown; an inspection photo remains the preferred Street image |
+| Research status | Shows queued, processing, ready, partial, stale, needs address, needs review, or failed | Worker and a usable address are required for automatic completion |
+| Profile complete / Valuation confidence / Selected comps / Snapshot | Summarizes evidence coverage, confidence, retained comp count, and immutable snapshot version | Read-only; missing evidence remains visible instead of being guessed |
+| **Refresh research** | Queues a new property snapshot and explicitly refreshes market evidence | Requires lead edit access; may use RentCast or DealMachine credits |
+| Verified property facts | Shows normalized physical and sale-history facts with retained source metadata | Unknown remains unknown when providers do not support a fact; provider estimates are labeled research signals |
+| Additional property intelligence | Expands DealMachine assessor, tax, equity, loan, listing, parcel, lien, construction, system, amenity, and hazard facts when returned | Property-only research; Stonegate does not request owner/contact enrichment for this workflow |
+| Saved value evidence | Shows Stonegate ARV support and external benchmark values already on file | Provider estimates remain benchmarks and do not become Stonegate's comp conclusion |
+| Comparable evidence already on file | Previews retained screened sales without re-querying a provider | **Open full valuation** moves to the complete Valuation & Offer analysis |
+| Sources, conflicts and freshness | Expands provenance, disagreements, and evidence age | Read-only audit context |
+
 ### Notes, Tasks, And Appointments
 
 | Control or field | Purpose and effect | Availability and common blocker |

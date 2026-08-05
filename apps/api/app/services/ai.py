@@ -610,6 +610,17 @@ def build_lead_context(
         )
         .order_by(LeadFormSubmission.created_at.desc())
     )
+    from app.services.property_intelligence import current_property_snapshot
+
+    property_snapshot = (
+        current_property_snapshot(
+            db,
+            organization_id=principal.organization_id,
+            property_id=property_record.id,
+        )
+        if property_record is not None
+        else None
+    )
     return {
         "lead": {
             "id": str(lead.id),
@@ -648,6 +659,25 @@ def build_lead_context(
             "county": property_record.county if property_record else None,
             "property_type": property_record.property_type if property_record else None,
         },
+        "property_intelligence": (
+            {
+                "snapshot_id": str(property_snapshot.id),
+                "version_number": property_snapshot.version_number,
+                "status": property_snapshot.status,
+                "captured_at": property_snapshot.captured_at.isoformat(),
+                "expires_at": property_snapshot.expires_at.isoformat(),
+                "completeness_score": property_snapshot.completeness_score,
+                "confidence_score": property_snapshot.confidence_score,
+                "facts": property_snapshot.facts,
+                "valuation": property_snapshot.valuation,
+                "comparables": property_snapshot.comparables[:8],
+                "market_context": property_snapshot.market_context,
+                "sources": property_snapshot.sources,
+                "conflicts": property_snapshot.conflicts[:20],
+            }
+            if property_snapshot is not None
+            else None
+        ),
         "latest_form_submission": submission.raw_payload if submission is not None else None,
     }
 

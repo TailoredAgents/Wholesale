@@ -176,9 +176,7 @@ def update_user_voice_forwarding(
     if user is None:
         return None
     formatted = (
-        format_e164(payload.voice_forwarding_number)
-        if payload.voice_forwarding_number
-        else None
+        format_e164(payload.voice_forwarding_number) if payload.voice_forwarding_number else None
     )
     if payload.voice_forwarding_number and formatted is None:
         raise ValueError("Cellphone must be a valid E.164 phone number.")
@@ -244,8 +242,7 @@ def list_voice_line_teams(db: Session, principal: Principal) -> list[VoiceLineTe
         .order_by(Team.name.asc())
     ).all()
     return [
-        VoiceLineTeamRead(id=team.id, name=team.name, team_type=team.team_type)
-        for team in teams
+        VoiceLineTeamRead(id=team.id, name=team.name, team_type=team.team_type) for team in teams
     ]
 
 
@@ -550,12 +547,9 @@ def create_call_intent(
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
         return None
-    if (
-        PermissionKeys.PLACE_CALLS not in principal.permission_keys
-        and (
-            PermissionKeys.PLACE_ASSIGNED_CALLS not in principal.permission_keys
-            or conversation.assigned_user_id != principal.user_id
-        )
+    if PermissionKeys.PLACE_CALLS not in principal.permission_keys and (
+        PermissionKeys.PLACE_ASSIGNED_CALLS not in principal.permission_keys
+        or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("Calls can only be placed from an assigned conversation.")
     existing = db.scalar(
@@ -566,9 +560,7 @@ def create_call_intent(
     )
     if existing is not None:
         if existing.conversation_id != conversation.id:
-            raise VoiceIntentConflictError(
-                "The idempotency key was already used for another call."
-            )
+            raise VoiceIntentConflictError("The idempotency key was already used for another call.")
         line = db.get(VoiceLine, existing.voice_line_id)
         if line is None:
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
@@ -896,9 +888,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         if not is_within_line_coverage(line):
             if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
                 return voicemail_twiml(settings, call_id=str(existing.id))
-            return hangup_twiml(
-                "Stonegate is currently closed. We will return your call shortly."
-            )
+            return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
         targets = resolve_inbound_targets(db, target_user_ids)
         if not targets:
@@ -1201,9 +1191,7 @@ def process_voice_recording(
         recording.channel_count = parse_int(payload.get("RecordingChannels"))
         if recording_status == "completed":
             recording.recorded_at = completed_at
-            recording.retention_expires_at = (
-                recording.retention_expires_at or retention_expires_at
-            )
+            recording.retention_expires_at = recording.retention_expires_at or retention_expires_at
     if recording_status == "completed":
         db.flush()
         enqueue_call_transcript(
@@ -1507,9 +1495,7 @@ def apply_call_status(
     if status in {"in-progress", "answered"} and call.answered_at is None:
         call.answered_at = now
     duration = parse_int(
-        payload.get("CallDuration")
-        or payload.get("DialCallDuration")
-        or payload.get("Duration")
+        payload.get("CallDuration") or payload.get("DialCallDuration") or payload.get("Duration")
     )
     if duration is not None:
         call.duration_seconds = duration
@@ -1721,6 +1707,14 @@ def create_inbound_call_lead(
     from app.services.ai_operations import enqueue_lead_created_ai_work
 
     enqueue_lead_created_ai_work(db, lead, source="inbound_call")
+    from app.services.property_intelligence import enqueue_property_research
+
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source="inbound_call",
+    )
     conversation = ensure_primary_conversation(db, lead)
     db.add(
         ActivityEvent(
@@ -2018,13 +2012,9 @@ def select_voice_line_for_conversation(
     *,
     conversation: Conversation,
 ) -> VoiceLine | None:
-    department_key = (
-        "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
-    )
+    department_key = "dispositions" if conversation.conversation_type == "buyer" else "acquisitions"
     purpose_key = (
-        "buyer_relations"
-        if conversation.conversation_type == "buyer"
-        else "seller_conversations"
+        "buyer_relations" if conversation.conversation_type == "buyer" else "seller_conversations"
     )
     team_ids = select(TeamMembership.team_id).where(
         TeamMembership.organization_id == organization_id,
@@ -2194,9 +2184,7 @@ def validate_line_ownership(
 
 
 def clear_default_lines(db: Session, organization_id: UUID) -> None:
-    for line in db.scalars(
-        select(VoiceLine).where(VoiceLine.organization_id == organization_id)
-    ):
+    for line in db.scalars(select(VoiceLine).where(VoiceLine.organization_id == organization_id)):
         line.is_default = False
 
 
@@ -2270,15 +2258,9 @@ def record_line_audit(
             previous_value=None,
             new_value={
                 "phone_number": line.phone_number,
-                "assigned_user_id": (
-                    str(line.assigned_user_id) if line.assigned_user_id else None
-                ),
-                "fallback_user_id": (
-                    str(line.fallback_user_id) if line.fallback_user_id else None
-                ),
-                "assigned_team_id": (
-                    str(line.assigned_team_id) if line.assigned_team_id else None
-                ),
+                "assigned_user_id": (str(line.assigned_user_id) if line.assigned_user_id else None),
+                "fallback_user_id": (str(line.fallback_user_id) if line.fallback_user_id else None),
+                "assigned_team_id": (str(line.assigned_team_id) if line.assigned_team_id else None),
                 "department_key": line.department_key,
                 "purpose_key": line.purpose_key,
                 "coverage_timezone": line.coverage_timezone,

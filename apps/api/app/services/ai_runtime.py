@@ -381,9 +381,21 @@ ACQUISITIONS_REPAIR_SCOPE_SUGGESTION_SCHEMA: dict[str, Any] = {
         "category": {
             "type": "string",
             "enum": [
-                "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen",
-                "bathrooms", "flooring", "paint_drywall", "windows_doors", "exterior",
-                "landscaping", "permits", "cleanup", "other",
+                "roof",
+                "hvac",
+                "plumbing",
+                "electrical",
+                "foundation",
+                "kitchen",
+                "bathrooms",
+                "flooring",
+                "paint_drywall",
+                "windows_doors",
+                "exterior",
+                "landscaping",
+                "permits",
+                "cleanup",
+                "other",
             ],
         },
         "scope_status": {
@@ -397,7 +409,13 @@ ACQUISITIONS_REPAIR_SCOPE_SUGGESTION_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
     },
     "required": [
-        "category", "scope_status", "severity", "quantity", "rationale", "evidence", "confidence"
+        "category",
+        "scope_status",
+        "severity",
+        "quantity",
+        "rationale",
+        "evidence",
+        "confidence",
     ],
 }
 ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA: dict[str, Any] = {
@@ -416,8 +434,13 @@ ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA: dict[str, Any] = {
         "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
     },
     "required": [
-        "summary", "suggestions", "missing_evidence", "requested_photos",
-        "safety_notes", "evidence", "confidence"
+        "summary",
+        "suggestions",
+        "missing_evidence",
+        "requested_photos",
+        "safety_notes",
+        "evidence",
+        "confidence",
     ],
 }
 TRANSACTION_DEADLINE_RISK_SCHEMA: dict[str, Any] = {
@@ -754,9 +777,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
         runtime = _new_runtime_policy(
             principal,
             provider_status=(
-                "enabled"
-                if settings.ai_enabled and bool(settings.openai_api_key)
-                else "disabled"
+                "enabled" if settings.ai_enabled and bool(settings.openai_api_key) else "disabled"
             ),
             high_volume_model=settings.openai_high_volume_model or default_model,
             default_model=default_model,
@@ -813,9 +834,7 @@ def install_runtime(db: Session, principal: Principal) -> AiRuntimeInstallRead:
                 agent_definition_id=agent.id,
                 capability_key=capability_key,
                 status=(
-                    "enabled"
-                    if capability_key in DRAFT_ONLY_ENABLED_CAPABILITIES
-                    else "disabled"
+                    "enabled" if capability_key in DRAFT_ONLY_ENABLED_CAPABILITIES else "disabled"
                 ),
                 model_route=route,
                 output_schema={
@@ -1469,21 +1488,19 @@ def _execute_read_tool(
     context: dict[str, Any] = {"request": payload.input_payload}
     field_scope: list[str]
     if capability.capability_key in {
-        "appointment.brief", "underwriting.analyze", "negotiation.coach"
+        "appointment.brief",
+        "underwriting.analyze",
+        "negotiation.coach",
     }:
         acquisitions_context, field_scope = _acquisitions_context(
             db, principal, capability.capability_key, payload
         )
         context["acquisitions"] = acquisitions_context
     elif capability.capability_key == "transaction.coordinate":
-        transaction_context, field_scope = _transaction_context(
-            db, principal, payload
-        )
+        transaction_context, field_scope = _transaction_context(db, principal, payload)
         context["transaction"] = transaction_context
     elif capability.capability_key == "disposition.match":
-        disposition_context, field_scope = _disposition_context(
-            db, principal, payload
-        )
+        disposition_context, field_scope = _disposition_context(db, principal, payload)
         context["disposition"] = disposition_context
     elif capability.capability_key in {
         "finance.reconcile",
@@ -1515,9 +1532,11 @@ def _execute_read_tool(
         if lead_context is None:
             raise ValueError("Lead not found.")
         context["lead"] = _scope_lead_context(capability.capability_key, lead_context)
-        field_scope = [f"lead.{field}" for field in COMMON_LEAD_FIELDS] + [
-            f"property.{field}" for field in COMMON_PROPERTY_FIELDS
-        ]
+        field_scope = (
+            [f"lead.{field}" for field in COMMON_LEAD_FIELDS]
+            + [f"property.{field}" for field in COMMON_PROPERTY_FIELDS]
+            + ["property_intelligence.saved_snapshot"]
+        )
         if capability.capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES:
             field_scope.append("property.street_address")
     elif capability.capability_key == "prospecting.prioritize":
@@ -1586,15 +1605,19 @@ def _disposition_context(
         ).all()
     )
     buyer_ids = {item.buyer_id for item in matches}
-    buyers = {
-        item.id: item
-        for item in db.scalars(
-            select(Buyer).where(
-                Buyer.organization_id == principal.organization_id,
-                Buyer.id.in_(buyer_ids),
-            )
-        ).all()
-    } if buyer_ids else {}
+    buyers = (
+        {
+            item.id: item
+            for item in db.scalars(
+                select(Buyer).where(
+                    Buyer.organization_id == principal.organization_id,
+                    Buyer.id.in_(buyer_ids),
+                )
+            ).all()
+        }
+        if buyer_ids
+        else {}
+    )
     criteria_by_buyer: dict[UUID, BuyerCriteria] = {}
     source_by_buyer: dict[UUID, BuyerDiscoveryCandidate] = {}
     if buyer_ids:
@@ -1613,8 +1636,7 @@ def _disposition_context(
         for source_record in db.scalars(
             select(BuyerDiscoveryCandidate)
             .where(
-                BuyerDiscoveryCandidate.organization_id
-                == principal.organization_id,
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
                 BuyerDiscoveryCandidate.buyer_id.in_(buyer_ids),
             )
             .order_by(BuyerDiscoveryCandidate.created_at.desc())
@@ -1666,9 +1688,7 @@ def _disposition_context(
                 "qualification_status": match.qualification_status,
                 "recipient_status": match.recipient_status,
                 "proof_status": buyers[match.buyer_id].proof_of_funds_status,
-                "proof_expires_at": _iso(
-                    buyers[match.buyer_id].proof_of_funds_expires_at
-                ),
+                "proof_expires_at": _iso(buyers[match.buyer_id].proof_of_funds_expires_at),
                 "reliability_score_basis_points": buyers[
                     match.buyer_id
                 ].reliability_score_basis_points,
@@ -1682,26 +1702,18 @@ def _disposition_context(
                     "observed_purchase_count": source_by_buyer[
                         match.buyer_id
                     ].observed_purchase_count,
-                    "no_mortgage_count": source_by_buyer[
-                        match.buyer_id
-                    ].no_mortgage_count,
+                    "no_mortgage_count": source_by_buyer[match.buyer_id].no_mortgage_count,
                     "last_purchase_date": _date_iso(
                         source_by_buyer[match.buyer_id].last_purchase_date
                     ),
-                    "basis": source_by_buyer[
-                        match.buyer_id
-                    ].evidence_snapshot.get("basis"),
+                    "basis": source_by_buyer[match.buyer_id].evidence_snapshot.get("basis"),
                 }
                 if match.buyer_id in source_by_buyer
                 else None,
                 "criteria": {
                     "markets": criteria_by_buyer[match.buyer_id].markets,
-                    "property_types": criteria_by_buyer[
-                        match.buyer_id
-                    ].property_types,
-                    "rehab_levels": criteria_by_buyer[
-                        match.buyer_id
-                    ].rehab_levels,
+                    "property_types": criteria_by_buyer[match.buyer_id].property_types,
+                    "rehab_levels": criteria_by_buyer[match.buyer_id].rehab_levels,
                 }
                 if match.buyer_id in criteria_by_buyer
                 else None,
@@ -1717,9 +1729,7 @@ def _disposition_context(
                 if item.buyer_id in buyers
                 else "Recorded buyer",
                 "amount_cents": item.amount_cents,
-                "meets_internal_floor": (
-                    item.amount_cents >= case.minimum_acceptable_cents
-                ),
+                "meets_internal_floor": (item.amount_cents >= case.minimum_acceptable_cents),
                 "earnest_money_cents": item.earnest_money_cents,
                 "financing_type": item.financing_type,
                 "status": item.status,
@@ -1823,8 +1833,7 @@ def _transaction_context(
         db.scalars(
             select(TransactionChecklistItem)
             .where(
-                TransactionChecklistItem.organization_id
-                == principal.organization_id,
+                TransactionChecklistItem.organization_id == principal.organization_id,
                 TransactionChecklistItem.transaction_id == transaction.id,
             )
             .order_by(TransactionChecklistItem.sort_order)
@@ -1889,9 +1898,7 @@ def _transaction_context(
         "confirmed_document_facts": [
             {
                 "document_id": str(item.document_id),
-                "document_title": document_names.get(
-                    item.document_id, "Unknown document"
-                ),
+                "document_title": document_names.get(item.document_id, "Unknown document"),
                 "field_key": item.field_key,
                 "value": item.value_text,
                 "source_page": item.source_page,
@@ -1918,9 +1925,7 @@ def _transaction_context(
                 "required": item.is_required,
                 "due_at": _iso(item.due_at),
                 "evidence_document_id": (
-                    str(item.evidence_document_id)
-                    if item.evidence_document_id
-                    else None
+                    str(item.evidence_document_id) if item.evidence_document_id else None
                 ),
                 "evidence_notes": item.evidence_notes,
             }
@@ -2048,7 +2053,8 @@ def _acquisitions_context(
     photos = (
         list(
             db.scalars(
-                select(FieldInspectionPhoto).where(
+                select(FieldInspectionPhoto)
+                .where(
                     FieldInspectionPhoto.organization_id == principal.organization_id,
                     FieldInspectionPhoto.inspection_id == inspection.id,
                 )
@@ -2520,15 +2526,37 @@ def _scope_lead_context(
     scoped_lead = lead if isinstance(lead, dict) else {}
     scoped_property = property_record if isinstance(property_record, dict) else {}
     scoped_seller = seller if isinstance(seller, dict) else {}
+    intelligence_value = lead_context.get("property_intelligence")
+    scoped_intelligence = intelligence_value if isinstance(intelligence_value, dict) else None
     property_fields = list(COMMON_PROPERTY_FIELDS)
-    if capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES:
+    address_allowed = capability_key.split(".", 1)[0] in ADDRESS_ALLOWED_PREFIXES
+    if address_allowed:
         property_fields.append("street_address")
+    elif scoped_intelligence is not None:
+        scoped_intelligence = dict(scoped_intelligence)
+        raw_facts = scoped_intelligence.get("facts")
+        if isinstance(raw_facts, dict):
+            scoped_intelligence["facts"] = {
+                key: value for key, value in raw_facts.items() if key != "address"
+            }
+        raw_comparables = scoped_intelligence.get("comparables")
+        if isinstance(raw_comparables, list):
+            scoped_intelligence["comparables"] = [
+                {
+                    key: value
+                    for key, value in comparable.items()
+                    if key not in {"formatted_address", "source_url", "source_reference"}
+                }
+                for comparable in raw_comparables
+                if isinstance(comparable, dict)
+            ]
     return {
         "lead": {field: scoped_lead.get(field) for field in COMMON_LEAD_FIELDS},
         "seller": {
             "preferred_name": scoped_seller.get("preferred_name"),
         },
         "property": {field: scoped_property.get(field) for field in property_fields},
+        "property_intelligence": scoped_intelligence,
     }
 
 

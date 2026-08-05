@@ -1288,14 +1288,15 @@ telemarketing, recording, or real-estate advice.
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
 | Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
-| DealMachine | Buyer discovery plus property-only underwriting comp evidence | Implemented adapter with cost preview, credit controls, provenance, conflict handling, and shadow/candidate modes | Subscription purchased; API key/configuration and controlled acceptance pending |
+| DealMachine | Buyer discovery, property facts and imagery, plus property-only underwriting comp evidence | Implemented adapter with cost preview, credit controls, safe image proxy, reusable facts, provenance, conflict handling, and shadow/candidate modes | Active in candidate mode; continued outcome review required |
+| Google Street View Static API | Optional fallback property exterior imagery | Authenticated server-side metadata and image proxy implemented | Optional; DealMachine imagery is the primary provider fallback after inspection photos |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
-| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented authenticated Zapier endpoint, deduplication, attribution, audit payloads, and retries | Zapier connection, Page Leads Access, secret, form mapping, and controlled acceptance pending |
-| Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Disabled until approved use case and controlled acceptance |
+| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented Page-ID-restricted Zapier endpoint, deduplication, attribution, audit payloads, and retries | Active; controlled ingestion test passed |
+| Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Active; controlled live delivery passed |
 
 ## 21. Data Domain Map
 
@@ -1315,7 +1316,8 @@ recommendations, reviews, and call quality.
 
 ### CRM And Seller Evidence
 
-`Contact`, `ContactMethod`, `Property`, `Lead`, `ConsentRecord`, `SuppressionRecord`,
+`Contact`, `ContactMethod`, `Property`, `PropertyIntelligenceSnapshot`, `PropertyResearchRun`,
+`Lead`, `ConsentRecord`, `SuppressionRecord`,
 `LeadFormSubmission`, `AttributionTouch`, `ConversionEvent`, qualification scripts, cases, and
 sessions.
 

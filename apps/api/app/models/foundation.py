@@ -1042,6 +1042,101 @@ class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
     address_validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    research_status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="not_started", server_default="not_started", index=True
+    )
+    research_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    research_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    research_last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+
+
+class PropertyIntelligenceSnapshot(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "property_intelligence_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "property_id",
+            "version_number",
+            name="uq_property_intelligence_property_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("properties.id", ondelete="CASCADE"), index=True
+    )
+    source_lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_market_analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("underwriting_market_analyses.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    is_current: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true", index=True
+    )
+    address_signature: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    completeness_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    facts: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    valuation: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    comparables: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    market_context: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    sources: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    conflicts: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    media: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    snapshot_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+    captured_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+
+
+class PropertyResearchRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "property_research_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "idempotency_key",
+            name="uq_property_research_org_idempotency",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("properties.id", ondelete="CASCADE"), index=True
+    )
+    source_lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    trigger_source: Mapped[str] = mapped_column(String(120), nullable=False)
+    address_signature: Mapped[str] = mapped_column(String(500), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    force_refresh: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    run_metadata: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON, nullable=True)
 
 
 class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -4783,9 +4878,7 @@ class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("meta_lead_events.id", ondelete="CASCADE"), index=True
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
-    recipient_user_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("users.id"), index=True
-    )
+    recipient_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     recipient_phone: Mapped[str] = mapped_column(String(40), nullable=False)
     message_body: Mapped[str] = mapped_column(String(1000), nullable=False)
     status: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
@@ -4795,9 +4888,7 @@ class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     provider: Mapped[str | None] = mapped_column(String(80), nullable=True)
-    provider_message_id: Mapped[str | None] = mapped_column(
-        String(255), nullable=True, index=True
-    )
+    provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
     provider_response: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 

@@ -385,6 +385,556 @@
   color: #765b16 !important;
 }
 
+.propertyIntelligencePanel {
+  overflow: hidden;
+}
+
+.propertyIntelligenceHeader {
+  padding: 20px;
+  border-bottom: 1px solid #e2ded5;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.propertyIntelligenceHeader h2,
+.propertyIntelligenceHeader p,
+.propertyFactSection h3,
+.propertyValueSection h3,
+.propertySignalSection h3,
+.propertySectionTitle h3 {
+  margin: 0;
+}
+
+.propertyIntelligenceHeader h2 {
+  margin-top: 4px;
+  color: #17201c;
+  font-size: 23px;
+}
+
+.propertyIntelligenceHeader p {
+  margin-top: 6px;
+  color: #68706d;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.propertyResearchActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.propertyResearchActions button,
+.propertySectionTitle a {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #c8c2b7;
+  border-radius: 5px;
+  background: #fff;
+  color: #244f3a;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.propertyResearchActions button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.propertyResearchStatus {
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #edf5ef;
+  color: #286143;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.propertyResearchStatus[data-status="queued"],
+.propertyResearchStatus[data-status="processing"] {
+  background: #fff3d9;
+  color: #8a5c08;
+}
+
+.propertyResearchStatus[data-status="failed"],
+.propertyResearchStatus[data-status="needs_address"],
+.propertyResearchStatus[data-status="needs_review"] {
+  background: #fbe9e5;
+  color: #9b3e2f;
+}
+
+.propertyResearchStatus[data-status="stale"] {
+  background: #eeecf8;
+  color: #5a4a8d;
+}
+
+.propertyHeroGrid {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2ded5;
+  background: #f6f4ef;
+  display: grid;
+  grid-template-columns: minmax(320px, 1.6fr) minmax(220px, 0.7fr);
+  gap: 16px;
+}
+
+.propertyHeroImage {
+  position: relative;
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid #d5d0c6;
+  border-radius: 8px;
+  background: #dfe4df;
+}
+
+.propertyHeroImage > img {
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  object-fit: cover;
+  display: block;
+}
+
+.propertyImagePlaceholder {
+  min-height: 280px;
+  padding: 24px;
+  color: #617069;
+  background: linear-gradient(145deg, #e7ece7, #d7ded7);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  text-align: center;
+}
+
+.propertyImagePlaceholder strong {
+  color: #35463e;
+  font-size: 15px;
+}
+
+.propertyImagePlaceholder span {
+  max-width: 310px;
+  font-size: 12px;
+}
+
+.propertyImageCaption {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  left: 8px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: rgb(18 26 22 / 78%);
+  color: #fff;
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.propertyImageCaption small {
+  margin-left: auto;
+  color: #d8dfdc;
+}
+
+.propertyImageViews {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 3px;
+  border-radius: 6px;
+  background: rgb(18 26 22 / 78%);
+  display: flex;
+  gap: 3px;
+}
+
+.propertyImageViews button {
+  min-height: 27px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #e4e9e6;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.propertyImageViews button[aria-pressed="true"] {
+  background: #ffffff;
+  color: #214e39;
+}
+
+.propertyResearchSummary {
+  padding: 4px 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(90px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.propertyResearchSummary > div {
+  min-height: 90px;
+  padding: 14px;
+  border: 1px solid #d7d2c9;
+  border-radius: 7px;
+  background: #fff;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.propertyResearchSummary span {
+  color: #69716e;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.propertyResearchSummary strong {
+  color: #1e3f30;
+  font-size: 22px;
+}
+
+.propertyResearchSummary > small {
+  grid-column: 1 / -1;
+  color: #727875;
+  font-size: 10px;
+}
+
+.propertyResearchWarning {
+  padding: 10px 20px;
+  border-bottom: 1px solid #efd3c8;
+  background: #fff4ef;
+  color: #853d2c;
+  font-size: 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+}
+
+.propertyIntelligenceSections {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  border-bottom: 1px solid #e2ded5;
+}
+
+.propertyFactSection,
+.propertyValueSection {
+  padding: 18px 20px;
+}
+
+.propertyFactSection {
+  border-right: 1px solid #e2ded5;
+}
+
+.propertyFactSection h3,
+.propertyValueSection h3,
+.propertySignalSection h3,
+.propertySectionTitle h3 {
+  color: #252c29;
+  font-size: 14px;
+}
+
+.propertySignalSection {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2ded5;
+}
+
+.propertySignalSection > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.propertySignalSection h3 {
+  color: #252c29;
+  font-size: 14px;
+}
+
+.propertySignalSection p {
+  margin: 0;
+  color: #777e7a;
+  font-size: 10px;
+}
+
+.propertySignalSection dl,
+.propertyAdditionalFacts {
+  margin: 13px 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  gap: 8px;
+}
+
+.propertySignalSection dl > div,
+.propertyAdditionalFacts > div {
+  min-height: 58px;
+  padding: 9px 10px;
+  border: 1px solid #e0dcd4;
+  border-radius: 5px;
+  background: #f8f7f4;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+}
+
+.propertySignalSection dt,
+.propertyAdditionalFacts dt {
+  color: #737976;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.propertySignalSection dd,
+.propertyAdditionalFacts dd {
+  margin: 0;
+  color: #26322c;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.propertyFactSection dl {
+  margin: 13px 0 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 0 18px;
+}
+
+.propertyFactSection dl > div {
+  padding: 8px 0;
+  border-bottom: 1px solid #ece8e0;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.propertyFactSection dt,
+.propertyValueCards span {
+  color: #737976;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.propertyFactSection dd {
+  margin: 0;
+  color: #252c29;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: right;
+}
+
+.propertyValueCards {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.propertyValueCards > div {
+  padding: 11px;
+  border: 1px solid #ddd8cf;
+  border-radius: 5px;
+  background: #f8f7f4;
+  display: grid;
+  gap: 4px;
+}
+
+.propertyValueCards strong {
+  color: #214e39;
+  font-size: 15px;
+}
+
+.propertyValueSection > p {
+  margin: 11px 0 0;
+  color: #6c7370;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.propertyCompPreview {
+  padding: 18px 20px;
+  border-bottom: 1px solid #e2ded5;
+}
+
+.propertySectionTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.propertySectionTitle > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.propertyCompRows {
+  margin-top: 12px;
+  display: grid;
+  gap: 7px;
+}
+
+.propertyCompRows > div {
+  padding: 10px 11px;
+  border: 1px solid #e0dcd4;
+  border-radius: 5px;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto;
+  gap: 3px 12px;
+}
+
+.propertyCompRows strong {
+  color: #29312d;
+  font-size: 11px;
+}
+
+.propertyCompRows span {
+  color: #214e39;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.propertyCompRows small {
+  grid-column: 1 / -1;
+  color: #747a77;
+  font-size: 10px;
+}
+
+.propertyEvidenceDetails {
+  padding: 14px 20px 18px;
+}
+
+.propertyEvidenceDetails summary {
+  color: #41534a;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.propertyEvidenceDetails > div {
+  margin-top: 13px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.propertyEvidenceDetails h4 {
+  margin: 0 0 7px;
+  color: #303936;
+  font-size: 11px;
+}
+
+.propertyEvidenceDetails ul {
+  margin: 0;
+  padding-left: 17px;
+  color: #5d6662;
+  font-size: 10px;
+}
+
+.propertyEvidenceDetails li {
+  margin: 5px 0;
+}
+
+.propertyEvidenceDetails li span {
+  margin-left: 6px;
+  color: #858b88;
+}
+
+.propertyEvidenceDetails p {
+  margin: 0;
+  color: #747a77;
+  font-size: 10px;
+}
+
+.spin {
+  animation: propertySpin 0.9s linear infinite;
+}
+
+@keyframes propertySpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 900px) {
+  .propertyIntelligenceHeader,
+  .propertySectionTitle {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .propertyResearchActions {
+    justify-content: space-between;
+  }
+
+  .propertyHeroGrid,
+  .propertyIntelligenceSections {
+    grid-template-columns: 1fr;
+  }
+
+  .propertyFactSection {
+    border-right: 0;
+    border-bottom: 1px solid #e2ded5;
+  }
+
+  .propertySignalSection dl,
+  .propertyAdditionalFacts {
+    grid-template-columns: repeat(2, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .propertyResearchActions,
+  .propertyResearchSummary,
+  .propertyFactSection dl,
+  .propertyValueCards,
+  .propertyEvidenceDetails > div {
+    grid-template-columns: 1fr;
+  }
+
+  .propertySignalSection > div {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .propertySignalSection dl,
+  .propertyAdditionalFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .propertyResearchActions {
+    display: grid;
+  }
+
+  .propertyResearchSummary > small {
+    grid-column: 1;
+  }
+
+  .propertyCompRows > div {
+    grid-template-columns: 1fr;
+  }
+
+  .propertyCompRows small {
+    grid-column: 1;
+  }
+}
+
 .compSourceBadge {
   border: 1px solid #ccd6d0;
   background: #f4f7f5;

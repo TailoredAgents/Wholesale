@@ -323,6 +323,36 @@ class Settings(BaseSettings):
         default="rentcast",
         validation_alias="PROPERTY_DATA_PROVIDER",
     )
+    property_intelligence_auto_research_enabled: bool = Field(
+        default=True,
+        validation_alias="PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED",
+    )
+    property_intelligence_fresh_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        validation_alias="PROPERTY_INTELLIGENCE_FRESH_DAYS",
+    )
+    property_intelligence_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        validation_alias="PROPERTY_INTELLIGENCE_MAX_ATTEMPTS",
+    )
+    property_intelligence_retry_base_seconds: int = Field(
+        default=60,
+        ge=5,
+        le=3600,
+        validation_alias="PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS",
+    )
+    google_street_view_api_key: str | None = Field(
+        default=None,
+        validation_alias="GOOGLE_STREET_VIEW_API_KEY",
+    )
+    google_street_view_base_url: str = Field(
+        default="https://maps.googleapis.com/maps/api/streetview",
+        validation_alias="GOOGLE_STREET_VIEW_BASE_URL",
+    )
     buyer_data_provider: Literal["disabled", "dealmachine"] = Field(
         default="disabled",
         validation_alias="BUYER_DATA_PROVIDER",
@@ -877,6 +907,13 @@ class Settings(BaseSettings):
             blockers.append("PROPERTY_DATA_PROVIDER=rentcast")
         if not self.rentcast_api_key:
             blockers.append("RENTCAST_API_KEY")
+        return tuple(blockers)
+
+    @property
+    def property_intelligence_configuration_blockers(self) -> tuple[str, ...]:
+        blockers = list(self.facebook_address_enrichment_configuration_blockers)
+        if not self.property_intelligence_auto_research_enabled:
+            blockers.append("PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED=true")
         return tuple(blockers)
 
     @property

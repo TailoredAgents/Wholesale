@@ -8,6 +8,8 @@ from app.core.config import Settings
 from app.integrations.dealmachine_client import (
     UNDERWRITING_PROPERTY_FIELDS,
     DealMachineClient,
+    DealMachineError,
+    get_dealmachine_image,
 )
 
 
@@ -35,6 +37,9 @@ def test_underwriting_property_lookup_excludes_contacts() -> None:
                         "dm_property_id": "prop_subject",
                         "full_address": "1200 Barton Springs Rd, Austin, TX 78704",
                         "num_bedrooms": 3,
+                        "images": {
+                            "street_view": ("https://img.dealmachine.com/sv/30.2598,-97.7544.jpg")
+                        },
                     }
                 ],
                 "credits": {
@@ -54,6 +59,7 @@ def test_underwriting_property_lookup_excludes_contacts() -> None:
     assert result.matched is True
     assert result.property is not None
     assert result.property["dm_property_id"] == "prop_subject"
+    assert result.property["images"]["street_view"].startswith("https://img.dealmachine.com/sv/")
     assert result.credits["people"] == 0
     assert len(requests) == 1
     assert requests[0].url.path == "/v1/enrichment/address"
@@ -64,6 +70,40 @@ def test_underwriting_property_lookup_excludes_contacts() -> None:
         "fields": UNDERWRITING_PROPERTY_FIELDS,
         "contact_audience": "none",
     }
+
+
+def test_dealmachine_image_proxy_allows_only_provider_cdn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested: list[str] = []
+
+    def fake_get(
+        url: str,
+        *,
+        timeout: float,
+        follow_redirects: bool,
+    ) -> httpx.Response:
+        requested.append(url)
+        assert timeout == 12
+        assert follow_redirects is False
+        return httpx.Response(
+            200,
+            request=httpx.Request("GET", url),
+            headers={"Content-Type": "image/jpeg"},
+            content=b"property-image",
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+    content, content_type = get_dealmachine_image(
+        "https://img.dealmachine.com/sv/30.2598,-97.7544.jpg",
+        timeout_seconds=12,
+    )
+
+    assert content == b"property-image"
+    assert content_type == "image/jpeg"
+    assert requested == ["https://img.dealmachine.com/sv/30.2598,-97.7544.jpg"]
+    with pytest.raises(DealMachineError, match="invalid property image URL"):
+        get_dealmachine_image("https://example.com/not-allowed.jpg")
 
 
 def test_underwriting_comps_use_subject_credit_endpoint_and_closed_sales_only() -> None:

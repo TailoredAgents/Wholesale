@@ -127,6 +127,11 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
+from app.services.property_intelligence import (
+    build_property_intelligence_read,
+    enqueue_property_research,
+    invalidate_property_intelligence,
+)
 from app.services.property_validation import (
     canonical_address_key,
     reset_property_validation,
@@ -322,24 +327,32 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         )
         has_primary_method = True
 
-    property_record = Property(
-        organization_id=principal.organization_id,
-        street_address=payload.property.street_address,
-        city=payload.property.city,
-        state=payload.property.state.upper(),
-        postal_code=payload.property.postal_code,
-        county=payload.property.county,
-        property_type=payload.property.property_type,
-        normalized_address_key=canonical_address_key(
-            payload.property.street_address,
-            payload.property.city,
-            payload.property.state,
-            payload.property.postal_code,
-        ),
-        address_validation_status="unverified",
+    normalized_property_key = canonical_address_key(
+        payload.property.street_address,
+        payload.property.city,
+        payload.property.state,
+        payload.property.postal_code,
     )
-    db.add(property_record)
-    db.flush()
+    property_record = db.scalar(
+        select(Property).where(
+            Property.organization_id == principal.organization_id,
+            Property.normalized_address_key == normalized_property_key,
+        )
+    )
+    if property_record is None:
+        property_record = Property(
+            organization_id=principal.organization_id,
+            street_address=payload.property.street_address,
+            city=payload.property.city,
+            state=payload.property.state.upper(),
+            postal_code=payload.property.postal_code,
+            county=payload.property.county,
+            property_type=payload.property.property_type,
+            normalized_address_key=normalized_property_key,
+            address_validation_status="unverified",
+        )
+        db.add(property_record)
+        db.flush()
 
     lead = Lead(
         organization_id=principal.organization_id,
@@ -369,6 +382,12 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
     from app.services.ai_operations import enqueue_lead_created_ai_work
 
     enqueue_lead_created_ai_work(db, lead, source="manual_entry")
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source="manual_entry",
+    )
 
     db.add(
         ActivityEvent(
@@ -819,6 +838,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             contact_methods=list(contact_methods),
             open_tasks=list(open_tasks),
         ),
+        property_intelligence=build_property_intelligence_read(db, principal, lead),
     )
 
 
@@ -1588,6 +1608,13 @@ def validate_lead_property_address(
             reason="Provider property-record validation",
         )
     )
+    if property_record.address_validation_status == "provider_confirmed":
+        enqueue_property_research(
+            db,
+            property_record,
+            source_lead_id=lead.id,
+            trigger_source="manual_address_validation",
+        )
     db.commit()
     db.refresh(property_record)
     return property_validation_to_read(property_record)
@@ -1667,18 +1694,22 @@ def create_lead_market_analysis(
         )
         .where(
             UnderwritingMarketAnalysis.organization_id == principal.organization_id,
-            UnderwritingMarketAnalysis.lead_id == lead.id,
         )
     )
     if payload.source_analysis_id is not None:
         cached_analysis = db.scalar(
-            analysis_query.where(UnderwritingMarketAnalysis.id == payload.source_analysis_id)
+            analysis_query.where(
+                UnderwritingMarketAnalysis.id == payload.source_analysis_id,
+                UnderwritingMarketAnalysis.lead_id == lead.id,
+            )
         )
         if cached_analysis is None:
             raise ValueError("The source market analysis was not found for this lead.")
     else:
         cached_analysis = db.scalar(
-            analysis_query.order_by(
+            analysis_query.where(
+                UnderwritingMarketAnalysis.property_id == lead.property_id,
+            ).order_by(
                 func.coalesce(UnderwritingVersion.version_number, 0).desc(),
                 UnderwritingMarketAnalysis.created_at.desc(),
                 UnderwritingMarketAnalysis.id.desc(),
@@ -2175,6 +2206,7 @@ def create_lead_market_analysis(
             else None
         ),
         "market_data_reused": reuse_market_data,
+        "research_only": payload.research_only,
         "comp_review_applied": comp_review is not None,
         "comp_review_decision_count": len(payload.comp_review_decisions),
         "comp_review_override_count": comp_review_override_count,
@@ -2391,7 +2423,11 @@ def create_lead_market_analysis(
         **(version.underwriting_metadata or {}),
         "market_analysis_id": str(analysis.id),
     }
-    if lead.stage_key not in {"offer_presented", "negotiating", "under_contract"}:
+    if not payload.research_only and lead.stage_key not in {
+        "offer_presented",
+        "negotiating",
+        "under_contract",
+    }:
         lead.stage_key = "underwriting"
 
     db.add(
@@ -2401,7 +2437,11 @@ def create_lead_market_analysis(
             entity_type="lead",
             entity_id=lead.id,
             event_type=(
-                "lead.comp_review_applied" if comp_review else "lead.market_analysis_created"
+                "property.research_valuation_created"
+                if payload.research_only
+                else "lead.comp_review_applied"
+                if comp_review
+                else "lead.market_analysis_created"
             ),
             summary=(
                 (
@@ -2912,6 +2952,13 @@ def update_lead_staff_details(
             property_record.postal_code,
         )
         reset_property_validation(property_record)
+        invalidate_property_intelligence(db, property_record)
+        enqueue_property_research(
+            db,
+            property_record,
+            source_lead_id=lead.id,
+            trigger_source="lead_address_updated",
+        )
 
     if previous_values or new_values or phone_changed or email_changed:
         db.add(

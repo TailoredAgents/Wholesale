@@ -690,25 +690,32 @@ def convert_prospect_to_lead(
                 is_primary=not bool(prospect.phone),
             )
         )
-    property_record = Property(
-        organization_id=principal.organization_id,
-        street_address=street_address,
-        city=city,
-        state=state_code,
-        postal_code=postal_code,
-        county=None,
-        property_type=None,
-        normalized_address_key=prospect.normalized_address_key
-        or canonical_address_key(
-            street_address,
-            city,
-            state_code,
-            postal_code,
-        ),
-        address_validation_status=prospect.address_validation_status,
+    normalized_property_key = prospect.normalized_address_key or canonical_address_key(
+        street_address,
+        city,
+        state_code,
+        postal_code,
     )
-    db.add(property_record)
-    db.flush()
+    property_record = db.scalar(
+        select(Property).where(
+            Property.organization_id == principal.organization_id,
+            Property.normalized_address_key == normalized_property_key,
+        )
+    )
+    if property_record is None:
+        property_record = Property(
+            organization_id=principal.organization_id,
+            street_address=street_address,
+            city=city,
+            state=state_code,
+            postal_code=postal_code,
+            county=None,
+            property_type=None,
+            normalized_address_key=normalized_property_key,
+            address_validation_status=prospect.address_validation_status,
+        )
+        db.add(property_record)
+        db.flush()
     campaign = db.get(Campaign, prospect.campaign_id)
     lead = Lead(
         organization_id=principal.organization_id,
@@ -733,6 +740,14 @@ def convert_prospect_to_lead(
     from app.services.ai_operations import enqueue_lead_created_ai_work
 
     enqueue_lead_created_ai_work(db, lead, source="prospecting_handoff")
+    from app.services.property_intelligence import enqueue_property_research
+
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source="prospecting_handoff",
+    )
     prospect.converted_lead_id = lead.id
     db.add(
         AttributionTouch(
@@ -984,19 +999,13 @@ def build_batch_queues(
                 dialer_mode=first.dialer_mode,
                 provider_sync_status=first.provider_sync_status,
                 ready=sum(item.queue_kind == "ready" for item in batch_entries),
-                callbacks_due=sum(
-                    item.queue_kind == "callback_due" for item in batch_entries
-                ),
+                callbacks_due=sum(item.queue_kind == "callback_due" for item in batch_entries),
                 callbacks_scheduled=sum(
                     item.queue_kind == "callback_scheduled" for item in batch_entries
                 ),
-                corrections=sum(
-                    item.queue_kind == "correction_required" for item in batch_entries
-                ),
+                corrections=sum(item.queue_kind == "correction_required" for item in batch_entries),
                 in_progress=sum(item.queue_kind == "in_progress" for item in batch_entries),
-                handoff_pending=sum(
-                    item.queue_kind == "handoff_pending" for item in batch_entries
-                ),
+                handoff_pending=sum(item.queue_kind == "handoff_pending" for item in batch_entries),
             )
         )
     return sorted(summaries, key=lambda item: (item.campaign_name, item.batch_name))
@@ -1068,8 +1077,7 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
         sequence_number=entry.sequence_number,
         status=entry.status,
         queue_kind=queue_kind,
-        is_actionable=queue_kind
-        in {"ready", "callback_due", "correction_required", "in_progress"},
+        is_actionable=queue_kind in {"ready", "callback_due", "correction_required", "in_progress"},
         dialer_mode=batch.dialer_mode,
         provider_sync_status=provider_sync_status(),
         attempt_count=entry.attempt_count,
@@ -1091,11 +1099,7 @@ def entry_queue_kind(
     if entry.status == "handoff_pending":
         return "handoff_pending"
     if entry.next_attempt_at is not None:
-        return (
-            "callback_due"
-            if as_utc(entry.next_attempt_at) <= now
-            else "callback_scheduled"
-        )
+        return "callback_due" if as_utc(entry.next_attempt_at) <= now else "callback_scheduled"
     return "ready"
 
 

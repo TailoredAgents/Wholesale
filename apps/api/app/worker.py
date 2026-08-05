@@ -31,6 +31,10 @@ from app.services.operations import (
     register_worker,
     resolve_operation_failures,
 )
+from app.services.property_intelligence import (
+    backfill_next_property_snapshot,
+    process_next_property_research,
+)
 from app.services.resend_email_events import (
     process_next_resend_event,
     recover_next_received_email,
@@ -61,6 +65,10 @@ def run_worker(stop_event: threading.Event) -> None:
         poll_seconds=settings.call_transcription_poll_seconds,
     )
     operations: tuple[tuple[str, WorkerOperation], ...] = (
+        ("meta_lead_ads", process_next_meta_lead_event),
+        ("staff_lead_alerts", process_next_staff_lead_alert),
+        ("meta_address_enrichment", process_next_meta_address_enrichment),
+        ("property_intelligence", process_next_property_research),
         ("ai_operations", process_next_ai_operation),
         ("call_transcription", process_next_call_transcript),
         ("recording_retention", purge_next_expired_recording),
@@ -70,10 +78,8 @@ def run_worker(stop_event: threading.Event) -> None:
         ("mailbox_notifications", process_next_mailbox_notification),
         ("acquisition_reminders", process_next_acquisition_reminder),
         ("lead_manager_escalations", process_next_escalation),
-        ("meta_lead_ads", process_next_meta_lead_event),
-        ("staff_lead_alerts", process_next_staff_lead_alert),
-        ("meta_address_enrichment", process_next_meta_address_enrichment),
         ("marketing_conversions", process_next_marketing_conversion),
+        ("property_intelligence_backfill", backfill_next_property_snapshot),
     )
     while not stop_event.is_set():
         processed_operation: str | None = None

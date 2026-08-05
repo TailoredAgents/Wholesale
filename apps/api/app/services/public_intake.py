@@ -40,6 +40,7 @@ from app.services.conversion_events import record_conversion_event, with_meta_br
 from app.services.inbox import ensure_primary_conversation
 from app.services.lead_manager import ensure_inbound_case
 from app.services.marketing import enqueue_meta_web_conversion
+from app.services.property_intelligence import enqueue_property_research
 from app.services.property_validation import canonical_address_key
 from app.services.tasks import ensure_speed_to_lead_task
 
@@ -97,6 +98,12 @@ def create_public_seller_lead(
     event_namespace = "public" if intake_source == "seller_website" else intake_source
     if not matched_existing_lead:
         enqueue_lead_created_ai_work(db, lead, source=intake_source)
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source=intake_source,
+    )
     ensure_inbound_case(
         db,
         organization_id=organization.id,

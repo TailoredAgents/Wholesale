@@ -571,7 +571,9 @@ When ready:
 12. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
     cost.
 
-For underwriting acceptance:
+For underwriting acceptance, Stonegate has completed the connection steps and now runs
+`candidate` mode. The earlier staged sequence remains useful if credentials are rotated or the
+provider must be requalified:
 
 1. Leave `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` until the key and account usage endpoint
    pass.
@@ -592,7 +594,7 @@ For underwriting acceptance:
 8. Confirm DealMachine's provider value estimate appears only under external benchmarks and is
    excluded from ARV and offer math.
 9. Compare the shadow evidence with expert-reviewed comp sets and verified outcomes.
-10. Change the mode to `candidate` only after the owner approves the measured provider decision.
+10. Restore the approved `candidate` mode after the owner approves the measured provider decision.
    Candidate mode does not bypass deterministic screening or human offer approval.
 
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not

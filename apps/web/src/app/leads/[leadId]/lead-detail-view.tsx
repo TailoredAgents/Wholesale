@@ -24,6 +24,7 @@ import { MarketValuePreview } from "./market-value-preview";
 import { NegotiationGovernance } from "./negotiation-governance";
 import { OfferApprovalControl } from "./offer-approval-control";
 import { PropertyValidationControl } from "./property-validation-control";
+import { PropertyIntelligencePanel } from "./property-intelligence-panel";
 import { StageUpdateForm } from "./stage-update-form";
 import { TransactionForm } from "./transaction-form";
 import { UnderwritingForm } from "./underwriting-form";
@@ -678,6 +679,7 @@ function PropertyTab({ lead }: { lead: LeadDetail }) {
   return (
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
+        <PropertyIntelligencePanel lead={lead} />
         <PropertyPanel lead={lead} />
         <section className={`${styles.sectionPanel} ${styles.editAnchor}`} id="edit-lead">
           <SectionHeader title="Edit lead" />

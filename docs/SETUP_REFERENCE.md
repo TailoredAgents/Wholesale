@@ -36,13 +36,13 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | AI | OpenAI | Configured; Copilot pilots pending |
 | Property data | RentCast | Active |
 | Operational email | Resend | Configured; controlled acceptance pending |
-| SMS | Twilio | Seller-inquiry A2P approved; number attachment and acceptance pending |
+| SMS | Twilio | Seller-inquiry A2P approved; internal Facebook lead alerts tested live |
 | Voice | Twilio | Configuration and acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
-| Buyer data | DealMachine | Subscription purchased; API key and controlled acceptance pending |
+| Buyer data | DealMachine | Connected; underwriting candidate mode enabled |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
 | Error monitoring | Sentry | Optional/deferred |
-| Ad conversion delivery | Google and Meta | Pending |
+| Ad conversion delivery | Google and Meta | Meta Pixel and Conversions API active; Google pending |
 
 ## Secret Handling Rule
 
@@ -289,9 +289,15 @@ Variables:
 - `PROPERTY_DATA_PROVIDER=rentcast`
 - `RENTCAST_API_KEY`
 - `RENTCAST_BASE_URL=https://api.rentcast.io/v1`
+- `PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED=true`
+- `PROPERTY_INTELLIGENCE_FRESH_DAYS=30`
+- `PROPERTY_INTELLIGENCE_MAX_ATTEMPTS=3`
+- `PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS=60`
+- optional `GOOGLE_STREET_VIEW_API_KEY`
+- `GOOGLE_STREET_VIEW_BASE_URL=https://maps.googleapis.com/maps/api/streetview`
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3`
 - `UNDERWRITING_V3_SHADOW_ENABLED=false`
-- `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled`
+- `UNDERWRITING_DEALMACHINE_COMPS_MODE=candidate`
 - `UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS=2`
 - `UNDERWRITING_AI_COMP_ANALYST_MODE=disabled`
 - optional `ATTOM_API_KEY` placeholder
@@ -312,17 +318,45 @@ analysis. **Update Stonegate valuation**, repair changes, and comp review reuse 
 snapshot without a paid retry. **Refresh market evidence (may use credits)** explicitly replaces
 the snapshot. Neither endpoint supplies closed-sale evidence to ARV or offer math.
 
+### Automatic Property Intelligence
+
+When a lead has a usable street address and city, the worker automatically runs the same V3
+research pipeline used by Stonegate Valuation and saves an immutable, property-level snapshot. The
+snapshot centralizes normalized property facts, screened comparable sales, calculated valuation
+evidence, provider provenance, conflicts, market context, confidence, and freshness. Leads that
+resolve to the same normalized property reuse the current snapshot and its cached market analysis
+instead of buying the same provider evidence again. A normal snapshot remains fresh for the
+configured number of days; **Refresh research** intentionally requests current evidence and may
+use provider credits.
+
+The API and worker must receive the same property-data, RentCast, DealMachine, and intelligence
+variables. A successful DealMachine property lookup saves the provider's street-view, satellite,
+and roadmap URLs plus its available property-only facts in the reusable snapshot. The browser
+requests those images through Stonegate's authenticated API; it never receives provider
+credentials or an unrestricted proxy. DealMachine serves these image variants without an
+additional image credit beyond the property lookup.
+
+`GOOGLE_STREET_VIEW_API_KEY` is optional fallback coverage, not required for normal DealMachine
+imagery. If present on both services, the snapshot also saves Google Street View availability and
+panorama metadata. The display order is the latest field-inspection photo, DealMachine imagery,
+optional Google Street View, then a clear placeholder. Never expose either provider key to the
+browser.
+
+Existing saved market analyses are lazily backfilled into property snapshots by the worker without
+a provider call. Automatic research does not move the seller into Underwriting, approve a value,
+or make an offer. It prepares evidence for staff and AI; consequential valuation and offer controls
+remain human-operated.
+
 Set `OPENAI_WEB_SEARCH_ENABLED=true` to allow the underwriting research agent to supplement thin
 RentCast results. It uses medium-context live search with a five-call ceiling, stores consulted
 citations, and never lets the model set ARV or an offer directly. Use
 `OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search request has time to finish.
 
-After the DealMachine API key passes its own acceptance test, set
-`UNDERWRITING_DEALMACHINE_COMPS_MODE=shadow`. Shadow mode saves normalized DealMachine comparable
-evidence, provider overlap, conflicts, external benchmarks, credits, and latency but cannot affect
-ARV or offer math. Use `candidate` only after reviewed Georgia cases show that its unique closed
-sales improve evidence quality; candidate sales still pass the same deterministic screen and human
-review. The default two-credit ceiling covers a first-time property-only address resolution and
+Stonegate's configured mode is `candidate`: DealMachine's unique closed sales may enter the
+candidate pool, but every sale still passes the same deterministic screen, confidence rules, and
+human review as RentCast evidence. `shadow` remains available for diagnostics; it saves normalized
+evidence, provider overlap, conflicts, external benchmarks, credits, and latency without allowing
+DealMachine sales to affect ARV or offer math. The default two-credit ceiling covers a first-time property-only address resolution and
 one subject comp request. Stonegate never requests owner contacts for underwriting.
 The subject lookup must explicitly report zero people credits; the comp endpoint may omit that field
 under its property-only contract, but any positive people-credit report excludes the evidence. The

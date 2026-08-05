@@ -152,9 +152,8 @@ def process_next_meta_lead_event(
     event.next_attempt_at = None
     if not configured:
         event.status = "blocked"
-        event.last_error = (
-            "Missing configuration: "
-            + ", ".join(settings.zapier_facebook_leads_configuration_blockers)
+        event.last_error = "Missing configuration: " + ", ".join(
+            settings.zapier_facebook_leads_configuration_blockers
         )
         db.commit()
         return event.id
@@ -243,8 +242,7 @@ def process_next_meta_address_enrichment(
                 MetaLeadEvent.address_enrichment_status == "blocked" if configured else false(),
                 and_(
                     MetaLeadEvent.address_enrichment_status == "processing",
-                    MetaLeadEvent.address_enrichment_last_attempt_at
-                    <= now - timedelta(minutes=5),
+                    MetaLeadEvent.address_enrichment_last_attempt_at <= now - timedelta(minutes=5),
                 ),
             ),
             or_(
@@ -262,9 +260,8 @@ def process_next_meta_address_enrichment(
     event.address_enrichment_next_attempt_at = None
     if not configured:
         event.address_enrichment_status = "blocked"
-        event.address_enrichment_last_error = (
-            "Missing configuration: "
-            + ", ".join(settings.facebook_address_enrichment_configuration_blockers)
+        event.address_enrichment_last_error = "Missing configuration: " + ", ".join(
+            settings.facebook_address_enrichment_configuration_blockers
         )
         db.commit()
         return event.id
@@ -332,6 +329,15 @@ def process_next_meta_address_enrichment(
     event.address_enrichment_status = status_value
     event.address_enrichment_last_error = error[:2000] if error else None
     event.address_enriched_at = datetime.now(UTC)
+    if status_value == "enriched":
+        from app.services.property_intelligence import enqueue_property_research
+
+        enqueue_property_research(
+            db,
+            property_record,
+            source_lead_id=lead.id,
+            trigger_source="facebook_address_enriched",
+        )
     db.commit()
     return event.id
 
@@ -373,10 +379,7 @@ def mark_meta_address_enrichment_failure(
     if event is None:
         return event_id
     event.address_enrichment_last_error = error[:2000]
-    if (
-        event.address_enrichment_attempt_count
-        >= settings.facebook_address_enrichment_max_attempts
-    ):
+    if event.address_enrichment_attempt_count >= settings.facebook_address_enrichment_max_attempts:
         event.address_enrichment_status = "exhausted"
         event.address_enrichment_next_attempt_at = None
     else:
@@ -476,9 +479,8 @@ def process_next_staff_lead_alert(
     alert.next_attempt_at = None
     if not configured:
         alert.status = "blocked"
-        alert.last_error = (
-            "Missing configuration: "
-            + ", ".join(settings.staff_lead_alert_configuration_blockers)
+        alert.last_error = "Missing configuration: " + ", ".join(
+            settings.staff_lead_alert_configuration_blockers
         )
         db.commit()
         return alert.id

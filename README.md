@@ -5,15 +5,20 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 74 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 89 migrations.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
-  recording-retention worker.
+  recording-retention worker, plus lead intake, property research, AI preparation, alerts, and
+  provider retries.
 - `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
   the Render worker service.
 - `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
 - Clerk authentication and organization-scoped RBAC are live.
 - CRM, shared inbox, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
   transactions, buyers, finance, marketing, and AI control foundations are implemented.
+- Complete lead addresses automatically create a reusable Property Intelligence snapshot with
+  normalized facts, screened comparable evidence, Stonegate valuation context, provenance,
+  conflicts, freshness, DealMachine street/satellite/map imagery, and optional Google Street View
+  fallback.
 - The branded web domain is live. Stonegate's dedicated A2P Campaign requires resubmission and
   approval; final Twilio SMS and Voice acceptance remains pending.
 - Resend sending, receiving, aliases, shared mailboxes, routing, attachments, notifications, and

@@ -1376,6 +1376,30 @@ export type FieldAppointmentWorkspace = {
 };
 
 export type LeadDetail = LeadListItem & {
+  property_intelligence: {
+    research_status: string;
+    snapshot_id: string | null;
+    version_number: number | null;
+    snapshot_status: string | null;
+    completeness_score: number;
+    confidence_score: number;
+    captured_at: string | null;
+    expires_at: string | null;
+    is_stale: boolean;
+    facts: Record<string, { value?: unknown; source?: string; observed_at?: string; unit?: string }>;
+    valuation: Record<string, unknown>;
+    comparables: Array<Record<string, unknown>>;
+    market_context: Record<string, unknown>;
+    sources: Array<Record<string, unknown>>;
+    conflicts: Array<Record<string, unknown>>;
+    image_source: string;
+    image_available: boolean;
+    image_views: string[];
+    image_url: string | null;
+    image_attribution: string | null;
+    imagery_date: string | null;
+    last_error: string | null;
+  };
   contact_methods: Array<{
     id: string;
     method_type: string;

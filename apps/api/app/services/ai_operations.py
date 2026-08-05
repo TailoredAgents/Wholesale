@@ -26,6 +26,7 @@ from app.schemas.tasks import AiOperationReviewRead, AiOperationReviewRequest
 
 SUPPORTED_EVENT_CAPABILITIES = {
     "lead.created": "lead.next_action",
+    "property.research_ready": "lead.next_action",
 }
 ACTIVE_EVENT_STATUSES = {"queued", "processing", "needs_review"}
 TERMINAL_EVENT_STATUSES = {"completed", "failed", "blocked", "dismissed"}
@@ -54,9 +55,7 @@ def enqueue_lead_created_ai_work(
     if existing is not None:
         return existing
 
-    assigned_user_id = lead.assigned_user_id or default_ai_work_owner(
-        db, lead.organization_id
-    )
+    assigned_user_id = lead.assigned_user_id or default_ai_work_owner(db, lead.organization_id)
     now = datetime.now(UTC)
     event = AiOrchestratorEvent(
         organization_id=lead.organization_id,
@@ -72,10 +71,53 @@ def enqueue_lead_created_ai_work(
             "priority": "high",
             "assigned_user_id": str(assigned_user_id) if assigned_user_id else None,
             "source_url": f"/os/leads/{lead.id}",
-            "due_at": (
-                now + timedelta(minutes=5)
-            ).isoformat(),
+            "due_at": (now + timedelta(minutes=5)).isoformat(),
             "trigger_source": source,
+            "attempt_count": 0,
+        },
+        occurred_at=now,
+        processed_at=None,
+        last_error=None,
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def enqueue_property_research_ai_work(
+    db: Session,
+    *,
+    lead: Lead,
+    snapshot_id: UUID,
+) -> AiOrchestratorEvent:
+    event_key = f"property.research_ready:{snapshot_id}:{lead.id}"
+    existing = db.scalar(
+        select(AiOrchestratorEvent).where(
+            AiOrchestratorEvent.organization_id == lead.organization_id,
+            AiOrchestratorEvent.event_key == event_key,
+        )
+    )
+    if existing is not None:
+        return existing
+    assigned_user_id = lead.assigned_user_id or default_ai_work_owner(db, lead.organization_id)
+    now = datetime.now(UTC)
+    event = AiOrchestratorEvent(
+        organization_id=lead.organization_id,
+        event_key=event_key,
+        event_type="property.research_ready",
+        entity_type="lead",
+        entity_id=lead.id,
+        status="queued",
+        payload={
+            "capability_key": "lead.next_action",
+            "title": "Review researched lead brief",
+            "summary": "Stonegate is updating the lead brief with saved property intelligence.",
+            "priority": "high",
+            "assigned_user_id": str(assigned_user_id) if assigned_user_id else None,
+            "source_url": f"/os/leads/{lead.id}?tab=property",
+            "due_at": now.isoformat(),
+            "trigger_source": "property_research",
+            "property_intelligence_snapshot_id": str(snapshot_id),
             "attempt_count": 0,
         },
         occurred_at=now,
@@ -105,15 +147,11 @@ def enqueue_call_intelligence_ai_work(
     if existing is not None:
         return existing
     assigned_user_id = (
-        actor_user_id
-        or lead.assigned_user_id
-        or default_ai_work_owner(db, lead.organization_id)
+        actor_user_id or lead.assigned_user_id or default_ai_work_owner(db, lead.organization_id)
     )
     now = datetime.now(UTC)
     source_url = (
-        f"/os/inbox?conversation={conversation_id}"
-        if conversation_id
-        else f"/os/leads/{lead.id}"
+        f"/os/inbox?conversation={conversation_id}" if conversation_id else f"/os/leads/{lead.id}"
     )
     event = AiOrchestratorEvent(
         organization_id=lead.organization_id,
@@ -237,13 +275,9 @@ def process_next_ai_operation(
         if lead is None or lead.archived_at is not None:
             raise ValueError("The seller lead is no longer available.")
         assigned_user_id = payload_uuid((event.payload or {}).get("assigned_user_id"))
-        assigned_user = (
-            db.get(User, assigned_user_id) if assigned_user_id is not None else None
-        )
+        assigned_user = db.get(User, assigned_user_id) if assigned_user_id is not None else None
         if assigned_user is None or not assigned_user.is_active:
-            fallback_id = lead.assigned_user_id or default_ai_work_owner(
-                db, event.organization_id
-            )
+            fallback_id = lead.assigned_user_id or default_ai_work_owner(db, event.organization_id)
             assigned_user = db.get(User, fallback_id) if fallback_id else None
         if assigned_user is None or not assigned_user.is_active:
             raise ValueError("No active Stonegate user is available to own this AI work.")
@@ -336,7 +370,7 @@ def review_ai_operation(
         return None
     if event.status != "needs_review":
         raise ValueError("This AI work item is no longer awaiting review.")
-    if event.event_type != "lead.created" or event.entity_id is None:
+    if event.event_type not in SUPPORTED_EVENT_CAPABILITIES or event.entity_id is None:
         raise ValueError("Open the source workspace to review this AI result.")
     lead = db.get(Lead, event.entity_id)
     if lead is None:
@@ -490,9 +524,7 @@ def format_ai_output(raw_output: str | None) -> str:
         )
     uncertainties = output.get("uncertainties")
     if isinstance(uncertainties, list) and uncertainties:
-        lines.append(
-            f"Uncertainties: {'; '.join(str(item) for item in uncertainties[:8])}"
-        )
+        lines.append(f"Uncertainties: {'; '.join(str(item) for item in uncertainties[:8])}")
     return "\n".join(lines)[:4000]
 
 

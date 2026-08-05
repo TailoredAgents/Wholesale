@@ -350,6 +350,23 @@ Every run saves immutable raw provider responses, selected/rejected comps, class
 assumptions, review reasons, data disagreements, calculation outputs, and a linked
 underwriting version.
 
+Complete lead addresses also enter the background Property Intelligence pipeline. It runs this
+same deterministic V3 method in research-only mode, saves an immutable property-level snapshot,
+and leaves the lead's pipeline stage unchanged. The snapshot is the shared research record for
+normalized facts, screened comps, valuation context, market context, sources, conflicts, and
+freshness. A later valuation for any lead tied to that property can reuse the saved provider
+analysis without a new paid request. A manual **Refresh research** or **Refresh market evidence** is
+the explicit boundary that may buy current provider evidence. AI receives the saved snapshot as
+evidence, but cannot replace the deterministic comp math or approve an offer.
+
+The property-only DealMachine subject result also contributes its street-view, satellite, and
+roadmap images and any available physical, assessor, tax, sale, listing, equity, mortgage, lien,
+construction, system, amenity, and hazard facts. Canonical RentCast facts remain primary when both
+providers supply the same core field, and material disagreements are saved as conflicts rather
+than silently overwritten. DealMachine value, equity, loan, and tax amounts are research signals;
+they are not seller-confirmed balances and never enter offer math by themselves. This workflow
+does not request owner/contact enrichment or people credits.
+
 A comp review covers every sale in the source analysis. The reviewer includes or excludes each
 sale, confirms its condition, selects a reason, and may apply 50-150% of the engine's original
 match weight. Applying the review reruns ARV, confidence, buyer economics, seller ceiling, and

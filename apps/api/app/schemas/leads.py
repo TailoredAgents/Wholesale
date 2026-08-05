@@ -570,6 +570,7 @@ class LeadMarketAnalysisCreate(BaseModel):
     )
     manual_comp_ids: list[UUID] | None = Field(default=None, max_length=12)
     refresh_market_data: bool = False
+    research_only: bool = False
 
 
 class UnderwritingMethodologyControlRead(BaseModel):
@@ -808,6 +809,31 @@ class LeadMissingField(BaseModel):
     severity: str
 
 
+class PropertyIntelligenceRead(BaseModel):
+    research_status: str
+    snapshot_id: UUID | None = None
+    version_number: int | None = None
+    snapshot_status: str | None = None
+    completeness_score: int = Field(default=0, ge=0, le=100)
+    confidence_score: int = Field(default=0, ge=0, le=100)
+    captured_at: datetime | None = None
+    expires_at: datetime | None = None
+    is_stale: bool = False
+    facts: dict[str, Any] = Field(default_factory=dict)
+    valuation: dict[str, Any] = Field(default_factory=dict)
+    comparables: list[dict[str, Any]] = Field(default_factory=list)
+    market_context: dict[str, Any] = Field(default_factory=dict)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    conflicts: list[dict[str, Any]] = Field(default_factory=list)
+    image_source: str = "placeholder"
+    image_available: bool = False
+    image_views: list[str] = Field(default_factory=list)
+    image_url: str | None = None
+    image_attribution: str | None = None
+    imagery_date: str | None = None
+    last_error: str | None = None
+
+
 class LeadNextBestAction(BaseModel):
     action_type: str
     label: str
@@ -845,6 +871,7 @@ class LeadDetail(LeadRead):
     buyer_offers: list[BuyerOfferRead]
     recent_activity: list[ActivityEventRead]
     intelligence: LeadIntelligence
+    property_intelligence: PropertyIntelligenceRead
 
 
 class LeadStageUpdate(BaseModel):

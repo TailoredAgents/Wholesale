@@ -196,6 +196,18 @@ services:
         value: 30
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
+      - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
+        value: true
+      - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
+        value: 30
+      - key: PROPERTY_INTELLIGENCE_MAX_ATTEMPTS
+        value: 3
+      - key: PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS
+        value: 60
+      - key: GOOGLE_STREET_VIEW_API_KEY
+        sync: false
+      - key: GOOGLE_STREET_VIEW_BASE_URL
+        value: https://maps.googleapis.com/maps/api/streetview
       - key: ATTOM_API_KEY
         sync: false
       - key: RENTCAST_API_KEY
@@ -501,10 +513,32 @@ services:
         value: 30
       - key: PROPERTY_DATA_PROVIDER
         value: rentcast
+      - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
+        value: true
+      - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
+        value: 30
+      - key: PROPERTY_INTELLIGENCE_MAX_ATTEMPTS
+        value: 3
+      - key: PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS
+        value: 60
+      - key: GOOGLE_STREET_VIEW_API_KEY
+        sync: false
+      - key: GOOGLE_STREET_VIEW_BASE_URL
+        value: https://maps.googleapis.com/maps/api/streetview
       - key: RENTCAST_API_KEY
         sync: false
       - key: RENTCAST_BASE_URL
         value: https://api.rentcast.io/v1
+      - key: DEALMACHINE_API_KEY
+        sync: false
+      - key: DEALMACHINE_BASE_URL
+        value: https://api.v2.dealmachine.com/v1
+      - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
+        value: 30
+      - key: UNDERWRITING_DEALMACHINE_COMPS_MODE
+        value: candidate
+      - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
+        value: 2
       - key: TWILIO_SMS_ENABLED
         value: true
       - key: TWILIO_ACCOUNT_SID

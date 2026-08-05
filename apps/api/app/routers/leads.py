@@ -5,8 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
+from app.integrations.dealmachine_client import DealMachineError
+from app.integrations.google_street_view import GoogleStreetViewError
 from app.schemas.approvals import (
     OfferConcessionCreate,
     OfferConcessionPresent,
@@ -36,6 +39,7 @@ from app.schemas.leads import (
     LeadStageUpdate,
     LeadTransactionCreate,
     LeadUnderwritingCreate,
+    PropertyIntelligenceRead,
     PropertyValidationRead,
     RepairCatalogRead,
     RepairEstimateCreate,
@@ -74,6 +78,10 @@ from app.services.offer_concessions import (
     create_negotiation_event,
     get_negotiation_ledger,
     present_concession,
+)
+from app.services.property_intelligence import (
+    get_property_image_content,
+    request_property_research,
 )
 from app.services.repair_estimates import (
     create_repair_estimate,
@@ -465,6 +473,58 @@ def validate_property_address(
     if validation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return validation
+
+
+@router.post("/{lead_id}/property-intelligence/refresh", status_code=202)
+def refresh_property_intelligence(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> PropertyIntelligenceRead:
+    try:
+        intelligence = request_property_research(db, principal, lead_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if intelligence is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return intelligence
+
+
+@router.get("/{lead_id}/property-image")
+def read_property_image(
+    lead_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_leads_dependency)],
+    view: Literal["street_view", "satellite", "roadmap"] = Query(default="street_view"),
+) -> Response:
+    try:
+        image = get_property_image_content(
+            db,
+            principal,
+            lead_id,
+            get_settings(),
+            view=view,
+        )
+    except (DealMachineError, GoogleStreetViewError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    if image is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Property image not found."
+        )
+    return Response(
+        content=image.content,
+        media_type=image.content_type,
+        headers={
+            "Cache-Control": "private, max-age=300",
+            "X-Property-Image-Source": image.source,
+        },
+    )
 
 
 @router.get("/{lead_id}/underwriting/market-analysis")
