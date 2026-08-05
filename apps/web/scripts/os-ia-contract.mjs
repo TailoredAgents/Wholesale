@@ -56,7 +56,7 @@ export const targetDestinations = [
   },
   {
     id: "seller-leads",
-    label: "Seller Leads",
+    label: "Leads",
     group: "operations",
     canonicalRoute: "/os/leads",
     anyPermissions: ["leads:view", "leads:view_assigned"],

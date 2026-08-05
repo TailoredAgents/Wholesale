@@ -126,7 +126,7 @@ export const osNavGroups: OsNavGroup[] = [
       },
       {
         href: "/os/leads",
-        label: "Seller Leads",
+        label: "Leads",
         icon: UsersRound,
         roles: ["administrator", ...acquisitionRoles],
         anyPermissions: ["leads:view", "leads:view_assigned"],
