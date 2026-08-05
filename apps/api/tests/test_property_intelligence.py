@@ -148,21 +148,27 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
             "longitude": -84.39,
         },
         raw_response={
-            "dealmachine": {
-                "lookup": {
-                    "property": {
-                        "dm_property_id": "prop-subject",
-                        "full_address": "123 Peachtree Street, Atlanta, GA 30303",
-                        "estimated_equity_amount": 175_000,
-                        "estimated_equity_percentage": 61,
-                        "tax_amount": 3_250,
-                        "parcel_number_raw": "14-0001-LL-001",
-                        "images": {
-                            "street_view": ("https://img.dealmachine.com/sv/33.75,-84.39.jpg"),
-                            "satellite": ("https://img.dealmachine.com/sat/33.75,-84.39.jpg"),
-                            "roadmap": "https://img.dealmachine.com/map/33.75,-84.39.jpg",
-                        },
-                    }
+            "realestateapi": {
+                "property": {
+                    "id": "prop-subject",
+                    "estimatedEquity": 175_000,
+                    "equityPercent": 61,
+                    "propertyInfo": {
+                        "address": {
+                            "address": "123 Peachtree Street",
+                            "city": "Atlanta",
+                            "state": "GA",
+                            "zip": "30303",
+                        }
+                    },
+                    "taxInfo": {"taxAmount": 3_250},
+                    "lotInfo": {"apn": "14-0001-LL-001"},
+                    "media": {
+                        "primaryListingImageUrl": (
+                            "https://imagecdn.realty.dev/mls_photos/prop-subject/1.jpg"
+                        ),
+                        "photosCount": "12",
+                    },
                 }
             }
         },
@@ -209,8 +215,11 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     assert intelligence["facts"]["estimated_equity_amount"]["value"] == 175_000
     assert intelligence["facts"]["estimated_equity_amount"]["unit"] == "dollars"
     assert intelligence["facts"]["parcel_id"]["value"] == "14-0001-LL-001"
-    assert intelligence["image_source"] == "dealmachine"
-    assert intelligence["image_views"] == ["street_view", "satellite", "roadmap"]
+    assert intelligence["image_source"] == "realestateapi_listing"
+    assert intelligence["image_views"] == ["listing"]
+    assert intelligence["market_context"]["provider_property_records"]["realestateapi"][
+        "estimatedEquity"
+    ] == 175_000
     assert (
         int(db_session.scalar(select(func.count()).select_from(PropertyIntelligenceSnapshot)) or 0)
         == 1
@@ -224,7 +233,7 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     principal = principal_for_user(db_session, owner)
     assert principal.organization_id == lead.organization_id
     monkeypatch.setattr(
-        "app.services.property_intelligence.get_dealmachine_image",
+        "app.services.property_intelligence.get_realestateapi_image",
         lambda image_url, timeout_seconds: (image_url.encode(), "image/jpeg"),
     )
     image = get_property_image_content(
@@ -232,11 +241,11 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
         principal,
         lead.id,
         get_settings(),
-        view="satellite",
+        view="listing",
     )
     assert image is not None
-    assert image.source == "dealmachine_satellite"
-    assert image.content.startswith(b"https://img.dealmachine.com/sat/")
+    assert image.source == "realestateapi_listing"
+    assert image.content.startswith(b"https://imagecdn.realty.dev/mls_photos/")
     captured_at = datetime.fromisoformat(intelligence["captured_at"])
     assert captured_at.tzinfo is not None
     assert captured_at <= datetime.now(UTC)

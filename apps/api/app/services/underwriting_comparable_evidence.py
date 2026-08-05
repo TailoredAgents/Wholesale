@@ -14,6 +14,7 @@ ProviderBatchStatus = Literal["completed", "failed"]
 DEFAULT_PROVIDER_PRIORITY = (
     "manual",
     "rentcast",
+    "realestateapi",
     "dealmachine",
     "public",
 )
@@ -536,6 +537,102 @@ def normalize_dealmachine_comparable(
         source_reference=provider_id,
         source_url=_string(_first(record, "source_url", "url")),
         search_level=_normalize_search_level(search_level),
+    )
+
+
+def normalize_realestateapi_comparable(
+    record: dict[str, Any],
+    *,
+    search_level: str | None = None,
+) -> ComparableObservation | None:
+    sale_price = _integer(
+        _first(record, "lastSaleAmount", "lastSalePrice", "saleAmount", "salePrice")
+    )
+    sale_date = _date_string(
+        _first(record, "lastSaleDate", "saleDate", "recordingDate")
+    )
+    if sale_price is None or sale_price <= 0 or sale_date is None:
+        return None
+    address = record.get("address")
+    address_values = address if isinstance(address, dict) else {}
+    formatted_address = _realestateapi_address(record, address_values)
+    if not formatted_address:
+        return None
+    transaction_type = _string(
+        _first(record, "lastSaleDocumentType", "documentType", "transactionType")
+    )
+    transaction_eligibility, transaction_review_reason = _transaction_evidence(
+        record,
+        transaction_type=transaction_type,
+        sale_price=sale_price,
+    )
+    lot_size = _integer(_first(record, "lotSquareFeet", "lotSize", "lotSqft"))
+    values = {
+        "formatted_address": formatted_address,
+        "sale_price": sale_price,
+        "sale_date": sale_date,
+        "property_type": _property_type(_first(record, "propertyType", "landUse")),
+        "bedrooms": _number(record.get("bedrooms")),
+        "bathrooms": _number(record.get("bathrooms")),
+        "square_footage": _integer(
+            _first(record, "squareFeet", "livingSquareFeet", "livingArea")
+        ),
+        "year_built": _integer(record.get("yearBuilt")),
+        "latitude": _number(record.get("latitude") or address_values.get("latitude")),
+        "longitude": _number(record.get("longitude") or address_values.get("longitude")),
+        "lot_size": lot_size,
+        "garage": _feature_present(record.get("garage")),
+        "garage_spaces": _number(record.get("garageSpaces")),
+        "pool": _feature_present(record.get("pool")),
+        "basement": _feature_present(record.get("basement")),
+        "subdivision": _string(record.get("subdivision")),
+        "transaction_type": transaction_type,
+        "transaction_eligibility": transaction_eligibility,
+        "transaction_review_reason": transaction_review_reason,
+        "distance_miles": _number(record.get("distance")),
+        "match_score": _number(record.get("similarity") or record.get("score")),
+    }
+    provider_id = _string(_first(record, "propertyId", "id", "priorId"))
+    return ComparableObservation(
+        provider="realestateapi",
+        provider_record_id=provider_id,
+        values=values,
+        evidence_source="realestateapi_public_record_closed_sale",
+        source_reference=provider_id,
+        source_url=None,
+        search_level=_normalize_search_level(search_level),
+    )
+
+
+def _realestateapi_address(
+    record: Mapping[str, Any],
+    address: Mapping[str, Any],
+) -> str | None:
+    direct = _string(
+        _first_mapping(record, "formattedAddress", "fullAddress")
+        or _first_mapping(address, "formattedAddress", "fullAddress")
+    )
+    if direct:
+        return direct
+    street = _string(
+        _first_mapping(address, "address", "addressLine1", "streetAddress")
+        or _first_mapping(record, "addressLine1", "streetAddress")
+    )
+    if not street:
+        house = _string(address.get("house"))
+        street_name = _string(address.get("street"))
+        street = " ".join(value for value in (house, street_name) if value) or None
+    city = _string(address.get("city") or record.get("city"))
+    state = _string(address.get("state") or record.get("state"))
+    postal_code = _string(
+        _first_mapping(address, "zip", "zipCode", "postalCode")
+        or _first_mapping(record, "zip", "zipCode", "postalCode")
+    )
+    if not street:
+        return None
+    locality = ", ".join(value for value in (city, state) if value)
+    return ", ".join(value for value in (street, locality) if value) + (
+        f" {postal_code}" if postal_code else ""
     )
 
 

@@ -2957,6 +2957,7 @@ def provider_display_name(value: str | None) -> str:
     names = {
         "dealmachine": "DealMachine",
         "openai": "OpenAI",
+        "realestateapi": "RealEstateAPI",
         "rentcast": "RentCast",
     }
     return names.get(normalized, labelize(value))

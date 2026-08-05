@@ -69,11 +69,11 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
   const [source, setSource] = useState("");
   const [sourceType, setSourceType] = useState(intelligence.image_source);
   const [selectedView, setSelectedView] = useState(
-    intelligence.image_views?.[0] ?? "street_view",
+    intelligence.image_views?.[0] ?? "listing",
   );
   const availableViews = intelligence.image_views?.length
     ? intelligence.image_views
-    : ["street_view"];
+    : ["listing"];
   const activeView = availableViews.includes(selectedView)
     ? selectedView
     : availableViews[0];
@@ -133,9 +133,11 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
     setSelectedView(view);
   }
 
-  const attribution = sourceType.startsWith("dealmachine_")
-    ? `DealMachine ${labelize(activeView)}`
-    : intelligence.image_attribution ?? "Stonegate property media";
+  const attribution = !intelligence.image_available
+    ? "No licensed image returned"
+    : sourceType === "realestateapi_listing"
+      ? "RealEstateAPI licensed listing media"
+      : intelligence.image_attribution ?? "Stonegate property media";
 
   return (
     <div className={styles.propertyHeroImage}>
@@ -144,8 +146,8 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
       ) : (
         <div className={styles.propertyImagePlaceholder}>
           <Home size={42} />
-          <strong>Property image pending</strong>
-          <span>An inspection photo or Street View image will appear here.</span>
+          <strong>No property photo available</strong>
+          <span>A licensed listing image or Stonegate inspection photo will appear here.</span>
         </div>
       )}
       <div className={styles.propertyImageCaption}>
@@ -162,7 +164,7 @@ function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence:
               onClick={() => chooseView(view)}
               type="button"
             >
-              {view === "street_view" ? "Street" : labelize(view)}
+              {labelize(view)}
             </button>
           ))}
         </div>
@@ -247,6 +249,11 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Assessed value", displaySavedFact(intelligence, "assessed_total_value")],
     ["Annual property tax", displaySavedFact(intelligence, "annual_property_tax")],
     ["Active liens", displaySavedFact(intelligence, "active_lien_count")],
+    ["Lien reported", displaySavedFact(intelligence, "lien_reported")],
+    ["Pre-foreclosure", displaySavedFact(intelligence, "pre_foreclosure")],
+    ["Vacant", displaySavedFact(intelligence, "vacant")],
+    ["Owner occupied", displaySavedFact(intelligence, "owner_occupied")],
+    ["Free and clear", displaySavedFact(intelligence, "free_and_clear")],
   ];
   const additionalFacts = [
     ["School district", "school_district"],
@@ -264,6 +271,10 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Sewer", "sewer"],
     ["Water", "water"],
     ["Flood zone", "flood_zone"],
+    ["Recorded owner", "recorded_owner"],
+    ["Recorded co-owner", "recorded_co_owner"],
+    ["Owner company", "owner_company"],
+    ["Ownership length", "ownership_length_months"],
   ].map(([label, key]) => [label, displaySavedFact(intelligence, key)]);
 
   return (

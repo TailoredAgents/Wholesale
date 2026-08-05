@@ -17,7 +17,7 @@ do I know it worked?”
 Stonegate setup is split between:
 
 1. **Outside provider accounts**, such as Render, Clerk, Resend, Twilio, SignWell, OpenAI,
-   RentCast, and DealMachine.
+   RentCast, and RealEstateAPI.
 2. **Stonegate OS**, where the owner creates staff users, teams, sender permissions, templates,
    roles, operating policies, and assignments.
 
@@ -55,7 +55,7 @@ Follow this order for a new environment or a complete production review:
 6. Configure SignWell and contract templates.
 7. Activate Twilio SMS only after A2P approval.
 8. Configure Twilio Voice.
-9. Connect and accept the purchased DealMachine account before depending on external buyer data.
+9. Deploy and test RealEstateAPI property intelligence on the API and worker.
 10. Configure bank, vendor, accounting, and compensation policy.
 11. Test backups and production health.
 12. Train each employee using **My Setup** and the role manuals.
@@ -88,11 +88,12 @@ provider account. For example:
 | --- | --- |
 | `OPENAI_API_KEY` | OpenAI API Keys |
 | `RENTCAST_API_KEY` | RentCast account |
+| `REALESTATEAPI_API_KEY` | RealEstateAPI account |
 | `RESEND_API_KEY` | Resend API Keys |
 | `TWILIO_ACCOUNT_SID` | Twilio Account Info |
 | `TWILIO_AUTH_TOKEN` | Twilio Account Info; it is not the Account SID |
 | `ESIGN_API_KEY` | SignWell API settings |
-| `DEALMACHINE_API_KEY` | DealMachine API access |
+| `DEALMACHINE_API_KEY` | Optional legacy DealMachine buyer discovery only |
 
 Do not put quotation marks around a value unless the documented value itself requires them.
 Do not add spaces before or after a key.
@@ -548,10 +549,31 @@ unless its approved operating policy also permits one-party recording.
    seller sees the Stonegate company number.
 6. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
 
-## DealMachine Buyer And Underwriting Data
+## RealEstateAPI Property Intelligence And Optional DealMachine Buyers
 
-Stonegate has purchased DealMachine. Connect it now and test buyer quality and credit use before
-marketing a live deal.
+RealEstateAPI now supplies the reusable property profile and secondary comp evidence. DealMachine
+is disabled and is optional only for legacy buyer discovery if that subscription is retained.
+
+For RealEstateAPI activation:
+
+1. Add `REALESTATEAPI_API_KEY` to both the Render API and worker services. Never paste the key into
+   chat, documentation, source code, or browser settings.
+2. Set `REALESTATEAPI_BASE_URL=https://api.realestateapi.com` and
+   `REALESTATEAPI_REQUEST_TIMEOUT_SECONDS=30` on both services.
+3. Set `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate` on both services.
+4. Set `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` and `BUYER_DATA_PROVIDER=disabled`.
+5. Redeploy API and worker, then use **Refresh research** on a known Georgia property.
+6. Confirm Sources shows RentCast and RealEstateAPI, duplicate transfers appear once, and the
+   Stonegate ARV is based on screened comp math rather than either provider estimate.
+7. Confirm physical, tax, sale, equity, mortgage, lien, ownership, listing, and hazard signals are
+   saved when returned. Unknown fields must remain unknown.
+8. If the response contains licensed listing media, confirm it loads through Stonegate. If not,
+   confirm the UI shows **No property photo available** with no Street View or scraped fallback.
+9. Repeat **Update Stonegate valuation** without refreshing and confirm no new RealEstateAPI call is
+   made. Only explicit evidence refreshes may spend another provider credit.
+
+If DealMachine is retained solely for buyer discovery, use the legacy controlled workflow below.
+Otherwise remove its key after disabling both DealMachine modes.
 
 When ready:
 
@@ -570,32 +592,6 @@ When ready:
 11. Review candidates before importing them.
 12. Check duplicates, contact quality, DNC handling, market fit, purchase evidence, and provider
     cost.
-
-For underwriting acceptance, Stonegate has completed the connection steps and now runs
-`candidate` mode. The earlier staged sequence remains useful if credentials are rotated or the
-provider must be requalified:
-
-1. Leave `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled` until the key and account usage endpoint
-   pass.
-2. Set the mode to `shadow` and keep
-   `UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS=2` for the first reviewed cases.
-3. Select **Refresh market evidence (may use credits)** on a known Georgia analysis. Confirm the
-   provider summary reports property-only access, property credits (measured or conservatively
-   estimated), zero people credits from the subject lookup, overlap, usable sales, net-new sales,
-   material conflicts, and latency. The comp endpoint may omit people-credit telemetry; a positive
-   people-credit report from either call must exclude its evidence.
-4. Confirm a DealMachine failure does not prevent the RentCast analysis from completing.
-5. Confirm a wrong-address or fuzzy subject match stops before the paid comp request.
-6. Confirm duplicate transfers appear once and retain both provider observations. Small recording
-   and rounding differences must remain auditable without being counted as material conflicts.
-7. Select **Update Stonegate valuation** and re-run comp review without refreshing market data.
-   Confirm both use zero new DealMachine credits while retaining the original source-credit and
-   latency audit, even after a failed or no-match provider result.
-8. Confirm DealMachine's provider value estimate appears only under external benchmarks and is
-   excluded from ARV and offer math.
-9. Compare the shadow evidence with expert-reviewed comp sets and verified outcomes.
-10. Restore the approved `candidate` mode after the owner approves the measured provider decision.
-   Candidate mode does not bypass deterministic screening or human offer approval.
 
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.
@@ -722,7 +718,7 @@ makes failures difficult to identify.
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
 - [ ] Recording after disclosure and retention approval.
-- [ ] DealMachine API key, production connection, and controlled buyer-search acceptance.
+- [ ] RealEstateAPI key and controlled property-research acceptance.
 - [ ] Google/Meta conversion delivery after ad-account setup.
 - [ ] S3-compatible private storage as document volume grows.
 - [ ] Sentry and separate worker alerts when the owner wants external monitoring.

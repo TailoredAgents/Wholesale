@@ -34,12 +34,12 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | API domain | `api.stonegatehb.com` | Active |
 | Authentication | Clerk | Active |
 | AI | OpenAI | Configured; Copilot pilots pending |
-| Property data | RentCast | Active |
+| Property data | RentCast + RealEstateAPI | RentCast active; RealEstateAPI activation pending key deployment |
 | Operational email | Resend | Configured; controlled acceptance pending |
 | SMS | Twilio | Seller-inquiry A2P approved; internal Facebook lead alerts tested live |
 | Voice | Twilio | Configuration and acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
-| Buyer data | DealMachine | Connected; underwriting candidate mode enabled |
+| Buyer data | DealMachine | Optional and disabled; safe to remove after subscription cancellation |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
 | Error monitoring | Sentry | Optional/deferred |
 | Ad conversion delivery | Google and Meta | Meta Pixel and Conversions API active; Google pending |
@@ -282,7 +282,7 @@ Activation checks:
 4. Web search, when enabled, remains bounded and cited.
 5. No Copilot receives autonomous consequential authority.
 
-## RentCast And Property Data
+## RentCast, RealEstateAPI, And Property Data
 
 Variables:
 
@@ -293,12 +293,13 @@ Variables:
 - `PROPERTY_INTELLIGENCE_FRESH_DAYS=30`
 - `PROPERTY_INTELLIGENCE_MAX_ATTEMPTS=3`
 - `PROPERTY_INTELLIGENCE_RETRY_BASE_SECONDS=60`
-- optional `GOOGLE_STREET_VIEW_API_KEY`
-- `GOOGLE_STREET_VIEW_BASE_URL=https://maps.googleapis.com/maps/api/streetview`
+- `REALESTATEAPI_API_KEY`
+- `REALESTATEAPI_BASE_URL=https://api.realestateapi.com`
+- `REALESTATEAPI_REQUEST_TIMEOUT_SECONDS=30`
 - `UNDERWRITING_ACTIVE_METHODOLOGY_VERSION=v3`
 - `UNDERWRITING_V3_SHADOW_ENABLED=false`
-- `UNDERWRITING_DEALMACHINE_COMPS_MODE=candidate`
-- `UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS=2`
+- `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate`
+- `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled`
 - `UNDERWRITING_AI_COMP_ANALYST_MODE=disabled`
 - optional `ATTOM_API_KEY` placeholder
 
@@ -329,18 +330,16 @@ instead of buying the same provider evidence again. A normal snapshot remains fr
 configured number of days; **Refresh research** intentionally requests current evidence and may
 use provider credits.
 
-The API and worker must receive the same property-data, RentCast, DealMachine, and intelligence
-variables. A successful DealMachine property lookup saves the provider's street-view, satellite,
-and roadmap URLs plus its available property-only facts in the reusable snapshot. The browser
-requests those images through Stonegate's authenticated API; it never receives provider
-credentials or an unrestricted proxy. DealMachine serves these image variants without an
-additional image credit beyond the property lookup.
+The API and worker must receive the same RentCast, RealEstateAPI, and intelligence variables. A
+fresh analysis makes one exact-address RealEstateAPI Property Detail request with standard comps
+included, then reuses that response for the property profile, secondary comp evidence, provider
+benchmark, and any licensed listing image. The complete sanitized property record is saved inside
+the immutable snapshot so the UI and AI runtime do not re-buy it.
 
-`GOOGLE_STREET_VIEW_API_KEY` is optional fallback coverage, not required for normal DealMachine
-imagery. If present on both services, the snapshot also saves Google Street View availability and
-panorama metadata. The display order is the latest field-inspection photo, DealMachine imagery,
-optional Google Street View, then a clear placeholder. Never expose either provider key to the
-browser.
+The image order is the latest Stonegate field-inspection photo, a RealEstateAPI listing image when
+the response directly includes an approved `imagecdn.realty.dev` URL, then a clear no-photo
+placeholder. Stonegate does not use Street View, satellite, aerial, or scraped images. The browser
+retrieves provider media through Stonegate's authenticated API and never receives the API key.
 
 Existing saved market analyses are lazily backfilled into property snapshots by the worker without
 a provider call. Automatic research does not move the seller into Underwriting, approve a value,
@@ -352,21 +351,14 @@ RentCast results. It uses medium-context live search with a five-call ceiling, s
 citations, and never lets the model set ARV or an offer directly. Use
 `OPENAI_REQUEST_TIMEOUT_SECONDS=75` so the bounded multi-search request has time to finish.
 
-Stonegate's configured mode is `candidate`: DealMachine's unique closed sales may enter the
+Stonegate's configured RealEstateAPI mode is `candidate`: unique closed sales may enter the
 candidate pool, but every sale still passes the same deterministic screen, confidence rules, and
-human review as RentCast evidence. `shadow` remains available for diagnostics; it saves normalized
-evidence, provider overlap, conflicts, external benchmarks, credits, and latency without allowing
-DealMachine sales to affect ARV or offer math. The default two-credit ceiling covers a first-time property-only address resolution and
-one subject comp request. Stonegate never requests owner contacts for underwriting.
-The subject lookup must explicitly report zero people credits; the comp endpoint may omit that field
-under its property-only contract, but any positive people-credit report excludes the evidence. The
-provider audit distinguishes returned, usable, overlapping, net-new, duplicate, ineligible, dropped,
-and conflicting sales. Failed calls without final billing telemetry receive a conservative estimated
-credit count. Reused snapshots show zero current-run credits while preserving original source cost
-and latency. An exact normalized subject address with no fuzzy-match warning is required before the
-comp request. Changing the mode invalidates the cached admission decision: Stonegate falls back to
-cached RentCast-only math until an operator explicitly refreshes; Update never spends credits to
-resolve the mismatch.
+human review as RentCast evidence. `shadow` remains available for diagnostics and records overlap,
+conflicts, benchmark, estimated credits, and latency without affecting ARV. Exact address matching
+is fail-closed. The provider audit distinguishes returned, usable, overlapping, net-new, duplicate,
+ineligible, dropped, and conflicting sales. Reused snapshots show zero current-run credits while
+preserving original source cost and latency. RealEstateAPI and RentCast estimates remain external
+benchmarks; Stonegate's screened comp math remains the valuation conclusion.
 
 Set `UNDERWRITING_AI_COMP_ANALYST_MODE=draft` only after OpenAI is configured. The draft analyst
 can organize comp review work and explain deterministic range drivers, but its strict output
@@ -636,8 +628,10 @@ Variables:
 - request timeout
 - maximum discovery results
 
-The subscription is purchased. Create the API key from the Stonegate DealMachine developer/API
-settings, store it only in Render, set the provider to `dealmachine`, and redeploy. The Buyer
+This legacy integration is optional and should remain `BUYER_DATA_PROVIDER=disabled` after the
+subscription is cancelled. If Stonegate deliberately reactivates it, create the API key from the
+DealMachine developer settings, store it only in Render, set the provider to `dealmachine`, and
+redeploy. The Buyer
 workspace readiness check must show the expected paid plan and available credits. Every search
 first uses DealMachine's zero-credit estimate mode and requires explicit confirmation of the
 current maximum credit use. Acceptance must compare estimated and actual credits and test provider
@@ -930,7 +924,7 @@ After a production deployment:
 | Attach approved acquisitions number and configure Messaging Service callbacks | Stonegate owner | Twilio Console |
 | Dedicated Twilio SMS and Voice acceptance | Owner and developer | After provider configuration |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
-| DealMachine API key, production connection, and acceptance | Owner and dispositions | Now that the subscription is purchased |
+| RealEstateAPI API key, production connection, and acceptance | Owner and acquisitions | Now |
 | CPA accounting acceptance | Owner, finance, CPA | Before relying on first closed period |
 | Underwriting calibration | Owner/acquisitions | As real outcomes accumulate |
 | Google/Meta conversion activation | Owner/marketing | When ad accounts are ready |

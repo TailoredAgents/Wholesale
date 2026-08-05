@@ -9,13 +9,10 @@ from sqlalchemy.orm import Session
 from app.core.auth import Principal, principal_for_user
 from app.core.config import Settings, get_settings
 from app.domain.rbac import PermissionKeys
-from app.integrations.dealmachine_client import (
-    get_dealmachine_image,
-    is_dealmachine_image_url,
-)
-from app.integrations.google_street_view import (
-    GoogleStreetViewClient,
-    GoogleStreetViewError,
+from app.integrations.realestateapi_client import (
+    get_realestateapi_image,
+    is_realestateapi_image_url,
+    realestateapi_primary_image_url,
 )
 from app.models.foundation import (
     ActivityEvent,
@@ -33,7 +30,7 @@ from app.services.document_storage import read_content
 from app.services.property_validation import canonical_address_key, normalize_postal_code
 
 ACTIVE_RESEARCH_STATUSES = {"queued", "processing", "retry"}
-PROPERTY_IMAGE_VIEWS = ("street_view", "satellite", "roadmap")
+PROPERTY_IMAGE_VIEWS = ("listing",)
 
 
 @dataclass(frozen=True)
@@ -291,7 +288,6 @@ def process_next_property_research(db: Session, settings: Settings) -> UUID | No
             property_record=property_record,
             lead=lead,
             analysis=analysis,
-            include_street_view=True,
             trigger_source=run.trigger_source,
         )
         run = db.get(PropertyResearchRun, run_id)
@@ -366,7 +362,6 @@ def create_snapshot_from_analysis(
     property_record: Property,
     lead: Lead,
     analysis: UnderwritingMarketAnalysis,
-    include_street_view: bool,
     trigger_source: str,
 ) -> PropertyIntelligenceSnapshot:
     captured_at = datetime.now(UTC)
@@ -377,10 +372,10 @@ def create_snapshot_from_analysis(
     provenance_values = provenance if isinstance(provenance, dict) else {}
     subject = analysis.subject_property or {}
     facts = normalized_fact_snapshot(subject, provenance_values, captured_at)
-    dealmachine_subject = dealmachine_subject_property(analysis)
-    dealmachine_conflicts = merge_dealmachine_property_facts(
+    realestateapi_subject = realestateapi_subject_property(analysis)
+    realestateapi_conflicts = merge_realestateapi_property_facts(
         facts,
-        dealmachine_subject,
+        realestateapi_subject,
         captured_at,
     )
     facts["address"] = {
@@ -394,21 +389,12 @@ def create_snapshot_from_analysis(
             property_record.address_validation_provider or "stonegate_crm",
             captured_at,
         )
-    media = (
-        property_media_snapshot(
-            settings,
-            property_record,
-            subject,
-            dealmachine_subject,
-        )
-        if include_street_view
-        else dealmachine_media_snapshot(dealmachine_subject)
-    )
+    media = realestateapi_media_snapshot(realestateapi_subject)
     selected = [item for item in analysis.selected_comps if isinstance(item, dict)]
     rejected = [item for item in analysis.rejected_comps if isinstance(item, dict)]
     conflicts = [
         *property_conflicts(metadata, selected, rejected),
-        *dealmachine_conflicts,
+        *realestateapi_conflicts,
     ][:100]
     valuation = {
         "estimated_value_cents": analysis.estimated_value_cents,
@@ -435,10 +421,15 @@ def create_snapshot_from_analysis(
         "market_data_captured_at": metadata.get("market_data_captured_at"),
         "manual_review_required": metadata.get("human_review_required") is True,
         "review_reasons": metadata.get("review_reasons") or [],
+        "provider_property_records": {
+            "realestateapi": realestateapi_subject,
+        }
+        if realestateapi_subject
+        else {},
     }
     source_names = {analysis.provider, "stonegate"}
-    if dealmachine_subject:
-        source_names.add("dealmachine")
+    if realestateapi_subject:
+        source_names.add("realestateapi")
     comp_intelligence = metadata.get("comp_intelligence")
     if isinstance(comp_intelligence, dict):
         provider_values = comp_intelligence.get("providers")
@@ -543,91 +534,76 @@ def normalized_fact_snapshot(
     }
 
 
-DEALMACHINE_PROPERTY_FACTS: dict[str, tuple[str, str | None]] = {
-    "estimated_value": ("dealmachine_estimated_value", "dollars"),
-    "estimated_equity_amount": ("estimated_equity_amount", "dollars"),
-    "estimated_equity_percentage": ("estimated_equity_percentage", "percent"),
-    "num_bedrooms": ("bedrooms", "count"),
-    "num_bathrooms": ("bathrooms", "count"),
-    "living_area_sqft": ("square_footage", "square_feet"),
-    "year_built": ("year_built", None),
-    "num_units": ("unit_count", "count"),
-    "num_buildings": ("building_count", "count"),
-    "building_style": ("building_style", None),
-    "stories": ("stories", None),
-    "property_construction_type": ("construction_type", None),
-    "property_type": ("property_type", None),
-    "property_class": ("property_class", None),
-    "school_district_name": ("school_district", None),
-    "num_mortgages": ("mortgage_count", "count"),
-    "estimated_loan_to_value_percentage": ("estimated_loan_to_value", "percent"),
-    "total_estimated_loan_balance": ("estimated_loan_balance", "dollars"),
-    "mortgage_1_loan_balance": ("first_mortgage_balance", "dollars"),
-    "mortgage_1_loan_interest_rate": ("first_mortgage_rate", "percent"),
-    "mortgage_1_loan_type": ("first_mortgage_type", None),
-    "mortgage_1_loan_due_date": ("first_mortgage_due_date", None),
-    "mortgage_1_loan_recording_date": ("first_mortgage_recording_date", None),
-    "market_status": ("market_status", None),
-    "mls_current_listing_price": ("current_listing_price", "dollars"),
-    "mls_days_on_market": ("days_on_market", "days"),
-    "mls_last_initial_listing_date": ("initial_listing_date", None),
-    "last_sale_date": ("last_sale_date", None),
-    "last_sale_price": ("last_sale_price", "dollars"),
-    "last_sale_doc_type": ("last_sale_document_type", None),
-    "tax_amount": ("annual_property_tax", "dollars"),
-    "tax_delinquent_year": ("tax_delinquent_year", None),
-    "tax_year": ("tax_year", None),
-    "assessed_total_value": ("assessed_total_value", "dollars"),
-    "assessed_improvement_value": ("assessed_improvement_value", "dollars"),
-    "assessed_land_value": ("assessed_land_value", "dollars"),
-    "tax_assessment_year": ("tax_assessment_year", None),
-    "num_total_active_liens": ("active_lien_count", "count"),
-    "num_total_open_liens": ("open_lien_count", "count"),
-    "hoa_1_fee_amount": ("hoa_fee", "dollars"),
-    "lot_size_acres": ("lot_size_acres", "acres"),
-    "lot_size_frontage_feet": ("lot_frontage", "feet"),
-    "lot_size_depth_feet": ("lot_depth", "feet"),
-    "zoning": ("zoning", None),
-    "parcel_number_raw": ("parcel_id", None),
-    "legal_description": ("legal_description", None),
-    "lot_number": ("lot_number", None),
-    "municipality_name": ("municipality", None),
-    "subdivision_name": ("subdivision", None),
-    "pool": ("pool", None),
-    "garage_type": ("garage_type", None),
-    "basement": ("basement", None),
-    "patio": ("patio", None),
-    "porch": ("porch", None),
-    "driveway": ("driveway", None),
-    "air_conditioning": ("air_conditioning", None),
-    "heating_type": ("heating_type", None),
-    "heating_fuel": ("heating_fuel", None),
-    "sewer": ("sewer", None),
-    "water": ("water", None),
-    "has_fireplaces": ("has_fireplaces", None),
-    "exterior_walls": ("exterior_walls", None),
-    "roof_type": ("roof_type", None),
-    "roof_cover": ("roof_cover", None),
-    "floor_cover": ("floor_cover", None),
-    "building_condition": ("building_condition", None),
-    "building_quality": ("building_quality", None),
-    "flood_zone": ("flood_zone", None),
-}
+REALESTATEAPI_PROPERTY_FACTS: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
+    (("estimatedValue",), "realestateapi_estimated_value", "dollars"),
+    (("estimatedEquity",), "estimated_equity_amount", "dollars"),
+    (("equityPercent",), "estimated_equity_percentage", "percent"),
+    (("estimatedMortgageBalance",), "estimated_loan_balance", "dollars"),
+    (("openMortgageBalance",), "open_mortgage_balance", "dollars"),
+    (("lastSaleDate",), "last_sale_date", None),
+    (("lastSalePrice",), "last_sale_price", "dollars"),
+    (("propertyType",), "property_type", None),
+    (("mlsListingPrice",), "current_listing_price", "dollars"),
+    (("mlsDaysOnMarket",), "days_on_market", "days"),
+    (("mlsLastStatusDate",), "listing_status_date", None),
+    (("floodZone",), "flood_zone", None),
+    (("floodZoneDescription",), "flood_zone_description", None),
+    (("ownerOccupied",), "owner_occupied", None),
+    (("vacant",), "vacant", None),
+    (("preForeclosure",), "pre_foreclosure", None),
+    (("auction",), "auction", None),
+    (("lien",), "lien_reported", None),
+    (("freeClear",), "free_and_clear", None),
+    (("propertyInfo", "bedrooms"), "bedrooms", "count"),
+    (("propertyInfo", "bathrooms"), "bathrooms", "count"),
+    (("propertyInfo", "livingSquareFeet"), "square_footage", "square_feet"),
+    (("propertyInfo", "buildingSquareFeet"), "building_square_footage", "square_feet"),
+    (("propertyInfo", "yearBuilt"), "year_built", None),
+    (("propertyInfo", "stories"), "stories", None),
+    (("propertyInfo", "unitsCount"), "unit_count", "count"),
+    (("propertyInfo", "construction"), "construction_type", None),
+    (("propertyInfo", "garage"), "garage_type", None),
+    (("propertyInfo", "basement"), "basement", None),
+    (("propertyInfo", "pool"), "pool", None),
+    (("propertyInfo", "porchType"), "porch", None),
+    (("propertyInfo", "roofConstruction"), "roof_type", None),
+    (("propertyInfo", "roofMaterial"), "roof_cover", None),
+    (("propertyInfo", "heatingType"), "heating_type", None),
+    (("propertyInfo", "airConditioningType"), "air_conditioning", None),
+    (("propertyInfo", "waterSource"), "water", None),
+    (("propertyInfo", "sewer"), "sewer", None),
+    (("lotInfo", "apn"), "parcel_id", None),
+    (("lotInfo", "lotSquareFeet"), "lot_size", "square_feet"),
+    (("lotInfo", "lotAcres"), "lot_size_acres", "acres"),
+    (("lotInfo", "legalDescription"), "legal_description", None),
+    (("lotInfo", "lotNumber"), "lot_number", None),
+    (("lotInfo", "zoning"), "zoning", None),
+    (("taxInfo", "taxAmount"), "annual_property_tax", "dollars"),
+    (("taxInfo", "assessedValue"), "assessed_total_value", "dollars"),
+    (("taxInfo", "assessedImprovementValue"), "assessed_improvement_value", "dollars"),
+    (("taxInfo", "assessedLandValue"), "assessed_land_value", "dollars"),
+    (("taxInfo", "assessmentYear"), "tax_assessment_year", None),
+    (("ownerInfo", "ownershipLength"), "ownership_length_months", "months"),
+    (("ownerInfo", "owner1FullName"), "recorded_owner", None),
+    (("ownerInfo", "owner2FullName"), "recorded_co_owner", None),
+    (("ownerInfo", "companyName"), "owner_company", None),
+    (("ownerInfo", "mailAddress", "address"), "owner_mailing_street", None),
+    (("ownerInfo", "mailAddress", "city"), "owner_mailing_city", None),
+    (("ownerInfo", "mailAddress", "state"), "owner_mailing_state", None),
+    (("ownerInfo", "mailAddress", "zip"), "owner_mailing_zip", None),
+)
 
 
-def dealmachine_subject_property(analysis: UnderwritingMarketAnalysis) -> dict[str, Any]:
+def realestateapi_subject_property(analysis: UnderwritingMarketAnalysis) -> dict[str, Any]:
     raw_response = analysis.raw_response if isinstance(analysis.raw_response, dict) else {}
-    provider_payload = raw_response.get("dealmachine")
+    provider_payload = raw_response.get("realestateapi")
     if not isinstance(provider_payload, dict):
         return {}
-    lookup = provider_payload.get("lookup")
-    if not isinstance(lookup, dict):
-        return {}
-    property_payload = lookup.get("property")
+    property_payload = provider_payload.get("property")
     return property_payload if isinstance(property_payload, dict) else {}
 
 
-def merge_dealmachine_property_facts(
+def merge_realestateapi_property_facts(
     facts: dict[str, Any],
     property_payload: dict[str, Any],
     captured_at: datetime,
@@ -642,15 +618,15 @@ def merge_dealmachine_property_facts(
         "last_sale_date",
         "last_sale_price",
     }
-    for provider_key, (fact_key, unit) in DEALMACHINE_PROPERTY_FACTS.items():
-        value = property_payload.get(provider_key)
+    for path, fact_key, unit in REALESTATEAPI_PROPERTY_FACTS:
+        value = nested_value(property_payload, path)
         if value is None:
             continue
         existing = facts.get(fact_key)
         if existing is None:
             facts[fact_key] = fact_value(
                 value,
-                "dealmachine_property_record",
+                "realestateapi_property_detail",
                 captured_at,
                 unit=unit,
             )
@@ -665,7 +641,7 @@ def merge_dealmachine_property_facts(
                     "field": fact_key,
                     "severity": "review",
                     "message": (
-                        f"RentCast and DealMachine disagree on {fact_key.replace('_', ' ')}."
+                        f"RentCast and RealEstateAPI disagree on {fact_key.replace('_', ' ')}."
                     ),
                     "observations": [
                         {
@@ -676,11 +652,48 @@ def merge_dealmachine_property_facts(
                             ),
                             "value": existing_value,
                         },
-                        {"source": "dealmachine_property_record", "value": value},
+                        {"source": "realestateapi_property_detail", "value": value},
                     ],
                 }
             )
+        if fact_key in conflict_targets:
+            facts[fact_key] = fact_value(
+                value,
+                "realestateapi_property_detail",
+                captured_at,
+                unit=unit,
+            )
+    if "market_status" not in facts:
+        market_status = next(
+            (
+                label
+                for key, label in (
+                    ("mlsActive", "active"),
+                    ("mlsPending", "pending"),
+                    ("mlsSold", "sold"),
+                    ("mlsCancelled", "cancelled"),
+                    ("mlsFailed", "failed"),
+                )
+                if property_payload.get(key) is True
+            ),
+            None,
+        )
+        if market_status:
+            facts["market_status"] = fact_value(
+                market_status,
+                "realestateapi_property_detail",
+                captured_at,
+            )
     return conflicts
+
+
+def nested_value(payload: dict[str, Any], path: tuple[str, ...]) -> Any:
+    value: Any = payload
+    for key in path:
+        if not isinstance(value, dict):
+            return None
+        value = value.get(key)
+    return value
 
 
 def comparable_fact_value(value: Any) -> str:
@@ -728,70 +741,17 @@ def property_conflicts(
     return conflicts[:100]
 
 
-def property_media_snapshot(
-    settings: Settings,
-    property_record: Property,
-    subject: dict[str, Any],
-    dealmachine_subject: dict[str, Any],
-) -> dict[str, Any]:
-    dealmachine = dealmachine_media_snapshot(dealmachine_subject)
-    provider_media = dealmachine.get("dealmachine")
-    if isinstance(provider_media, dict) and provider_media.get("status") == "available":
-        return dealmachine
+def realestateapi_media_snapshot(property_payload: dict[str, Any]) -> dict[str, Any]:
+    media = property_payload.get("media")
+    media_values = media if isinstance(media, dict) else {}
+    image_url = realestateapi_primary_image_url(property_payload)
     return {
-        **dealmachine,
-        **google_street_view_snapshot(settings, property_record, subject),
-    }
-
-
-def dealmachine_media_snapshot(property_payload: dict[str, Any]) -> dict[str, Any]:
-    raw_images = property_payload.get("images")
-    images = raw_images if isinstance(raw_images, dict) else {}
-    views = {
-        view: image_url
-        for view in PROPERTY_IMAGE_VIEWS
-        if (image_url := string_value(images.get(view))) and is_dealmachine_image_url(image_url)
-    }
-    return {
-        "dealmachine": {
-            "status": "available" if views else "unavailable",
-            "views": views,
-            "attribution": "DealMachine property imagery",
-            "credit_cost": "no_additional_image_credit",
-        }
-    }
-
-
-def google_street_view_snapshot(
-    settings: Settings,
-    property_record: Property,
-    subject: dict[str, Any],
-) -> dict[str, Any]:
-    if not settings.google_street_view_api_key:
-        return {"street_view": {"status": "not_configured"}}
-    latitude = number_value(subject.get("latitude"))
-    longitude = number_value(subject.get("longitude"))
-    location = (
-        f"{latitude},{longitude}"
-        if latitude is not None and longitude is not None
-        else format_property_address(property_record)
-    )
-    try:
-        metadata = GoogleStreetViewClient(
-            api_key=settings.google_street_view_api_key,
-            base_url=settings.google_street_view_base_url,
-        ).get_metadata(location=location)
-    except GoogleStreetViewError as exc:
-        return {"street_view": {"status": "error", "error": str(exc)}}
-    return {
-        "street_view": {
-            "status": "available" if metadata.available and metadata.panorama_id else "unavailable",
-            "panorama_id": metadata.panorama_id,
-            "imagery_date": metadata.imagery_date,
-            "latitude": metadata.latitude,
-            "longitude": metadata.longitude,
-            "copyright": metadata.copyright,
-            "attribution": "Google Street View",
+        "realestateapi": {
+            "status": "available" if image_url else "unavailable",
+            "primary_listing_image_url": image_url,
+            "photos_count": media_values.get("photosCount"),
+            "attribution": "RealEstateAPI licensed listing media",
+            "usage": "listing_media_returned_by_provider",
         }
     }
 
@@ -823,17 +783,10 @@ def property_completeness_score(
         else 0
     )
     comp_points = min(20, len(comparables) * 7)
-    dealmachine = media.get("dealmachine")
-    dealmachine_views = dealmachine.get("views") if isinstance(dealmachine, dict) else None
-    street_view = media.get("street_view")
+    realestateapi = media.get("realestateapi")
     image_points = (
         5
-        if (
-            isinstance(dealmachine_views, dict)
-            and bool(dealmachine_views)
-            or isinstance(street_view, dict)
-            and street_view.get("status") == "available"
-        )
+        if isinstance(realestateapi, dict) and realestateapi.get("status") == "available"
         else 0
     )
     return min(100, fact_points + valuation_points + comp_points + image_points)
@@ -841,7 +794,8 @@ def property_completeness_score(
 
 def source_role(name: str) -> str:
     return {
-        "rentcast": "canonical_property_and_market_evidence",
+        "rentcast": "independent_comparable_and_market_evidence",
+        "realestateapi": "canonical_property_record_and_candidate_comparable_evidence",
         "dealmachine": "candidate_comparable_evidence",
         "cited_public_research": "supplemental_review_only",
         "stonegate": "crm_and_calculation_record",
@@ -871,38 +825,28 @@ def build_property_intelligence_read(
     image_attribution = None
     imagery_date = None
     photo = latest_property_photo(db, principal.organization_id, property_record.id)
-    dealmachine_views: dict[str, Any] = {}
-    street_view: dict[str, Any] = {}
+    realestateapi_media: dict[str, Any] = {}
     if snapshot is not None:
-        dealmachine = snapshot.media.get("dealmachine")
-        raw_views = dealmachine.get("views") if isinstance(dealmachine, dict) else None
-        if isinstance(raw_views, dict):
-            dealmachine_views = raw_views
-        raw_street_view = snapshot.media.get("street_view")
-        if isinstance(raw_street_view, dict):
-            street_view = raw_street_view
-    provider_views = [
-        view
-        for view in ("street_view", "satellite", "roadmap")
-        if string_value(dealmachine_views.get(view))
-    ]
+        raw_media = snapshot.media.get("realestateapi")
+        if isinstance(raw_media, dict):
+            realestateapi_media = raw_media
+    listing_image_url = string_value(
+        realestateapi_media.get("primary_listing_image_url")
+    )
     if photo is not None:
         image_source = "inspection_photo"
         image_available = True
-        image_views = ["street_view", *[view for view in provider_views if view != "street_view"]]
+        image_views = ["listing"]
         image_attribution = "Stonegate field inspection"
         imagery_date = (photo.captured_at or photo.created_at).date().isoformat()
-    elif provider_views:
-        image_source = "dealmachine"
+    elif listing_image_url and is_realestateapi_image_url(listing_image_url):
+        image_source = "realestateapi_listing"
         image_available = True
-        image_views = provider_views
-        image_attribution = "DealMachine property imagery"
-    elif street_view.get("status") == "available":
-        image_source = "google_street_view"
-        image_available = True
-        image_views = ["street_view"]
-        image_attribution = str(street_view.get("attribution") or "Google Street View")
-        imagery_date = string_value(street_view.get("imagery_date"))
+        image_views = ["listing"]
+        image_attribution = str(
+            realestateapi_media.get("attribution")
+            or "RealEstateAPI licensed listing media"
+        )
     return PropertyIntelligenceRead(
         research_status=property_record.research_status,
         snapshot_id=snapshot.id if snapshot else None,
@@ -1011,7 +955,7 @@ def get_property_image_content(
     lead_id: UUID,
     settings: Settings,
     *,
-    view: str = "street_view",
+    view: str = "listing",
 ) -> PropertyImageContent | None:
     if view not in PROPERTY_IMAGE_VIEWS:
         raise ValueError("The requested property image view is unsupported.")
@@ -1029,12 +973,8 @@ def get_property_image_content(
         and lead.assigned_user_id != principal.user_id
     ):
         return None
-    photo = (
-        latest_property_photo(db, principal.organization_id, lead.property_id)
-        if view == "street_view"
-        else None
-    )
-    if photo is not None and view == "street_view":
+    photo = latest_property_photo(db, principal.organization_id, lead.property_id)
+    if photo is not None:
         return PropertyImageContent(
             content=read_content(
                 provider=photo.storage_provider,
@@ -1049,38 +989,23 @@ def get_property_image_content(
         organization_id=principal.organization_id,
         property_id=lead.property_id,
     )
-    dealmachine = snapshot.media.get("dealmachine") if snapshot else None
-    views = dealmachine.get("views") if isinstance(dealmachine, dict) else None
-    image_url = string_value(views.get(view)) if isinstance(views, dict) else None
-    if image_url and is_dealmachine_image_url(image_url):
-        content, content_type = get_dealmachine_image(
+    realestateapi = snapshot.media.get("realestateapi") if snapshot else None
+    image_url = (
+        string_value(realestateapi.get("primary_listing_image_url"))
+        if isinstance(realestateapi, dict)
+        else None
+    )
+    if image_url and is_realestateapi_image_url(image_url):
+        content, content_type = get_realestateapi_image(
             image_url,
-            timeout_seconds=settings.dealmachine_request_timeout_seconds,
+            timeout_seconds=settings.realestateapi_request_timeout_seconds,
         )
         return PropertyImageContent(
             content=content,
             content_type=content_type,
-            source=f"dealmachine_{view}",
+            source="realestateapi_listing",
         )
-    if view != "street_view":
-        return None
-    street_view = snapshot.media.get("street_view") if snapshot else None
-    if (
-        not isinstance(street_view, dict)
-        or street_view.get("status") != "available"
-        or not settings.google_street_view_api_key
-    ):
-        return None
-    panorama_id = string_value(street_view.get("panorama_id"))
-    if not panorama_id:
-        return None
-    content, content_type = GoogleStreetViewClient(
-        api_key=settings.google_street_view_api_key,
-        base_url=settings.google_street_view_base_url,
-    ).get_image(panorama_id=panorama_id)
-    return PropertyImageContent(
-        content=content, content_type=content_type, source="google_street_view"
-    )
+    return None
 
 
 def finish_research_needs_review(db: Session, run: PropertyResearchRun, error: str) -> UUID:
@@ -1151,7 +1076,6 @@ def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | N
         property_record=property_record,
         lead=lead,
         analysis=analysis,
-        include_street_view=False,
         trigger_source="existing_market_analysis_backfill",
     )
     property_record.research_status = snapshot.status

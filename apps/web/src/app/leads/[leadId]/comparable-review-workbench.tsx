@@ -941,6 +941,7 @@ function sourceLabel(value: string) {
   const normalized = value.trim().toLowerCase();
   if (normalized.includes("rentcast")) return "RentCast";
   if (normalized.includes("dealmachine")) return "DealMachine";
+  if (normalized.includes("realestateapi")) return "RealEstateAPI";
   if (normalized.includes("manual")) return "Manual verified";
   if (normalized.includes("ai_web") || normalized.includes("public")) return "Public cited";
   if (normalized === "provider_record") return "Provider record";

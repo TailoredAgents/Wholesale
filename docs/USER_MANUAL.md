@@ -51,7 +51,7 @@ The following still require external configuration, approval, or production acce
 - Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
-- DealMachine API-key connection and controlled buyer-search acceptance for the purchased account.
+- RealEstateAPI production key deployment and controlled property-research acceptance.
 - Live buyer-package and advertising conversion delivery.
 - CPA acceptance of opening balances and the first Stonegate month close.
 - Real Georgia underwriting calibration and supervised Copilot pilots.
@@ -1319,16 +1319,16 @@ provider has a matching subject but no AVM, the system can still use its recorde
 The **Subject match** status and resolved address show which property was used. Stop and correct the
 record if that address is not the subject property.
 
-When the owner has enabled DealMachine underwriting in **shadow** mode, Stonegate also retrieves a
-property-only DealMachine comp set, records the credits used, and compares it with RentCast without
-changing ARV. In **candidate** mode, unique DealMachine closed sales may enter the same screen as
-other provider sales. A transfer returned by both providers appears once with both source badges;
+When the owner has enabled RealEstateAPI underwriting in **shadow** mode, Stonegate retrieves an
+exact-match Property Detail profile and standard comp set, records estimated credits, and compares
+it with RentCast without changing ARV. In **candidate** mode, unique RealEstateAPI closed sales may
+enter the same screen as other provider sales. A transfer returned by both providers appears once
+with both source badges;
 material price, date, or property-fact conflicts remain visible and require review. Small
 recording-date, coordinate, or rounding differences remain visible as minor provider variances but
-do not reduce confidence or force review. A wrong/fuzzy DealMachine subject match is rejected before
-comp retrieval, and provider billing must show zero people credits.
+do not reduce confidence or force review. A different RealEstateAPI subject address is rejected.
 
-Ordinary valuation updates reuse the saved DealMachine result even when it is old, failed, or had no
+Ordinary valuation updates reuse the saved RealEstateAPI result even when it is old, failed, or had no
 match; they do not retry a paid call in the background. The provider panel shows zero current-run
 credits on reuse while retaining the original source credits and latency. A failed call whose final
 billing response was unavailable is labeled with a conservative estimated credit count. Use the
@@ -2232,17 +2232,15 @@ off until market authorization, access, retention, and deletion settings are app
 - When configured, confirm the provider panel says live search is enabled before previewing cost.
 - Provider candidates are not buyers in Stonegate until a person selects and imports them.
 
-### DealMachine Underwriting Comps Are Unavailable
+### RealEstateAPI Property Intelligence Is Unavailable
 
-- Confirm `DEALMACHINE_API_KEY` and the paid account credit balance.
-- Confirm `UNDERWRITING_DEALMACHINE_COMPS_MODE` is `shadow` or `candidate` and production was
+- Confirm `REALESTATEAPI_API_KEY` and the account credit balance.
+- Confirm `UNDERWRITING_REALESTATEAPI_COMPS_MODE` is `shadow` or `candidate` and production was
   redeployed.
-- Read the provider summary for the address-match, credit-limit, quota, timeout, or response error.
-- Treat a people-credit charge, missing people-credit telemetry, wrong-address match, or fuzzy-match
-  warning as a provider-boundary issue; DealMachine evidence should remain excluded.
-- A DealMachine failure does not invalidate an otherwise complete RentCast analysis. Continue the
-  review and retry DealMachine only when its evidence is needed.
-- Never promote DealMachine from shadow to candidate merely because it returned more records;
+- Read the provider summary for the exact-address match, quota, timeout, or response error.
+- A RealEstateAPI failure does not invalidate an otherwise complete RentCast analysis. Continue the
+  review and retry only when its evidence is needed.
+- Never promote RealEstateAPI from shadow to candidate merely because it returned more records;
   review overlap, conflicts, comp quality, operator time, cost, and verified outcomes first.
 
 ### PDF Buttons Are Missing

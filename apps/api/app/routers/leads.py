@@ -8,8 +8,7 @@ from app.core.auth import Principal, require_any_permission, require_permission
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
-from app.integrations.dealmachine_client import DealMachineError
-from app.integrations.google_street_view import GoogleStreetViewError
+from app.integrations.realestateapi_client import RealEstateAPIError
 from app.schemas.approvals import (
     OfferConcessionCreate,
     OfferConcessionPresent,
@@ -498,7 +497,7 @@ def read_property_image(
     lead_id: UUID,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_leads_dependency)],
-    view: Literal["street_view", "satellite", "roadmap"] = Query(default="street_view"),
+    view: Literal["listing"] = Query(default="listing"),
 ) -> Response:
     try:
         image = get_property_image_content(
@@ -508,7 +507,7 @@ def read_property_image(
             get_settings(),
             view=view,
         )
-    except (DealMachineError, GoogleStreetViewError) as exc:
+    except RealEstateAPIError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),

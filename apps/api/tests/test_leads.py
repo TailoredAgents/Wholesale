@@ -1934,7 +1934,7 @@ def test_create_lead_market_analysis_saves_draft_underwriting_and_mao(
     assert payload["market_adjustment"]["conclusion"]["arv_point_cents"] is not None
     assert payload["market_adjustment"]["calculation_version"] == ("v3.1-adjusted-distribution")
     assert payload["market_adjustment"]["range_diagnostics"]["artificial_padding_applied"] is False
-    assert payload["comp_intelligence"]["version"] == "comp_intelligence_v1"
+    assert payload["comp_intelligence"]["version"] == "comp_intelligence_v2"
     assert payload["comp_intelligence"]["mode"] == "disabled"
     assert payload["comp_intelligence"]["providers"][1]["status"] == "disabled"
     assert (

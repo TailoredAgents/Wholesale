@@ -957,13 +957,12 @@ contact, qualification, or activity history.
 
 | Control or result | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Property image | Shows the latest field-inspection photo first; otherwise uses DealMachine property imagery, optional Google Street View fallback, or a placeholder | DealMachine imagery requires a successful subject lookup; Google is optional |
-| **Street / Satellite / Roadmap** | Switches among the DealMachine image views saved with the property snapshot | Only available views are shown; an inspection photo remains the preferred Street image |
+| Property image | Shows the latest field-inspection photo first; otherwise uses a licensed RealEstateAPI listing image or a no-photo placeholder | No Street View, aerial, satellite, or scraped fallback is used |
 | Research status | Shows queued, processing, ready, partial, stale, needs address, needs review, or failed | Worker and a usable address are required for automatic completion |
 | Profile complete / Valuation confidence / Selected comps / Snapshot | Summarizes evidence coverage, confidence, retained comp count, and immutable snapshot version | Read-only; missing evidence remains visible instead of being guessed |
-| **Refresh research** | Queues a new property snapshot and explicitly refreshes market evidence | Requires lead edit access; may use RentCast or DealMachine credits |
+| **Refresh research** | Queues a new property snapshot and explicitly refreshes market evidence | Requires lead edit access; may use RentCast and RealEstateAPI credits |
 | Verified property facts | Shows normalized physical and sale-history facts with retained source metadata | Unknown remains unknown when providers do not support a fact; provider estimates are labeled research signals |
-| Additional property intelligence | Expands DealMachine assessor, tax, equity, loan, listing, parcel, lien, construction, system, amenity, and hazard facts when returned | Property-only research; Stonegate does not request owner/contact enrichment for this workflow |
+| Additional property intelligence | Expands RealEstateAPI assessor, tax, equity, loan, listing, parcel, lien, construction, amenity, ownership, and hazard facts when returned | Full sanitized provider record is saved once and reused by the UI and AI |
 | Saved value evidence | Shows Stonegate ARV support and external benchmark values already on file | Provider estimates remain benchmarks and do not become Stonegate's comp conclusion |
 | Comparable evidence already on file | Previews retained screened sales without re-querying a provider | **Open full valuation** moves to the complete Valuation & Offer analysis |
 | Sources, conflicts and freshness | Expands provenance, disagreements, and evidence age | Read-only audit context |
@@ -1313,7 +1312,7 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | Internal match list | Ranks stored buyers against market, property, price, strategy, funding, and performance | Requires buyer profiles |
 | Match explanation | Shows why a buyer ranked highly or poorly | Read-only |
 | **Rank buyers** | Refreshes the buyer recommendation using current case facts | AI output remains reviewable |
-| DealMachine plan and credits | Shows whether the paid account is reachable, the active plan, available credits, and billing reset | Requires enabled DealMachine API credentials |
+| DealMachine plan and credits | Legacy buyer-discovery readiness when that optional provider is enabled | Hidden or unavailable while DealMachine remains disabled |
 | **Preview search cost** | Validates the deal-specific search and estimates property and owner credits without consuming them | Requires a connected paid plan with available credits |
 | **Run search (up to N credits)** | Confirms the displayed estimate, requests recent local purchaser candidates, and records actual provider credit use | Disabled until a current preview succeeds; the run is rejected if the estimate changes or credits are insufficient |
 | Candidate result | Shows provider evidence and match context before import; DNC-tagged phone numbers are excluded | Not yet a Stonegate buyer record |

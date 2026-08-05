@@ -1,0 +1,194 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+from urllib.parse import urlparse
+
+import httpx
+
+from app.core.config import Settings
+
+REALESTATEAPI_IMAGE_HOSTS = frozenset({"imagecdn.realty.dev"})
+MAX_PROPERTY_IMAGE_BYTES = 12_000_000
+
+
+class RealEstateAPIError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class RealEstateAPIPropertyDetail:
+    found: bool
+    property: dict[str, Any]
+    comparables: list[dict[str, Any]]
+    status_code: int
+    status_message: str | None
+    raw_response: dict[str, Any]
+
+
+class RealEstateAPIClient:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        client: httpx.Client | None = None,
+    ) -> None:
+        if not settings.realestateapi_api_key:
+            raise RealEstateAPIError("REALESTATEAPI_API_KEY is not configured.")
+        self.api_key = settings.realestateapi_api_key
+        self.base_url = settings.realestateapi_base_url.rstrip("/")
+        self.timeout_seconds = settings.realestateapi_request_timeout_seconds
+        self.client = client
+
+    def get_property_detail(
+        self,
+        *,
+        address: str,
+        include_comps: bool = True,
+    ) -> RealEstateAPIPropertyDetail:
+        try:
+            request = self.client.post if self.client is not None else httpx.post
+            response = request(
+                f"{self.base_url}/v2/PropertyDetail",
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "x-api-key": self.api_key,
+                },
+                json={
+                    "address": address,
+                    "exact_match": True,
+                    "comps": include_comps,
+                },
+                timeout=self.timeout_seconds,
+            )
+        except httpx.HTTPError as exc:
+            raise RealEstateAPIError(f"RealEstateAPI property request failed: {exc}") from exc
+
+        if response.status_code == 404:
+            return RealEstateAPIPropertyDetail(
+                found=False,
+                property={},
+                comparables=[],
+                status_code=404,
+                status_message="No exact property match was found.",
+                raw_response={},
+            )
+        if response.is_error:
+            raise RealEstateAPIError(_http_error_message(response))
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise RealEstateAPIError("RealEstateAPI returned invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise RealEstateAPIError("RealEstateAPI returned an unexpected response shape.")
+
+        payload_status = _integer(payload.get("statusCode")) or response.status_code
+        status_message = _string(payload.get("statusMessage"))
+        if payload_status == 404:
+            return RealEstateAPIPropertyDetail(
+                found=False,
+                property={},
+                comparables=[],
+                status_code=payload_status,
+                status_message=status_message or "No exact property match was found.",
+                raw_response=payload,
+            )
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise RealEstateAPIError(
+                status_message or "RealEstateAPI did not return a property record."
+            )
+        comps = data.get("comps")
+        return RealEstateAPIPropertyDetail(
+            found=True,
+            property=data,
+            comparables=[item for item in comps if isinstance(item, dict)]
+            if isinstance(comps, list)
+            else [],
+            status_code=payload_status,
+            status_message=status_message,
+            raw_response=payload,
+        )
+
+
+def realestateapi_primary_image_url(property_payload: dict[str, Any]) -> str | None:
+    media = property_payload.get("media")
+    if not isinstance(media, dict):
+        return None
+    candidates: list[Any] = [media.get("primaryListingImageUrl")]
+    photos = media.get("photosList")
+    if isinstance(photos, list) and photos and isinstance(photos[0], dict):
+        candidates.extend(
+            [photos[0].get("highRes"), photos[0].get("midRes"), photos[0].get("lowRes")]
+        )
+    for value in candidates:
+        url = _string(value)
+        if url and is_realestateapi_image_url(url):
+            return url
+    return None
+
+
+def is_realestateapi_image_url(value: str) -> bool:
+    parsed = urlparse(value)
+    return (
+        parsed.scheme == "https"
+        and parsed.hostname is not None
+        and parsed.hostname.lower() in REALESTATEAPI_IMAGE_HOSTS
+        and parsed.username is None
+        and parsed.password is None
+    )
+
+
+def get_realestateapi_image(
+    image_url: str,
+    *,
+    timeout_seconds: float,
+) -> tuple[bytes, str]:
+    if not is_realestateapi_image_url(image_url):
+        raise RealEstateAPIError("RealEstateAPI returned an unsupported property image URL.")
+    try:
+        response = httpx.get(
+            image_url,
+            headers={"Accept": "image/jpeg,image/png,image/webp"},
+            timeout=timeout_seconds,
+            follow_redirects=False,
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise RealEstateAPIError(f"RealEstateAPI property image request failed: {exc}") from exc
+    content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
+    if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise RealEstateAPIError("RealEstateAPI property image returned unsupported content.")
+    if len(response.content) > MAX_PROPERTY_IMAGE_BYTES:
+        raise RealEstateAPIError("RealEstateAPI property image exceeded the size limit.")
+    return response.content, content_type
+
+
+def _http_error_message(response: httpx.Response) -> str:
+    message = None
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        message = _string(payload.get("statusMessage") or payload.get("message"))
+    suffix = f": {message}" if message else ""
+    return f"RealEstateAPI property request failed (HTTP {response.status_code}){suffix}"
+
+
+def _string(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return None
+
+
+def _integer(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

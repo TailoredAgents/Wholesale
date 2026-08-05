@@ -16,9 +16,10 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 - CRM, shared inbox, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
   transactions, buyers, finance, marketing, and AI control foundations are implemented.
 - Complete lead addresses automatically create a reusable Property Intelligence snapshot with
-  normalized facts, screened comparable evidence, Stonegate valuation context, provenance,
-  conflicts, freshness, DealMachine street/satellite/map imagery, and optional Google Street View
-  fallback.
+  normalized RealEstateAPI property facts, screened RentCast and RealEstateAPI comparable evidence,
+  Stonegate-owned valuation math, provenance, conflicts, freshness, and an authorized listing
+  image when the provider returns one. Inspection photos remain preferred; no Street View,
+  satellite, or scraped imagery is used.
 - The branded web domain is live. Stonegate's dedicated A2P Campaign requires resubmission and
   approval; final Twilio SMS and Voice acceptance remains pending.
 - Resend sending, receiving, aliases, shared mailboxes, routing, attachments, notifications, and

@@ -353,6 +353,20 @@ class Settings(BaseSettings):
         default="https://maps.googleapis.com/maps/api/streetview",
         validation_alias="GOOGLE_STREET_VIEW_BASE_URL",
     )
+    realestateapi_api_key: str | None = Field(
+        default=None,
+        validation_alias="REALESTATEAPI_API_KEY",
+    )
+    realestateapi_base_url: str = Field(
+        default="https://api.realestateapi.com",
+        validation_alias="REALESTATEAPI_BASE_URL",
+    )
+    realestateapi_request_timeout_seconds: float = Field(
+        default=30,
+        ge=5,
+        le=120,
+        validation_alias="REALESTATEAPI_REQUEST_TIMEOUT_SECONDS",
+    )
     buyer_data_provider: Literal["disabled", "dealmachine"] = Field(
         default="disabled",
         validation_alias="BUYER_DATA_PROVIDER",
@@ -604,6 +618,10 @@ class Settings(BaseSettings):
         ge=0,
         le=25,
         validation_alias="UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS",
+    )
+    underwriting_realestateapi_comps_mode: Literal["disabled", "shadow", "candidate"] = Field(
+        default="disabled",
+        validation_alias="UNDERWRITING_REALESTATEAPI_COMPS_MODE",
     )
     underwriting_ai_comp_analyst_mode: Literal["disabled", "draft"] = Field(
         default="disabled",

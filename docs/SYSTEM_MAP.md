@@ -63,9 +63,10 @@ must use Stonegate Home Buyers.
 | Twilio SMS | Implemented; seller-inquiry A2P approved, number attachment and acceptance remain |
 | Twilio Voice | Implemented; dedicated number, credentials, and acceptance remain |
 | RentCast property data | Implemented; provider coverage varies by address |
+| RealEstateAPI property intelligence | Implemented; production key deployment and controlled refresh remain |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
 | SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
-| DealMachine buyer discovery | Implemented adapter; subscription purchased, API key/configuration and controlled acceptance remain |
+| DealMachine buyer discovery | Legacy optional adapter; disabled and removable after subscription cancellation |
 | Internal accounting | Implemented; CPA acceptance and first real close remain |
 | Marketing conversion delivery | Implemented; ad-provider credentials and acceptance remain |
 
@@ -746,7 +747,7 @@ redirect to their new owners.
 1. The disposition case is opened from the contracted transaction.
 2. Staff approve the property package before marketing.
 3. Buyers are matched against markets, property criteria, price, capacity, activity, and proof.
-4. DealMachine can provide external buyer candidates after its purchased account is connected and
+4. The optional DealMachine adapter can provide external buyer candidates only if it is deliberately reactivated and
    accepted.
 5. Candidates are reviewed before import; external data does not overwrite trusted buyer records.
 6. Staff record outreach, engagement, offers, deposits, and proof.
@@ -947,7 +948,7 @@ The one complete-analysis workflow performs:
 2. provider-safe address retries
 3. subject fact reconciliation
 4. adaptive preferred, expanded, and extended RentCast recorded-sale search
-5. optional credit-controlled DealMachine shadow or candidate comp retrieval
+5. exact-match RealEstateAPI Property Detail and candidate or shadow comp retrieval
 6. cross-provider normalization, transfer deduplication, conflict retention, subdivision
    comparison, A-D grading, screening, and scoring
 7. subject-versus-candidate review data, engine recommendation, and location direction
@@ -1042,7 +1043,8 @@ Buyer records can retain:
 
 ### 13.2 Buyer Discovery
 
-DealMachine is the selected first external buyer-data adapter. The workflow:
+The DealMachine buyer-data adapter is retained only as an optional legacy workflow and is disabled
+when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the workflow:
 
 1. Verifies the configured account and displays the paid plan, billing-cycle reset, and available
    credits without exposing the API key.
@@ -1284,12 +1286,12 @@ telemarketing, recording, or real-estate advice.
 | Clerk | Authentication | Implemented | Active |
 | Render | Hosting, Postgres, key value | Implemented | Active |
 | OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
-| RentCast | Subject and recorded-sale data | Implemented | Configured; address coverage varies |
+| RentCast | Independent recorded-sale, rent, and market evidence | Implemented | Configured; address coverage varies |
+| RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Activation requires the same API key and candidate mode on API and worker |
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
 | Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
-| DealMachine | Buyer discovery, property facts and imagery, plus property-only underwriting comp evidence | Implemented adapter with cost preview, credit controls, safe image proxy, reusable facts, provenance, conflict handling, and shadow/candidate modes | Active in candidate mode; continued outcome review required |
-| Google Street View Static API | Optional fallback property exterior imagery | Authenticated server-side metadata and image proxy implemented | Optional; DealMachine imagery is the primary provider fallback after inspection photos |
+| DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
 | ClamAV | Document malware scanning | Implemented option | Disabled |
 | Sentry | Error monitoring | Implemented option | Deferred |
@@ -1416,7 +1418,7 @@ acceptance and evidence:
 - Twilio acquisitions-number attachment and dedicated SMS/Voice end-to-end tests
 - Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
 - SignWell template, webhook, remote signature, and iPad signature acceptance
-- DealMachine API-key configuration and controlled buyer-data acceptance
+- RealEstateAPI API-key deployment and controlled property-research acceptance
 - real Georgia underwriting outcomes and operator calibration
 - first CPA-reviewed opening balances, bank reconciliation, month close, and report package
 - ad-provider credential setup and offline conversion acceptance

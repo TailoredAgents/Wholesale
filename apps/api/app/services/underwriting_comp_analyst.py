@@ -1047,7 +1047,7 @@ def _contains_conflict_claim(value: str) -> bool:
             "different closing",
         )
     )
-    source_terms = r"(?:provider|source|record|rentcast|dealmachine)"
+    source_terms = r"(?:provider|source|record|rentcast|realestateapi|dealmachine)"
     conflict_terms = r"(?:disagree|disagreement|inconsisten|conflict|discrepanc|mismatch|differ)"
     contextual_match = re.search(
         rf"(?:{source_terms}.{{0,80}}{conflict_terms}|"

@@ -6,6 +6,7 @@ from app.integrations.dealmachine_client import (
     DealMachineComparableSearch,
     DealMachinePropertyLookup,
 )
+from app.integrations.realestateapi_client import RealEstateAPIPropertyDetail
 from app.integrations.rentcast_client import RentCastValueEstimate
 from app.services.leads import comp_intelligence_valuation_warnings
 from app.services.underwriting_provider_pipeline import (
@@ -158,6 +159,104 @@ def _run(
         },
         client=client,
     )
+
+
+def test_realestateapi_candidate_merges_and_deduplicates_comps(
+    monkeypatch,
+) -> None:
+    class FakeRealEstateAPIClient:
+        def __init__(self, _settings: Settings) -> None:
+            pass
+
+        def get_property_detail(
+            self, *, address: str, include_comps: bool = True
+        ) -> RealEstateAPIPropertyDetail:
+            assert include_comps is True
+            return RealEstateAPIPropertyDetail(
+                found=True,
+                property={
+                    "id": "subject-1",
+                    "estimatedValue": 215_000,
+                    "propertyInfo": {
+                        "address": {
+                            "address": "500 Subject St",
+                            "city": "Dayton",
+                            "state": "OH",
+                            "zip": "45402",
+                        }
+                    },
+                },
+                comparables=[
+                    {
+                        "id": "re-overlap",
+                        "address": {
+                            "address": "101 Main St",
+                            "city": "Dayton",
+                            "state": "OH",
+                            "zip": "45402",
+                        },
+                        "lastSaleAmount": 200_000,
+                        "lastSaleDate": "2026-05-10",
+                        "propertyType": "SFR",
+                        "bedrooms": 3,
+                        "bathrooms": 2,
+                        "squareFeet": 1_400,
+                    },
+                    {
+                        "id": "re-unique",
+                        "address": {
+                            "address": "202 Oak Ave",
+                            "city": "Dayton",
+                            "state": "OH",
+                            "zip": "45402",
+                        },
+                        "lastSaleAmount": 225_000,
+                        "lastSaleDate": "2026-04-15",
+                        "propertyType": "SFR",
+                        "bedrooms": 3,
+                        "bathrooms": 2,
+                        "squareFeet": 1_500,
+                    },
+                ],
+                status_code=200,
+                status_message=None,
+                raw_response={},
+            )
+
+    monkeypatch.setattr(
+        "app.services.underwriting_provider_pipeline.RealEstateAPIClient",
+        FakeRealEstateAPIClient,
+    )
+    settings = Settings.model_validate(
+        {
+            "REALESTATEAPI_API_KEY": "re_test",
+            "UNDERWRITING_REALESTATEAPI_COMPS_MODE": "candidate",
+            "UNDERWRITING_DEALMACHINE_COMPS_MODE": "disabled",
+        }
+    )
+    result = build_comparable_intelligence(
+        settings,
+        address="500 Subject St, Dayton, OH 45402",
+        rentcast_records=_rentcast_records(),
+        comp_search_summary={"final_level": "preferred"},
+        rentcast_estimated_value_cents=21_000_000,
+        rentcast_estimated_value_low_cents=20_000_000,
+        rentcast_estimated_value_high_cents=22_000_000,
+    )
+
+    assert len(result.analysis_records) == 2
+    overlap = next(
+        record for record in result.analysis_records if "101 Main" in record["formattedAddress"]
+    )
+    assert set(overlap["source_providers"]) == {"rentcast", "realestateapi"}
+    provider = next(
+        item for item in result.metadata["providers"] if item["provider"] == "realestateapi"
+    )
+    assert provider["status"] == "completed"
+    assert provider["net_new_count"] == 1
+    assert result.metadata["mode"] == "candidate"
+    assert result.metadata["external_benchmarks"][-1]["provider"] == "realestateapi"
+    assert result.provider_payload["property"]["id"] == "subject-1"
 
 
 def _underwrite(

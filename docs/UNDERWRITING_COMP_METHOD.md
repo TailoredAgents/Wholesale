@@ -29,24 +29,20 @@ The engine keeps three conclusions separate:
 2. **After-repair value (ARV):** the supported retail value after a defined renovation.
 3. **Contract recommendation:** the amount Stonegate can pay while preserving a viable exit.
 
-RentCast supplies the canonical subject record, recorded-sale history, rent evidence, and an
-external AVM benchmark. When its underwriting mode is enabled, DealMachine performs a
-property-only subject lookup to resolve the provider property ID and returns a second pool of
-comparable-sale observations. Stonegate normalizes the comparable observations, deduplicates the
-same transfer, preserves both providers' provenance, and exposes comp-field conflicts; the same
-sale never receives double weight. The DealMachine subject lookup is retained for provider audit
-but does not silently replace canonical RentCast subject facts. In `shadow` mode DealMachine cannot
-affect ARV. In `candidate` mode its unique closed sales enter the same deterministic screening and
+RealEstateAPI supplies the canonical public-record property profile, financial/property signals,
+and a second pool of standard comparable-sale observations. RentCast independently supplies
+recorded sales, rent evidence, market context, and an AVM benchmark. Stonegate normalizes both comp
+feeds, deduplicates the same transfer, preserves both providers' provenance, and exposes field
+conflicts; the same sale never receives double weight. In `shadow` mode RealEstateAPI comps cannot
+affect ARV. In `candidate` mode unique closed sales enter the same deterministic screening and
 human-review workflow as every other provider sale.
 
-DealMachine identity is fail-closed: the property-only lookup must return the exact normalized
-requested address with no fuzzy-match warning before Stonegate requests comps. The two-call credit
-audit stores property and people-credit totals. The subject lookup must explicitly report zero
-people credits; the comp response may omit that field under the provider contract. Any positive
-people-credit report or missing lookup telemetry excludes DealMachine evidence and raises a
-high-severity provider warning. Underwriting never requests owner or contact records.
+RealEstateAPI identity is fail-closed: Property Detail is requested with `exact_match=true`, and a
+different returned normalized address excludes both its facts and comps. Direct phone and email
+fields are removed before provider payloads are saved. Underwriting never purchases contact
+enrichment as part of property research.
 
-Recorded sale price and date are the core comp evidence. RentCast and DealMachine value estimates
+Recorded sale price and date are the core comp evidence. RentCast and RealEstateAPI value estimates
 are retained only as external benchmarks and disagreement checks. Provider listing prices, active
 listings, estimates, and foreclosure transfers are not treated as ordinary closed-sale prices and
 never enter ARV or seller-ceiling math.
@@ -359,13 +355,14 @@ analysis without a new paid request. A manual **Refresh research** or **Refresh 
 the explicit boundary that may buy current provider evidence. AI receives the saved snapshot as
 evidence, but cannot replace the deterministic comp math or approve an offer.
 
-The property-only DealMachine subject result also contributes its street-view, satellite, and
-roadmap images and any available physical, assessor, tax, sale, listing, equity, mortgage, lien,
-construction, system, amenity, and hazard facts. Canonical RentCast facts remain primary when both
-providers supply the same core field, and material disagreements are saved as conflicts rather
-than silently overwritten. DealMachine value, equity, loan, and tax amounts are research signals;
-they are not seller-confirmed balances and never enter offer math by themselves. This workflow
-does not request owner/contact enrichment or people credits.
+The RealEstateAPI subject result also contributes available physical, assessor, tax, sale,
+listing, equity, mortgage, lien, construction, amenity, ownership, and hazard facts. The sanitized
+full record is retained in the snapshot for the property UI and AI context. Material disagreements
+with RentCast core facts are saved as conflicts rather than silently overwritten. Provider value,
+equity, loan, and tax amounts are research signals; they are not seller-confirmed balances and do
+not enter offer math by themselves. If RealEstateAPI directly returns licensed listing media,
+Stonegate may display it through the authenticated image proxy; otherwise the system shows no
+provider photo.
 
 A comp review covers every sale in the source analysis. The reviewer includes or excludes each
 sale, confirms its condition, selects a reason, and may apply 50-150% of the engine's original

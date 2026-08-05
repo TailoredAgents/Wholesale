@@ -63,6 +63,14 @@ def read_integration_status(
     if not settings.dealmachine_api_key:
         dealmachine_comp_blockers.append("DEALMACHINE_API_KEY")
 
+    realestateapi_blockers = []
+    if settings.underwriting_realestateapi_comps_mode == "disabled":
+        realestateapi_blockers.append(
+            "UNDERWRITING_REALESTATEAPI_COMPS_MODE=shadow or candidate"
+        )
+    if not settings.realestateapi_api_key:
+        realestateapi_blockers.append("REALESTATEAPI_API_KEY")
+
     comp_analyst_blockers = []
     if settings.underwriting_ai_comp_analyst_mode == "disabled":
         comp_analyst_blockers.append("UNDERWRITING_AI_COMP_ANALYST_MODE=draft")
@@ -139,6 +147,14 @@ def read_integration_status(
                 mode=settings.underwriting_dealmachine_comps_mode,
                 enabled=settings.underwriting_dealmachine_comps_mode != "disabled",
                 blockers=dealmachine_comp_blockers,
+            ),
+            _status(
+                key="realestateapi-underwriting",
+                name="RealEstateAPI property intelligence",
+                category="Underwriting",
+                mode=settings.underwriting_realestateapi_comps_mode,
+                enabled=settings.underwriting_realestateapi_comps_mode != "disabled",
+                blockers=realestateapi_blockers,
             ),
             _status(
                 key="ai-comp-analyst",

@@ -444,6 +444,7 @@ function providerLabel(value: string) {
   const normalized = value.trim().toLowerCase();
   if (normalized.includes("rentcast")) return "RentCast";
   if (normalized.includes("dealmachine")) return "DealMachine";
+  if (normalized.includes("realestateapi")) return "RealEstateAPI";
   return titleCaseValue(value || "Provider");
 }
 

@@ -13,6 +13,11 @@ from app.integrations.dealmachine_client import (
     DealMachineComparableSearch,
     DealMachinePropertyLookup,
 )
+from app.integrations.realestateapi_client import (
+    RealEstateAPIClient,
+    RealEstateAPIError,
+    RealEstateAPIPropertyDetail,
+)
 from app.services.underwriting_comparable_evidence import (
     ComparableEvidenceSet,
     ComparableProviderBatch,
@@ -21,6 +26,7 @@ from app.services.underwriting_comparable_evidence import (
     merge_comparable_batches,
     normalize_address_key,
     normalize_dealmachine_comparable,
+    normalize_realestateapi_comparable,
     normalize_rentcast_comparable,
     provider_batch_from_response,
 )
@@ -29,7 +35,7 @@ CompProviderMode = Literal["disabled", "shadow", "candidate"]
 SearchLevel = Literal["preferred", "expanded", "extended", "manual"]
 DealMachineTimeframe = Literal["3months", "6months", "12months", "all"]
 
-COMP_INTELLIGENCE_VERSION = "comp_intelligence_v1"
+COMP_INTELLIGENCE_VERSION = "comp_intelligence_v2"
 EXCLUDED_FROM_VALUATION = "excluded_from_arv_and_offer_math"
 CORE_CLOSED_SALE_EVIDENCE = "core_closed_sale_evidence"
 CANDIDATE_CLOSED_SALE_EVIDENCE = "candidate_closed_sale_evidence_subject_to_stonegate_screening"
@@ -76,8 +82,9 @@ def build_comparable_intelligence(
 ) -> ComparableIntelligenceResult:
     """Build property-only comparable evidence without letting an optional source fail.
 
-    Shadow mode records DealMachine coverage and conflicts but returns RentCast-only records
-    to underwriting. Candidate mode returns the merged, provenance-preserving evidence set.
+    RealEstateAPI is preferred when enabled; DealMachine remains a disabled-by-default legacy
+    fallback. Shadow mode records secondary-provider coverage and conflicts but returns
+    RentCast-only records. Candidate mode returns the merged, provenance-preserving evidence set.
     Provider AVMs are retained only as explicitly excluded external benchmarks.
     """
     mode: CompProviderMode = settings.underwriting_dealmachine_comps_mode
@@ -95,6 +102,18 @@ def build_comparable_intelligence(
         rentcast_estimated_value_high_cents,
     )
 
+    realestateapi_mode: CompProviderMode = settings.underwriting_realestateapi_comps_mode
+    if realestateapi_mode != "disabled":
+        return _build_realestateapi_intelligence(
+            settings,
+            mode=realestateapi_mode,
+            address=address,
+            search_level=provider_search_level,
+            rentcast_batch=rentcast_batch,
+            rentcast_evidence=rentcast_evidence,
+            benchmarks=benchmarks,
+        )
+
     if mode == "disabled":
         return _result(
             mode=mode,
@@ -110,6 +129,7 @@ def build_comparable_intelligence(
             provider_payload={},
             warnings=[],
         )
+
 
     if not settings.dealmachine_api_key:
         return _result(
@@ -360,6 +380,135 @@ def build_comparable_intelligence(
         )
 
 
+def _build_realestateapi_intelligence(
+    settings: Settings,
+    *,
+    mode: CompProviderMode,
+    address: str,
+    search_level: SearchLevel,
+    rentcast_batch: ComparableProviderBatch,
+    rentcast_evidence: ComparableEvidenceSet,
+    benchmarks: list[dict[str, Any]],
+) -> ComparableIntelligenceResult:
+    if not settings.realestateapi_api_key:
+        return _realestateapi_result(
+            mode=mode,
+            analysis_evidence=rentcast_evidence,
+            comparison_evidence=rentcast_evidence,
+            rentcast_batch=rentcast_batch,
+            provider_batch=None,
+            provider_status="unavailable",
+            provider_error="REALESTATEAPI_API_KEY is not configured.",
+            provider_latency_ms=None,
+            credits_used=0,
+            benchmarks=benchmarks,
+            provider_payload={},
+            warnings=[
+                "RealEstateAPI comp evidence was unavailable; RentCast closed sales remain "
+                "the only provider evidence."
+            ],
+        )
+    started = perf_counter()
+    try:
+        detail = RealEstateAPIClient(settings).get_property_detail(
+            address=address,
+            include_comps=True,
+        )
+        safe_payload = _safe_realestateapi_payload(detail)
+        if not detail.found:
+            return _realestateapi_result(
+                mode=mode,
+                analysis_evidence=rentcast_evidence,
+                comparison_evidence=rentcast_evidence,
+                rentcast_batch=rentcast_batch,
+                provider_batch=None,
+                provider_status="no_match",
+                provider_error=None,
+                provider_latency_ms=_elapsed_ms(started),
+                credits_used=1,
+                benchmarks=benchmarks,
+                provider_payload=safe_payload,
+                warnings=["RealEstateAPI found no exact subject-property match."],
+            )
+        identity_error = _realestateapi_identity_error(detail.property, address)
+        if identity_error:
+            return _realestateapi_result(
+                mode=mode,
+                analysis_evidence=rentcast_evidence,
+                comparison_evidence=rentcast_evidence,
+                rentcast_batch=rentcast_batch,
+                provider_batch=None,
+                provider_status="identity_mismatch",
+                provider_error=None,
+                provider_latency_ms=_elapsed_ms(started),
+                credits_used=1,
+                benchmarks=benchmarks,
+                provider_payload=safe_payload,
+                warnings=[identity_error],
+            )
+        requested_key = normalize_address_key(address)
+        filtered_comps = [
+            record
+            for record in detail.comparables
+            if normalize_address_key(_realestateapi_record_address(record) or "")
+            != requested_key
+        ]
+        provider_batch = provider_batch_from_response(
+            provider="realestateapi",
+            response=ComparableProviderResponse(records=filtered_comps),
+            normalizer=partial(
+                normalize_realestateapi_comparable,
+                search_level=search_level,
+            ),
+        )
+        comparison_evidence = merge_comparable_batches([rentcast_batch, provider_batch])
+        analysis_evidence = comparison_evidence if mode == "candidate" else rentcast_evidence
+        benchmark = _realestateapi_benchmark(detail.property)
+        if benchmark is not None:
+            benchmarks.append(benchmark)
+        warnings: list[str] = []
+        if provider_batch.dropped_count:
+            warnings.append(
+                "RealEstateAPI returned "
+                f"{provider_batch.dropped_count} row(s) that were not usable closed sales."
+            )
+        return _realestateapi_result(
+            mode=mode,
+            analysis_evidence=analysis_evidence,
+            comparison_evidence=comparison_evidence,
+            rentcast_batch=rentcast_batch,
+            provider_batch=provider_batch,
+            provider_status=(
+                "degraded_no_usable_comps"
+                if provider_batch.raw_count > 0 and provider_batch.usable_count == 0
+                else "completed"
+            ),
+            provider_error=None,
+            provider_latency_ms=_elapsed_ms(started),
+            credits_used=1,
+            benchmarks=benchmarks,
+            provider_payload=safe_payload,
+            warnings=warnings,
+        )
+    except RealEstateAPIError as exc:
+        return _realestateapi_result(
+            mode=mode,
+            analysis_evidence=rentcast_evidence,
+            comparison_evidence=rentcast_evidence,
+            rentcast_batch=rentcast_batch,
+            provider_batch=None,
+            provider_status="failed",
+            provider_error=str(exc)[:500],
+            provider_latency_ms=_elapsed_ms(started),
+            credits_used=1,
+            benchmarks=benchmarks,
+            provider_payload={},
+            warnings=[
+                "RealEstateAPI evidence failed without interrupting the RentCast analysis."
+            ],
+        )
+
+
 def build_cached_rentcast_intelligence(
     *,
     rentcast_records: Sequence[dict[str, Any]],
@@ -395,7 +544,7 @@ def build_cached_rentcast_intelligence(
             warning
             or (
                 "This cached analysis predates multi-source comp evidence; refresh market data "
-                "to run the configured DealMachine mode."
+                "to run the configured secondary-provider mode."
             )
         ],
     )
@@ -431,7 +580,7 @@ def reuse_cached_comparable_intelligence(
             if not isinstance(raw_provider, Mapping):
                 continue
             provider = dict(raw_provider)
-            if provider.get("provider") == "dealmachine":
+            if provider.get("provider") in {"dealmachine", "realestateapi"}:
                 provider["source_credits_used"] = provider.get(
                     "source_credits_used", provider.get("credits_used")
                 )
@@ -490,6 +639,212 @@ def reuse_cached_comparable_intelligence(
             "cached_mode": cached_mode,
         },
         provider_payload={},
+    )
+
+
+def _realestateapi_result(
+    *,
+    mode: CompProviderMode,
+    analysis_evidence: ComparableEvidenceSet,
+    comparison_evidence: ComparableEvidenceSet,
+    rentcast_batch: ComparableProviderBatch,
+    provider_batch: ComparableProviderBatch | None,
+    provider_status: str,
+    provider_error: str | None,
+    provider_latency_ms: int | None,
+    credits_used: int | None,
+    benchmarks: list[dict[str, Any]],
+    provider_payload: dict[str, Any],
+    warnings: list[str],
+) -> ComparableIntelligenceResult:
+    comparison_records = comparison_evidence.to_underwriting_records()
+    provider_records = [
+        record
+        for record in comparison_records
+        if "realestateapi" in _string_list(record.get("_stonegateSourceProviders"))
+    ]
+    eligible_records = [
+        record
+        for record in provider_records
+        if record.get("_stonegateTransactionEligibility") != "ineligible"
+    ]
+    net_new_count = sum(
+        "rentcast" not in _string_list(record.get("_stonegateSourceProviders"))
+        for record in eligible_records
+    )
+    overlap_count = len(eligible_records) - net_new_count
+    internal_duplicates = provider_batch.duplicate_count if provider_batch else 0
+    cross_provider_duplicates = comparison_evidence.duplicate_observation_count
+    provider_use = (
+        CANDIDATE_CLOSED_SALE_EVIDENCE if mode == "candidate" else SHADOW_CLOSED_SALE_EVIDENCE
+    )
+    metadata = {
+        "version": COMP_INTELLIGENCE_VERSION,
+        "mode": mode,
+        "provider_strategy": "rentcast_plus_realestateapi_stonegate_math",
+        "valuation_use": CORE_CLOSED_SALE_EVIDENCE,
+        "providers": [
+            {
+                "provider": "rentcast",
+                "status": rentcast_batch.status,
+                "valuation_use": CORE_CLOSED_SALE_EVIDENCE,
+                "returned_count": rentcast_batch.raw_count,
+                "normalized_count": rentcast_batch.normalized_count,
+                "retained_count": rentcast_batch.retained_count,
+                "unique_count": rentcast_batch.usable_count,
+                "usable_count": rentcast_batch.usable_count,
+                "dropped_count": rentcast_batch.dropped_count,
+                "valuation_eligible_count": rentcast_batch.valuation_eligible_count,
+                "ineligible_transfer_count": rentcast_batch.ineligible_transfer_count,
+                "net_new_count": rentcast_batch.usable_count,
+                "overlap_count": cross_provider_duplicates,
+                "duplicate_count": rentcast_batch.duplicate_count,
+                "conflict_count": 0,
+                "credits_used": None,
+                "latency_ms": None,
+                "error": rentcast_batch.error,
+                "warnings": list(rentcast_batch.warnings),
+            },
+            {
+                "provider": "realestateapi",
+                "status": provider_status,
+                "valuation_use": provider_use,
+                "returned_count": provider_batch.raw_count if provider_batch else 0,
+                "normalized_count": provider_batch.normalized_count if provider_batch else 0,
+                "retained_count": provider_batch.retained_count if provider_batch else 0,
+                "unique_count": net_new_count,
+                "usable_count": provider_batch.usable_count if provider_batch else 0,
+                "dropped_count": provider_batch.dropped_count if provider_batch else 0,
+                "valuation_eligible_count": (
+                    provider_batch.valuation_eligible_count if provider_batch else 0
+                ),
+                "ineligible_transfer_count": (
+                    provider_batch.ineligible_transfer_count if provider_batch else 0
+                ),
+                "net_new_count": net_new_count,
+                "overlap_count": overlap_count,
+                "duplicate_count": internal_duplicates,
+                "conflict_count": comparison_evidence.field_conflict_count,
+                "credits_used": credits_used,
+                "credits_estimated": credits_used is not None,
+                "credit_cost_status": "estimated" if credits_used is not None else "not_run",
+                "latency_ms": provider_latency_ms,
+                "error": provider_error,
+                "warnings": list(provider_batch.warnings) if provider_batch else [],
+            },
+        ],
+        "corroborated_sale_count": sum(
+            record.get("_stonegateCorroborated") is True for record in comparison_records
+        ),
+        "cross_sourced_sale_count": sum(
+            len(_string_list(record.get("_stonegateSourceProviders"))) > 1
+            for record in comparison_records
+        ),
+        "duplicate_count": (
+            rentcast_batch.duplicate_count
+            + internal_duplicates
+            + cross_provider_duplicates
+        ),
+        "conflict_count": comparison_evidence.field_conflict_count,
+        "source_conflicts": _source_conflicts(comparison_records),
+        "external_benchmarks": benchmarks,
+        "shadow_comps": provider_records if mode == "shadow" else [],
+        "warnings": warnings,
+    }
+    return ComparableIntelligenceResult(
+        analysis_records=analysis_evidence.to_underwriting_records(),
+        metadata=metadata,
+        provider_payload=provider_payload,
+    )
+
+
+def _realestateapi_benchmark(property_payload: Mapping[str, Any]) -> dict[str, Any] | None:
+    point = _dollars_to_cents(property_payload.get("estimatedValue"))
+    if point is None:
+        return None
+    return {
+        "provider": "realestateapi",
+        "label": "RealEstateAPI estimated value",
+        "point_cents": point,
+        "low_cents": None,
+        "high_cents": None,
+        "status": "available",
+        "source_url": None,
+        "valuation_use": EXCLUDED_FROM_VALUATION,
+    }
+
+
+def _safe_realestateapi_payload(detail: RealEstateAPIPropertyDetail) -> dict[str, Any]:
+    return {
+        "found": detail.found,
+        "status_code": detail.status_code,
+        "status_message": detail.status_message,
+        "property": _remove_direct_contact_data(detail.property),
+        "comparables": _remove_direct_contact_data(detail.comparables),
+    }
+
+
+def _remove_direct_contact_data(value: Any) -> Any:
+    forbidden = ("phone", "email")
+    if isinstance(value, Mapping):
+        return {
+            str(key): _remove_direct_contact_data(item)
+            for key, item in value.items()
+            if not any(token in str(key).lower() for token in forbidden)
+        }
+    if isinstance(value, list):
+        return [_remove_direct_contact_data(item) for item in value]
+    return value
+
+
+def _realestateapi_identity_error(
+    property_payload: Mapping[str, Any],
+    requested_address: str,
+) -> str | None:
+    returned = _realestateapi_property_address(property_payload)
+    if returned and normalize_address_key(returned) != normalize_address_key(requested_address):
+        return (
+            "RealEstateAPI returned a different subject address; its property facts and comps "
+            "were excluded."
+        )
+    return None
+
+
+def _realestateapi_property_address(property_payload: Mapping[str, Any]) -> str | None:
+    info = property_payload.get("propertyInfo")
+    info_values = info if isinstance(info, Mapping) else {}
+    address = info_values.get("address")
+    if not isinstance(address, Mapping):
+        address = property_payload.get("address")
+    return _realestateapi_record_address(
+        {"address": address} if isinstance(address, Mapping) else {}
+    )
+
+
+def _realestateapi_record_address(record: Mapping[str, Any]) -> str | None:
+    direct = _first(record, "formattedAddress", "fullAddress")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    address = record.get("address")
+    values = address if isinstance(address, Mapping) else {}
+    direct = _first(values, "formattedAddress", "fullAddress")
+    if isinstance(direct, str) and direct.strip():
+        return direct.strip()
+    street = _first(values, "address", "addressLine1", "streetAddress")
+    if not isinstance(street, str) or not street.strip():
+        house = _first(values, "house")
+        street_name = _first(values, "street")
+        street = " ".join(
+            str(value).strip() for value in (house, street_name) if value is not None
+        )
+    if not isinstance(street, str) or not street.strip():
+        return None
+    city = _first(values, "city")
+    state = _first(values, "state")
+    postal_code = _first(values, "zip", "zipCode", "postalCode")
+    locality = ", ".join(str(value).strip() for value in (city, state) if value)
+    return ", ".join(value for value in (street.strip(), locality) if value) + (
+        f" {str(postal_code).strip()}" if postal_code else ""
     )
 
 

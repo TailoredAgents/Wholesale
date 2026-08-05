@@ -1754,7 +1754,7 @@ def create_lead_market_analysis(
     provider_returned_comp_count = 0
     rentcast_sale_records: list[dict[str, Any]] = []
     comp_intelligence: dict[str, Any] = {}
-    dealmachine_provider_payload: dict[str, Any] = {}
+    external_property_provider_payload: dict[str, Any] = {}
     if reuse_market_data:
         assert isinstance(cached_avm, dict)
         estimate = value_estimate_from_payload(cached_avm)
@@ -1803,9 +1803,18 @@ def create_lead_market_analysis(
             and cached_comp_intelligence.get("version") == COMP_INTELLIGENCE_VERSION
             else None
         )
-        cached_dealmachine_payload = cached_raw.get("dealmachine") if cached_raw else None
+        cached_provider_payload = None
+        if cached_raw:
+            cached_provider_payload = cached_raw.get("realestateapi")
+            if not isinstance(cached_provider_payload, dict):
+                cached_provider_payload = cached_raw.get("dealmachine")
+        configured_comp_mode = (
+            settings.underwriting_realestateapi_comps_mode
+            if settings.underwriting_realestateapi_comps_mode != "disabled"
+            else settings.underwriting_dealmachine_comps_mode
+        )
         cached_intelligence = reuse_cached_comparable_intelligence(
-            configured_mode=settings.underwriting_dealmachine_comps_mode,
+            configured_mode=configured_comp_mode,
             rentcast_records=rentcast_sale_records,
             normalized_provider_records=(
                 [record for record in cached_normalized_sales if isinstance(record, dict)]
@@ -1815,7 +1824,7 @@ def create_lead_market_analysis(
             ),
             cached_metadata=current_comp_intelligence,
             cached_provider_payload=(
-                cached_dealmachine_payload if isinstance(cached_dealmachine_payload, dict) else None
+                cached_provider_payload if isinstance(cached_provider_payload, dict) else None
             ),
             rentcast_estimated_value_cents=dollars_to_cents(estimate.price),
             rentcast_estimated_value_low_cents=dollars_to_cents(estimate.price_range_low),
@@ -1823,7 +1832,7 @@ def create_lead_market_analysis(
         )
         sale_records = cached_intelligence.analysis_records
         comp_intelligence = cached_intelligence.metadata
-        dealmachine_provider_payload = cached_intelligence.provider_payload
+        external_property_provider_payload = cached_intelligence.provider_payload
         cached_search_summary = (
             (cached_analysis.analysis_metadata or {}).get("comp_search_summary")
             if cached_analysis is not None
@@ -1941,7 +1950,7 @@ def create_lead_market_analysis(
         )
         sale_records = intelligence_result.analysis_records
         comp_intelligence = intelligence_result.metadata
-        dealmachine_provider_payload = intelligence_result.provider_payload
+        external_property_provider_payload = intelligence_result.provider_payload
 
         try:
             rent_estimate = client.get_rent_estimate(
@@ -2192,6 +2201,14 @@ def create_lead_market_analysis(
         ),
         {},
     )
+    realestateapi_metrics = next(
+        (
+            provider
+            for provider in list_of_dicts(comp_intelligence.get("providers"))
+            if provider.get("provider") == "realestateapi"
+        ),
+        {},
+    )
     execution_metrics = {
         "duration_ms": max(0, round((perf_counter() - analysis_started_at) * 1000)),
         "provider_returned_comp_count": provider_returned_comp_count,
@@ -2227,6 +2244,22 @@ def create_lead_market_analysis(
         ),
         "dealmachine_credits_used": optional_int(dealmachine_metrics.get("credits_used")),
         "dealmachine_latency_ms": optional_int(dealmachine_metrics.get("latency_ms")),
+        "realestateapi_returned_comp_count": (
+            optional_int(realestateapi_metrics.get("returned_count")) or 0
+        ),
+        "realestateapi_unique_comp_count": (
+            optional_int(realestateapi_metrics.get("net_new_count")) or 0
+        ),
+        "realestateapi_usable_comp_count": (
+            optional_int(realestateapi_metrics.get("usable_count")) or 0
+        ),
+        "realestateapi_overlap_comp_count": (
+            optional_int(realestateapi_metrics.get("overlap_count")) or 0
+        ),
+        "realestateapi_credits_used": optional_int(
+            realestateapi_metrics.get("credits_used")
+        ),
+        "realestateapi_latency_ms": optional_int(realestateapi_metrics.get("latency_ms")),
         "ai_comp_analyst_latency_ms": (
             optional_int(ai_comp_analyst.get("latency_ms")) if ai_comp_analyst is not None else None
         ),
@@ -2403,7 +2436,16 @@ def create_lead_market_analysis(
             "subject_record": subject_record,
             "recorded_sales": rentcast_sale_records,
             "normalized_provider_sales": provider_sale_records,
-            "dealmachine": dealmachine_provider_payload,
+            "realestateapi": (
+                external_property_provider_payload
+                if settings.underwriting_realestateapi_comps_mode != "disabled"
+                else None
+            ),
+            "dealmachine": (
+                external_property_provider_payload
+                if settings.underwriting_realestateapi_comps_mode == "disabled"
+                else None
+            ),
             "comp_intelligence": comp_intelligence,
             "research_recorded_sales": research_sale_records,
             "manual_recorded_sales": manual_sale_records,
