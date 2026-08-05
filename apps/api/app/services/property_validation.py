@@ -2,8 +2,10 @@ import re
 import unicodedata
 from datetime import UTC, datetime
 from difflib import SequenceMatcher
-from typing import Any
+from typing import Any, Protocol
 
+from app.core.config import Settings
+from app.integrations.rentcast_client import RentCastClient
 from app.models.foundation import Property
 
 STREET_SUFFIXES = {
@@ -31,6 +33,15 @@ DIRECTIONS = {
     "southeast": "se",
     "southwest": "sw",
 }
+
+
+class PropertyRecordClient(Protocol):
+    def get_property_record(
+        self,
+        *,
+        address: str,
+        property_id: str | None = None,
+    ) -> dict[str, Any]: ...
 UNIT_MARKERS = {"apartment": "unit", "apt": "unit", "suite": "unit", "ste": "unit", "#": "unit"}
 SUBJECT_FACT_FIELDS = (
     "propertyType",
@@ -124,6 +135,80 @@ def validate_provider_record(
     return metadata
 
 
+def validate_property_with_provider(
+    property_record: Property,
+    settings: Settings,
+    *,
+    client: PropertyRecordClient | None = None,
+) -> dict[str, Any]:
+    if settings.property_data_provider.lower() != "rentcast":
+        raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for address validation.")
+    if not settings.rentcast_api_key:
+        raise ValueError("RENTCAST_API_KEY is not configured.")
+    lookup_client = client or RentCastClient(
+        api_key=settings.rentcast_api_key,
+        base_url=settings.rentcast_base_url,
+        timeout_seconds=settings.openai_request_timeout_seconds,
+    )
+    provider_record = lookup_client.get_property_record(
+        address=property_lookup_address(property_record)
+    )
+    metadata = validate_provider_record(property_record, provider_record)
+    apply_confident_provider_enrichment(property_record, metadata)
+    return metadata
+
+
+def property_lookup_address(property_record: Property) -> str:
+    locality = (
+        f"{property_record.state.strip()} "
+        f"{normalize_postal_code(property_record.postal_code)}"
+    )
+    return ", ".join(
+        value
+        for value in (
+            property_record.street_address.strip(),
+            property_record.city.strip(),
+            locality.strip(),
+        )
+        if value
+    )
+
+
+def apply_confident_provider_enrichment(
+    property_record: Property,
+    metadata: dict[str, Any],
+) -> tuple[str, ...]:
+    if property_record.address_validation_status != "provider_confirmed":
+        return ()
+    provider = metadata.get("provider")
+    facts = metadata.get("facts")
+    if not isinstance(provider, dict):
+        return ()
+    enriched_fields: list[str] = []
+    provider_postal_code = normalize_postal_code(
+        string_value(provider.get("postal_code")) or ""
+    )
+    if not normalize_postal_code(property_record.postal_code) and provider_postal_code:
+        property_record.postal_code = provider_postal_code
+        enriched_fields.append("postal_code")
+    provider_county = string_value(facts.get("county")) if isinstance(facts, dict) else None
+    if not property_record.county and provider_county:
+        property_record.county = provider_county
+        enriched_fields.append("county")
+    property_record.normalized_address_key = canonical_address_key(
+        property_record.street_address,
+        property_record.city,
+        property_record.state,
+        property_record.postal_code,
+    )
+    enriched_fields.append("normalized_address_key")
+    property_record.address_validation_metadata = {
+        **metadata,
+        "enriched_fields": enriched_fields,
+    }
+    return tuple(enriched_fields)
+
+
 def reset_property_validation(property_record: Property) -> None:
     property_record.address_validation_status = "unverified"
     property_record.address_validation_provider = None
@@ -187,12 +272,15 @@ def address_match_score(
         score += 10
     else:
         issues.append("State differs from the provider record.")
-    if normalize_postal_code(requested["postal_code"]) == normalize_postal_code(
-        provider["postal_code"]
-    ):
+    requested_postal_code = normalize_postal_code(requested["postal_code"])
+    provider_postal_code = normalize_postal_code(provider["postal_code"])
+    if requested_postal_code:
+        if requested_postal_code == provider_postal_code:
+            score += 10
+        else:
+            issues.append("ZIP code differs from the provider record.")
+    elif provider_postal_code:
         score += 10
-    else:
-        issues.append("ZIP code differs from the provider record.")
     if street_similarity < 0.75:
         issues.append("Street name or unit differs materially from the provider record.")
     return max(0, min(100, score)), issues

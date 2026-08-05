@@ -247,7 +247,7 @@ services:
       - key: META_TEST_EVENT_CODE
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
-        value: false
+        value: true
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
@@ -256,8 +256,12 @@ services:
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
         value: 30
+      - key: FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS
+        value: 3
+      - key: FACEBOOK_ADDRESS_ENRICHMENT_RETRY_BASE_SECONDS
+        value: 60
       - key: STAFF_LEAD_ALERT_SMS_MODE
-        value: disabled
+        value: live
       - key: STAFF_LEAD_ALERT_MAX_ATTEMPTS
         value: 5
       - key: STAFF_LEAD_ALERT_RETRY_BASE_SECONDS
@@ -267,7 +271,7 @@ services:
       - key: BRIDGE_API_KEY
         sync: false
       - key: TWILIO_SMS_ENABLED
-        sync: false
+        value: true
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
@@ -476,7 +480,7 @@ services:
       - key: META_TEST_EVENT_CODE
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
-        value: false
+        value: true
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
@@ -485,16 +489,34 @@ services:
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
         value: 30
+      - key: FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS
+        value: 3
+      - key: FACEBOOK_ADDRESS_ENRICHMENT_RETRY_BASE_SECONDS
+        value: 60
       - key: STAFF_LEAD_ALERT_SMS_MODE
-        value: disabled
+        value: live
       - key: STAFF_LEAD_ALERT_MAX_ATTEMPTS
         value: 5
       - key: STAFF_LEAD_ALERT_RETRY_BASE_SECONDS
         value: 30
+      - key: PROPERTY_DATA_PROVIDER
+        value: rentcast
+      - key: RENTCAST_API_KEY
+        sync: false
+      - key: RENTCAST_BASE_URL
+        value: https://api.rentcast.io/v1
+      - key: TWILIO_SMS_ENABLED
+        value: true
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
+      - key: TWILIO_MESSAGING_SERVICE_SID
+        sync: false
+      - key: TWILIO_SMS_FROM_NUMBER
+        sync: false
+      - key: TWILIO_WEBHOOK_BASE_URL
+        value: https://api.stonegatehb.com
 
   - type: keyvalue
     name: oakwell-key-value

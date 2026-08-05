@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.integrations.rentcast_client import RentCastClientError
 from app.main import app
 from app.models.foundation import (
     ConsentRecord,
@@ -23,6 +24,7 @@ from app.models.foundation import (
 from app.services.bootstrap import bootstrap_foundation
 from app.services.messaging import process_twilio_status
 from app.services.meta_lead_ads import (
+    process_next_meta_address_enrichment,
     process_next_meta_lead_event,
     process_next_staff_lead_alert,
 )
@@ -37,6 +39,7 @@ def zapier_settings(monkeypatch: MonkeyPatch) -> Iterator[Settings]:
     values = {
         "ZAPIER_FACEBOOK_LEADS_ENABLED": "true",
         "ZAPIER_FACEBOOK_PAGE_ID": PAGE_ID,
+        "RENTCAST_API_KEY": "test-rentcast-key",
         "STAFF_LEAD_ALERT_SMS_MODE": "simulate",
     }
     for key, value in values.items():
@@ -92,6 +95,46 @@ def webhook_payload(lead_id: str = PROVIDER_LEAD_ID) -> dict[str, object]:
 
 def post_lead(client: TestClient, payload: dict[str, object]) -> Response:
     return cast(Response, client.post(ENDPOINT, json=payload))
+
+
+class FakePropertyRecordClient:
+    def __init__(
+        self,
+        record: dict[str, Any] | None = None,
+        error: RentCastClientError | None = None,
+    ) -> None:
+        self.record = record or {}
+        self.error = error
+        self.addresses: list[str] = []
+
+    def get_property_record(
+        self,
+        *,
+        address: str,
+        property_id: str | None = None,
+    ) -> dict[str, Any]:
+        self.addresses.append(address)
+        if self.error is not None:
+            raise self.error
+        return self.record
+
+
+def provider_property_record(
+    *,
+    street_address: str = "101 Zapier Lane",
+) -> dict[str, Any]:
+    return {
+        "id": "rentcast-property-101",
+        "formattedAddress": f"{street_address}, Atlanta, GA 30303",
+        "addressLine1": street_address,
+        "city": "Atlanta",
+        "state": "GA",
+        "zipCode": "30303",
+        "county": "Fulton",
+        "countyFips": "121",
+        "latitude": 33.75,
+        "longitude": -84.39,
+    }
 
 
 def test_zapier_webhook_requires_enabled_mode(
@@ -203,6 +246,117 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     )
     db_session.refresh(alert)
     assert alert.status == "delivered"
+
+
+def test_facebook_address_enrichment_fills_zip_and_county_after_staff_alert(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session)
+    payload = webhook_payload("987654321012346")
+    payload.pop("property_zip_code")
+    client = TestClient(app)
+    assert post_lead(client, payload).status_code == 200
+    assert post_lead(client, payload).json() == {"received": True, "accepted": 0}
+
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None and event.lead_id is not None
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    assert process_next_staff_lead_alert(db_session, zapier_settings) == alert.id
+
+    provider = FakePropertyRecordClient(provider_property_record())
+    assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) == event.id
+
+    db_session.refresh(event)
+    lead = db_session.get(Lead, event.lead_id)
+    assert lead is not None
+    property_record = db_session.get(Property, lead.property_id)
+    assert property_record is not None
+    assert event.address_enrichment_status == "enriched"
+    assert event.address_enrichment_attempt_count == 1
+    assert event.address_enriched_at is not None
+    assert event.address_enrichment_last_error is None
+    assert property_record.postal_code == "30303"
+    assert property_record.county == "Fulton"
+    assert property_record.address_validation_status == "provider_confirmed"
+    assert property_record.normalized_address_key == "101 zapier ln|atlanta|GA|30303"
+    assert provider.addresses == ["101 Zapier Lane, Atlanta, GA"]
+    assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) is None
+    assert len(provider.addresses) == 1
+
+
+def test_facebook_address_enrichment_routes_ambiguous_and_missing_addresses_to_review(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session, enable_sms_alerts=False)
+    ambiguous = webhook_payload("987654321012347")
+    ambiguous.pop("property_zip_code")
+    missing = webhook_payload("987654321012348")
+    missing.pop("property_address")
+    missing.pop("property_city")
+    client = TestClient(app)
+    post_lead(client, ambiguous)
+    post_lead(client, missing)
+
+    first_id = process_next_meta_lead_event(db_session, zapier_settings)
+    second_id = process_next_meta_lead_event(db_session, zapier_settings)
+    provider = FakePropertyRecordClient(
+        provider_property_record(street_address="999 Different Road")
+    )
+    assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) == first_id
+    assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) == second_id
+
+    first = db_session.get(MetaLeadEvent, first_id)
+    second = db_session.get(MetaLeadEvent, second_id)
+    assert first is not None and first.lead_id is not None
+    assert second is not None
+    ambiguous_lead = db_session.get(Lead, first.lead_id)
+    assert ambiguous_lead is not None
+    ambiguous_property = db_session.get(Property, ambiguous_lead.property_id)
+    assert ambiguous_property is not None
+    assert first.address_enrichment_status == "needs_review"
+    assert ambiguous_property.postal_code == "Unknown"
+    assert ambiguous_property.county is None
+    assert ambiguous_property.address_validation_status == "needs_review"
+    assert second.address_enrichment_status == "skipped"
+    assert "did not provide" in (second.address_enrichment_last_error or "")
+    assert len(provider.addresses) == 1
+
+
+def test_facebook_address_enrichment_retries_provider_outage_without_losing_lead(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session, enable_sms_alerts=False)
+    payload = webhook_payload("987654321012349")
+    payload.pop("property_zip_code")
+    post_lead(TestClient(app), payload)
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    provider = FakePropertyRecordClient(
+        error=RentCastClientError(
+            "temporary RentCast outage",
+            operation="property record",
+            status_code=503,
+        )
+    )
+
+    assert process_next_meta_address_enrichment(db_session, zapier_settings, provider) == event_id
+
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None and event.lead_id is not None
+    assert event.address_enrichment_status == "retry"
+    assert event.address_enrichment_attempt_count == 1
+    assert event.address_enrichment_next_attempt_at is not None
+    assert event.address_enrichment_last_attempt_at is not None
+    assert event.address_enrichment_next_attempt_at > event.address_enrichment_last_attempt_at
+    assert event.address_enrichment_last_error == "temporary RentCast outage"
+    assert db_session.get(Lead, event.lead_id) is not None
 
 
 def test_zapier_lead_without_contact_information_requires_review(

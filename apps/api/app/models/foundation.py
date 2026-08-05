@@ -4715,6 +4715,11 @@ class MetaLeadEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "status",
             "next_attempt_at",
         ),
+        Index(
+            "ix_meta_lead_events_address_enrichment_due",
+            "address_enrichment_status",
+            "address_enrichment_next_attempt_at",
+        ),
     )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
@@ -4739,6 +4744,20 @@ class MetaLeadEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     webhook_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     lead_payload: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     last_error: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    address_enrichment_status: Mapped[str] = mapped_column(
+        String(80), nullable=False, server_default="pending", index=True
+    )
+    address_enrichment_attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    address_enrichment_last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    address_enrichment_next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    address_enriched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    address_enrichment_last_error: Mapped[str | None] = mapped_column(String(2000))
 
 
 class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):

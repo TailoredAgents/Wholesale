@@ -1071,6 +1071,11 @@ def get_measurement_summary(
                 blockers=list(settings.zapier_facebook_leads_configuration_blockers),
             ),
             MarketingProviderReadiness(
+                platform="facebook_address_enrichment",
+                configured=not settings.facebook_address_enrichment_configuration_blockers,
+                blockers=list(settings.facebook_address_enrichment_configuration_blockers),
+            ),
+            MarketingProviderReadiness(
                 platform="staff_lead_alert_sms",
                 configured=not settings.staff_lead_alert_configuration_blockers,
                 blockers=list(settings.staff_lead_alert_configuration_blockers),

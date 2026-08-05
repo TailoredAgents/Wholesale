@@ -13,11 +13,13 @@ from app.integrations.communications import (
     OutboundMessageRequest,
     SimulatedCommunicationProvider,
 )
+from app.integrations.rentcast_client import RentCastClientError
 from app.integrations.twilio_messaging import (
     TwilioMessagingError,
     get_twilio_messaging_provider,
 )
 from app.models.foundation import (
+    ActivityEvent,
     Contact,
     Lead,
     MetaLeadEvent,
@@ -28,6 +30,11 @@ from app.models.foundation import (
 from app.schemas.public_intake import SellerIntakeCreate
 from app.schemas.zapier import ZapierFacebookLeadCreate
 from app.services.communication_compliance import format_e164
+from app.services.property_validation import (
+    PropertyRecordClient,
+    normalize_postal_code,
+    validate_property_with_provider,
+)
 from app.services.public_intake import create_public_seller_lead, get_default_organization
 
 META_CONTACT_CONSENT_VERSION = "meta-lead-form-contact-v1"
@@ -215,6 +222,171 @@ def mark_meta_lead_failure(
             * (2 ** max(0, event.attempt_count - 1))
         )
     db.commit()
+
+
+def process_next_meta_address_enrichment(
+    db: Session,
+    settings: Settings,
+    client: PropertyRecordClient | None = None,
+) -> UUID | None:
+    if not settings.zapier_facebook_leads_enabled:
+        return None
+    now = datetime.now(UTC)
+    configured = not settings.facebook_address_enrichment_configuration_blockers
+    event = db.scalar(
+        select(MetaLeadEvent)
+        .where(
+            MetaLeadEvent.status == "processed",
+            MetaLeadEvent.lead_id.is_not(None),
+            or_(
+                MetaLeadEvent.address_enrichment_status.in_({"pending", "retry"}),
+                MetaLeadEvent.address_enrichment_status == "blocked" if configured else false(),
+                and_(
+                    MetaLeadEvent.address_enrichment_status == "processing",
+                    MetaLeadEvent.address_enrichment_last_attempt_at
+                    <= now - timedelta(minutes=5),
+                ),
+            ),
+            or_(
+                MetaLeadEvent.address_enrichment_next_attempt_at.is_(None),
+                MetaLeadEvent.address_enrichment_next_attempt_at <= now,
+            ),
+        )
+        .order_by(MetaLeadEvent.processed_at, MetaLeadEvent.created_at)
+        .with_for_update(skip_locked=True)
+    )
+    if event is None:
+        return None
+    event.address_enrichment_attempt_count += 1
+    event.address_enrichment_last_attempt_at = now
+    event.address_enrichment_next_attempt_at = None
+    if not configured:
+        event.address_enrichment_status = "blocked"
+        event.address_enrichment_last_error = (
+            "Missing configuration: "
+            + ", ".join(settings.facebook_address_enrichment_configuration_blockers)
+        )
+        db.commit()
+        return event.id
+    event.address_enrichment_status = "processing"
+    event.address_enrichment_last_error = None
+    db.commit()
+    event_id = event.id
+
+    lead = db.get(Lead, event.lead_id)
+    property_record = db.get(Property, lead.property_id) if lead is not None else None
+    if lead is None or property_record is None:
+        return finish_meta_address_enrichment(
+            db,
+            event_id,
+            status="needs_review",
+            error="Facebook lead is missing its CRM lead or property record.",
+        )
+    if not usable_meta_property_address(property_record):
+        return finish_meta_address_enrichment(
+            db,
+            event_id,
+            status="skipped",
+            error="Facebook form did not provide a usable street address and city.",
+        )
+
+    try:
+        metadata = validate_property_with_provider(property_record, settings, client=client)
+    except RentCastClientError as exc:
+        db.rollback()
+        return mark_meta_address_enrichment_failure(db, event_id, settings, str(exc))
+    except ValueError as exc:
+        db.rollback()
+        event = db.get(MetaLeadEvent, event_id)
+        if event is not None:
+            event.address_enrichment_status = "blocked"
+            event.address_enrichment_last_error = str(exc)[:2000]
+            db.commit()
+        return event_id
+
+    postal_code = normalize_postal_code(property_record.postal_code)
+    if property_record.address_validation_status == "provider_confirmed" and postal_code:
+        status_value = "enriched"
+        error = None
+    else:
+        status_value = "needs_review"
+        issues = metadata.get("issues")
+        issue_values = issues if isinstance(issues, list) else []
+        error = "; ".join(str(item) for item in issue_values) or (
+            "Provider validation did not return a confident address with a ZIP code."
+        )
+    db.add(
+        ActivityEvent(
+            organization_id=event.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type=f"property.address_enrichment_{status_value}",
+            summary=(
+                "Facebook lead address was enriched from provider property data."
+                if status_value == "enriched"
+                else "Facebook lead address enrichment requires review."
+            ),
+        )
+    )
+    event.address_enrichment_status = status_value
+    event.address_enrichment_last_error = error[:2000] if error else None
+    event.address_enriched_at = datetime.now(UTC)
+    db.commit()
+    return event.id
+
+
+def usable_meta_property_address(property_record: Property) -> bool:
+    street_address = property_record.street_address.strip().lower()
+    city = property_record.city.strip().lower()
+    return bool(
+        street_address
+        and city
+        and not street_address.startswith("address pending (meta ")
+        and city != "unknown"
+    )
+
+
+def finish_meta_address_enrichment(
+    db: Session,
+    event_id: UUID,
+    *,
+    status: str,
+    error: str,
+) -> UUID:
+    event = db.get(MetaLeadEvent, event_id)
+    if event is not None:
+        event.address_enrichment_status = status
+        event.address_enrichment_last_error = error[:2000]
+        event.address_enriched_at = datetime.now(UTC)
+        db.commit()
+    return event_id
+
+
+def mark_meta_address_enrichment_failure(
+    db: Session,
+    event_id: UUID,
+    settings: Settings,
+    error: str,
+) -> UUID:
+    event = db.get(MetaLeadEvent, event_id)
+    if event is None:
+        return event_id
+    event.address_enrichment_last_error = error[:2000]
+    if (
+        event.address_enrichment_attempt_count
+        >= settings.facebook_address_enrichment_max_attempts
+    ):
+        event.address_enrichment_status = "exhausted"
+        event.address_enrichment_next_attempt_at = None
+    else:
+        event.address_enrichment_status = "retry"
+        event.address_enrichment_next_attempt_at = datetime.now(UTC) + timedelta(
+            seconds=settings.facebook_address_enrichment_retry_base_seconds
+            * (2 ** max(0, event.address_enrichment_attempt_count - 1))
+        )
+    db.commit()
+    return event_id
 
 
 def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:

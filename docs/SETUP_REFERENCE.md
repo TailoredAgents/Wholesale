@@ -664,7 +664,12 @@ Variables on both **oakwell-api** and **oakwell-worker**:
 - `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
 - `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
+- `FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS`
+- `FACEBOOK_ADDRESS_ENRICHMENT_RETRY_BASE_SECONDS`
 - `STAFF_LEAD_ALERT_SMS_MODE` plus its retry values
+
+The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
+address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
 
 The endpoint is:
 
@@ -733,6 +738,13 @@ that are not present on the form rather than inserting descriptive placeholder t
 question keys may also be sent as flat scalar fields using letters, numbers, spaces, periods,
 underscores, or hyphens; Stonegate preserves them even when they are not part of CRM qualification.
 
+For Georgia-only forms, map the seller's street answer to `property_address`, city to
+`property_city`, and enter `GA` as the fixed `property_state`. Omit `property_zip_code` when the
+form does not ask for it. After the CRM record and staff alert are queued, the worker uses RentCast
+property-record data to fill a missing ZIP and county only when the street, city, and state match
+confidently. Ambiguous results remain unchanged and are marked for review. This lookup does not use
+RentCast's AVM value range in comp or offer math.
+
 ### Activation And Acceptance
 
 1. Store the numeric Page ID on both Render services. Leave
@@ -746,7 +758,10 @@ underscores, or hyphens; Stonegate preserves them even when they are not part of
 6. Confirm source is `facebook_lead_ads`, campaign/ad attribution is present, ingestion method is
    `zapier`, and the original payload is auditable. A submission without email and phone stops in
    `needs_review` instead of creating an unusable lead.
-7. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
+7. For a street-and-city submission without ZIP, confirm the property gains a five-digit ZIP,
+   county, normalized address, provider provenance, and `provider_confirmed` status. An ambiguous
+   provider response must retain the seller's original values and require review.
+8. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
 The endpoint is publicly reachable and does not authenticate requests. It rejects the wrong Page,
@@ -775,8 +790,9 @@ should receive them:
    `delivered`. The alert contains the seller name, market, and a Stonegate lead link, but excludes
    the seller's phone number and street address.
 
-Production forbids staff-alert `simulate` mode. Keep it `disabled` until Twilio acceptance is
-complete; disabling alerts never disables Meta lead ingestion.
+Production forbids staff-alert `simulate` mode. Disabling alerts never disables Meta lead
+ingestion. When the use case is approved and the controlled delivery test is ready,
+`STAFF_LEAD_ALERT_SMS_MODE=live` must be present on both the API and worker.
 
 ## Public Trust Proof Acceptance
 

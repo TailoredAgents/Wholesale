@@ -206,7 +206,10 @@ def test_validate_property_address_preserves_crm_address_and_provider_provenance
                 "owner": {"names": ["Must Not Be Retained"]},
             }
 
-    monkeypatch.setattr("app.services.leads.RentCastClient", FakeRentCastClient)
+    monkeypatch.setattr(
+        "app.services.property_validation.RentCastClient",
+        FakeRentCastClient,
+    )
 
     def unexpected_web_comp_discovery(*_: object, **__: object) -> dict[str, object]:
         raise AssertionError(

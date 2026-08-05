@@ -436,6 +436,18 @@ class Settings(BaseSettings):
         le=3600,
         validation_alias="FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS",
     )
+    facebook_address_enrichment_max_attempts: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        validation_alias="FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS",
+    )
+    facebook_address_enrichment_retry_base_seconds: int = Field(
+        default=60,
+        ge=5,
+        le=3600,
+        validation_alias="FACEBOOK_ADDRESS_ENRICHMENT_RETRY_BASE_SECONDS",
+    )
     staff_lead_alert_sms_mode: Literal["disabled", "simulate", "live"] = Field(
         default="disabled",
         validation_alias="STAFF_LEAD_ALERT_SMS_MODE",
@@ -857,6 +869,15 @@ class Settings(BaseSettings):
     @property
     def zapier_facebook_leads_configured(self) -> bool:
         return not self.zapier_facebook_leads_configuration_blockers
+
+    @property
+    def facebook_address_enrichment_configuration_blockers(self) -> tuple[str, ...]:
+        blockers: list[str] = []
+        if self.property_data_provider.lower() != "rentcast":
+            blockers.append("PROPERTY_DATA_PROVIDER=rentcast")
+        if not self.rentcast_api_key:
+            blockers.append("RENTCAST_API_KEY")
+        return tuple(blockers)
 
     @property
     def staff_lead_alert_configuration_blockers(self) -> tuple[str, ...]:

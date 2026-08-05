@@ -19,6 +19,7 @@ from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
 from app.services.meta_lead_ads import (
+    process_next_meta_address_enrichment,
     process_next_meta_lead_event,
     process_next_staff_lead_alert,
 )
@@ -71,6 +72,7 @@ def run_worker(stop_event: threading.Event) -> None:
         ("lead_manager_escalations", process_next_escalation),
         ("meta_lead_ads", process_next_meta_lead_event),
         ("staff_lead_alerts", process_next_staff_lead_alert),
+        ("meta_address_enrichment", process_next_meta_address_enrichment),
         ("marketing_conversions", process_next_marketing_conversion),
     )
     while not stop_event.is_set():

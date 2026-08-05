@@ -130,6 +130,7 @@ from app.services.inbox import (
 from app.services.property_validation import (
     canonical_address_key,
     reset_property_validation,
+    validate_property_with_provider,
     validate_provider_record,
 )
 from app.services.repair_catalog import prepare_new_scope_items
@@ -1547,22 +1548,15 @@ def validate_lead_property_address(
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
 
-    requested_address = format_property_address(property_record)
-    client = RentCastClient(
-        api_key=settings.rentcast_api_key,
-        base_url=settings.rentcast_base_url,
-        timeout_seconds=settings.openai_request_timeout_seconds,
-    )
-    try:
-        provider_record = client.get_property_record(address=requested_address)
-    except RentCastClientError as exc:
-        raise RuntimeError(str(exc)) from exc
-
     previous = {
         "status": property_record.address_validation_status,
         "validated_address": property_record.validated_formatted_address,
     }
-    metadata = validate_provider_record(property_record, provider_record)
+    try:
+        metadata = validate_property_with_provider(property_record, settings)
+    except RentCastClientError as exc:
+        raise RuntimeError(str(exc)) from exc
+
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
