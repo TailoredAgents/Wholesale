@@ -942,6 +942,7 @@ class LeadAppointmentCreate(BaseModel):
     location_type: str = Field(default="phone", max_length=80)
     location: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=1000)
+    owner_user_id: UUID | None = None
 
 
 class LeadAppointmentUpdate(BaseModel):

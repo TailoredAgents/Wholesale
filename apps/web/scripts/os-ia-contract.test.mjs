@@ -331,3 +331,26 @@ test("old and new employee vocabulary is explicit and non-duplicative", () => {
     assert.notEqual(term.current, term.target);
   }
 });
+
+test("Calendar owns one quick appointment workflow with contextual entry points", () => {
+  const calendarWorkspace = readFileSync(
+    resolve(osSourceRoot, "field-operations/field-operations-workspace.tsx"),
+    "utf8",
+  );
+  const fieldCalendar = readFileSync(
+    resolve(osSourceRoot, "field-operations/field-calendar.tsx"),
+    "utf8",
+  );
+  const leadRecord = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+
+  assert.match(calendarWorkspace, /Schedule an appointment/);
+  assert.match(calendarWorkspace, /Meeting format/);
+  assert.match(calendarWorkspace, /Assigned team member/);
+  assert.match(fieldCalendar, /onSchedule/);
+  assert.match(leadRecord, /view=appointment&schedule=1&lead=/);
+  assert.match(inbox, /view=appointment&schedule=1&lead=/);
+});

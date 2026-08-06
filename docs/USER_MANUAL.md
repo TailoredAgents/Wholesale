@@ -1084,12 +1084,15 @@ Use:
 
 To schedule:
 
-1. Open the lead in **Seller Leads > Lead Queue**, **Inbox**, or **Calendar > Dispatch**.
-2. Select the requested start and end time.
-3. Evaluate closer availability, territory, overlap, and travel buffers.
-4. Select an eligible closer.
-5. Save the appointment.
-6. Confirm it appears in Calendar.
+1. Open **Calendar** and select **Schedule appointment**. The same scheduler opens from a seller
+   record, the Inbox contact panel, or an empty Calendar day with the seller or date preselected.
+2. Choose the seller, meeting format, purpose, start and end time, and assigned team member.
+3. Confirm the automatically suggested phone number or property address, add preparation notes,
+   and select **Schedule appointment**.
+4. Confirm the appointment opens in **Calendar > Appointment** and appears in Schedule view.
+
+Use **Calendar > Dispatch** instead when closer capacity, territory, overlap, travel buffers, or a
+manager conflict override must be evaluated before assignment.
 
 Manager override is allowed only for authorized roles and requires a reason.
 

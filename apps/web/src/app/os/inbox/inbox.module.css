@@ -1926,6 +1926,23 @@
   font-size: 10px;
 }
 
+.scheduleFromInbox {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 9px;
+  padding: 0 9px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 850;
+}
+
 .mutedText {
   color: var(--muted);
   font-size: 11px;

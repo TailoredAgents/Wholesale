@@ -658,6 +658,30 @@ def test_prospecting_caller_cannot_access_field_operations(
     assert response.status_code == 403
 
 
+def test_field_operations_overview_includes_leads_for_quick_scheduling(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    _, lead, _, _ = field_appointment(db_session)
+    db_session.commit()
+
+    response = TestClient(app).get(
+        "/api/v1/field-operations",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert str(lead.id) in {item["id"] for item in payload["schedulable_leads"]}
+    assert str(lead.id) not in {item["id"] for item in payload["ready_leads"]}
+
+
 def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
     db_session: Session,
     api_db_override: None,

@@ -1305,6 +1305,24 @@ def create_lead_appointment(
     if lead is None:
         return None
 
+    owner_user_id = payload.owner_user_id or lead.assigned_user_id or principal.user_id
+    owner = db.scalar(
+        select(User).where(
+            User.id == owner_user_id,
+            User.organization_id == principal.organization_id,
+            User.is_active.is_(True),
+        )
+    )
+    if owner is None:
+        raise ValueError("Appointment owner is unavailable.")
+    if (
+        payload.owner_user_id is not None
+        and payload.owner_user_id not in {lead.assigned_user_id, principal.user_id}
+        and PermissionKeys.EDIT_LEADS not in principal.permission_keys
+        and PermissionKeys.MANAGE_ACQUISITION_OPERATIONS not in principal.permission_keys
+    ):
+        raise PermissionError("You cannot assign this appointment to another user.")
+
     conversation = ensure_primary_conversation(db, lead)
     previous_values = {
         "appointment_status": lead.appointment_status,
@@ -1316,7 +1334,7 @@ def create_lead_appointment(
         lead_id=lead.id,
         contact_id=lead.contact_id,
         property_id=lead.property_id,
-        owner_user_id=lead.assigned_user_id or principal.user_id,
+        owner_user_id=owner.id,
         appointment_type=payload.appointment_type,
         status=payload.status,
         scheduled_start_at=payload.scheduled_start_at,

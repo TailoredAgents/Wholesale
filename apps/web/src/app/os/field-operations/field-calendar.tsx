@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   ChevronRight,
   MapPin,
+  Plus,
   UserRound,
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useState } from "react";
@@ -124,9 +125,11 @@ function AppointmentButton({
 export function FieldCalendar({
   data,
   onOpenMeeting,
+  onSchedule,
 }: {
   data: FieldOperationsOverview;
   onOpenMeeting: (appointmentId: string) => void;
+  onSchedule: (startsAt?: Date) => void;
 }) {
   const { request } = useFieldApi();
   const [mode, setMode] = useState<CalendarMode>("month");
@@ -198,6 +201,14 @@ export function FieldCalendar({
           <h3>{calendarTitle(mode, cursor)}</h3>
         </div>
         <div className={styles.calendarControls}>
+          <button
+            className={styles.calendarScheduleButton}
+            onClick={() => onSchedule(cursor)}
+            type="button"
+          >
+            <Plus size={15} />
+            Schedule
+          </button>
           {data.can_manage ? (
             <label>
               <UserRound size={15} />
@@ -251,6 +262,18 @@ export function FieldCalendar({
                 >
                   {day.getDate()}
                 </button>
+                {items.length === 0 ? (
+                  <button
+                    aria-label={`Schedule an appointment on ${day.toLocaleDateString()}`}
+                    className={styles.emptyDaySchedule}
+                    onClick={() => onSchedule(day)}
+                    title="Schedule appointment"
+                    type="button"
+                  >
+                    <Plus size={13} />
+                    Schedule
+                  </button>
+                ) : null}
                 <div className={styles.monthEvents}>
                   {items.slice(0, 3).map((item) => (
                     <AppointmentButton appointment={item} compact key={item.id} onOpen={open} />
@@ -279,7 +302,16 @@ export function FieldCalendar({
                 </button>
                 <div className={styles.weekEvents}>
                   {items.map((item) => <AppointmentButton appointment={item} key={item.id} onOpen={open} />)}
-                  {!items.length ? <span className={styles.noEvents}>No meetings</span> : null}
+                  {!items.length ? (
+                    <button
+                      className={styles.noEventsSchedule}
+                      onClick={() => onSchedule(day)}
+                      type="button"
+                    >
+                      <Plus size={13} />
+                      Schedule
+                    </button>
+                  ) : null}
                 </div>
               </section>
             );
@@ -289,6 +321,14 @@ export function FieldCalendar({
 
       {!loading && mode === "day" ? (
         <div className={styles.dayAgenda}>
+          <button
+            className={styles.dayScheduleButton}
+            onClick={() => onSchedule(cursor)}
+            type="button"
+          >
+            <Plus size={15} />
+            Schedule on this day
+          </button>
           {appointments.map((appointment) => (
             <button key={appointment.id} onClick={() => open(appointment)} type="button">
               <time>{timeLabel(appointment.scheduled_start_at)}</time>

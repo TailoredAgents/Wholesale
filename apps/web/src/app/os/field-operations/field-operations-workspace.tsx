@@ -9,9 +9,11 @@ import {
   Clock3,
   ExternalLink,
   MapPin,
+  Plus,
   Route,
   Settings2,
   UserRoundCheck,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -64,6 +66,8 @@ export function FieldOperationsWorkspace({
   data,
   initialAppointmentId = "",
   initialLeadId = "",
+  initialScheduleAt = "",
+  initialScheduleOpen = false,
   initialWorkspace = null,
   initialView = "dispatch",
 }: {
@@ -71,6 +75,8 @@ export function FieldOperationsWorkspace({
   data: FieldOperationsOverview;
   initialAppointmentId?: string;
   initialLeadId?: string;
+  initialScheduleAt?: string;
+  initialScheduleOpen?: boolean;
   initialWorkspace?: FieldAppointmentWorkspace | null;
   initialView?: View;
 }) {
@@ -88,6 +94,25 @@ export function FieldOperationsWorkspace({
     value.setHours(11, 30, 0, 0);
     return localInputValue(value);
   }, []);
+  const initialComposerStart = useMemo(() => {
+    const requested = initialScheduleAt ? new Date(initialScheduleAt) : null;
+    if (requested && !Number.isNaN(requested.getTime())) {
+      if (requested.getHours() === 0 && requested.getMinutes() === 0) {
+        requested.setHours(10, 0, 0, 0);
+      }
+      return localInputValue(requested);
+    }
+    return initialStart;
+  }, [initialScheduleAt, initialStart]);
+  const initialComposerEnd = useMemo(() => {
+    const value = new Date(initialComposerStart);
+    value.setHours(value.getHours() + 1);
+    return localInputValue(value);
+  }, [initialComposerStart]);
+  const initialAppointmentLead =
+    data.schedulable_leads.find((lead) => lead.id === initialLeadId) ??
+    data.schedulable_leads[0] ??
+    null;
   const [view, setView] = useState<View>(initialView);
   const [requestedAppointmentId, setRequestedAppointmentId] = useState(initialAppointmentId);
   const [selectedLeadId, setSelectedLeadId] = useState(
@@ -102,6 +127,20 @@ export function FieldOperationsWorkspace({
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editingUserId, setEditingUserId] = useState(data.users[0]?.id ?? "");
+  const [appointmentComposerOpen, setAppointmentComposerOpen] = useState(initialScheduleOpen);
+  const [appointmentLeadId, setAppointmentLeadId] = useState(initialAppointmentLead?.id ?? "");
+  const [appointmentStartAt, setAppointmentStartAt] = useState(initialComposerStart);
+  const [appointmentEndAt, setAppointmentEndAt] = useState(initialComposerEnd);
+  const [appointmentLocationType, setAppointmentLocationType] = useState("phone");
+  const [appointmentLocation, setAppointmentLocation] = useState(
+    initialAppointmentLead?.phone_number ?? "",
+  );
+  const [appointmentOwnerId, setAppointmentOwnerId] = useState(
+    initialAppointmentLead?.current_owner_user_id &&
+      data.users.some((user) => user.id === initialAppointmentLead.current_owner_user_id)
+      ? initialAppointmentLead.current_owner_user_id
+      : "",
+  );
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -114,6 +153,8 @@ export function FieldOperationsWorkspace({
   const selectedCandidate =
     evaluation?.candidates.find((item) => item.user_id === selectedCloserId) ?? null;
   const editingProfile = data.profiles.find((item) => item.user_id === editingUserId) ?? null;
+  const appointmentLead =
+    data.schedulable_leads.find((item) => item.id === appointmentLeadId) ?? null;
 
   function viewUrl(nextView: View, appointmentId = "", leadId = "") {
     const params = new URLSearchParams();
@@ -141,6 +182,54 @@ export function FieldOperationsWorkspace({
         nextView === "dispatch" ? selectedLeadId : "",
       ),
       { scroll: false },
+    );
+  }
+
+  function openAppointmentComposer(startsAt?: Date) {
+    if (startsAt) {
+      const start = new Date(startsAt);
+      if (start.getHours() === 0 && start.getMinutes() === 0) {
+        start.setHours(10, 0, 0, 0);
+      }
+      const end = new Date(start.getTime() + 60 * 60 * 1000);
+      setAppointmentStartAt(localInputValue(start));
+      setAppointmentEndAt(localInputValue(end));
+    }
+    setAppointmentComposerOpen(true);
+  }
+
+  function closeAppointmentComposer() {
+    setAppointmentComposerOpen(false);
+    router.replace(
+      viewUrl(view, view === "meetings" ? requestedAppointmentId : ""),
+      { scroll: false },
+    );
+  }
+
+  function selectAppointmentLead(leadId: string) {
+    const lead = data.schedulable_leads.find((item) => item.id === leadId) ?? null;
+    setAppointmentLeadId(leadId);
+    setAppointmentLocation(
+      appointmentLocationType === "property"
+        ? lead?.property_address ?? ""
+        : appointmentLocationType === "phone"
+          ? lead?.phone_number ?? ""
+          : "",
+    );
+    const ownerId = lead?.current_owner_user_id;
+    setAppointmentOwnerId(
+      ownerId && data.users.some((user) => user.id === ownerId) ? ownerId : "",
+    );
+  }
+
+  function selectAppointmentLocationType(locationType: string) {
+    setAppointmentLocationType(locationType);
+    setAppointmentLocation(
+      locationType === "property"
+        ? appointmentLead?.property_address ?? ""
+        : locationType === "phone"
+          ? appointmentLead?.phone_number ?? ""
+          : "",
     );
   }
 
@@ -213,6 +302,46 @@ export function FieldOperationsWorkspace({
     setRequestedAppointmentId(result.appointment_id);
     setView("meetings");
     router.replace(viewUrl("meetings", result.appointment_id), { scroll: false });
+    router.refresh();
+  }
+
+  async function scheduleAppointment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!appointmentLeadId) return;
+    const form = new FormData(event.currentTarget);
+    const scheduledStartAt = new Date(appointmentStartAt).toISOString();
+    const result = await request<{
+      appointments: Array<{
+        id: string;
+        status: string;
+        scheduled_start_at: string;
+      }>;
+    }>(`/api/v1/leads/${appointmentLeadId}/appointments`, "POST", {
+      appointment_type: String(form.get("appointment_type") ?? "seller_call"),
+      status: "scheduled",
+      scheduled_start_at: scheduledStartAt,
+      scheduled_end_at: new Date(appointmentEndAt).toISOString(),
+      location_type: appointmentLocationType,
+      location: appointmentLocation.trim() || null,
+      notes: String(form.get("notes") ?? "").trim() || null,
+      owner_user_id: appointmentOwnerId || null,
+    });
+    if (!result) return;
+    const created = result.appointments.find(
+      (item) =>
+        item.status === "scheduled" &&
+        item.scheduled_start_at.slice(0, 19) === scheduledStartAt.slice(0, 19),
+    );
+    setMessage("Appointment scheduled and added to the internal calendar.");
+    setAppointmentComposerOpen(false);
+    if (created) {
+      setRequestedAppointmentId(created.id);
+      setView("meetings");
+      router.replace(viewUrl("meetings", created.id), { scroll: false });
+    } else {
+      setView("calendar");
+      router.replace(viewUrl("calendar"), { scroll: false });
+    }
     router.refresh();
   }
 
@@ -292,9 +421,153 @@ export function FieldOperationsWorkspace({
         <button className={view === "dispatch" ? styles.activeTab : ""} onClick={() => chooseView("dispatch")} type="button"><Route size={16} />Dispatch</button>
         <button className={view === "meetings" ? styles.activeTab : ""} onClick={() => chooseView("meetings")} type="button"><ClipboardCheck size={16} />Appointment</button>
         {data.can_manage ? <button className={view === "capacity" ? styles.activeTab : ""} onClick={() => chooseView("capacity")} type="button"><Settings2 size={16} />Availability</button> : null}
+        <button className={styles.newAppointmentButton} onClick={() => openAppointmentComposer()} type="button"><Plus size={16} />Schedule appointment</button>
       </nav>
 
       {message ? <p className={message.includes("saved") || message.includes("added") || message.includes("dispatched") || message.includes("removed") ? styles.notice : styles.error}>{message}</p> : null}
+
+      {appointmentComposerOpen ? (
+        <div className={styles.appointmentComposerBackdrop} role="presentation">
+          <section
+            aria-labelledby="appointment-composer-title"
+            aria-modal="true"
+            className={styles.appointmentComposer}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") closeAppointmentComposer();
+            }}
+            role="dialog"
+          >
+            <header>
+              <div>
+                <span>Calendar</span>
+                <h3 id="appointment-composer-title">Schedule an appointment</h3>
+                <p>Create a phone, property, video, or office meeting from one place.</p>
+              </div>
+              <button
+                aria-label="Close appointment form"
+                onClick={closeAppointmentComposer}
+                title="Close"
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </header>
+            {data.schedulable_leads.length > 0 ? (
+              <form onSubmit={scheduleAppointment}>
+                <label className={styles.composerFullField}>
+                  <span>Seller or property</span>
+                  <select
+                    autoFocus
+                    onChange={(event) => selectAppointmentLead(event.target.value)}
+                    required
+                    value={appointmentLeadId}
+                  >
+                    {data.schedulable_leads.map((lead) => (
+                      <option key={lead.id} value={lead.id}>
+                        {lead.seller_name} — {lead.property_address}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>Meeting format</span>
+                  <select
+                    onChange={(event) => selectAppointmentLocationType(event.target.value)}
+                    value={appointmentLocationType}
+                  >
+                    <option value="phone">Phone</option>
+                    <option value="property">At the property</option>
+                    <option value="video">Video</option>
+                    <option value="office">Office</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Purpose</span>
+                  <select defaultValue="seller_call" name="appointment_type">
+                    <option value="seller_call">Seller call</option>
+                    <option value="walkthrough">Property walkthrough</option>
+                    <option value="offer_review">Offer review</option>
+                    <option value="follow_up">Follow-up</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Starts</span>
+                  <input
+                    onChange={(event) => setAppointmentStartAt(event.target.value)}
+                    required
+                    type="datetime-local"
+                    value={appointmentStartAt}
+                  />
+                </label>
+                <label>
+                  <span>Ends</span>
+                  <input
+                    min={appointmentStartAt}
+                    onChange={(event) => setAppointmentEndAt(event.target.value)}
+                    required
+                    type="datetime-local"
+                    value={appointmentEndAt}
+                  />
+                </label>
+                <label>
+                  <span>Assigned team member</span>
+                  <select
+                    onChange={(event) => setAppointmentOwnerId(event.target.value)}
+                    value={appointmentOwnerId}
+                  >
+                    <option value="">Use the lead owner</option>
+                    {data.users.map((user) => (
+                      <option key={user.id} value={user.id}>{user.name}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>
+                    {appointmentLocationType === "phone"
+                      ? "Phone number"
+                      : appointmentLocationType === "property"
+                        ? "Property address"
+                        : "Location or meeting link"}
+                  </span>
+                  <input
+                    onChange={(event) => setAppointmentLocation(event.target.value)}
+                    placeholder={
+                      appointmentLocationType === "video"
+                        ? "Paste the meeting link"
+                        : "Add the meeting location"
+                    }
+                    value={appointmentLocation}
+                  />
+                </label>
+                <label className={styles.composerFullField}>
+                  <span>Preparation notes</span>
+                  <textarea
+                    maxLength={1000}
+                    name="notes"
+                    placeholder="Seller expectations, access instructions, or topics to cover"
+                    rows={3}
+                  />
+                </label>
+                <footer className={styles.composerFullField}>
+                  <button onClick={closeAppointmentComposer} type="button">
+                    Cancel
+                  </button>
+                  <button disabled={saving} type="submit">
+                    <CalendarDays size={16} />
+                    {saving ? "Scheduling" : "Schedule appointment"}
+                  </button>
+                </footer>
+              </form>
+            ) : (
+              <div className={styles.composerEmpty}>
+                <p>No accessible seller leads are available to schedule.</p>
+                <Link href="/os/leads">Open Leads</Link>
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
 
       {view === "dispatch" ? (
         <div className={styles.dispatchLayout}>
@@ -368,6 +641,7 @@ export function FieldOperationsWorkspace({
             setView("meetings");
             router.replace(viewUrl("meetings", appointmentId), { scroll: false });
           }}
+          onSchedule={openAppointmentComposer}
         />
       ) : null}
 

@@ -2444,6 +2444,15 @@ export function InboxWorkspace({
                     ) : (
                       <p className={styles.mutedText}>No open task or appointment.</p>
                     )}
+                    {detail.lead_id ? (
+                      <Link
+                        className={styles.scheduleFromInbox}
+                        href={`/os/calendar?view=appointment&schedule=1&lead=${encodeURIComponent(detail.lead_id)}`}
+                      >
+                        <CalendarClock size={14} aria-hidden="true" />
+                        {nextAppointment ? "Schedule another appointment" : "Schedule appointment"}
+                      </Link>
+                    ) : null}
                   </section>
                 </>
               )}

@@ -368,6 +368,9 @@ not presented as competing navigation.
 
 - Internal month, week, day, and agenda views.
 - Combines appointments, field scheduling, and due work without requiring Google Calendar.
+- Owns one central appointment composer opened from Calendar, empty schedule days, seller records,
+  and Inbox; phone and property meetings reuse the lead's saved contact and address context.
+- Keeps Dispatch as the advanced closer-capacity, territory, overlap, and travel-buffer workflow.
 
 ### 7.2 Operations And Acquisition Tools
 
