@@ -77,7 +77,7 @@ def test_two_sale_v3_returns_working_guidance_with_capped_confidence() -> None:
         rent_estimate=None,
         local_property_type="single_family",
         holding_period_months=6,
-        settings=Settings(_env_file=None),
+        settings=Settings.model_validate({}),
     )
 
     assert result.arv_point_cents == 30_000_000

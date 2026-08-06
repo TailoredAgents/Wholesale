@@ -17,9 +17,7 @@ def test_demo_email_uses_simulator_without_google_credentials(db_session: Sessio
         owner_name="Demo Owner",
     )
     owner = db_session.scalar(select(User).where(User.email == "owner@example.test"))
-    account = db_session.scalar(
-        select(EmailAccount).where(EmailAccount.provider == "simulated")
-    )
+    account = db_session.scalar(select(EmailAccount).where(EmailAccount.provider == "simulated"))
     conversation = db_session.scalar(select(Conversation).order_by(Conversation.created_at))
     assert owner is not None
     assert account is not None

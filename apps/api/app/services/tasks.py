@@ -27,8 +27,10 @@ from app.schemas.tasks import (
     PrimaryNextActionCreate,
     PrimaryNextActionRead,
     TaskCompleteRequest,
+    TaskDueStatus,
     TaskQueueItemRead,
     TaskRead,
+    TaskWorkKind,
     TaskWorkspaceItemRead,
     TaskWorkspaceRead,
 )
@@ -365,13 +367,15 @@ def task_visible_to_principal(
         PermissionKeys.VIEW_LEADS in permissions or PermissionKeys.EDIT_LEADS in permissions
     ):
         return True
-    if can_manage_team and task.deal_id is not None and (
-        PermissionKeys.VIEW_DEALS in permissions
-        or PermissionKeys.EDIT_DEALS in permissions
-        or PermissionKeys.VIEW_FINANCIALS in permissions
-    ):
-        return True
-    return False
+    return bool(
+        can_manage_team
+        and task.deal_id is not None
+        and (
+            PermissionKeys.VIEW_DEALS in permissions
+            or PermissionKeys.EDIT_DEALS in permissions
+            or PermissionKeys.VIEW_FINANCIALS in permissions
+        )
+    )
 
 
 def task_workspace_item(row: Any, principal: Principal, now: datetime) -> TaskWorkspaceItemRead:
@@ -539,13 +543,13 @@ def list_ai_workspace_items(
         return []
     event_ids = [event.id for event in events]
     runs_by_event: dict[UUID, AiRunLog] = {}
-    for run in db.scalars(
+    for candidate_run in db.scalars(
         select(AiRunLog)
         .where(AiRunLog.orchestrator_event_id.in_(event_ids))
         .order_by(AiRunLog.created_at.desc())
     ).all():
-        if run.orchestrator_event_id is not None:
-            runs_by_event.setdefault(run.orchestrator_event_id, run)
+        if candidate_run.orchestrator_event_id is not None:
+            runs_by_event.setdefault(candidate_run.orchestrator_event_id, candidate_run)
 
     items: list[TaskWorkspaceItemRead] = []
     for event in events:
@@ -614,9 +618,7 @@ def list_ai_workspace_items(
                 priority=str(payload.get("priority") or "normal"),
                 due_at=due_at,
                 due_status=(
-                    "completed"
-                    if event_is_complete
-                    else workspace_due_status("open", due_at, now)
+                    "completed" if event_is_complete else workspace_due_status("open", due_at, now)
                 ),
                 created_at=event.created_at,
                 completed_at=event.processed_at if event_is_complete else None,
@@ -651,7 +653,7 @@ def ai_event_visible_to_principal(
     )
 
 
-def ai_work_kind(status: str) -> str:
+def ai_work_kind(status: str) -> TaskWorkKind:
     if status == "needs_review":
         return "ai_review"
     if status == "completed":
@@ -709,10 +711,7 @@ def can_complete_task(task: Task, principal: Principal) -> bool:
             PermissionKeys.EDIT_DEALS in permissions
             or PermissionKeys.MANAGE_ACQUISITION_OPERATIONS in permissions
         )
-    return (
-        PermissionKeys.EDIT_LEADS in permissions
-        or task.responsible_user_id == principal.user_id
-    )
+    return PermissionKeys.EDIT_LEADS in permissions or task.responsible_user_id == principal.user_id
 
 
 def create_primary_next_action(
@@ -945,12 +944,7 @@ def get_primary_next_action(
         filters.append(Task.lead_id == lead_id)
     else:
         return None
-    task = db.scalar(
-        select(Task)
-        .where(*filters)
-        .order_by(Task.created_at.desc())
-        .limit(1)
-    )
+    task = db.scalar(select(Task).where(*filters).order_by(Task.created_at.desc()).limit(1))
     if task is None:
         return None
     user = db.get(User, task.responsible_user_id) if task.responsible_user_id else None
@@ -986,7 +980,7 @@ def workspace_due_status(
     status: str,
     due_at: datetime | None,
     now: datetime,
-) -> str:
+) -> TaskDueStatus:
     if status not in OPEN_TASK_STATUSES:
         return "completed"
     if due_at is None:
@@ -1011,9 +1005,11 @@ def workspace_sort_key(item: TaskWorkspaceItemRead) -> tuple[int, datetime, date
     return status_order[item.due_status], due_at, as_utc(item.created_at)
 
 
-def normalized_work_kind(value: str) -> str:
-    if value in {"primary_next_action", "supporting", "operational_exception"}:
-        return value
+def normalized_work_kind(value: str) -> TaskWorkKind:
+    if value == "primary_next_action":
+        return "primary_next_action"
+    if value == "operational_exception":
+        return "operational_exception"
     return "supporting"
 
 

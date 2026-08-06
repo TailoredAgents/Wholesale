@@ -60,11 +60,14 @@ def test_operation_failures_are_grouped_and_resolved(db_session: Session) -> Non
 
     assert second.id == first.id
     assert second.attempt_count == 2
-    assert operation_retry_due(
-        db_session,
-        service_name=COMMUNICATIONS_WORKER,
-        operation_name="email_sync",
-    ) is False
+    assert (
+        operation_retry_due(
+            db_session,
+            service_name=COMMUNICATIONS_WORKER,
+            operation_name="email_sync",
+        )
+        is False
+    )
     assert db_session.query(OperationalFailure).count() == 1
     heartbeat = db_session.query(WorkerHeartbeat).one()
     assert heartbeat.status == "degraded"

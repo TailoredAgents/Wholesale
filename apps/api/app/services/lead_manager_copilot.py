@@ -66,8 +66,9 @@ def get_copilot_overview(
     )
     all_recommendations = list(
         db.scalars(
-            _visible_recommendations_statement(principal)
-            .order_by(LeadManagerCopilotRecommendation.generated_at.desc())
+            _visible_recommendations_statement(principal).order_by(
+                LeadManagerCopilotRecommendation.generated_at.desc()
+            )
         ).all()
     )
     runtime = get_runtime_overview(db, principal)
@@ -87,9 +88,7 @@ def get_copilot_overview(
             runtime.policy is None or not runtime.policy.external_actions_enabled
         ),
         work_items=work_items,
-        recommendations=[
-            recommendation_read(item) for item in all_recommendations[:50]
-        ],
+        recommendations=[recommendation_read(item) for item in all_recommendations[:50]],
         metrics=_copilot_metrics(db, principal, cases, all_recommendations, now),
     )
 
@@ -114,9 +113,7 @@ def analyze_case(
     )
     if agent is None:
         raise ValueError("Install the governed AI agent portfolio first.")
-    idempotency_key = payload.idempotency_key or _analysis_idempotency_key(
-        db, case, work_item
-    )
+    idempotency_key = payload.idempotency_key or _analysis_idempotency_key(db, case, work_item)
     existing = db.scalar(
         select(LeadManagerCopilotRecommendation).where(
             LeadManagerCopilotRecommendation.organization_id == principal.organization_id,
@@ -304,9 +301,7 @@ def _visible_cases(db: Session, principal: Principal) -> list[LeadManagementCase
         LeadManagementCase.organization_id == principal.organization_id
     )
     if not can_manage(principal):
-        statement = statement.where(
-            LeadManagementCase.assigned_user_id == principal.user_id
-        )
+        statement = statement.where(LeadManagementCase.assigned_user_id == principal.user_id)
     return list(db.scalars(statement).all())
 
 
@@ -356,13 +351,10 @@ def _work_item(
         and conversation.last_inbound_at
         and (
             conversation.last_outbound_at is None
-            or as_utc(conversation.last_inbound_at)
-            > as_utc(conversation.last_outbound_at)
+            or as_utc(conversation.last_inbound_at) > as_utc(conversation.last_outbound_at)
         )
     )
-    qualification_gaps, recommended_questions = _qualification_gaps(
-        db, case, lead
-    )
+    qualification_gaps, recommended_questions = _qualification_gaps(db, case, lead)
     score = 10 + min(case_details.age_hours, 24)
     alerts: list[str] = []
     evidence: list[str] = [
@@ -481,9 +473,7 @@ def _analysis_idempotency_key(
             Conversation.lead_id == case.lead_id,
         )
     )
-    script: LeadQualificationScriptVersion | None = get_active_script(
-        db, case.organization_id
-    )
+    script: LeadQualificationScriptVersion | None = get_active_script(db, case.organization_id)
     fingerprint = {
         "case_id": str(case.id),
         "case_updated_at": as_utc(case.updated_at).isoformat(),
@@ -493,9 +483,7 @@ def _analysis_idempotency_key(
         "script_version": script.version_number if script else None,
         "priority_score": work_item.priority_score,
     }
-    digest = hashlib.sha256(
-        json.dumps(fingerprint, sort_keys=True).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     return f"lead-manager-copilot:{case.id}:{digest}"
 
 
@@ -515,11 +503,8 @@ def _copilot_metrics(
         list(
             db.scalars(
                 select(LeadManagerCopilotReview).where(
-                    LeadManagerCopilotReview.organization_id
-                    == principal.organization_id,
-                    LeadManagerCopilotReview.recommendation_id.in_(
-                        recommendation_ids
-                    ),
+                    LeadManagerCopilotReview.organization_id == principal.organization_id,
+                    LeadManagerCopilotReview.recommendation_id.in_(recommendation_ids),
                 )
             ).all()
         )
@@ -531,9 +516,7 @@ def _copilot_metrics(
     edited_count = sum(item.decision == "edited" for item in reviews)
     rejected_count = sum(item.decision == "rejected" for item in reviews)
     run_ids = [
-        item.ai_run_log_id
-        for item in recent_recommendations
-        if item.ai_run_log_id is not None
+        item.ai_run_log_id for item in recent_recommendations if item.ai_run_log_id is not None
     ]
     total_cost = (
         int(
@@ -551,12 +534,7 @@ def _copilot_metrics(
     acceptance_minutes = [
         max(
             0,
-            round(
-                (
-                    as_utc(case.accepted_at) - as_utc(case.created_at)
-                ).total_seconds()
-                / 60
-            ),
+            round((as_utc(case.accepted_at) - as_utc(case.created_at)).total_seconds() / 60),
         )
         for case in cases
         if case.accepted_at is not None and as_utc(case.created_at) >= since
@@ -595,9 +573,7 @@ def _copilot_metrics(
         ),
         total_cost_microusd=total_cost,
         average_response_minutes=(
-            round(sum(acceptance_minutes) / len(acceptance_minutes))
-            if acceptance_minutes
-            else None
+            round(sum(acceptance_minutes) / len(acceptance_minutes)) if acceptance_minutes else None
         ),
         appointments_set=appointments_set,
     )

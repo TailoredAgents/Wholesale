@@ -63,16 +63,22 @@ def post_cash_journal(
     )
     assert response.status_code == 201
     entry_id = response.json()["id"]
-    assert client.post(
-        f"/api/v1/finance/accounting/journals/{entry_id}/approve",
-        headers=HEADERS,
-        json={"notes": "Evidence reviewed for Copilot test."},
-    ).status_code == 200
-    assert client.post(
-        f"/api/v1/finance/accounting/journals/{entry_id}/post",
-        headers=HEADERS,
-        json={"notes": "Posted for Copilot evidence test."},
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/v1/finance/accounting/journals/{entry_id}/approve",
+            headers=HEADERS,
+            json={"notes": "Evidence reviewed for Copilot test."},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            f"/api/v1/finance/accounting/journals/{entry_id}/post",
+            headers=HEADERS,
+            json={"notes": "Posted for Copilot evidence test."},
+        ).status_code
+        == 200
+    )
     return str(entry_id)
 
 
@@ -90,16 +96,19 @@ def test_f6f_finance_copilot_uses_exact_read_only_accounting_evidence(
     accounts = {item["system_key"]: item["id"] for item in setup["accounts"]}
     journal_id = post_cash_journal(client, accounts, 2_500_000)
 
-    assert client.post(
-        "/api/v1/finance/marketing-spend",
-        headers=HEADERS,
-        json={
-            "source": "software",
-            "campaign": "F6F accounting classification",
-            "amount_cents": 25_000,
-            "notes": "Monthly CRM subscription.",
-        },
-    ).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/finance/marketing-spend",
+            headers=HEADERS,
+            json={
+                "source": "software",
+                "campaign": "F6F accounting classification",
+                "amount_cents": 25_000,
+                "notes": "Monthly CRM subscription.",
+            },
+        ).status_code
+        == 201
+    )
     bank_account = client.post(
         "/api/v1/finance/banking/accounts",
         headers=HEADERS,
@@ -131,12 +140,8 @@ def test_f6f_finance_copilot_uses_exact_read_only_accounting_evidence(
     )
     assert imported.status_code == 201
 
-    journal_count_before = db_session.scalar(
-        select(func.count(JournalEntry.id))
-    )
-    match_count_before = db_session.scalar(
-        select(func.count(BankTransactionMatch.id))
-    )
+    journal_count_before = db_session.scalar(select(func.count(JournalEntry.id)))
+    match_count_before = db_session.scalar(select(func.count(BankTransactionMatch.id)))
     finance = build_management_facts(
         db_session,
         principal,
@@ -164,13 +169,9 @@ def test_f6f_finance_copilot_uses_exact_read_only_accounting_evidence(
             "occurred_on": date.today().isoformat(),
             "description": "Settlement deposit",
             "amount_cents": 2_500_000,
-            "journal_entry_number": accounting["bank_match_candidates"][0][
-                "journal_entry_number"
-            ],
+            "journal_entry_number": accounting["bank_match_candidates"][0]["journal_entry_number"],
             "journal_memo": "Collected assignment fee for F6F review.",
-            "match_basis": (
-                "one unused posted journal has the exact cash movement"
-            ),
+            "match_basis": ("one unused posted journal has the exact cash movement"),
             "confidence": "candidate_only",
             "requires_human_match_decision": True,
         }
@@ -184,14 +185,10 @@ def test_f6f_finance_copilot_uses_exact_read_only_accounting_evidence(
         for item in accounting["general_ledger_evidence"]
     )
     assert any(
-        item["proposed_tax_category"]
-        for item in tax["context"]["classification_candidates"]
+        item["proposed_tax_category"] for item in tax["context"]["classification_candidates"]
     )
     assert db_session.scalar(select(func.count(JournalEntry.id))) == journal_count_before
-    assert (
-        db_session.scalar(select(func.count(BankTransactionMatch.id)))
-        == match_count_before
-    )
+    assert db_session.scalar(select(func.count(BankTransactionMatch.id))) == match_count_before
 
 
 def test_f6f_bank_candidates_preserve_same_amount_ambiguity(

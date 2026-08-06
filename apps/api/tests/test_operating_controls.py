@@ -31,7 +31,7 @@ def test_operating_codes_are_normalized_before_validation() -> None:
         timezone="America/New_York",
     )
     campaign = CampaignCreate(
-        market_id="00000000-0000-0000-0000-000000000001",
+        market_id=UUID("00000000-0000-0000-0000-000000000001"),
         name="North Metro Absentee Owners",
         code="North Metro / August",
         channel="cold_call",
@@ -181,9 +181,7 @@ def test_versioned_compensation_role_credit_and_market_launch_controls(
     operations_response = client.get("/api/v1/operations", headers=owner_headers)
     assert operations_response.status_code == 200, operations_response.text
     owner = next(
-        user
-        for user in operations_response.json()["users"]
-        if user["email"] == OWNER_EMAIL
+        user for user in operations_response.json()["users"] if user["email"] == OWNER_EMAIL
     )
     rename_response = client.patch(
         f"/api/v1/operations/users/{owner['id']}",

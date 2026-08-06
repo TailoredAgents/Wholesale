@@ -149,12 +149,9 @@ def get_company_setup(db: Session, principal: Principal) -> CompanySetupRead:
     return CompanySetupRead(
         seats=[_seat_read(seat, users) for seat in seats],
         counterparties=[
-            _counterparty_read(counterparty, users, markets)
-            for counterparty in counterparties
+            _counterparty_read(counterparty, users, markets) for counterparty in counterparties
         ],
-        role_acceptances=[
-            _acceptance_read(acceptance, users) for acceptance in acceptances
-        ],
+        role_acceptances=[_acceptance_read(acceptance, users) for acceptance in acceptances],
         checks=checks,
         completed_check_count=sum(check.status == "complete" for check in checks),
         total_check_count=len(checks),
@@ -518,9 +515,7 @@ def _setup_checks(
         and item.counterparty_type in {"closing_attorney", "title_company"}
         for item in counterparties
     )
-    approved_user_ids = {
-        item.user_id for item in acceptances if item.status == "approved"
-    }
+    approved_user_ids = {item.user_id for item in acceptances if item.status == "approved"}
     covered_non_owner_ids = {
         seat.primary_user_id
         for seat in covered_seats
@@ -566,7 +561,7 @@ def _setup_checks(
             approved_launch > 0,
             "A market launch checklist is approved."
             if approved_launch
-                else "Complete and approve the market launch checklist.",
+            else "Complete and approve the market launch checklist.",
         ),
         _check(
             "team_routing",
@@ -718,9 +713,7 @@ def _user_map(db: Session, organization_id: UUID) -> dict[UUID, User]:
 def _market_map(db: Session, organization_id: UUID) -> dict[UUID, Market]:
     return {
         market.id: market
-        for market in db.scalars(
-            select(Market).where(Market.organization_id == organization_id)
-        )
+        for market in db.scalars(select(Market).where(Market.organization_id == organization_id))
     }
 
 

@@ -100,9 +100,7 @@ def test_runtime_is_disabled_by_default_and_shutdown_is_global(
         assert capability["requires_human_review"] is True
         assert all(tool_key.endswith(".read") for tool_key in capability["allowed_tool_keys"])
     assert {
-        key
-        for key, capability in capabilities_by_key.items()
-        if capability["status"] == "enabled"
+        key for key, capability in capabilities_by_key.items() if capability["status"] == "enabled"
     } == DRAFT_ONLY_ENABLED_CAPABILITIES
 
     capability = first["runtime"]["capabilities"][0]

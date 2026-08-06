@@ -190,4 +190,4 @@ def test_underwriting_comps_reject_unsafe_requests(
     with httpx.Client(transport=transport) as client:
         provider = DealMachineClient(_settings(), client=client)
         with pytest.raises(ValueError, match=message):
-            provider.get_underwriting_comparables(**kwargs)  # type: ignore[arg-type]
+            provider.get_underwriting_comparables(**kwargs)

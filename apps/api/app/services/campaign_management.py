@@ -25,12 +25,12 @@ from app.models.foundation import (
     ProspectImportBatch,
     ProspectImportMapping,
     ProspectImportRow,
-    ProspectSourceMembership,
-    ProspectSuppressionCheck,
     ProspectingAttempt,
     ProspectingCohort,
     ProspectingScriptVersion,
     ProspectingWorkSession,
+    ProspectSourceMembership,
+    ProspectSuppressionCheck,
     SuppressionRecord,
     User,
 )
@@ -50,11 +50,11 @@ from app.schemas.campaign_management import (
     ProspectImportPreviewRow,
     ProspectImportRequest,
     ProspectImportRowRead,
-    ProspectSourceMembershipRead,
     ProspectingCohortCreate,
     ProspectingCohortRead,
     ProspectingWorkSessionCreate,
     ProspectingWorkSessionRead,
+    ProspectSourceMembershipRead,
 )
 from app.services.acquisition_operations import (
     list_campaigns,
@@ -616,14 +616,17 @@ def prepare_row(
         values.setdefault(field, clean_text(default))
     errors: list[str] = []
     reasons: list[str] = []
-    legal_name = values.get("legal_name") or " ".join(
-        part
-        for part in (
-            values.get("legal_first_name"),
-            values.get("legal_last_name"),
-        )
-        if part
-    ).strip()
+    legal_name = (
+        values.get("legal_name")
+        or " ".join(
+            part
+            for part in (
+                values.get("legal_first_name"),
+                values.get("legal_last_name"),
+            )
+            if part
+        ).strip()
+    )
     if not legal_name:
         errors.append("Seller or owner name is required.")
     elif len(legal_name) > 255:
@@ -665,8 +668,7 @@ def prepare_row(
                     rank,
                     field,
                     source_phone_type=values.get(type_field),
-                    source_dnc=(source_dnc_value or "").strip().casefold()
-                    in DNC_BLOCKED_VALUES,
+                    source_dnc=(source_dnc_value or "").strip().casefold() in DNC_BLOCKED_VALUES,
                     source_dnc_value=source_dnc_value,
                 )
             )
@@ -699,11 +701,7 @@ def prepare_row(
     phone_points = [point for point in contact_points if point.contact_type == "phone"]
     source_dnc_points = [point for point in phone_points if point.source_dnc]
     primary_phone = next(
-        (
-            point
-            for point in phone_points
-            if not point.source_dnc
-        ),
+        (point for point in phone_points if not point.source_dnc),
         None,
     )
     primary_email = next(
@@ -787,10 +785,7 @@ def prepare_row(
     identity_keys = {
         value
         for value in (
-            *(
-                f"{point.contact_type}:{point.normalized_value}"
-                for point in contact_points
-            ),
+            *(f"{point.contact_type}:{point.normalized_value}" for point in contact_points),
             f"address:{normalized_address}" if normalized_address else None,
             (
                 f"source:{values.get('source_record_key')}"
@@ -880,9 +875,7 @@ def find_duplicate(
         )
         for point in contact_points
     )
-    candidates.append(
-        (string_value(normalized.get("normalized_address_key")), address_matches)
-    )
+    candidates.append((string_value(normalized.get("normalized_address_key")), address_matches))
     for value, matches in candidates:
         if value and value in matches:
             return matches[value]
@@ -1048,9 +1041,7 @@ def upsert_source_membership(
             latest_import_batch_id=batch.id,
             source_name=batch.source_name,
             source_profile=batch.source_profile,
-            source_record_key=string_value(
-                prepared.normalized_data.get("source_record_key")
-            ),
+            source_record_key=string_value(prepared.normalized_data.get("source_record_key")),
             source_list_key=source_list_key,
             source_list_name=batch.source_list_name,
             first_seen_at=seen_at,
@@ -1108,7 +1099,7 @@ def upsert_prospect_contact_points(
             if point.contact_type == "phone"
             else prospect.normalized_email == point.normalized_value
         )
-        contact = existing.get(key)
+        existing_contact = existing.get(key)
         metadata = {
             "source_field": point.source_field,
             "source_phone_type": point.source_phone_type,
@@ -1118,7 +1109,7 @@ def upsert_prospect_contact_points(
             "source_dnc_value": point.source_dnc_value,
         }
         validation_status = "source_dnc" if point.source_dnc else "valid"
-        if contact is None:
+        if existing_contact is None:
             db.add(
                 ProspectContactPoint(
                     organization_id=principal.organization_id,
@@ -1136,13 +1127,13 @@ def upsert_prospect_contact_points(
                 )
             )
         else:
-            contact.source_membership_id = membership.id
-            contact.value = point.value
-            contact.rank = min(contact.rank, point.rank)
-            contact.is_primary = is_primary
-            contact.validation_status = validation_status
-            contact.last_seen_at = seen_at
-            contact.contact_metadata = metadata
+            existing_contact.source_membership_id = membership.id
+            existing_contact.value = point.value
+            existing_contact.rank = min(existing_contact.rank, point.rank)
+            existing_contact.is_primary = is_primary
+            existing_contact.validation_status = validation_status
+            existing_contact.last_seen_at = seen_at
+            existing_contact.contact_metadata = metadata
 
 
 def normalized_source_list_key(value: str | None) -> str | None:

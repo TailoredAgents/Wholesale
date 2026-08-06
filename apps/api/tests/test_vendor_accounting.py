@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -66,7 +67,7 @@ def upload_document(
         content=f"%PDF-1.4 {document_type} evidence".encode(),
     )
     assert response.status_code == 201
-    return response.json()
+    return cast(dict[str, object], response.json())
 
 
 def test_vendor_bill_evidence_and_itemized_posting_use_one_finance_trail(
@@ -257,9 +258,9 @@ def test_vendor_bill_evidence_and_itemized_posting_use_one_finance_trail(
     assert download.content.startswith(b"%PDF")
     assert (
         db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action == "finance.document_access"
-            )
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.action == "finance.document_access")
         )
         == 1
     )

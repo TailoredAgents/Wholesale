@@ -79,9 +79,7 @@ class SimulatedEmailDeliveryProvider:
                 metadata=metadata,
             )
         )
-        provider_message_id = result.provider_message_id or (
-            f"sim-email-{request.idempotency_key}"
-        )
+        provider_message_id = result.provider_message_id or (f"sim-email-{request.idempotency_key}")
         return EmailDeliveryResult(
             provider=result.provider,
             provider_message_id=provider_message_id,

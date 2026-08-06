@@ -130,9 +130,9 @@ test("target role visibility is complete, bounded, and least-privilege for servi
 });
 
 test("every current App Router page is represented in the migration inventory", () => {
-  const discoveredRoutes = walk(osSourceRoot, (path) => path.endsWith("/page.tsx")).map(
-    routeFromPage,
-  );
+  const discoveredRoutes = walk(osSourceRoot, (path) =>
+    path.replaceAll("\\", "/").endsWith("/page.tsx"),
+  ).map(routeFromPage);
   assert.deepEqual(
     sorted(currentRouteInventory.map((route) => route.routePattern)),
     sorted(discoveredRoutes),

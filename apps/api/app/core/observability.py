@@ -21,4 +21,3 @@ def initialize_error_monitoring(settings: Settings, *, service_name: str) -> boo
     )
     sentry_sdk.set_tag("stonegate.service", service_name)
     return True
-

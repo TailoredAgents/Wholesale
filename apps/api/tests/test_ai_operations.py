@@ -19,15 +19,18 @@ HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
 
 
 def install_runtime(client: TestClient) -> None:
-    assert client.post(
-        "/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS
-    ).status_code == 201
+    assert (
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code == 201
+    )
     assert client.post("/api/v1/ai/copilots/install", headers=HEADERS).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/foundation/decision",
-        headers=HEADERS,
-        json={"decision": "approve", "notes": "Approved for AI operations test."},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=HEADERS,
+            json={"decision": "approve", "notes": "Approved for AI operations test."},
+        ).status_code
+        == 200
+    )
     assert client.post("/api/v1/ai/runtime/install", headers=HEADERS).status_code == 201
 
 
@@ -92,9 +95,7 @@ def test_new_lead_is_prepared_and_reviewed_from_shared_work_queue(
     assert processed_id == event.id
     db_session.refresh(event)
     assert event.status == "needs_review"
-    run = db_session.scalar(
-        select(AiRunLog).where(AiRunLog.orchestrator_event_id == event.id)
-    )
+    run = db_session.scalar(select(AiRunLog).where(AiRunLog.orchestrator_event_id == event.id))
     assert run is not None
     assert run.capability_key == "lead.next_action"
     assert run.status == "needs_review"
@@ -102,9 +103,7 @@ def test_new_lead_is_prepared_and_reviewed_from_shared_work_queue(
     workspace_response = client.get("/api/v1/tasks/workspace", headers=HEADERS)
     assert workspace_response.status_code == 200, workspace_response.text
     ai_item = next(
-        item
-        for item in workspace_response.json()["items"]
-        if item["id"] == f"ai:{event.id}"
+        item for item in workspace_response.json()["items"] if item["id"] == f"ai:{event.id}"
     )
     assert ai_item["item_type"] == "ai_work"
     assert ai_item["work_kind"] == "ai_review"
@@ -121,14 +120,17 @@ def test_new_lead_is_prepared_and_reviewed_from_shared_work_queue(
     db_session.refresh(run)
     assert event.status == "completed"
     assert run.status == "accepted"
-    assert int(
-        db_session.scalar(
-            select(func.count())
-            .select_from(CommunicationRecord)
-            .where(CommunicationRecord.provider_message_id == f"ai-operations:{event.id}")
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(CommunicationRecord)
+                .where(CommunicationRecord.provider_message_id == f"ai-operations:{event.id}")
+            )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
     completed_workspace = client.get("/api/v1/tasks/workspace", headers=HEADERS).json()
     completed_item = next(

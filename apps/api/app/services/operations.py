@@ -108,8 +108,7 @@ def record_operation_failure(
             error_message=error_message,
             first_occurred_at=now,
             last_occurred_at=now,
-            next_retry_at=now
-            + timedelta(seconds=min(retry_base_seconds, retry_max_seconds)),
+            next_retry_at=now + timedelta(seconds=min(retry_base_seconds, retry_max_seconds)),
             resolved_at=None,
             failure_metadata=None,
         )

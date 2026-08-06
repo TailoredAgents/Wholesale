@@ -37,8 +37,7 @@ def parse_args() -> argparse.Namespace:
         "--apply",
         action="store_true",
         help=(
-            "Persist object uploads and clear copied database bytes. "
-            "Without this flag, only count."
+            "Persist object uploads and clear copied database bytes. Without this flag, only count."
         ),
     )
     return parser.parse_args()

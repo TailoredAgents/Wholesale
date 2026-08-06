@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.main import app
-from app.services.operations import register_worker
+from app.services.operations import record_worker_heartbeat, register_worker
 
 
 def test_health() -> None:
@@ -51,3 +51,21 @@ def test_ready_requires_worker_heartbeat(
     assert missing.json()["detail"]["checks"]["worker"] == "missing"
     assert available.status_code == 200
     assert available.json()["checks"]["worker"] == "starting"
+
+
+def test_ready_rejects_degraded_worker(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings.model_validate(
+        {"APP_ENV": "local", "WORKER_READINESS_REQUIRED": True}
+    )
+    try:
+        register_worker(db_session)
+        record_worker_heartbeat(db_session, had_error=True)
+        response = TestClient(app).get("/ready")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["checks"]["worker"] == "degraded"

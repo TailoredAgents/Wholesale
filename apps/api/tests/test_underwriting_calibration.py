@@ -223,8 +223,7 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     assert overview["markets"][0]["market_key"] == "GA | Fulton"
     assert overview["provider_scorecards"][0]["providers"] == ["rentcast"]
     segment_keys = {
-        (segment["dimension"], segment["segment_key"])
-        for segment in overview["segments"]
+        (segment["dimension"], segment["segment_key"]) for segment in overview["segments"]
     }
     assert ("property_type", "Single Family") in segment_keys
     assert ("search_level", "preferred") in segment_keys
@@ -232,10 +231,7 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
     assert ("verification_stage", "pre_meeting_reviewed") in segment_keys
     assert ("repair_catalog", "ga-2026.07-v1") in segment_keys
     assert overview["baseline"]["repair_catalog_case_count"] == 1
-    assert (
-        overview["baseline"]["repair_catalog_median_absolute_error_percentage"]
-        == 9.1
-    )
+    assert overview["baseline"]["repair_catalog_median_absolute_error_percentage"] == 9.1
     assert overview["baseline"]["ai_scope_review_count"] == 0
     assert overview["uncalibrated_analysis_count"] == 0
     assert overview["minimum_sample_for_formula_review"] == 50
@@ -262,17 +258,10 @@ def test_calibration_records_snapshot_and_reports_error_metrics(
 
 def test_provider_adequacy_uses_minimum_sample_and_pilot_thresholds() -> None:
     assert (
-        provider_adequacy(sample_count=9, arv_mape=3, range_coverage=100)
-        == "insufficient_evidence"
+        provider_adequacy(sample_count=9, arv_mape=3, range_coverage=100) == "insufficient_evidence"
     )
-    assert (
-        provider_adequacy(sample_count=10, arv_mape=10, range_coverage=80)
-        == "adequate"
-    )
-    assert (
-        provider_adequacy(sample_count=10, arv_mape=13, range_coverage=80)
-        == "monitor"
-    )
+    assert provider_adequacy(sample_count=10, arv_mape=10, range_coverage=80) == "adequate"
+    assert provider_adequacy(sample_count=10, arv_mape=13, range_coverage=80) == "monitor"
     assert (
         provider_adequacy(sample_count=10, arv_mape=16, range_coverage=80)
         == "provider_review_required"
@@ -305,14 +294,12 @@ def test_shadow_rollout_gates_pass_only_after_complete_evidence() -> None:
         shadow_unsupported_count=0,
         unsafe_certainty_count=0,
     )
-    market = overall.model_copy(
-        update={"scope_key": "GA | Fulton", "paired_case_count": 50}
-    )
+    market = overall.model_copy(update={"scope_key": "GA | Fulton", "paired_case_count": 50})
 
     gates = shadow_rollout_gates(
         overall=overall,
         markets=[market],
-        scenario_coverage={key: 1 for key in REQUIRED_VALIDATION_SCENARIOS},
+        scenario_coverage=dict.fromkeys(REQUIRED_VALIDATION_SCENARIOS, 1),
         review_decision_count=20,
         override_percentage=10.0,
         owner_accepted=True,
@@ -365,9 +352,7 @@ def test_formula_and_provider_changes_require_evidence_and_human_decision(
             "title": "Test a narrower ARV range",
             "rationale": "The first verified case needs documented follow-up before changes.",
             "proposed_methodology_version": "v2.2-candidate",
-            "proposed_changes": {
-                "summary": "Evaluate a tighter range after the sample threshold."
-            },
+            "proposed_changes": {"summary": "Evaluate a tighter range after the sample threshold."},
         },
     )
     assert draft_response.status_code == 201
@@ -462,10 +447,7 @@ def test_v3_rollout_requires_explicit_owner_controls_and_remains_sample_blocked(
     assert draft.json()["minimum_sample_required"] == 50
     assert draft.json()["approval_blocked"] is True
     assert (
-        draft.json()["evidence_snapshot"]["shadow_validation"]["overall"][
-            "paired_case_count"
-        ]
-        == 1
+        draft.json()["evidence_snapshot"]["shadow_validation"]["overall"]["paired_case_count"] == 1
     )
 
     approval = client.patch(
@@ -509,17 +491,21 @@ def test_calibration_update_preserves_one_case_and_writes_audit_event(
     assert second_response.status_code == 200
     assert second_response.json()["id"] == first_response.json()["id"]
     assert second_response.json()["benchmark_arv_cents"] == 30_500_000
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingCalibrationCase)) or 0
-    ) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count())
-            .select_from(AuditEvent)
-            .where(AuditEvent.action == "underwriting.calibration.create")
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(UnderwritingCalibrationCase)) or 0)
+        == 1
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "underwriting.calibration.create")
+            )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
     archive_response = client.delete(
         f"/api/v1/leads/{analysis.lead_id}",
@@ -531,14 +517,18 @@ def test_calibration_update_preserves_one_case_and_writes_audit_event(
         headers=headers,
     )
     assert delete_response.status_code == 204
-    assert int(
-        db_session.scalar(select(func.count()).select_from(UnderwritingCalibrationCase)) or 0
-    ) == 0
-    assert int(
-        db_session.scalar(
-            select(func.count())
-            .select_from(AuditEvent)
-            .where(AuditEvent.action == "underwriting.calibration.update")
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(UnderwritingCalibrationCase)) or 0)
+        == 0
+    )
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "underwriting.calibration.update")
+            )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )

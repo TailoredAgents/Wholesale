@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
 from app.core.config import get_settings
@@ -24,8 +25,8 @@ from app.models.foundation import (
     ConversationContextLink,
     ConversationWatcher,
     EmailAttachment,
-    EmailSenderGrant,
     EmailSenderAlias,
+    EmailSenderGrant,
     Lead,
     Notification,
     Property,
@@ -563,9 +564,7 @@ def _response_buckets(
 
 def _oldest_wait_minutes(conversations: list[ConversationRead]) -> int | None:
     ages = [
-        item.response_age_minutes
-        for item in conversations
-        if item.response_age_minutes is not None
+        item.response_age_minutes for item in conversations if item.response_age_minutes is not None
     ]
     return max(ages) if ages else None
 
@@ -629,9 +628,9 @@ def get_conversation_detail(
     )
     attachments_by_communication_id: dict[UUID, list[EmailAttachment]] = {}
     for attachment in email_attachments:
-        attachments_by_communication_id.setdefault(
-            attachment.communication_record_id, []
-        ).append(attachment)
+        attachments_by_communication_id.setdefault(attachment.communication_record_id, []).append(
+            attachment
+        )
     dispatches = (
         db.scalars(
             select(CommunicationDispatch).where(
@@ -767,47 +766,47 @@ def get_conversation_detail(
         )
         timeline.append(
             ConversationTimelineItemRead(
-            id=item.id,
-            item_type="communication",
-            direction=item.direction,
-            channel=item.channel,
-            status=item.status,
-            provider=item.provider,
-            status_detail=(
-                dispatch_by_communication_id[item.id].error_message
-                if item.id in dispatch_by_communication_id
-                else None
-            ),
-            subject=item.subject,
-            body=item.body,
-            actor_user_id=item.actor_user_id,
-            actor_display_name=actor_display_name(item.actor_user_id),
-            occurred_at=item.occurred_at,
-            call_id=call.id if call else None,
-            duration_seconds=call.duration_seconds if call else None,
-            recording_id=timeline_recording.id if timeline_recording else None,
-            recording_status=timeline_recording.status if timeline_recording else None,
-            recording_retention_expires_at=(
-                timeline_recording.retention_expires_at if timeline_recording else None
-            ),
-            recording_deleted_at=(
-                timeline_recording.deleted_at if timeline_recording else None
-            ),
-            transcript=(
-                transcript_to_read(db, timeline_transcript)
-                if timeline_transcript is not None
-                else None
-            ),
-            attachments=[
-                EmailAttachmentRead(
-                    id=attachment.id,
-                    filename=attachment.filename,
-                    content_type=attachment.content_type,
-                    size_bytes=attachment.size_bytes,
-                )
-                for attachment in attachments_by_communication_id.get(item.id, [])
-            ],
-        )
+                id=item.id,
+                item_type="communication",
+                direction=item.direction,
+                channel=item.channel,
+                status=item.status,
+                provider=item.provider,
+                status_detail=(
+                    dispatch_by_communication_id[item.id].error_message
+                    if item.id in dispatch_by_communication_id
+                    else None
+                ),
+                subject=item.subject,
+                body=item.body,
+                actor_user_id=item.actor_user_id,
+                actor_display_name=actor_display_name(item.actor_user_id),
+                occurred_at=item.occurred_at,
+                call_id=call.id if call else None,
+                duration_seconds=call.duration_seconds if call else None,
+                recording_id=timeline_recording.id if timeline_recording else None,
+                recording_status=timeline_recording.status if timeline_recording else None,
+                recording_retention_expires_at=(
+                    timeline_recording.retention_expires_at if timeline_recording else None
+                ),
+                recording_deleted_at=(
+                    timeline_recording.deleted_at if timeline_recording else None
+                ),
+                transcript=(
+                    transcript_to_read(db, timeline_transcript)
+                    if timeline_transcript is not None
+                    else None
+                ),
+                attachments=[
+                    EmailAttachmentRead(
+                        id=attachment.id,
+                        filename=attachment.filename,
+                        content_type=attachment.content_type,
+                        size_bytes=attachment.size_bytes,
+                    )
+                    for attachment in attachments_by_communication_id.get(item.id, [])
+                ],
+            )
         )
     timeline.extend(
         ConversationTimelineItemRead(
@@ -1101,14 +1100,10 @@ def handoff_conversation(
         db.commit()
         db.refresh(conversation)
         return conversation_to_read(db, conversation)
-    if (
-        payload.queue_key == "va_prospecting"
-        and "prospecting_caller" not in target_role_keys
-    ):
+    if payload.queue_key == "va_prospecting" and "prospecting_caller" not in target_role_keys:
         raise ValueError("VA prospecting conversations must be assigned to a prospecting caller.")
-    if (
-        payload.queue_key != "va_prospecting"
-        and not target_role_keys.intersection(ELIGIBLE_ACQUISITION_ROLE_KEYS)
+    if payload.queue_key != "va_prospecting" and not target_role_keys.intersection(
+        ELIGIBLE_ACQUISITION_ROLE_KEYS
     ):
         raise ValueError("Handoff target must be an active acquisition user.")
 
@@ -1186,9 +1181,7 @@ def handoff_conversation(
     if payload.queue_key != "va_prospecting":
         add_automatic_owner_watchers(db, conversation)
     action = (
-        "conversation.assign"
-        if payload.queue_key == "va_prospecting"
-        else "conversation.handoff"
+        "conversation.assign" if payload.queue_key == "va_prospecting" else "conversation.handoff"
     )
     activity_verb = "assigned" if payload.queue_key == "va_prospecting" else "handed off"
     db.add(
@@ -1203,8 +1196,7 @@ def handoff_conversation(
                 else "lead.handed_off"
             ),
             summary=(
-                f"Conversation {activity_verb} to {target.display_name} "
-                f"in {payload.queue_key}."
+                f"Conversation {activity_verb} to {target.display_name} in {payload.queue_key}."
             ),
         )
     )
@@ -1403,7 +1395,7 @@ def principal_has_owner_mailbox_access(
 def conversation_access_filter(
     db: Session,
     principal: Principal,
-):
+) -> ColumnElement[bool]:
     team_ids = select(TeamMembership.team_id).where(
         TeamMembership.organization_id == principal.organization_id,
         TeamMembership.user_id == principal.user_id,

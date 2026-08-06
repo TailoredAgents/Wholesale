@@ -83,9 +83,7 @@ def create_concession(
         db, principal.organization_id, lead, payload.offer_negotiation_plan_id
     )
     db.execute(
-        select(OfferNegotiationPlan.id)
-        .where(OfferNegotiationPlan.id == plan.id)
-        .with_for_update()
+        select(OfferNegotiationPlan.id).where(OfferNegotiationPlan.id == plan.id).with_for_update()
     )
     validate_appointment(db, principal, lead, payload.appointment_id)
     expected_previous = latest_presented_amount(db, plan) or plan.opening_offer_cents

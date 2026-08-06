@@ -73,12 +73,17 @@ def test_create_and_list_buyer_with_criteria(
     assert context_link is not None
     assert str(context_link.buyer_id) == created["id"]
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(AuditEvent.action == "buyer.create")
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(AuditEvent.action == "buyer.create")
+            )
+            or 0
         )
-        or 0
-    ) == 1
+        == 1
+    )
 
     list_response = client.get("/api/v1/buyers", headers={"X-Dev-User-Email": OWNER_EMAIL})
 

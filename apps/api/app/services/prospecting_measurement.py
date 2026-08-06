@@ -110,12 +110,8 @@ class ProspectingCostBreakdown:
 
 OUTCOME_CLASSIFICATIONS = {
     "no_answer": AttemptClassification("no_answer", "unknown", "not_assessed", "not_recorded"),
-    "left_voicemail": AttemptClassification(
-        "machine", "unknown", "not_assessed", "not_recorded"
-    ),
-    "wrong_number": AttemptClassification(
-        "live_person", "wrong_party", "not_assessed", "declined"
-    ),
+    "left_voicemail": AttemptClassification("machine", "unknown", "not_assessed", "not_recorded"),
+    "wrong_number": AttemptClassification("live_person", "wrong_party", "not_assessed", "declined"),
     "not_interested": AttemptClassification(
         "live_person", "right_party", "not_interested", "declined"
     ),
@@ -127,9 +123,7 @@ OUTCOME_CLASSIFICATIONS = {
     ),
     "follow_up": AttemptClassification("live_person", "right_party", "interested", "granted"),
     "interested": AttemptClassification("live_person", "right_party", "interested", "granted"),
-    "appointment_set": AttemptClassification(
-        "live_person", "right_party", "interested", "granted"
-    ),
+    "appointment_set": AttemptClassification("live_person", "right_party", "interested", "granted"),
 }
 
 
@@ -154,9 +148,7 @@ def apply_outcome_measurement(
     attempt.classification_source = "manual_outcome"
     attempt.dial_started_at = attempt.dial_started_at or attempt.started_at
     attempt.answered_at = (
-        completed_at
-        if classification.answer in {"machine", "live_person"}
-        else None
+        completed_at if classification.answer in {"machine", "live_person"} else None
     )
     attempt.right_party_confirmed_at = (
         completed_at if classification.party == "right_party" else None
@@ -192,11 +184,7 @@ def has_accepted_warm_evidence(attempt: ProspectingAttempt) -> bool:
 
 def default_handoff_decision_code(decision: str, outcome: str | None) -> str:
     if decision == "accepted":
-        return (
-            "accepted_appointment_set"
-            if outcome == "appointment_set"
-            else "accepted_interested"
-        )
+        return "accepted_appointment_set" if outcome == "appointment_set" else "accepted_interested"
     if decision == "needs_correction":
         return "correction_other"
     return "rejected_other"

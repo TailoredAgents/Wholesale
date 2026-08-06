@@ -109,8 +109,7 @@ def get_accounting_reports(
             movement["journals"].add(entry.id)
             period_lines.append((line, entry, account))
     report_lines = {
-        account.id: account_report_line(account, movements[account.id])
-        for account in accounts
+        account.id: account_report_line(account, movements[account.id]) for account in accounts
     }
     pnl = profit_and_loss(accounts, report_lines)
     cumulative_earnings = sum(
@@ -220,14 +219,10 @@ def section(
             item = item.model_copy(
                 update={
                     "opening_balance_cents": (
-                        item.opening_balance_cents
-                        * account_multiplier
-                        * presentation_multiplier
+                        item.opening_balance_cents * account_multiplier * presentation_multiplier
                     ),
                     "ending_balance_cents": (
-                        item.ending_balance_cents
-                        * account_multiplier
-                        * presentation_multiplier
+                        item.ending_balance_cents * account_multiplier * presentation_multiplier
                     ),
                 }
             )
@@ -363,9 +358,7 @@ def cash_flow(
         if not cash_lines:
             continue
         delta = sum(line.debit_cents - line.credit_cents for line, _, _ in cash_lines)
-        other_accounts = [
-            account for _, _, account in grouped if account.subtype != "cash"
-        ]
+        other_accounts = [account for _, _, account in grouped if account.subtype != "cash"]
         entry = grouped[0][1]
         category = "operating"
         if entry.source_type == "owner_distribution" or any(
@@ -447,7 +440,8 @@ def receivable_schedule(
             .where(
                 RevenueRecord.organization_id == principal.organization_id,
                 RevenueRecord.status == "pending",
-                RevenueRecord.received_at <= datetime.combine(
+                RevenueRecord.received_at
+                <= datetime.combine(
                     end_on,
                     datetime.max.time(),
                     tzinfo=UTC,
@@ -618,8 +612,7 @@ def close_readiness(
             "Bank reconciliations",
             bool(active_banks and len(reconciled_accounts) < len(active_banks)),
             (
-                f"{len(reconciled_accounts)} of {len(active_banks)} active accounts "
-                "reconciled."
+                f"{len(reconciled_accounts)} of {len(active_banks)} active accounts reconciled."
                 if active_banks
                 else "No active bank accounts require reconciliation."
             ),

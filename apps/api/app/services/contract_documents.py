@@ -182,10 +182,7 @@ def _contract_context(
         (
             item
             for item in recipients
-            if any(
-                role in item.placeholder_name.lower()
-                for role in ("assignee", "end buyer")
-            )
+            if any(role in item.placeholder_name.lower() for role in ("assignee", "end buyer"))
         ),
         None,
     )
@@ -256,9 +253,7 @@ def _render_contract(
             if story and not isinstance(story[-1], PageBreak):
                 story.append(PageBreak())
             continue
-        if skip_source_signatures and block.kind == "h2" and _is_exhibit_heading(
-            block.text
-        ):
+        if skip_source_signatures and block.kind == "h2" and _is_exhibit_heading(block.text):
             skip_source_signatures = False
         if block.kind in {"h1", "h2"} and _is_signature_heading(block.text):
             story.append(Paragraph(escape(block.text), styles["heading"]))

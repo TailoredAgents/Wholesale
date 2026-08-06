@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import cast
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -54,12 +55,13 @@ def test_cached_market_snapshot_reuse_depends_on_property_not_provider_status() 
         },
     )
 
-    assert cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
-        failed_snapshot,
+    snapshot = cast(UnderwritingMarketAnalysis, failed_snapshot)
+    assert cached_market_data_snapshot_is_reusable(
+        snapshot,
         current_address="123 Peachtree St, Atlanta, GA 30303",
     )
-    assert not cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
-        failed_snapshot,
+    assert not cached_market_data_snapshot_is_reusable(
+        snapshot,
         current_address="999 Different St, Atlanta, GA 30303",
     )
 

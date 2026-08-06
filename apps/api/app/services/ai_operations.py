@@ -1,6 +1,6 @@
 import json
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -579,7 +579,7 @@ def default_ai_work_owner(db: Session, organization_id: UUID) -> UUID | None:
             row[0].created_at,
         ),
     )
-    return ranked[0][0].id
+    return cast(UUID, ranked[0][0].id)
 
 
 def payload_uuid(value: object) -> UUID | None:

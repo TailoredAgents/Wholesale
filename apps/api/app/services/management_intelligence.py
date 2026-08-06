@@ -130,9 +130,7 @@ def _tax_facts(
         ],
         "policy_notes": setup.policy_notes,
         "deductions": [item.model_dump(mode="json") for item in overview.deductions],
-        "marketing_spend": [
-            item.model_dump(mode="json") for item in overview.marketing_spend
-        ],
+        "marketing_spend": [item.model_dump(mode="json") for item in overview.marketing_spend],
         "classification_candidates": classification_candidates[:50],
         "authority": {
             "mode": "draft_only",
@@ -220,9 +218,7 @@ def _finance_facts(
             .order_by(DealReconciliation.created_at.desc())
         ).all()
     )
-    pending_revenue = [
-        item for item in overview.revenue_records if item.status == "pending"
-    ]
+    pending_revenue = [item for item in overview.revenue_records if item.status == "pending"]
     unlinked_revenue = [
         item
         for item in overview.revenue_records
@@ -247,9 +243,7 @@ def _finance_facts(
                 severity="warning",
                 item="Pending revenue",
                 reason=f"{len(pending_revenue)} revenue records are not collected.",
-                evidence=[
-                    f"revenue_record:{item.id}" for item in pending_revenue[:10]
-                ],
+                evidence=[f"revenue_record:{item.id}" for item in pending_revenue[:10]],
             )
         )
     if unlinked_revenue:
@@ -259,9 +253,7 @@ def _finance_facts(
                 severity="critical",
                 item="Unlinked revenue",
                 reason=f"{len(unlinked_revenue)} records lack complete deal linkage.",
-                evidence=[
-                    f"revenue_record:{item.id}" for item in unlinked_revenue[:10]
-                ],
+                evidence=[f"revenue_record:{item.id}" for item in unlinked_revenue[:10]],
             )
         )
     if reconciliation_exceptions:
@@ -275,8 +267,7 @@ def _finance_facts(
                     "approval or margin review."
                 ),
                 evidence=[
-                    f"deal_reconciliation:{item.id}"
-                    for item in reconciliation_exceptions[:10]
+                    f"deal_reconciliation:{item.id}" for item in reconciliation_exceptions[:10]
                 ],
             )
         )
@@ -378,9 +369,7 @@ def _finance_facts(
 
     margin_basis_points = (
         round(
-            overview.summary.company_net_cents
-            / overview.summary.collected_revenue_cents
-            * 10_000
+            overview.summary.company_net_cents / overview.summary.collected_revenue_cents * 10_000
         )
         if overview.summary.collected_revenue_cents
         else None
@@ -391,9 +380,7 @@ def _finance_facts(
         "period_end_at": overview.period_end_at,
         "summary": overview.summary.model_dump(mode="json"),
         "previous_summary": (
-            overview.previous_summary.model_dump(mode="json")
-            if overview.previous_summary
-            else None
+            overview.previous_summary.model_dump(mode="json") if overview.previous_summary else None
         ),
         "company_margin_basis_points": margin_basis_points,
         "reconciliation_exceptions": [
@@ -420,9 +407,7 @@ def _finance_facts(
             for item in pending_revenue
         ],
         "unlinked_revenue_count": len(unlinked_revenue),
-        "compensation_calculation_count": len(
-            overview.compensation_calculations
-        ),
+        "compensation_calculation_count": len(overview.compensation_calculations),
         "active_compensation_rule_count": sum(
             item.is_active for item in overview.compensation_rules
         ),
@@ -434,12 +419,8 @@ def _finance_facts(
             },
             "statement_summary": {
                 "revenue_cents": reports.profit_and_loss.revenue.total_cents,
-                "cost_of_revenue_cents": (
-                    reports.profit_and_loss.cost_of_revenue.total_cents
-                ),
-                "operating_expense_cents": (
-                    reports.profit_and_loss.operating_expenses.total_cents
-                ),
+                "cost_of_revenue_cents": (reports.profit_and_loss.cost_of_revenue.total_cents),
+                "operating_expense_cents": (reports.profit_and_loss.operating_expenses.total_cents),
                 "net_income_cents": reports.profit_and_loss.net_income_cents,
                 "cash_change_cents": reports.cash_flow.net_change_cents,
                 "total_assets_cents": reports.balance_sheet.total_assets_cents,
@@ -455,9 +436,7 @@ def _finance_facts(
             "general_ledger_evidence": [
                 {
                     **item.model_dump(mode="json"),
-                    "citation": (
-                        f"journal_line:{item.journal_entry_id}:{item.account_code}"
-                    ),
+                    "citation": (f"journal_line:{item.journal_entry_id}:{item.account_code}"),
                 }
                 for item in reports.general_ledger[:100]
             ],
@@ -485,11 +464,7 @@ def _finance_facts(
                 "Ledger net income",
                 _money(reports.profit_and_loss.net_income_cents),
                 f"{start_on} through {end_on}",
-                (
-                    "success"
-                    if reports.profit_and_loss.net_income_cents >= 0
-                    else "danger"
-                ),
+                ("success" if reports.profit_and_loss.net_income_cents >= 0 else "danger"),
             ),
             _metric(
                 "Close blockers",
@@ -499,12 +474,7 @@ def _finance_facts(
             ),
             _metric(
                 "Posting candidates",
-                str(
-                    sum(
-                        item["readiness"] == "ready"
-                        for item in posting_candidates
-                    )
-                ),
+                str(sum(item["readiness"] == "ready" for item in posting_candidates)),
                 f"{posting.exception_count} exceptions",
                 "warning" if posting.exception_count else "info",
             ),
@@ -526,10 +496,7 @@ def _posting_candidates(posting: Any) -> list[dict[str, Any]]:
         if item.journal_entry_id is not None:
             continue
         rule = rules.get(item.rule_id)
-        citation = (
-            f"accounting_source:{item.source_type}:{item.source_id}:"
-            f"{item.posting_purpose}"
-        )
+        citation = f"accounting_source:{item.source_type}:{item.source_id}:{item.posting_purpose}"
         result.append(
             {
                 "citation": citation,
@@ -540,16 +507,10 @@ def _posting_candidates(posting: Any) -> list[dict[str, Any]]:
                 "amount_cents": item.amount_cents,
                 "readiness": item.readiness,
                 "readiness_detail": item.readiness_detail,
-                "proposed_debit_account_key": (
-                    rule.debit_account_key if rule else None
-                ),
-                "proposed_credit_account_key": (
-                    rule.credit_account_key if rule else None
-                ),
+                "proposed_debit_account_key": (rule.debit_account_key if rule else None),
+                "proposed_credit_account_key": (rule.credit_account_key if rule else None),
                 "posting_rule": (
-                    f"accounting_posting_rule:{rule.id}:v{rule.version_number}"
-                    if rule
-                    else None
+                    f"accounting_posting_rule:{rule.id}:v{rule.version_number}" if rule else None
                 ),
                 "evidence_references": item.evidence_references,
                 "requires_human_journal_review": True,
@@ -576,9 +537,7 @@ def _bank_match_candidates(
     unmatched_by_amount: dict[int, list[Any]] = {}
     for transaction in banking.transactions:
         if transaction.status == "unmatched":
-            unmatched_by_amount.setdefault(transaction.amount_cents, []).append(
-                transaction
-            )
+            unmatched_by_amount.setdefault(transaction.amount_cents, []).append(transaction)
     suggestions: list[dict[str, Any]] = []
     ambiguous = 0
     for amount, transactions in unmatched_by_amount.items():
@@ -591,9 +550,7 @@ def _bank_match_candidates(
         journal = candidates[0]
         suggestions.append(
             {
-                "bank_transaction_citation": (
-                    f"bank_transaction:{transaction.id}"
-                ),
+                "bank_transaction_citation": (f"bank_transaction:{transaction.id}"),
                 "journal_citation": f"journal_entry:{journal['id']}",
                 "occurred_on": transaction.occurred_on.isoformat(),
                 "description": transaction.description,
@@ -650,20 +607,12 @@ def _statement_variances(
             "previous_cents": previous_amount,
             "change_cents": current_amount - previous_amount,
             "change_basis_points": (
-                round(
-                    (current_amount - previous_amount)
-                    / abs(previous_amount)
-                    * 10_000
-                )
+                round((current_amount - previous_amount) / abs(previous_amount) * 10_000)
                 if previous_amount
                 else None
             ),
-            "current_citation": (
-                f"financial_statement:{current_start}:{current_end}:{label}"
-            ),
-            "previous_citation": (
-                f"financial_statement:{previous_start}:{previous_end}:{label}"
-            ),
+            "current_citation": (f"financial_statement:{current_start}:{current_end}:{label}"),
+            "previous_citation": (f"financial_statement:{previous_start}:{previous_end}:{label}"),
         }
         for label, current_amount, previous_amount in values
     ]
@@ -742,15 +691,11 @@ def _marketing_facts(
         "period_end_at": overview.period_end_at,
         "summary": overview.summary.model_dump(mode="json"),
         "previous_summary": (
-            overview.previous_summary.model_dump(mode="json")
-            if overview.previous_summary
-            else None
+            overview.previous_summary.model_dump(mode="json") if overview.previous_summary else None
         ),
         "public_funnel": overview.public_funnel.model_dump(mode="json"),
         "web_vitals": [item.model_dump(mode="json") for item in overview.web_vitals],
-        "campaigns": [
-            item.model_dump(mode="json") for item in overview.campaigns[:30]
-        ],
+        "campaigns": [item.model_dump(mode="json") for item in overview.campaigns[:30]],
         "exception_campaigns": [
             {
                 "source": item.source,
@@ -781,10 +726,7 @@ def _marketing_facts(
             ),
             _metric(
                 "Leads / contracts",
-                (
-                    f"{overview.summary.leads_created} / "
-                    f"{overview.summary.contracted_leads}"
-                ),
+                (f"{overview.summary.leads_created} / {overview.summary.contracted_leads}"),
                 f"CPL {_money(overview.summary.cost_per_lead_cents)}",
                 "info",
             ),
@@ -853,9 +795,7 @@ def _operations_facts(
     )
     open_provider_failures = int(
         db.scalar(
-            select(func.count(OperationalFailure.id)).where(
-                OperationalFailure.status == "open"
-            )
+            select(func.count(OperationalFailure.id)).where(OperationalFailure.status == "open")
         )
         or 0
     )
@@ -906,9 +846,7 @@ def _operations_facts(
         risks.append(
             ManagementRiskAlert(
                 severity=(
-                    "critical"
-                    if item in {"Financial close", "Provider operations"}
-                    else "warning"
+                    "critical" if item in {"Financial close", "Provider operations"} else "warning"
                 ),
                 item=item,
                 reason=reason,
@@ -933,9 +871,7 @@ def _operations_facts(
             "new_paid_leads": dashboard.new_paid_leads,
             "active_contracts": dashboard.active_contracts,
             "offers_pending": dashboard.offers_pending,
-            "stage_counts": [
-                item.model_dump(mode="json") for item in dashboard.pipeline
-            ],
+            "stage_counts": [item.model_dump(mode="json") for item in dashboard.pipeline],
             "unassigned_leads": unassigned_leads,
             "upcoming_appointments_7_days": upcoming_appointments,
             "overdue_tasks": overdue_tasks,
@@ -1028,10 +964,7 @@ def _count(
     model: type[Any],
     *conditions: Any,
 ) -> int:
-    return int(
-        db.scalar(select(func.count(model.id)).where(*conditions))
-        or 0
-    )
+    return int(db.scalar(select(func.count(model.id)).where(*conditions)) or 0)
 
 
 def _money(value: int | None) -> str:

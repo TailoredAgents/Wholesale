@@ -382,18 +382,13 @@ def create_vendor_bill(
     )
     if {account.system_key for account in accounts} != account_keys:
         raise ValueError("Every bill line must use an active expense account.")
-    if any(
-        account.account_type not in {"expense", "cost_of_revenue"}
-        for account in accounts
-    ):
+    if any(account.account_type not in {"expense", "cost_of_revenue"} for account in accounts):
         raise ValueError("Bill lines must use expense or cost-of-revenue accounts.")
     for line in payload.lines:
         validate_bill_line_links(db, principal, line.deal_id, line.transaction_id)
     issue_at = payload.issue_at or datetime.now(UTC)
     due_at = payload.due_at or (
-        issue_at + timedelta(days=vendor.payment_terms_days)
-        if vendor.payment_terms_days
-        else None
+        issue_at + timedelta(days=vendor.payment_terms_days) if vendor.payment_terms_days else None
     )
     if due_at is not None and comparable_datetime(due_at) < comparable_datetime(issue_at):
         raise ValueError("Bill due date cannot be before its issue date.")
@@ -486,9 +481,7 @@ def approve_vendor_bill(
     obligation = FinancialObligation(
         organization_id=principal.organization_id,
         obligation_type=(
-            "contractor_payable"
-            if vendor.vendor_type == "contractor"
-            else "vendor_payable"
+            "contractor_payable" if vendor.vendor_type == "contractor" else "vendor_payable"
         ),
         direction="outbound",
         counterparty_name=vendor_name(db, vendor),
@@ -558,17 +551,11 @@ def upload_finance_document(
     if not content or len(content) > MAX_FINANCE_DOCUMENT_BYTES:
         raise ValueError("Document must be between 1 byte and 15 MB.")
     vendor = (
-        scoped_vendor(db, principal, vendor_profile_id)
-        if vendor_profile_id is not None
-        else None
+        scoped_vendor(db, principal, vendor_profile_id) if vendor_profile_id is not None else None
     )
     if vendor_profile_id is not None and vendor is None:
         raise ValueError("Finance vendor not found.")
-    bill = (
-        scoped_bill(db, principal, vendor_bill_id)
-        if vendor_bill_id is not None
-        else None
-    )
+    bill = scoped_bill(db, principal, vendor_bill_id) if vendor_bill_id is not None else None
     if vendor_bill_id is not None and bill is None:
         raise ValueError("Vendor bill not found.")
     if bill is not None:
@@ -601,9 +588,7 @@ def upload_finance_document(
     stored = store_content(
         organization_id=principal.organization_id,
         namespace=(
-            f"finance/vendors/{vendor_profile_id}"
-            if vendor_profile_id
-            else "finance/general"
+            f"finance/vendors/{vendor_profile_id}" if vendor_profile_id else "finance/general"
         ),
         record_id=document_id,
         file_name=file_name,
@@ -666,9 +651,7 @@ def upload_finance_document(
             "vendor_profile_id": (
                 str(document.vendor_profile_id) if document.vendor_profile_id else None
             ),
-            "vendor_bill_id": (
-                str(document.vendor_bill_id) if document.vendor_bill_id else None
-            ),
+            "vendor_bill_id": (str(document.vendor_bill_id) if document.vendor_bill_id else None),
             "is_sensitive": document.is_sensitive,
             "sha256": document.sha256,
         },
@@ -861,10 +844,7 @@ def load_bill_read(
     if vendor is None:
         raise ValueError("Bill vendor is unavailable.")
     counterparty = db.get(BusinessCounterparty, vendor.counterparty_id)
-    if (
-        counterparty is None
-        or counterparty.organization_id != principal.organization_id
-    ):
+    if counterparty is None or counterparty.organization_id != principal.organization_id:
         raise ValueError("Bill counterparty is unavailable.")
     documents = list(
         db.scalars(
@@ -1038,9 +1018,7 @@ def bill_snapshot(bill: VendorBill) -> dict[str, object]:
         "amount_cents": bill.amount_cents,
         "vendor_profile_id": str(bill.vendor_profile_id),
         "financial_obligation_id": (
-            str(bill.financial_obligation_id)
-            if bill.financial_obligation_id
-            else None
+            str(bill.financial_obligation_id) if bill.financial_obligation_id else None
         ),
     }
 

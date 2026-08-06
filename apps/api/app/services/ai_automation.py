@@ -319,9 +319,7 @@ def decide_external_action_policy(
         return None
     previous: dict[str, object] = {
         "status": item.status,
-        "approved_by_user_id": str(item.approved_by_user_id)
-        if item.approved_by_user_id
-        else None,
+        "approved_by_user_id": str(item.approved_by_user_id) if item.approved_by_user_id else None,
     }
     if payload.decision == "approve_control":
         item.status = "paused" if item.status == "paused" else "control_approved"
@@ -517,9 +515,7 @@ def get_external_automation_overview(
         .order_by(AiExternalActionPolicy.action_key)
     ).all()
     runtime = db.scalar(
-        select(AiRuntimePolicy).where(
-            AiRuntimePolicy.organization_id == principal.organization_id
-        )
+        select(AiRuntimePolicy).where(AiRuntimePolicy.organization_id == principal.organization_id)
     )
 
     def count(model: Any, *conditions: Any) -> int:
@@ -538,9 +534,7 @@ def get_external_automation_overview(
         1 for item in policy_reads if item.readiness_status == "ready_for_activation_review"
     )
     external_delivery_globally_enabled = bool(
-        runtime
-        and runtime.external_actions_enabled
-        and not runtime.emergency_stop
+        runtime and runtime.external_actions_enabled and not runtime.emergency_stop
     )
     return AiExternalAutomationOverview(
         phase_status="control_plane_only",
@@ -569,10 +563,7 @@ def get_external_automation_overview(
                 db.scalar(
                     select(
                         func.coalesce(func.sum(AiExternalActionAttempt.delivered_count), 0)
-                    ).where(
-                        AiExternalActionAttempt.organization_id
-                        == principal.organization_id
-                    )
+                    ).where(AiExternalActionAttempt.organization_id == principal.organization_id)
                 )
                 or 0
             ),
@@ -588,9 +579,7 @@ def _readiness_blockers(
 ) -> list[str]:
     blockers: list[str] = []
     runtime = db.scalar(
-        select(AiRuntimePolicy).where(
-            AiRuntimePolicy.organization_id == principal.organization_id
-        )
+        select(AiRuntimePolicy).where(AiRuntimePolicy.organization_id == principal.organization_id)
     )
     capability = db.scalar(
         select(AiCapabilityRuntimePolicy).where(
@@ -616,8 +605,7 @@ def _readiness_blockers(
             AiEvaluationRun.organization_id == principal.organization_id,
             AiEvaluationDataset.capability_key == item.capability_key,
             AiEvaluationRun.thresholds_passed.is_(True),
-            AiEvaluationRun.case_count
-            >= int(quality_policy.get("minimum_reviewed_samples", 0)),
+            AiEvaluationRun.case_count >= int(quality_policy.get("minimum_reviewed_samples", 0)),
             AiEvaluationRun.pass_rate_basis_points
             >= int(quality_policy.get("minimum_pass_rate_basis_points", 0)),
             AiEvaluationRun.critical_failure_count
@@ -715,9 +703,7 @@ def _policy_read(
         approved_at=item.approved_at,
         last_pause_reason=item.last_pause_reason,
         paused_at=item.paused_at,
-        readiness_status=(
-            "ready_for_activation_review" if only_release_lock else "blocked"
-        ),
+        readiness_status=("ready_for_activation_review" if only_release_lock else "blocked"),
         readiness_blockers=blockers,
         attempts=[_attempt_read(attempt) for attempt in attempts],
         updated_at=item.updated_at,

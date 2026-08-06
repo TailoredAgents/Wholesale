@@ -130,7 +130,6 @@ def build_comparable_intelligence(
             warnings=[],
         )
 
-
     if not settings.dealmachine_api_key:
         return _result(
             mode=mode,
@@ -450,8 +449,7 @@ def _build_realestateapi_intelligence(
         filtered_comps = [
             record
             for record in detail.comparables
-            if normalize_address_key(_realestateapi_record_address(record) or "")
-            != requested_key
+            if normalize_address_key(_realestateapi_record_address(record) or "") != requested_key
         ]
         provider_batch = provider_batch_from_response(
             provider="realestateapi",
@@ -503,9 +501,7 @@ def _build_realestateapi_intelligence(
             credits_used=1,
             benchmarks=benchmarks,
             provider_payload={},
-            warnings=[
-                "RealEstateAPI evidence failed without interrupting the RentCast analysis."
-            ],
+            warnings=["RealEstateAPI evidence failed without interrupting the RentCast analysis."],
         )
 
 
@@ -741,9 +737,7 @@ def _realestateapi_result(
             for record in comparison_records
         ),
         "duplicate_count": (
-            rentcast_batch.duplicate_count
-            + internal_duplicates
-            + cross_provider_duplicates
+            rentcast_batch.duplicate_count + internal_duplicates + cross_provider_duplicates
         ),
         "conflict_count": comparison_evidence.field_conflict_count,
         "source_conflicts": _source_conflicts(comparison_records),
@@ -834,9 +828,7 @@ def _realestateapi_record_address(record: Mapping[str, Any]) -> str | None:
     if not isinstance(street, str) or not street.strip():
         house = _first(values, "house")
         street_name = _first(values, "street")
-        street = " ".join(
-            str(value).strip() for value in (house, street_name) if value is not None
-        )
+        street = " ".join(str(value).strip() for value in (house, street_name) if value is not None)
     if not isinstance(street, str) or not street.strip():
         return None
     city = _first(values, "city")

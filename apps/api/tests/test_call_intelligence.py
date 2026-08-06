@@ -198,6 +198,7 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
         "property_condition": "Roof needs replacement",
         "occupancy_status": "Owner occupied",
         "asking_price": "$180,000",
+        "mortgage_balance": "$92,000 payoff",
         "mortgage_or_title": None,
         "repairs": ["Replace roof"],
         "objections": [],
@@ -238,9 +239,7 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert processed.status == "needs_review"
     assert processed.transcript_text
     assert processed.confidence_score == 88
-    assert db_session.scalar(
-        select(func.count()).select_from(ApprovalRequest)
-    ) == 1
+    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
     assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 1
     ai_run = db_session.scalar(select(AiRunLog))
     assert ai_run is not None
@@ -288,7 +287,9 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
             "motivation",
             "timeline",
             "property_condition",
+            "occupancy_status",
             "asking_price",
+            "mortgage_balance",
         ],
         create_follow_up_task=True,
     )
@@ -306,32 +307,48 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"
     assert lead.property_condition == "Roof replacement needed"
+    assert lead.occupancy_status == "Owner occupied"
     assert lead.asking_price == "$180,000"
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(CommunicationRecord)
-        .where(CommunicationRecord.provider == "openai_reviewed")
-    ) == 1
-    approved_note = db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider == "openai_reviewed"
+    assert lead.mortgage_balance == "$92,000 payoff"
+    assert lead.next_follow_up_at is not None
+    assert lead.next_follow_up_at.replace(tzinfo=UTC) == datetime(2026, 7, 20, 18, 0, tzinfo=UTC)
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CommunicationRecord)
+            .where(CommunicationRecord.provider == "openai_reviewed")
         )
+        == 1
+    )
+    approved_note = db_session.scalar(
+        select(CommunicationRecord).where(CommunicationRecord.provider == "openai_reviewed")
     )
     assert approved_note is not None
     assert approved_note.lead_id == lead.id
     assert approved_note.contact_id == lead.contact_id
     assert approved_note.conversation_id == conversation.id
+    assert "Mortgage balance/payoff: $92,000 payoff" in approved_note.body
     lead_detail = client.get(
         f"/api/v1/leads/{lead.id}",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
     assert lead_detail.status_code == 200, lead_detail.text
-    assert lead_detail.json()["communications"][0]["id"] == str(approved_note.id)
+    lead_payload = lead_detail.json()
+    assert lead_payload["desired_timeline"] == "30 days"
+    assert lead_payload["property_condition"] == "Roof replacement needed"
+    assert lead_payload["occupancy_status"] == "Owner occupied"
+    assert lead_payload["asking_price"] == "$180,000"
+    assert lead_payload["mortgage_balance"] == "$92,000 payoff"
+    assert lead_payload["next_follow_up_at"] == "2026-07-20T18:00:00"
+    assert lead_payload["communications"][0]["id"] == str(approved_note.id)
+    assert lead_payload["communications"][0]["direction"] == "internal"
+    assert lead_payload["communications"][0]["channel"] == "note"
+    assert any(task["task_type"] == "call_follow_up" for task in lead_payload["open_tasks"])
     db_session.refresh(transcript)
     review_metrics = (transcript.transcript_metadata or {}).get("review_metrics")
     assert isinstance(review_metrics, dict)
     assert review_metrics["changed_fields"] == ["property_condition"]
-    assert review_metrics["field_agreement_percent"] == 92
+    assert review_metrics["field_agreement_percent"] == 93
     quality_response = client.get(
         "/api/v1/ai",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -340,11 +357,18 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     quality = quality_response.json()["call_intelligence_quality"]
     assert quality["reviewed_calls"] == 1
     assert quality["approved_calls"] == 1
-    assert quality["average_field_agreement"] == 92
+    assert quality["average_field_agreement"] == 93
     assert quality["autonomy_status"] == "human_review_required"
-    assert db_session.scalar(
-        select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
-    ) == 1
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
+        )
+        == 1
+    )
+    follow_up_task = db_session.scalar(select(Task).where(Task.task_type == "call_follow_up"))
+    assert follow_up_task is not None
+    assert follow_up_task.due_at is not None
+    assert follow_up_task.due_at.replace(tzinfo=UTC) == datetime(2026, 7, 20, 18, 0, tzinfo=UTC)
 
     repeated = client.patch(
         f"/api/v1/voice/transcripts/{transcript.id}/review",
@@ -352,11 +376,17 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
         json=payload.model_dump(mode="json"),
     )
     assert repeated.status_code == 200
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(CommunicationRecord)
-        .where(CommunicationRecord.provider == "openai_reviewed")
-    ) == 1
-    assert db_session.scalar(
-        select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
-    ) == 1
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CommunicationRecord)
+            .where(CommunicationRecord.provider == "openai_reviewed")
+        )
+        == 1
+    )
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
+        )
+        == 1
+    )

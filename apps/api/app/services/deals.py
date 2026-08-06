@@ -155,7 +155,8 @@ def _blockers(
             )
         )
     overdue = [
-        item for item in checklist
+        item
+        for item in checklist
         if item.due_at
         and _utc(item.due_at) < now
         and item.status not in {"complete", "not_applicable"}
@@ -165,10 +166,7 @@ def _blockers(
             DealBlockerRead(
                 key="overdue_checklist",
                 domain="closing",
-                label=(
-                    f"{len(overdue)} closing item"
-                    f"{'s' if len(overdue) != 1 else ''} overdue"
-                ),
+                label=(f"{len(overdue)} closing item{'s' if len(overdue) != 1 else ''} overdue"),
                 severity="danger",
             )
         )
@@ -264,9 +262,7 @@ def _build_item(
         select(DispositionCase).where(DispositionCase.transaction_id == transaction.id)
     )
     reconciliation = db.scalar(
-        select(DealReconciliation).where(
-            DealReconciliation.transaction_id == transaction.id
-        )
+        select(DealReconciliation).where(DealReconciliation.transaction_id == transaction.id)
     )
     checklist = list(
         db.scalars(
@@ -299,9 +295,7 @@ def _build_item(
         )
         offer_count = (
             db.scalar(
-                select(func.count(BuyerOffer.id)).where(
-                    BuyerOffer.disposition_case_id == case.id
-                )
+                select(func.count(BuyerOffer.id)).where(BuyerOffer.disposition_case_id == case.id)
             )
             or 0
         )
@@ -309,9 +303,7 @@ def _build_item(
         disposition_owner = db.get(User, case.owner_user_id)
     owner = db.get(User, transaction.owner_user_id) if transaction.owner_user_id else None
     coordinator = (
-        db.get(User, transaction.coordinator_user_id)
-        if transaction.coordinator_user_id
-        else None
+        db.get(User, transaction.coordinator_user_id) if transaction.coordinator_user_id else None
     )
     required = [item for item in checklist if item.is_required]
     complete = sum(item.status in {"complete", "not_applicable"} for item in required)
@@ -356,9 +348,7 @@ def _build_item(
         contract_price_cents=transaction.purchase_price_cents,
         assignment_fee_cents=transaction.assignment_fee_cents if can_view_economics else None,
         company_profit_cents=(
-            reconciliation.company_profit_cents
-            if can_view_economics and reconciliation
-            else None
+            reconciliation.company_profit_cents if can_view_economics and reconciliation else None
         ),
         company_margin_basis_points=(
             reconciliation.company_margin_basis_points
@@ -392,15 +382,13 @@ def overview(db: Session, principal: Principal) -> DealOverviewRead:
         metrics=DealMetricsRead(
             active=len(active),
             closing_exceptions=sum(
-                any(blocker.domain == "closing" for blocker in item.blockers)
-                for item in active
+                any(blocker.domain == "closing" for blocker in item.blockers) for item in active
             ),
             ready_for_disposition=sum(
                 item.disposition_status == "ready_to_open" for item in active
             ),
             buyer_needed=sum(
-                item.disposition_status
-                in {"buyer_matching", "marketing", "offer_review"}
+                item.disposition_status in {"buyer_matching", "marketing", "offer_review"}
                 and item.selected_buyer_name is None
                 for item in active
             ),

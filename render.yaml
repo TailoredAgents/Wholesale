@@ -214,8 +214,14 @@ services:
         sync: false
       - key: RENTCAST_BASE_URL
         value: https://api.rentcast.io/v1
+      - key: REALESTATEAPI_API_KEY
+        sync: false
+      - key: REALESTATEAPI_BASE_URL
+        value: https://api.realestateapi.com
+      - key: REALESTATEAPI_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: BUYER_DATA_PROVIDER
-        value: dealmachine
+        value: disabled
       - key: DEALMACHINE_API_KEY
         sync: false
       - key: DEALMACHINE_BASE_URL
@@ -223,9 +229,11 @@ services:
       - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: UNDERWRITING_DEALMACHINE_COMPS_MODE
-        value: candidate
+        value: disabled
       - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
         value: 2
+      - key: UNDERWRITING_REALESTATEAPI_COMPS_MODE
+        value: candidate
       - key: BUYER_DISCOVERY_MAX_RESULTS
         value: 100
       - key: MARKETING_CONVERSION_MODE
@@ -260,10 +268,18 @@ services:
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: true
+      - key: ZAPIER_FACEBOOK_LEADS_SECRET
+        sync: false
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
         value: 65536
+      - key: PUBLIC_INTAKE_RATE_LIMIT_ENABLED
+        value: true
+      - key: PUBLIC_INTAKE_RATE_LIMIT_REQUESTS
+        value: 5
+      - key: PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS
+        value: 600
       - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
@@ -493,6 +509,8 @@ services:
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_ENABLED
         value: true
+      - key: ZAPIER_FACEBOOK_LEADS_SECRET
+        sync: false
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
@@ -529,6 +547,12 @@ services:
         sync: false
       - key: RENTCAST_BASE_URL
         value: https://api.rentcast.io/v1
+      - key: REALESTATEAPI_API_KEY
+        sync: false
+      - key: REALESTATEAPI_BASE_URL
+        value: https://api.realestateapi.com
+      - key: REALESTATEAPI_REQUEST_TIMEOUT_SECONDS
+        value: 30
       - key: DEALMACHINE_API_KEY
         sync: false
       - key: DEALMACHINE_BASE_URL
@@ -536,9 +560,11 @@ services:
       - key: DEALMACHINE_REQUEST_TIMEOUT_SECONDS
         value: 30
       - key: UNDERWRITING_DEALMACHINE_COMPS_MODE
-        value: candidate
+        value: disabled
       - key: UNDERWRITING_DEALMACHINE_MAX_CREDITS_PER_ANALYSIS
         value: 2
+      - key: UNDERWRITING_REALESTATEAPI_COMPS_MODE
+        value: candidate
       - key: TWILIO_SMS_ENABLED
         value: true
       - key: TWILIO_ACCOUNT_SID

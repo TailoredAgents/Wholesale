@@ -1500,9 +1500,9 @@ def _cohort_descriptor(
             bounds[field] = {"minimum": min(values), "maximum": max(values)}
     feature_values: dict[str, list[bool]] = {}
     for key in ("garage", "pool", "basement"):
-        values = {_comp_feature(comp, key) for comp in participants}
-        if None not in values:
-            feature_values[key] = sorted(value for value in values if value is not None)
+        observed_features = {_comp_feature(comp, key) for comp in participants}
+        if None not in observed_features:
+            feature_values[key] = sorted(value for value in observed_features if value is not None)
     return {
         "bounds": bounds,
         "feature_values": feature_values,

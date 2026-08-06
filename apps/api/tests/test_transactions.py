@@ -295,10 +295,7 @@ def test_transaction_document_facts_preserve_page_evidence_and_reject_duplicates
     assert "already stored" in duplicate.json()["detail"]
 
     fact = client.post(
-        (
-            f"/api/v1/transactions/{transaction_id}/documents/"
-            f"{uploaded.json()['id']}/facts"
-        ),
+        (f"/api/v1/transactions/{transaction_id}/documents/{uploaded.json()['id']}/facts"),
         headers=HEADERS,
         json={
             "field_key": "Closing Date",
@@ -317,9 +314,7 @@ def test_transaction_document_facts_preserve_page_evidence_and_reject_duplicates
         headers=HEADERS,
     )
     stored_document = next(
-        item
-        for item in detail.json()["documents"]
-        if item["id"] == uploaded.json()["id"]
+        item for item in detail.json()["documents"] if item["id"] == uploaded.json()["id"]
     )
     assert stored_document["facts"][0]["value_text"] == "August 14, 2026"
     assert stored_document["facts"][0]["reviewed_by_name"] == "Owner"
@@ -447,9 +442,7 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
     assert detail["contract_packages"][0]["status"] == "executed"
     assert detail["esign_envelopes"][0]["status"] == "completed"
     signed_document = next(
-        item
-        for item in detail["documents"]
-        if item["document_type"] == "signed_purchase_agreement"
+        item for item in detail["documents"] if item["document_type"] == "signed_purchase_agreement"
     )
     assert signed_document["storage_provider"] == "database"
     assert signed_document["malware_scan_status"] == "not_configured"
@@ -522,10 +515,7 @@ def test_f4_simulated_esign_completion_stores_provider_pdf_and_executes_package(
             }
         },
     }
-    assert (
-        client.post("/api/v1/webhooks/esign/signwell", json=assignment_event).status_code
-        == 200
-    )
+    assert client.post("/api/v1/webhooks/esign/signwell", json=assignment_event).status_code == 200
     assignment_detail = client.get(
         f"/api/v1/transactions/{transaction_id}",
         headers=HEADERS,

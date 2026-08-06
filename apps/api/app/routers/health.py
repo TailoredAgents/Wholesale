@@ -26,7 +26,7 @@ def ready(
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
     worker = get_worker_readiness(db, settings)
-    if worker.required and worker.status in {"missing", "stale"}:
+    if worker.required and worker.status in {"missing", "stale", "degraded"}:
         raise HTTPException(
             status_code=503,
             detail={

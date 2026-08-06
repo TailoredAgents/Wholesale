@@ -341,10 +341,13 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         },
     ).json()
     case_id = case["id"]
-    assert client.post(
-        f"/api/v1/dispositions/cases/{case_id}/package/approve",
-        headers=HEADERS,
-    ).status_code == 200
+    assert (
+        client.post(
+            f"/api/v1/dispositions/cases/{case_id}/package/approve",
+            headers=HEADERS,
+        ).status_code
+        == 200
+    )
     proof = client.post(
         f"/api/v1/dispositions/buyers/{buyer_id}/proof",
         headers={**HEADERS, "Content-Type": "application/pdf"},
@@ -381,19 +384,28 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         configured_environment.setenv("AI_ENABLED", "true")
         configured_environment.setenv("OPENAI_API_KEY", "test-openai-key")
         get_settings.cache_clear()
-        assert client.post(
-            "/api/v1/ai/orchestrator/portfolio/install",
-            headers=HEADERS,
-        ).status_code == 201
-        assert client.post(
-            "/api/v1/ai/copilots/install",
-            headers=HEADERS,
-        ).status_code == 201
-        assert client.post(
-            "/api/v1/ai/copilots/foundation/decision",
-            headers=HEADERS,
-            json={"decision": "approve", "notes": "Approved for AI8 test."},
-        ).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/ai/orchestrator/portfolio/install",
+                headers=HEADERS,
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                "/api/v1/ai/copilots/install",
+                headers=HEADERS,
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                "/api/v1/ai/copilots/foundation/decision",
+                headers=HEADERS,
+                json={"decision": "approve", "notes": "Approved for AI8 test."},
+            ).status_code
+            == 200
+        )
         installed = client.post("/api/v1/ai/runtime/install", headers=HEADERS)
         assert installed.status_code == 201
         capability = next(
@@ -460,9 +472,7 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                                 "risks": ["Deposit receipt has not been recorded."],
                             }
                         ],
-                        "buyer_outreach_subject": (
-                            "Atlanta single-family investment opportunity"
-                        ),
+                        "buyer_outreach_subject": ("Atlanta single-family investment opportunity"),
                         "buyer_outreach_body": (
                             "Stonegate has an Atlanta single-family opportunity "
                             "available at $190,000. Reply for the approved package."
@@ -473,12 +483,8 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
                         "relationship_update_proposals": [
                             "Confirm the buyer's preferred Atlanta ZIP codes."
                         ],
-                        "risk_alerts": [
-                            "Maintain a backup buyer before final placement."
-                        ],
-                        "uncertainties": [
-                            "Stonegate closing performance is not yet recorded."
-                        ],
+                        "risk_alerts": ["Maintain a backup buyer before final placement."],
+                        "uncertainties": ["Stonegate closing performance is not yet recorded."],
                         "evidence": [
                             "Approved disposition package",
                             "Buyer match and offer records",
@@ -544,7 +550,5 @@ def test_disposition_copilot_generates_reviewed_draft_without_taking_action(
         )
         == 0
     )
-    assert db_session.scalar(
-        select(func.count(DispositionCopilotRecommendation.id))
-    ) == 1
+    assert db_session.scalar(select(func.count(DispositionCopilotRecommendation.id))) == 1
     assert db_session.scalar(select(func.count(DispositionCopilotReview.id))) == 1

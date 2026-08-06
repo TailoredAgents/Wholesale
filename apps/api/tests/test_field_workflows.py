@@ -448,6 +448,7 @@ def test_field_meeting_evidence_and_underwriting_transfer(
     assert new_version.status == "draft"
     assert new_version.repair_low_cents == 2_300_000
     assert new_version.repair_high_cents == 2_300_000
+    assert new_version.underwriting_metadata is not None
     assert new_version.underwriting_metadata["repair_scenario"]["version"] == "ga-2026.07-v1"
     assert new_version.max_offer_cents is None
     repair = db_session.scalar(select(RepairEstimate).where(RepairEstimate.lead_id == lead.id))
@@ -587,9 +588,7 @@ def test_offer_concessions_govern_field_negotiation(
 
     event_types = list(
         db_session.scalars(
-            select(OfferNegotiationEvent.event_type).where(
-                OfferNegotiationEvent.lead_id == lead.id
-            )
+            select(OfferNegotiationEvent.event_type).where(OfferNegotiationEvent.lead_id == lead.id)
         )
     )
     assert event_types.count("concession_requested") == 2
@@ -673,24 +672,26 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
     _, lead, appointment, _ = field_appointment(db_session)
     client = TestClient(app)
     headers = {"X-Dev-User-Email": OWNER_EMAIL}
-    assert client.post(
-        f"/api/v1/field-operations/appointments/{appointment.id}/brief",
-        headers=headers,
-    ).status_code == 200
-    assert client.post(
-        "/api/v1/ai/orchestrator/portfolio/install", headers=headers
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/install", headers=headers
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/foundation/decision",
-        headers=headers,
-        json={"decision": "approve", "notes": "Approved for acquisitions pilot test."},
-    ).status_code == 200
-    assert client.post(
-        "/api/v1/ai/runtime/install", headers=headers
-    ).status_code == 201
+    assert (
+        client.post(
+            f"/api/v1/field-operations/appointments/{appointment.id}/brief",
+            headers=headers,
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=headers).status_code == 201
+    )
+    assert client.post("/api/v1/ai/copilots/install", headers=headers).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=headers,
+            json={"decision": "approve", "notes": "Approved for acquisitions pilot test."},
+        ).status_code
+        == 200
+    )
+    assert client.post("/api/v1/ai/runtime/install", headers=headers).status_code == 201
 
     workspace = client.get(
         f"/api/v1/field-operations/appointments/{appointment.id}/workspace",
@@ -793,20 +794,24 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
                 "total_tokens": 280,
             }
 
-    monkeypatch.setattr(
-        "app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient
-    )
-    assert client.patch(
-        "/api/v1/ai/runtime/policy",
-        headers=headers,
-        json={"provider_status": "enabled"},
-    ).status_code == 200
-    for capability in ("appointment.brief", "underwriting.analyze", "negotiation.coach"):
-        assert client.patch(
-            f"/api/v1/ai/runtime/capabilities/{capability}",
+    monkeypatch.setattr("app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient)
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
             headers=headers,
-            json={"status": "enabled", "model_route": "default"},
-        ).status_code == 200
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
+    )
+    for capability in ("appointment.brief", "underwriting.analyze", "negotiation.coach"):
+        assert (
+            client.patch(
+                f"/api/v1/ai/runtime/capabilities/{capability}",
+                headers=headers,
+                json={"status": "enabled", "model_route": "default"},
+            ).status_code
+            == 200
+        )
 
     task_count = int(db_session.scalar(select(func.count()).select_from(Task)) or 0)
     communication_count = int(
@@ -937,19 +942,12 @@ def test_acquisitions_copilot_is_draft_only_and_appointment_scoped(
     )
     assert (
         int(
-            db_session.scalar(
-                select(func.count()).select_from(AcquisitionsCopilotRecommendation)
-            )
+            db_session.scalar(select(func.count()).select_from(AcquisitionsCopilotRecommendation))
             or 0
         )
         == 3
     )
     assert (
-        int(
-            db_session.scalar(
-                select(func.count()).select_from(AcquisitionsCopilotReview)
-            )
-            or 0
-        )
+        int(db_session.scalar(select(func.count()).select_from(AcquisitionsCopilotReview)) or 0)
         == 2
     )

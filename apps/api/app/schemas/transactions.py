@@ -35,9 +35,9 @@ class TransactionOverview(BaseModel):
 
 class ContractPackageCreate(BaseModel):
     template_id: UUID | None = None
-    document_type: Literal[
-        "purchase_agreement", "assignment_contract", "addendum"
-    ] = "purchase_agreement"
+    document_type: Literal["purchase_agreement", "assignment_contract", "addendum"] = (
+        "purchase_agreement"
+    )
     seller_name: str = Field(min_length=1, max_length=255)
     buyer_entity_name: str = Field(min_length=1, max_length=255)
     purchase_price_cents: int = Field(ge=1)

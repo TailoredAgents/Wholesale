@@ -84,12 +84,9 @@ def create_repair_estimate(
         if (
             item.labor_cost_cents is not None
             and item.material_cost_cents is not None
-            and item.labor_cost_cents + item.material_cost_cents
-            != item.estimated_cost_cents
+            and item.labor_cost_cents + item.material_cost_cents != item.estimated_cost_cents
         ):
-            raise ValueError(
-                "Labor and material costs must add up to the work-item estimate."
-            )
+            raise ValueError("Labor and material costs must add up to the work-item estimate.")
         raw_scope_items.append(item.model_dump(mode="json"))
 
     scenario = evaluate_repair_scope(
@@ -105,9 +102,7 @@ def create_repair_estimate(
         property_id=lead.property_id,
         created_by_user_id=principal.user_id,
         source_type=payload.source_type,
-        contractor_name=(
-            payload.contractor_name.strip() if payload.contractor_name else None
-        ),
+        contractor_name=(payload.contractor_name.strip() if payload.contractor_name else None),
         estimate_date=payload.estimate_date,
         scope_items=scope_items,
         subtotal_cents=subtotal_cents,
@@ -186,9 +181,7 @@ def repair_estimate_to_read(estimate: RepairEstimate) -> RepairEstimateRead:
         source_type=estimate.source_type,
         contractor_name=estimate.contractor_name,
         estimate_date=estimate.estimate_date,
-        scope_items=[
-            RepairEstimateItemInput.model_validate(item) for item in estimate.scope_items
-        ],
+        scope_items=[RepairEstimateItemInput.model_validate(item) for item in estimate.scope_items],
         subtotal_cents=estimate.subtotal_cents,
         contingency_percentage=estimate.contingency_percentage,
         contingency_cents=estimate.contingency_cents,

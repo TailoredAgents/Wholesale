@@ -169,11 +169,7 @@ class RentCastClient:
                 round(square_footage * (1 - square_footage_tolerance)),
                 round(square_footage * (1 + square_footage_tolerance)),
             )
-        if (
-            year_built is not None
-            and year_built > 0
-            and year_built_tolerance is not None
-        ):
+        if year_built is not None and year_built > 0 and year_built_tolerance is not None:
             params["yearBuilt"] = numeric_range(
                 max(1700, year_built - year_built_tolerance),
                 year_built + year_built_tolerance,
@@ -349,9 +345,7 @@ def rentcast_error_details(response: httpx.Response) -> tuple[str | None, str | 
     if isinstance(payload, dict):
         error_code = payload.get("error")
         normalized_error_code = (
-            error_code.strip()
-            if isinstance(error_code, str) and error_code.strip()
-            else None
+            error_code.strip() if isinstance(error_code, str) and error_code.strip() else None
         )
         for key in ("message", "detail"):
             value = payload.get(key)

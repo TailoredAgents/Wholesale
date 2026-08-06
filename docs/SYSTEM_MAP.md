@@ -924,6 +924,10 @@ When recording is deliberately enabled:
 6. the AI run and orchestrator event close with the same human decision.
 7. retention and early deletion are tracked.
 
+The integration is not launch-ready unless Voice, the approved recording-authorization policy,
+transcription, OpenAI, failure visibility, retention, deletion, and human review/apply have passed
+together. A spoken disclosure is optional in the approved Georgia-only one-party mode.
+
 ## 11. Underwriting System
 
 ### 11.1 Evidence Hierarchy
@@ -1287,9 +1291,9 @@ telemarketing, recording, or real-estate advice.
 | Render | Hosting, Postgres, key value | Implemented | Active |
 | OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
 | RentCast | Independent recorded-sale, rent, and market evidence | Implemented | Configured; address coverage varies |
-| RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Activation requires the same API key and candidate mode on API and worker |
+| RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Active; controlled property research passed |
 | Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
-| Twilio | SMS, Voice, recordings | Implemented | Seller A2P approved; number/Voice acceptance pending |
+| Twilio | SMS, Voice, recordings, and Call Intelligence | Implemented | Staff lead alerts active; Voice/recording/transcription/AI-note acceptance remains |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
@@ -1297,7 +1301,7 @@ telemarketing, recording, or real-estate advice.
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
-| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented Page-ID-restricted Zapier endpoint, deduplication, attribution, audit payloads, and retries | Active; controlled ingestion test passed |
+| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented secret-authenticated, Page-ID-restricted Zapier endpoint, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; secret must be synchronized before this release deploys |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Active; controlled live delivery passed |
 
 ## 21. Data Domain Map
@@ -1415,7 +1419,8 @@ DNS, webhook, carrier, mailbox, signing, data-provider, or advertising account c
 The major product workflows are implemented. The remaining risk is primarily production
 acceptance and evidence:
 
-- Twilio acquisitions-number attachment and dedicated SMS/Voice end-to-end tests
+- Twilio acquisitions-number attachment and dedicated Voice, recording, transcription, AI-note
+  review/apply, failure, retention, and deletion acceptance
 - Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
 - SignWell template, webhook, remote signature, and iPad signature acceptance
 - RealEstateAPI API-key deployment and controlled property-research acceptance

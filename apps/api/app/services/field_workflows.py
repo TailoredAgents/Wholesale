@@ -13,9 +13,9 @@ from app.models.foundation import (
     Appointment,
     ApprovalRequest,
     AuditEvent,
-    ContractPackage,
     Contact,
     ContactMethod,
+    ContractPackage,
     EsignEnvelope,
     FieldInspection,
     FieldInspectionPhoto,
@@ -235,8 +235,7 @@ def field_contract_signing_summary(
                 ContractPackage.organization_id == principal.organization_id,
                 ContractPackage.transaction_id == transaction.id,
                 ContractPackage.voided_at.is_(None),
-                ContractPackage.terms_snapshot["document_type"].as_string()
-                == "purchase_agreement",
+                ContractPackage.terms_snapshot["document_type"].as_string() == "purchase_agreement",
             )
             .order_by(ContractPackage.version_number.desc())
         )
@@ -1224,18 +1223,10 @@ def client_presentation_summary(
         },
         "value_evidence": {
             "arv_low_cents": (
-                version.arv_low_cents
-                if version
-                else analysis.arv_low_cents
-                if analysis
-                else None
+                version.arv_low_cents if version else analysis.arv_low_cents if analysis else None
             ),
             "arv_high_cents": (
-                version.arv_high_cents
-                if version
-                else analysis.arv_high_cents
-                if analysis
-                else None
+                version.arv_high_cents if version else analysis.arv_high_cents if analysis else None
             ),
             "confidence_score": analysis.confidence_score if analysis else None,
             "confidence_tier": analysis_metadata.get("confidence_tier"),

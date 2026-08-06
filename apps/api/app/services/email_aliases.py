@@ -67,8 +67,7 @@ def list_email_sender_aliases(
         items=[email_sender_alias_to_read(db, alias, principal) for alias in aliases],
         provider=settings.email_provider,
         provider_configured=(
-            settings.communication_simulation_enabled
-            or not settings.email_configuration_blockers
+            settings.communication_simulation_enabled or not settings.email_configuration_blockers
         ),
         configuration_blockers=list(settings.email_configuration_blockers),
     )

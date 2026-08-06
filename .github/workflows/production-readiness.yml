@@ -26,8 +26,8 @@ jobs:
 
       - name: Check API, worker readiness, and public pages
         env:
-          API_BASE_URL: https://oakwell-api.onrender.com
-          WEB_BASE_URL: https://www.stonegatehomebuyer.com
+          API_BASE_URL: https://api.stonegatehb.com
+          WEB_BASE_URL: https://www.stonegatehb.com
         run: bash scripts/smoke-test.sh
 
       - name: Controlled alert-path failure

@@ -1,7 +1,8 @@
 import json
+import secrets
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -18,6 +19,10 @@ router = APIRouter(prefix="/api/v1/webhooks/zapier", tags=["zapier-webhooks"])
 async def receive_zapier_facebook_lead_webhook(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    supplied_secret: Annotated[
+        str | None,
+        Header(alias="X-Stonegate-Webhook-Secret"),
+    ] = None,
 ) -> dict[str, object]:
     settings = get_settings()
     if not settings.zapier_facebook_leads_enabled:
@@ -30,6 +35,9 @@ async def receive_zapier_facebook_lead_webhook(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Zapier Facebook lead ingestion is not configured.",
         )
+    expected_secret = settings.zapier_facebook_leads_secret or ""
+    if not supplied_secret or not secrets.compare_digest(supplied_secret, expected_secret):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid secret.")
     content_length = request.headers.get("content-length")
     if (
         content_length

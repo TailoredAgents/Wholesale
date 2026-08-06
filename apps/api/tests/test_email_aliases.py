@@ -235,18 +235,12 @@ def test_owner_manages_provider_neutral_aliases_and_sender_access(
         "/api/v1/email/aliases",
         headers={"X-Dev-User-Email": "devon.login@example.com"},
     )
-    assert {
-        item["email_address"] for item in devon_after_revoke.json()["items"]
-    } == {"devon@stonegatehb.com"}
+    assert {item["email_address"] for item in devon_after_revoke.json()["items"]} == {
+        "devon@stonegatehb.com"
+    }
 
-    assert (
-        db_session.scalar(select(func.count()).select_from(EmailSenderAlias))
-        == 3
-    )
-    assert (
-        db_session.scalar(select(func.count()).select_from(EmailSenderGrant))
-        == 1
-    )
+    assert db_session.scalar(select(func.count()).select_from(EmailSenderAlias)) == 3
+    assert db_session.scalar(select(func.count()).select_from(EmailSenderGrant)) == 1
     assert (
         db_session.scalar(
             select(func.count())

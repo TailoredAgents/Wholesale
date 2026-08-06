@@ -66,8 +66,7 @@ def get_disposition_copilot_overview(
         db.scalars(
             select(DispositionCopilotRecommendation)
             .where(
-                DispositionCopilotRecommendation.organization_id
-                == principal.organization_id,
+                DispositionCopilotRecommendation.organization_id == principal.organization_id,
                 DispositionCopilotRecommendation.disposition_case_id == case.id,
             )
             .order_by(DispositionCopilotRecommendation.generated_at.desc())
@@ -114,8 +113,7 @@ def analyze_disposition(
     idempotency_key = payload.idempotency_key or _idempotency_key(case, facts)
     existing = db.scalar(
         select(DispositionCopilotRecommendation).where(
-            DispositionCopilotRecommendation.organization_id
-            == principal.organization_id,
+            DispositionCopilotRecommendation.organization_id == principal.organization_id,
             DispositionCopilotRecommendation.idempotency_key == idempotency_key,
         )
     )
@@ -169,9 +167,7 @@ def analyze_disposition(
             recommendation=None,
         )
     try:
-        parsed = DispositionCoordinationOutput.model_validate(
-            json.loads(run.output_summary)
-        )
+        parsed = DispositionCoordinationOutput.model_validate(json.loads(run.output_summary))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
             "The model response did not match the Disposition Copilot contract."
@@ -191,9 +187,7 @@ def analyze_disposition(
         evidence_snapshot={
             "readiness_score": facts["readiness_score"],
             "readiness_gaps": facts["readiness_gaps"],
-            "risk_alerts": [
-                item.model_dump(mode="json") for item in facts["risk_alerts"]
-            ],
+            "risk_alerts": [item.model_dump(mode="json") for item in facts["risk_alerts"]],
             "qualified_buyer_count": facts["qualified_buyer_count"],
             "verified_buyer_count": facts["verified_buyer_count"],
             "offer_count": facts["offer_count"],
@@ -236,8 +230,7 @@ def review_recommendation(
 ) -> DispositionCopilotReviewRead | None:
     recommendation = db.scalar(
         select(DispositionCopilotRecommendation).where(
-            DispositionCopilotRecommendation.organization_id
-            == principal.organization_id,
+            DispositionCopilotRecommendation.organization_id == principal.organization_id,
             DispositionCopilotRecommendation.id == recommendation_id,
         )
     )
@@ -260,9 +253,7 @@ def review_recommendation(
     if payload.decision == "edited":
         assert payload.final_output is not None
         try:
-            parsed = DispositionCoordinationOutput.model_validate(
-                payload.final_output
-            )
+            parsed = DispositionCoordinationOutput.model_validate(payload.final_output)
         except ValidationError as exc:
             raise ValueError(
                 "The corrected output must preserve the disposition response contract."
@@ -316,9 +307,7 @@ def recommendation_read(
         lead_id=item.lead_id,
         ai_run_log_id=item.ai_run_log_id,
         status=item.status,
-        output_payload=DispositionCoordinationOutput.model_validate(
-            item.output_payload
-        ),
+        output_payload=DispositionCoordinationOutput.model_validate(item.output_payload),
         confidence_score=item.confidence_score,
         generated_at=item.generated_at,
         reviewed_at=item.reviewed_at,
@@ -407,9 +396,7 @@ def _disposition_facts(
     if not matches:
         gaps.append("Generate the deterministic buyer ranking.")
         score -= 20
-    qualified = [
-        item for item in matches if item.qualification_status == "qualified"
-    ]
+    qualified = [item for item in matches if item.qualification_status == "qualified"]
     if matches and not qualified:
         gaps.append("Resolve buyer qualification and proof-of-funds gaps.")
         score -= 20
@@ -430,9 +417,7 @@ def _disposition_facts(
         buyer = buyers.get(match.buyer_id)
         if buyer is None:
             continue
-        if buyer.proof_of_funds_expires_at and _aware(
-            buyer.proof_of_funds_expires_at
-        ) < now:
+        if buyer.proof_of_funds_expires_at and _aware(buyer.proof_of_funds_expires_at) < now:
             risks.append(
                 DispositionRiskAlert(
                     severity="critical",
@@ -509,9 +494,7 @@ def _disposition_facts(
         "readiness_score": score,
         "readiness_band": band,
         "readiness_gaps": gaps,
-        "risk_alerts": sorted(
-            risks, key=lambda item: severity_order[item.severity]
-        ),
+        "risk_alerts": sorted(risks, key=lambda item: severity_order[item.severity]),
         "qualified_buyer_count": len(qualified),
         "verified_buyer_count": len(verified),
         "offer_count": len(offers),
@@ -541,9 +524,7 @@ def _validate_output(
         if str(offer_item.offer_id) not in valid_offer_ids:
             raise ValueError("The model compared an offer outside this disposition case.")
 
-    external_draft = (
-        f"{output.buyer_outreach_subject}\n{output.buyer_outreach_body}".lower()
-    )
+    external_draft = f"{output.buyer_outreach_subject}\n{output.buyer_outreach_body}".lower()
     seller_name = str(case.package_snapshot.get("seller_name") or "").strip().lower()
     if seller_name and seller_name in external_draft:
         raise ValueError("The buyer outreach draft exposed the seller identity.")
@@ -572,20 +553,13 @@ def _idempotency_key(
     fingerprint = {
         "case_id": str(case.id),
         "case_updated_at": case.updated_at.isoformat(),
-        "matches": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["matches"]
-        ],
-        "offers": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["offers"]
-        ],
+        "matches": [(str(item.id), item.updated_at.isoformat()) for item in facts["matches"]],
+        "offers": [(str(item.id), item.updated_at.isoformat()) for item in facts["offers"]],
         "engagements": [
-            (str(item.id), item.updated_at.isoformat())
-            for item in facts["engagements"]
+            (str(item.id), item.updated_at.isoformat()) for item in facts["engagements"]
         ],
     }
-    digest = hashlib.sha256(
-        json.dumps(fingerprint, sort_keys=True).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     return f"disposition-copilot:{case.id}:{digest}"
 
 
@@ -594,8 +568,7 @@ def _metrics(db: Session, principal: Principal) -> DispositionCopilotMetrics:
     recommendations = list(
         db.scalars(
             select(DispositionCopilotRecommendation).where(
-                DispositionCopilotRecommendation.organization_id
-                == principal.organization_id,
+                DispositionCopilotRecommendation.organization_id == principal.organization_id,
                 DispositionCopilotRecommendation.generated_at >= since,
             )
         ).all()
@@ -605,11 +578,8 @@ def _metrics(db: Session, principal: Principal) -> DispositionCopilotMetrics:
         list(
             db.scalars(
                 select(DispositionCopilotReview).where(
-                    DispositionCopilotReview.organization_id
-                    == principal.organization_id,
-                    DispositionCopilotReview.recommendation_id.in_(
-                        recommendation_ids
-                    ),
+                    DispositionCopilotReview.organization_id == principal.organization_id,
+                    DispositionCopilotReview.recommendation_id.in_(recommendation_ids),
                 )
             ).all()
         )
@@ -617,9 +587,7 @@ def _metrics(db: Session, principal: Principal) -> DispositionCopilotMetrics:
         else []
     )
     reviewed = len(reviews)
-    accepted_or_edited = sum(
-        item.decision in {"accepted", "edited"} for item in reviews
-    )
+    accepted_or_edited = sum(item.decision in {"accepted", "edited"} for item in reviews)
     edited = sum(item.decision == "edited" for item in reviews)
     return DispositionCopilotMetrics(
         generated=len(recommendations),
@@ -627,9 +595,7 @@ def _metrics(db: Session, principal: Principal) -> DispositionCopilotMetrics:
         accepted_or_corrected_rate_basis_points=(
             round(accepted_or_edited / reviewed * 10_000) if reviewed else 0
         ),
-        correction_rate_basis_points=(
-            round(edited / reviewed * 10_000) if reviewed else 0
-        ),
+        correction_rate_basis_points=(round(edited / reviewed * 10_000) if reviewed else 0),
         estimated_time_saved_minutes=round(
             sum(item.estimated_time_saved_seconds for item in reviews) / 60
         ),

@@ -286,9 +286,7 @@ class AcquisitionsFollowUpOutput(BaseModel):
 
 class AcquisitionsRepairScopeSuggestion(BaseModel):
     category: RepairCategory
-    scope_status: Literal[
-        "unknown", "no_work", "repair", "replace", "specialist_review"
-    ]
+    scope_status: Literal["unknown", "no_work", "repair", "replace", "specialist_review"]
     severity: Literal["minor", "standard", "extensive"]
     quantity: float | None = Field(default=None, gt=0, le=100_000)
     rationale: str = Field(max_length=1000)

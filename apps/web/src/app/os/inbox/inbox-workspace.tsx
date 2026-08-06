@@ -129,6 +129,7 @@ type StructuredCallNotes = {
   property_condition: string | null;
   occupancy_status: string | null;
   asking_price: string | null;
+  mortgage_balance: string | null;
   mortgage_or_title: string | null;
   repairs: string[];
   objections: string[];
@@ -396,6 +397,7 @@ const callNoteFieldOptions: Array<{
   { key: "property_condition", label: "Condition" },
   { key: "occupancy_status", label: "Occupancy" },
   { key: "asking_price", label: "Asking price" },
+  { key: "mortgage_balance", label: "Mortgage balance/payoff" },
 ];
 
 function listToText(values: string[]) {
@@ -501,7 +503,7 @@ function CallTranscriptPanel({
                 </label>
               ))}
               <label>
-                Mortgage or title
+                Mortgage or title notes
                 <input
                   disabled={!canReview || transcript.status !== "needs_review"}
                   onChange={(event) => updateNote("mortgage_or_title", event.target.value || null)}
@@ -1089,6 +1091,19 @@ export function InboxWorkspace({
     ["scheduled", "rescheduled"].includes(appointment.status),
   );
   const nextTask = detail?.open_tasks[0];
+  const callNotes = useMemo(
+    () =>
+      (detail?.timeline ?? [])
+        .filter(
+          (item): item is TimelineItem & { transcript: CallTranscript } =>
+            Boolean(item.call_id && item.transcript?.structured_notes),
+        )
+        .sort(
+          (left, right) =>
+            new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime(),
+        ),
+    [detail?.timeline],
+  );
   const isLiveSms = channel === "sms" && direction === "outbound";
   const isLiveEmail = channel === "email";
   const isVoiceComposer = channel === "call" && callComposerMode === "device";
@@ -1634,6 +1649,7 @@ export function InboxWorkspace({
                             ? styles.internalMessage
                             : styles.inboundMessage
                       } ${item.channel === "call" ? styles.callMessage : ""}`}
+                      id={item.call_id ? `call-${item.call_id}` : undefined}
                       key={item.id}
                     >
                       <div className={styles.messageMeta}>
@@ -2371,6 +2387,40 @@ export function InboxWorkspace({
                         <dd>{labelize(detail.occupancy_status)}</dd>
                       </div>
                     </dl>
+                  </section>
+
+                  <section className={styles.detailSection}>
+                    <h4>Call notes</h4>
+                    {callNotes.length > 0 ? (
+                      <div className={styles.callNotesList}>
+                        {callNotes.map((item) => {
+                          const transcript = item.transcript;
+                          const notes = transcript.structured_notes;
+                          if (!notes || !item.call_id) return null;
+
+                          return (
+                            <article className={styles.callNoteCard} key={transcript.id}>
+                              <div className={styles.callNoteMeta}>
+                                <time>{formatDateTime(item.occurred_at)}</time>
+                                <span>{labelize(transcript.status)}</span>
+                              </div>
+                              <strong>{notes.summary}</strong>
+                              {notes.next_action ? (
+                                <p>
+                                  <span>Next:</span> {notes.next_action}
+                                </p>
+                              ) : null}
+                              <a href={`#call-${item.call_id}`}>
+                                Open call in thread
+                                <ChevronRight size={12} aria-hidden="true" />
+                              </a>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className={styles.mutedText}>No processed call notes yet.</p>
+                    )}
                   </section>
 
                   <section className={styles.detailSection}>

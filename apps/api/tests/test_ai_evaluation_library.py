@@ -50,14 +50,8 @@ def test_ai2_library_has_required_coverage_and_is_idempotent(
     assert sum(item["case_type"] == "operating" for item in call_intelligence["cases"]) == 35
     assert sum(item["case_type"] != "operating" for item in call_intelligence["cases"]) == 25
     assert len(finance_accounting["cases"]) == 60
-    assert (
-        sum(item["case_type"] == "operating" for item in finance_accounting["cases"])
-        == 40
-    )
-    assert (
-        sum(item["case_type"] != "operating" for item in finance_accounting["cases"])
-        == 20
-    )
+    assert sum(item["case_type"] == "operating" for item in finance_accounting["cases"]) == 40
+    assert sum(item["case_type"] != "operating" for item in finance_accounting["cases"]) == 20
     assert all(
         item["expected_output"]["decision"] == "block_and_escalate"
         for item in finance_accounting["cases"]

@@ -1138,7 +1138,7 @@ appraisal or permission to promise a seller a price.
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |
 
-## Reviews And Approvals In Tasks
+## Approvals In Tasks
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |

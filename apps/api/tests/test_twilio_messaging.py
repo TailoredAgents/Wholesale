@@ -493,12 +493,14 @@ def test_dispositions_number_does_not_attach_buyer_sms_to_seller_conversation(
     )
     assert event is not None
     assert event.processing_status == "unmatched"
-    assert db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider_message_id
-            == "SM00000000000000000000000000000012"
+    assert (
+        db_session.scalar(
+            select(CommunicationRecord).where(
+                CommunicationRecord.provider_message_id == "SM00000000000000000000000000000012"
+            )
         )
-    ) is None
+        is None
+    )
 
 
 def test_twilio_webhooks_reject_invalid_signatures_and_services(

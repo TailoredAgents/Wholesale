@@ -48,11 +48,11 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
 | F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM and cost-governed DealMachine adapter implemented; subscription purchased | API-key activation, controlled search acceptance, and full placement simulation |
+| F5 Buyers and dispositions | Buyer CRM implemented; optional DealMachine adapter disabled | Full buyer-placement and disposition simulation |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
-| F7 Underwriting proof | Stonegate Valuation V3.1 and U4 Comp Intelligence are implemented behind supervised rollout flags; V2.2 is a technical rollback only | Run DealMachine shadow and AI Comp Analyst pilots, collect verified Georgia outcomes, and monitor accuracy and corrections |
+| F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
 | F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
-| F9 Twilio communications | SMS, Voice, recording, and transcription code implemented; seller A2P approved | Number attachment, shared-line routing, and provider acceptance |
+| F9 Twilio communications | SMS, Voice, recording, transcription, and reviewed AI notes implemented; seller A2P approved | Voice, recording authorization, AI-note population, failure, retention, and deletion acceptance before launch |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -338,7 +338,7 @@ quality and credit-use acceptance test before staff rely on it.
 - market scorecards and methodology decision ledger
 - weighted interpolated adjusted-sale ranges with explicit range drivers and no generic percentage
   padding
-- normalized RentCast and DealMachine closed-sale evidence with cross-provider deduplication,
+- normalized RentCast and RealEstateAPI closed-sale evidence with cross-provider deduplication,
   field provenance, conflict visibility, provider-failure isolation, and credit accounting
 - internal provider-audit reporting that keeps external AVMs out of Stonegate ARV and offer math
 - a bounded AI Comp Analyst draft that cites saved evidence, identifies review work, and has no
@@ -362,10 +362,10 @@ and calibration records. Its target capabilities are:
 
 ### Implemented U4 Comp Intelligence Extension
 
-U4 is implemented behind default-safe controls. DealMachine comparable evidence can be disabled,
+U4 is implemented behind default-safe controls. RealEstateAPI comparable evidence can be disabled,
 observed in shadow mode without changing valuation math, or admitted as candidate closed-sale
-evidence after a measured promotion decision. A per-analysis credit ceiling and property-only
-requests bound cost and data scope. Provider failures do not prevent RentCast-backed analysis.
+evidence after a measured promotion decision. Exact subject matching, saved provider records, and
+snapshot reuse bound cost and data scope. Provider failures do not prevent RentCast-backed analysis.
 
 The optional AI Comp Analyst runs only in draft mode against evidence already supplied by
 Stonegate. Its structured output can explain comp inclusion, source conflict, uncertainty, and
@@ -408,12 +408,12 @@ For ongoing V3 validation:
 
 For the U4 controlled rollout:
 
-1. Start DealMachine in shadow mode and compare sale coverage, duplicate matching, material field
-   conflicts, latency, and actual credits with the same RentCast-backed analyses.
+1. Compare RealEstateAPI candidate evidence with RentCast for sale coverage, duplicate matching,
+   material field conflicts, latency, and provider credits on the same analyses.
 2. Review every cross-provider conflict and confirm that canonical values and source provenance
    remain reproducible from the saved record.
-3. Promote DealMachine to candidate evidence only for a named market after shadow results show a
-   useful evidence gain without unacceptable error, operator burden, or credit cost.
+3. Keep RealEstateAPI in candidate mode only while it shows useful evidence gain without
+   unacceptable error, operator burden, or credit cost.
 4. Run the AI Comp Analyst only in draft mode after fixed-case replay confirms evidence citations,
    prohibited-price controls, incomplete-evidence behavior, and human-review routing.
 5. Measure operator acceptance, correction, rejection, latency, and time saved before any broader
@@ -425,10 +425,10 @@ For the U4 controlled rollout:
   show a material accuracy or operator-burden regression.
 - The first market has enough verified cases for the approved review threshold.
 - Material bias and failure patterns are documented.
-- Stonegate has decided whether RentCast alone or RentCast plus DealMachine candidate evidence is
+- Stonegate has decided whether RentCast alone or RentCast plus RealEstateAPI candidate evidence is
   adequate for that market.
-- The DealMachine shadow pilot documents coverage gain, conflicts, provider failures, latency, and
-  credit use before candidate promotion.
+- The RealEstateAPI evaluation documents coverage gain, conflicts, provider failures, latency, and
+  credit use while candidate mode remains active.
 - The AI Comp Analyst pilot shows evidence-bound drafts with no prohibited valuation or offer
   authority and an acceptable human-correction burden.
 - Formula and provider decisions are evidence-backed, versioned, and human approved.
@@ -576,8 +576,9 @@ Stonegate is ready for controlled first-market operations when:
 2. The production backup, restore, readiness, and access-revocation checks pass.
 3. Resend email passes controlled acceptance.
 4. SignWell and the actual contract package pass remote and iPad acceptance before live signing.
-5. Dedicated Twilio communications pass after A2P approval, or Stonegate launches with those
-   channels deliberately disabled and a documented manual communication process.
+5. Dedicated Twilio SMS and Voice pass after A2P approval. Because call notes are launch-critical,
+   the approved recording authorization, private media, transcription, structured AI draft, human
+   correction/rejection/apply, failure visibility, retention, and deletion also pass end to end.
 6. One buyer and disposition simulation reaches reconciliation.
 7. The accounting process has an accepted opening and first close plan.
 8. Underwriting outcomes are recorded from the first live analyses onward.

@@ -50,6 +50,7 @@ def read_integration_status(
         property_blockers.append("ATTOM_API_KEY")
 
     voice_blockers = list(settings.twilio_voice_configuration_blockers)
+    call_intelligence_blockers = list(settings.call_intelligence_configuration_blockers)
 
     buyer_blockers = []
     if settings.buyer_data_provider != "dealmachine":
@@ -65,9 +66,7 @@ def read_integration_status(
 
     realestateapi_blockers = []
     if settings.underwriting_realestateapi_comps_mode == "disabled":
-        realestateapi_blockers.append(
-            "UNDERWRITING_REALESTATEAPI_COMPS_MODE=shadow or candidate"
-        )
+        realestateapi_blockers.append("UNDERWRITING_REALESTATEAPI_COMPS_MODE=shadow or candidate")
     if not settings.realestateapi_api_key:
         realestateapi_blockers.append("REALESTATEAPI_API_KEY")
 
@@ -123,6 +122,18 @@ def read_integration_status(
                 mode=settings.communication_provider_mode,
                 enabled=settings.twilio_voice_enabled,
                 blockers=voice_blockers,
+            ),
+            _status(
+                key="call-intelligence",
+                name="Call recording and AI notes",
+                category="Communications",
+                mode=settings.openai_transcription_model,
+                enabled=(
+                    settings.twilio_voice_enabled
+                    and settings.twilio_voice_recording_enabled
+                    and settings.call_transcription_enabled
+                ),
+                blockers=call_intelligence_blockers,
             ),
             _status(
                 key="signwell",

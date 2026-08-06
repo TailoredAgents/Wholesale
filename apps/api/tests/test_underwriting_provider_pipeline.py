@@ -1,6 +1,8 @@
 from dataclasses import replace
 from typing import Any
 
+from pytest import MonkeyPatch
+
 from app.core.config import Settings
 from app.integrations.dealmachine_client import (
     DealMachineComparableSearch,
@@ -162,7 +164,7 @@ def _run(
 
 
 def test_realestateapi_candidate_merges_and_deduplicates_comps(
-    monkeypatch,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     class FakeRealEstateAPIClient:
         def __init__(self, _settings: Settings) -> None:

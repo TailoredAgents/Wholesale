@@ -65,8 +65,7 @@ def get_transaction_copilot_overview(
         db.scalars(
             select(TransactionCopilotRecommendation)
             .where(
-                TransactionCopilotRecommendation.organization_id
-                == principal.organization_id,
+                TransactionCopilotRecommendation.organization_id == principal.organization_id,
                 TransactionCopilotRecommendation.transaction_id == transaction.id,
             )
             .order_by(TransactionCopilotRecommendation.generated_at.desc())
@@ -111,8 +110,7 @@ def analyze_transaction(
     idempotency_key = payload.idempotency_key or _idempotency_key(transaction, facts)
     existing = db.scalar(
         select(TransactionCopilotRecommendation).where(
-            TransactionCopilotRecommendation.organization_id
-            == principal.organization_id,
+            TransactionCopilotRecommendation.organization_id == principal.organization_id,
             TransactionCopilotRecommendation.idempotency_key == idempotency_key,
         )
     )
@@ -160,9 +158,7 @@ def analyze_transaction(
             recommendation=None,
         )
     try:
-        parsed = TransactionCoordinationOutput.model_validate(
-            json.loads(run.output_summary)
-        )
+        parsed = TransactionCoordinationOutput.model_validate(json.loads(run.output_summary))
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
             "The model response did not match the Transaction Copilot contract."
@@ -180,13 +176,9 @@ def analyze_transaction(
         evidence_snapshot={
             "readiness_score": facts["readiness_score"],
             "readiness_gaps": facts["readiness_gaps"],
-            "deadline_risks": [
-                item.model_dump(mode="json") for item in facts["deadline_risks"]
-            ],
+            "deadline_risks": [item.model_dump(mode="json") for item in facts["deadline_risks"]],
             "evidence_available": facts["evidence_available"],
-            "confirmed_document_fact_count": facts[
-                "confirmed_document_fact_count"
-            ],
+            "confirmed_document_fact_count": facts["confirmed_document_fact_count"],
         },
         confidence_score=parsed.confidence,
         generated_at=datetime.now(UTC),
@@ -224,8 +216,7 @@ def review_recommendation(
 ) -> TransactionCopilotReviewRead | None:
     recommendation = db.scalar(
         select(TransactionCopilotRecommendation).where(
-            TransactionCopilotRecommendation.organization_id
-            == principal.organization_id,
+            TransactionCopilotRecommendation.organization_id == principal.organization_id,
             TransactionCopilotRecommendation.id == recommendation_id,
         )
     )
@@ -330,8 +321,7 @@ def _transaction_facts(
     checklist = list(
         db.scalars(
             select(TransactionChecklistItem).where(
-                TransactionChecklistItem.organization_id
-                == principal.organization_id,
+                TransactionChecklistItem.organization_id == principal.organization_id,
                 TransactionChecklistItem.transaction_id == transaction.id,
             )
         ).all()
@@ -355,8 +345,7 @@ def _transaction_facts(
     confirmed_fact_count = int(
         db.scalar(
             select(func.count(TransactionDocumentFact.id)).where(
-                TransactionDocumentFact.organization_id
-                == principal.organization_id,
+                TransactionDocumentFact.organization_id == principal.organization_id,
                 TransactionDocumentFact.transaction_id == transaction.id,
                 TransactionDocumentFact.status == "confirmed",
             )
@@ -376,9 +365,7 @@ def _transaction_facts(
     if not transaction.title_company:
         gaps.append("Record the closing attorney or title company.")
         score -= 10
-    if not any(
-        item.party_type in {"closing_attorney", "title_company"} for item in parties
-    ):
+    if not any(item.party_type in {"closing_attorney", "title_company"} for item in parties):
         gaps.append("Add the closing attorney or title contact.")
         score -= 10
     executed = [item for item in packages if item.status == "executed"]
@@ -401,17 +388,13 @@ def _transaction_facts(
         gaps.append("Upload the transaction evidence package.")
         score -= 10
     if confirmed_fact_count:
-        evidence.append(
-            f"{confirmed_fact_count} human-confirmed document fact(s)"
-        )
+        evidence.append(f"{confirmed_fact_count} human-confirmed document fact(s)")
     else:
         gaps.append("Confirm material facts with document page references.")
         score -= 5
     if parties:
         evidence.append(f"{len(parties)} closing party record(s)")
-    completed = sum(
-        item.status in {"complete", "not_applicable"} for item in checklist
-    )
+    completed = sum(item.status in {"complete", "not_applicable"} for item in checklist)
     if checklist:
         evidence.append(f"{completed}/{len(checklist)} checklist items complete")
     critical_count = sum(item.severity == "critical" for item in risks)
@@ -492,23 +475,13 @@ def _idempotency_key(
     fingerprint = {
         "transaction_id": str(transaction.id),
         "transaction_updated_at": transaction.updated_at.isoformat(),
-        "documents": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["documents"]
-        ],
-        "checklist": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["checklist"]
-        ],
-        "parties": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["parties"]
-        ],
-        "packages": [
-            (str(item.id), item.updated_at.isoformat()) for item in facts["packages"]
-        ],
+        "documents": [(str(item.id), item.updated_at.isoformat()) for item in facts["documents"]],
+        "checklist": [(str(item.id), item.updated_at.isoformat()) for item in facts["checklist"]],
+        "parties": [(str(item.id), item.updated_at.isoformat()) for item in facts["parties"]],
+        "packages": [(str(item.id), item.updated_at.isoformat()) for item in facts["packages"]],
         "confirmed_document_fact_count": facts["confirmed_document_fact_count"],
     }
-    digest = hashlib.sha256(
-        json.dumps(fingerprint, sort_keys=True).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     return f"transaction-copilot:{transaction.id}:{digest}"
 
 
@@ -517,8 +490,7 @@ def _metrics(db: Session, principal: Principal) -> TransactionCopilotMetrics:
     recommendations = list(
         db.scalars(
             select(TransactionCopilotRecommendation).where(
-                TransactionCopilotRecommendation.organization_id
-                == principal.organization_id,
+                TransactionCopilotRecommendation.organization_id == principal.organization_id,
                 TransactionCopilotRecommendation.generated_at >= since,
             )
         ).all()
@@ -528,8 +500,7 @@ def _metrics(db: Session, principal: Principal) -> TransactionCopilotMetrics:
         list(
             db.scalars(
                 select(TransactionCopilotReview).where(
-                    TransactionCopilotReview.organization_id
-                    == principal.organization_id,
+                    TransactionCopilotReview.organization_id == principal.organization_id,
                     TransactionCopilotReview.recommendation_id.in_(ids),
                 )
             ).all()
@@ -538,9 +509,7 @@ def _metrics(db: Session, principal: Principal) -> TransactionCopilotMetrics:
         else []
     )
     reviewed = len(reviews)
-    accepted_or_edited = sum(
-        item.decision in {"accepted", "edited"} for item in reviews
-    )
+    accepted_or_edited = sum(item.decision in {"accepted", "edited"} for item in reviews)
     edited = sum(item.decision == "edited" for item in reviews)
     return TransactionCopilotMetrics(
         generated=len(recommendations),
@@ -548,9 +517,7 @@ def _metrics(db: Session, principal: Principal) -> TransactionCopilotMetrics:
         accepted_or_corrected_rate_basis_points=(
             round(accepted_or_edited / reviewed * 10_000) if reviewed else 0
         ),
-        correction_rate_basis_points=(
-            round(edited / reviewed * 10_000) if reviewed else 0
-        ),
+        correction_rate_basis_points=(round(edited / reviewed * 10_000) if reviewed else 0),
         estimated_time_saved_minutes=round(
             sum(item.estimated_time_saved_seconds for item in reviews) / 60
         ),

@@ -1,10 +1,12 @@
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.schema import Column, Table
 
 from app.core.auth import Principal
 from app.core.config import Settings
@@ -854,20 +856,16 @@ def delete_operations_user(
         raise ValueError("Deactivate this employee before deleting them.")
 
     blockers: list[str] = []
-    cleanup_references: list[tuple[object, object, str]] = []
+    cleanup_references: list[tuple[Table, Column[Any], Literal["delete", "clear"]]] = []
     for table in Base.metadata.sorted_tables:
         for column in table.columns:
             if not any(
-                foreign_key.target_fullname == "users.id"
-                for foreign_key in column.foreign_keys
+                foreign_key.target_fullname == "users.id" for foreign_key in column.foreign_keys
             ):
                 continue
             reference = (table.name, column.name)
             reference_count = int(
-                db.scalar(
-                    select(func.count()).select_from(table).where(column == user.id)
-                )
-                or 0
+                db.scalar(select(func.count()).select_from(table).where(column == user.id)) or 0
             )
             if not reference_count:
                 continue

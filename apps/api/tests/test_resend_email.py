@@ -15,11 +15,11 @@ from app.core.config import get_settings
 from app.integrations.resend_email import ResendEmailDeliveryProvider
 from app.main import app
 from app.models.foundation import (
-    Contact,
-    ContactMethod,
     CommunicationDispatch,
     CommunicationParticipant,
     CommunicationRecord,
+    Contact,
+    ContactMethod,
     Conversation,
 )
 from app.services.bootstrap import bootstrap_foundation
@@ -192,19 +192,14 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
 
     first_request = requests[0]
     assert first_request["idempotency_key"] == "resend-request-1"
-    assert first_request["payload"]["from"] == (
-        "Stonegate Home Buyers <offers@stonegatehb.com>"
-    )
+    assert first_request["payload"]["from"] == ("Stonegate Home Buyers <offers@stonegatehb.com>")
     assert first_request["payload"]["to"] == ["seller@example.com"]
     assert first_request["payload"]["cc"] == ["conner@stonegatehb.com"]
     assert first_request["payload"]["bcc"] == ["audit@stonegatehb.com"]
     assert first_request["payload"]["html"] == (
-        "<p>Can we meet Tuesday?</p><br><br>--<br>"
-        "Austin<br>Stonegate Home Buyers"
+        "<p>Can we meet Tuesday?</p><br><br>--<br>Austin<br>Stonegate Home Buyers"
     )
-    assert first_request["payload"]["text"].endswith(
-        "Austin\nStonegate Home Buyers"
-    )
+    assert first_request["payload"]["text"].endswith("Austin\nStonegate Home Buyers")
     assert first_request["payload"]["attachments"] == [
         {
             "filename": "offer-summary.pdf",
@@ -222,23 +217,17 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
     assert len(communications) == 2
     assert communications[0].provider == "resend"
     assert communications[0].communication_metadata is not None
-    assert (
-        communications[0].communication_metadata["email_sender_alias_id"]
-        == alias_id
-    )
+    assert communications[0].communication_metadata["email_sender_alias_id"] == alias_id
     participants = db_session.scalars(
         select(CommunicationParticipant)
-        .where(
-            CommunicationParticipant.communication_record_id == communications[0].id
-        )
+        .where(CommunicationParticipant.communication_record_id == communications[0].id)
         .order_by(
             CommunicationParticipant.participant_role.asc(),
             CommunicationParticipant.normalized_email.asc(),
         )
     ).all()
     assert {
-        (participant.participant_role, participant.normalized_email)
-        for participant in participants
+        (participant.participant_role, participant.normalized_email) for participant in participants
     } == {
         ("bcc", "audit@stonegatehb.com"),
         ("cc", "conner@stonegatehb.com"),
@@ -246,9 +235,7 @@ def test_resend_sends_alias_email_with_attachment_threading_and_idempotency(
         ("to", "seller@example.com"),
     }
     assert next(
-        participant
-        for participant in participants
-        if participant.participant_role == "from"
+        participant for participant in participants if participant.participant_role == "from"
     ).email_sender_alias_id == UUID(alias_id)
 
 

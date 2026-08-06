@@ -22,13 +22,13 @@ from app.schemas.email import (
     EmailRoutingExceptionListResponse,
     EmailRoutingExceptionRead,
     EmailRoutingResolutionRequest,
-    EmailSendRead,
-    EmailSendRequest,
     EmailSenderAliasCreate,
     EmailSenderAliasListResponse,
     EmailSenderAliasRead,
     EmailSenderAliasUpdate,
     EmailSenderGrantCreate,
+    EmailSendRead,
+    EmailSendRequest,
     EmailSyncRead,
     EmailTemplateCreate,
     EmailTemplateListResponse,
@@ -100,9 +100,7 @@ def read_email_recipient_options(
     principal: Annotated[Principal, Depends(global_email_dependency)],
     q: str = Query(default="", max_length=255),
 ) -> EmailRecipientOptionListResponse:
-    return EmailRecipientOptionListResponse(
-        items=search_email_recipients(db, principal, q)
-    )
+    return EmailRecipientOptionListResponse(items=search_email_recipients(db, principal, q))
 
 
 @router.post("/aliases", status_code=201)

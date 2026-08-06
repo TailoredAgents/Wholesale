@@ -22,6 +22,7 @@ from app.schemas.underwriting_comp_analyst import (
     CompAnalystRunResult,
     CompAnalystSubjectInput,
     CompAnalystUsage,
+    EvidenceType,
     SpreadAssessment,
 )
 
@@ -259,7 +260,7 @@ def build_saved_comp_context_evidence(
             continue
         source_url = _safe_url(raw_fact.get("source_url"))
         related_keys = source_keys.get(source_url or "", [])
-        evidence_type = (
+        evidence_type: EvidenceType = (
             "market_context"
             if field == "market_context"
             else "listing_history"

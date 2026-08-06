@@ -208,9 +208,7 @@ class LeadManagerAcceptRequest(BaseModel):
 
 class QualificationCompleteRequest(BaseModel):
     answers: dict[str, str | bool] = Field(default_factory=dict)
-    next_action_type: Literal[
-        "call", "sms", "email", "appointment", "nurture", "disqualify"
-    ]
+    next_action_type: Literal["call", "sms", "email", "appointment", "nurture", "disqualify"]
     next_action_due_at: datetime | None = None
 
     @model_validator(mode="after")

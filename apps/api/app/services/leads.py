@@ -2256,9 +2256,7 @@ def create_lead_market_analysis(
         "realestateapi_overlap_comp_count": (
             optional_int(realestateapi_metrics.get("overlap_count")) or 0
         ),
-        "realestateapi_credits_used": optional_int(
-            realestateapi_metrics.get("credits_used")
-        ),
+        "realestateapi_credits_used": optional_int(realestateapi_metrics.get("credits_used")),
         "realestateapi_latency_ms": optional_int(realestateapi_metrics.get("latency_ms")),
         "ai_comp_analyst_latency_ms": (
             optional_int(ai_comp_analyst.get("latency_ms")) if ai_comp_analyst is not None else None

@@ -69,18 +69,13 @@ def send_conversation_sms(
     conversation = get_scoped_conversation(db, principal, conversation_id)
     if conversation is None:
         return None
-    if (
-        PermissionKeys.SEND_SMS not in principal.permission_keys
-        and (
-            PermissionKeys.SEND_ASSIGNED_SMS not in principal.permission_keys
-            or conversation.assigned_user_id != principal.user_id
-        )
+    if PermissionKeys.SEND_SMS not in principal.permission_keys and (
+        PermissionKeys.SEND_ASSIGNED_SMS not in principal.permission_keys
+        or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("SMS can only be sent from an assigned conversation.")
     if conversation.conversation_type not in {"lead", "buyer"}:
-        raise SmsConfigurationError(
-            "SMS is only available from seller and buyer conversations."
-        )
+        raise SmsConfigurationError("SMS is only available from seller and buyer conversations.")
 
     body = payload.body.strip()
     body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -147,9 +142,7 @@ def send_conversation_sms(
             user_id=principal.user_id,
         )
     ):
-        raise PermissionError(
-            "Buyer SMS requires assignment to the Stonegate dispositions line."
-        )
+        raise PermissionError("Buyer SMS requires assignment to the Stonegate dispositions line.")
     if not settings.communication_simulation_enabled and not sender_number:
         raise SmsConfigurationError(
             "No active Stonegate SMS line is configured for this conversation."
@@ -181,12 +174,8 @@ def send_conversation_sms(
     db.commit()
     dispatch_id = dispatch.id
 
-    if (
-        settings.communication_provider_mode == "disabled"
-        or (
-            not settings.communication_simulation_enabled
-            and not settings.twilio_sms_configured
-        )
+    if settings.communication_provider_mode == "disabled" or (
+        not settings.communication_simulation_enabled and not settings.twilio_sms_configured
     ):
         mark_dispatch_failed(
             db,
@@ -572,9 +561,7 @@ def apply_sms_preference(
     else:
         suppression.contact_id = contact.id
         suppression.status = "active" if preference == "STOP" else "lifted"
-        suppression.reason = (
-            "Seller texted STOP" if preference == "STOP" else "Seller texted START"
-        )
+        suppression.reason = "Seller texted STOP" if preference == "STOP" else "Seller texted START"
         suppression.external_event_id = message_sid
         suppression.suppressed_at = now if preference == "STOP" else suppression.suppressed_at
         suppression.lifted_at = None if preference == "STOP" else now
@@ -713,13 +700,16 @@ def user_can_use_line(
         return True
     if line.assigned_team_id is None:
         return False
-    return db.scalar(
-        select(TeamMembership.id).where(
-            TeamMembership.organization_id == line.organization_id,
-            TeamMembership.team_id == line.assigned_team_id,
-            TeamMembership.user_id == user_id,
+    return (
+        db.scalar(
+            select(TeamMembership.id).where(
+                TeamMembership.organization_id == line.organization_id,
+                TeamMembership.team_id == line.assigned_team_id,
+                TeamMembership.user_id == user_id,
+            )
         )
-    ) is not None
+        is not None
+    )
 
 
 def classify_opt_out(payload: dict[str, str], body: str) -> str | None:

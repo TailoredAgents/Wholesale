@@ -65,9 +65,7 @@ view_marketing_dependency = require_any_permission(
     PermissionKeys.SEND_BULK_COMMUNICATIONS,
 )
 manage_public_proof_dependency = require_any_permission(PermissionKeys.MANAGE_PUBLIC_PROOF)
-manage_experiments_dependency = require_any_permission(
-    PermissionKeys.MANAGE_MARKETING_EXPERIMENTS
-)
+manage_experiments_dependency = require_any_permission(PermissionKeys.MANAGE_MARKETING_EXPERIMENTS)
 
 
 def invalid(exc: ValueError) -> HTTPException:
