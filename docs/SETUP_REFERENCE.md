@@ -571,8 +571,8 @@ All paths use `https://api.stonegatehb.com` as the base.
 5. Status callbacks attach to the correct conversation.
 6. Recording remains off until disclosure and retention policy are approved.
 7. When recording is enabled, confirm the authorization state, private recording, speaker-aware
-   transcript, structured AI draft, correction, rejection, selective CRM apply, internal seller
-   note/activity entry, follow-up task and date, audit history, failure and retry visibility,
+   transcript, structured AI draft, automatic empty-field CRM population, correction, rejection,
+   internal seller note/activity entry, follow-up task and date, audit history, failure visibility,
    retention date, and early deletion.
 8. **Settings > Integrations** shows **Call recording and AI notes** as configured. A missing Voice,
    recording, transcription, AI, or OpenAI setting is a launch blocker; an intentionally blank

@@ -728,16 +728,16 @@ history into separate channel threads.
 | --- | --- | --- |
 | **Generate AI notes** | Produces a transcript-grounded draft | Requires a completed transcript and enabled Call Intelligence capability |
 | Summary | Drafts the overall call result | Human review required |
-| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details | Human review required |
+| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the draft |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
 | Mortgage and title | Extracts possible debt or ownership concerns | Must be verified by staff |
 | Repairs / Objections / Commitments | Structures operational follow-up context | Human review required |
 | Next action / Follow-up date | Proposes the next task | Does not create a task unless selected |
 | Supporting timestamps | Opens the transcript evidence behind an extracted item | Requires diarized transcript evidence |
-| Fill empty lead fields | Allows approved notes to populate only blank CRM fields | Existing values remain unchanged |
+| Review auto-filled CRM fields | Corrects transcript-populated CRM values during note review | Existing staff-entered values remain unchanged |
 | Create follow-up task | Creates the reviewed proposed task | Optional approval choice |
 | **Approve** | Saves the reviewed notes and selected low-risk updates | Requires review permission |
-| **Reject** | Records that the AI draft should not be used | Does not alter CRM fields |
+| **Reject** | Records that the full AI narrative should not be used | Auto-filled factual fields remain editable on the lead |
 
 ### Email Administration
 

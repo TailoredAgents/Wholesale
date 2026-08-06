@@ -543,7 +543,7 @@ function CallTranscriptPanel({
             {canReview && transcript.status === "needs_review" ? (
               <div className={styles.reviewControls}>
                 <fieldset>
-                  <legend>Fill empty lead fields</legend>
+                  <legend>Review auto-filled CRM fields</legend>
                   {callNoteFieldOptions
                     .filter((item) => Boolean(notes[item.key]))
                     .map((item) => (

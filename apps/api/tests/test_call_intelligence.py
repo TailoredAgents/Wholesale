@@ -10,6 +10,7 @@ from app.integrations.openai_client import OpenAIAudioTranscript
 from app.integrations.twilio_recordings import TwilioRecordingMedia
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
     AiOrchestratorEvent,
     AiRunLog,
     ApprovalRequest,
@@ -32,7 +33,7 @@ from app.services.call_intelligence import (
 OWNER_EMAIL = "owner@example.com"
 
 
-def test_call_transcription_requires_review_and_applies_only_selected_empty_fields(
+def test_call_transcription_auto_populates_empty_fields_before_review(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
@@ -239,6 +240,22 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert processed.status == "needs_review"
     assert processed.transcript_text
     assert processed.confidence_score == 88
+    db_session.refresh(lead)
+    assert lead.motivation == "Existing verified motivation"
+    assert lead.desired_timeline == "30 days"
+    assert lead.property_condition == "Roof needs replacement"
+    assert lead.occupancy_status == "Owner occupied"
+    assert lead.asking_price == "$180,000"
+    assert lead.mortgage_balance == "$92,000 payoff"
+    auto_population_event = db_session.scalar(
+        select(ActivityEvent).where(
+            ActivityEvent.event_type == "call_notes.crm_fields_auto_populated"
+        )
+    )
+    assert auto_population_event is not None
+    assert "desired_timeline" in auto_population_event.summary
+    lead.occupancy_status = "Tenant occupied"
+    db_session.commit()
     assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
     assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 1
     ai_run = db_session.scalar(select(AiRunLog))
@@ -307,7 +324,7 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"
     assert lead.property_condition == "Roof replacement needed"
-    assert lead.occupancy_status == "Owner occupied"
+    assert lead.occupancy_status == "Tenant occupied"
     assert lead.asking_price == "$180,000"
     assert lead.mortgage_balance == "$92,000 payoff"
     assert lead.next_follow_up_at is not None
@@ -336,7 +353,7 @@ def test_call_transcription_requires_review_and_applies_only_selected_empty_fiel
     lead_payload = lead_detail.json()
     assert lead_payload["desired_timeline"] == "30 days"
     assert lead_payload["property_condition"] == "Roof replacement needed"
-    assert lead_payload["occupancy_status"] == "Owner occupied"
+    assert lead_payload["occupancy_status"] == "Tenant occupied"
     assert lead_payload["asking_price"] == "$180,000"
     assert lead_payload["mortgage_balance"] == "$92,000 payoff"
     assert lead_payload["next_follow_up_at"] == "2026-07-20T18:00:00"

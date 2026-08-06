@@ -361,7 +361,8 @@ not presented as competing navigation.
   remains active.
 - Home, Seller Leads, seller records, and Tasks read the same primary next-action record.
 - Lead briefs created from new seller events are reviewed inline. Transcript-grounded call notes
-  open in Inbox so the reviewer can hear and inspect their source evidence.
+  immediately fill empty qualification fields, while the narrative review opens in Inbox so staff
+  can hear the source evidence and correct any AI-populated value.
 
 **Calendar (`/os/calendar`)**
 
