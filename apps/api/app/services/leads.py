@@ -1,11 +1,11 @@
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
 from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import and_, delete, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -202,12 +202,19 @@ COMMUNICATION_STATUSES = {"logged", "draft", "sent", "received", "failed", "bloc
 APPOINTMENT_TYPES = {"seller_call", "walkthrough", "offer_review", "follow_up"}
 APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "rescheduled"}
 APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
+ACTIVE_APPOINTMENT_STATUSES = {"scheduled", "rescheduled"}
 UNDERWRITING_STATUSES = {"draft", "needs_review", "approved", "rejected"}
 TRANSACTION_CONTRACT_TYPES = {"purchase_agreement", "assignment_contract", "novation"}
 BUYER_OFFER_STATUSES = {"received", "countered", "accepted", "rejected", "withdrawn"}
 BUYER_OFFER_FINANCING_TYPES = {"cash", "hard_money", "private_money", "conventional", "other"}
 HIGH_URGENCY_TIMELINES = {"asap", "now", "immediately", "30_days", "30 days", "within 30 days"}
 MEDIUM_URGENCY_TIMELINES = {"60_90_days", "60-90 days", "90_days", "90 days"}
+
+
+class AppointmentConflictError(ValueError):
+    """Raised when a manual appointment would double-book its assigned user."""
+
+
 QUALIFICATION_FIELDS = [
     (
         "motivation",
@@ -1323,6 +1330,36 @@ def create_lead_appointment(
     ):
         raise PermissionError("You cannot assign this appointment to another user.")
 
+    scheduled_end_at = payload.scheduled_end_at or payload.scheduled_start_at + timedelta(hours=1)
+    if payload.status in ACTIVE_APPOINTMENT_STATUSES and not payload.override_conflicts:
+        assumed_existing_duration = timedelta(minutes=90)
+        conflict = db.scalar(
+            select(Appointment)
+            .where(
+                Appointment.organization_id == principal.organization_id,
+                Appointment.owner_user_id == owner.id,
+                Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+                Appointment.scheduled_start_at < scheduled_end_at,
+                or_(
+                    and_(
+                        Appointment.scheduled_end_at.is_not(None),
+                        Appointment.scheduled_end_at > payload.scheduled_start_at,
+                    ),
+                    and_(
+                        Appointment.scheduled_end_at.is_(None),
+                        Appointment.scheduled_start_at
+                        > payload.scheduled_start_at - assumed_existing_duration,
+                    ),
+                ),
+            )
+            .order_by(Appointment.scheduled_start_at)
+        )
+        if conflict is not None:
+            raise AppointmentConflictError(
+                f"{owner.display_name} is already booked during part of this time. "
+                "Change the time or choose Schedule anyway."
+            )
+
     conversation = ensure_primary_conversation(db, lead)
     previous_values = {
         "appointment_status": lead.appointment_status,
@@ -1338,7 +1375,7 @@ def create_lead_appointment(
         appointment_type=payload.appointment_type,
         status=payload.status,
         scheduled_start_at=payload.scheduled_start_at,
-        scheduled_end_at=payload.scheduled_end_at,
+        scheduled_end_at=scheduled_end_at,
         location_type=payload.location_type,
         location=payload.location,
         notes=payload.notes,
@@ -1417,6 +1454,7 @@ def create_lead_appointment(
                 if appointment.scheduled_end_at
                 else None,
                 "location_type": appointment.location_type,
+                "conflict_override": payload.override_conflicts,
                 "stage_key": lead.stage_key,
             },
             reason="Manual appointment scheduling",

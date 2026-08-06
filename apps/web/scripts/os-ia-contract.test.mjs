@@ -350,7 +350,12 @@ test("Calendar owns one quick appointment workflow with contextual entry points"
   assert.match(calendarWorkspace, /Schedule an appointment/);
   assert.match(calendarWorkspace, /Meeting format/);
   assert.match(calendarWorkspace, /Assigned team member/);
+  assert.match(calendarWorkspace, /Schedule anyway/);
+  assert.match(calendarWorkspace, /error\.status !== 409/);
   assert.match(fieldCalendar, /onSchedule/);
+  assert.match(fieldCalendar, /appointmentVisuals/);
+  assert.match(fieldCalendar, /appointmentBlockStyle/);
+  assert.match(fieldCalendar, /Appointment color legend/);
   assert.match(leadRecord, /view=appointment&schedule=1&lead=/);
   assert.match(inbox, /view=appointment&schedule=1&lead=/);
 });

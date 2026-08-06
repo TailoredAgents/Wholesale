@@ -265,11 +265,13 @@ buttons. The originating workspace remains authoritative for that decision.
 | Next arrow | Moves forward one period | Filter only |
 | All closers | Filters calendar by closer | Visible to users with management authority |
 | Month / Week / Day / Agenda | Changes calendar display without changing appointments | Filter only |
+| Appointment color legend | Identifies phone, property, video, office, other, and cancelled blocks | Icons and labels accompany every color |
 | Month day number | Opens that date in Day view | Navigation within calendar |
 | Empty day **Schedule** | Opens the central appointment form with that date prefilled | Seller and exact time remain editable |
 | `+N more` | Opens a crowded month date in Day view | Appears after more than three appointments |
 | Week day heading | Opens that date in Day view | Week mode only |
-| Appointment event | Opens Calendar appointment mode | Requires a selected appointment |
+| Appointment event | Blocks the saved start-to-end duration and opens Calendar appointment mode | Color and icon show meeting format; cancelled events are striped |
+| **Schedule anyway** | Confirms an intentional owner overlap after the API detects a double booking | Appears only after a conflict warning; the override is audited |
 
 Calendar loading or availability errors do not delete appointments. Refresh after API recovery.
 

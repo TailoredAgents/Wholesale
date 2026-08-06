@@ -370,6 +370,8 @@ not presented as competing navigation.
 - Combines appointments, field scheduling, and due work without requiring Google Calendar.
 - Owns one central appointment composer opened from Calendar, empty schedule days, seller records,
   and Inbox; phone and property meetings reuse the lead's saved contact and address context.
+- Renders duration-aware blocks by meeting format, preserves cancelled blocks as history, and
+  requires an explicit second action before saving an assigned-user scheduling conflict.
 - Keeps Dispatch as the advanced closer-capacity, territory, overlap, and travel-buffer workflow.
 
 ### 7.2 Operations And Acquisition Tools

@@ -48,6 +48,7 @@ from app.schemas.leads import (
 )
 from app.services.acquisition_operations import update_appointment
 from app.services.leads import (
+    AppointmentConflictError,
     add_lead_communication,
     add_lead_note,
     archive_lead,
@@ -202,6 +203,11 @@ def schedule_lead_appointment(
 ) -> LeadDetail:
     try:
         lead = create_lead_appointment(db, principal, lead_id, payload)
+    except AppointmentConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -1089,7 +1089,14 @@ To schedule:
 2. Choose the seller, meeting format, purpose, start and end time, and assigned team member.
 3. Confirm the automatically suggested phone number or property address, add preparation notes,
    and select **Schedule appointment**.
-4. Confirm the appointment opens in **Calendar > Appointment** and appears in Schedule view.
+4. If the assigned team member is already booked, change the time or deliberately select
+   **Schedule anyway**. The override is retained in the appointment audit history.
+5. Confirm the appointment opens in **Calendar > Appointment** and appears in Schedule view.
+
+Calendar blocks cover the saved start-to-end duration. Phone meetings are blue, property visits
+green, video meetings purple, office meetings orange, and other meetings gray. Cancelled meetings
+remain visible with a faded striped treatment. Each block also includes an icon and text label, so
+the calendar never relies on color alone.
 
 Use **Calendar > Dispatch** instead when closer capacity, territory, overlap, travel buffers, or a
 manager conflict override must be evaluated before assignment.

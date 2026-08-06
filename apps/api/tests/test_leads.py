@@ -1024,6 +1024,62 @@ def test_schedule_lead_appointment_rejects_invalid_time_window(
     assert response.status_code == 422
 
 
+def test_schedule_lead_appointment_warns_before_owner_double_booking(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created_response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    lead_id = created_response.json()["id"]
+    appointment = {
+        "appointment_type": "seller_call",
+        "status": "scheduled",
+        "scheduled_start_at": "2026-07-17T15:00:00Z",
+        "scheduled_end_at": "2026-07-17T16:00:00Z",
+        "location_type": "phone",
+    }
+
+    first_response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=appointment,
+    )
+    assert first_response.status_code == 201
+
+    conflict_response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            **appointment,
+            "appointment_type": "follow_up",
+            "scheduled_start_at": "2026-07-17T15:30:00Z",
+            "scheduled_end_at": "2026-07-17T16:30:00Z",
+        },
+    )
+    assert conflict_response.status_code == 409
+    assert "already booked" in conflict_response.json()["detail"]
+    assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 1
+
+    override_response = client.post(
+        f"/api/v1/leads/{lead_id}/appointments",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            **appointment,
+            "appointment_type": "follow_up",
+            "scheduled_start_at": "2026-07-17T15:30:00Z",
+            "scheduled_end_at": "2026-07-17T16:30:00Z",
+            "override_conflicts": True,
+        },
+    )
+    assert override_response.status_code == 201
+    assert int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0) == 2
+
+
 def test_create_lead_underwriting_version_updates_stage_and_records_audit(
     db_session: Session,
     api_db_override: None,

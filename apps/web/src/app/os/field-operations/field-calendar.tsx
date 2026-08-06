@@ -3,14 +3,20 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import {
+  Building2,
+  CalendarClock,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CircleSlash2,
+  House,
   MapPin,
+  Phone,
   Plus,
   UserRound,
+  Video,
 } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { CSSProperties, Fragment, useEffect, useMemo, useState } from "react";
 
 import type { FieldCalendarAppointment, FieldOperationsOverview } from "../../lib/api";
 import { labelize } from "../os-utils";
@@ -52,6 +58,47 @@ function timeLabel(value: string) {
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+}
+
+const appointmentVisuals = {
+  phone: { label: "Phone", className: "eventPhone", icon: Phone },
+  property: { label: "At property", className: "eventProperty", icon: House },
+  video: { label: "Video", className: "eventVideo", icon: Video },
+  office: { label: "Office", className: "eventOffice", icon: Building2 },
+  other: { label: "Other", className: "eventOther", icon: CalendarClock },
+} as const;
+
+function appointmentVisual(appointment: FieldCalendarAppointment) {
+  if (appointment.status === "cancelled") {
+    return { label: "Cancelled", className: "eventCancelled", icon: CircleSlash2 };
+  }
+  return (
+    appointmentVisuals[appointment.location_type as keyof typeof appointmentVisuals] ??
+    appointmentVisuals.other
+  );
+}
+
+function appointmentEnd(appointment: FieldCalendarAppointment) {
+  if (appointment.scheduled_end_at) return new Date(appointment.scheduled_end_at);
+  return new Date(new Date(appointment.scheduled_start_at).getTime() + 60 * 60 * 1000);
+}
+
+function appointmentDurationMinutes(appointment: FieldCalendarAppointment) {
+  const start = new Date(appointment.scheduled_start_at).getTime();
+  return Math.max(15, Math.round((appointmentEnd(appointment).getTime() - start) / 60_000));
+}
+
+function appointmentTimeRange(appointment: FieldCalendarAppointment) {
+  return `${timeLabel(appointment.scheduled_start_at)} – ${timeLabel(appointmentEnd(appointment).toISOString())}`;
+}
+
+function appointmentBlockStyle(appointment: FieldCalendarAppointment): CSSProperties {
+  return {
+    "--appointment-block-height": `${Math.max(
+      54,
+      appointmentDurationMinutes(appointment) * 0.8,
+    )}px`,
+  } as CSSProperties;
 }
 
 function rangeFor(mode: CalendarMode, cursor: Date) {
@@ -108,16 +155,31 @@ function AppointmentButton({
   compact?: boolean;
   onOpen: (appointment: FieldCalendarAppointment) => void;
 }) {
+  const visual = appointmentVisual(appointment);
+  const Icon = visual.icon;
+  const className = `${compact ? styles.compactCalendarEvent : styles.calendarEvent} ${styles[visual.className]}`;
+  const timeRange = appointmentTimeRange(appointment);
   return (
     <button
-      className={compact ? styles.compactCalendarEvent : styles.calendarEvent}
+      aria-label={`${visual.label} appointment, ${labelize(appointment.appointment_type)}, ${appointment.seller_name}, ${timeRange}`}
+      className={className}
       onClick={() => onOpen(appointment)}
-      title={`Open ${appointment.seller_name}'s meeting workspace`}
+      style={compact ? undefined : appointmentBlockStyle(appointment)}
+      title={`${visual.label} - ${labelize(appointment.appointment_type)} - ${timeRange}`}
       type="button"
     >
-      <span>{timeLabel(appointment.scheduled_start_at)}</span>
+      <span className={styles.eventTime}>
+        <Icon aria-hidden="true" size={compact ? 10 : 13} />
+        {compact ? timeLabel(appointment.scheduled_start_at) : timeRange}
+      </span>
       <strong>{appointment.seller_name}</strong>
-      {!compact ? <small>{appointment.property_address}</small> : null}
+      {!compact ? (
+        <>
+          <small className={styles.eventPurpose}>{labelize(appointment.appointment_type)}</small>
+          <small><MapPin aria-hidden="true" size={12} />{appointment.property_address}</small>
+          <small><UserRound aria-hidden="true" size={12} />{appointment.closer_name}</small>
+        </>
+      ) : null}
     </button>
   );
 }
@@ -239,6 +301,22 @@ export function FieldCalendar({
         </div>
       </header>
 
+      <div className={styles.calendarLegend} aria-label="Appointment color legend">
+        {Object.values(appointmentVisuals).map((item) => {
+          const Icon = item.icon;
+          return (
+            <span className={styles[item.className]} key={item.label}>
+              <Icon aria-hidden="true" size={12} />
+              {item.label}
+            </span>
+          );
+        })}
+        <span className={styles.eventCancelled}>
+          <CircleSlash2 aria-hidden="true" size={12} />
+          Cancelled
+        </span>
+      </div>
+
       {error ? <p className={styles.error}>{error}</p> : null}
       {loading ? <div className={styles.calendarLoading}>Loading calendar…</div> : null}
 
@@ -330,15 +408,7 @@ export function FieldCalendar({
             Schedule on this day
           </button>
           {appointments.map((appointment) => (
-            <button key={appointment.id} onClick={() => open(appointment)} type="button">
-              <time>{timeLabel(appointment.scheduled_start_at)}</time>
-              <span>
-                <strong>{appointment.seller_name}</strong>
-                <small><MapPin size={14} />{appointment.property_address}</small>
-                <small><UserRound size={14} />{appointment.closer_name} · {labelize(appointment.field_status)}</small>
-              </span>
-              <CalendarDays size={18} />
-            </button>
+            <AppointmentButton appointment={appointment} key={appointment.id} onOpen={open} />
           ))}
           {!appointments.length ? <p className={styles.empty}>No field meetings scheduled for this day.</p> : null}
         </div>
@@ -355,6 +425,8 @@ export function FieldCalendar({
             )
             .map((appointment, index, sorted) => {
               const appointmentDate = new Date(appointment.scheduled_start_at);
+              const visual = appointmentVisual(appointment);
+              const Icon = visual.icon;
               const previousDate = index
                 ? new Date(sorted[index - 1]!.scheduled_start_at)
                 : null;
@@ -370,15 +442,21 @@ export function FieldCalendar({
                       })}
                     </h4>
                   ) : null}
-                  <button onClick={() => open(appointment)} type="button">
-                    <time>{timeLabel(appointment.scheduled_start_at)}</time>
+                  <button
+                    aria-label={`${visual.label} appointment, ${labelize(appointment.appointment_type)}, ${appointment.seller_name}, ${appointmentTimeRange(appointment)}`}
+                    className={`${styles.agendaEvent} ${styles[visual.className]}`}
+                    onClick={() => open(appointment)}
+                    title={`${visual.label} - ${labelize(appointment.appointment_type)}`}
+                    type="button"
+                  >
+                    <time><Icon aria-hidden="true" size={13} />{appointmentTimeRange(appointment)}</time>
                     <span>
                       <strong>{appointment.seller_name}</strong>
-                      <small><MapPin size={14} />{appointment.property_address}</small>
+                      <small><MapPin aria-hidden="true" size={14} />{appointment.property_address}</small>
                     </span>
                     <span>
                       <strong>{appointment.closer_name}</strong>
-                      <small>{labelize(appointment.field_status)}</small>
+                      <small>{labelize(appointment.appointment_type)} · {labelize(appointment.status)}</small>
                     </span>
                     <CalendarDays aria-hidden="true" size={18} />
                   </button>

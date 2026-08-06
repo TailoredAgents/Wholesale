@@ -61,6 +61,16 @@ function candidateStatus(candidate: DispatchCandidate) {
   return candidate.violations.map(labelize).join(" · ");
 }
 
+class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 export function FieldOperationsWorkspace({
   basePath = "/os/calendar",
   data,
@@ -141,6 +151,7 @@ export function FieldOperationsWorkspace({
       ? initialAppointmentLead.current_owner_user_id
       : "",
   );
+  const [appointmentConflict, setAppointmentConflict] = useState("");
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -186,6 +197,7 @@ export function FieldOperationsWorkspace({
   }
 
   function openAppointmentComposer(startsAt?: Date) {
+    setAppointmentConflict("");
     if (startsAt) {
       const start = new Date(startsAt);
       if (start.getHours() === 0 && start.getMinutes() === 0) {
@@ -200,6 +212,7 @@ export function FieldOperationsWorkspace({
 
   function closeAppointmentComposer() {
     setAppointmentComposerOpen(false);
+    setAppointmentConflict("");
     router.replace(
       viewUrl(view, view === "meetings" ? requestedAppointmentId : ""),
       { scroll: false },
@@ -220,6 +233,7 @@ export function FieldOperationsWorkspace({
     setAppointmentOwnerId(
       ownerId && data.users.some((user) => user.id === ownerId) ? ownerId : "",
     );
+    setAppointmentConflict("");
   }
 
   function selectAppointmentLocationType(locationType: string) {
@@ -233,7 +247,12 @@ export function FieldOperationsWorkspace({
     );
   }
 
-  async function request<T>(path: string, method: string, body?: object): Promise<T | null> {
+  async function request<T>(
+    path: string,
+    method: string,
+    body?: object,
+    onError?: (error: ApiRequestError) => boolean,
+  ): Promise<T | null> {
     setSaving(true);
     setMessage("");
     try {
@@ -248,12 +267,22 @@ export function FieldOperationsWorkspace({
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-        throw new Error(payload?.detail ?? "The operation could not be completed.");
+        throw new ApiRequestError(
+          payload?.detail ?? "The operation could not be completed.",
+          response.status,
+        );
       }
       if (response.status === 204) return {} as T;
       return (await response.json()) as T;
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The operation could not be completed.");
+      const requestError =
+        error instanceof ApiRequestError
+          ? error
+          : new ApiRequestError(
+              error instanceof Error ? error.message : "The operation could not be completed.",
+              0,
+            );
+      if (!onError?.(requestError)) setMessage(requestError.message);
       return null;
     } finally {
       setSaving(false);
@@ -309,6 +338,9 @@ export function FieldOperationsWorkspace({
     event.preventDefault();
     if (!appointmentLeadId) return;
     const form = new FormData(event.currentTarget);
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const overrideConflicts = submitter?.dataset.overrideConflicts === "true";
+    if (!overrideConflicts) setAppointmentConflict("");
     const scheduledStartAt = new Date(appointmentStartAt).toISOString();
     const result = await request<{
       appointments: Array<{
@@ -325,6 +357,11 @@ export function FieldOperationsWorkspace({
       location: appointmentLocation.trim() || null,
       notes: String(form.get("notes") ?? "").trim() || null,
       owner_user_id: appointmentOwnerId || null,
+      override_conflicts: overrideConflicts,
+    }, (error) => {
+      if (error.status !== 409) return false;
+      setAppointmentConflict(error.message);
+      return true;
     });
     if (!result) return;
     const created = result.appointments.find(
@@ -333,6 +370,7 @@ export function FieldOperationsWorkspace({
         item.scheduled_start_at.slice(0, 19) === scheduledStartAt.slice(0, 19),
     );
     setMessage("Appointment scheduled and added to the internal calendar.");
+    setAppointmentConflict("");
     setAppointmentComposerOpen(false);
     if (created) {
       setRequestedAppointmentId(created.id);
@@ -494,7 +532,10 @@ export function FieldOperationsWorkspace({
                 <label>
                   <span>Starts</span>
                   <input
-                    onChange={(event) => setAppointmentStartAt(event.target.value)}
+                    onChange={(event) => {
+                      setAppointmentStartAt(event.target.value);
+                      setAppointmentConflict("");
+                    }}
                     required
                     type="datetime-local"
                     value={appointmentStartAt}
@@ -504,7 +545,10 @@ export function FieldOperationsWorkspace({
                   <span>Ends</span>
                   <input
                     min={appointmentStartAt}
-                    onChange={(event) => setAppointmentEndAt(event.target.value)}
+                    onChange={(event) => {
+                      setAppointmentEndAt(event.target.value);
+                      setAppointmentConflict("");
+                    }}
                     required
                     type="datetime-local"
                     value={appointmentEndAt}
@@ -513,7 +557,10 @@ export function FieldOperationsWorkspace({
                 <label>
                   <span>Assigned team member</span>
                   <select
-                    onChange={(event) => setAppointmentOwnerId(event.target.value)}
+                    onChange={(event) => {
+                      setAppointmentOwnerId(event.target.value);
+                      setAppointmentConflict("");
+                    }}
                     value={appointmentOwnerId}
                   >
                     <option value="">Use the lead owner</option>
@@ -549,13 +596,30 @@ export function FieldOperationsWorkspace({
                     rows={3}
                   />
                 </label>
+                {appointmentConflict ? (
+                  <div className={`${styles.composerConflict} ${styles.composerFullField}`} role="alert">
+                    <AlertTriangle aria-hidden="true" size={18} />
+                    <div>
+                      <strong>That team member is already booked.</strong>
+                      <p>{appointmentConflict}</p>
+                    </div>
+                  </div>
+                ) : null}
                 <footer className={styles.composerFullField}>
                   <button onClick={closeAppointmentComposer} type="button">
                     Cancel
                   </button>
-                  <button disabled={saving} type="submit">
+                  <button
+                    data-override-conflicts={appointmentConflict ? "true" : undefined}
+                    disabled={saving}
+                    type="submit"
+                  >
                     <CalendarDays size={16} />
-                    {saving ? "Scheduling" : "Schedule appointment"}
+                    {saving
+                      ? "Scheduling"
+                      : appointmentConflict
+                        ? "Schedule anyway"
+                        : "Schedule appointment"}
                   </button>
                 </footer>
               </form>
