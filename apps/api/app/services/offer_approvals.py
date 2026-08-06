@@ -295,9 +295,7 @@ def find_offer_approver_id(db: Session, principal: Principal) -> UUID:
 def offer_plan_to_read(db: Session, plan: OfferNegotiationPlan) -> OfferNegotiationPlanRead:
     version = db.get(UnderwritingVersion, plan.underwriting_version_id)
     approval = (
-        db.get(ApprovalRequest, plan.approval_request_id)
-        if plan.approval_request_id
-        else None
+        db.get(ApprovalRequest, plan.approval_request_id) if plan.approval_request_id else None
     )
     return OfferNegotiationPlanRead(
         id=plan.id,

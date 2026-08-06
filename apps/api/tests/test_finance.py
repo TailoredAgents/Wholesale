@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from typing import cast
 
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
@@ -7,9 +8,9 @@ from sqlalchemy.orm import Session
 from app.main import app
 from app.models.foundation import (
     AccountingAccount,
+    AccountingPeriod,
     AccountingPostingRule,
     AccountingProfile,
-    AccountingPeriod,
     AccountingSourceLink,
     AiCapabilityRuntimePolicy,
     AuditEvent,
@@ -135,9 +136,9 @@ def test_finance_records_revenue_deductions_compensation_and_spend(
     assert int(db_session.scalar(select(func.count()).select_from(RevenueRecord)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(DealDeduction)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(CompensationRule)) or 0) == 1
-    assert int(
-        db_session.scalar(select(func.count()).select_from(CompensationCalculation)) or 0
-    ) == 1
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(CompensationCalculation)) or 0) == 1
+    )
     assert int(db_session.scalar(select(func.count()).select_from(MarketingSpend)) or 0) == 1
 
     overview_response = client.get(
@@ -182,21 +183,26 @@ def test_finance_records_revenue_deductions_compensation_and_spend(
     assert period["previous_summary"]["company_net_cents"] == 1480000
     assert period["revenue_records"] == []
     assert period["compensation_calculations"] == []
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action.in_(
-                    [
-                        "finance.deduction_create",
-                        "finance.compensation_rule_create",
-                        "finance.revenue_create",
-                        "finance.marketing_spend_create",
-                    ]
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.action.in_(
+                        [
+                            "finance.deduction_create",
+                            "finance.compensation_rule_create",
+                            "finance.revenue_create",
+                            "finance.marketing_spend_create",
+                        ]
+                    )
                 )
             )
+            or 0
         )
-        or 0
-    ) == 4
+        == 4
+    )
 
 
 def test_finance_rejects_invalid_revenue_status(
@@ -245,12 +251,9 @@ def test_accounting_foundation_is_wholesale_specific_and_idempotent(
         "owner_distributions",
     }.issubset(account_keys)
     assert "acquisition_reserve" not in account_keys
-    assert (
-        db_session.scalar(select(func.count()).select_from(AccountingProfile)) == 1
-    )
-    assert (
-        db_session.scalar(select(func.count()).select_from(AccountingAccount))
-        == len(setup["accounts"])
+    assert db_session.scalar(select(func.count()).select_from(AccountingProfile)) == 1
+    assert db_session.scalar(select(func.count()).select_from(AccountingAccount)) == len(
+        setup["accounts"]
     )
 
 
@@ -306,10 +309,8 @@ def journal_payload(
     idempotency_key: str,
     amount_cents: int = 2500000,
 ) -> dict[str, object]:
-    accounts = {
-        item["system_key"]: item["id"]
-        for item in setup["accounts"]  # type: ignore[index,union-attr]
-    }
+    setup_accounts = cast(list[dict[str, object]], setup["accounts"])
+    accounts = {item["system_key"]: item["id"] for item in setup_accounts}
     return {
         "entry_date": date.today().isoformat(),
         "memo": "Assignment fee deposited after closing.",
@@ -536,7 +537,7 @@ def approve_posting_rule(
         json={},
     )
     assert response.status_code == 200
-    return response.json()
+    return cast(dict[str, object], response.json())
 
 
 def test_operational_posting_rules_require_approval_and_link_once(
@@ -572,9 +573,7 @@ def test_operational_posting_rules_require_approval_and_link_once(
         headers=headers,
     ).json()
     item = next(
-        source
-        for source in workspace["source_items"]
-        if source["source_type"] == "marketing_spend"
+        source for source in workspace["source_items"] if source["source_type"] == "marketing_spend"
     )
     assert item["readiness"] == "ready"
 
@@ -602,12 +601,8 @@ def test_operational_posting_rules_require_approval_and_link_once(
     assert drafted.json()["total_credits_cents"] == 12500
     account_names = {line["account_name"] for line in drafted.json()["lines"]}
     assert account_names == {"Lead Lists and Data", "Operating Cash"}
-    assert (
-        db_session.scalar(select(func.count()).select_from(AccountingSourceLink)) == 1
-    )
-    assert (
-        db_session.scalar(select(func.count()).select_from(AccountingPostingRule)) == 10
-    )
+    assert db_session.scalar(select(func.count()).select_from(AccountingSourceLink)) == 1
+    assert db_session.scalar(select(func.count()).select_from(AccountingPostingRule)) == 10
 
 
 def test_obligation_payment_states_create_separate_accrual_and_settlement_drafts(
@@ -658,9 +653,7 @@ def test_obligation_payment_states_create_separate_accrual_and_settlement_drafts
         headers=headers,
     ).json()
     items = [
-        item
-        for item in workspace["source_items"]
-        if item["source_type"] == "financial_obligation"
+        item for item in workspace["source_items"] if item["source_type"] == "financial_obligation"
     ]
     assert {item["posting_purpose"] for item in items} == {"accrued", "paid"}
     assert all(item["readiness"] == "ready" for item in items)
@@ -678,12 +671,8 @@ def test_obligation_payment_states_create_separate_accrual_and_settlement_drafts
         assert response.status_code == 201
         drafts.append(response.json())
 
-    accrued = next(
-        entry for entry in drafts if entry["idempotency_key"].endswith(":accrued:v1")
-    )
-    settled = next(
-        entry for entry in drafts if entry["idempotency_key"].endswith(":paid:v1")
-    )
+    accrued = next(entry for entry in drafts if entry["idempotency_key"].endswith(":accrued:v1"))
+    settled = next(entry for entry in drafts if entry["idempotency_key"].endswith(":paid:v1"))
     assert {line["account_name"] for line in accrued["lines"]} == {
         "Software and Subscriptions",
         "Accounts Payable",

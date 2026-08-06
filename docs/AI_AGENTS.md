@@ -70,9 +70,11 @@ The first production event loop is active for Lead Manager preparation and Call 
 6. Completed reviews remain in **Tasks > AI Completed** for operating history and measurement.
 
 Recorded seller calls use the same event history, but their decision remains in the Inbox where
-the recording and transcript are visible. Approving call notes may apply only the explicitly
-selected empty CRM fields and may create the selected follow-up task. Neither workflow sends a
-message, changes an offer, creates a contract, or contacts a seller autonomously.
+the recording and transcript are visible. Transcript-grounded qualification values automatically
+fill only empty CRM fields and are audit logged; they never replace staff-entered values. Reviewers
+can correct those AI-populated values when approving the narrative note and may create the selected
+follow-up task. Neither workflow sends a message, changes an offer, creates a contract, or contacts
+a seller autonomously.
 
 ## Architecture
 
@@ -314,10 +316,12 @@ Promotion requires:
 5. A documented rollback trigger and kill switch.
 6. Explicit owner approval for the exact next autonomy level.
 
-Call intelligence keeps human approval until at least 50 calls have been reviewed, field agreement
-and evidence coverage are at least 90%, reviewer rejection is no more than 5%, and processing
-failure is no more than 2%. Passing makes it eligible for a narrow pilot; it does not authorize
-seller messages, offers, contracts, or financial actions.
+Call intelligence keeps human approval for narrative notes and proposed follow-up tasks until at
+least 50 calls have been reviewed, field agreement and evidence coverage are at least 90%, reviewer
+rejection is no more than 5%, and processing failure is no more than 2%. Empty qualification fields
+may populate immediately from transcript evidence under the non-overwrite and audit rules. Passing
+makes broader autonomy eligible for a narrow pilot; it does not authorize seller messages, offers,
+contracts, or financial actions.
 
 ## Observability, Security, And Cost
 

@@ -30,14 +30,10 @@ def test_ai10_external_action_controls_are_idempotent_audited_and_delivery_locke
     seed_owner(db_session)
     client = TestClient(app)
     assert (
-        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code
-        == 201
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code == 201
     )
     assert client.post("/api/v1/ai/copilots/install", headers=HEADERS).status_code == 201
-    assert (
-        client.post("/api/v1/ai/runtime/install", headers=HEADERS).status_code
-        == 201
-    )
+    assert client.post("/api/v1/ai/runtime/install", headers=HEADERS).status_code == 201
 
     first = client.post("/api/v1/ai/automation/install", headers=HEADERS)
     second = client.post("/api/v1/ai/automation/install", headers=HEADERS)
@@ -108,8 +104,9 @@ def test_ai10_external_action_controls_are_idempotent_audited_and_delivery_locke
     assert duplicate.json()["id"] == simulation.json()["id"]
     assert simulation.json()["external_delivery_attempted"] is False
     assert simulation.json()["delivered_count"] == 0
-    assert "External delivery is locked by the AI10 control-plane release." in (
-        simulation.json()["block_reasons"]
+    assert (
+        "External delivery is locked by the AI10 control-plane release."
+        in (simulation.json()["block_reasons"])
     )
 
     paused = client.post(
@@ -127,14 +124,8 @@ def test_ai10_external_action_controls_are_idempotent_audited_and_delivery_locke
     assert resumed.json()["status"] == "control_approved"
     assert resumed.json()["external_delivery_enabled"] is False
 
-    assert (
-        db_session.scalar(select(func.count(AiExternalActionPolicy.id)))
-        == 4
-    )
-    assert (
-        db_session.scalar(select(func.count(AiExternalActionAttempt.id)))
-        == 1
-    )
+    assert db_session.scalar(select(func.count(AiExternalActionPolicy.id))) == 4
+    assert db_session.scalar(select(func.count(AiExternalActionAttempt.id))) == 1
     attempt = db_session.scalar(select(AiExternalActionAttempt))
     assert attempt is not None
     assert attempt.external_delivery_attempted is False

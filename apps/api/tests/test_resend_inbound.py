@@ -208,9 +208,7 @@ def provider_for_messages(messages: dict[str, dict[str, Any]]) -> ResendEmailDel
                     "filename": "seller-document.pdf",
                     "size": 17,
                     "content_type": "application/pdf",
-                    "download_url": (
-                        "https://inbound-cdn.resend.com/inbound-1/attachment-1"
-                    ),
+                    "download_url": ("https://inbound-cdn.resend.com/inbound-1/attachment-1"),
                     "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
                 },
                 request=request,
@@ -271,9 +269,7 @@ def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
     )
     assert processed is not None
     inbound = db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider_message_id == "inbound-1"
-        )
+        select(CommunicationRecord).where(CommunicationRecord.provider_message_id == "inbound-1")
     )
     assert inbound is not None
     assert inbound.conversation_id == conversation.id
@@ -284,17 +280,17 @@ def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
         )
     ).all()
     assert {
-        (participant.participant_role, participant.normalized_email)
-        for participant in participants
+        (participant.participant_role, participant.normalized_email) for participant in participants
     } == {
         ("from", "seller@example.com"),
         ("to", "offers@stonegatehb.com"),
     }
-    assert next(
-        participant
-        for participant in participants
-        if participant.participant_role == "from"
-    ).contact_id == conversation.contact_id
+    assert (
+        next(
+            participant for participant in participants if participant.participant_role == "from"
+        ).contact_id
+        == conversation.contact_id
+    )
     db_session.refresh(conversation)
     assert conversation.unread_count == 1
 
@@ -533,11 +529,14 @@ def test_inbound_email_from_stonegate_identity_is_ignored_as_a_loop(
     assert event is not None
     assert event.processing_status == "ignored"
     assert event.payload["_routing"]["rule"] == "internal_loop_protection"
-    assert db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider_message_id == "internal-loop-1"
+    assert (
+        db_session.scalar(
+            select(CommunicationRecord).where(
+                CommunicationRecord.provider_message_id == "internal-loop-1"
+            )
         )
-    ) is None
+        is None
+    )
 
 
 def test_delivery_events_are_idempotent_and_cannot_regress_status(
@@ -637,17 +636,18 @@ def test_recovery_scan_enqueues_and_imports_a_missed_received_email(
         client=provider,
     )
     recovered = db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider_message_id == "recovery-1"
-        )
+        select(CommunicationRecord).where(CommunicationRecord.provider_message_id == "recovery-1")
     )
     assert recovered is not None
     assert recovered.direction == "inbound"
-    assert recover_next_received_email(
-        db_session,
-        resend_inbound_settings,
-        client=provider,
-    ) is None
+    assert (
+        recover_next_received_email(
+            db_session,
+            resend_inbound_settings,
+            client=provider,
+        )
+        is None
+    )
 
 
 def test_unmatched_inbound_email_stays_in_the_review_queue(
@@ -715,9 +715,7 @@ def test_unmatched_inbound_email_stays_in_the_review_queue(
         client=provider,
     )
     routed = db_session.scalar(
-        select(CommunicationRecord).where(
-            CommunicationRecord.provider_message_id == "unmatched-1"
-        )
+        select(CommunicationRecord).where(CommunicationRecord.provider_message_id == "unmatched-1")
     )
     assert routed is not None
     assert routed.conversation_id == db_session.scalar(select(Conversation.id))

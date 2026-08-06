@@ -165,9 +165,7 @@ def evaluate_voice_eligibility(
         blockers.append("Calling is outside Stonegate's allowed contact hours.")
     if not settings.twilio_voice_configured:
         blockers.append(
-            "Twilio Voice needs: "
-            + ", ".join(settings.twilio_voice_configuration_blockers)
-            + "."
+            "Twilio Voice needs: " + ", ".join(settings.twilio_voice_configuration_blockers) + "."
         )
     return VoiceEligibility(
         can_call=not blockers,

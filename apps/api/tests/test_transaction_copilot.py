@@ -37,39 +37,51 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
         content=b"%PDF transaction copilot evidence",
     )
     assert document.status_code == 201, document.text
-    assert client.post(
-        (
-            f"/api/v1/transactions/{transaction_id}/documents/"
-            f"{document.json()['id']}/facts"
-        ),
-        headers=HEADERS,
-        json={
-            "field_key": "purchase_price",
-            "value_text": "$170,000",
-            "source_page": 2,
-            "source_excerpt": "Purchase price is $170,000.",
-        },
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/ai/orchestrator/portfolio/install",
-        headers=HEADERS,
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/install",
-        headers=HEADERS,
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/foundation/decision",
-        headers=HEADERS,
-        json={
-            "decision": "approve",
-            "notes": "Approved for transaction pilot testing.",
-        },
-    ).status_code == 200
-    assert client.post(
-        "/api/v1/ai/runtime/install",
-        headers=HEADERS,
-    ).status_code == 201
+    assert (
+        client.post(
+            (f"/api/v1/transactions/{transaction_id}/documents/{document.json()['id']}/facts"),
+            headers=HEADERS,
+            json={
+                "field_key": "purchase_price",
+                "value_text": "$170,000",
+                "source_page": 2,
+                "source_excerpt": "Purchase price is $170,000.",
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/ai/orchestrator/portfolio/install",
+            headers=HEADERS,
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/install",
+            headers=HEADERS,
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=HEADERS,
+            json={
+                "decision": "approve",
+                "notes": "Approved for transaction pilot testing.",
+            },
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/api/v1/ai/runtime/install",
+            headers=HEADERS,
+        ).status_code
+        == 201
+    )
 
     overview = client.get(
         f"/api/v1/transactions/{transaction_id}/copilot",
@@ -138,11 +150,14 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
         "app.services.ai_runtime.OpenAIResponsesClient",
         FakeOpenAIResponsesClient,
     )
-    assert client.patch(
-        "/api/v1/ai/runtime/policy",
-        headers=HEADERS,
-        json={"provider_status": "enabled"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
+            headers=HEADERS,
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
+    )
     transaction = db_session.get(Transaction, UUID(transaction_id))
     assert transaction is not None
     transaction_snapshot = {
@@ -187,10 +202,7 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
     corrected = deepcopy(output)
     corrected["status_summary"] = "Human-corrected transaction summary."
     reviewed = client.post(
-        (
-            "/api/v1/transactions/copilot/recommendations/"
-            f"{recommendation['id']}/review"
-        ),
+        (f"/api/v1/transactions/copilot/recommendations/{recommendation['id']}/review"),
         headers=HEADERS,
         json={
             "decision": "edited",
@@ -199,9 +211,7 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
         },
     )
     assert reviewed.status_code == 200, reviewed.text
-    assert reviewed.json()["final_output"]["status_summary"].startswith(
-        "Human-corrected"
-    )
+    assert reviewed.json()["final_output"]["status_summary"].startswith("Human-corrected")
 
     db_session.expire_all()
     stored = db_session.get(Transaction, transaction.id)
@@ -228,15 +238,13 @@ def test_transaction_copilot_is_evidence_linked_draft_only_and_non_mutating(
         )
         == event_count
     )
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(TransactionCopilotRecommendation)
+    assert (
+        int(
+            db_session.scalar(select(func.count()).select_from(TransactionCopilotRecommendation))
+            or 0
         )
-        or 0
-    ) == 1
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(TransactionCopilotReview)
-        )
-        or 0
-    ) == 1
+        == 1
+    )
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(TransactionCopilotReview)) or 0) == 1
+    )

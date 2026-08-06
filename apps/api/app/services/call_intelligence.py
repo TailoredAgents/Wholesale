@@ -46,8 +46,10 @@ from app.services.ai_operations import (
 CALL_INTELLIGENCE_AGENT_KEY = "call_intelligence"
 CALL_INTELLIGENCE_PROMPT = """You prepare factual real-estate acquisition call notes.
 Use only facts explicitly present in the diarized transcript. Never infer a price, timeline,
-condition, occupancy, debt, title issue, commitment, or appointment. Use null or an empty list
-when the call does not support a field. Keep seller language precise and operational.
+condition, occupancy, debt, title issue, commitment, or appointment. Put a stated mortgage,
+loan balance, or payoff amount in mortgage_balance; use mortgage_or_title for other lien, probate,
+ownership, or title context. Use null or an empty list when the call does not support a field.
+Keep seller language precise and operational.
 Evidence entries must point to the supplied segment index and start time. This is a draft for
 human review and must not claim that Stonegate made a binding offer or contractual commitment."""
 LEAD_UPDATE_FIELDS = {
@@ -56,6 +58,7 @@ LEAD_UPDATE_FIELDS = {
     "property_condition": "property_condition",
     "occupancy_status": "occupancy_status",
     "asking_price": "asking_price",
+    "mortgage_balance": "mortgage_balance",
 }
 QUALITY_NOTE_FIELDS = (
     "summary",
@@ -64,6 +67,7 @@ QUALITY_NOTE_FIELDS = (
     "property_condition",
     "occupancy_status",
     "asking_price",
+    "mortgage_balance",
     "mortgage_or_title",
     "repairs",
     "objections",
@@ -307,21 +311,54 @@ def process_call_transcript(
             audio_result.output_tokens,
             note_usage["output_tokens"],
         )
+        auto_populated_values = (
+            auto_populate_call_note_fields(lead, notes) if lead is not None else {}
+        )
+        processing_completed_at = datetime.now(UTC)
         transcript.confidence_score = confidence
         transcript.status = "needs_review" if lead is not None else "completed"
         transcript.error_message = None
         transcript.transcript_metadata = {
             **metadata,
-            "processing_completed_at": datetime.now(UTC).isoformat(),
+            "processing_completed_at": processing_completed_at.isoformat(),
             "structured_notes": notes.model_dump(mode="json"),
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
             "human_review_required": lead is not None,
             "conversation_context": "seller" if lead is not None else "buyer",
             "evidence_coverage_percent": evidence_coverage_percent(notes),
+            "crm_auto_populated_at": (
+                processing_completed_at.isoformat() if auto_populated_values else None
+            ),
+            "crm_auto_populated_values": auto_populated_values,
         }
         approval: ApprovalRequest | None = None
         if lead is not None:
+            if auto_populated_values:
+                auto_populated_fields = ", ".join(auto_populated_values)
+                db.add(
+                    ActivityEvent(
+                        organization_id=lead.organization_id,
+                        actor_user_id=None,
+                        entity_type="lead",
+                        entity_id=lead.id,
+                        event_type="call_notes.crm_fields_auto_populated",
+                        summary=f"AI call notes filled empty CRM fields: {auto_populated_fields}.",
+                    )
+                )
+                db.add(
+                    AuditEvent(
+                        organization_id=lead.organization_id,
+                        actor_user_id=None,
+                        actor_type="ai",
+                        action="call_notes.crm_fields_auto_populate",
+                        entity_type="lead",
+                        entity_id=lead.id,
+                        previous_value=dict.fromkeys(auto_populated_values),
+                        new_value=auto_populated_values,
+                        reason="Transcript-grounded call qualification populated empty CRM fields.",
+                    )
+                )
             approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
             transcript.transcript_metadata = {
                 **(transcript.transcript_metadata or {}),
@@ -333,11 +370,14 @@ def process_call_transcript(
         run.output_summary = notes.summary[:4000]
         run.input_tokens = input_tokens
         run.output_tokens = output_tokens
-        run.total_tokens = sum(
-            value
-            for value in (audio_result.total_tokens, note_usage["total_tokens"])
-            if value is not None
-        ) or None
+        run.total_tokens = (
+            sum(
+                value
+                for value in (audio_result.total_tokens, note_usage["total_tokens"])
+                if value is not None
+            )
+            or None
+        )
         run.cost_microusd = total_cost_microusd
         run.cost_cents = cents_from_microusd(total_cost_microusd)
         run.run_metadata = {
@@ -345,9 +385,7 @@ def process_call_transcript(
                 audio_cost.to_metadata(),
                 notes_cost.to_metadata(),
             ],
-            "pricing_status": (
-                "priced" if total_cost_microusd is not None else "incomplete"
-            ),
+            "pricing_status": ("priced" if total_cost_microusd is not None else "incomplete"),
         }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
@@ -389,9 +427,7 @@ def process_call_transcript(
             if persisted_run is not None:
                 persisted_run.status = "failed"
                 persisted_run.error_message = str(exc)[:2000]
-                persisted_run.latency_ms = round(
-                    (time.perf_counter() - started_monotonic) * 1000
-                )
+                persisted_run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
                 persisted_run.completed_at = datetime.now(UTC)
         if operation_event_id is not None:
             mark_call_intelligence_ai_work(
@@ -708,12 +744,23 @@ def apply_approved_call_notes(
         return
     applied_fields: list[str] = []
     note_values = notes.model_dump()
+    raw_auto_populated_values = metadata.get("crm_auto_populated_values")
+    auto_populated_values = (
+        raw_auto_populated_values if isinstance(raw_auto_populated_values, dict) else {}
+    )
     for note_field in apply_field_updates:
         lead_field = LEAD_UPDATE_FIELDS.get(note_field)
         if lead_field is None:
             continue
         value = note_values.get(note_field)
-        if value and getattr(lead, lead_field) is None:
+        current_value = getattr(lead, lead_field)
+        can_correct_auto_value = (
+            lead_field in auto_populated_values
+            and current_value == auto_populated_values[lead_field]
+        )
+        if (can_correct_auto_value and current_value != value) or (
+            value and crm_field_is_empty(current_value)
+        ):
             setattr(lead, lead_field, value)
             applied_fields.append(lead_field)
 
@@ -740,6 +787,7 @@ def apply_approved_call_notes(
         )
     )
     if create_follow_up_task and notes.next_action:
+        follow_up_at = parse_follow_up_at(notes.follow_up_at)
         db.add(
             Task(
                 organization_id=principal.organization_id,
@@ -749,10 +797,12 @@ def apply_approved_call_notes(
                 title=notes.next_action[:255],
                 status="open",
                 priority="normal",
-                due_at=parse_follow_up_at(notes.follow_up_at),
+                due_at=follow_up_at,
                 completed_at=None,
             )
         )
+        if follow_up_at is not None and lead.next_follow_up_at is None:
+            lead.next_follow_up_at = follow_up_at
     transcript.transcript_metadata = {
         **metadata,
         "applied_at": datetime.now(UTC).isoformat(),
@@ -760,6 +810,25 @@ def apply_approved_call_notes(
         "approved_note_logged": True,
         "follow_up_task_created": bool(create_follow_up_task and notes.next_action),
     }
+
+
+def auto_populate_call_note_fields(
+    lead: Lead,
+    notes: StructuredCallNotes,
+) -> dict[str, object]:
+    populated_values: dict[str, object] = {}
+    note_values = notes.model_dump()
+    for note_field, lead_field in LEAD_UPDATE_FIELDS.items():
+        value = note_values.get(note_field)
+        if not value or not crm_field_is_empty(getattr(lead, lead_field)):
+            continue
+        setattr(lead, lead_field, value)
+        populated_values[lead_field] = value
+    return populated_values
+
+
+def crm_field_is_empty(value: object) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 def format_approved_notes(notes: StructuredCallNotes) -> str:
@@ -770,6 +839,7 @@ def format_approved_notes(notes: StructuredCallNotes) -> str:
         ("Condition", notes.property_condition),
         ("Occupancy", notes.occupancy_status),
         ("Asking price", notes.asking_price),
+        ("Mortgage balance/payoff", notes.mortgage_balance),
         ("Mortgage/title", notes.mortgage_or_title),
         ("Next action", notes.next_action),
         ("Appointment", notes.appointment_details),
@@ -792,7 +862,9 @@ def parse_follow_up_at(value: str | None) -> datetime | None:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError:
         return None
-    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=UTC)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def mark_ai_run_reviewed(
@@ -850,9 +922,7 @@ def evidence_coverage_percent(notes: StructuredCallNotes) -> int | None:
     if not populated_fields:
         return None
     evidenced_fields = {
-        evidence.field
-        for evidence in notes.evidence
-        if evidence.supporting_text.strip()
+        evidence.field for evidence in notes.evidence if evidence.supporting_text.strip()
     }
     return round(100 * len(populated_fields & evidenced_fields) / len(populated_fields))
 

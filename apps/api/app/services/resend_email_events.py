@@ -201,10 +201,7 @@ def process_received_email(
     conversation = db.get(Conversation, UUID(str(route["conversation_id"])))
     if conversation is None:
         raise RuntimeError("Matched Resend conversation no longer exists.")
-    route_alias_ids = [
-        UUID(str(alias_id))
-        for alias_id in route["email_sender_alias_ids"]
-    ]
+    route_alias_ids = [UUID(str(alias_id)) for alias_id in route["email_sender_alias_ids"]]
     if conversation.source_alias_id is None and len(route_alias_ids) == 1:
         conversation.source_alias_id = route_alias_ids[0]
     lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
@@ -282,9 +279,7 @@ def process_received_email(
             entity_type="lead" if lead is not None else "conversation",
             entity_id=lead.id if lead is not None else conversation.id,
             event_type=(
-                "lead.email_received"
-                if lead is not None
-                else "conversation.email_received"
+                "lead.email_received" if lead is not None else "conversation.email_received"
             ),
             summary=f"Email received from {optional_string(message.get('from'))}.",
         )
@@ -472,9 +467,12 @@ def resolve_inbound_route(
     for communication in communications:
         metadata = communication.communication_metadata or {}
         rfc_message_id = optional_string(metadata.get("rfc_message_id"))
-        if rfc_message_id and any(rfc_message_id in value for value in thread_values):
-            if communication.conversation_id is not None:
-                thread_matches[communication.conversation_id] = communication
+        if (
+            rfc_message_id
+            and any(rfc_message_id in value for value in thread_values)
+            and communication.conversation_id is not None
+        ):
+            thread_matches[communication.conversation_id] = communication
     if len(thread_matches) == 1:
         conversation_id, matched_message = next(iter(thread_matches.items()))
         metadata = matched_message.communication_metadata or {}
@@ -601,9 +599,7 @@ def resolve_inbound_route(
 
     active_candidate_ids = list(
         dict.fromkeys(
-            conversation.id
-            for conversation in candidates
-            if conversation.status != "closed"
+            conversation.id for conversation in candidates if conversation.status != "closed"
         )
     )
     if len(active_candidate_ids) == 1:
@@ -666,9 +662,7 @@ def resolve_inbound_route(
             "status": "matched",
             "rule": "alias_owner_or_team",
             "confidence": 80,
-            "reason": (
-                "Created a general conversation in the receiving Stonegate mailbox."
-            ),
+            "reason": ("Created a general conversation in the receiving Stonegate mailbox."),
             "conversation_id": str(conversation.id),
             "provider_thread_id": None,
             "email_sender_alias_ids": alias_ids,
@@ -735,20 +729,18 @@ def conversations_for_aliases(
     ):
         metadata = communication.communication_metadata or {}
         sender_alias_id = optional_string(metadata.get("email_sender_alias_id"))
-        inbound_alias_ids = {
-            optional_string(value)
-            for value in (
-                metadata.get("email_sender_alias_ids")
-                if isinstance(metadata.get("email_sender_alias_ids"), list)
-                else []
-            )
-        }
-        if (
-            communication.conversation_id is not None
-            and (
-                sender_alias_id in alias_ids
-                or bool(alias_ids.intersection(inbound_alias_ids))
-            )
+        raw_alias_ids = metadata.get("email_sender_alias_ids")
+        inbound_alias_ids = (
+            {
+                alias_id
+                for value in raw_alias_ids
+                if (alias_id := optional_string(value)) is not None
+            }
+            if isinstance(raw_alias_ids, list)
+            else set()
+        )
+        if communication.conversation_id is not None and (
+            sender_alias_id in alias_ids or bool(alias_ids.intersection(inbound_alias_ids))
         ):
             matches.add(communication.conversation_id)
     ordered = [
@@ -759,9 +751,7 @@ def conversations_for_aliases(
     if ordered:
         return list(dict.fromkeys(ordered))
     return list(
-        dict.fromkeys(
-            conversation.id for conversation in candidates if conversation.id in matches
-        )
+        dict.fromkeys(conversation.id for conversation in candidates if conversation.id in matches)
     )
 
 
@@ -878,10 +868,7 @@ def retain_received_attachments(
         if existing is not None:
             continue
         filename = optional_string(item.get("filename"))[:500] or "attachment"
-        content_type = (
-            optional_string(item.get("content_type"))[:255]
-            or "application/octet-stream"
-        )
+        content_type = optional_string(item.get("content_type"))[:255] or "application/octet-stream"
         record = EmailAttachment(
             organization_id=communication.organization_id,
             communication_record_id=communication.id,
@@ -953,14 +940,10 @@ def organization_for_recipients(
             return organization
     settings = get_settings()
     organization = db.scalar(
-        select(Organization).where(
-            Organization.name == settings.default_organization_name
-        )
+        select(Organization).where(Organization.name == settings.default_organization_name)
     )
     if organization is None:
-        organization = db.scalar(
-            select(Organization).order_by(Organization.created_at.asc())
-        )
+        organization = db.scalar(select(Organization).order_by(Organization.created_at.asc()))
     if organization is None:
         raise RuntimeError("Resend webhook received before an organization was configured.")
     return organization
@@ -986,8 +969,7 @@ def received_email_is_known(db: Session, provider_message_id: str) -> bool:
     recovery_event = db.scalar(
         select(CommunicationProviderEvent.id).where(
             CommunicationProviderEvent.provider == "resend",
-            CommunicationProviderEvent.external_event_id
-            == f"recovery:{provider_message_id}",
+            CommunicationProviderEvent.external_event_id == f"recovery:{provider_message_id}",
         )
     )
     return recovery_event is not None
@@ -1000,9 +982,7 @@ def should_apply_status(
     event_at: datetime,
 ) -> bool:
     if current_status in TERMINAL_STATUSES:
-        return new_status in TERMINAL_STATUSES and (
-            current_at is None or event_at >= current_at
-        )
+        return new_status in TERMINAL_STATUSES and (current_at is None or event_at >= current_at)
     if new_status in TERMINAL_STATUSES:
         return True
     if current_at is not None and event_at < current_at:
@@ -1029,9 +1009,7 @@ def event_data(event: CommunicationProviderEvent) -> dict[str, Any]:
 
 def normalized_addresses(values: list[str]) -> list[str]:
     addresses = [
-        address.strip().lower()
-        for _name, address in getaddresses(values)
-        if address.strip()
+        address.strip().lower() for _name, address in getaddresses(values) if address.strip()
     ]
     return list(dict.fromkeys(addresses))
 
@@ -1039,10 +1017,7 @@ def normalized_addresses(values: list[str]) -> list[str]:
 def normalized_headers(value: object) -> dict[str, str]:
     if not isinstance(value, dict):
         return {}
-    return {
-        str(key).strip().lower(): optional_string(item)
-        for key, item in value.items()
-    }
+    return {str(key).strip().lower(): optional_string(item) for key, item in value.items()}
 
 
 def string_list(value: object) -> list[str]:

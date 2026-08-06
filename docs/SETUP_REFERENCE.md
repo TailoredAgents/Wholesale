@@ -34,7 +34,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | API domain | `api.stonegatehb.com` | Active |
 | Authentication | Clerk | Active |
 | AI | OpenAI | Configured; Copilot pilots pending |
-| Property data | RentCast + RealEstateAPI | RentCast active; RealEstateAPI activation pending key deployment |
+| Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
 | Operational email | Resend | Configured; controlled acceptance pending |
 | SMS | Twilio | Seller-inquiry A2P approved; internal Facebook lead alerts tested live |
 | Voice | Twilio | Configuration and acceptance pending |
@@ -537,15 +537,20 @@ After campaign approval and number attachment:
 - `TWILIO_WEBHOOK_BASE_URL`
 - token TTL, ring timeout, timezone, and calling-hour variables
 - `TWILIO_VOICE_RECORDING_ENABLED`
-- `TWILIO_VOICE_RECORDING_DISCLOSURE` (optional when the operating policy requires an announcement)
+- `TWILIO_VOICE_RECORDING_DISCLOSURE`
 - `CALL_RECORDING_RETENTION_DAYS`
+- `CALL_TRANSCRIPTION_ENABLED`
+- `CALL_TRANSCRIPTION_MODEL`
+- `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
 keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
-With recording enabled and no disclosure value, Stonegate records under its documented Georgia
-one-party operating policy. Add a disclosure before calling markets where that policy is not valid.
+The disclosure is optional. Stonegate's approved Georgia-only one-party mode leaves it unset and
+records `one_party_consent` without playing an announcement. Set the variable when Stonegate
+chooses or is required to announce recording. Recording-consent rules can differ outside Georgia,
+so review the operating policy before calling into other states.
 
 ### Webhooks
 
@@ -565,7 +570,13 @@ All paths use `https://api.stonegatehb.com` as the base.
 4. No-answer and missed-call task behavior work.
 5. Status callbacks attach to the correct conversation.
 6. Recording remains off until disclosure and retention policy are approved.
-7. When recording is enabled, media access, transcription, review, and deletion are tested.
+7. When recording is enabled, confirm the authorization state, private recording, speaker-aware
+   transcript, structured AI draft, automatic empty-field CRM population, correction, rejection,
+   internal seller note/activity entry, follow-up task and date, audit history, failure visibility,
+   retention date, and early deletion.
+8. **Settings > Integrations** shows **Call recording and AI notes** as configured. A missing Voice,
+   recording, transcription, AI, or OpenAI setting is a launch blocker; an intentionally blank
+   disclosure is not.
 
 ## SignWell
 
@@ -689,6 +700,7 @@ Variables on both **oakwell-api** and **oakwell-worker**:
 
 - `ZAPIER_FACEBOOK_LEADS_ENABLED`
 - `ZAPIER_FACEBOOK_PAGE_ID`
+- `ZAPIER_FACEBOOK_LEADS_SECRET` (the same random value, at least 32 characters, on both services)
 - `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
 - `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
@@ -724,6 +736,7 @@ Add **Webhooks by Zapier > Custom Request** as the Zap's only action:
 - Data Pass-Through: `false`
 - Unflatten: `false`
 - Header `Content-Type`: `application/json`
+- Header `X-Stonegate-Webhook-Secret`: the same private value stored in Render
 
 Use a JSON body with Zapier field tokens in place of the example labels:
 
@@ -775,7 +788,9 @@ RentCast's AVM value range in comp or offer math.
 
 ### Activation And Acceptance
 
-1. Store the numeric Page ID on both Render services. Leave
+1. Store the numeric Page ID and the same high-entropy webhook secret on both Render services.
+   Add that secret to Zapier as `X-Stonegate-Webhook-Secret`; never put it in chat, screenshots, or
+   source control. Leave
    `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
 2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
    Zapier action test.
@@ -792,7 +807,7 @@ RentCast's AVM value range in comp or offer math.
 8. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
-The endpoint is publicly reachable and does not authenticate requests. It rejects the wrong Page,
+The endpoint is publicly reachable but requires the private Zapier header, rejects the wrong Page,
 limits request size, and returns quickly after durable storage. The worker performs CRM intake and
 retries temporary internal failures with backoff. Facebook lead IDs are unique per organization,
 so Zapier replays are safe. If a Zap fails, correct the mapping and replay the original run; do not
@@ -922,9 +937,9 @@ After a production deployment:
 | First controlled homepage experiment acceptance | Stonegate owner/marketing | After a stable production baseline exists |
 | Approved public team content and photography | Stonegate owner/marketing | Before PC8 production acceptance |
 | Attach approved acquisitions number and configure Messaging Service callbacks | Stonegate owner | Twilio Console |
-| Dedicated Twilio SMS and Voice acceptance | Owner and developer | After provider configuration |
+| Dedicated Twilio SMS, Voice, recording, transcription, and AI-note acceptance | Owner and developer | Before launch |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
-| RealEstateAPI API key, production connection, and acceptance | Owner and acquisitions | Now |
+| RealEstateAPI production connection and acceptance | Owner and acquisitions | Passed; monitor credits and evidence quality |
 | CPA accounting acceptance | Owner, finance, CPA | Before relying on first closed period |
 | Underwriting calibration | Owner/acquisitions | As real outcomes accumulate |
 | Google/Meta conversion activation | Owner/marketing | When ad accounts are ready |

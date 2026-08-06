@@ -1,14 +1,19 @@
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from app.main import app
 from app.services.bootstrap import bootstrap_foundation
 
 OWNER_EMAIL = "owner@example.com"
 HEADERS = {"X-Dev-User-Email": OWNER_EMAIL}
-CSV_CONTENT = "Date,Description,Amount,Balance,Transaction ID\n2026-07-01,Vendor ACH,-20.00,80.00,txn-1\n2026-07-02,Card fee,-10.00,70.00,txn-2\n"
+CSV_CONTENT = (
+    "Date,Description,Amount,Balance,Transaction ID\n"
+    "2026-07-01,Vendor ACH,-20.00,80.00,txn-1\n"
+    "2026-07-02,Card fee,-10.00,70.00,txn-2\n"
+)
 
 
-def seed_owner(db_session) -> None:
+def seed_owner(db_session: Session) -> None:
     bootstrap_foundation(
         db_session,
         organization_name="Stonegate Home Buyers",
@@ -34,7 +39,10 @@ def import_payload(account_id: str) -> dict[str, object]:
     }
 
 
-def test_private_bank_import_and_reconciliation_flow(db_session, api_db_override) -> None:
+def test_private_bank_import_and_reconciliation_flow(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
     seed_owner(db_session)
     client = TestClient(app)
     account = client.post(

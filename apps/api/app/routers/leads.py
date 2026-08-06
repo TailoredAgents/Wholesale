@@ -202,6 +202,11 @@ def schedule_lead_appointment(
 ) -> LeadDetail:
     try:
         lead = create_lead_appointment(db, principal, lead_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

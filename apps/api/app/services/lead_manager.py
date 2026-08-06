@@ -296,14 +296,17 @@ def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
 def create_script(
     db: Session, principal: Principal, payload: QualificationScriptCreate
 ) -> QualificationScriptRead:
-    next_version = int(
-        db.scalar(
-            select(func.max(LeadQualificationScriptVersion.version_number)).where(
-                LeadQualificationScriptVersion.organization_id == principal.organization_id
+    next_version = (
+        int(
+            db.scalar(
+                select(func.max(LeadQualificationScriptVersion.version_number)).where(
+                    LeadQualificationScriptVersion.organization_id == principal.organization_id
+                )
             )
+            or 0
         )
-        or 0
-    ) + 1
+        + 1
+    )
     script = LeadQualificationScriptVersion(
         organization_id=principal.organization_id,
         version_number=next_version,
@@ -655,25 +658,35 @@ def build_scorecards(
             for case in accepted
             if case.accepted_at is not None
         ]
-        appointments = list(
-            db.scalars(
-                select(Appointment).where(
-                    Appointment.organization_id == principal.organization_id,
-                    Appointment.lead_id.in_(lead_ids),
-                    Appointment.created_at >= since,
-                )
-            ).all()
-        ) if lead_ids else []
-        contracts = int(
-            db.scalar(
-                select(func.count()).select_from(Transaction).where(
-                    Transaction.organization_id == principal.organization_id,
-                    Transaction.lead_id.in_(lead_ids),
-                    Transaction.created_at >= since,
-                )
+        appointments = (
+            list(
+                db.scalars(
+                    select(Appointment).where(
+                        Appointment.organization_id == principal.organization_id,
+                        Appointment.lead_id.in_(lead_ids),
+                        Appointment.created_at >= since,
+                    )
+                ).all()
             )
-            or 0
-        ) if lead_ids else 0
+            if lead_ids
+            else []
+        )
+        contracts = (
+            int(
+                db.scalar(
+                    select(func.count())
+                    .select_from(Transaction)
+                    .where(
+                        Transaction.organization_id == principal.organization_id,
+                        Transaction.lead_id.in_(lead_ids),
+                        Transaction.created_at >= since,
+                    )
+                )
+                or 0
+            )
+            if lead_ids
+            else 0
+        )
         active = [
             case
             for case in user_cases
@@ -772,9 +785,7 @@ def list_scripts(db: Session, principal: Principal) -> list[QualificationScriptR
     ]
 
 
-def get_active_script(
-    db: Session, organization_id: UUID
-) -> LeadQualificationScriptVersion | None:
+def get_active_script(db: Session, organization_id: UUID) -> LeadQualificationScriptVersion | None:
     return db.scalar(
         select(LeadQualificationScriptVersion).where(
             LeadQualificationScriptVersion.organization_id == organization_id,
@@ -814,9 +825,7 @@ def session_read(
     )
 
 
-def scoped_case(
-    db: Session, principal: Principal, case_id: UUID
-) -> LeadManagementCase | None:
+def scoped_case(db: Session, principal: Principal, case_id: UUID) -> LeadManagementCase | None:
     return db.scalar(
         select(LeadManagementCase).where(
             LeadManagementCase.organization_id == principal.organization_id,

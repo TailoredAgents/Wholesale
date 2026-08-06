@@ -42,6 +42,8 @@ class PropertyRecordClient(Protocol):
         address: str,
         property_id: str | None = None,
     ) -> dict[str, Any]: ...
+
+
 UNIT_MARKERS = {"apartment": "unit", "apt": "unit", "suite": "unit", "ste": "unit", "#": "unit"}
 SUBJECT_FACT_FIELDS = (
     "propertyType",
@@ -160,8 +162,7 @@ def validate_property_with_provider(
 
 def property_lookup_address(property_record: Property) -> str:
     locality = (
-        f"{property_record.state.strip()} "
-        f"{normalize_postal_code(property_record.postal_code)}"
+        f"{property_record.state.strip()} {normalize_postal_code(property_record.postal_code)}"
     )
     return ", ".join(
         value
@@ -185,9 +186,7 @@ def apply_confident_provider_enrichment(
     if not isinstance(provider, dict):
         return ()
     enriched_fields: list[str] = []
-    provider_postal_code = normalize_postal_code(
-        string_value(provider.get("postal_code")) or ""
-    )
+    provider_postal_code = normalize_postal_code(string_value(provider.get("postal_code")) or "")
     if not normalize_postal_code(property_record.postal_code) and provider_postal_code:
         property_record.postal_code = provider_postal_code
         enriched_fields.append("postal_code")

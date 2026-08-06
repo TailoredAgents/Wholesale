@@ -1,4 +1,5 @@
 from types import SimpleNamespace
+from typing import cast
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -54,12 +55,13 @@ def test_cached_market_snapshot_reuse_depends_on_property_not_provider_status() 
         },
     )
 
-    assert cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
-        failed_snapshot,
+    snapshot = cast(UnderwritingMarketAnalysis, failed_snapshot)
+    assert cached_market_data_snapshot_is_reusable(
+        snapshot,
         current_address="123 Peachtree St, Atlanta, GA 30303",
     )
-    assert not cached_market_data_snapshot_is_reusable(  # type: ignore[arg-type]
-        failed_snapshot,
+    assert not cached_market_data_snapshot_is_reusable(
+        snapshot,
         current_address="999 Different St, Atlanta, GA 30303",
     )
 
@@ -933,6 +935,17 @@ def test_schedule_lead_appointment_updates_lead_and_records_audit(
 ) -> None:
     seed_owner(db_session)
     client = TestClient(app)
+    assignee_response = client.post(
+        "/api/v1/operations/users",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "email": "calendar-owner@example.com",
+            "display_name": "Calendar Owner",
+            "role_key": "acquisition_rep",
+        },
+    )
+    assert assignee_response.status_code == 201, assignee_response.text
+    appointment_owner_id = assignee_response.json()["id"]
     created_response = client.post(
         "/api/v1/leads",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -951,6 +964,7 @@ def test_schedule_lead_appointment_updates_lead_and_records_audit(
             "location_type": "property",
             "location": "123 Peachtree St, Atlanta, GA 30303",
             "notes": "Seller wants us to look at roof and kitchen first.",
+            "owner_user_id": appointment_owner_id,
         },
     )
 
@@ -962,6 +976,9 @@ def test_schedule_lead_appointment_updates_lead_and_records_audit(
     assert payload["appointments"][0]["appointment_type"] == "walkthrough"
     assert payload["appointments"][0]["status"] == "scheduled"
     assert payload["appointments"][0]["location_type"] == "property"
+    appointment = db_session.scalar(select(Appointment))
+    assert appointment is not None
+    assert str(appointment.owner_user_id) == appointment_owner_id
     assert "lead.appointment_scheduled" in [
         activity["event_type"] for activity in payload["recent_activity"]
     ]

@@ -110,9 +110,9 @@ def test_cold_calling_can_be_added_to_another_staff_role_without_broadening_acce
     assert caller_workbench.status_code == 200, caller_workbench.text
     assert caller_workbench.json()["can_manage"] is False
     assert len(caller_workbench.json()["queue_entries"]) == 3
-    assert {
-        entry["assigned_user_name"] for entry in caller_workbench.json()["queue_entries"]
-    } == {"Disposition Caller"}
+    assert {entry["assigned_user_name"] for entry in caller_workbench.json()["queue_entries"]} == {
+        "Disposition Caller"
+    }
 
     other_workbench = client.get(
         "/api/v1/prospecting",
@@ -783,9 +783,7 @@ def test_terminal_handoff_rejection_uses_structured_reason_and_does_not_count_as
         },
     )
     assert completed.status_code == 200, completed.text
-    handoff = client.get("/api/v1/prospecting", headers=owner_headers).json()[
-        "pending_handoffs"
-    ][0]
+    handoff = client.get("/api/v1/prospecting", headers=owner_headers).json()["pending_handoffs"][0]
     rejected = client.post(
         f"/api/v1/prospecting/handoffs/{handoff['id']}/decision",
         headers=owner_headers,

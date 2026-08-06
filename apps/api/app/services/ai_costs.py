@@ -71,9 +71,9 @@ def estimate_openai_cost(
             input_usd_per_million=str(input_rate),
             output_usd_per_million=str(output_rate),
         )
-    cost = (
-        Decimal(input_tokens) * input_rate + Decimal(output_tokens) * output_rate
-    ).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    cost = (Decimal(input_tokens) * input_rate + Decimal(output_tokens) * output_rate).quantize(
+        Decimal("1"), rounding=ROUND_HALF_UP
+    )
     return AiCostEstimate(
         model=model,
         input_tokens=input_tokens,

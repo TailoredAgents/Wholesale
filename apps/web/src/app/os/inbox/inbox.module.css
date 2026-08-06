@@ -1850,6 +1850,58 @@
   gap: 10px;
 }
 
+.callNotesList {
+  max-height: 360px;
+  display: grid;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.callNoteCard {
+  padding: 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 6px;
+  background: var(--surface-soft);
+  display: grid;
+  gap: 6px;
+}
+
+.callNoteMeta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.callNoteMeta span {
+  color: var(--brand-strong);
+  text-transform: uppercase;
+}
+
+.callNoteCard strong,
+.callNoteCard p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.callNoteCard p span {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.callNoteCard a {
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 10px;
+  font-weight: 800;
+}
+
 .nextAction {
   padding: 9px;
   border: 1px solid #cbdcd1;
@@ -1872,6 +1924,23 @@
 
 .nextAction span {
   font-size: 10px;
+}
+
+.scheduleFromInbox {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 9px;
+  padding: 0 9px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 850;
 }
 
 .mutedText {

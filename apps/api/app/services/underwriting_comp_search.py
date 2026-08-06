@@ -30,8 +30,7 @@ class ClosedSaleProvider(Protocol):
         bathroom_tolerance: float | None = 1,
         square_footage_tolerance: float | None = 0.2,
         year_built_tolerance: int | None = 25,
-    ) -> list[dict[str, Any]]:
-        ...
+    ) -> list[dict[str, Any]]: ...
 
 
 @dataclass(frozen=True)

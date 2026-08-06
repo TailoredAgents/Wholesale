@@ -55,6 +55,7 @@ type FormValues = {
   preferred_contact_method: "phone" | "email" | "sms";
   consent_to_contact: boolean;
   sms_consent: boolean;
+  company_website: string;
 };
 
 type FieldName = keyof FormValues;
@@ -96,6 +97,7 @@ const initialValues: FormValues = {
   preferred_contact_method: "phone",
   consent_to_contact: false,
   sms_consent: false,
+  company_website: "",
 };
 
 const conditionOptions = [
@@ -335,6 +337,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       consent_to_contact: values.consent_to_contact,
       consent_wording_version: "seller-contact-web-v2",
       sms_consent: values.sms_consent,
+      company_website: values.company_website,
       sms_consent_wording_version: "seller-sms-web-v2",
       conversion_session_id: getConversionSessionId(),
       experiment_key: experiment?.experiment_key ?? null,
@@ -726,6 +729,16 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       {activeStep === 1 ? (
         <fieldset className={styles.stepFields}>
           <legend className={styles.visuallyHidden}>Contact details and consent</legend>
+          <label className={styles.visuallyHidden} aria-hidden="true">
+            Company website
+            <input
+              name="company_website"
+              autoComplete="off"
+              tabIndex={-1}
+              value={values.company_website}
+              onChange={(event) => updateValue("company_website", event.target.value)}
+            />
+          </label>
           <Field label="Your name" name="name" error={errors.name} required>
             <input
               id="name"

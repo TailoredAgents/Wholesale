@@ -57,18 +57,18 @@ class VoiceLineCreate(BaseModel):
     fallback_user_id: UUID | None = None
     assigned_team_id: UUID | None = None
     department_key: Literal["acquisitions", "dispositions", "general"] = "acquisitions"
-    purpose_key: Literal[
-        "seller_conversations", "buyer_relations", "company_general"
-    ] = "seller_conversations"
+    purpose_key: Literal["seller_conversations", "buyer_relations", "company_general"] = (
+        "seller_conversations"
+    )
     is_default: bool = False
     inbound_route: str = Field(default="conversation_owner", max_length=80)
     ring_strategy: Literal["sequential", "simultaneous"] = "simultaneous"
     coverage_timezone: str = Field(default="America/New_York", min_length=3, max_length=80)
     coverage_start_hour: int = Field(default=9, ge=0, le=23)
     coverage_end_hour: int = Field(default=20, ge=1, le=24)
-    missed_call_action: Literal[
-        "fallback_then_voicemail", "voicemail", "task_only"
-    ] = "fallback_then_voicemail"
+    missed_call_action: Literal["fallback_then_voicemail", "voicemail", "task_only"] = (
+        "fallback_then_voicemail"
+    )
 
 
 class VoiceLineAssignmentUpdate(BaseModel):
@@ -77,9 +77,7 @@ class VoiceLineAssignmentUpdate(BaseModel):
     assigned_team_id: UUID | None = None
     label: str | None = Field(default=None, min_length=1, max_length=120)
     department_key: Literal["acquisitions", "dispositions", "general"] | None = None
-    purpose_key: Literal[
-        "seller_conversations", "buyer_relations", "company_general"
-    ] | None = None
+    purpose_key: Literal["seller_conversations", "buyer_relations", "company_general"] | None = None
     status: str | None = Field(default=None, max_length=40)
     is_default: bool | None = None
     inbound_route: str | None = Field(default=None, max_length=80)
@@ -87,9 +85,7 @@ class VoiceLineAssignmentUpdate(BaseModel):
     coverage_timezone: str | None = Field(default=None, min_length=3, max_length=80)
     coverage_start_hour: int | None = Field(default=None, ge=0, le=23)
     coverage_end_hour: int | None = Field(default=None, ge=1, le=24)
-    missed_call_action: Literal[
-        "fallback_then_voicemail", "voicemail", "task_only"
-    ] | None = None
+    missed_call_action: Literal["fallback_then_voicemail", "voicemail", "task_only"] | None = None
 
 
 class VoiceLineListResponse(BaseModel):
@@ -176,7 +172,8 @@ class StructuredCallNotes(BaseModel):
     property_condition: str | None = Field(max_length=120)
     occupancy_status: str | None = Field(max_length=120)
     asking_price: str | None = Field(max_length=120)
-    mortgage_or_title: str | None = Field(max_length=500)
+    mortgage_balance: str | None = Field(default=None, max_length=120)
+    mortgage_or_title: str | None = Field(default=None, max_length=500)
     repairs: list[str] = Field(max_length=20)
     objections: list[str] = Field(max_length=20)
     commitments: list[str] = Field(max_length=20)

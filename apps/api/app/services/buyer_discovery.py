@@ -69,8 +69,7 @@ PROPERTY_TYPE_MAP = {
 def provider_status(settings: Settings | None = None) -> BuyerDataProviderRead:
     settings = settings or get_settings()
     configured = bool(
-        settings.buyer_data_provider == "dealmachine"
-        and settings.dealmachine_api_key
+        settings.buyer_data_provider == "dealmachine" and settings.dealmachine_api_key
     )
     if settings.buyer_data_provider == "disabled":
         message = "Buyer-data search is disabled until DealMachine is configured."
@@ -144,9 +143,7 @@ def estimate_buyer_discovery(
     status = provider_status(settings)
     if not status.configured:
         raise ValueError(status.message)
-    case, property_record, provider_request = _discovery_context(
-        db, principal, payload, settings
-    )
+    case, property_record, provider_request = _discovery_context(db, principal, payload, settings)
     provider_client = client or DealMachineClient(settings)
     try:
         _add_property_type_filter(
@@ -190,9 +187,7 @@ def discover_buyers(
     status = provider_status(settings)
     if not status.configured:
         raise ValueError(status.message)
-    case, property_record, provider_request = _discovery_context(
-        db, principal, payload, settings
-    )
+    case, property_record, provider_request = _discovery_context(db, principal, payload, settings)
     postal_code = property_record.postal_code.strip()[:5]
     provider_client = client or DealMachineClient(settings)
     try:
@@ -329,8 +324,7 @@ def import_candidates(
     candidates = list(
         db.scalars(
             select(BuyerDiscoveryCandidate).where(
-                BuyerDiscoveryCandidate.organization_id
-                == principal.organization_id,
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
                 BuyerDiscoveryCandidate.discovery_run_id == run.id,
                 BuyerDiscoveryCandidate.id.in_(payload.candidate_ids),
             )
@@ -344,14 +338,9 @@ def import_candidates(
         raise ValueError("The source disposition case is unavailable.")
 
     existing_buyers = list(
-        db.scalars(
-            select(Buyer).where(Buyer.organization_id == principal.organization_id)
-        ).all()
+        db.scalars(select(Buyer).where(Buyer.organization_id == principal.organization_id)).all()
     )
-    by_name = {
-        _normalized_name(item.company_name or item.name): item
-        for item in existing_buyers
-    }
+    by_name = {_normalized_name(item.company_name or item.name): item for item in existing_buyers}
     imported = 0
     duplicates = 0
     now = datetime.now(UTC)
@@ -363,8 +352,7 @@ def import_candidates(
         previous = db.scalar(
             select(BuyerDiscoveryCandidate)
             .where(
-                BuyerDiscoveryCandidate.organization_id
-                == principal.organization_id,
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
                 BuyerDiscoveryCandidate.provider == candidate.provider,
                 BuyerDiscoveryCandidate.external_key == candidate.external_key,
                 BuyerDiscoveryCandidate.buyer_id.is_not(None),
@@ -416,16 +404,10 @@ def import_candidates(
                 buyer_id=buyer.id,
                 markets=candidate.market,
                 property_types=(
-                    property_record.property_type
-                    or ", ".join(candidate.property_types)
-                    or None
+                    property_record.property_type or ", ".join(candidate.property_types) or None
                 ),
-                min_price_cents=(
-                    round(observed_min * 0.75) if observed_min is not None else None
-                ),
-                max_price_cents=(
-                    round(observed_max * 1.25) if observed_max is not None else None
-                ),
+                min_price_cents=(round(observed_min * 0.75) if observed_min is not None else None),
+                max_price_cents=(round(observed_max * 1.25) if observed_max is not None else None),
                 rehab_levels=None,
                 notes=(
                     "Initial buy box inferred from provider evidence. Confirm directly "
@@ -500,8 +482,7 @@ def run_to_read(
         db.scalars(
             select(BuyerDiscoveryCandidate)
             .where(
-                BuyerDiscoveryCandidate.organization_id
-                == principal.organization_id,
+                BuyerDiscoveryCandidate.organization_id == principal.organization_id,
                 BuyerDiscoveryCandidate.discovery_run_id == run.id,
             )
             .order_by(
@@ -611,9 +592,7 @@ def _estimate_read(
         requested_candidates=payload.max_candidates,
         provider_result_limit=_integer(provider_request.get("per_page")) or 0,
         total_matching_properties=(
-            _integer(pagination.get("total_results"))
-            or _integer(totals.get("properties"))
-            or 0
+            _integer(pagination.get("total_results")) or _integer(totals.get("properties")) or 0
         ),
         estimated_credits=estimated_credits,
         estimated_property_credits=_integer(breakdown.get("properties")) or 0,
@@ -643,9 +622,7 @@ def _provider_request(
         },
     ]
     return {
-        "locations": [
-            {"type": "zip_code", "code": property_record.postal_code.strip()[:5]}
-        ],
+        "locations": [{"type": "zip_code", "code": property_record.postal_code.strip()[:5]}],
         "anchor": "properties",
         "contact_audience": "owners",
         "filters": filters,
@@ -672,9 +649,7 @@ def _add_property_type_filter(
     property_record: Property,
     filters: list[object],
 ) -> None:
-    target_label = PROPERTY_TYPE_MAP.get(
-        (property_record.property_type or "").strip().lower()
-    )
+    target_label = PROPERTY_TYPE_MAP.get((property_record.property_type or "").strip().lower())
     if not target_label:
         return
     target_key = _normalized_option_label(target_label)
@@ -774,9 +749,7 @@ def _candidate_groups(
         )
         closest_price = min(prices, key=lambda price: abs(price - target)) if prices else None
         price_ratio = (
-            abs(closest_price - target) / max(target, 1)
-            if closest_price is not None
-            else 1.0
+            abs(closest_price - target) / max(target, 1) if closest_price is not None else 1.0
         )
         price_fit = max(0, round(2500 * (1 - min(price_ratio, 1))))
         type_fit = (
@@ -806,8 +779,7 @@ def _candidate_groups(
                 "email": email,
                 "phone": phone,
                 "market": (
-                    f"{property_record.city}, {property_record.state} "
-                    f"{property_record.postal_code}"
+                    f"{property_record.city}, {property_record.state} {property_record.postal_code}"
                 ),
                 "property_types": property_types or [subject_type],
                 "observed_purchase_count": len(evidence),
@@ -872,9 +844,7 @@ def _contact_details(
     matching = [
         item
         for item in contacts
-        if _normalized_name(
-            _string(item.get("full_name") or item.get("person_full_name"))
-        )
+        if _normalized_name(_string(item.get("full_name") or item.get("person_full_name")))
         == owner_key
     ]
     ordered = matching + [item for item in contacts if item not in matching]

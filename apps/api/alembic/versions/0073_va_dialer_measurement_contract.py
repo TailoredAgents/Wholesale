@@ -283,7 +283,9 @@ def upgrade() -> None:
                     WHEN outcome IN (
                         'callback_requested', 'follow_up', 'interested', 'appointment_set'
                     ) THEN 'granted'
-                    WHEN outcome IN ('wrong_number', 'not_interested', 'do_not_call') THEN 'declined'
+                    WHEN outcome IN (
+                        'wrong_number', 'not_interested', 'do_not_call'
+                    ) THEN 'declined'
                     ELSE 'not_recorded'
                 END,
                 answered_at = CASE

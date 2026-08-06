@@ -28,6 +28,8 @@ export default async function CalendarPage({
 }) {
   const params = (await searchParams) ?? {};
   const appointmentId = first(params.appointment);
+  const scheduleOpen = first(params.schedule) === "1";
+  const scheduleAt = first(params.starts_at);
   const initialView = appointmentId ? "meetings" : normalizeView(first(params.view));
   const [{ fieldOperations, apiConnected }, initialWorkspace] = await Promise.all([
     getFieldOperationsOverview(),
@@ -68,6 +70,8 @@ export default async function CalendarPage({
           data={fieldOperations}
           initialAppointmentId={appointmentId}
           initialLeadId={first(params.lead)}
+          initialScheduleAt={scheduleAt}
+          initialScheduleOpen={scheduleOpen}
           initialWorkspace={initialWorkspace}
           initialView={permittedView}
         />

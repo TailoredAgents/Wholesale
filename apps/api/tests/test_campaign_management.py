@@ -435,15 +435,11 @@ def test_propstream_contact_export_preserves_all_contacts_and_mixed_state_warnin
     )
     assert import_response.status_code == 201, import_response.text
     assert import_response.json()["imported_rows"] == 2
-    company = db_session.scalar(
-        select(Prospect).where(Prospect.legal_name == "1182 Test Trust")
-    )
+    company = db_session.scalar(select(Prospect).where(Prospect.legal_name == "1182 Test Trust"))
     assert company is not None
     assert company.phone == "4045550102"
     contact_points = db_session.scalars(
-        select(ProspectContactPoint).where(
-            ProspectContactPoint.prospect_id == company.id
-        )
+        select(ProspectContactPoint).where(ProspectContactPoint.prospect_id == company.id)
     ).all()
     assert len(contact_points) == 9
     assert sum(point.validation_status == "source_dnc" for point in contact_points) == 2
@@ -581,9 +577,7 @@ def test_propstream_refresh_preserves_history_and_cohort_lineage(
     assert prospect.last_contacted_at == contacted_at.replace(tzinfo=None)
     assert prospect.phone == original_phone
     membership = db_session.scalar(
-        select(ProspectSourceMembership).where(
-            ProspectSourceMembership.prospect_id == prospect.id
-        )
+        select(ProspectSourceMembership).where(ProspectSourceMembership.prospect_id == prospect.id)
     )
     assert membership is not None
     assert membership.appearance_count == 2

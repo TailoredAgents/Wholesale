@@ -118,43 +118,413 @@ PAYMENT_TRANSITIONS = {
 # The operating-model acquisition reserve is intentionally absent. It is a
 # profitability target, not an accounting expense without an underlying cost.
 DEFAULT_WHOLESALE_ACCOUNTS = (
-    ("1000", "operating_cash", "Operating Cash", "asset", "cash", "debit", "cash", False, "Primary operating bank balance."),
-    ("1010", "tax_reserve_cash", "Tax Reserve Cash", "asset", "cash", "debit", "cash", False, "Cash reserved by management for expected tax payments."),
-    ("1100", "settlement_receivable", "Settlement Receivable", "asset", "receivable", "debit", "receivable", True, "Funded closing proceeds due to Stonegate but not yet received."),
-    ("1200", "earnest_money_deposits", "Earnest Money Deposits", "asset", "deposit", "debit", "deposit", True, "Stonegate earnest money held by a closing attorney or title company."),
-    ("1300", "real_estate_inventory", "Real Estate Inventory", "asset", "inventory", "debit", "inventory", True, "Property cost held for resale in a double-close transaction."),
-    ("1310", "capitalized_deal_costs", "Capitalized Acquisition and Closing Costs", "asset", "inventory_cost", "debit", "inventory", True, "Deal costs capitalized into property inventory when required."),
-    ("1400", "prepaid_expenses", "Prepaid Expenses", "asset", "prepaid", "debit", "prepaid_expense", False, "Payments that benefit a future accounting period."),
-    ("2000", "accounts_payable", "Accounts Payable", "liability", "payable", "credit", "accounts_payable", False, "Approved vendor obligations not yet paid."),
-    ("2100", "commission_payable", "Commission Payable", "liability", "payable", "credit", "compensation", True, "Approved deal commissions payable after cleared proceeds."),
-    ("2200", "contractor_payable", "Contractor Payable", "liability", "payable", "credit", "contract_labor", False, "Approved contractor obligations not yet paid."),
-    ("2300", "transactional_funding_payable", "Transactional Funding Payable", "liability", "financing", "credit", "deal_financing", True, "Short-term transactional funding owed on a double close."),
-    ("2400", "credit_cards", "Credit Cards", "liability", "credit_card", "credit", "credit_card", False, "Company credit-card balances."),
-    ("3000", "owner_contributions", "Owner Contributions", "equity", "contribution", "credit", "equity", False, "Owner capital contributed to the company."),
-    ("3100", "owner_distributions", "Owner Distributions", "equity", "distribution", "debit", "owner_distribution", False, "Owner withdrawals that are not operating expenses."),
-    ("3200", "retained_earnings", "Retained Earnings", "equity", "retained_earnings", "credit", "equity", False, "Accumulated company earnings."),
-    ("4000", "assignment_fee_revenue", "Assignment Fee Revenue", "revenue", "assignment", "credit", "gross_receipts", True, "Revenue earned from assigning a purchase contract."),
-    ("4100", "wholesale_property_sale_revenue", "Wholesale Property Sale Revenue", "revenue", "property_sale", "credit", "gross_receipts", True, "Gross resale proceeds from a double-close transaction."),
-    ("4200", "jv_revenue", "Joint Venture Revenue", "revenue", "joint_venture", "credit", "gross_receipts", True, "Stonegate revenue from a documented joint-venture transaction."),
-    ("4900", "other_operating_revenue", "Other Operating Revenue", "revenue", "other", "credit", "other_income", False, "Operating revenue outside normal assignment, resale, or JV activity."),
-    ("5000", "property_acquisition_cost", "Property Acquisition Cost", "cost_of_revenue", "inventory_cost", "debit", "cost_of_goods_sold", True, "Acquisition basis released from inventory when a double-close property is sold."),
-    ("5100", "deal_closing_costs", "Deal Closing Costs", "cost_of_revenue", "closing_cost", "debit", "cost_of_goods_sold", True, "Closing costs directly attributable to a completed deal."),
-    ("5200", "transactional_funding_fees", "Transactional Funding Fees", "cost_of_revenue", "financing_cost", "debit", "cost_of_goods_sold", True, "Direct transactional funding charges for a double close."),
-    ("5300", "jv_partner_payments", "Joint Venture Partner Payments", "cost_of_revenue", "partner_payment", "debit", "cost_of_goods_sold", True, "Documented partner share attributable to a joint-venture deal."),
-    ("5400", "buyer_credits_refunds", "Buyer Credits and Refunds", "cost_of_revenue", "contra_revenue", "debit", "returns_allowances", True, "Approved deal-specific buyer credits or revenue refunds."),
-    ("5500", "deal_commissions", "Deal Commissions", "cost_of_revenue", "commission", "debit", "compensation", True, "Approved commissions attributable to funded deal revenue."),
-    ("6000", "advertising", "Advertising", "expense", "marketing", "debit", "advertising", False, "Paid media, direct mail, and other advertising."),
-    ("6010", "lead_lists_data", "Lead Lists and Data", "expense", "marketing_data", "debit", "advertising", False, "Prospect lists, property data, skip tracing, and campaign data."),
-    ("6020", "prospecting_labor", "VA and Prospecting Labor", "expense", "contract_labor", "debit", "contract_labor", False, "Cold-calling and outreach labor not tied to a funded-deal commission."),
-    ("6100", "software_subscriptions", "Software and Subscriptions", "expense", "software", "debit", "office_expense", False, "Business software, hosting, data tools, and subscriptions."),
-    ("6200", "professional_services", "Legal and Accounting", "expense", "professional_services", "debit", "legal_professional", False, "Attorneys, tax professionals, bookkeeping, and accounting services."),
-    ("6300", "insurance", "Insurance", "expense", "insurance", "debit", "insurance", False, "Business insurance premiums."),
-    ("6400", "office_expense", "Office Expense", "expense", "office", "debit", "office_expense", False, "Ordinary office supplies and operating costs."),
-    ("6500", "communications", "Telephone and Communications", "expense", "communications", "debit", "utilities", False, "Business phone, SMS, email, and internet communication costs."),
-    ("6600", "travel_mileage", "Travel and Mileage", "expense", "travel", "debit", "travel", False, "Documented business travel and vehicle mileage."),
-    ("6700", "bank_merchant_fees", "Bank and Merchant Fees", "expense", "bank_fee", "debit", "bank_fees", False, "Banking and payment-processing fees."),
-    ("6800", "payroll_contract_labor", "Payroll and Contract Labor", "expense", "labor", "debit", "wages_contract_labor", False, "Non-deal payroll and contractor labor."),
-    ("6900", "other_operating_expense", "Other Operating Expense", "expense", "other", "debit", "other_deduction", False, "Reviewed operating costs without a more specific account."),
+    (
+        "1000",
+        "operating_cash",
+        "Operating Cash",
+        "asset",
+        "cash",
+        "debit",
+        "cash",
+        False,
+        "Primary operating bank balance.",
+    ),
+    (
+        "1010",
+        "tax_reserve_cash",
+        "Tax Reserve Cash",
+        "asset",
+        "cash",
+        "debit",
+        "cash",
+        False,
+        "Cash reserved by management for expected tax payments.",
+    ),
+    (
+        "1100",
+        "settlement_receivable",
+        "Settlement Receivable",
+        "asset",
+        "receivable",
+        "debit",
+        "receivable",
+        True,
+        "Funded closing proceeds due to Stonegate but not yet received.",
+    ),
+    (
+        "1200",
+        "earnest_money_deposits",
+        "Earnest Money Deposits",
+        "asset",
+        "deposit",
+        "debit",
+        "deposit",
+        True,
+        "Stonegate earnest money held by a closing attorney or title company.",
+    ),
+    (
+        "1300",
+        "real_estate_inventory",
+        "Real Estate Inventory",
+        "asset",
+        "inventory",
+        "debit",
+        "inventory",
+        True,
+        "Property cost held for resale in a double-close transaction.",
+    ),
+    (
+        "1310",
+        "capitalized_deal_costs",
+        "Capitalized Acquisition and Closing Costs",
+        "asset",
+        "inventory_cost",
+        "debit",
+        "inventory",
+        True,
+        "Deal costs capitalized into property inventory when required.",
+    ),
+    (
+        "1400",
+        "prepaid_expenses",
+        "Prepaid Expenses",
+        "asset",
+        "prepaid",
+        "debit",
+        "prepaid_expense",
+        False,
+        "Payments that benefit a future accounting period.",
+    ),
+    (
+        "2000",
+        "accounts_payable",
+        "Accounts Payable",
+        "liability",
+        "payable",
+        "credit",
+        "accounts_payable",
+        False,
+        "Approved vendor obligations not yet paid.",
+    ),
+    (
+        "2100",
+        "commission_payable",
+        "Commission Payable",
+        "liability",
+        "payable",
+        "credit",
+        "compensation",
+        True,
+        "Approved deal commissions payable after cleared proceeds.",
+    ),
+    (
+        "2200",
+        "contractor_payable",
+        "Contractor Payable",
+        "liability",
+        "payable",
+        "credit",
+        "contract_labor",
+        False,
+        "Approved contractor obligations not yet paid.",
+    ),
+    (
+        "2300",
+        "transactional_funding_payable",
+        "Transactional Funding Payable",
+        "liability",
+        "financing",
+        "credit",
+        "deal_financing",
+        True,
+        "Short-term transactional funding owed on a double close.",
+    ),
+    (
+        "2400",
+        "credit_cards",
+        "Credit Cards",
+        "liability",
+        "credit_card",
+        "credit",
+        "credit_card",
+        False,
+        "Company credit-card balances.",
+    ),
+    (
+        "3000",
+        "owner_contributions",
+        "Owner Contributions",
+        "equity",
+        "contribution",
+        "credit",
+        "equity",
+        False,
+        "Owner capital contributed to the company.",
+    ),
+    (
+        "3100",
+        "owner_distributions",
+        "Owner Distributions",
+        "equity",
+        "distribution",
+        "debit",
+        "owner_distribution",
+        False,
+        "Owner withdrawals that are not operating expenses.",
+    ),
+    (
+        "3200",
+        "retained_earnings",
+        "Retained Earnings",
+        "equity",
+        "retained_earnings",
+        "credit",
+        "equity",
+        False,
+        "Accumulated company earnings.",
+    ),
+    (
+        "4000",
+        "assignment_fee_revenue",
+        "Assignment Fee Revenue",
+        "revenue",
+        "assignment",
+        "credit",
+        "gross_receipts",
+        True,
+        "Revenue earned from assigning a purchase contract.",
+    ),
+    (
+        "4100",
+        "wholesale_property_sale_revenue",
+        "Wholesale Property Sale Revenue",
+        "revenue",
+        "property_sale",
+        "credit",
+        "gross_receipts",
+        True,
+        "Gross resale proceeds from a double-close transaction.",
+    ),
+    (
+        "4200",
+        "jv_revenue",
+        "Joint Venture Revenue",
+        "revenue",
+        "joint_venture",
+        "credit",
+        "gross_receipts",
+        True,
+        "Stonegate revenue from a documented joint-venture transaction.",
+    ),
+    (
+        "4900",
+        "other_operating_revenue",
+        "Other Operating Revenue",
+        "revenue",
+        "other",
+        "credit",
+        "other_income",
+        False,
+        "Operating revenue outside normal assignment, resale, or JV activity.",
+    ),
+    (
+        "5000",
+        "property_acquisition_cost",
+        "Property Acquisition Cost",
+        "cost_of_revenue",
+        "inventory_cost",
+        "debit",
+        "cost_of_goods_sold",
+        True,
+        "Acquisition basis released from inventory when a double-close property is sold.",
+    ),
+    (
+        "5100",
+        "deal_closing_costs",
+        "Deal Closing Costs",
+        "cost_of_revenue",
+        "closing_cost",
+        "debit",
+        "cost_of_goods_sold",
+        True,
+        "Closing costs directly attributable to a completed deal.",
+    ),
+    (
+        "5200",
+        "transactional_funding_fees",
+        "Transactional Funding Fees",
+        "cost_of_revenue",
+        "financing_cost",
+        "debit",
+        "cost_of_goods_sold",
+        True,
+        "Direct transactional funding charges for a double close.",
+    ),
+    (
+        "5300",
+        "jv_partner_payments",
+        "Joint Venture Partner Payments",
+        "cost_of_revenue",
+        "partner_payment",
+        "debit",
+        "cost_of_goods_sold",
+        True,
+        "Documented partner share attributable to a joint-venture deal.",
+    ),
+    (
+        "5400",
+        "buyer_credits_refunds",
+        "Buyer Credits and Refunds",
+        "cost_of_revenue",
+        "contra_revenue",
+        "debit",
+        "returns_allowances",
+        True,
+        "Approved deal-specific buyer credits or revenue refunds.",
+    ),
+    (
+        "5500",
+        "deal_commissions",
+        "Deal Commissions",
+        "cost_of_revenue",
+        "commission",
+        "debit",
+        "compensation",
+        True,
+        "Approved commissions attributable to funded deal revenue.",
+    ),
+    (
+        "6000",
+        "advertising",
+        "Advertising",
+        "expense",
+        "marketing",
+        "debit",
+        "advertising",
+        False,
+        "Paid media, direct mail, and other advertising.",
+    ),
+    (
+        "6010",
+        "lead_lists_data",
+        "Lead Lists and Data",
+        "expense",
+        "marketing_data",
+        "debit",
+        "advertising",
+        False,
+        "Prospect lists, property data, skip tracing, and campaign data.",
+    ),
+    (
+        "6020",
+        "prospecting_labor",
+        "VA and Prospecting Labor",
+        "expense",
+        "contract_labor",
+        "debit",
+        "contract_labor",
+        False,
+        "Cold-calling and outreach labor not tied to a funded-deal commission.",
+    ),
+    (
+        "6100",
+        "software_subscriptions",
+        "Software and Subscriptions",
+        "expense",
+        "software",
+        "debit",
+        "office_expense",
+        False,
+        "Business software, hosting, data tools, and subscriptions.",
+    ),
+    (
+        "6200",
+        "professional_services",
+        "Legal and Accounting",
+        "expense",
+        "professional_services",
+        "debit",
+        "legal_professional",
+        False,
+        "Attorneys, tax professionals, bookkeeping, and accounting services.",
+    ),
+    (
+        "6300",
+        "insurance",
+        "Insurance",
+        "expense",
+        "insurance",
+        "debit",
+        "insurance",
+        False,
+        "Business insurance premiums.",
+    ),
+    (
+        "6400",
+        "office_expense",
+        "Office Expense",
+        "expense",
+        "office",
+        "debit",
+        "office_expense",
+        False,
+        "Ordinary office supplies and operating costs.",
+    ),
+    (
+        "6500",
+        "communications",
+        "Telephone and Communications",
+        "expense",
+        "communications",
+        "debit",
+        "utilities",
+        False,
+        "Business phone, SMS, email, and internet communication costs.",
+    ),
+    (
+        "6600",
+        "travel_mileage",
+        "Travel and Mileage",
+        "expense",
+        "travel",
+        "debit",
+        "travel",
+        False,
+        "Documented business travel and vehicle mileage.",
+    ),
+    (
+        "6700",
+        "bank_merchant_fees",
+        "Bank and Merchant Fees",
+        "expense",
+        "bank_fee",
+        "debit",
+        "bank_fees",
+        False,
+        "Banking and payment-processing fees.",
+    ),
+    (
+        "6800",
+        "payroll_contract_labor",
+        "Payroll and Contract Labor",
+        "expense",
+        "labor",
+        "debit",
+        "wages_contract_labor",
+        False,
+        "Non-deal payroll and contractor labor.",
+    ),
+    (
+        "6900",
+        "other_operating_expense",
+        "Other Operating Expense",
+        "expense",
+        "other",
+        "debit",
+        "other_deduction",
+        False,
+        "Reviewed operating costs without a more specific account.",
+    ),
 )
 
 DEFAULT_POSTING_RULES = (
@@ -167,7 +537,8 @@ DEFAULT_POSTING_RULES = (
         "operating_cash",
         "assignment_fee_revenue",
         True,
-        "Draft cash-basis assignment revenue after funded-deal evidence and reconciliation are complete.",
+        "Draft cash-basis assignment revenue after funded-deal evidence and reconciliation "
+        "are complete.",
     ),
     (
         "double_close_revenue_collected",
@@ -178,7 +549,8 @@ DEFAULT_POSTING_RULES = (
         "operating_cash",
         "wholesale_property_sale_revenue",
         True,
-        "Draft gross double-close sale proceeds. Property basis and direct costs remain separate source entries.",
+        "Draft gross double-close sale proceeds. Property basis and direct costs remain "
+        "separate source entries.",
     ),
     (
         "other_revenue_collected",
@@ -189,7 +561,8 @@ DEFAULT_POSTING_RULES = (
         "operating_cash",
         "other_operating_revenue",
         True,
-        "Draft collected consulting or other approved operating revenue without classifying it as an assignment fee.",
+        "Draft collected consulting or other approved operating revenue without classifying "
+        "it as an assignment fee.",
     ),
     (
         "deal_deduction_paid",
@@ -211,7 +584,8 @@ DEFAULT_POSTING_RULES = (
         "advertising",
         "operating_cash",
         False,
-        "Draft paid marketing, software, data, or prospecting costs using source-aware account mapping.",
+        "Draft paid marketing, software, data, or prospecting costs using source-aware "
+        "account mapping.",
     ),
     (
         "commission_accrued",
@@ -289,9 +663,7 @@ def get_accounting_setup(
     readiness_gaps = accounting_readiness_gaps(profile)
     deduction_records = list(
         db.scalars(
-            select(DealDeduction).where(
-                DealDeduction.organization_id == principal.organization_id
-            )
+            select(DealDeduction).where(DealDeduction.organization_id == principal.organization_id)
         ).all()
     )
     spend_records = list(
@@ -309,9 +681,7 @@ def get_accounting_setup(
     if not source_records:
         tax_gaps.append("No expense or deal-deduction records are available for review.")
     elif missing_notes:
-        tax_gaps.append(
-            f"{missing_notes} source records do not include a business-purpose note."
-        )
+        tax_gaps.append(f"{missing_notes} source records do not include a business-purpose note.")
     readiness_score = max(0, 100 - (20 * len(readiness_gaps)))
     tax_score = max(0, 100 - (15 * len(tax_gaps)))
     return AccountingSetupRead(
@@ -320,10 +690,12 @@ def get_accounting_setup(
         readiness_score=readiness_score,
         readiness_gaps=readiness_gaps,
         policy_notes=[
-            "Assignment fees are revenue; double-close resale proceeds and property basis are tracked separately.",
+            "Assignment fees are revenue; double-close resale proceeds and property basis "
+            "are tracked separately.",
             "Earnest money remains an asset until applied, returned, or forfeited.",
             "Commissions become payable only after funded proceeds and approved reconciliation.",
-            "The acquisition reserve is a management target, not a ledger expense without a real underlying cost.",
+            "The acquisition reserve is a management target, not a ledger expense without "
+            "a real underlying cost.",
         ],
         tax_copilot=TaxReadinessRead(
             capability_key="finance.tax_review",
@@ -368,9 +740,7 @@ def update_accounting_profile(
     profile.owner_compensation_treatment = payload.owner_compensation_treatment
     profile.notes = payload.notes
     profile.updated_by_user_id = principal.user_id
-    profile.status = (
-        "ready" if not accounting_readiness_gaps(profile) else "needs_setup"
-    )
+    profile.status = "ready" if not accounting_readiness_gaps(profile) else "needs_setup"
     db.flush()
     db.add(
         AuditEvent(
@@ -661,24 +1031,19 @@ def get_accounting_ledger(
             posted_entries=status_summary.get("posted", (0, 0))[0],
             reversed_entries=status_summary.get("reversed", (0, 0))[0],
             posted_amount_cents=(
-                status_summary.get("posted", (0, 0))[1]
-                + status_summary.get("reversed", (0, 0))[1]
+                status_summary.get("posted", (0, 0))[1] + status_summary.get("reversed", (0, 0))[1]
             ),
             out_of_balance_entries=int(
                 db.scalar(
                     select(func.count(JournalEntry.id)).where(
                         JournalEntry.organization_id == principal.organization_id,
-                        JournalEntry.total_debits_cents
-                        != JournalEntry.total_credits_cents,
+                        JournalEntry.total_debits_cents != JournalEntry.total_credits_cents,
                     )
                 )
                 or 0
             ),
         ),
-        periods=[
-            accounting_period_to_read(period, period_counts[period.id])
-            for period in periods
-        ],
+        periods=[accounting_period_to_read(period, period_counts[period.id]) for period in periods],
         entries=[
             journal_entry_to_read(
                 entry,
@@ -746,9 +1111,7 @@ def create_journal_entry(
         ).all()
     }
     if set(accounts) != account_ids:
-        raise ValueError(
-            "Every journal line must use an active account from the current policy."
-        )
+        raise ValueError("Every journal line must use an active account from the current policy.")
     if any(not account.is_active for account in accounts.values()):
         raise ValueError("Inactive accounting accounts cannot receive new journal lines.")
     validate_journal_links(db, principal, payload)
@@ -883,9 +1246,7 @@ def post_journal_entry(
     if period is None or period.status != "open":
         raise ValueError("Journals can only be posted in an open accounting period.")
     lines = list(
-        db.scalars(
-            select(JournalLine).where(JournalLine.journal_entry_id == entry.id)
-        ).all()
+        db.scalars(select(JournalLine).where(JournalLine.journal_entry_id == entry.id)).all()
     )
     total_debits = sum(line.debit_cents for line in lines)
     total_credits = sum(line.credit_cents for line in lines)
@@ -1040,9 +1401,7 @@ def update_accounting_period_status(
         "locked": set(),
     }
     if payload.status not in allowed[period.status]:
-        raise ValueError(
-            f"Accounting period cannot move from {period.status} to {payload.status}."
-        )
+        raise ValueError(f"Accounting period cannot move from {period.status} to {payload.status}.")
     if period.status == "closed" and payload.status == "open" and not payload.reason:
         raise ValueError("A reason is required to reopen a closed accounting period.")
     if payload.status == "closed":
@@ -1189,9 +1548,7 @@ def validate_journal_links(
 ) -> None:
     deal_ids = {line.deal_id for line in payload.lines if line.deal_id is not None}
     transaction_ids = {
-        line.transaction_id
-        for line in payload.lines
-        if line.transaction_id is not None
+        line.transaction_id for line in payload.lines if line.transaction_id is not None
     }
     if deal_ids:
         found_deals = set(
@@ -1353,9 +1710,7 @@ def journal_snapshot(entry: JournalEntry) -> dict[str, object]:
         "currency": entry.currency,
         "total_debits_cents": entry.total_debits_cents,
         "total_credits_cents": entry.total_credits_cents,
-        "reverses_entry_id": (
-            str(entry.reverses_entry_id) if entry.reverses_entry_id else None
-        ),
+        "reverses_entry_id": (str(entry.reverses_entry_id) if entry.reverses_entry_id else None),
     }
 
 
@@ -1385,9 +1740,7 @@ def add_accounting_audit(
             actor_type="user",
             action=action,
             entity_type=(
-                "accounting_period"
-                if isinstance(entity, AccountingPeriod)
-                else "journal_entry"
+                "accounting_period" if isinstance(entity, AccountingPeriod) else "journal_entry"
             ),
             entity_id=entity.id,
             previous_value=previous_value,
@@ -1529,11 +1882,7 @@ def get_operational_posting_workspace(
 ) -> AccountingPostingWorkspaceRead:
     ensure_accounting_foundation(db, principal)
     rules = ensure_operational_posting_rules(db, principal)
-    rule_by_key = {
-        rule.rule_key: rule
-        for rule in rules
-        if rule.status in {"draft", "approved"}
-    }
+    rule_by_key = {rule.rule_key: rule for rule in rules if rule.status in {"draft", "approved"}}
     links = list(
         db.scalars(
             select(AccountingSourceLink).where(
@@ -1565,9 +1914,7 @@ def get_operational_posting_workspace(
     )
     deductions = list(
         db.scalars(
-            select(DealDeduction).where(
-                DealDeduction.organization_id == principal.organization_id
-            )
+            select(DealDeduction).where(DealDeduction.organization_id == principal.organization_id)
         ).all()
     )
     for record in revenue_records:
@@ -1752,9 +2099,7 @@ def get_operational_posting_workspace(
             transaction_id=deduction.transaction_id,
         )
     for spend in db.scalars(
-        select(MarketingSpend).where(
-            MarketingSpend.organization_id == principal.organization_id
-        )
+        select(MarketingSpend).where(MarketingSpend.organization_id == principal.organization_id)
     ).all():
         add_item(
             source_type="marketing_spend",
@@ -1770,9 +2115,7 @@ def get_operational_posting_workspace(
         )
     for payout in payouts:
         payout_reconciliation = reconciliation_by_id.get(payout.deal_reconciliation_id)
-        transaction_id = (
-            payout_reconciliation.transaction_id if payout_reconciliation else None
-        )
+        transaction_id = payout_reconciliation.transaction_id if payout_reconciliation else None
         evidence, gaps = funded_deal_evidence(
             transaction_id,
             transaction_by_id,
@@ -1808,11 +2151,7 @@ def get_operational_posting_workspace(
                 rule_key="commission_paid",
                 evidence_references=[
                     *evidence,
-                    *(
-                        [f"payment:{payout.payment_reference}"]
-                        if payout.payment_reference
-                        else []
-                    ),
+                    *([f"payment:{payout.payment_reference}"] if payout.payment_reference else []),
                 ],
                 evidence_gaps=payment_gaps,
                 transaction_id=transaction_id,
@@ -1855,9 +2194,7 @@ def get_operational_posting_workspace(
                 source_type="financial_obligation",
                 source_id=obligation.id,
                 purpose=(
-                    "distribution"
-                    if obligation.obligation_type == "owner_distribution"
-                    else "paid"
+                    "distribution" if obligation.obligation_type == "owner_distribution" else "paid"
                 ),
                 label=(
                     f"{obligation.counterparty_name} owner distribution"
@@ -2258,10 +2595,7 @@ def posting_account_keys(
             debit_key = "prospecting_labor"
         else:
             debit_key = "advertising"
-    elif (
-        item.source_type == "financial_obligation"
-        and item.posting_purpose == "accrued"
-    ):
+    elif item.source_type == "financial_obligation" and item.posting_purpose == "accrued":
         obligation = db.scalar(
             select(FinancialObligation).where(
                 FinancialObligation.organization_id == principal.organization_id,
@@ -2276,10 +2610,7 @@ def posting_account_keys(
             if obligation.obligation_type == "contractor_payable"
             else "accounts_payable"
         )
-    elif (
-        item.source_type == "financial_obligation"
-        and item.posting_purpose == "paid"
-    ):
+    elif item.source_type == "financial_obligation" and item.posting_purpose == "paid":
         obligation = db.scalar(
             select(FinancialObligation).where(
                 FinancialObligation.organization_id == principal.organization_id,
@@ -2309,11 +2640,7 @@ def operational_vendor_bill_lines(
             FinancialObligation.id == UUID(item.source_id),
         )
     )
-    if (
-        obligation is None
-        or obligation.source_type != "vendor_bill"
-        or not obligation.source_id
-    ):
+    if obligation is None or obligation.source_type != "vendor_bill" or not obligation.source_id:
         return []
     bill = db.scalar(
         select(VendorBill).where(
@@ -2927,9 +3254,7 @@ def rule_is_effective(rule: CompensationRule, received_at: datetime) -> bool:
         comparable_datetime(rule.effective_end_at) if rule.effective_end_at is not None else None
     )
     received = comparable_datetime(received_at)
-    return effective_start <= received and (
-        effective_end is None or effective_end >= received
-    )
+    return effective_start <= received and (effective_end is None or effective_end >= received)
 
 
 def comparable_datetime(value: datetime) -> datetime:

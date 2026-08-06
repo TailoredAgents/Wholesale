@@ -52,7 +52,8 @@ CAPABILITY_CONFIG: dict[ManagementCapability, dict[str, object]] = {
             "Do not promise deductibility or final tax treatment.",
             "Do not post, delete, or alter accounting entries.",
             "Do not move money or approve owner compensation.",
-            "Separate recorded facts, missing evidence, proposed classification, and professional decisions.",
+            "Separate recorded facts, missing evidence, proposed classification, and "
+            "professional decisions.",
         ],
     },
     "marketing.analyze": {
@@ -114,8 +115,7 @@ def get_management_copilot_overview(
         db.scalars(
             select(ManagementCopilotRecommendation)
             .where(
-                ManagementCopilotRecommendation.organization_id
-                == principal.organization_id,
+                ManagementCopilotRecommendation.organization_id == principal.organization_id,
                 ManagementCopilotRecommendation.capability_key == capability_key,
                 ManagementCopilotRecommendation.reporting_period_days == period_days,
             )
@@ -139,9 +139,7 @@ def get_management_copilot_overview(
         readiness_gaps=facts["readiness_gaps"],
         risk_alerts=facts["risk_alerts"],
         metric_cards=facts["metric_cards"],
-        recommendations=[
-            recommendation_read(item) for item in recommendations
-        ],
+        recommendations=[recommendation_read(item) for item in recommendations],
         metrics=_metrics(db, principal, capability_key),
     )
 
@@ -169,13 +167,11 @@ def analyze_management(
     if agent is None:
         raise ValueError("Install the governed AI agent portfolio first.")
     idempotency_key = payload.idempotency_key or (
-        f"management:{capability_key}:{payload.period_days}:"
-        f"{facts['fingerprint'][:24]}"
+        f"management:{capability_key}:{payload.period_days}:{facts['fingerprint'][:24]}"
     )
     existing = db.scalar(
         select(ManagementCopilotRecommendation).where(
-            ManagementCopilotRecommendation.organization_id
-            == principal.organization_id,
+            ManagementCopilotRecommendation.organization_id == principal.organization_id,
             ManagementCopilotRecommendation.idempotency_key == idempotency_key,
         )
     )
@@ -228,8 +224,7 @@ def analyze_management(
                                 "request evidence when causation is not recorded."
                             ),
                         ]
-                        if capability_key
-                        in {"finance.reconcile", "finance.tax_review"}
+                        if capability_key in {"finance.reconcile", "finance.tax_review"}
                         else []
                     ),
                 ],
@@ -244,9 +239,7 @@ def analyze_management(
             recommendation=None,
         )
     try:
-        parsed = ManagementCopilotOutput.model_validate(
-            json.loads(run.output_summary)
-        )
+        parsed = ManagementCopilotOutput.model_validate(json.loads(run.output_summary))
     except (json.JSONDecodeError, ValidationError) as exc:
         _record_blocked_output(
             db,
@@ -283,12 +276,8 @@ def analyze_management(
             "health_score": facts["health_score"],
             "health_band": facts["health_band"],
             "readiness_gaps": facts["readiness_gaps"],
-            "risk_alerts": [
-                item.model_dump(mode="json") for item in facts["risk_alerts"]
-            ],
-            "metric_cards": [
-                item.model_dump(mode="json") for item in facts["metric_cards"]
-            ],
+            "risk_alerts": [item.model_dump(mode="json") for item in facts["risk_alerts"]],
+            "metric_cards": [item.model_dump(mode="json") for item in facts["metric_cards"]],
             "source_fingerprint": facts["fingerprint"],
         },
         confidence_score=parsed.confidence,
@@ -330,8 +319,7 @@ def review_management_recommendation(
 ) -> ManagementCopilotReviewRead | None:
     recommendation = db.scalar(
         select(ManagementCopilotRecommendation).where(
-            ManagementCopilotRecommendation.organization_id
-            == principal.organization_id,
+            ManagementCopilotRecommendation.organization_id == principal.organization_id,
             ManagementCopilotRecommendation.capability_key == capability_key,
             ManagementCopilotRecommendation.id == recommendation_id,
         )
@@ -464,12 +452,8 @@ def _validate_output(
             raise ValueError(
                 "Every finance conclusion must cite an exact Stonegate source identifier."
             )
-        if not any(
-            reference.startswith(exact_prefixes) for reference in output.evidence
-        ):
-            raise ValueError(
-                "Finance evidence must include an exact Stonegate source identifier."
-            )
+        if not any(reference.startswith(exact_prefixes) for reference in output.evidence):
+            raise ValueError("Finance evidence must include an exact Stonegate source identifier.")
     completed_action_claims = (
         "i changed ",
         "i approved ",
@@ -495,8 +479,7 @@ def _metrics(
     recommendations = list(
         db.scalars(
             select(ManagementCopilotRecommendation).where(
-                ManagementCopilotRecommendation.organization_id
-                == principal.organization_id,
+                ManagementCopilotRecommendation.organization_id == principal.organization_id,
                 ManagementCopilotRecommendation.capability_key == capability_key,
                 ManagementCopilotRecommendation.generated_at >= since,
             )
@@ -507,11 +490,8 @@ def _metrics(
         list(
             db.scalars(
                 select(ManagementCopilotReview).where(
-                    ManagementCopilotReview.organization_id
-                    == principal.organization_id,
-                    ManagementCopilotReview.recommendation_id.in_(
-                        recommendation_ids
-                    ),
+                    ManagementCopilotReview.organization_id == principal.organization_id,
+                    ManagementCopilotReview.recommendation_id.in_(recommendation_ids),
                 )
             ).all()
         )
@@ -519,16 +499,10 @@ def _metrics(
         else []
     )
     reviewed = len(reviews)
-    accepted_or_edited = sum(
-        item.decision in {"accepted", "edited"} for item in reviews
-    )
+    accepted_or_edited = sum(item.decision in {"accepted", "edited"} for item in reviews)
     edited = sum(item.decision == "edited" for item in reviews)
     rejected = sum(item.decision == "rejected" for item in reviews)
-    run_ids = [
-        item.ai_run_log_id
-        for item in recommendations
-        if item.ai_run_log_id is not None
-    ]
+    run_ids = [item.ai_run_log_id for item in recommendations if item.ai_run_log_id is not None]
     run_metrics = (
         db.execute(
             select(
@@ -546,8 +520,7 @@ def _metrics(
         db.scalar(
             select(func.count(AuditEvent.id)).where(
                 AuditEvent.organization_id == principal.organization_id,
-                AuditEvent.action
-                == f"management.copilot_output_blocked.{capability_key}",
+                AuditEvent.action == f"management.copilot_output_blocked.{capability_key}",
                 AuditEvent.created_at >= since,
             )
         )
@@ -559,16 +532,10 @@ def _metrics(
         accepted_or_corrected_rate_basis_points=(
             round(accepted_or_edited / reviewed * 10_000) if reviewed else 0
         ),
-        correction_rate_basis_points=(
-            round(edited / reviewed * 10_000) if reviewed else 0
-        ),
-        rejection_rate_basis_points=(
-            round(rejected / reviewed * 10_000) if reviewed else 0
-        ),
+        correction_rate_basis_points=(round(edited / reviewed * 10_000) if reviewed else 0),
+        rejection_rate_basis_points=(round(rejected / reviewed * 10_000) if reviewed else 0),
         blocked_output_count=blocked_output_count,
-        average_latency_ms=(
-            round(float(run_metrics[0])) if run_metrics[0] is not None else None
-        ),
+        average_latency_ms=(round(float(run_metrics[0])) if run_metrics[0] is not None else None),
         total_cost_microusd=int(run_metrics[1] or 0),
         estimated_time_saved_minutes=round(
             sum(item.estimated_time_saved_seconds for item in reviews) / 60

@@ -122,9 +122,7 @@ def test_invalid_json_is_reported_as_provider_failure(
 
     assert error.value.operation == "property record"
     assert error.value.status_code == 200
-    assert str(error.value) == (
-        "RentCast property record returned invalid JSON (HTTP 200)."
-    )
+    assert str(error.value) == ("RentCast property record returned invalid JSON (HTTP 200).")
 
 
 def test_property_record_uses_normalized_avm_id(
@@ -154,8 +152,7 @@ def test_property_record_uses_normalized_avm_id(
 
     assert record["id"] == "134-Waterstone-Trl,-Canton,-GA-30114"
     assert captured["url"] == (
-        "https://api.rentcast.io/v1/properties/"
-        "134-Waterstone-Trl%2C-Canton%2C-GA-30114"
+        "https://api.rentcast.io/v1/properties/134-Waterstone-Trl%2C-Canton%2C-GA-30114"
     )
     assert captured["params"] == {}
 

@@ -105,6 +105,25 @@ def test_cellphone_voice_uses_active_line_without_legacy_from_number(
     assert "TWILIO_VOICE_FROM_NUMBER" not in settings.twilio_voice_configuration_blockers
 
 
+def test_call_intelligence_allows_georgia_one_party_recording_and_requires_ai(
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    settings = get_settings()
+
+    assert "TWILIO_VOICE_RECORDING_ENABLED=true" in (
+        settings.call_intelligence_configuration_blockers
+    )
+    monkeypatch.setenv("TWILIO_VOICE_RECORDING_ENABLED", "true")
+    monkeypatch.delenv("TWILIO_VOICE_RECORDING_DISCLOSURE", raising=False)
+    monkeypatch.setenv("CALL_TRANSCRIPTION_ENABLED", "true")
+    monkeypatch.setenv("AI_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-api-key")
+    get_settings.cache_clear()
+
+    assert get_settings().call_intelligence_configuration_blockers == ()
+
+
 def seed_voice_lead(db: Session, client: TestClient) -> Conversation:
     bootstrap_foundation(
         db,
@@ -393,6 +412,7 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     assert 'sequential="false"' in inbound.text
     call = db_session.scalar(select(CallRecord))
     assert call is not None
+    assert call.call_metadata is not None
     assert call.call_metadata["ring_user_count"] == 2
     assert call.call_metadata["ring_target_count"] == 2
 
@@ -426,11 +446,11 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     assert "<Hangup" not in screen_result.text
     db_session.refresh(call)
     assert str(call.actor_user_id) == devon["id"]
+    assert call.call_metadata is not None
     assert call.call_metadata["mobile_screen_accepted_by_user_id"] == devon["id"]
 
     answered_path = (
-        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"
-        f"&answered_user_id={devon['id']}"
+        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}&answered_user_id={devon['id']}"
     )
     answered = post_signed(
         client,
@@ -447,8 +467,7 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     assert call.status == "in-progress"
 
     canceled_path = (
-        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}"
-        f"&answered_user_id={owner['id']}"
+        f"/api/v1/webhooks/twilio/voice/status?call_id={call.id}&answered_user_id={owner['id']}"
     )
     canceled = post_signed(
         client,
@@ -510,6 +529,7 @@ def test_after_hours_call_uses_voicemail_and_creates_follow_up(
     assert completed.status_code == 200, completed.text
     db_session.refresh(call)
     assert call.status == "completed"
+    assert call.call_metadata is not None
     assert call.call_metadata["voicemail"] is True
     assert db_session.scalar(select(Task).where(Task.task_type == "missed_call")) is not None
 
@@ -600,10 +620,7 @@ def test_forwarded_outbound_call_rings_staff_then_connects_seller(
     assert fake_provider.request["from_number"] == STONEGATE_NUMBER
     assert "Press 1 to connect" in fake_provider.request["twiml"]
 
-    connect_path = (
-        "/api/v1/webhooks/twilio/voice/forwarded-connect"
-        f"?intent_id={intent['id']}"
-    )
+    connect_path = f"/api/v1/webhooks/twilio/voice/forwarded-connect?intent_id={intent['id']}"
     connected = post_signed(
         client,
         connect_path,
@@ -692,9 +709,7 @@ def test_voice_statuses_are_idempotent_and_create_missed_call_tasks(
     assert (
         int(
             db_session.scalar(
-                select(func.count())
-                .select_from(Task)
-                .where(Task.task_type == "missed_call")
+                select(func.count()).select_from(Task).where(Task.task_type == "missed_call")
             )
             or 0
         )
@@ -730,9 +745,7 @@ def test_unknown_inbound_caller_creates_one_lead_and_conversation(
         select(Contact).where(Contact.legal_name == "Inbound caller +14705550199")
     )
     assert contact is not None
-    inbound_lead = db_session.scalar(
-        select(Lead).where(Lead.contact_id == contact.id)
-    )
+    inbound_lead = db_session.scalar(select(Lead).where(Lead.contact_id == contact.id))
     assert inbound_lead is not None
     ai_event = db_session.scalar(
         select(AiOrchestratorEvent).where(
@@ -796,9 +809,7 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     assert disclosure.status_code == 200
     assert "This call may be recorded" in disclosure.text
 
-    recording_path = (
-        f"/api/v1/webhooks/twilio/voice/recording?intent_id={intent['id']}"
-    )
+    recording_path = f"/api/v1/webhooks/twilio/voice/recording?intent_id={intent['id']}"
     recording_payload = {
         "CallSid": outbound_payload["CallSid"],
         "RecordingSid": "RE00000000000000000000000000000001",
@@ -865,9 +876,7 @@ def test_recording_can_use_georgia_one_party_policy_without_announcement(
     assert call is not None
     assert call.recording_consent_status == "one_party_consent"
 
-    recording_path = (
-        f"/api/v1/webhooks/twilio/voice/recording?intent_id={intent['id']}"
-    )
+    recording_path = f"/api/v1/webhooks/twilio/voice/recording?intent_id={intent['id']}"
     recording = post_signed(
         client,
         recording_path,
@@ -992,11 +1001,14 @@ def test_recording_deletion_is_owner_only_audited_and_preserves_transcript(
     assert recording.deleted_by_user_id == owner.id
     assert recording.deletion_reason == "Seller requested early deletion."
     assert transcript.status == "approved"
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(AuditEvent)
-        .where(AuditEvent.action == "communication.recording_delete")
-    ) == 1
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuditEvent)
+            .where(AuditEvent.action == "communication.recording_delete")
+        )
+        == 1
+    )
 
     detail = client.get(
         f"/api/v1/inbox/conversations/{conversation.id}",
@@ -1101,12 +1113,7 @@ def test_voice_webhooks_reject_invalid_signatures(
     assert response.status_code == 403
     assert int(db_session.scalar(select(func.count()).select_from(CallRecord)) or 0) == 0
     assert (
-        int(
-            db_session.scalar(
-                select(func.count()).select_from(CommunicationProviderEvent)
-            )
-            or 0
-        )
+        int(db_session.scalar(select(func.count()).select_from(CommunicationProviderEvent)) or 0)
         == 0
     )
     assert db_session.scalar(select(VoiceLine)) is not None

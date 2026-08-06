@@ -58,25 +58,31 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
     )
     assert lead.status_code == 201
     lead_id = lead.json()["id"]
-    assert client.post(
-        "/api/v1/finance/revenue",
-        headers=HEADERS,
-        json={
-            "lead_id": lead_id,
-            "source": "assignment_fee",
-            "status": "collected",
-            "amount_cents": 2500000,
-        },
-    ).status_code == 201
-    assert client.post(
-        "/api/v1/finance/marketing-spend",
-        headers=HEADERS,
-        json={
-            "source": "google_ppc",
-            "campaign": "atlanta-seller",
-            "amount_cents": 500000,
-        },
-    ).status_code == 201
+    assert (
+        client.post(
+            "/api/v1/finance/revenue",
+            headers=HEADERS,
+            json={
+                "lead_id": lead_id,
+                "source": "assignment_fee",
+                "status": "collected",
+                "amount_cents": 2500000,
+            },
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            "/api/v1/finance/marketing-spend",
+            headers=HEADERS,
+            json={
+                "source": "google_ppc",
+                "campaign": "atlanta-seller",
+                "amount_cents": 500000,
+            },
+        ).status_code
+        == 201
+    )
     db_session.add(
         Task(
             organization_id=owner.organization_id,
@@ -96,24 +102,32 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
         configured_environment.setenv("AI_ENABLED", "true")
         configured_environment.setenv("OPENAI_API_KEY", "test-openai-key")
         get_settings.cache_clear()
-        assert client.post(
-            "/api/v1/ai/orchestrator/portfolio/install",
-            headers=HEADERS,
-        ).status_code == 201
-        assert client.post(
-            "/api/v1/ai/copilots/install",
-            headers=HEADERS,
-        ).status_code == 201
-        assert client.post(
-            "/api/v1/ai/copilots/foundation/decision",
-            headers=HEADERS,
-            json={"decision": "approve", "notes": "Approved for AI9 test."},
-        ).status_code == 200
+        assert (
+            client.post(
+                "/api/v1/ai/orchestrator/portfolio/install",
+                headers=HEADERS,
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                "/api/v1/ai/copilots/install",
+                headers=HEADERS,
+            ).status_code
+            == 201
+        )
+        assert (
+            client.post(
+                "/api/v1/ai/copilots/foundation/decision",
+                headers=HEADERS,
+                json={"decision": "approve", "notes": "Approved for AI9 test."},
+            ).status_code
+            == 200
+        )
         installed = client.post("/api/v1/ai/runtime/install", headers=HEADERS)
         assert installed.status_code == 201
         statuses = {
-            item["capability_key"]: item
-            for item in installed.json()["runtime"]["capabilities"]
+            item["capability_key"]: item for item in installed.json()["runtime"]["capabilities"]
         }
         for capability in (
             "finance.reconcile",
@@ -138,10 +152,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                 assert "500 Management Test Way" not in prompt
                 citation = (
                     "finance_summary:2026-07-01:2026-07-30"
-                    if (
-                        "accounting_review" in prompt
-                        and not self.invalid_finance_output
-                    )
+                    if ("accounting_review" in prompt and not self.invalid_finance_output)
                     else "approved_management_record:test"
                 )
                 schema = kwargs["json_schema"]
@@ -149,9 +160,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                 assert schema["additionalProperties"] is False
                 return (
                     {
-                        "brief": (
-                            "Management evidence shows one priority requiring human review."
-                        ),
+                        "brief": ("Management evidence shows one priority requiring human review."),
                         "confirmed_facts": [
                             {
                                 "label": "Reporting period",
@@ -195,9 +204,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                                 "evidence": [citation],
                             }
                         ],
-                        "uncertainties": [
-                            "Provider ledgers are not connected in this test."
-                        ],
+                        "uncertainties": ["Provider ledgers are not connected in this test."],
                         "evidence": [citation],
                         "confidence": 86,
                     },
@@ -226,9 +233,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
                 "/api/v1/dashboard/executive-copilot/recommendations",
             ),
         )
-        for index, (overview_path, analyze_path, review_base) in enumerate(
-            endpoint_specs
-        ):
+        for index, (overview_path, analyze_path, review_base) in enumerate(endpoint_specs):
             overview = client.get(
                 f"{overview_path}?period_days=30",
                 headers=HEADERS,
@@ -289,9 +294,7 @@ def test_ai9_management_copilots_generate_reviewed_drafts_without_mutation(
         assert finance_after_block.json()["metrics"]["blocked_output_count"] == 1
 
     get_settings.cache_clear()
-    assert db_session.scalar(
-        select(func.count(ManagementCopilotRecommendation.id))
-    ) == 3
+    assert db_session.scalar(select(func.count(ManagementCopilotRecommendation.id))) == 3
     assert db_session.scalar(select(func.count(ManagementCopilotReview.id))) == 3
     assert db_session.scalar(select(func.count(RevenueRecord.id))) == 1
     assert db_session.scalar(select(func.count(MarketingSpend.id))) == 1

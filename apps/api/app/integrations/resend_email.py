@@ -67,9 +67,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         )
         provider_message_id = required_string(response, "id")
         retrieved = self.retrieve_sent_message(provider_message_id)
-        rfc_message_id = (
-            str(retrieved.get("message_id", "")).strip() if retrieved else ""
-        )
+        rfc_message_id = str(retrieved.get("message_id", "")).strip() if retrieved else ""
         return EmailDeliveryResult(
             provider=self.provider_name,
             provider_message_id=provider_message_id,
@@ -109,10 +107,7 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
     ) -> dict[str, Any]:
         return self._request(
             "GET",
-            (
-                f"/emails/receiving/{provider_message_id}"
-                f"/attachments/{provider_attachment_id}"
-            ),
+            (f"/emails/receiving/{provider_message_id}/attachments/{provider_attachment_id}"),
         )
 
     def download_received_attachment(

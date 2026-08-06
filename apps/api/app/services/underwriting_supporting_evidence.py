@@ -47,8 +47,7 @@ def collect_supporting_market_evidence(
         try:
             raw_listings = get_listings(
                 address=address,
-                property_type=string(subject_facts.get("propertyType"))
-                or local_property_type,
+                property_type=string(subject_facts.get("propertyType")) or local_property_type,
                 bedrooms=number(subject_facts.get("bedrooms")),
                 bathrooms=number(subject_facts.get("bathrooms")),
                 square_footage=integer(subject_facts.get("squareFootage")),
@@ -160,9 +159,7 @@ def normalize_market_statistics(payload: dict[str, Any]) -> dict[str, Any] | Non
     else:
         history_rows = []
     history_rows.sort(
-        key=lambda row: string(row.get("date"))
-        or string(row.get("lastUpdatedDate"))
-        or ""
+        key=lambda row: string(row.get("date")) or string(row.get("lastUpdatedDate")) or ""
     )
     current_median = integer(sale_data.get("medianPrice"))
     comparison = next(
@@ -184,9 +181,7 @@ def normalize_market_statistics(payload: dict[str, Any]) -> dict[str, Any] | Non
         "last_updated_date": string(sale_data.get("lastUpdatedDate")),
         "median_list_price_cents": cents(sale_data.get("medianPrice")),
         "average_list_price_cents": cents(sale_data.get("averagePrice")),
-        "median_price_per_square_foot_cents": cents(
-            sale_data.get("medianPricePerSquareFoot")
-        ),
+        "median_price_per_square_foot_cents": cents(sale_data.get("medianPricePerSquareFoot")),
         "average_days_on_market": number(sale_data.get("averageDaysOnMarket")),
         "median_days_on_market": number(sale_data.get("medianDaysOnMarket")),
         "total_listings": integer(sale_data.get("totalListings")),

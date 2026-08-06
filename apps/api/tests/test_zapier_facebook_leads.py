@@ -32,12 +32,15 @@ from app.services.meta_lead_ads import (
 PAGE_ID = "123456789"
 PROVIDER_LEAD_ID = "987654321012345"
 ENDPOINT = "/api/v1/webhooks/zapier/facebook-leads"
+WEBHOOK_SECRET = "stonegate-zapier-test-secret-1234567890"
+WEBHOOK_HEADERS = {"X-Stonegate-Webhook-Secret": WEBHOOK_SECRET}
 
 
 @pytest.fixture
 def zapier_settings(monkeypatch: MonkeyPatch) -> Iterator[Settings]:
     values = {
         "ZAPIER_FACEBOOK_LEADS_ENABLED": "true",
+        "ZAPIER_FACEBOOK_LEADS_SECRET": WEBHOOK_SECRET,
         "ZAPIER_FACEBOOK_PAGE_ID": PAGE_ID,
         "RENTCAST_API_KEY": "test-rentcast-key",
         "STAFF_LEAD_ALERT_SMS_MODE": "simulate",
@@ -94,7 +97,7 @@ def webhook_payload(lead_id: str = PROVIDER_LEAD_ID) -> dict[str, object]:
 
 
 def post_lead(client: TestClient, payload: dict[str, object]) -> Response:
-    return cast(Response, client.post(ENDPOINT, json=payload))
+    return cast(Response, client.post(ENDPOINT, json=payload, headers=WEBHOOK_HEADERS))
 
 
 class FakePropertyRecordClient:
@@ -149,12 +152,15 @@ def test_zapier_webhook_requires_enabled_mode(
     disabled = client.post(ENDPOINT, json=webhook_payload())
 
     monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_ENABLED", "true")
+    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_SECRET", WEBHOOK_SECRET)
     monkeypatch.setenv("ZAPIER_FACEBOOK_PAGE_ID", PAGE_ID)
     get_settings.cache_clear()
-    accepted = client.post(ENDPOINT, json=webhook_payload())
+    rejected = client.post(ENDPOINT, json=webhook_payload())
+    accepted = client.post(ENDPOINT, json=webhook_payload(), headers=WEBHOOK_HEADERS)
     retired = client.post("/api/v1/webhooks/meta/lead-ads", json={})
 
     assert disabled.status_code == 503
+    assert rejected.status_code == 401
     assert accepted.status_code == 200
     assert accepted.json() == {"received": True, "accepted": 1}
     assert retired.status_code == 404

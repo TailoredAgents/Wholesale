@@ -54,10 +54,14 @@ def list_trust_proofs(
         )
         if user_id is not None
     }
-    users = {
-        user.id: user.display_name
-        for user in db.scalars(select(User).where(User.id.in_(user_ids)))
-    } if user_ids else {}
+    users = (
+        {
+            user.id: user.display_name
+            for user in db.scalars(select(User).where(User.id.in_(user_ids)))
+        }
+        if user_ids
+        else {}
+    )
     return TrustProofAdminOverview(
         can_manage=PermissionKeys.MANAGE_PUBLIC_PROOF in principal.permission_keys,
         records=[admin_read(record, users) for record in records],
@@ -196,9 +200,7 @@ def get_public_trust_proofs(db: Session) -> PublicTrustProofResponse:
         organization = next(
             (
                 candidate
-                for candidate in db.scalars(
-                    select(Organization).order_by(Organization.created_at)
-                )
+                for candidate in db.scalars(select(Organization).order_by(Organization.created_at))
                 if candidate.is_active
             ),
             None,
@@ -318,8 +320,7 @@ def validate_source_url(value: str | None) -> None:
 
 def normalized_values(values: dict[str, object]) -> dict[str, object]:
     return {
-        key: value.strip() if isinstance(value, str) else value
-        for key, value in values.items()
+        key: value.strip() if isinstance(value, str) else value for key, value in values.items()
     }
 
 
@@ -330,9 +331,7 @@ def validate_required_values(values: dict[str, object]) -> None:
         ("source_type", "Source type"),
     ):
         current = values.get(key)
-        if key in values and not (
-            isinstance(current, str) and current.strip()
-        ):
+        if key in values and not (isinstance(current, str) and current.strip()):
             raise ValueError(f"{label} cannot be empty.")
 
 
@@ -368,10 +367,7 @@ def user_names(db: Session, record: PublicProofRecord) -> dict[UUID, str]:
         )
         if user_id is not None
     }
-    return {
-        user.id: user.display_name
-        for user in db.scalars(select(User).where(User.id.in_(ids)))
-    }
+    return {user.id: user.display_name for user in db.scalars(select(User).where(User.id.in_(ids)))}
 
 
 def admin_read(

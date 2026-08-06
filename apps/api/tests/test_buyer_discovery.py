@@ -217,9 +217,7 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
         f"/api/v1/dispositions/cases/{case_id}/matches",
         headers=HEADERS,
     ).json()["matches"]
-    imported_match = next(
-        item for item in matches if item["buyer_id"] == imported_buyer_id
-    )
+    imported_match = next(item for item in matches if item["buyer_id"] == imported_buyer_id)
     assert imported_match["score_components"]["property_type"] == 1000
     assert imported_match["qualification_status"] == "review_required"
 
@@ -240,11 +238,8 @@ def test_dealmachine_discovery_imports_selected_candidate_and_deduplicates(
     assert duplicate.status_code == 200
     assert duplicate.json()["candidates"][0]["status"] == "duplicate"
     assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 2
-    assert int(
-        db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0
-    ) == 2
-    assert int(
-        db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate))
-        or 0
-    ) == 4
+    assert int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryRun)) or 0) == 2
+    assert (
+        int(db_session.scalar(select(func.count()).select_from(BuyerDiscoveryCandidate)) or 0) == 4
+    )
     get_settings.cache_clear()

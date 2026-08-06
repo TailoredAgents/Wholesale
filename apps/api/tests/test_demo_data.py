@@ -36,25 +36,43 @@ def test_demo_seed_is_repeatable(db_session: Session) -> None:
     assert second.users_created == 0
     assert second.leads_created == 0
     assert second.leads_reused == 4
-    assert db_session.scalar(
-        select(func.count()).select_from(User).where(User.organization_id == organization.id)
-    ) == 6
-    assert db_session.scalar(
-        select(func.count()).select_from(Lead).where(Lead.organization_id == organization.id)
-    ) == 4
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(LeadManagementCase)
-        .where(LeadManagementCase.organization_id == organization.id)
-    ) == 4
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(LeadQualificationScriptVersion)
-        .where(LeadQualificationScriptVersion.organization_id == organization.id)
-    ) == 1
-    assert db_session.scalar(
-        select(func.count()).select_from(Deal).where(Deal.organization_id == organization.id)
-    ) == 1
-    assert db_session.scalar(
-        select(func.count()).select_from(Buyer).where(Buyer.organization_id == organization.id)
-    ) == 2
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(User).where(User.organization_id == organization.id)
+        )
+        == 6
+    )
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(Lead).where(Lead.organization_id == organization.id)
+        )
+        == 4
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(LeadManagementCase)
+            .where(LeadManagementCase.organization_id == organization.id)
+        )
+        == 4
+    )
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(LeadQualificationScriptVersion)
+            .where(LeadQualificationScriptVersion.organization_id == organization.id)
+        )
+        == 1
+    )
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(Deal).where(Deal.organization_id == organization.id)
+        )
+        == 1
+    )
+    assert (
+        db_session.scalar(
+            select(func.count()).select_from(Buyer).where(Buyer.organization_id == organization.id)
+        )
+        == 2
+    )

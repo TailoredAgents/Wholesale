@@ -207,9 +207,7 @@ def create_field_inspection(
     return result
 
 
-@router.post(
-    "/inspections/{inspection_id}/copilot-scope/{recommendation_id}/apply"
-)
+@router.post("/inspections/{inspection_id}/copilot-scope/{recommendation_id}/apply")
 def apply_copilot_repair_scope(
     inspection_id: UUID,
     recommendation_id: UUID,
@@ -217,9 +215,7 @@ def apply_copilot_repair_scope(
     principal: Annotated[Principal, Depends(work_dependency)],
 ) -> FieldInspectionRead:
     try:
-        result = apply_repair_scope_suggestions(
-            db, principal, inspection_id, recommendation_id
-        )
+        result = apply_repair_scope_suggestions(db, principal, inspection_id, recommendation_id)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

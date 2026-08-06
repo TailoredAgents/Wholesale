@@ -251,6 +251,8 @@ export const currentRouteInventory = [
     queryParameters: [
       { name: "appointment", status: "consumed" },
       { name: "lead", status: "consumed" },
+      { name: "schedule", status: "consumed" },
+      { name: "starts_at", status: "consumed" },
       { name: "view", status: "consumed" },
     ],
     helpSections: ["Calendar", "Appointment Workspace"],

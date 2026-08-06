@@ -18,8 +18,7 @@ def test_openai_cost_estimate_supports_versioned_defaults_and_overrides() -> Non
         {
             "DATABASE_URL": "sqlite+pysqlite:///:memory:",
             "OPENAI_PRICING_OVERRIDES_JSON": (
-                '{"custom-model":{"input_usd_per_million":1.5,'
-                '"output_usd_per_million":7}}'
+                '{"custom-model":{"input_usd_per_million":1.5,"output_usd_per_million":7}}'
             ),
         }
     )

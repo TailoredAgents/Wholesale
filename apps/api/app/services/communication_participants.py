@@ -81,8 +81,7 @@ def record_email_participants(
                     external_contact_id
                     if role in external_roles
                     and (
-                        normalized_external_email is None
-                        or normalized == normalized_external_email
+                        normalized_external_email is None or normalized == normalized_external_email
                     )
                     else None
                 ),

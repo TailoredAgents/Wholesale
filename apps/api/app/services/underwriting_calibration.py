@@ -122,12 +122,8 @@ def upsert_calibration_case(
     case.predicted_arv_point_cents = predicted_arv
     case.predicted_arv_high_cents = analysis.arv_high_cents
     case.predicted_rehab_cents = metadata_int(analysis, "total_rehab_cents")
-    case.predicted_seller_ceiling_cents = metadata_int(
-        analysis, "seller_contract_ceiling_cents"
-    )
-    case.predicted_disposition_cents = metadata_int(
-        analysis, "recommended_disposition_cents"
-    )
+    case.predicted_seller_ceiling_cents = metadata_int(analysis, "seller_contract_ceiling_cents")
+    case.predicted_disposition_cents = metadata_int(analysis, "recommended_disposition_cents")
     case.evidence_reference = payload.evidence_reference
     case.notes = payload.notes
     case.validation_scenarios = list(dict.fromkeys(payload.validation_scenarios))
@@ -186,27 +182,21 @@ def get_calibration_overview(
     analyses = list(
         db.scalars(
             select(UnderwritingMarketAnalysis).where(
-                UnderwritingMarketAnalysis.organization_id
-                == principal.organization_id
+                UnderwritingMarketAnalysis.organization_id == principal.organization_id
             )
         )
     )
     analyses_by_id = {analysis.id: analysis for analysis in analyses}
-    provider_grouped: dict[
-        tuple[str, str], list[UnderwritingCalibrationCase]
-    ] = defaultdict(list)
+    provider_grouped: dict[tuple[str, str], list[UnderwritingCalibrationCase]] = defaultdict(list)
     for case in cases:
         analysis = analyses_by_id.get(case.analysis_id)
-        provider_grouped[
-            (case.market_key, analysis.provider if analysis else "unknown")
-        ].append(case)
+        provider_grouped[(case.market_key, analysis.provider if analysis else "unknown")].append(
+            case
+        )
     decisions = list(
         db.scalars(
             select(UnderwritingCalibrationDecision)
-            .where(
-                UnderwritingCalibrationDecision.organization_id
-                == principal.organization_id
-            )
+            .where(UnderwritingCalibrationDecision.organization_id == principal.organization_id)
             .order_by(UnderwritingCalibrationDecision.created_at.desc())
         )
     )
@@ -223,14 +213,11 @@ def get_calibration_overview(
             select(AcquisitionsCopilotReview.decision)
             .join(
                 AcquisitionsCopilotRecommendation,
-                AcquisitionsCopilotRecommendation.id
-                == AcquisitionsCopilotReview.recommendation_id,
+                AcquisitionsCopilotRecommendation.id == AcquisitionsCopilotReview.recommendation_id,
             )
             .where(
-                AcquisitionsCopilotReview.organization_id
-                == principal.organization_id,
-                AcquisitionsCopilotRecommendation.recommendation_type
-                == "repair_scope",
+                AcquisitionsCopilotReview.organization_id == principal.organization_id,
+                AcquisitionsCopilotRecommendation.recommendation_type == "repair_scope",
             )
         ).all()
     )
@@ -243,8 +230,7 @@ def get_calibration_overview(
         ),
         overall=metric_summary("All markets", cases, analyses_by_id),
         markets=[
-            metric_summary(key, values, analyses_by_id)
-            for key, values in sorted(grouped.items())
+            metric_summary(key, values, analyses_by_id) for key, values in sorted(grouped.items())
         ],
         provider_scorecards=[
             metric_summary(market, values, analyses_by_id)
@@ -281,8 +267,7 @@ def baseline_summary(
         )
     ]
     execution_metrics = [
-        (analysis.analysis_metadata or {})["execution_metrics"]
-        for analysis in instrumented
+        (analysis.analysis_metadata or {})["execution_metrics"] for analysis in instrumented
     ]
     comp_yields = [
         round(
@@ -298,9 +283,7 @@ def baseline_summary(
         analyses,
         analyses_by_id,
     )
-    reuse_count = sum(
-        metric.get("market_data_reused") is True for metric in execution_metrics
-    )
+    reuse_count = sum(metric.get("market_data_reused") is True for metric in execution_metrics)
     manual_review_count = sum(
         metric.get("manual_review_required") is True for metric in execution_metrics
     )
@@ -318,9 +301,7 @@ def baseline_summary(
     repair_catalog_errors = [
         error
         for case in cases
-        if (
-            analysis := analyses_by_id.get(case.analysis_id)
-        ) is not None
+        if (analysis := analyses_by_id.get(case.analysis_id)) is not None
         and repair_catalog_version(analysis) is not None
         and case.actual_rehab_cents is not None
         and (
@@ -328,11 +309,10 @@ def baseline_summary(
                 case.predicted_rehab_cents,
                 case.actual_rehab_cents,
             )
-        ) is not None
+        )
+        is not None
     ]
-    ai_scope_corrections = sum(
-        decision == "edited" for decision in ai_scope_review_decisions
-    )
+    ai_scope_corrections = sum(decision == "edited" for decision in ai_scope_review_decisions)
     return UnderwritingBaselineSummary(
         analysis_count=len(analyses),
         instrumented_analysis_count=len(instrumented),
@@ -385,8 +365,7 @@ def metric_summary(
     analyses_by_id: dict[UUID, UnderwritingMarketAnalysis],
 ) -> CalibrationMetricSummary:
     arv_errors = [
-        percentage_error(case.predicted_arv_point_cents, case.benchmark_arv_cents)
-        for case in cases
+        percentage_error(case.predicted_arv_point_cents, case.benchmark_arv_cents) for case in cases
     ]
     valid_arv_errors = [value for value in arv_errors if value is not None]
     range_results = [
@@ -410,8 +389,7 @@ def metric_summary(
             case.actual_seller_contract_cents,
         )
         for case in cases
-        if case.actual_seller_contract_cents is not None
-        and case.actual_seller_contract_cents > 0
+        if case.actual_seller_contract_cents is not None and case.actual_seller_contract_cents > 0
     ]
     valid_seller_contract_variances = [
         value for value in seller_contract_variances if value is not None
@@ -424,9 +402,7 @@ def metric_summary(
     valid_disposition_errors = [value for value in disposition_errors if value is not None]
     sample_count = len(valid_arv_errors)
     case_analyses = [
-        analyses_by_id[case.analysis_id]
-        for case in cases
-        if case.analysis_id in analyses_by_id
+        analyses_by_id[case.analysis_id] for case in cases if case.analysis_id in analyses_by_id
     ]
     providers = sorted({analysis.provider for analysis in case_analyses})
     methodology_versions = sorted(
@@ -434,9 +410,7 @@ def metric_summary(
             value
             for analysis in case_analyses
             if (
-                value := string_value(
-                    (analysis.analysis_metadata or {}).get("methodology_version")
-                )
+                value := string_value((analysis.analysis_metadata or {}).get("methodology_version"))
             )
         }
     )
@@ -454,9 +428,7 @@ def metric_summary(
     seller_contract_variance = rounded_median(
         [abs(value) for value in valid_seller_contract_variances]
     )
-    disposition_mape = rounded_median(
-        [abs(value) for value in valid_disposition_errors]
-    )
+    disposition_mape = rounded_median([abs(value) for value in valid_disposition_errors])
     median_error = rounded_median(valid_arv_errors)
     failure_patterns = calibration_failure_patterns(
         arv_mape=arv_mape,
@@ -481,18 +453,14 @@ def metric_summary(
         repair_sample_count=len(valid_repair_errors),
         repair_median_absolute_error_percentage=repair_mape,
         seller_contract_sample_count=len(valid_seller_contract_variances),
-        seller_contract_median_absolute_variance_percentage=(
-            seller_contract_variance
-        ),
+        seller_contract_median_absolute_variance_percentage=(seller_contract_variance),
         disposition_sample_count=len(valid_disposition_errors),
         disposition_median_absolute_error_percentage=disposition_mape,
         comp_review_case_count=review_case_count,
         comp_review_decision_count=review_decisions,
         comp_review_override_count=review_overrides,
         comp_review_override_percentage=(
-            round(review_overrides / review_decisions * 100, 1)
-            if review_decisions
-            else None
+            round(review_overrides / review_decisions * 100, 1) if review_decisions else None
         ),
         provider_adequacy=provider_adequacy(
             sample_count=sample_count,
@@ -508,9 +476,7 @@ def calibration_segments(
     cases: list[UnderwritingCalibrationCase],
     analyses_by_id: dict[UUID, UnderwritingMarketAnalysis],
 ) -> list[CalibrationSegmentSummary]:
-    grouped: dict[
-        tuple[str, str], list[UnderwritingCalibrationCase]
-    ] = defaultdict(list)
+    grouped: dict[tuple[str, str], list[UnderwritingCalibrationCase]] = defaultdict(list)
     for case in cases:
         analysis = analyses_by_id.get(case.analysis_id)
         if analysis is None:
@@ -526,17 +492,13 @@ def calibration_segments(
                 dimension=dimension,
                 segment_key=segment_key,
                 sample_count=metric.sample_count,
-                median_absolute_error_percentage=(
-                    metric.median_absolute_error_percentage
-                ),
+                median_absolute_error_percentage=(metric.median_absolute_error_percentage),
                 range_coverage_percentage=metric.range_coverage_percentage,
                 repair_sample_count=metric.repair_sample_count,
                 repair_median_absolute_error_percentage=(
                     metric.repair_median_absolute_error_percentage
                 ),
-                comp_review_override_percentage=(
-                    metric.comp_review_override_percentage
-                ),
+                comp_review_override_percentage=(metric.comp_review_override_percentage),
             )
         )
     return segments
@@ -638,9 +600,7 @@ def calibration_case_to_read(
             case.benchmark_arv_cents,
         ),
         provider=analysis.provider if analysis else "unknown",
-        methodology_version=string_value(
-            analysis_metadata.get("methodology_version")
-        ),
+        methodology_version=string_value(analysis_metadata.get("methodology_version")),
         confidence_score=analysis.confidence_score if analysis else 0,
         comp_review_applied=isinstance(analysis_metadata.get("comp_review"), dict),
         evidence_reference=case.evidence_reference,
@@ -666,10 +626,7 @@ def create_calibration_decision(
     available_scopes = {"All markets", *(case.market_key for case in cases)}
     if payload.scope_key not in available_scopes:
         raise ValueError("Choose a market with verified calibration evidence.")
-    if (
-        payload.decision_type == "methodology_change"
-        and not payload.proposed_methodology_version
-    ):
+    if payload.decision_type == "methodology_change" and not payload.proposed_methodology_version:
         raise ValueError("A methodology change requires a proposed version.")
     if (
         payload.decision_type in {"methodology_change", "provider_change"}
@@ -686,9 +643,7 @@ def create_calibration_decision(
             "human_authority_confirmed",
         }
         missing = sorted(
-            key
-            for key in required_confirmations
-            if payload.proposed_changes.get(key) is not True
+            key for key in required_confirmations if payload.proposed_changes.get(key) is not True
         )
         if missing:
             raise ValueError(
@@ -703,9 +658,7 @@ def create_calibration_decision(
     )
     metric = metric_summary(payload.scope_key, scoped_cases, analyses_by_id)
     governed_changes = {"methodology_change", "provider_change", "v3_rollout"}
-    minimum = (
-        FORMULA_REVIEW_SAMPLE if payload.decision_type in governed_changes else 0
-    )
+    minimum = FORMULA_REVIEW_SAMPLE if payload.decision_type in governed_changes else 0
     evidence_snapshot: dict[str, object] = metric.model_dump(mode="json")
     if payload.decision_type == "v3_rollout":
         case_reads = [calibration_case_to_read(db, case) for case in cases]
@@ -727,9 +680,7 @@ def create_calibration_decision(
         status="draft",
         title=payload.title.strip(),
         rationale=payload.rationale.strip(),
-        current_methodology_version=latest_methodology_version(
-            scoped_cases, analyses_by_id
-        ),
+        current_methodology_version=latest_methodology_version(scoped_cases, analyses_by_id),
         proposed_methodology_version=payload.proposed_methodology_version,
         proposed_changes=payload.proposed_changes,
         evidence_snapshot=evidence_snapshot,
@@ -765,8 +716,7 @@ def decide_calibration_decision(
     decision = db.scalar(
         select(UnderwritingCalibrationDecision).where(
             UnderwritingCalibrationDecision.id == decision_id,
-            UnderwritingCalibrationDecision.organization_id
-            == principal.organization_id,
+            UnderwritingCalibrationDecision.organization_id == principal.organization_id,
         )
     )
     if decision is None:
@@ -806,9 +756,7 @@ def decide_calibration_decision(
         ]
         if blockers:
             raise ValueError(
-                "V3 rollout cannot be approved until these gates pass: "
-                + ", ".join(blockers)
-                + "."
+                "V3 rollout cannot be approved until these gates pass: " + ", ".join(blockers) + "."
             )
 
     decision.status = payload.status
@@ -859,18 +807,14 @@ def calibration_evidence(
     cases = list(
         db.scalars(
             select(UnderwritingCalibrationCase)
-            .where(
-                UnderwritingCalibrationCase.organization_id
-                == principal.organization_id
-            )
+            .where(UnderwritingCalibrationCase.organization_id == principal.organization_id)
             .order_by(UnderwritingCalibrationCase.evidence_date.desc())
         )
     )
     analyses = list(
         db.scalars(
             select(UnderwritingMarketAnalysis).where(
-                UnderwritingMarketAnalysis.organization_id
-                == principal.organization_id
+                UnderwritingMarketAnalysis.organization_id == principal.organization_id
             )
         )
     )
@@ -894,8 +838,7 @@ def calibration_decision_to_read(
         sample_count=decision.sample_count,
         minimum_sample_required=decision.minimum_sample_required,
         approval_blocked=(
-            decision.status == "draft"
-            and decision.minimum_sample_required > decision.sample_count
+            decision.status == "draft" and decision.minimum_sample_required > decision.sample_count
         ),
         proposed_by_user_id=decision.proposed_by_user_id,
         decided_by_user_id=decision.decided_by_user_id,
@@ -925,15 +868,12 @@ def shadow_validation_summary(
     for replay in replay_cases:
         market_groups[replay.market_key].append(replay)
     scenario_coverage = {
-        scenario: sum(
-            scenario in replay.validation_scenarios for replay in replay_cases
-        )
+        scenario: sum(scenario in replay.validation_scenarios for replay in replay_cases)
         for scenario in REQUIRED_VALIDATION_SCENARIOS
     }
     overall = shadow_replay_metric("All markets", replay_cases)
     market_metrics = [
-        shadow_replay_metric(key, values)
-        for key, values in sorted(market_groups.items())
+        shadow_replay_metric(key, values) for key, values in sorted(market_groups.items())
     ]
     approved_rollout = next(
         (
@@ -1054,12 +994,8 @@ def shadow_replay_metric(
     scope_key: str,
     cases: list[ShadowReplayCaseRead],
 ) -> ShadowReplayMetric:
-    baseline_error = rounded_median(
-        [case.baseline_absolute_error_percentage for case in cases]
-    )
-    shadow_error = rounded_median(
-        [case.shadow_absolute_error_percentage for case in cases]
-    )
+    baseline_error = rounded_median([case.baseline_absolute_error_percentage for case in cases])
+    shadow_error = rounded_median([case.shadow_absolute_error_percentage for case in cases])
     return ShadowReplayMetric(
         scope_key=scope_key,
         paired_case_count=len(cases),
@@ -1099,12 +1035,9 @@ def shadow_rollout_gates(
     sample_passed = overall.paired_case_count >= FORMULA_REVIEW_SAMPLE
     georgia_markets = [market for market in markets if market.scope_key.startswith("GA |")]
     market_passed = bool(georgia_markets) and all(
-        market.paired_case_count >= PRELIMINARY_PROVIDER_SAMPLE
-        for market in georgia_markets
+        market.paired_case_count >= PRELIMINARY_PROVIDER_SAMPLE for market in georgia_markets
     )
-    uncovered_scenarios = [
-        key for key, count in scenario_coverage.items() if count == 0
-    ]
+    uncovered_scenarios = [key for key, count in scenario_coverage.items() if count == 0]
     accuracy_measured = overall.paired_case_count >= PRELIMINARY_PROVIDER_SAMPLE
     accuracy_passed = (
         accuracy_measured
@@ -1136,8 +1069,7 @@ def shadow_rollout_gates(
             pending=not georgia_markets,
             current=(
                 ", ".join(
-                    f"{market.scope_key}: {market.paired_case_count}"
-                    for market in georgia_markets
+                    f"{market.scope_key}: {market.paired_case_count}" for market in georgia_markets
                 )
                 or "No paired Georgia markets"
             ),
@@ -1281,18 +1213,12 @@ def provider_adequacy(
 ) -> str:
     if sample_count < PRELIMINARY_PROVIDER_SAMPLE:
         return "insufficient_evidence"
-    if (
-        arv_mape is not None and arv_mape > ARV_ERROR_REVIEW_PERCENTAGE
-    ) or (
-        range_coverage is not None
-        and range_coverage < RANGE_COVERAGE_REVIEW_PERCENTAGE
+    if (arv_mape is not None and arv_mape > ARV_ERROR_REVIEW_PERCENTAGE) or (
+        range_coverage is not None and range_coverage < RANGE_COVERAGE_REVIEW_PERCENTAGE
     ):
         return "provider_review_required"
-    if (
-        arv_mape is not None and arv_mape > ARV_ERROR_MONITOR_PERCENTAGE
-    ) or (
-        range_coverage is not None
-        and range_coverage < RANGE_COVERAGE_MONITOR_PERCENTAGE
+    if (arv_mape is not None and arv_mape > ARV_ERROR_MONITOR_PERCENTAGE) or (
+        range_coverage is not None and range_coverage < RANGE_COVERAGE_MONITOR_PERCENTAGE
     ):
         return "monitor"
     return "adequate"
@@ -1315,10 +1241,7 @@ def calibration_failure_patterns(
         patterns.append("ARV estimates show a material overvaluation bias.")
     elif median_error is not None and median_error < -5:
         patterns.append("ARV estimates show a material undervaluation bias.")
-    if (
-        range_coverage is not None
-        and range_coverage < RANGE_COVERAGE_MONITOR_PERCENTAGE
-    ):
+    if range_coverage is not None and range_coverage < RANGE_COVERAGE_MONITOR_PERCENTAGE:
         patterns.append("Verified ARV falls outside the reported range too often.")
     if repair_mape is not None and repair_mape > 25:
         patterns.append("Repair estimates need local cost calibration.")
@@ -1356,9 +1279,7 @@ def parse_uuid(value: object) -> UUID | None:
 
 
 def comparable_key(value: dict[str, object]) -> str | None:
-    return string_value(value.get("provider_id")) or string_value(
-        value.get("formatted_address")
-    )
+    return string_value(value.get("provider_id")) or string_value(value.get("formatted_address"))
 
 
 def metadata_dict(value: object) -> dict[str, object]:
@@ -1409,8 +1330,7 @@ def metadata_median(metrics: list[dict[str, object]], key: str) -> float | None:
     values = [
         float(value)
         for metric in metrics
-        if isinstance((value := metric.get(key)), (int, float))
-        and not isinstance(value, bool)
+        if isinstance((value := metric.get(key)), (int, float)) and not isinstance(value, bool)
     ]
     return rounded_median(values)
 
@@ -1466,7 +1386,5 @@ def calibration_decision_audit_value(
         "sample_count": decision.sample_count,
         "minimum_sample_required": decision.minimum_sample_required,
         "decision_notes": decision.decision_notes,
-        "decided_at": (
-            decision.decided_at.isoformat() if decision.decided_at else None
-        ),
+        "decided_at": (decision.decided_at.isoformat() if decision.decided_at else None),
     }

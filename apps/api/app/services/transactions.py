@@ -254,9 +254,7 @@ def get_transaction_detail(
         document_facts.setdefault(fact.document_id, []).append(
             document_fact_read(
                 fact,
-                users.get(fact.reviewed_by_user_id)
-                if fact.reviewed_by_user_id
-                else None,
+                users.get(fact.reviewed_by_user_id) if fact.reviewed_by_user_id else None,
             )
         )
     return TransactionDetail(
@@ -291,10 +289,7 @@ def get_transaction_detail(
             principal.organization_id,
             transaction.id,
         ),
-        documents=[
-            document_read(item, document_facts.get(item.id, []))
-            for item in documents
-        ],
+        documents=[document_read(item, document_facts.get(item.id, [])) for item in documents],
         parties=[
             TransactionPartyRead(
                 id=item.id,
@@ -620,9 +615,7 @@ def upload_document(
         )
     )
     if duplicate is not None:
-        raise ValueError(
-            f"This file is already stored as '{duplicate.title}'."
-        )
+        raise ValueError(f"This file is already stored as '{duplicate.title}'.")
     document_id = uuid4()
     stored = store_content(
         organization_id=principal.organization_id,
@@ -740,9 +733,7 @@ def get_document_content(document: TransactionDocument) -> bytes:
 def create_document_download_link(
     document: TransactionDocument,
 ) -> DocumentDownloadLinkRead:
-    fallback = (
-        f"/api/v1/transactions/{document.transaction_id}/documents/{document.id}/content"
-    )
+    fallback = f"/api/v1/transactions/{document.transaction_id}/documents/{document.id}/content"
     url, expires_at = create_download_url(
         provider=document.storage_provider,
         key=document.storage_key,
@@ -1143,9 +1134,7 @@ def package_read(item: ContractPackage) -> ContractPackageRead:
         id=item.id,
         version_number=item.version_number,
         template_id=item.template_id,
-        document_type=str(
-            item.terms_snapshot.get("document_type") or "purchase_agreement"
-        ),
+        document_type=str(item.terms_snapshot.get("document_type") or "purchase_agreement"),
         status=item.status,
         seller_name=item.seller_name,
         buyer_entity_name=item.buyer_entity_name,

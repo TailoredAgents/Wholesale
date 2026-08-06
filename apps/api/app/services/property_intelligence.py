@@ -785,9 +785,7 @@ def property_completeness_score(
     comp_points = min(20, len(comparables) * 7)
     realestateapi = media.get("realestateapi")
     image_points = (
-        5
-        if isinstance(realestateapi, dict) and realestateapi.get("status") == "available"
-        else 0
+        5 if isinstance(realestateapi, dict) and realestateapi.get("status") == "available" else 0
     )
     return min(100, fact_points + valuation_points + comp_points + image_points)
 
@@ -830,9 +828,7 @@ def build_property_intelligence_read(
         raw_media = snapshot.media.get("realestateapi")
         if isinstance(raw_media, dict):
             realestateapi_media = raw_media
-    listing_image_url = string_value(
-        realestateapi_media.get("primary_listing_image_url")
-    )
+    listing_image_url = string_value(realestateapi_media.get("primary_listing_image_url"))
     if photo is not None:
         image_source = "inspection_photo"
         image_available = True
@@ -844,8 +840,7 @@ def build_property_intelligence_read(
         image_available = True
         image_views = ["listing"]
         image_attribution = str(
-            realestateapi_media.get("attribution")
-            or "RealEstateAPI licensed listing media"
+            realestateapi_media.get("attribution") or "RealEstateAPI licensed listing media"
         )
     return PropertyIntelligenceRead(
         research_status=property_record.research_status,

@@ -30,16 +30,13 @@ def resolve_underwriting_methodology(
 ) -> UnderwritingMethodologyControl:
     requested = settings.underwriting_active_methodology_version
     if requested not in {ACTIVE_METHODOLOGY_VERSION, ROLLBACK_METHODOLOGY_VERSION}:
-        raise ValueError(
-            "Choose the live Stonegate V3 method or the V2.2 rollback method."
-        )
+        raise ValueError("Choose the live Stonegate V3 method or the V2.2 rollback method.")
     return UnderwritingMethodologyControl(
         requested_version=requested,
         active_version=requested,
         planned_version=PLANNED_METHODOLOGY_VERSION,
         v3_available=True,
         shadow_enabled=(
-            requested == ROLLBACK_METHODOLOGY_VERSION
-            and settings.underwriting_v3_shadow_enabled
+            requested == ROLLBACK_METHODOLOGY_VERSION and settings.underwriting_v3_shadow_enabled
         ),
     )

@@ -259,13 +259,9 @@ def ensure_demo_lead_manager_case(
     now = datetime.now(UTC)
     accepted_at = None if scenario.key == "new-inbound" else now - timedelta(minutes=18)
     qualification_completed_at = (
-        now - timedelta(minutes=8)
-        if scenario.key in {"appointment", "under-contract"}
-        else None
+        now - timedelta(minutes=8) if scenario.key in {"appointment", "under-contract"} else None
     )
-    next_action_due_at = (
-        now + timedelta(days=1) if scenario.key == "appointment" else None
-    )
+    next_action_due_at = now + timedelta(days=1) if scenario.key == "appointment" else None
     status = {
         "new-inbound": "awaiting_acceptance",
         "qualification": "active",

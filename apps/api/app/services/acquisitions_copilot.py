@@ -45,12 +45,12 @@ from app.schemas.field_operations import (
     AcquisitionsRepairScopeOutput,
     FieldInspectionRead,
 )
-from app.services.repair_catalog import evaluate_repair_scope
 from app.services.ai_runtime import (
     ACQUISITIONS_REPAIR_SCOPE_OUTPUT_SCHEMA,
     execute_runtime,
     get_runtime_overview,
 )
+from app.services.repair_catalog import evaluate_repair_scope
 
 CAPABILITY_BY_TYPE = {
     "preparation": ("appointment_preparation", "appointment.brief"),
@@ -59,9 +59,21 @@ CAPABILITY_BY_TYPE = {
 }
 
 REPAIR_CATEGORIES = {
-    "roof", "hvac", "plumbing", "electrical", "foundation", "kitchen", "bathrooms",
-    "flooring", "paint_drywall", "windows_doors", "exterior", "landscaping", "permits",
-    "cleanup", "other",
+    "roof",
+    "hvac",
+    "plumbing",
+    "electrical",
+    "foundation",
+    "kitchen",
+    "bathrooms",
+    "flooring",
+    "paint_drywall",
+    "windows_doors",
+    "exterior",
+    "landscaping",
+    "permits",
+    "cleanup",
+    "other",
 }
 
 
@@ -88,15 +100,12 @@ def get_acquisitions_copilot_overview(
 ) -> AcquisitionsCopilotOverview:
     facts = _appointment_facts(db, principal, appointment)
     runtime = get_runtime_overview(db, principal)
-    statuses = {
-        item.capability_key: item.status for item in runtime.capabilities
-    }
+    statuses = {item.capability_key: item.status for item in runtime.capabilities}
     recommendations = list(
         db.scalars(
             select(AcquisitionsCopilotRecommendation)
             .where(
-                AcquisitionsCopilotRecommendation.organization_id
-                == principal.organization_id,
+                AcquisitionsCopilotRecommendation.organization_id == principal.organization_id,
                 AcquisitionsCopilotRecommendation.appointment_id == appointment.id,
             )
             .order_by(AcquisitionsCopilotRecommendation.generated_at.desc())
@@ -105,15 +114,9 @@ def get_acquisitions_copilot_overview(
     return AcquisitionsCopilotOverview(
         pilot_mode="draft_only",
         runtime_status=runtime.status,
-        preparation_capability_status=statuses.get(
-            "appointment.brief", "not_installed"
-        ),
-        follow_up_capability_status=statuses.get(
-            "negotiation.coach", "not_installed"
-        ),
-        repair_scope_capability_status=statuses.get(
-            "underwriting.analyze", "not_installed"
-        ),
+        preparation_capability_status=statuses.get("appointment.brief", "not_installed"),
+        follow_up_capability_status=statuses.get("negotiation.coach", "not_installed"),
+        repair_scope_capability_status=statuses.get("underwriting.analyze", "not_installed"),
         external_actions_blocked=(
             runtime.policy is None or not runtime.policy.external_actions_enabled
         ),
@@ -173,8 +176,7 @@ def analyze_appointment(
     )
     existing = db.scalar(
         select(AcquisitionsCopilotRecommendation).where(
-            AcquisitionsCopilotRecommendation.organization_id
-            == principal.organization_id,
+            AcquisitionsCopilotRecommendation.organization_id == principal.organization_id,
             AcquisitionsCopilotRecommendation.idempotency_key == idempotency_key,
         )
     )
@@ -224,17 +226,11 @@ def analyze_appointment(
     try:
         raw_output = json.loads(run.output_summary)
         if payload.recommendation_type == "preparation":
-            parsed_output = AcquisitionsPreparationOutput.model_validate(
-                raw_output
-            ).model_dump()
+            parsed_output = AcquisitionsPreparationOutput.model_validate(raw_output).model_dump()
         elif payload.recommendation_type == "repair_scope":
-            parsed_output = AcquisitionsRepairScopeOutput.model_validate(
-                raw_output
-            ).model_dump()
+            parsed_output = AcquisitionsRepairScopeOutput.model_validate(raw_output).model_dump()
         else:
-            parsed_output = AcquisitionsFollowUpOutput.model_validate(
-                raw_output
-            ).model_dump()
+            parsed_output = AcquisitionsFollowUpOutput.model_validate(raw_output).model_dump()
     except (json.JSONDecodeError, ValidationError) as exc:
         raise ValueError(
             "The model response did not match the Acquisitions Copilot contract."
@@ -246,18 +242,10 @@ def analyze_appointment(
         lead_id=appointment.lead_id,
         recommendation_type=payload.recommendation_type,
         field_meeting_brief_id=facts["brief"].id,
-        field_inspection_id=(
-            facts["inspection"].id if facts["inspection"] else None
-        ),
-        field_negotiation_session_id=(
-            facts["negotiation"].id if facts["negotiation"] else None
-        ),
-        underwriting_version_id=(
-            facts["underwriting"].id if facts["underwriting"] else None
-        ),
-        offer_negotiation_plan_id=(
-            facts["approved_plan"].id if facts["approved_plan"] else None
-        ),
+        field_inspection_id=(facts["inspection"].id if facts["inspection"] else None),
+        field_negotiation_session_id=(facts["negotiation"].id if facts["negotiation"] else None),
+        underwriting_version_id=(facts["underwriting"].id if facts["underwriting"] else None),
+        offer_negotiation_plan_id=(facts["approved_plan"].id if facts["approved_plan"] else None),
         generated_for_user_id=appointment.owner_user_id or principal.user_id,
         ai_run_log_id=run.id,
         idempotency_key=idempotency_key,
@@ -306,8 +294,7 @@ def review_recommendation(
 ) -> AcquisitionsCopilotReviewRead | None:
     recommendation = db.scalar(
         select(AcquisitionsCopilotRecommendation).where(
-            AcquisitionsCopilotRecommendation.organization_id
-            == principal.organization_id,
+            AcquisitionsCopilotRecommendation.organization_id == principal.organization_id,
             AcquisitionsCopilotRecommendation.id == recommendation_id,
         )
     )
@@ -411,12 +398,8 @@ def apply_repair_scope_suggestions(
     if recommendation.status not in {"accepted", "edited"}:
         raise ValueError("Review the AI repair-scope draft before applying it.")
 
-    parsed = AcquisitionsRepairScopeOutput.model_validate(
-        recommendation.output_payload
-    )
-    existing_categories = {
-        str(item.get("category")) for item in inspection.repair_items
-    }
+    parsed = AcquisitionsRepairScopeOutput.model_validate(recommendation.output_payload)
+    existing_categories = {str(item.get("category")) for item in inspection.repair_items}
     additions: list[dict[str, object]] = []
     for suggestion in parsed.suggestions:
         category = suggestion.category if suggestion.category in REPAIR_CATEGORIES else "other"
@@ -508,9 +491,7 @@ def _scoped_appointment(
         return None
     can_manage = PermissionKeys.MANAGE_ACQUISITION_OPERATIONS in principal.permission_keys
     if not can_manage and appointment.owner_user_id != principal.user_id:
-        raise PermissionError(
-            "Only the assigned closer or an acquisition manager can access it."
-        )
+        raise PermissionError("Only the assigned closer or an acquisition manager can access it.")
     return appointment
 
 
@@ -570,10 +551,7 @@ def _appointment_facts(
     )
     approved_plan = (
         plan
-        if plan
-        and plan.status == "approved"
-        and approval
-        and approval.status == "approved"
+        if plan and plan.status == "approved" and approval and approval.status == "approved"
         else None
     )
     inspection = db.scalar(
@@ -667,9 +645,7 @@ def _appointment_facts(
             "to the seller ceiling."
         )
     elif plan:
-        authority_status = (
-            "An offer plan exists but is not approved. Do not present a final price."
-        )
+        authority_status = "An offer plan exists but is not approved. Do not present a final price."
     else:
         authority_status = "No approved offer authority. Do not present a final price."
     return {
@@ -685,9 +661,7 @@ def _appointment_facts(
         "readiness_gaps": gaps,
         "evidence_available": evidence,
         "authority_status": authority_status,
-        "approved_ceiling_cents": (
-            approved_plan.seller_ceiling_cents if approved_plan else None
-        ),
+        "approved_ceiling_cents": (approved_plan.seller_ceiling_cents if approved_plan else None),
     }
 
 
@@ -706,9 +680,7 @@ def _idempotency_key(
         "underwriting_updated_at": _updated(facts["underwriting"]),
         "approved_plan_updated_at": _updated(facts["approved_plan"]),
     }
-    digest = hashlib.sha256(
-        json.dumps(fingerprint, sort_keys=True).encode()
-    ).hexdigest()[:24]
+    digest = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()[:24]
     return f"acquisitions-copilot:{appointment.id}:{recommendation_type}:{digest}"
 
 
@@ -717,15 +689,12 @@ def _updated(value: object) -> str | None:
     return updated_at.isoformat() if updated_at else None
 
 
-def _metrics(
-    db: Session, principal: Principal
-) -> AcquisitionsCopilotMetrics:
+def _metrics(db: Session, principal: Principal) -> AcquisitionsCopilotMetrics:
     since = datetime.now(UTC) - timedelta(days=30)
     recommendations = list(
         db.scalars(
             select(AcquisitionsCopilotRecommendation).where(
-                AcquisitionsCopilotRecommendation.organization_id
-                == principal.organization_id,
+                AcquisitionsCopilotRecommendation.organization_id == principal.organization_id,
                 AcquisitionsCopilotRecommendation.generated_at >= since,
             )
         ).all()
@@ -735,8 +704,7 @@ def _metrics(
         list(
             db.scalars(
                 select(AcquisitionsCopilotReview).where(
-                    AcquisitionsCopilotReview.organization_id
-                    == principal.organization_id,
+                    AcquisitionsCopilotReview.organization_id == principal.organization_id,
                     AcquisitionsCopilotReview.recommendation_id.in_(ids),
                 )
             ).all()
@@ -745,9 +713,7 @@ def _metrics(
         else []
     )
     reviewed = len(reviews)
-    accepted_or_edited = sum(
-        item.decision in {"accepted", "edited"} for item in reviews
-    )
+    accepted_or_edited = sum(item.decision in {"accepted", "edited"} for item in reviews)
     edited = sum(item.decision == "edited" for item in reviews)
     return AcquisitionsCopilotMetrics(
         generated=len(recommendations),
@@ -755,9 +721,7 @@ def _metrics(
         accepted_or_corrected_rate_basis_points=(
             round(accepted_or_edited / reviewed * 10_000) if reviewed else 0
         ),
-        correction_rate_basis_points=(
-            round(edited / reviewed * 10_000) if reviewed else 0
-        ),
+        correction_rate_basis_points=(round(edited / reviewed * 10_000) if reviewed else 0),
         estimated_time_saved_minutes=round(
             sum(item.estimated_time_saved_seconds for item in reviews) / 60
         ),

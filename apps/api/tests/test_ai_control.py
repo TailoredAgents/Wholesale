@@ -155,21 +155,26 @@ def test_ai_control_center_logs_run_and_creates_approval(
     assert approval_response.json()["items"][0]["request_type"] == "ai_tool_call"
     assert decision_response.status_code == 200
     assert decision_response.json()["status"] == "approved"
-    assert int(
-        db_session.scalar(
-            select(func.count()).select_from(AuditEvent).where(
-                AuditEvent.action.in_(
-                    [
-                        "ai.agent_create",
-                        "ai.prompt_version_create",
-                        "ai.run_log_create",
-                        "approval.decide",
-                    ]
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(AuditEvent)
+                .where(
+                    AuditEvent.action.in_(
+                        [
+                            "ai.agent_create",
+                            "ai.prompt_version_create",
+                            "ai.run_log_create",
+                            "approval.decide",
+                        ]
+                    )
                 )
             )
+            or 0
         )
-        or 0
-    ) == 4
+        == 4
+    )
 
 
 def test_ai_run_rejects_unconfigured_tool(
@@ -254,8 +259,7 @@ def test_lead_intake_summary_calls_openai_and_logs_review_run(
             assert kwargs["enable_web_search"] is False
             return OpenAITextResponse(
                 text=(
-                    "Seller inherited the property, wants a 30 day sale, "
-                    "and needs repair context."
+                    "Seller inherited the property, wants a 30 day sale, and needs repair context."
                 ),
                 total_tokens=321,
                 input_tokens=200,

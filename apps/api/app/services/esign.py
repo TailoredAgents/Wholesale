@@ -155,11 +155,11 @@ def integration_status(
         else None
     )
     simulated = active.esign_provider == "simulate"
-    webhook_connected = simulated or configuration is not None or bool(
-        active.esign_signwell_webhook_id
+    webhook_connected = (
+        simulated or configuration is not None or bool(active.esign_signwell_webhook_id)
     )
-    account_connected = simulated or configuration is not None or bool(
-        active.esign_signwell_webhook_id
+    account_connected = (
+        simulated or configuration is not None or bool(active.esign_signwell_webhook_id)
     )
     if not webhook_connected and not simulated and not esign_blockers:
         esign_blockers.append("Connect SignWell in Transactions")
@@ -200,11 +200,7 @@ def connect_signwell(
     callback_url = active.esign_webhook_callback_url.rstrip("/")
     hooks = client.list_webhooks()
     hook = next(
-        (
-            item
-            for item in hooks
-            if str(item.get("callback_url") or "").rstrip("/") == callback_url
-        ),
+        (item for item in hooks if str(item.get("callback_url") or "").rstrip("/") == callback_url),
         None,
     )
     webhook_created = hook is None
@@ -311,9 +307,7 @@ def send_contract_for_signature(
     if package.status != "approved":
         raise ValueError("Approve this exact contract package before sending it for signature.")
     template = db.get(ContractTemplate, package.template_id) if package.template_id else None
-    if template is not None and (
-        template.deleted_at is not None or template.status != "approved"
-    ):
+    if template is not None and (template.deleted_at is not None or template.status != "approved"):
         raise ValueError("The selected internal contract template is not approved.")
     existing = db.scalar(
         select(EsignEnvelope).where(

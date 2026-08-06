@@ -128,9 +128,7 @@ approve_journal_dependency = require_permission(PermissionKeys.APPROVE_JOURNALS)
 post_journal_dependency = require_permission(PermissionKeys.POST_JOURNALS)
 manage_period_dependency = require_permission(PermissionKeys.MANAGE_ACCOUNTING_PERIODS)
 manage_vendors_dependency = require_permission(PermissionKeys.MANAGE_VENDORS)
-manage_finance_evidence_dependency = require_permission(
-    PermissionKeys.MANAGE_FINANCE_EVIDENCE
-)
+manage_finance_evidence_dependency = require_permission(PermissionKeys.MANAGE_FINANCE_EVIDENCE)
 manage_banking_dependency = require_permission(PermissionKeys.MANAGE_BANKING)
 
 

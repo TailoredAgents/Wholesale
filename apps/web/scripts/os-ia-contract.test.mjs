@@ -130,9 +130,9 @@ test("target role visibility is complete, bounded, and least-privilege for servi
 });
 
 test("every current App Router page is represented in the migration inventory", () => {
-  const discoveredRoutes = walk(osSourceRoot, (path) => path.endsWith("/page.tsx")).map(
-    routeFromPage,
-  );
+  const discoveredRoutes = walk(osSourceRoot, (path) =>
+    path.replaceAll("\\", "/").endsWith("/page.tsx"),
+  ).map(routeFromPage);
   assert.deepEqual(
     sorted(currentRouteInventory.map((route) => route.routePattern)),
     sorted(discoveredRoutes),
@@ -330,4 +330,27 @@ test("old and new employee vocabulary is explicit and non-duplicative", () => {
     assert.ok(currentLabels.has(term.current), `${term.current} is not a current navigation term`);
     assert.notEqual(term.current, term.target);
   }
+});
+
+test("Calendar owns one quick appointment workflow with contextual entry points", () => {
+  const calendarWorkspace = readFileSync(
+    resolve(osSourceRoot, "field-operations/field-operations-workspace.tsx"),
+    "utf8",
+  );
+  const fieldCalendar = readFileSync(
+    resolve(osSourceRoot, "field-operations/field-calendar.tsx"),
+    "utf8",
+  );
+  const leadRecord = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+
+  assert.match(calendarWorkspace, /Schedule an appointment/);
+  assert.match(calendarWorkspace, /Meeting format/);
+  assert.match(calendarWorkspace, /Assigned team member/);
+  assert.match(fieldCalendar, /onSchedule/);
+  assert.match(leadRecord, /view=appointment&schedule=1&lead=/);
+  assert.match(inbox, /view=appointment&schedule=1&lead=/);
 });

@@ -1133,9 +1133,24 @@ export type FieldOperationsOverview = {
     id: string;
     seller_name: string;
     property_address: string;
+    phone_number: string | null;
     county: string | null;
     postal_code: string;
     stage_key: string;
+    current_owner_user_id: string | null;
+    current_owner_name: string | null;
+    next_follow_up_at: string | null;
+    lead_url: string;
+  }>;
+  schedulable_leads: Array<{
+    id: string;
+    seller_name: string;
+    property_address: string;
+    phone_number: string | null;
+    county: string | null;
+    postal_code: string;
+    stage_key: string;
+    current_owner_user_id: string | null;
     current_owner_name: string | null;
     next_follow_up_at: string | null;
     lead_url: string;

@@ -56,15 +56,18 @@ def seed_owner(db: Session) -> None:
 
 
 def install_runtime(client: TestClient) -> None:
-    assert client.post(
-        "/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS
-    ).status_code == 201
+    assert (
+        client.post("/api/v1/ai/orchestrator/portfolio/install", headers=HEADERS).status_code == 201
+    )
     assert client.post("/api/v1/ai/copilots/install", headers=HEADERS).status_code == 201
-    assert client.post(
-        "/api/v1/ai/copilots/foundation/decision",
-        headers=HEADERS,
-        json={"decision": "approve", "notes": "Approved for AI4 pilot test."},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/api/v1/ai/copilots/foundation/decision",
+            headers=HEADERS,
+            json={"decision": "approve", "notes": "Approved for AI4 pilot test."},
+        ).status_code
+        == 200
+    )
     assert client.post("/api/v1/ai/runtime/install", headers=HEADERS).status_code == 201
 
 
@@ -126,9 +129,7 @@ def test_copilot_prioritizes_work_and_blocks_generation_until_runtime_is_enabled
     assert copilot["work_items"][0]["case_id"] == str(case.id)
     assert copilot["work_items"][0]["priority_band"] == "urgent"
     assert copilot["work_items"][0]["missed_reply"] is True
-    assert "Seller sent the latest message and needs a reply." in copilot["work_items"][0][
-        "alerts"
-    ]
+    assert "Seller sent the latest message and needs a reply." in copilot["work_items"][0]["alerts"]
 
     install_runtime(client)
     blocked = client.post(
@@ -141,9 +142,7 @@ def test_copilot_prioritizes_work_and_blocks_generation_until_runtime_is_enabled
     assert blocked.json()["recommendation"] is None
     assert (
         int(
-            db_session.scalar(
-                select(func.count()).select_from(LeadManagerCopilotRecommendation)
-            )
+            db_session.scalar(select(func.count()).select_from(LeadManagerCopilotRecommendation))
             or 0
         )
         == 0
@@ -181,23 +180,25 @@ def test_copilot_generates_idempotent_draft_and_preserves_human_control(
                 {"input_tokens": 120, "output_tokens": 80, "total_tokens": 200},
             )
 
-    monkeypatch.setattr(
-        "app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient
+    monkeypatch.setattr("app.services.ai_runtime.OpenAIResponsesClient", FakeOpenAIResponsesClient)
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/policy",
+            headers=HEADERS,
+            json={"provider_status": "enabled"},
+        ).status_code
+        == 200
     )
-    assert client.patch(
-        "/api/v1/ai/runtime/policy",
-        headers=HEADERS,
-        json={"provider_status": "enabled"},
-    ).status_code == 200
-    assert client.patch(
-        "/api/v1/ai/runtime/capabilities/lead.next_action",
-        headers=HEADERS,
-        json={"status": "enabled", "model_route": "default"},
-    ).status_code == 200
+    assert (
+        client.patch(
+            "/api/v1/ai/runtime/capabilities/lead.next_action",
+            headers=HEADERS,
+            json={"status": "enabled", "model_route": "default"},
+        ).status_code
+        == 200
+    )
     task_count = int(db_session.scalar(select(func.count()).select_from(Task)) or 0)
-    appointment_count = int(
-        db_session.scalar(select(func.count()).select_from(Appointment)) or 0
-    )
+    appointment_count = int(db_session.scalar(select(func.count()).select_from(Appointment)) or 0)
     communication_count = int(
         db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0
     )

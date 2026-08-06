@@ -217,9 +217,12 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     assert intelligence["facts"]["parcel_id"]["value"] == "14-0001-LL-001"
     assert intelligence["image_source"] == "realestateapi_listing"
     assert intelligence["image_views"] == ["listing"]
-    assert intelligence["market_context"]["provider_property_records"]["realestateapi"][
-        "estimatedEquity"
-    ] == 175_000
+    assert (
+        intelligence["market_context"]["provider_property_records"]["realestateapi"][
+            "estimatedEquity"
+        ]
+        == 175_000
+    )
     assert (
         int(db_session.scalar(select(func.count()).select_from(PropertyIntelligenceSnapshot)) or 0)
         == 1
@@ -229,6 +232,7 @@ def test_saved_snapshot_populates_property_profile_without_provider_call(
     )
     assert research_run is not None
     assert research_run.status == snapshot.status
+    assert research_run.run_metadata is not None
     assert research_run.run_metadata["existing_analysis_backfilled"] is True
     principal = principal_for_user(db_session, owner)
     assert principal.organization_id == lead.organization_id

@@ -80,6 +80,164 @@
   box-shadow: var(--shadow-tight);
 }
 
+.tabs .newAppointmentButton {
+  margin-left: 4px;
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+}
+
+.tabs .newAppointmentButton:hover {
+  background: var(--brand-strong);
+  color: white;
+}
+
+.appointmentComposerBackdrop {
+  position: fixed;
+  z-index: 90;
+  inset: 0;
+  padding: 24px;
+  background: rgb(10 25 19 / 52%);
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+}
+
+.appointmentComposer {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 48px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 22px 60px rgb(14 37 27 / 28%);
+  overflow-y: auto;
+}
+
+.appointmentComposer > header {
+  padding: 20px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.appointmentComposer > header span {
+  color: var(--brand-strong);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.appointmentComposer > header h3 {
+  margin-top: 4px;
+  font-size: 22px;
+}
+
+.appointmentComposer > header p {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.appointmentComposer > header > button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.appointmentComposer form {
+  padding: 22px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.appointmentComposer form > label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.appointmentComposer form > label > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.appointmentComposer input,
+.appointmentComposer select,
+.appointmentComposer textarea {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.appointmentComposer textarea {
+  min-height: 86px;
+  resize: vertical;
+}
+
+.appointmentComposer .composerFullField {
+  grid-column: 1 / -1;
+}
+
+.appointmentComposer footer {
+  padding-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.appointmentComposer footer button,
+.composerEmpty a {
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.appointmentComposer footer button[type="submit"],
+.composerEmpty a {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: white;
+}
+
+.appointmentComposer footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.composerEmpty {
+  padding: 34px 22px;
+  color: var(--muted);
+  display: grid;
+  justify-items: start;
+  gap: 14px;
+}
+
 .notice,
 .error {
   margin: 0;
@@ -755,6 +913,20 @@
   color: var(--muted);
 }
 
+.calendarScheduleButton {
+  min-height: 36px;
+  padding: 0 11px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: white;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .calendarControls select {
   min-height: 34px;
   max-width: 160px;
@@ -816,6 +988,7 @@
 }
 
 .monthDay {
+  position: relative;
   min-width: 0;
   height: 132px;
   padding: 7px;
@@ -823,6 +996,29 @@
   border-bottom: 1px solid var(--line-soft);
   background: var(--surface);
   overflow: hidden;
+}
+
+.emptyDaySchedule {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  height: 25px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.emptyDaySchedule:hover {
+  border-color: var(--line);
+  background: var(--brand-soft);
+  color: var(--brand-strong);
 }
 
 .outsideMonth {
@@ -969,10 +1165,22 @@
   line-height: 1.35;
 }
 
-.noEvents {
+.noEvents,
+.noEventsSchedule {
   padding: 8px 2px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.noEventsSchedule {
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-weight: 800;
 }
 
 .dayAgenda {
@@ -997,6 +1205,21 @@
 
 .dayAgenda > button:hover {
   background: var(--surface-soft);
+}
+
+.dayAgenda > .dayScheduleButton {
+  min-height: 42px;
+  margin-bottom: 10px;
+  padding: 0 12px;
+  border: 1px dashed var(--brand);
+  border-radius: 6px;
+  color: var(--brand-strong);
+  display: inline-flex;
+  grid-template-columns: none;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 850;
 }
 
 .dayAgenda time {
@@ -2995,6 +3218,29 @@
     padding: 0 8px;
   }
 
+  .tabs .newAppointmentButton {
+    order: -1;
+    flex-basis: 100%;
+    margin-left: 0;
+  }
+
+  .appointmentComposerBackdrop {
+    padding: 12px;
+  }
+
+  .appointmentComposer {
+    max-height: calc(100vh - 24px);
+  }
+
+  .appointmentComposer form {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .appointmentComposer .composerFullField {
+    grid-column: 1;
+  }
+
   .leadRows,
   .slotForm,
   .appointmentFields,
@@ -3353,5 +3599,14 @@
   .compactCalendarEvent span,
   .compactCalendarEvent strong {
     display: none;
+  }
+
+  .emptyDaySchedule {
+    top: 3px;
+    right: 3px;
+    width: 22px;
+    padding: 0;
+    justify-content: center;
+    font-size: 0;
   }
 }

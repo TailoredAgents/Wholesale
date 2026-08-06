@@ -548,9 +548,7 @@ def normalize_realestateapi_comparable(
     sale_price = _integer(
         _first(record, "lastSaleAmount", "lastSalePrice", "saleAmount", "salePrice")
     )
-    sale_date = _date_string(
-        _first(record, "lastSaleDate", "saleDate", "recordingDate")
-    )
+    sale_date = _date_string(_first(record, "lastSaleDate", "saleDate", "recordingDate"))
     if sale_price is None or sale_price <= 0 or sale_date is None:
         return None
     address = record.get("address")
@@ -574,9 +572,7 @@ def normalize_realestateapi_comparable(
         "property_type": _property_type(_first(record, "propertyType", "landUse")),
         "bedrooms": _number(record.get("bedrooms")),
         "bathrooms": _number(record.get("bathrooms")),
-        "square_footage": _integer(
-            _first(record, "squareFeet", "livingSquareFeet", "livingArea")
-        ),
+        "square_footage": _integer(_first(record, "squareFeet", "livingSquareFeet", "livingArea")),
         "year_built": _integer(record.get("yearBuilt")),
         "latitude": _number(record.get("latitude") or address_values.get("latitude")),
         "longitude": _number(record.get("longitude") or address_values.get("longitude")),

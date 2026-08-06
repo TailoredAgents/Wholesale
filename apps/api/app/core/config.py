@@ -458,6 +458,10 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="ZAPIER_FACEBOOK_LEADS_ENABLED",
     )
+    zapier_facebook_leads_secret: str | None = Field(
+        default=None,
+        validation_alias="ZAPIER_FACEBOOK_LEADS_SECRET",
+    )
     zapier_facebook_page_id: str | None = Field(
         default=None,
         validation_alias="ZAPIER_FACEBOOK_PAGE_ID",
@@ -467,6 +471,22 @@ class Settings(BaseSettings):
         ge=4096,
         le=1_000_000,
         validation_alias="ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES",
+    )
+    public_intake_rate_limit_enabled: bool = Field(
+        default=False,
+        validation_alias="PUBLIC_INTAKE_RATE_LIMIT_ENABLED",
+    )
+    public_intake_rate_limit_requests: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        validation_alias="PUBLIC_INTAKE_RATE_LIMIT_REQUESTS",
+    )
+    public_intake_rate_limit_window_seconds: int = Field(
+        default=600,
+        ge=60,
+        le=86400,
+        validation_alias="PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS",
     )
     facebook_lead_intake_max_attempts: int = Field(
         default=8,
@@ -858,6 +878,19 @@ class Settings(BaseSettings):
         )
 
     @property
+    def call_intelligence_configuration_blockers(self) -> tuple[str, ...]:
+        blockers = list(self.twilio_voice_configuration_blockers)
+        if not self.twilio_voice_recording_enabled:
+            blockers.append("TWILIO_VOICE_RECORDING_ENABLED=true")
+        if not self.call_transcription_enabled:
+            blockers.append("CALL_TRANSCRIPTION_ENABLED=true")
+        if not self.ai_enabled:
+            blockers.append("AI_ENABLED=true")
+        if not self.openai_api_key:
+            blockers.append("OPENAI_API_KEY")
+        return tuple(dict.fromkeys(blockers))
+
+    @property
     def google_data_manager_conversion_actions(self) -> dict[str, str]:
         if not self.google_data_manager_conversion_actions_raw.strip():
             return {}
@@ -910,6 +943,10 @@ class Settings(BaseSettings):
         blockers: list[str] = []
         if not self.zapier_facebook_leads_enabled:
             blockers.append("ZAPIER_FACEBOOK_LEADS_ENABLED=true")
+        if not self.zapier_facebook_leads_secret:
+            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET")
+        elif len(self.zapier_facebook_leads_secret) < 32:
+            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET must contain at least 32 characters")
         if not self.zapier_facebook_page_id:
             blockers.append("ZAPIER_FACEBOOK_PAGE_ID")
         return tuple(blockers)

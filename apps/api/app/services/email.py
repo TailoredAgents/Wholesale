@@ -262,8 +262,7 @@ def list_email_accounts(db: Session, principal: Principal) -> EmailAccountListRe
     return EmailAccountListResponse(
         items=[email_account_to_read(account, principal) for account in accounts],
         provider_configured=(
-            settings.communication_simulation_enabled
-            or not settings.email_configuration_blockers
+            settings.communication_simulation_enabled or not settings.email_configuration_blockers
         ),
         configuration_blockers=list(settings.email_configuration_blockers),
     )
@@ -503,9 +502,7 @@ def get_email_delivery_provider(
         return GoogleEmailDeliveryProvider(gmail, access_token)
     if provider_name == "resend":
         if alias is None or alias.provider != "resend":
-            raise EmailConfigurationError(
-                "Select an active Stonegate Resend email alias."
-            )
+            raise EmailConfigurationError("Select an active Stonegate Resend email alias.")
         if not settings.resend_api_key:
             raise EmailConfigurationError("Resend outbound delivery is not configured.")
         return ResendEmailDeliveryProvider(
@@ -842,9 +839,7 @@ def send_conversation_email(
             index_message_attachments(db, account, communication, provider_message)
             db.commit()
         except (EmailProviderError, GoogleGmailError):
-            account.last_error = (
-                "Email sent, but attachment metadata will be indexed during sync."
-            )
+            account.last_error = "Email sent, but attachment metadata will be indexed during sync."
             db.commit()
     return EmailSendRead(
         communication_id=communication.id,
@@ -975,9 +970,8 @@ def compose_general_email(
         db,
         organization_id=principal.organization_id,
         contact_id=contact.id,
-        assigned_user_id=alias.owner_user_id or (
-            None if alias.assigned_team_id is not None else principal.user_id
-        ),
+        assigned_user_id=alias.owner_user_id
+        or (None if alias.assigned_team_id is not None else principal.user_id),
         assigned_team_id=alias.assigned_team_id,
         source_alias_id=alias.id,
         visibility_scope=visibility_scope,

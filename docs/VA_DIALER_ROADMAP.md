@@ -245,7 +245,8 @@ conversations.
 
 - Retrieve or link BatchDialer recordings for accepted warm leads when provider access permits.
 - Transcribe accepted calls and run the existing Prospecting and Lead Manager Copilots.
-- Require human approval before AI changes qualification, appointment, or CRM facts.
+- Auto-populate only empty qualification fields from transcript evidence with an audit trail;
+  require human approval for narrative notes, appointments, tasks, and consequential CRM actions.
 - Report calls, contacts, interested sellers, accepted warm leads, appointments, contracts, and
   cost by VA, list, campaign, and cohort.
 - Reconcile BatchDialer seats, numbers, list costs, and VA hours against Stonegate campaign costs.

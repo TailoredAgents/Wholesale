@@ -17,6 +17,7 @@ from app.models.foundation import (
     CloserDispatchProfile,
     CloserTerritoryCoverage,
     Contact,
+    ContactMethod,
     FieldInspection,
     FieldMeetingBrief,
     FieldNegotiationSession,
@@ -192,6 +193,7 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
         )
 
     ready_leads = list_ready_leads(db, principal)
+    schedulable_leads = list_schedulable_leads(db, principal)
     appointments = list_upcoming_appointments(db, principal)
     now = datetime.now(UTC)
     today_count = sum(item.scheduled_start_at.date() == now.date() for item in appointments)
@@ -224,6 +226,7 @@ def get_overview(db: Session, principal: Principal) -> FieldOperationsOverview:
         profiles=[profile_read(db, profile) for profile in profiles],
         territories=territory_reads,
         ready_leads=ready_leads,
+        schedulable_leads=schedulable_leads,
         upcoming_appointments=appointments,
         scorecards=field_scorecards(db, principal, users),
     )
@@ -321,11 +324,57 @@ def list_ready_leads(db: Session, principal: Principal) -> list[DispatchLeadRead
             )
         )
     )
+    return dispatch_lead_reads(db, leads)
+
+
+def list_schedulable_leads(db: Session, principal: Principal) -> list[DispatchLeadRead]:
+    statement = select(Lead).where(
+        Lead.organization_id == principal.organization_id,
+        Lead.archived_at.is_(None),
+    )
+    if not can_manage(principal):
+        statement = statement.where(Lead.assigned_user_id == principal.user_id)
+    leads = list(db.scalars(statement.order_by(Lead.created_at.desc()).limit(200)))
+    return dispatch_lead_reads(db, leads)
+
+
+def dispatch_lead_reads(db: Session, leads: list[Lead]) -> list[DispatchLeadRead]:
+    if not leads:
+        return []
+    contacts = {
+        item.id: item
+        for item in db.scalars(
+            select(Contact).where(Contact.id.in_({lead.contact_id for lead in leads}))
+        )
+    }
+    properties = {
+        item.id: item
+        for item in db.scalars(
+            select(Property).where(Property.id.in_({lead.property_id for lead in leads}))
+        )
+    }
+    owner_ids = {lead.assigned_user_id for lead in leads if lead.assigned_user_id is not None}
+    owners = {item.id: item for item in db.scalars(select(User).where(User.id.in_(owner_ids)))}
+    contact_ids = {lead.contact_id for lead in leads}
+    phone_methods = db.scalars(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == leads[0].organization_id,
+            ContactMethod.contact_id.in_(contact_ids),
+            ContactMethod.method_type == "phone",
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    ).all()
+    phones_by_contact: dict[UUID, ContactMethod] = {}
+    for phone_method in phone_methods:
+        phones_by_contact.setdefault(phone_method.contact_id, phone_method)
+
     result: list[DispatchLeadRead] = []
     for lead in leads:
-        contact = db.get(Contact, lead.contact_id)
-        property_record = db.get(Property, lead.property_id)
-        owner = db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
+        contact = contacts.get(lead.contact_id)
+        property_record = properties.get(lead.property_id)
+        owner = owners.get(lead.assigned_user_id) if lead.assigned_user_id else None
+        phone = phones_by_contact.get(lead.contact_id)
         if property_record is None:
             continue
         result.append(
@@ -336,9 +385,11 @@ def list_ready_leads(db: Session, principal: Principal) -> list[DispatchLeadRead
                     f"{property_record.street_address}, {property_record.city}, "
                     f"{property_record.state} {property_record.postal_code}"
                 ),
+                phone_number=phone.value if phone else None,
                 county=property_record.county,
                 postal_code=property_record.postal_code,
                 stage_key=lead.stage_key,
+                current_owner_user_id=lead.assigned_user_id,
                 current_owner_name=owner.display_name if owner else None,
                 next_follow_up_at=lead.next_follow_up_at,
                 lead_url=f"/os/leads/{lead.id}",

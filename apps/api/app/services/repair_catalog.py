@@ -226,22 +226,16 @@ def evaluate_repair_scope(
         warnings.extend(item_warnings)
 
     saved_versions = {
-        str(item["catalog_version"])
-        for item in normalized_items
-        if item.get("catalog_version")
+        str(item["catalog_version"]) for item in normalized_items if item.get("catalog_version")
     }
-    scenario_version = (
-        next(iter(saved_versions)) if len(saved_versions) == 1 else CATALOG_VERSION
-    )
+    scenario_version = next(iter(saved_versions)) if len(saved_versions) == 1 else CATALOG_VERSION
     if len(saved_versions) > 1:
         warnings.append(
             "Repair items contain multiple catalog versions; review the combined scope."
         )
 
     subtotal_low = sum(int(item["system_low_cents"]) for item in normalized_items)
-    subtotal_expected = sum(
-        int(item["estimated_cost_cents"]) for item in normalized_items
-    )
+    subtotal_expected = sum(int(item["estimated_cost_cents"]) for item in normalized_items)
     subtotal_high = sum(int(item["system_high_cents"]) for item in normalized_items)
     unknown_reserve = sum(
         int(item["estimated_cost_cents"])
@@ -261,12 +255,9 @@ def evaluate_repair_scope(
         "total_expected_cents": round(subtotal_expected * factor),
         "total_high_cents": round(subtotal_high * factor),
         "unknown_reserve_cents": unknown_reserve,
-        "unknown_item_count": sum(
-            item["scope_status"] == "unknown" for item in normalized_items
-        ),
+        "unknown_item_count": sum(item["scope_status"] == "unknown" for item in normalized_items),
         "specialist_item_count": sum(
-            item["scope_status"] == "specialist_review"
-            for item in normalized_items
+            item["scope_status"] == "specialist_review" for item in normalized_items
         ),
         "items": normalized_items,
         "warnings": list(dict.fromkeys(warnings)),
@@ -334,9 +325,7 @@ def evaluate_repair_item(
         if override is not None:
             reason = text(raw_item.get("override_reason"))
             if not reason:
-                raise ValueError(
-                    f"{entry['label']} needs a reason for the manual price override."
-                )
+                raise ValueError(f"{entry['label']} needs a reason for the manual price override.")
             expected = override
             low = min(low, override)
             high = max(high, override)
@@ -421,12 +410,8 @@ def subject_defaults(subject: dict[str, Any]) -> dict[str, float | int | None]:
     return {
         "square_footage": round(square_feet) if square_feet else None,
         "bathrooms": bathrooms,
-        "estimated_roof_squares": (
-            round(square_feet * 1.15 / 100, 1) if square_feet else 20
-        ),
-        "estimated_openings": (
-            max(8, round(square_feet / 150)) if square_feet else 12
-        ),
+        "estimated_roof_squares": (round(square_feet * 1.15 / 100, 1) if square_feet else 20),
+        "estimated_openings": (max(8, round(square_feet / 150)) if square_feet else 12),
     }
 
 

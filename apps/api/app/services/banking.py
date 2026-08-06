@@ -24,10 +24,10 @@ from app.models.foundation import (
 from app.schemas.banking import (
     BankAccountCreate,
     BankAccountRead,
-    BankingWorkspaceRead,
     BankImportPreview,
     BankImportPreviewRow,
     BankImportRequest,
+    BankingWorkspaceRead,
     BankReconciliationCreate,
     BankReconciliationRead,
     BankStatementImportRead,
@@ -127,12 +127,21 @@ def get_banking_workspace(db: Session, principal: Principal) -> BankingWorkspace
     )
     cash_deltas = posted_journal_cash_deltas(db, principal, posted_entries, profile.policy_version)
     return BankingWorkspaceRead(
-        accounts=[bank_account_read(item, unmatched_by_account.get(item.id, 0)) for item in accounts],
+        accounts=[
+            bank_account_read(item, unmatched_by_account.get(item.id, 0)) for item in accounts
+        ],
         imports=[statement_import_read(item) for item in imports],
-        transactions=[transaction_read(item, matches.get(item.id), journals) for item in transactions],
+        transactions=[
+            transaction_read(item, matches.get(item.id), journals) for item in transactions
+        ],
         reconciliations=[reconciliation_read(db, principal, item) for item in reconciliations],
         posted_journals=[
-            {"id": str(entry.id), "entry_number": entry.entry_number, "memo": entry.memo, "cash_delta_cents": cash_deltas.get(entry.id, 0)}
+            {
+                "id": str(entry.id),
+                "entry_number": entry.entry_number,
+                "memo": entry.memo,
+                "cash_delta_cents": cash_deltas.get(entry.id, 0),
+            }
             for entry in posted_entries
             if cash_deltas.get(entry.id, 0)
         ],
@@ -145,7 +154,9 @@ def get_banking_workspace(db: Session, principal: Principal) -> BankingWorkspace
     )
 
 
-def create_bank_account(db: Session, principal: Principal, payload: BankAccountCreate) -> BankAccountRead:
+def create_bank_account(
+    db: Session, principal: Principal, payload: BankAccountCreate
+) -> BankAccountRead:
     profile = ensure_accounting_foundation(db, principal)
     account = BankAccount(
         organization_id=principal.organization_id,
@@ -164,12 +175,26 @@ def create_bank_account(db: Session, principal: Principal, payload: BankAccountC
     except IntegrityError as exc:
         db.rollback()
         raise ValueError("A bank or card account with this name already exists.") from exc
-    add_audit(db, principal, "finance.bank_account_create", "bank_account", account.id, {"name": account.name, "account_type": account.account_type, "last_four": account.last_four}, "Bank account created without credentials or payment authority.")
+    add_audit(
+        db,
+        principal,
+        "finance.bank_account_create",
+        "bank_account",
+        account.id,
+        {
+            "name": account.name,
+            "account_type": account.account_type,
+            "last_four": account.last_four,
+        },
+        "Bank account created without credentials or payment authority.",
+    )
     db.commit()
     return bank_account_read(account, 0)
 
 
-def preview_bank_import(db: Session, principal: Principal, payload: BankImportRequest) -> BankImportPreview:
+def preview_bank_import(
+    db: Session, principal: Principal, payload: BankImportRequest
+) -> BankImportPreview:
     account = scoped_account(db, principal, payload.bank_account_id)
     if account is None or account.status != "active":
         raise ValueError("Select an active bank or card account.")
@@ -187,7 +212,9 @@ def preview_bank_import(db: Session, principal: Principal, payload: BankImportRe
     return import_preview(headers, prepared)
 
 
-def create_bank_import(db: Session, principal: Principal, payload: BankImportRequest) -> BankStatementImportRead:
+def create_bank_import(
+    db: Session, principal: Principal, payload: BankImportRequest
+) -> BankStatementImportRead:
     account = scoped_account(db, principal, payload.bank_account_id)
     if account is None or account.status != "active":
         raise ValueError("Select an active bank or card account.")
@@ -258,48 +285,94 @@ def create_bank_import(db: Session, principal: Principal, payload: BankImportReq
     db.add(statement_import)
     db.flush()
     for item in valid:
-        db.add(BankTransaction(
-            organization_id=principal.organization_id,
-            bank_account_id=account.id,
-            statement_import_id=statement_import.id,
-            row_number=item.row_number,
-            external_id=item.external_id,
-            occurred_on=item.occurred_on,
-            posted_on=item.posted_on,
-            description=item.description,
-            amount_cents=item.amount_cents,
-            balance_cents=item.balance_cents,
-            fingerprint=item.fingerprint,
-            status="unmatched",
-            notes=None,
-        ))
+        db.add(
+            BankTransaction(
+                organization_id=principal.organization_id,
+                bank_account_id=account.id,
+                statement_import_id=statement_import.id,
+                row_number=item.row_number,
+                external_id=item.external_id,
+                occurred_on=item.occurred_on,
+                posted_on=item.posted_on,
+                description=item.description,
+                amount_cents=item.amount_cents,
+                balance_cents=item.balance_cents,
+                fingerprint=item.fingerprint,
+                status="unmatched",
+                notes=None,
+            )
+        )
     statement_import.imported_rows = len(valid)
     statement_import.status = "complete"
     statement_import.completed_at = now
-    add_audit(db, principal, "finance.bank_statement_import", "bank_statement_import", statement_import.id, {"bank_account_id": str(account.id), "file_name": statement_import.file_name, "imported_rows": len(valid), "invalid_rows": statement_import.invalid_rows, "duplicate_rows": statement_import.duplicate_rows}, "Private bank statement imported after row-level validation.")
+    add_audit(
+        db,
+        principal,
+        "finance.bank_statement_import",
+        "bank_statement_import",
+        statement_import.id,
+        {
+            "bank_account_id": str(account.id),
+            "file_name": statement_import.file_name,
+            "imported_rows": len(valid),
+            "invalid_rows": statement_import.invalid_rows,
+            "duplicate_rows": statement_import.duplicate_rows,
+        },
+        "Private bank statement imported after row-level validation.",
+    )
     db.commit()
     return statement_import_read(statement_import)
 
 
-def match_bank_transaction(db: Session, principal: Principal, transaction_id: UUID, payload: BankTransactionMatchCreate) -> BankTransactionRead | None:
+def match_bank_transaction(
+    db: Session, principal: Principal, transaction_id: UUID, payload: BankTransactionMatchCreate
+) -> BankTransactionRead | None:
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
     if transaction.status == "reconciled":
         raise ValueError("A reconciled transaction cannot be rematched.")
-    entry = db.scalar(select(JournalEntry).where(JournalEntry.organization_id == principal.organization_id, JournalEntry.id == payload.journal_entry_id, JournalEntry.status == "posted"))
+    entry = db.scalar(
+        select(JournalEntry).where(
+            JournalEntry.organization_id == principal.organization_id,
+            JournalEntry.id == payload.journal_entry_id,
+            JournalEntry.status == "posted",
+        )
+    )
     if entry is None:
         raise ValueError("Select a posted journal entry.")
     profile = ensure_accounting_foundation(db, principal)
-    delta = posted_journal_cash_deltas(db, principal, [entry], profile.policy_version).get(entry.id, 0)
+    delta = posted_journal_cash_deltas(db, principal, [entry], profile.policy_version).get(
+        entry.id, 0
+    )
     if delta != transaction.amount_cents:
-        raise ValueError("The bank transaction amount must equal the journal's operating-cash movement.")
-    used = db.scalar(select(BankTransactionMatch.id).where(BankTransactionMatch.organization_id == principal.organization_id, BankTransactionMatch.journal_entry_id == entry.id, BankTransactionMatch.bank_transaction_id != transaction.id))
+        raise ValueError(
+            "The bank transaction amount must equal the journal's operating-cash movement."
+        )
+    used = db.scalar(
+        select(BankTransactionMatch.id).where(
+            BankTransactionMatch.organization_id == principal.organization_id,
+            BankTransactionMatch.journal_entry_id == entry.id,
+            BankTransactionMatch.bank_transaction_id != transaction.id,
+        )
+    )
     if used is not None:
         raise ValueError("This posted journal is already matched to another bank transaction.")
-    match = db.scalar(select(BankTransactionMatch).where(BankTransactionMatch.bank_transaction_id == transaction.id))
+    match = db.scalar(
+        select(BankTransactionMatch).where(
+            BankTransactionMatch.bank_transaction_id == transaction.id
+        )
+    )
     if match is None:
-        match = BankTransactionMatch(organization_id=principal.organization_id, bank_transaction_id=transaction.id, journal_entry_id=entry.id, match_type="manual_exact", matched_by_user_id=principal.user_id, notes=clean(payload.notes), matched_at=datetime.now(UTC))
+        match = BankTransactionMatch(
+            organization_id=principal.organization_id,
+            bank_transaction_id=transaction.id,
+            journal_entry_id=entry.id,
+            match_type="manual_exact",
+            matched_by_user_id=principal.user_id,
+            notes=clean(payload.notes),
+            matched_at=datetime.now(UTC),
+        )
         db.add(match)
     else:
         match.journal_entry_id = entry.id
@@ -307,29 +380,53 @@ def match_bank_transaction(db: Session, principal: Principal, transaction_id: UU
         match.notes = clean(payload.notes)
         match.matched_at = datetime.now(UTC)
     transaction.status = "matched"
-    add_audit(db, principal, "finance.bank_transaction_match", "bank_transaction", transaction.id, {"journal_entry_id": str(entry.id), "amount_cents": transaction.amount_cents}, "Bank transaction manually matched to a posted journal.")
+    add_audit(
+        db,
+        principal,
+        "finance.bank_transaction_match",
+        "bank_transaction",
+        transaction.id,
+        {"journal_entry_id": str(entry.id), "amount_cents": transaction.amount_cents},
+        "Bank transaction manually matched to a posted journal.",
+    )
     db.commit()
     return transaction_read(transaction, match, {entry.id: entry})
 
 
-def update_bank_transaction_status(db: Session, principal: Principal, transaction_id: UUID, payload: BankTransactionStatusUpdate) -> BankTransactionRead | None:
+def update_bank_transaction_status(
+    db: Session, principal: Principal, transaction_id: UUID, payload: BankTransactionStatusUpdate
+) -> BankTransactionRead | None:
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
     if transaction.status == "reconciled":
         raise ValueError("A reconciled transaction cannot be changed.")
     if payload.status == "unmatched":
-        match = db.scalar(select(BankTransactionMatch).where(BankTransactionMatch.bank_transaction_id == transaction.id))
+        match = db.scalar(
+            select(BankTransactionMatch).where(
+                BankTransactionMatch.bank_transaction_id == transaction.id
+            )
+        )
         if match is not None:
             db.delete(match)
     transaction.status = payload.status
     transaction.notes = clean(payload.notes)
-    add_audit(db, principal, "finance.bank_transaction_status", "bank_transaction", transaction.id, {"status": payload.status}, "Bank transaction status updated.")
+    add_audit(
+        db,
+        principal,
+        "finance.bank_transaction_status",
+        "bank_transaction",
+        transaction.id,
+        {"status": payload.status},
+        "Bank transaction status updated.",
+    )
     db.commit()
     return transaction_read(transaction, None, {})
 
 
-def create_reconciliation(db: Session, principal: Principal, payload: BankReconciliationCreate) -> BankReconciliationRead:
+def create_reconciliation(
+    db: Session, principal: Principal, payload: BankReconciliationCreate
+) -> BankReconciliationRead:
     account = scoped_account(db, principal, payload.bank_account_id)
     if account is None:
         raise ValueError("Bank account not found.")
@@ -337,11 +434,26 @@ def create_reconciliation(db: Session, principal: Principal, payload: BankReconc
         raise ValueError("Statement end date cannot be before the statement start date.")
     statement_import = None
     if payload.statement_import_id:
-        statement_import = db.scalar(select(BankStatementImport).where(BankStatementImport.organization_id == principal.organization_id, BankStatementImport.id == payload.statement_import_id, BankStatementImport.bank_account_id == account.id))
+        statement_import = db.scalar(
+            select(BankStatementImport).where(
+                BankStatementImport.organization_id == principal.organization_id,
+                BankStatementImport.id == payload.statement_import_id,
+                BankStatementImport.bank_account_id == account.id,
+            )
+        )
         if statement_import is None:
             raise ValueError("Select a statement import from this account.")
-    rows = reconciliation_rows(db, principal, account.id, payload.statement_start_on, payload.statement_end_on, statement_import.id if statement_import else None)
-    difference = payload.closing_balance_cents - (payload.opening_balance_cents + sum(item.amount_cents for item in rows))
+    rows = reconciliation_rows(
+        db,
+        principal,
+        account.id,
+        payload.statement_start_on,
+        payload.statement_end_on,
+        statement_import.id if statement_import else None,
+    )
+    difference = payload.closing_balance_cents - (
+        payload.opening_balance_cents + sum(item.amount_cents for item in rows)
+    )
     unresolved = sum(item.status == "unmatched" for item in rows)
     reconciliation = BankReconciliation(
         organization_id=principal.organization_id,
@@ -364,23 +476,51 @@ def create_reconciliation(db: Session, principal: Principal, payload: BankReconc
         db.flush()
     except IntegrityError as exc:
         db.rollback()
-        raise ValueError("A reconciliation already exists for this account and statement end date.") from exc
-    add_audit(db, principal, "finance.bank_reconciliation_prepare", "bank_reconciliation", reconciliation.id, {"difference_cents": difference, "unresolved_transactions": unresolved}, "Bank reconciliation prepared for review.")
+        raise ValueError(
+            "A reconciliation already exists for this account and statement end date."
+        ) from exc
+    add_audit(
+        db,
+        principal,
+        "finance.bank_reconciliation_prepare",
+        "bank_reconciliation",
+        reconciliation.id,
+        {"difference_cents": difference, "unresolved_transactions": unresolved},
+        "Bank reconciliation prepared for review.",
+    )
     db.commit()
     return reconciliation_read(db, principal, reconciliation)
 
 
-def approve_reconciliation(db: Session, principal: Principal, reconciliation_id: UUID) -> BankReconciliationRead | None:
-    reconciliation = db.scalar(select(BankReconciliation).where(BankReconciliation.organization_id == principal.organization_id, BankReconciliation.id == reconciliation_id))
+def approve_reconciliation(
+    db: Session, principal: Principal, reconciliation_id: UUID
+) -> BankReconciliationRead | None:
+    reconciliation = db.scalar(
+        select(BankReconciliation).where(
+            BankReconciliation.organization_id == principal.organization_id,
+            BankReconciliation.id == reconciliation_id,
+        )
+    )
     if reconciliation is None:
         return None
     if reconciliation.status == "approved":
         return reconciliation_read(db, principal, reconciliation)
-    rows = reconciliation_rows(db, principal, reconciliation.bank_account_id, reconciliation.statement_start_on, reconciliation.statement_end_on, reconciliation.statement_import_id)
+    rows = reconciliation_rows(
+        db,
+        principal,
+        reconciliation.bank_account_id,
+        reconciliation.statement_start_on,
+        reconciliation.statement_end_on,
+        reconciliation.statement_import_id,
+    )
     unresolved = [item for item in rows if item.status == "unmatched"]
-    difference = reconciliation.closing_balance_cents - (reconciliation.opening_balance_cents + sum(item.amount_cents for item in rows))
+    difference = reconciliation.closing_balance_cents - (
+        reconciliation.opening_balance_cents + sum(item.amount_cents for item in rows)
+    )
     if difference != 0 or unresolved:
-        raise ValueError("Resolve every statement transaction and the balance difference before approval.")
+        raise ValueError(
+            "Resolve every statement transaction and the balance difference before approval."
+        )
     reconciliation.calculated_closing_balance_cents = reconciliation.closing_balance_cents
     reconciliation.difference_cents = 0
     reconciliation.status = "approved"
@@ -389,7 +529,18 @@ def approve_reconciliation(db: Session, principal: Principal, reconciliation_id:
     for item in rows:
         if item.status == "matched":
             item.status = "reconciled"
-    add_audit(db, principal, "finance.bank_reconciliation_approve", "bank_reconciliation", reconciliation.id, {"statement_end_on": reconciliation.statement_end_on.isoformat(), "transaction_count": len(rows)}, "Balanced bank reconciliation approved.")
+    add_audit(
+        db,
+        principal,
+        "finance.bank_reconciliation_approve",
+        "bank_reconciliation",
+        reconciliation.id,
+        {
+            "statement_end_on": reconciliation.statement_end_on.isoformat(),
+            "transaction_count": len(rows),
+        },
+        "Balanced bank reconciliation approved.",
+    )
     db.commit()
     return reconciliation_read(db, principal, reconciliation)
 
@@ -408,7 +559,11 @@ def parse_csv(content: str) -> tuple[list[str], list[dict[str, str]]]:
         raise ValueError("CSV column names must be unique.")
     rows = []
     for row in reader:
-        cleaned_row = {str(key).strip(): str(value or "").strip() for key, value in row.items() if key is not None}
+        cleaned_row = {
+            str(key).strip(): str(value or "").strip()
+            for key, value in row.items()
+            if key is not None
+        }
         if any(cleaned_row.values()):
             rows.append(cleaned_row)
         if len(rows) > MAX_BANK_IMPORT_ROWS:
@@ -426,7 +581,9 @@ def validate_mapping_headers(headers: list[str], mapping: dict[str, str]) -> Non
         raise ValueError("Map both debit and credit columns, or map one signed amount column.")
 
 
-def prepare_rows(rows: list[dict[str, str]], mapping: dict[str, str], existing: set[str]) -> list[PreparedBankRow]:
+def prepare_rows(
+    rows: list[dict[str, str]], mapping: dict[str, str], existing: set[str]
+) -> list[PreparedBankRow]:
     seen: set[str] = set()
     prepared = []
     for row_number, raw in enumerate(rows, start=2):
@@ -451,18 +608,53 @@ def prepare_rows(rows: list[dict[str, str]], mapping: dict[str, str], existing: 
         external_id = clean(raw.get(mapping["external_id"])) if "external_id" in mapping else None
         fingerprint = None
         if occurred_on and description and amount is not None:
-            fingerprint = sha256(f"{external_id or ''}|{occurred_on.isoformat()}|{description.lower()}|{amount}".encode()).hexdigest()
+            fingerprint_source = (
+                f"{external_id or ''}|{occurred_on.isoformat()}|{description.lower()}|{amount}"
+            )
+            fingerprint = sha256(fingerprint_source.encode()).hexdigest()
         status = "invalid" if errors else "valid"
         if status == "valid" and fingerprint in existing | seen:
             status = "duplicate"
         if fingerprint:
             seen.add(fingerprint)
-        prepared.append(PreparedBankRow(row_number, occurred_on, None, description, amount, balance, external_id, fingerprint, status, errors))
+        prepared.append(
+            PreparedBankRow(
+                row_number,
+                occurred_on,
+                None,
+                description,
+                amount,
+                balance,
+                external_id,
+                fingerprint,
+                status,
+                errors,
+            )
+        )
     return prepared
 
 
 def import_preview(headers: list[str], rows: list[PreparedBankRow]) -> BankImportPreview:
-    return BankImportPreview(headers=headers, total_rows=len(rows), valid_rows=sum(item.status == "valid" for item in rows), invalid_rows=sum(item.status == "invalid" for item in rows), duplicate_rows=sum(item.status == "duplicate" for item in rows), can_import=any(item.status == "valid" for item in rows), rows=[BankImportPreviewRow(row_number=item.row_number, status=item.status, occurred_on=item.occurred_on, description=item.description, amount_cents=item.amount_cents, balance_cents=item.balance_cents, validation_errors=item.validation_errors) for item in rows[:100]])
+    return BankImportPreview(
+        headers=headers,
+        total_rows=len(rows),
+        valid_rows=sum(item.status == "valid" for item in rows),
+        invalid_rows=sum(item.status == "invalid" for item in rows),
+        duplicate_rows=sum(item.status == "duplicate" for item in rows),
+        can_import=any(item.status == "valid" for item in rows),
+        rows=[
+            BankImportPreviewRow(
+                row_number=item.row_number,
+                status=item.status,
+                occurred_on=item.occurred_on,
+                description=item.description,
+                amount_cents=item.amount_cents,
+                balance_cents=item.balance_cents,
+                validation_errors=item.validation_errors,
+            )
+            for item in rows[:100]
+        ],
+    )
 
 
 def parse_date(value: str | None) -> date | None:
@@ -491,54 +683,179 @@ def parse_amount(value: str | None) -> int | None:
 
 
 def scoped_account(db: Session, principal: Principal, account_id: UUID) -> BankAccount | None:
-    return db.scalar(select(BankAccount).where(BankAccount.organization_id == principal.organization_id, BankAccount.id == account_id))
+    return db.scalar(
+        select(BankAccount).where(
+            BankAccount.organization_id == principal.organization_id, BankAccount.id == account_id
+        )
+    )
 
 
-def scoped_transaction(db: Session, principal: Principal, transaction_id: UUID) -> BankTransaction | None:
-    return db.scalar(select(BankTransaction).where(BankTransaction.organization_id == principal.organization_id, BankTransaction.id == transaction_id))
+def scoped_transaction(
+    db: Session, principal: Principal, transaction_id: UUID
+) -> BankTransaction | None:
+    return db.scalar(
+        select(BankTransaction).where(
+            BankTransaction.organization_id == principal.organization_id,
+            BankTransaction.id == transaction_id,
+        )
+    )
 
 
-def reconciliation_rows(db: Session, principal: Principal, account_id: UUID, start: date, end: date, import_id: UUID | None) -> list[BankTransaction]:
-    query = select(BankTransaction).where(BankTransaction.organization_id == principal.organization_id, BankTransaction.bank_account_id == account_id)
+def reconciliation_rows(
+    db: Session,
+    principal: Principal,
+    account_id: UUID,
+    start: date,
+    end: date,
+    import_id: UUID | None,
+) -> list[BankTransaction]:
+    query = select(BankTransaction).where(
+        BankTransaction.organization_id == principal.organization_id,
+        BankTransaction.bank_account_id == account_id,
+    )
     if import_id:
         query = query.where(BankTransaction.statement_import_id == import_id)
     else:
-        query = query.where(BankTransaction.occurred_on >= start, BankTransaction.occurred_on <= end)
+        query = query.where(
+            BankTransaction.occurred_on >= start, BankTransaction.occurred_on <= end
+        )
     return list(db.scalars(query).all())
 
 
-def posted_journal_cash_deltas(db: Session, principal: Principal, entries: list[JournalEntry], policy_version: int) -> dict[UUID, int]:
+def posted_journal_cash_deltas(
+    db: Session, principal: Principal, entries: list[JournalEntry], policy_version: int
+) -> dict[UUID, int]:
     if not entries:
         return {}
-    cash_account = db.scalar(select(AccountingAccount).where(AccountingAccount.organization_id == principal.organization_id, AccountingAccount.policy_version == policy_version, AccountingAccount.system_key == "operating_cash", AccountingAccount.is_active.is_(True)))
+    cash_account = db.scalar(
+        select(AccountingAccount).where(
+            AccountingAccount.organization_id == principal.organization_id,
+            AccountingAccount.policy_version == policy_version,
+            AccountingAccount.system_key == "operating_cash",
+            AccountingAccount.is_active.is_(True),
+        )
+    )
     if cash_account is None:
         return {}
     totals: dict[UUID, int] = {}
-    for line in db.scalars(select(JournalLine).where(JournalLine.journal_entry_id.in_({entry.id for entry in entries}), JournalLine.accounting_account_id == cash_account.id)).all():
-        totals[line.journal_entry_id] = totals.get(line.journal_entry_id, 0) + line.debit_cents - line.credit_cents
+    for line in db.scalars(
+        select(JournalLine).where(
+            JournalLine.journal_entry_id.in_({entry.id for entry in entries}),
+            JournalLine.accounting_account_id == cash_account.id,
+        )
+    ).all():
+        totals[line.journal_entry_id] = (
+            totals.get(line.journal_entry_id, 0) + line.debit_cents - line.credit_cents
+        )
     return totals
 
 
 def bank_account_read(item: BankAccount, unmatched: int) -> BankAccountRead:
-    return BankAccountRead(id=item.id, name=item.name, institution_name=item.institution_name, account_type=item.account_type, last_four=item.last_four, currency=item.currency, status=item.status, notes=item.notes, unmatched_transaction_count=unmatched, created_at=item.created_at)
+    return BankAccountRead(
+        id=item.id,
+        name=item.name,
+        institution_name=item.institution_name,
+        account_type=item.account_type,
+        last_four=item.last_four,
+        currency=item.currency,
+        status=item.status,
+        notes=item.notes,
+        unmatched_transaction_count=unmatched,
+        created_at=item.created_at,
+    )
 
 
 def statement_import_read(item: BankStatementImport) -> BankStatementImportRead:
-    return BankStatementImportRead(id=item.id, bank_account_id=item.bank_account_id, file_name=item.file_name, status=item.status, total_rows=item.total_rows, imported_rows=item.imported_rows, invalid_rows=item.invalid_rows, duplicate_rows=item.duplicate_rows, statement_start_on=item.statement_start_on, statement_end_on=item.statement_end_on, opening_balance_cents=item.opening_balance_cents, closing_balance_cents=item.closing_balance_cents, malware_scan_status=item.malware_scan_status, completed_at=item.completed_at, created_at=item.created_at)
+    return BankStatementImportRead(
+        id=item.id,
+        bank_account_id=item.bank_account_id,
+        file_name=item.file_name,
+        status=item.status,
+        total_rows=item.total_rows,
+        imported_rows=item.imported_rows,
+        invalid_rows=item.invalid_rows,
+        duplicate_rows=item.duplicate_rows,
+        statement_start_on=item.statement_start_on,
+        statement_end_on=item.statement_end_on,
+        opening_balance_cents=item.opening_balance_cents,
+        closing_balance_cents=item.closing_balance_cents,
+        malware_scan_status=item.malware_scan_status,
+        completed_at=item.completed_at,
+        created_at=item.created_at,
+    )
 
 
-def transaction_read(item: BankTransaction, match: BankTransactionMatch | None, journals: dict[UUID, JournalEntry]) -> BankTransactionRead:
+def transaction_read(
+    item: BankTransaction, match: BankTransactionMatch | None, journals: dict[UUID, JournalEntry]
+) -> BankTransactionRead:
     entry = journals.get(match.journal_entry_id) if match else None
-    return BankTransactionRead(id=item.id, bank_account_id=item.bank_account_id, statement_import_id=item.statement_import_id, occurred_on=item.occurred_on, posted_on=item.posted_on, description=item.description, amount_cents=item.amount_cents, balance_cents=item.balance_cents, status=item.status, journal_entry_id=entry.id if entry else None, journal_entry_number=entry.entry_number if entry else None, notes=item.notes)
+    return BankTransactionRead(
+        id=item.id,
+        bank_account_id=item.bank_account_id,
+        statement_import_id=item.statement_import_id,
+        occurred_on=item.occurred_on,
+        posted_on=item.posted_on,
+        description=item.description,
+        amount_cents=item.amount_cents,
+        balance_cents=item.balance_cents,
+        status=item.status,
+        journal_entry_id=entry.id if entry else None,
+        journal_entry_number=entry.entry_number if entry else None,
+        notes=item.notes,
+    )
 
 
-def reconciliation_read(db: Session, principal: Principal, item: BankReconciliation) -> BankReconciliationRead:
-    rows = reconciliation_rows(db, principal, item.bank_account_id, item.statement_start_on, item.statement_end_on, item.statement_import_id)
-    return BankReconciliationRead(id=item.id, bank_account_id=item.bank_account_id, statement_import_id=item.statement_import_id, statement_start_on=item.statement_start_on, statement_end_on=item.statement_end_on, opening_balance_cents=item.opening_balance_cents, closing_balance_cents=item.closing_balance_cents, calculated_closing_balance_cents=item.calculated_closing_balance_cents, difference_cents=item.difference_cents, status=item.status, matched_transaction_count=sum(row.status in {"matched", "reconciled"} for row in rows), unresolved_transaction_count=sum(row.status == "unmatched" for row in rows), approved_at=item.approved_at, notes=item.notes)
+def reconciliation_read(
+    db: Session, principal: Principal, item: BankReconciliation
+) -> BankReconciliationRead:
+    rows = reconciliation_rows(
+        db,
+        principal,
+        item.bank_account_id,
+        item.statement_start_on,
+        item.statement_end_on,
+        item.statement_import_id,
+    )
+    return BankReconciliationRead(
+        id=item.id,
+        bank_account_id=item.bank_account_id,
+        statement_import_id=item.statement_import_id,
+        statement_start_on=item.statement_start_on,
+        statement_end_on=item.statement_end_on,
+        opening_balance_cents=item.opening_balance_cents,
+        closing_balance_cents=item.closing_balance_cents,
+        calculated_closing_balance_cents=item.calculated_closing_balance_cents,
+        difference_cents=item.difference_cents,
+        status=item.status,
+        matched_transaction_count=sum(row.status in {"matched", "reconciled"} for row in rows),
+        unresolved_transaction_count=sum(row.status == "unmatched" for row in rows),
+        approved_at=item.approved_at,
+        notes=item.notes,
+    )
 
 
-def add_audit(db: Session, principal: Principal, action: str, entity_type: str, entity_id: UUID, new: dict[str, object], reason: str) -> None:
-    db.add(AuditEvent(organization_id=principal.organization_id, actor_user_id=principal.user_id, actor_type="user", action=action, entity_type=entity_type, entity_id=entity_id, previous_value=None, new_value=new, reason=reason))
+def add_audit(
+    db: Session,
+    principal: Principal,
+    action: str,
+    entity_type: str,
+    entity_id: UUID,
+    new: dict[str, object],
+    reason: str,
+) -> None:
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            previous_value=None,
+            new_value=new,
+            reason=reason,
+        )
+    )
 
 
 def clean(value: str | None) -> str | None:

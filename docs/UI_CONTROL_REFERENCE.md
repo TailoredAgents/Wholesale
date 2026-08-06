@@ -258,6 +258,7 @@ buttons. The originating workspace remains authoritative for that decision.
 | --- | --- | --- |
 | Schedule status | Shows today's appointments, leads ready to schedule, unassigned meetings, and capacity exceptions | Read-only summary |
 | Schedule / Dispatch / Appointment / Availability | Switches Calendar work without changing appointment records | Availability requires management authority |
+| **Schedule appointment** | Opens the central seller appointment form from any Calendar view | Requires an accessible active lead |
 | Upcoming appointment / **Prepare** | Opens that appointment workspace in one action | Requires an appointment |
 | Previous arrow | Moves back one month, week, day, or 30-day agenda period | Filter only |
 | **Today** | Returns the cursor to today | Filter only |
@@ -265,6 +266,7 @@ buttons. The originating workspace remains authoritative for that decision.
 | All closers | Filters calendar by closer | Visible to users with management authority |
 | Month / Week / Day / Agenda | Changes calendar display without changing appointments | Filter only |
 | Month day number | Opens that date in Day view | Navigation within calendar |
+| Empty day **Schedule** | Opens the central appointment form with that date prefilled | Seller and exact time remain editable |
 | `+N more` | Opens a crowded month date in Day view | Appears after more than three appointments |
 | Week day heading | Opens that date in Day view | Week mode only |
 | Appointment event | Opens Calendar appointment mode | Requires a selected appointment |
@@ -728,16 +730,16 @@ history into separate channel threads.
 | --- | --- | --- |
 | **Generate AI notes** | Produces a transcript-grounded draft | Requires a completed transcript and enabled Call Intelligence capability |
 | Summary | Drafts the overall call result | Human review required |
-| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details | Human review required |
+| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the draft |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
 | Mortgage and title | Extracts possible debt or ownership concerns | Must be verified by staff |
 | Repairs / Objections / Commitments | Structures operational follow-up context | Human review required |
 | Next action / Follow-up date | Proposes the next task | Does not create a task unless selected |
 | Supporting timestamps | Opens the transcript evidence behind an extracted item | Requires diarized transcript evidence |
-| Fill empty lead fields | Allows approved notes to populate only blank CRM fields | Existing values remain unchanged |
+| Review auto-filled CRM fields | Corrects transcript-populated CRM values during note review | Existing staff-entered values remain unchanged |
 | Create follow-up task | Creates the reviewed proposed task | Optional approval choice |
 | **Approve** | Saves the reviewed notes and selected low-risk updates | Requires review permission |
-| **Reject** | Records that the AI draft should not be used | Does not alter CRM fields |
+| **Reject** | Records that the full AI narrative should not be used | Auto-filled factual fields remain editable on the lead |
 
 ### Email Administration
 
@@ -833,6 +835,7 @@ Calendar has **Schedule**, **Dispatch**, **Appointment**, and **Availability** v
 | Control or item | Purpose and effect | Availability |
 | --- | --- | --- |
 | Field calendar view | Shows closer appointments and availability | Calendar access |
+| Central appointment form | Creates phone, property, video, office, or other seller meetings and can assign an eligible team member | Phone and property locations prefill from the lead |
 | Closer filter | Limits visible events to a closer | Manager sees team; closer sees permitted records |
 | Meeting row | Opens the appointment workspace | Requires appointment and lead access |
 | Status and outcome | Shows scheduled, completed, canceled, or no-show state | Read-only until updated in meeting workflow |
@@ -1138,7 +1141,7 @@ appraisal or permission to promise a seller a price.
 | Verified sale/outcome input | Records known closing evidence for calibration | Must come from reliable evidence |
 | Analysis version history | Opens prior valuation snapshots | Read-only |
 
-## Reviews And Approvals In Tasks
+## Approvals In Tasks
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |

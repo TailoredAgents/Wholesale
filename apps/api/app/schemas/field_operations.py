@@ -94,9 +94,11 @@ class DispatchLeadRead(BaseModel):
     id: UUID
     seller_name: str
     property_address: str
+    phone_number: str | None
     county: str | None
     postal_code: str
     stage_key: str
+    current_owner_user_id: UUID | None
     current_owner_name: str | None
     next_follow_up_at: datetime | None
     lead_url: str
@@ -209,6 +211,7 @@ class FieldOperationsOverview(BaseModel):
     profiles: list[CloserProfileRead]
     territories: list[DispatchTerritoryRead]
     ready_leads: list[DispatchLeadRead]
+    schedulable_leads: list[DispatchLeadRead]
     upcoming_appointments: list[DispatchAppointmentRead]
     scorecards: list[FieldCloserScorecardRead]
 
@@ -286,9 +289,7 @@ class AcquisitionsFollowUpOutput(BaseModel):
 
 class AcquisitionsRepairScopeSuggestion(BaseModel):
     category: RepairCategory
-    scope_status: Literal[
-        "unknown", "no_work", "repair", "replace", "specialist_review"
-    ]
+    scope_status: Literal["unknown", "no_work", "repair", "replace", "specialist_review"]
     severity: Literal["minor", "standard", "extensive"]
     quantity: float | None = Field(default=None, gt=0, le=100_000)
     rationale: str = Field(max_length=1000)

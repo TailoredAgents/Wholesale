@@ -127,19 +127,14 @@ def test_posted_ledger_reports_and_cpa_export(
     assert response.status_code == 200
     reports = response.json()
     assert reports["profit_and_loss"]["revenue"]["total_cents"] == 2_500_000
-    assert (
-        reports["profit_and_loss"]["operating_expenses"]["total_cents"] == 500_000
-    )
+    assert reports["profit_and_loss"]["operating_expenses"]["total_cents"] == 500_000
     assert reports["profit_and_loss"]["net_income_cents"] == 2_000_000
     assert reports["cash_flow"]["operating_cents"] == 2_000_000
     assert reports["cash_flow"]["financing_cents"] == -100_000
     assert reports["cash_flow"]["net_change_cents"] == 1_900_000
     assert reports["balance_sheet"]["total_assets_cents"] == 1_900_000
     assert reports["balance_sheet"]["equity"]["total_cents"] == -100_000
-    assert (
-        reports["balance_sheet"]["total_liabilities_and_equity_cents"]
-        == 1_900_000
-    )
+    assert reports["balance_sheet"]["total_liabilities_and_equity_cents"] == 1_900_000
     assert reports["balance_sheet"]["balanced"] is True
     assert reports["trial_balance"]["total_debits_cents"] == 2_500_000
     assert reports["trial_balance"]["total_credits_cents"] == 2_500_000
@@ -149,10 +144,7 @@ def test_posted_ledger_reports_and_cpa_export(
     assert reports["close_readiness"]["blocking_count"] == 1
 
     archive_response = client.get(
-        (
-            "/api/v1/finance/accounting/reports/cpa-export"
-            f"?start_on={start_on}&end_on={end_on}"
-        ),
+        (f"/api/v1/finance/accounting/reports/cpa-export?start_on={start_on}&end_on={end_on}"),
         headers=headers,
     )
     assert archive_response.status_code == 200
@@ -170,9 +162,7 @@ def test_posted_ledger_reports_and_cpa_export(
             "receivables.csv",
             "trial-balance.csv",
         }
-        assert "Collected assignment fee." in archive.read(
-            "general-ledger.csv"
-        ).decode()
+        assert "Collected assignment fee." in archive.read("general-ledger.csv").decode()
 
 
 def test_accounting_reports_reject_reversed_date_range(
@@ -186,6 +176,4 @@ def test_accounting_reports_reject_reversed_date_range(
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
     assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Report end date cannot be before its start date."
-    )
+    assert response.json()["detail"] == ("Report end date cannot be before its start date.")

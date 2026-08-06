@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 ValidationScenario = Literal[
     "dense_market",
     "suburban",
@@ -27,9 +26,7 @@ class CalibrationCaseUpsert(BaseModel):
     evidence_date: datetime
     benchmark_arv_cents: int = Field(ge=1, le=1_000_000_000)
     actual_rehab_cents: int | None = Field(default=None, ge=0, le=1_000_000_000)
-    actual_seller_contract_cents: int | None = Field(
-        default=None, ge=0, le=1_000_000_000
-    )
+    actual_seller_contract_cents: int | None = Field(default=None, ge=0, le=1_000_000_000)
     actual_disposition_cents: int | None = Field(default=None, ge=0, le=1_000_000_000)
     evidence_reference: str | None = Field(default=None, max_length=500)
     notes: str | None = Field(default=None, max_length=2000)
@@ -203,9 +200,7 @@ class CalibrationDecisionCreate(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     rationale: str = Field(min_length=10, max_length=3000)
     proposed_methodology_version: str | None = Field(default=None, max_length=80)
-    proposed_changes: dict[str, str | int | float | bool | None] = Field(
-        default_factory=dict
-    )
+    proposed_changes: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
 
 
 class CalibrationDecisionAction(BaseModel):

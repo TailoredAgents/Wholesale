@@ -24,8 +24,7 @@ def test_property_detail_requests_exact_match_and_standard_comps() -> None:
         assert request.url.path == "/v2/PropertyDetail"
         assert request.headers["x-api-key"] == "re_test_secret"
         assert request.content == (
-            b'{"address":"123 Main St, Atlanta, GA 30303",'
-            b'"exact_match":true,"comps":true}'
+            b'{"address":"123 Main St, Atlanta, GA 30303","exact_match":true,"comps":true}'
         )
         return httpx.Response(
             200,
@@ -72,17 +71,13 @@ def test_property_detail_errors_do_not_expose_api_key() -> None:
         httpx.Client(transport=transport) as client,
         pytest.raises(RealEstateAPIError, match="HTTP 401") as caught,
     ):
-        RealEstateAPIClient(_settings(), client=client).get_property_detail(
-            address="123 Main St"
-        )
+        RealEstateAPIClient(_settings(), client=client).get_property_detail(address="123 Main St")
     assert "re_test_secret" not in str(caught.value)
 
 
 def test_listing_image_requires_the_documented_https_cdn() -> None:
     valid = "https://imagecdn.realty.dev/mls_photos/123/1.jpg"
-    assert realestateapi_primary_image_url(
-        {"media": {"primaryListingImageUrl": valid}}
-    ) == valid
+    assert realestateapi_primary_image_url({"media": {"primaryListingImageUrl": valid}}) == valid
     assert is_realestateapi_image_url(valid) is True
     assert is_realestateapi_image_url("http://imagecdn.realty.dev/1.jpg") is False
     assert is_realestateapi_image_url("https://example.com/1.jpg") is False

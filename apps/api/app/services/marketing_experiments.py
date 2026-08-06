@@ -57,13 +57,9 @@ def list_marketing_experiments(
         )
     )
     return MarketingExperimentOverview(
-        can_manage=(
-            PermissionKeys.MANAGE_MARKETING_EXPERIMENTS
-            in principal.permission_keys
-        ),
+        can_manage=(PermissionKeys.MANAGE_MARKETING_EXPERIMENTS in principal.permission_keys),
         experiments=[
-            experiment_read(db, principal.organization_id, experiment)
-            for experiment in experiments
+            experiment_read(db, principal.organization_id, experiment) for experiment in experiments
         ],
     )
 
@@ -218,9 +214,7 @@ def decide_marketing_experiment(
             or 0
         )
         if assignment_count:
-            raise ValueError(
-                "An experiment with recorded assignments cannot be returned to draft."
-            )
+            raise ValueError("An experiment with recorded assignments cannot be returned to draft.")
         experiment.status = "draft"
         experiment.started_at = None
         experiment.active_started_at = None
@@ -254,11 +248,7 @@ def experiment_read(
     if experiment.active_started_at is not None:
         runtime_seconds += max(
             0,
-            int(
-                (
-                    datetime.now(UTC) - as_utc(experiment.active_started_at)
-                ).total_seconds()
-            ),
+            int((datetime.now(UTC) - as_utc(experiment.active_started_at)).total_seconds()),
         )
     runtime_days = max(0, runtime_seconds // 86400)
     blockers: list[str] = []
@@ -325,9 +315,7 @@ def build_performance(
             )
         )
     )
-    lead_ids = {
-        assignment.lead_id for assignment in assignments if assignment.lead_id is not None
-    }
+    lead_ids = {assignment.lead_id for assignment in assignments if assignment.lead_id is not None}
     leads = {
         lead.id: lead
         for lead in (
@@ -380,8 +368,8 @@ def build_performance(
         if lead_ids
         else []
     )
-    assignments_by_variant: defaultdict[str, list[MarketingExperimentAssignment]] = (
-        defaultdict(list)
+    assignments_by_variant: defaultdict[str, list[MarketingExperimentAssignment]] = defaultdict(
+        list
     )
     for assignment in assignments:
         assignments_by_variant[assignment.variant_key].append(assignment)
@@ -453,9 +441,7 @@ def build_performance(
                 appointments_scheduled=appointments,
                 contracts_signed=contracts,
                 funded_deals=funded_deals,
-                collected_revenue_cents=sum(
-                    revenue.amount_cents for revenue in variant_revenue
-                ),
+                collected_revenue_cents=sum(revenue.amount_cents for revenue in variant_revenue),
                 primary_outcomes=primary_outcomes,
                 primary_rate_basis_points=(
                     round(primary_outcomes / assigned_sessions * 10000)
@@ -498,9 +484,7 @@ def build_source_breakdown(
             for assignment in source_assignments
             if assignment.lead_id is not None
         }
-        source_revenue = [
-            revenue for revenue in revenue_rows if revenue.lead_id in lead_ids
-        ]
+        source_revenue = [revenue for revenue in revenue_rows if revenue.lead_id in lead_ids]
         rows.append(
             ExperimentSourcePerformance(
                 source=source,
@@ -515,15 +499,9 @@ def build_source_breakdown(
                 ),
                 contracts_signed=len(lead_ids & contract_leads),
                 funded_deals=len(
-                    {
-                        revenue.lead_id
-                        for revenue in source_revenue
-                        if revenue.lead_id is not None
-                    }
+                    {revenue.lead_id for revenue in source_revenue if revenue.lead_id is not None}
                 ),
-                collected_revenue_cents=sum(
-                    revenue.amount_cents for revenue in source_revenue
-                ),
+                collected_revenue_cents=sum(revenue.amount_cents for revenue in source_revenue),
             )
         )
     return sorted(
@@ -550,10 +528,7 @@ def distinct_event_sessions(events: list[ConversionEvent], event_type: str) -> i
 def parse_variants(
     experiment: MarketingExperiment,
 ) -> list[MarketingExperimentVariant]:
-    return [
-        MarketingExperimentVariant.model_validate(variant)
-        for variant in experiment.variants
-    ]
+    return [MarketingExperimentVariant.model_validate(variant) for variant in experiment.variants]
 
 
 def ensure_surface_available(db: Session, experiment: MarketingExperiment) -> None:
@@ -599,10 +574,7 @@ def get_experiment(
 
 
 def require_manage(principal: Principal) -> None:
-    if (
-        PermissionKeys.MANAGE_MARKETING_EXPERIMENTS
-        not in principal.permission_keys
-    ):
+    if PermissionKeys.MANAGE_MARKETING_EXPERIMENTS not in principal.permission_keys:
         raise PermissionError("Experiment management requires Marketing or Owner access.")
 
 
@@ -614,12 +586,8 @@ def snapshot(experiment: MarketingExperiment) -> dict[str, object]:
         "status": experiment.status,
         "minimum_sessions_per_variant": experiment.minimum_sessions_per_variant,
         "minimum_runtime_days": experiment.minimum_runtime_days,
-        "started_at": (
-            experiment.started_at.isoformat() if experiment.started_at else None
-        ),
-        "completed_at": (
-            experiment.completed_at.isoformat() if experiment.completed_at else None
-        ),
+        "started_at": (experiment.started_at.isoformat() if experiment.started_at else None),
+        "completed_at": (experiment.completed_at.isoformat() if experiment.completed_at else None),
     }
 
 

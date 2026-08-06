@@ -241,9 +241,7 @@ def ask_help(
     role_keys = get_role_keys(db, principal)
     restriction = restricted_topic(clean_question, role_keys)
     if restriction is None and recent_history and is_contextual_follow_up(clean_question):
-        role_context = " ".join(
-            [turn.question for turn in recent_history] + [clean_question]
-        )
+        role_context = " ".join([turn.question for turn in recent_history] + [clean_question])
         restriction = restricted_topic(role_context, role_keys)
     if restriction is not None:
         citations = role_boundary_citations(role_keys)
@@ -441,8 +439,7 @@ def generate_answer(
         for index, chunk in enumerate(chunks, start=1)
     )
     conversation_text = "\n".join(
-        f"Employee: {turn.question}\nStonegate Help: {turn.answer[:2000]}"
-        for turn in history
+        f"Employee: {turn.question}\nStonegate Help: {turn.answer[:2000]}" for turn in history
     )
     system_prompt = (
         "You are Stonegate Help, an internal software manual assistant. Answer only from the "
@@ -522,9 +519,7 @@ def role_boundary_citations(role_keys: frozenset[str]) -> list[HelpCitation]:
 
 def best_excerpt(content: str, terms: set[str], *, max_characters: int) -> str:
     blocks = [
-        clean_markdown(block)
-        for block in re.split(r"\n\s*\n", content)
-        if clean_markdown(block)
+        clean_markdown(block) for block in re.split(r"\n\s*\n", content) if clean_markdown(block)
     ]
     if not blocks:
         return "No source excerpt is available."
@@ -555,9 +550,7 @@ def normalize(value: str) -> str:
 
 def tokenize(value: str) -> set[str]:
     return {
-        token
-        for token in normalize(value).split()
-        if len(token) > 1 and token not in STOP_WORDS
+        token for token in normalize(value).split() if len(token) > 1 and token not in STOP_WORDS
     }
 
 

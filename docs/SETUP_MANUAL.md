@@ -528,15 +528,17 @@ Voice, microphone access, API keys, and a TwiML App are not required.
    both company lines.
 6. Under **Staff ring settings**, enter Austin's and Devon's cellphones in `+1...` format, enable
    **Ring cellphone**, and save each person.
-7. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for initial Voice acceptance. Voicemail uses its
-   own caller-initiated recording path.
+7. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for the first routing test. Voicemail uses its own
+   caller-initiated recording path.
 8. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
    forwarded-call testing** before acceptance begins.
 
-For Georgia-only recorded calls, set `TWILIO_VOICE_RECORDING_ENABLED=true` and leave
-`TWILIO_VOICE_RECORDING_DISCLOSURE` unset. Stonegate records the one-party policy on the call and
-does not play an announcement. Configure a disclosure before enabling recording in another market
-unless its approved operating policy also permits one-party recording.
+Call recording and AI notes are a launch requirement. For Stonegate's approved Georgia-only
+one-party operating mode, set `TWILIO_VOICE_RECORDING_ENABLED=true` and leave
+`TWILIO_VOICE_RECORDING_DISCLOSURE` unset; Stonegate records the authorization state without
+playing an announcement. The disclosure variable remains available when Stonegate chooses or is
+required to announce recording. Configure the same recording, transcription, OpenAI, and retention
+values on the API and worker, and review the operating policy before calling into other states.
 
 ### Acceptance
 
@@ -547,7 +549,18 @@ unless its approved operating policy also permits one-party recording.
 4. Confirm the inbound call appears on the correct seller or buyer conversation.
 5. From Inbox, select **Call > My cellphone**, answer the staff cellphone, press 1, and confirm the
    seller sees the Stonegate company number.
-6. Enable recording later and test disclosure, access, transcription, AI notes, and deletion.
+6. Enable recording and place a controlled call. Confirm the configured Georgia authorization is
+   recorded, no announcement plays when the disclosure is blank, the recording stays private, a
+   speaker-aware transcript is produced, and the AI draft extracts motivation, timeline,
+   condition, occupancy, asking price, mortgage/title issues, objections, commitments, and the next
+   action.
+7. Review the draft, correct it if needed, apply it, and confirm Stonegate fills only empty
+   motivation, timeline, condition, occupancy, asking-price, and mortgage/payoff fields; saves the
+   complete summary under **Internal seller notes** and Activity; and creates the intended follow-up
+   task and next-follow-up date.
+8. Test rejection, a failed transcription, retry visibility, retention date, and early deletion.
+9. Open **Settings > Integrations** and confirm **Call recording and AI notes** is configured before
+   launch.
 
 ## RealEstateAPI Property Intelligence And Optional DealMachine Buyers
 
@@ -606,14 +619,17 @@ normal CRM intake. No Meta developer app or Graph API token is required.
    [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#zapier-facebook-lead-ads-intake-and-staff-alerts).
 2. Use this Stonegate action URL:
    `https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads`.
-3. Submit one Facebook test lead containing name, phone or email, property street address, city,
+3. Create one random secret of at least 32 characters. Store the same value as
+   `ZAPIER_FACEBOOK_LEADS_SECRET` on the API and worker and as the Zapier header
+   `X-Stonegate-Webhook-Secret`. Never put the value in source control, chat, or screenshots.
+4. Submit one Facebook test lead containing name, phone or email, property street address, city,
    fixed state, motivation, and timeline. ZIP may be omitted when automatic enrichment is enabled.
-4. Confirm the lead appears once in Stonegate with source **Facebook Lead Ads**, attribution,
+5. Confirm the lead appears once in Stonegate with source **Facebook Lead Ads**, attribution,
    speed-to-lead work, normal intake notifications, and a provider-confirmed ZIP/county when the
    address matched confidently.
-5. Under **Settings > Communications**, save each alert recipient's cellphone and enable
+6. Under **Settings > Communications**, save each alert recipient's cellphone and enable
    **Text new Facebook leads**.
-6. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
+7. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
    alert per enabled employee using a controlled test lead.
 
 Stonegate never treats a Facebook lead-form phone field as seller SMS consent. The form may permit
@@ -708,6 +724,8 @@ makes failures difficult to identify.
 - [ ] OpenAI Copilots and Help work in advisory mode.
 - [ ] RentCast and underwriting reports pass controlled tests.
 - [ ] Resend sending, reply routing, attachments, and restricted aliases pass.
+- [ ] Twilio calls record under the approved disclosure and retention policy; transcript, AI-note
+      review/apply, failure visibility, and deletion pass end to end.
 - [ ] SignWell remote and iPad signing pass before using e-signature with a seller.
 - [ ] Compensation policy and role credits match current Stonegate policy.
 - [ ] Finance opening setup and first bank-reconciliation process are reviewed.
@@ -717,7 +735,6 @@ makes failures difficult to identify.
 
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
-- [ ] Recording after disclosure and retention approval.
 - [ ] RealEstateAPI key and controlled property-research acceptance.
 - [ ] Google/Meta conversion delivery after ad-account setup.
 - [ ] S3-compatible private storage as document volume grows.

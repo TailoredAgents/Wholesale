@@ -55,9 +55,7 @@ def test_company_setup_seats_counterparties_and_role_acceptance(
     assert repeat_response.json()["created_seat_count"] == 0
 
     lead_management_seat = next(
-        seat
-        for seat in installed["setup"]["seats"]
-        if seat["seat_key"] == "lead_management"
+        seat for seat in installed["setup"]["seats"] if seat["seat_key"] == "lead_management"
     )
     seat_response = client.patch(
         f"/api/v1/operating-model/setup/seats/{lead_management_seat['id']}",

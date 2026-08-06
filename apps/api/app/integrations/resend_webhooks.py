@@ -31,9 +31,7 @@ def verify_resend_webhook(
             },
         )
     except (UnicodeDecodeError, WebhookVerificationError, ValueError) as exc:
-        raise ResendWebhookVerificationError(
-            "Invalid Resend webhook signature."
-        ) from exc
+        raise ResendWebhookVerificationError("Invalid Resend webhook signature.") from exc
     if not isinstance(verified, dict):
         raise ResendWebhookVerificationError("Invalid Resend webhook payload.")
     return verified

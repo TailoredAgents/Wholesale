@@ -254,9 +254,7 @@ class EmailSendRequest(BaseModel):
     @model_validator(mode="after")
     def require_one_sender(self) -> "EmailSendRequest":
         if bool(self.email_sender_alias_id) == bool(self.email_account_id):
-            raise ValueError(
-                "Select exactly one Stonegate email alias or legacy email account."
-            )
+            raise ValueError("Select exactly one Stonegate email alias or legacy email account.")
         if set(self.cc) & set(self.bcc):
             raise ValueError("An email address cannot be both CC and BCC.")
         return self

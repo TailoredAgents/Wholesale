@@ -3,6 +3,7 @@
 import { useAuth } from "@clerk/nextjs";
 import { BadgeDollarSign, Building2, MessageSquare, Plus, Search, ShieldCheck, UsersRound, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 import type { BuyerListItem, LeadListItem } from "../../lib/api";
@@ -60,6 +61,7 @@ export function BuyersWorkspace({
   const [showCreate, setShowCreate] = useState(false);
   const [conversationStatus, setConversationStatus] = useState<"idle" | "opening" | "error">("idle");
   const { getToken } = useAuth();
+  const router = useRouter();
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
     [],
@@ -112,7 +114,7 @@ export function BuyersWorkspace({
       });
       if (!response.ok) throw new Error("Unable to open buyer conversation.");
       const payload = (await response.json()) as { conversation_id: string };
-      window.location.assign(`/os/inbox?conversation=${payload.conversation_id}`);
+      router.push(`/os/inbox?conversation=${payload.conversation_id}`);
     } catch {
       setConversationStatus("error");
     }

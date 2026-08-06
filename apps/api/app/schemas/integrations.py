@@ -13,4 +13,3 @@ class IntegrationStatusRead(BaseModel):
 
 class IntegrationStatusListResponse(BaseModel):
     items: list[IntegrationStatusRead]
-

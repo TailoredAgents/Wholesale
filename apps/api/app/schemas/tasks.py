@@ -4,6 +4,17 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+TaskWorkKind = Literal[
+    "primary_next_action",
+    "supporting",
+    "operational_exception",
+    "approval",
+    "ai_in_progress",
+    "ai_review",
+    "ai_completed",
+]
+TaskDueStatus = Literal["overdue", "today", "upcoming", "unscheduled", "completed"]
+
 
 class TaskQueueItemRead(BaseModel):
     task_id: UUID
@@ -76,15 +87,7 @@ class AiOperationReviewRead(BaseModel):
 class TaskWorkspaceItemRead(BaseModel):
     id: str
     item_type: Literal["task", "approval", "ai_work"]
-    work_kind: Literal[
-        "primary_next_action",
-        "supporting",
-        "operational_exception",
-        "approval",
-        "ai_in_progress",
-        "ai_review",
-        "ai_completed",
-    ]
+    work_kind: TaskWorkKind
     source_record_type: str
     source_record_id: UUID | None
     source_record_label: str
@@ -102,7 +105,7 @@ class TaskWorkspaceItemRead(BaseModel):
     status: str
     priority: str
     due_at: datetime | None
-    due_status: Literal["overdue", "today", "upcoming", "unscheduled", "completed"]
+    due_status: TaskDueStatus
     created_at: datetime
     completed_at: datetime | None
     assigned_user_id: UUID | None

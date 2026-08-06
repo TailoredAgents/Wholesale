@@ -32,8 +32,8 @@ from app.models.foundation import (
     UnderwritingVersion,
     User,
 )
-from app.services.communication_participants import record_email_participants
 from app.services.bootstrap import bootstrap_foundation
+from app.services.communication_participants import record_email_participants
 from app.services.inbox import create_general_conversation, update_conversation_activity
 
 OWNER_EMAIL = "owner@example.com"
@@ -148,14 +148,17 @@ def test_va_access_is_assigned_only_and_handoff_preserves_history(
     )
     assert qualified_conversation is not None
     assert qualified_conversation.queue_key == "qualified"
-    assert db_session.scalar(
-        select(func.count())
-        .select_from(ConversationWatcher)
-        .where(
-            ConversationWatcher.conversation_id == qualified_conversation.id,
-            ConversationWatcher.user_id == owner.id,
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ConversationWatcher)
+            .where(
+                ConversationWatcher.conversation_id == qualified_conversation.id,
+                ConversationWatcher.user_id == owner.id,
+            )
         )
-    ) == 1
+        == 1
+    )
 
     conversation = db_session.scalar(
         select(Conversation).where(Conversation.lead_id == UUID(assigned_lead["id"]))
@@ -646,12 +649,14 @@ def test_general_conversation_retains_email_without_a_lead(
     assert conversation.conversation_type == "general"
     assert len(participants) == 2
     assert {participant.participant_role for participant in participants} == {"from", "to"}
-    assert db_session.scalar(
+    sender = db_session.scalar(
         select(CommunicationParticipant).where(
             CommunicationParticipant.communication_record_id == communication.id,
             CommunicationParticipant.participant_role == "from",
         )
-    ).contact_id == contact.id
+    )
+    assert sender is not None
+    assert sender.contact_id == contact.id
     assignment = db_session.scalar(
         select(ConversationAssignmentEvent).where(
             ConversationAssignmentEvent.conversation_id == conversation.id
@@ -665,9 +670,7 @@ def test_general_conversation_retains_email_without_a_lead(
     list_response = client.get("/api/v1/inbox/conversations", headers=headers)
     assert list_response.status_code == 200
     listed = next(
-        item
-        for item in list_response.json()["items"]
-        if item["id"] == str(conversation.id)
+        item for item in list_response.json()["items"] if item["id"] == str(conversation.id)
     )
     assert listed["conversation_type"] == "general"
     assert listed["lead_id"] is None
@@ -763,33 +766,25 @@ def test_restricted_general_mailbox_is_visible_only_to_owner_or_assigned_team(
         headers={"X-Dev-User-Email": OWNER_EMAIL},
     )
     assert owner_items.status_code == 200
-    assert str(conversation.id) in {
-        item["id"] for item in owner_items.json()["items"]
-    }
+    assert str(conversation.id) in {item["id"] for item in owner_items.json()["items"]}
 
     finance_items = client.get(
         "/api/v1/inbox/conversations",
         headers={"X-Dev-User-Email": finance.email},
     )
     assert finance_items.status_code == 200
-    assert [item["id"] for item in finance_items.json()["items"]] == [
-        str(conversation.id)
-    ]
+    assert [item["id"] for item in finance_items.json()["items"]] == [str(conversation.id)]
 
     acquisitions_items = client.get(
         "/api/v1/inbox/conversations",
         headers={"X-Dev-User-Email": acquisitions.email},
     )
     assert acquisitions_items.status_code == 200
-    assert str(conversation.id) not in {
-        item["id"] for item in acquisitions_items.json()["items"]
-    }
+    assert str(conversation.id) not in {item["id"] for item in acquisitions_items.json()["items"]}
 
     va_items = client.get(
         "/api/v1/inbox/conversations",
         headers={"X-Dev-User-Email": va.email},
     )
     assert va_items.status_code == 200
-    assert str(conversation.id) not in {
-        item["id"] for item in va_items.json()["items"]
-    }
+    assert str(conversation.id) not in {item["id"] for item in va_items.json()["items"]}

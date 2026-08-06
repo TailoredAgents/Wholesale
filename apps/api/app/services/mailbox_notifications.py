@@ -51,8 +51,7 @@ def mailbox_response_status(
         or conversation.last_inbound_at is None
         or (
             conversation.last_outbound_at is not None
-            and _as_utc(conversation.last_outbound_at)
-            >= _as_utc(conversation.last_inbound_at)
+            and _as_utc(conversation.last_outbound_at) >= _as_utc(conversation.last_inbound_at)
         )
     ):
         return MailboxResponseStatus(
@@ -167,15 +166,10 @@ def process_next_mailbox_notification(
                     db.commit()
                     return notification.id
 
-        owner_escalation_due = (
-            response.age_minutes is not None
-            and response.age_minutes
-            >= (
-                settings.mailbox_unassigned_escalation_minutes
-                if conversation.assigned_user_id is None
-                and conversation.assigned_team_id is None
-                else settings.mailbox_owner_escalation_minutes
-            )
+        owner_escalation_due = response.age_minutes is not None and response.age_minutes >= (
+            settings.mailbox_unassigned_escalation_minutes
+            if conversation.assigned_user_id is None and conversation.assigned_team_id is None
+            else settings.mailbox_owner_escalation_minutes
         )
         if owner_escalation_due:
             for owner_id in _owner_user_ids(db, conversation.organization_id):
@@ -272,9 +266,7 @@ def _notification_recipient_ids(
 def _team_user_ids(db: Session, team_id: UUID) -> set[UUID]:
     team = db.get(Team, team_id)
     user_ids = set(
-        db.scalars(
-            select(TeamMembership.user_id).where(TeamMembership.team_id == team_id)
-        ).all()
+        db.scalars(select(TeamMembership.user_id).where(TeamMembership.team_id == team_id)).all()
     )
     if team is not None and team.is_active and team.manager_user_id is not None:
         user_ids.add(team.manager_user_id)

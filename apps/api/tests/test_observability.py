@@ -53,4 +53,3 @@ def test_error_monitoring_uses_privacy_preserving_defaults(monkeypatch: MonkeyPa
     assert init_options["max_request_body_size"] == "never"
     assert init_options["include_local_variables"] is False
     assert tags["stonegate.service"] == "worker"
-
