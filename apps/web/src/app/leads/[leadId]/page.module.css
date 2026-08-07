@@ -627,6 +627,138 @@
   gap: 7px;
 }
 
+.propertyLocationSection {
+  padding: 18px 20px 20px;
+  border-bottom: 1px solid #e2ded5;
+  background: #fff;
+}
+
+.propertyLocationHeader {
+  margin-bottom: 11px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.propertyLocationHeader span {
+  color: #68706d;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.propertyLocationHeader h3,
+.propertyLocationHeader p {
+  margin: 0;
+}
+
+.propertyLocationHeader h3 {
+  margin-top: 3px;
+  color: #252c29;
+  font-size: 14px;
+}
+
+.propertyLocationHeader p {
+  margin-top: 4px;
+  color: #737976;
+  font-size: 11px;
+}
+
+.propertyLocationHeader a {
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #c8c2b7;
+  border-radius: 5px;
+  color: #244f3a;
+  font-size: 11px;
+  font-weight: 850;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.propertyMapFrame {
+  position: relative;
+  min-height: 300px;
+  overflow: hidden;
+  border: 1px solid #d5d0c6;
+  border-radius: 8px;
+  background: #e8ebe7;
+}
+
+.propertyMapCanvas {
+  width: 100%;
+  height: 300px;
+}
+
+.propertyMapFrame > button {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 10px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgb(34 49 42 / 25%);
+  border-radius: 5px;
+  background: rgb(255 255 255 / 94%);
+  color: #244f3a;
+  box-shadow: 0 2px 7px rgb(20 30 25 / 12%);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.propertyMapError {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: 28px;
+  left: 10px;
+  padding: 9px 11px;
+  border: 1px solid #e1c4b9;
+  border-radius: 5px;
+  background: rgb(255 244 239 / 94%);
+  color: #853d2c;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.propertyMapFallback {
+  min-height: 150px;
+  padding: 22px;
+  border: 1px dashed #c9c4ba;
+  border-radius: 8px;
+  background: #f6f4ef;
+  color: #53635b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+}
+
+.propertyMapFallback div {
+  display: grid;
+  gap: 3px;
+}
+
+.propertyMapFallback strong {
+  color: #35463e;
+  font-size: 13px;
+}
+
+.propertyMapFallback span {
+  color: #737976;
+  font-size: 11px;
+}
+
 .propertyIntelligenceSections {
   display: grid;
   grid-template-columns: 1.05fr 0.95fr;
@@ -882,6 +1014,15 @@
     justify-content: space-between;
   }
 
+  .propertyLocationHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .propertyLocationHeader a {
+    align-self: flex-start;
+  }
+
   .propertyHeroGrid,
   .propertyIntelligenceSections {
     grid-template-columns: 1fr;
@@ -920,6 +1061,12 @@
 
   .propertyResearchActions {
     display: grid;
+  }
+
+  .propertyMapFrame,
+  .propertyMapCanvas {
+    min-height: 260px;
+    height: 260px;
   }
 
   .propertyResearchSummary > small {

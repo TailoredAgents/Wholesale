@@ -966,6 +966,9 @@ contact, qualification, or activity history.
 | Research status | Shows queued, processing, ready, partial, stale, needs address, needs review, or failed | Worker and a usable address are required for automatic completion |
 | Profile complete / Valuation confidence / Selected comps / Snapshot | Summarizes evidence coverage, confidence, retained comp count, and immutable snapshot version | Read-only; missing evidence remains visible instead of being guessed |
 | **Refresh research** | Queues a new property snapshot and explicitly refreshes market evidence | Requires lead edit access; may use RentCast and RealEstateAPI credits |
+| Property map | Shows an interactive road map and property pin from coordinates already saved in Property Intelligence | Does not run another provider query or use a property-data credit; shows **Map location pending** until usable coordinates exist |
+| **Recenter** | Returns the map to the saved property coordinates and default zoom | Available after the map loads; does not change the property record |
+| **Open directions** | Opens the property destination in Google Maps in a new browser tab | Uses an external directions link, not an embedded Google Maps API or Stonegate API key |
 | Verified property facts | Shows normalized physical and sale-history facts with retained source metadata | Unknown remains unknown when providers do not support a fact; provider estimates are labeled research signals |
 | Additional property intelligence | Expands RealEstateAPI assessor, tax, equity, loan, listing, parcel, lien, construction, amenity, ownership, and hazard facts when returned | Full sanitized provider record is saved once and reused by the UI and AI |
 | Saved value evidence | Shows Stonegate ARV support and external benchmark values already on file | Provider estimates remain benchmarks and do not become Stonegate's comp conclusion |

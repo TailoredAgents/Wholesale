@@ -1239,6 +1239,13 @@ The full lead record has seven sections:
 Use the lead record when you need the complete evidence chain. Use focused workspaces for daily
 queue execution.
 
+In **Property > Property Intelligence**, use the property map to confirm the general location,
+pan or zoom around the neighborhood, and select **Recenter** to return to the saved property pin.
+Select **Open directions** to start a route in Google Maps. The embedded map uses coordinates
+already saved by property research, so viewing it does not spend another RealEstateAPI or RentCast
+credit. If **Map location pending** appears, validate the address and then use **Refresh research**;
+Stonegate does not guess coordinates or substitute Street View or satellite imagery.
+
 ### Edit A Lead
 
 1. Open the seller's full lead record.

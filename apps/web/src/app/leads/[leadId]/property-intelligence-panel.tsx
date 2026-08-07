@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { LeadDetail } from "../../lib/api";
 import styles from "./page.module.css";
+import { PropertyLocationMap } from "./property-location-map";
 
 type Intelligence = LeadDetail["property_intelligence"];
 
@@ -62,6 +63,11 @@ function displaySavedFact(intelligence: Intelligence, key: string) {
   };
   const suffix = savedFact.unit ? suffixes[savedFact.unit] : undefined;
   return suffix ? `${displayFact(value)} ${suffix}` : displayFact(value);
+}
+
+function numericSavedFact(intelligence: Intelligence, key: string) {
+  const value = intelligence.facts[key]?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 function PropertyImage({ leadId, intelligence }: { leadId: string; intelligence: Intelligence }) {
@@ -276,6 +282,12 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Owner company", "owner_company"],
     ["Ownership length", "ownership_length_months"],
   ].map(([label, key]) => [label, displaySavedFact(intelligence, key)]);
+  const propertyAddress = [
+    lead.property_street_address,
+    lead.property_city,
+    lead.property_state,
+    lead.property_postal_code,
+  ].filter(Boolean).join(", ");
 
   return (
     <section className={`${styles.sectionPanel} ${styles.propertyIntelligencePanel}`}>
@@ -317,6 +329,12 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
           <span>{error ?? intelligence.last_error}</span>
         </div>
       ) : null}
+
+      <PropertyLocationMap
+        address={propertyAddress}
+        latitude={numericSavedFact(intelligence, "latitude")}
+        longitude={numericSavedFact(intelligence, "longitude")}
+      />
 
       <div className={styles.propertyIntelligenceSections}>
         <div className={styles.propertyFactSection}>
