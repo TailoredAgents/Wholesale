@@ -3,6 +3,15 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Render exposes many CPU cores to the build container but limits memory to 8 GB.
+    // Next otherwise creates one page-data worker per core (47 in production), which
+    // exhausts memory after compilation. Bound both worker and per-worker concurrency.
+    cpus: 4,
+    staticGenerationMaxConcurrency: 4,
+    staticGenerationMinPagesPerWorker: 25,
+    webpackMemoryOptimizations: true,
+  },
   images: {
     qualities: [60, 75],
   },
