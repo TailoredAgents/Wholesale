@@ -4,6 +4,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from app.core.auth import principal_for_user
@@ -21,9 +22,17 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.property_intelligence import (
     backfill_next_property_snapshot,
     get_property_image_content,
+    property_snapshot_backfill_candidate_statement,
 )
 
 OWNER_EMAIL = "owner@example.com"
+
+
+def test_property_snapshot_backfill_locks_only_the_analysis_table() -> None:
+    statement = property_snapshot_backfill_candidate_statement()
+    compiled = str(statement.compile(dialect=postgresql.dialect()))
+
+    assert "FOR UPDATE OF underwriting_market_analyses SKIP LOCKED" in compiled
 
 
 def seed_owner(db_session: Session) -> User:

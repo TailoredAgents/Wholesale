@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, principal_for_user
@@ -1044,8 +1044,8 @@ def mark_research_failure(
     return run_id
 
 
-def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | None:
-    analysis = db.scalar(
+def property_snapshot_backfill_candidate_statement() -> Select[tuple[UnderwritingMarketAnalysis]]:
+    return (
         select(UnderwritingMarketAnalysis)
         .join(Property, Property.id == UnderwritingMarketAnalysis.property_id)
         .outerjoin(
@@ -1057,8 +1057,12 @@ def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | N
         )
         .where(PropertyIntelligenceSnapshot.id.is_(None))
         .order_by(UnderwritingMarketAnalysis.created_at.desc())
-        .with_for_update(skip_locked=True)
+        .with_for_update(of=UnderwritingMarketAnalysis, skip_locked=True)
     )
+
+
+def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | None:
+    analysis = db.scalar(property_snapshot_backfill_candidate_statement())
     if analysis is None:
         return None
     property_record = db.get(Property, analysis.property_id)
