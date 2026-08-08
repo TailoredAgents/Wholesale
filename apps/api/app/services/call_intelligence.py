@@ -410,6 +410,7 @@ def process_call_transcript(
         OpenAIClientError,
         TwilioRecordingError,
         ValidationError,
+        ValueError,
     ) as exc:
         db.rollback()
         transcript = db.get(CallTranscript, transcript_id)

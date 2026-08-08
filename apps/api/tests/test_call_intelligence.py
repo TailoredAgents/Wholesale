@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.integrations.openai_client import OpenAIAudioTranscript
+from app.integrations.openai_client import OpenAIAudioTranscript, validate_strict_json_schema
 from app.integrations.twilio_recordings import TwilioRecordingMedia
 from app.main import app
 from app.models.foundation import (
@@ -31,6 +31,13 @@ from app.services.call_intelligence import (
 )
 
 OWNER_EMAIL = "owner@example.com"
+
+
+def test_call_note_schema_is_valid_for_openai_strict_mode() -> None:
+    schema = StructuredCallNotes.model_json_schema()
+
+    validate_strict_json_schema(schema)
+    assert set(schema["properties"]) == set(schema["required"])
 
 
 def test_call_transcription_auto_populates_empty_fields_before_review(
