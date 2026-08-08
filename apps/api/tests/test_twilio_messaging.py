@@ -75,7 +75,7 @@ class FakeMessagesResource:
             status="accepted",
             to=payload["to"],
             from_=payload["from_"],
-            messaging_service_sid=payload["messaging_service_sid"],
+            messaging_service_sid=payload.get("messaging_service_sid"),
             error_code=None,
             error_message=None,
             num_segments="1",
@@ -93,7 +93,6 @@ def twilio_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
         "TWILIO_SMS_ENABLED": "true",
         "TWILIO_ACCOUNT_SID": "AC00000000000000000000000000000000",
         "TWILIO_AUTH_TOKEN": AUTH_TOKEN,
-        "TWILIO_MESSAGING_SERVICE_SID": MESSAGING_SERVICE_SID,
         "TWILIO_SMS_FROM_NUMBER": STONEGATE_FROM_NUMBER,
         "TWILIO_WEBHOOK_BASE_URL": WEBHOOK_BASE_URL,
         "TWILIO_VALIDATE_WEBHOOK_SIGNATURES": "true",
@@ -187,7 +186,7 @@ def test_twilio_provider_uses_configured_stonegate_sender(
 
     assert client.messages.create_payload is not None
     assert client.messages.create_payload["from_"] == STONEGATE_FROM_NUMBER
-    assert client.messages.create_payload["messaging_service_sid"] == MESSAGING_SERVICE_SID
+    assert "messaging_service_sid" not in client.messages.create_payload
     assert result.raw_payload["from"] == STONEGATE_FROM_NUMBER
 
 
@@ -213,6 +212,31 @@ def test_twilio_provider_uses_line_specific_sender(
 
     assert client.messages.create_payload is not None
     assert client.messages.create_payload["from_"] == acquisitions_number
+    assert "messaging_service_sid" not in client.messages.create_payload
+
+
+def test_twilio_provider_supports_optional_messaging_service(
+    twilio_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TWILIO_MESSAGING_SERVICE_SID", MESSAGING_SERVICE_SID)
+    get_settings.cache_clear()
+    client = FakeTwilioClient()
+    provider = TwilioMessagingProvider(get_settings(), client=client)
+
+    provider.send(
+        OutboundMessageRequest(
+            lead_id="lead-1",
+            contact_id="contact-1",
+            channel="sms",
+            recipient="+14045551212",
+            body="Optional Messaging Service test.",
+            idempotency_key="sender-test-3",
+        ),
+        dry_run=False,
+    )
+
+    assert client.messages.create_payload is not None
     assert client.messages.create_payload["messaging_service_sid"] == MESSAGING_SERVICE_SID
 
 
@@ -507,6 +531,7 @@ def test_twilio_webhooks_reject_invalid_signatures_and_services(
     db_session: Session,
     api_db_override: None,
     twilio_settings: None,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     client = TestClient(app)
     seed_consent_lead(db_session, client)
@@ -528,6 +553,8 @@ def test_twilio_webhooks_reject_invalid_signatures_and_services(
     )
     assert invalid_signature_response.status_code == 403
 
+    monkeypatch.setenv("TWILIO_MESSAGING_SERVICE_SID", MESSAGING_SERVICE_SID)
+    get_settings.cache_clear()
     unexpected_service_payload = {
         **payload,
         "MessagingServiceSid": "MG11111111111111111111111111111111",
@@ -567,7 +594,7 @@ def test_sms_eligibility_identifies_missing_render_setting(
     twilio_settings: None,
     monkeypatch: MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("TWILIO_MESSAGING_SERVICE_SID")
+    monkeypatch.delenv("TWILIO_SMS_FROM_NUMBER")
     get_settings.cache_clear()
     client = TestClient(app)
     conversation = seed_consent_lead(db_session, client)
@@ -579,7 +606,7 @@ def test_sms_eligibility_identifies_missing_render_setting(
 
     assert response.status_code == 200
     blockers = response.json()["sms_eligibility"]["blockers"]
-    assert any("TWILIO_MESSAGING_SERVICE_SID" in blocker for blocker in blockers)
+    assert any("TWILIO_SMS_FROM_NUMBER" in blocker for blocker in blockers)
 
 
 def test_buyer_sms_uses_dispositions_line_and_routes_reply_to_buyer_thread(

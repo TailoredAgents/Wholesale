@@ -454,8 +454,8 @@ and recipient engagement. A successful API response alone does not establish inb
 
 ### Department Numbers
 
-- The approved seller-inquiry Messaging Service and A2P campaign belong to the shared acquisitions
-  number.
+- The approved seller-inquiry A2P registration belongs to the shared acquisitions number. A
+  Messaging Service is optional when Stonegate sends directly from that number.
 - A future dispositions number needs its own accurate buyer/investor messaging registration when
   its use differs from the seller-inquiry campaign.
 - BatchDialer owns VA cold-call numbers; those numbers are not added to Stonegate's Twilio
@@ -466,7 +466,7 @@ and recipient engagement. A successful API response alone does not establish inb
 Stonegate must use its own:
 
 - A2P brand and campaign
-- Messaging Service
+- Messaging Service, when used
 - 10DLC number
 - campaign description and samples
 - public consent evidence
@@ -479,20 +479,25 @@ Do not share another business's campaign or number.
 - `TWILIO_SMS_ENABLED`
 - `TWILIO_ACCOUNT_SID`
 - `TWILIO_AUTH_TOKEN`
-- `TWILIO_MESSAGING_SERVICE_SID`
 - `TWILIO_SMS_FROM_NUMBER` (acquisitions/default rollout fallback; department lines are stored in
   **Settings > Communications**)
 - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
 - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
 - SMS timezone and contact-hour variables
 
+`TWILIO_MESSAGING_SERVICE_SID` is optional. Stonegate's direct-number setup sends from
+`TWILIO_SMS_FROM_NUMBER` and does not require a Messaging Service.
+
+The Account SID, sending credential, direct sender number, and webhook base URL must be present on
+both **oakwell-api** and **oakwell-worker**. The API validates callbacks; the worker performs staff
+lead-alert sends.
+
 The Auth Token is not the Account SID. Twilio displays them as separate values in the account
 console.
 
 ### Webhooks
 
-Each phone number's **A message comes in** webhook (with the Messaging Service configured to
-**Defer to sender's webhook**):
+Each phone number's **A message comes in** webhook:
 
 ```text
 POST https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/incoming

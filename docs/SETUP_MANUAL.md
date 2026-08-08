@@ -458,24 +458,21 @@ must not describe it as attorney-approved when it has not been reviewed.
 
 ### Do Not Activate Before Approval
 
-Stonegate SMS should use its own A2P campaign, Messaging Service, and phone number. Do not attach
-another company's number or campaign.
+Stonegate SMS should use its own A2P registration and phone number. A Messaging Service is optional
+for direct-number sending. Do not attach another company's number or campaign.
 
 ### After A2P Approval
 
-1. Open Twilio Messaging Services and attach both approved Stonegate 10DLC numbers to the sender
-   pool only when the approved campaign accurately covers both messaging purposes.
-2. Under **Integration**, select **Defer to sender's webhook**.
-3. Open each Stonegate number under **Phone Numbers > Manage > Active numbers**.
-4. Under that number's Messaging configuration, set **A message comes in** to Webhook, `POST`:
+1. Open each Stonegate number under **Phone Numbers > Manage > Active numbers**.
+2. Under that number's Messaging configuration, set **A message comes in** to Webhook, `POST`:
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/incoming`
-5. Repeat the same number-level webhook for the acquisitions and dispositions numbers. Twilio's
+3. Repeat the same number-level webhook for the acquisitions and dispositions numbers. Twilio's
    `To` value lets Stonegate identify the department line.
-6. Do not add a separate Console delivery callback. Stonegate includes this callback on every
+4. Do not add a separate Console delivery callback. Stonegate includes this callback on every
    outbound API request:
    `https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/status`
-7. Copy the Account SID, separate Auth Token, Messaging Service SID, and both numbers in `+1...`
-   format.
+5. Copy the Account SID, separate Auth Token, and both numbers in `+1...` format. Copy a Messaging
+   Service SID only when Stonegate explicitly uses that optional Twilio feature.
 
 If the approved campaign only describes seller inquiries, attach only the acquisitions number.
 Using one Low Volume Mixed campaign for both numbers is appropriate only when its submitted and
@@ -483,8 +480,9 @@ approved message flow, consent methods, and samples cover both seller and buyer 
 
 ### In Render
 
-Enter the Twilio values on **oakwell-api**, keep webhook validation enabled, set the branded API
-base URL, and set `TWILIO_SMS_ENABLED=true` only after the approved number is attached.
+Enter the Twilio Account SID, sending credential, sender number, and branded webhook base URL on
+both **oakwell-api** and **oakwell-worker**. Keep webhook validation enabled and set
+`TWILIO_SMS_ENABLED=true` only after the approved number is attached.
 Use the acquisitions number for `TWILIO_SMS_FROM_NUMBER` as a deployment fallback. Add and manage
 both real department numbers in **Settings > Communications**; active seller conversations select
 the acquisitions line and buyer conversations select the dispositions line.

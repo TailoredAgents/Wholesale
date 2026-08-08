@@ -53,7 +53,6 @@ class TwilioMessagingProvider:
             )
         if not self.settings.twilio_sms_configured:
             raise TwilioMessagingError("Live Twilio SMS is not fully configured.")
-        assert self.settings.twilio_messaging_service_sid is not None
         assert self.settings.twilio_sms_from_number is not None
         assert self.settings.twilio_webhook_base_url is not None
         sender_number = (
@@ -65,12 +64,18 @@ class TwilioMessagingProvider:
             "/api/v1/webhooks/twilio/messaging/status"
         )
         try:
+            create_payload: dict[str, object] = {
+                "to": request.recipient,
+                "from_": sender_number,
+                "body": request.body,
+                "status_callback": status_callback,
+            }
+            if self.settings.twilio_messaging_service_sid:
+                create_payload["messaging_service_sid"] = (
+                    self.settings.twilio_messaging_service_sid
+                )
             message = self.client.messages.create(
-                to=request.recipient,
-                from_=sender_number,
-                messaging_service_sid=self.settings.twilio_messaging_service_sid,
-                body=request.body,
-                status_callback=status_callback,
+                **create_payload,
             )
         except TwilioRestException as exc:
             raise TwilioMessagingError(

@@ -302,8 +302,6 @@ services:
         sync: false
       - key: TWILIO_AUTH_TOKEN
         sync: false
-      - key: TWILIO_MESSAGING_SERVICE_SID
-        sync: false
       - key: TWILIO_SMS_FROM_NUMBER
         sync: false
       - key: TWILIO_WEBHOOK_BASE_URL
@@ -566,8 +564,6 @@ services:
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
-        sync: false
-      - key: TWILIO_MESSAGING_SERVICE_SID
         sync: false
       - key: TWILIO_SMS_FROM_NUMBER
         sync: false

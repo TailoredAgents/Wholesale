@@ -817,8 +817,6 @@ class Settings(BaseSettings):
             blockers.append(
                 "TWILIO_AUTH_TOKEN or both TWILIO_API_KEY_SID and TWILIO_API_KEY_SECRET"
             )
-        if not self.twilio_messaging_service_sid:
-            blockers.append("TWILIO_MESSAGING_SERVICE_SID")
         if not self.twilio_sms_from_number:
             blockers.append("TWILIO_SMS_FROM_NUMBER")
         if not self.twilio_webhook_base_url:
