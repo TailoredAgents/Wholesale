@@ -700,7 +700,6 @@ Variables on both **oakwell-api** and **oakwell-worker**:
 
 - `ZAPIER_FACEBOOK_LEADS_ENABLED`
 - `ZAPIER_FACEBOOK_PAGE_ID`
-- `ZAPIER_FACEBOOK_LEADS_SECRET` (the same random value, at least 32 characters, on both services)
 - `ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES`
 - `FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS`
 - `FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS`
@@ -736,7 +735,6 @@ Add **Webhooks by Zapier > Custom Request** as the Zap's only action:
 - Data Pass-Through: `false`
 - Unflatten: `false`
 - Header `Content-Type`: `application/json`
-- Header `X-Stonegate-Webhook-Secret`: the same private value stored in Render
 
 Use a JSON body with Zapier field tokens in place of the example labels:
 
@@ -788,9 +786,7 @@ RentCast's AVM value range in comp or offer math.
 
 ### Activation And Acceptance
 
-1. Store the numeric Page ID and the same high-entropy webhook secret on both Render services.
-   Add that secret to Zapier as `X-Stonegate-Webhook-Secret`; never put it in chat, screenshots, or
-   source control. Leave
+1. Store the numeric Page ID on both Render services. Leave
    `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
 2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
    Zapier action test.
@@ -807,7 +803,7 @@ RentCast's AVM value range in comp or offer math.
 8. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
-The endpoint is publicly reachable but requires the private Zapier header, rejects the wrong Page,
+The endpoint is publicly reachable and does not authenticate requests. It rejects the wrong Page,
 limits request size, and returns quickly after durable storage. The worker performs CRM intake and
 retries temporary internal failures with backoff. Facebook lead IDs are unique per organization,
 so Zapier replays are safe. If a Zap fails, correct the mapping and replay the original run; do not

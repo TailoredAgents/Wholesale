@@ -619,17 +619,14 @@ normal CRM intake. No Meta developer app or Graph API token is required.
    [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#zapier-facebook-lead-ads-intake-and-staff-alerts).
 2. Use this Stonegate action URL:
    `https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads`.
-3. Create one random secret of at least 32 characters. Store the same value as
-   `ZAPIER_FACEBOOK_LEADS_SECRET` on the API and worker and as the Zapier header
-   `X-Stonegate-Webhook-Secret`. Never put the value in source control, chat, or screenshots.
-4. Submit one Facebook test lead containing name, phone or email, property street address, city,
+3. Submit one Facebook test lead containing name, phone or email, property street address, city,
    fixed state, motivation, and timeline. ZIP may be omitted when automatic enrichment is enabled.
-5. Confirm the lead appears once in Stonegate with source **Facebook Lead Ads**, attribution,
+4. Confirm the lead appears once in Stonegate with source **Facebook Lead Ads**, attribution,
    speed-to-lead work, normal intake notifications, and a provider-confirmed ZIP/county when the
    address matched confidently.
-6. Under **Settings > Communications**, save each alert recipient's cellphone and enable
+5. Under **Settings > Communications**, save each alert recipient's cellphone and enable
    **Text new Facebook leads**.
-7. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
+6. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
    alert per enabled employee using a controlled test lead.
 
 Stonegate never treats a Facebook lead-form phone field as seller SMS consent. The form may permit

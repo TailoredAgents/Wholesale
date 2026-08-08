@@ -458,10 +458,6 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="ZAPIER_FACEBOOK_LEADS_ENABLED",
     )
-    zapier_facebook_leads_secret: str | None = Field(
-        default=None,
-        validation_alias="ZAPIER_FACEBOOK_LEADS_SECRET",
-    )
     zapier_facebook_page_id: str | None = Field(
         default=None,
         validation_alias="ZAPIER_FACEBOOK_PAGE_ID",
@@ -943,10 +939,6 @@ class Settings(BaseSettings):
         blockers: list[str] = []
         if not self.zapier_facebook_leads_enabled:
             blockers.append("ZAPIER_FACEBOOK_LEADS_ENABLED=true")
-        if not self.zapier_facebook_leads_secret:
-            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET")
-        elif len(self.zapier_facebook_leads_secret) < 32:
-            blockers.append("ZAPIER_FACEBOOK_LEADS_SECRET must contain at least 32 characters")
         if not self.zapier_facebook_page_id:
             blockers.append("ZAPIER_FACEBOOK_PAGE_ID")
         return tuple(blockers)
