@@ -5,14 +5,21 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
 ## Current State
 
 - `apps/web`: Next.js 16 / React 19 public seller site and private operating system.
-- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 89 migrations.
+- `apps/api`: FastAPI / SQLAlchemy / Alembic business API with 93 migrations.
 - `apps/api/app/worker.py`: deployed email synchronization, call transcription, and
   recording-retention worker, plus lead intake, property research, AI preparation, alerts, and
-  provider retries.
+  provider retries. Fair sweeps give every queue a turn. An independent liveness heartbeat remains
+  fresh during long provider work, while a separate main-loop progress/current-operation marker
+  lets `/ready` report a genuinely hung operation only after the production 600-second stall
+  threshold without treating a normal multi-provider call as stalled.
 - `apps/worker`: original standalone heartbeat scaffold, retained for local history but not used by
   the Render worker service.
 - `render.yaml`: deployed Render Blueprint with legacy `oakwell-*` resource names and no secrets.
-- Clerk authentication and organization-scoped RBAC are live.
+- Clerk authentication and organization-scoped RBAC are live. Production API and protected web
+  routes fail closed when Clerk is incomplete, development-header auth is explicit opt-in, and
+  approval decisions require the permission for their exact request type. The approval API and
+  Tasks approval feed show only request types covered by the viewer's permissions; `audit:view` is
+  the only blanket organization-wide approval-read authority.
 - CRM, shared inbox, Stonegate Valuation V3.1 with default-safe comp intelligence, reports,
   transactions, buyers, finance, marketing, and AI control foundations are implemented.
 - Complete lead addresses automatically create a reusable Property Intelligence snapshot with
@@ -20,10 +27,26 @@ Local-first monorepo and Render deployment for Stonegate Home Buyers.
   Stonegate-owned valuation math, provenance, conflicts, freshness, and an authorized listing
   image when the provider returns one. Inspection photos remain preferred; no Street View,
   satellite, or scraped imagery is used.
-- The branded web domain is live. Stonegate's dedicated A2P Campaign requires resubmission and
-  approval; final Twilio SMS and Voice acceptance remains pending.
+- The branded web domain is live. Stonegate's seller-inquiry A2P Campaign is approved. Internal
+  Facebook lead alerts have prior delivery evidence but require one repeat acceptance after the
+  worker credential correction; seller-facing SMS and final Twilio Voice acceptance remain.
 - Resend sending, receiving, aliases, shared mailboxes, routing, attachments, notifications, and
-  response management are implemented and configured; controlled production acceptance remains.
+  response management are implemented and configured. Provider events use UUID-fenced processing
+  leases, durable validated-route checkpoints, bounded retry for early lifecycle events,
+  manager-only audited dead-letter requeue, and bounded attachment downloads. Restricted aliases
+  cannot auto-route or be manually assigned to standard-visibility conversations. Controlled
+  production mailbox acceptance and the malware-scanning decision remain.
+- Call Intelligence automatically fills only empty CRM fields, keeps narrative review beside the
+  recording, retries temporary failures, exposes terminal exhaustion, and supports an audited
+  manual retry from Inbox.
+- Purchase agreements capture approved offer/underwriting/concession authority and revalidate it
+  through approval, sending, e-signature, and execution. Manual execution requires exact signed
+  evidence and an attestation.
+- Zapier Facebook intake is intentionally secretless and uses Page/form restrictions, payload,
+  burst, daily-volume, and deduplication controls. Those controls do not cryptographically prove
+  Meta provenance, so monitoring remains required. Production in-process rate-limit keys use the
+  edge-owned Cloudflare client address and ignore caller-supplied `X-Forwarded-For`; limiter key
+  storage is hard-bounded, but distributed edge protection remains required before scale.
 
 Start with:
 
@@ -76,7 +99,8 @@ uv run alembic upgrade head
 ```
 
 Copy `.env.example` to `.env` for local defaults. Clerk values can stay blank for local
-development; protected API calls will use the development email header until Clerk keys are added.
+development, but protected API calls use the development email header only after you deliberately
+set `DEV_AUTH_ENABLED=true`. Keep that flag false in shared and production environments.
 
 Bootstrap the first local organization and owner:
 
@@ -160,24 +184,33 @@ npm run build:web
 npm run lint:api
 npm run typecheck:api
 npm run test:api
+npm run lint:web
+npm run typecheck:web
+npm run audit:ia
+npm run audit:underwriting
+
+(cd apps/api && uv run pip-audit --strict --desc=off --progress-spinner=off)
+(cd apps/web && npm audit --workspaces=false --audit-level=high)
 ```
 
 Production operations:
 
 ```bash
-DATABASE_URL='...' npm run db:backup
-RESTORE_DATABASE_URL='...stonegate_restore_test' ALLOW_RESTORE_TEST=true \
-  npm run db:restore-verify -- .backups/stonegate-YYYYMMDDTHHMMSSZ.dump
+# Populate DATABASE_URL and BACKUP_DIR through an approved secret-injection method first.
+npm run db:backup
+# Populate RESTORE_DATABASE_URL and ALLOW_RESTORE_TEST without entering a secret in shell history.
+npm run db:restore-verify -- .backups/stonegate-YYYYMMDDTHHMMSSZ.dump
 API_BASE_URL='https://api.stonegatehb.com' \
 WEB_BASE_URL='https://oakwell-web.onrender.com' npm run ops:smoke
 ```
 
 See `docs/SETUP_REFERENCE.md` before running a restore drill or configuring failure alerts.
 
-Web lint currently runs as a local release check rather than in CI. Next.js web builds skip
-build-time TypeScript validation because Clerk dependency type checking has stalled in this
-environment; API lint, API typecheck, API tests, web lint, and the web production compile remain
-the working release gates.
+GitHub Actions runs API lint, dependency audit, typecheck, and tests plus web dependency audit,
+lint, explicit TypeScript checking, information-architecture and underwriting contract checks, and
+the production build. The Next.js build still skips its embedded TypeScript validation because that
+dependency graph can stall in this environment; the separate `tsc --noEmit` CI step is the hard
+type gate.
 
 ## GitHub
 

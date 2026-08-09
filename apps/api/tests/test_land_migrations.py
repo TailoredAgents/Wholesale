@@ -1,6 +1,6 @@
 from pathlib import Path
 from runpy import run_path
-from typing import Any
+from typing import Any, cast
 
 import sqlalchemy as sa
 
@@ -46,6 +46,13 @@ def migration_namespace(recorder: MigrationRecorder) -> dict[str, Any]:
     return namespace
 
 
+def resend_reliability_migration_namespace(recorder: MigrationRecorder) -> dict[str, Any]:
+    namespace = run_path(str(MIGRATIONS / "0093_resend_event_reliability.py"))
+    namespace["upgrade"].__globals__["op"] = recorder
+    namespace["downgrade"].__globals__["op"] = recorder
+    return namespace
+
+
 def column_names(elements: tuple[Any, ...]) -> set[str]:
     return {
         element.name
@@ -56,7 +63,7 @@ def column_names(elements: tuple[Any, ...]) -> set[str]:
 
 def constraint_names(elements: tuple[Any, ...]) -> set[str | None]:
     return {
-        element.name
+        cast(str | None, element.name)
         for element in elements
         if isinstance(element, sa.Constraint)
     }
@@ -120,3 +127,42 @@ def test_land_identity_and_valuation_downgrade_removes_dependents_first() -> Non
         ("ix_properties_normalized_parcel_key", "properties")
     ]
     assert recorder.dropped_columns == [("properties", "normalized_parcel_key")]
+
+
+def test_resend_reliability_migration_adds_and_removes_claim_fencing() -> None:
+    recorder = MigrationRecorder()
+    namespace = resend_reliability_migration_namespace(recorder)
+
+    assert namespace["down_revision"] == "0092_land_identity_and_valuation"
+    namespace["upgrade"]()
+    assert [(table, column.name) for table, column in recorder.added_columns] == [
+        ("communication_provider_events", "attempt_count"),
+        ("communication_provider_events", "next_attempt_at"),
+        ("communication_provider_events", "processing_started_at"),
+        ("communication_provider_events", "processing_token"),
+    ]
+    assert (
+        "ix_provider_events_processing_claim",
+        "communication_provider_events",
+        (
+            "provider",
+            "processing_status",
+            "next_attempt_at",
+            "processing_started_at",
+            "received_at",
+        ),
+    ) in recorder.indexes
+    assert any("SET processing_started_at = updated_at" in item for item in recorder.statements)
+
+    downgrade_recorder = MigrationRecorder()
+    namespace = resend_reliability_migration_namespace(downgrade_recorder)
+    namespace["downgrade"]()
+    assert downgrade_recorder.dropped_indexes == [
+        ("ix_provider_events_processing_claim", "communication_provider_events")
+    ]
+    assert downgrade_recorder.dropped_columns == [
+        ("communication_provider_events", "processing_token"),
+        ("communication_provider_events", "processing_started_at"),
+        ("communication_provider_events", "next_attempt_at"),
+        ("communication_provider_events", "attempt_count"),
+    ]

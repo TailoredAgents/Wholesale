@@ -120,6 +120,54 @@ export function TransactionWorkspace({
     finally { setBusy(false); }
   }
 
+  async function recoverSignWellDraft(envelopeId: string) {
+    if (!detail) return;
+    const providerDocumentId = window.prompt(
+      "Paste the unsent SignWell document ID after verifying its Stonegate metadata and recipients.",
+    )?.trim();
+    if (!providerDocumentId) return;
+    const reason = window.prompt("Record how you verified this exact unsent provider draft.")?.trim();
+    if (!reason) return;
+    await action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelopeId}/attach-draft`, {
+      method: "POST",
+      body: JSON.stringify({
+        provider_document_id: providerDocumentId,
+        confirm_provider_draft_verified: true,
+        reason,
+      }),
+    }));
+  }
+
+  async function abandonSignWellIntent(envelopeId: string) {
+    if (!detail || !window.confirm(
+      "Only continue after checking SignWell and confirming that no document exists for this Stonegate package.",
+    )) return;
+    const reason = window.prompt("Record where and how you verified that no provider document exists.")?.trim();
+    if (!reason) return;
+    await action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelopeId}/abandon-draft-intent`, {
+      method: "POST",
+      body: JSON.stringify({
+        confirm_no_provider_document_exists: true,
+        reason,
+      }),
+    }));
+  }
+
+  async function withdrawManualPackage(packageId: string) {
+    if (!detail || !window.confirm(
+      "Confirm the delivered agreement has been withdrawn from every recipient and cannot still be signed.",
+    )) return;
+    const reason = window.prompt("Record how the agreement was withdrawn or destroyed.")?.trim();
+    if (!reason) return;
+    await action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${packageId}/withdraw`, {
+      method: "POST",
+      body: JSON.stringify({
+        confirm_withdrawn_from_all_recipients: true,
+        reason,
+      }),
+    }));
+  }
+
   async function draftContract(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
@@ -207,6 +255,29 @@ export function TransactionWorkspace({
     ));
     form.reset();
     setSignaturePackageId(null);
+  }
+
+  async function recordManualExecution(packageId: string, documentId: string) {
+    const response = window.prompt(
+      "Manual execution attestation: explain how you verified that every required party signed this exact approved agreement.",
+    );
+    if (response === null) return;
+    const reason = response.trim();
+    if (reason.length < 10) {
+      setMessage("Enter at least 10 characters explaining how the signed agreement was verified.");
+      return;
+    }
+    await action(() => request(
+      `/api/v1/transactions/${selectedId}/contract-packages/${packageId}/mark-executed`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          document_id: documentId,
+          confirm_fully_executed: true,
+          reason,
+        }),
+      },
+    ));
   }
 
   async function addDocumentFact(event: FormEvent<HTMLFormElement>) {
@@ -337,13 +408,26 @@ export function TransactionWorkspace({
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Version control</span><h4>Contract packages</h4></div></div>
                   <div className={styles.packageList}>{detail.contract_packages.map((pkg) => {
-                    const signedDocument = detail.documents.find((document) => document.contract_package_id === pkg.id && ["signed_purchase_agreement", "assignment_contract", "executed_addendum", "executed_contract"].includes(document.document_type));
-                    return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}><button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-executed?document_id=${signedDocument.id}`, { method: "POST" }))} type="button">Record executed</button> : null}</div></article>;
+                    const expectedDocumentType = {
+                      purchase_agreement: "signed_purchase_agreement",
+                      assignment_contract: "assignment_contract",
+                      addendum: "executed_addendum",
+                    }[pkg.document_type];
+                    const signedDocument = detail.documents.find((document) => (
+                      document.contract_package_id === pkg.id
+                      && document.document_type === expectedDocumentType
+                      && document.status === "executed"
+                    ));
+                    const activeEnvelope = detail.esign_envelopes.some((envelope) => (
+                      envelope.contract_package_id === pkg.id
+                      && !["completed", "declined", "expired", "cancelled", "error"].includes(envelope.status)
+                    ));
+                    return <article key={pkg.id}><div><strong>{labelize(pkg.document_type)} · version {pkg.version_number}</strong><span className={styles.status}>{labelize(pkg.status)}</span></div><p>{pkg.seller_name} · {money(pkg.purchase_price_cents)} · {date(pkg.closing_date)}</p><div className={styles.inlineActions}><button disabled={busy} onClick={() => void previewContract(pkg.id)} type="button"><FileSearch size={14} />Preview PDF</button>{pkg.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/request-approval`, { method: "POST" }))} type="button">Request approval</button> : null}{pkg.status === "pending_approval" && pkg.approval_request_id ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/approvals/${pkg.approval_request_id}/decision`, { method: "PATCH", body: JSON.stringify({ status: "approved", decision_notes: "Terms reviewed in transaction workspace." }) }))} type="button">Approve package</button> : null}{pkg.status === "approved" && !f4Status?.esign_configured ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/contract-packages/${pkg.id}/mark-sent`, { method: "POST" }))} type="button">Record sent manually</button> : null}{pkg.status === "sent" && !activeEnvelope ? <button disabled={busy} onClick={() => void withdrawManualPackage(pkg.id)} type="button">Withdraw sent package</button> : null}{pkg.status === "approved" && f4Status?.esign_configured ? <span className={styles.actionHint}>Ready for signature request</span> : null}{["approved", "sent"].includes(pkg.status) && signedDocument ? <button disabled={busy} onClick={() => void recordManualExecution(pkg.id, signedDocument.id)} type="button">Attest executed</button> : null}</div></article>;
                   })}</div>
                 </section>
                 <section className={styles.section}>
                   <div className={styles.sectionTitle}><div><span>Provider evidence</span><h4>Signature requests</h4></div><PenLine size={18} /></div>
-                  <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {labelize(envelope.delivery_mode)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small>{!["completed", "declined", "expired", "cancelled"].includes(envelope.status) ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>
+                  <div className={styles.envelopeList}>{detail.esign_envelopes.length ? detail.esign_envelopes.map((envelope) => <article key={envelope.id}><div><strong>{envelope.subject}</strong><span className={styles.status}>{labelize(envelope.status)}</span></div><p>{envelope.recipients.map((recipient) => `${recipient.name}: ${labelize(recipient.status)}`).join(" · ")}</p><small>{labelize(envelope.provider)} · {labelize(envelope.delivery_mode)} · {envelope.test_mode ? "Test document" : "Binding document"} · {envelope.sent_at ? new Date(envelope.sent_at).toLocaleString() : "Not sent"}</small><div className={styles.inlineActions}>{envelope.status === "draft" ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/resume-draft`, { method: "POST" }))} type="button"><PenLine size={14} />Resume saved draft</button> : null}{["creating_draft", "draft_creation_uncertain"].includes(envelope.status) ? <><button disabled={busy} onClick={() => void recoverSignWellDraft(envelope.id)} type="button">Attach verified draft</button><button disabled={busy} onClick={() => void abandonSignWellIntent(envelope.id)} type="button">Abandon empty intent</button></> : null}{!["draft", "completed", "declined", "expired", "cancelled", "error"].includes(envelope.status) && !envelope.provider_document_id.startsWith("intent-") ? <button disabled={busy} onClick={() => void action(() => request(`/api/v1/transactions/${detail.id}/esign/${envelope.id}/reconcile`, { method: "POST" }))} type="button"><RefreshCw size={14} />Reconcile</button> : null}</div></article>) : <p className={styles.empty}>No signature requests sent.</p>}</div>
                 </section>
               </div>
               <div className={styles.rightStack}>
@@ -365,7 +449,7 @@ export function TransactionWorkspace({
             {tab === "documents" ? <div className={styles.sectionGrid}>
               <section className={styles.section}><div className={styles.sectionTitle}><div><span>Private file room</span><h4>Transaction documents</h4></div></div><div className={styles.documentList}>{detail.documents.length === 0 ? <p className={styles.empty}>No files uploaded.</p> : detail.documents.map((document) => <div key={document.id}><FileText size={18} /><div><strong>{document.title}</strong><span>{labelize(document.document_type)} · {(document.file_size / 1024).toFixed(0)} KB</span><small>{labelize(document.storage_provider)} storage · Scan: {labelize(document.malware_scan_status)}</small>{document.facts.map((fact) => <small key={fact.id}>{labelize(fact.field_key)}: {fact.value_text}{fact.source_page ? ` · page ${fact.source_page}` : ""}</small>)}</div><button aria-label={`Download ${document.title}`} onClick={() => void downloadDocument(document)} title="Download" type="button"><Download size={16} /></button></div>)}</div></section>
               <div className={styles.rightStack}>
-                <form className={styles.form} onSubmit={(event) => void uploadDocument(event)}><div className={styles.sectionTitle}><div><span>Evidence</span><h4>Upload document</h4></div><Upload size={18} /></div><label><span>File</span><input name="file" required type="file" /></label><label><span>Title</span><input name="title" placeholder="Signed purchase agreement" required /></label><label><span>Document type</span><select name="document_type"><option value="signed_purchase_agreement">Signed purchase agreement</option><option value="earnest_money_receipt">Earnest money receipt</option><option value="seller_disclosure">Seller disclosure</option><option value="title_document">Title document</option><option value="payoff_statement">Payoff statement</option><option value="assignment_contract">Assignment contract</option><option value="closing_statement">Closing statement</option><option value="funding_confirmation">Funding confirmation</option><option value="other">Other</option></select></label><label><span>Contract package</span><select name="package_id"><option value="">No package</option>{detail.contract_packages.map((pkg) => <option key={pkg.id} value={pkg.id}>Version {pkg.version_number}</option>)}</select></label><input name="document_status" type="hidden" value="final" /><button disabled={busy} type="submit"><Upload size={16} />Upload privately</button></form>
+                <form className={styles.form} onSubmit={(event) => void uploadDocument(event)}><div className={styles.sectionTitle}><div><span>Evidence</span><h4>Upload document</h4></div><Upload size={18} /></div><label><span>File</span><input name="file" required type="file" /></label><label><span>Title</span><input name="title" placeholder="Signed purchase agreement" required /></label><label><span>Document type</span><select name="document_type"><option value="signed_purchase_agreement">Signed purchase agreement</option><option value="earnest_money_receipt">Earnest money receipt</option><option value="seller_disclosure">Seller disclosure</option><option value="title_document">Title document</option><option value="payoff_statement">Payoff statement</option><option value="assignment_contract">Assignment contract</option><option value="closing_statement">Closing statement</option><option value="funding_confirmation">Funding confirmation</option><option value="other">Other</option></select></label><label><span>Contract package</span><select name="package_id"><option value="">No package</option>{detail.contract_packages.map((pkg) => <option key={pkg.id} value={pkg.id}>Version {pkg.version_number}</option>)}</select></label><label><span>Evidence status</span><select name="document_status"><option value="final">Final / reference copy</option><option value="executed">Fully executed signed copy</option></select></label><small>Mark a document fully executed only after every required party has signed it. Recording execution also requires a separate attestation.</small><button disabled={busy} type="submit"><Upload size={16} />Upload privately</button></form>
                 <form className={styles.form} onSubmit={(event) => void addDocumentFact(event)}><div className={styles.sectionTitle}><div><span>Page evidence</span><h4>Confirm document fact</h4></div><FileSearch size={18} /></div><label><span>Document</span><select disabled={!detail.documents.length} name="document_id" required><option value="">Select document</option>{detail.documents.map((document) => <option key={document.id} value={document.id}>{document.title}</option>)}</select></label><label><span>Fact name</span><input name="field_key" placeholder="Closing date" required /></label><label><span>Confirmed value</span><input name="value_text" placeholder="August 14, 2026" required /></label><label><span>Source page</span><input min="1" name="source_page" type="number" /></label><label><span>Source wording</span><textarea name="source_excerpt" placeholder="Short supporting excerpt" rows={3} /></label><button disabled={busy || !detail.documents.length} type="submit"><Check size={16} />Confirm evidence</button></form>
               </div>
             </div> : null}

@@ -25,13 +25,30 @@ def ready(
         db.execute(text("select 1"))
     except Exception as exc:
         raise HTTPException(status_code=503, detail="database unavailable") from exc
-    worker = get_worker_readiness(db, settings)
-    if worker.required and worker.status in {"missing", "stale", "degraded"}:
+    zapier_blockers = settings.production_zapier_facebook_leads_configuration_blockers
+    if zapier_blockers:
         raise HTTPException(
             status_code=503,
             detail={
                 "status": "not_ready",
-                "checks": {"database": "ready", "worker": worker.status},
+                "checks": {
+                    "database": "ready",
+                    "zapier_facebook_leads": "not_ready",
+                },
+                "blockers": list(zapier_blockers),
+            },
+        )
+    worker = get_worker_readiness(db, settings)
+    if worker.required and worker.status in {"missing", "stale", "stalled", "degraded"}:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "not_ready",
+                "checks": {
+                    "database": "ready",
+                    "worker": worker.status,
+                    "worker_operation": worker.current_operation,
+                },
             },
         )
     return {
@@ -39,5 +56,6 @@ def ready(
         "checks": {
             "database": "ready",
             "worker": worker.status,
+            "worker_operation": worker.current_operation,
         },
     }

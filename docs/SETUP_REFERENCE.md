@@ -1,6 +1,6 @@
 # Stonegate Setup Reference
 
-Last verified against the repository: July 31, 2026
+Last verified against the repository: August 8, 2026
 
 ## Purpose
 
@@ -36,8 +36,8 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | AI | OpenAI | Configured; Copilot pilots pending |
 | Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
 | Operational email | Resend | Configured; controlled acceptance pending |
-| SMS | Twilio | Seller-inquiry A2P approved; internal Facebook lead alerts tested live |
-| Voice | Twilio | Configuration and acceptance pending |
+| SMS | Twilio | Seller-inquiry A2P approved; repeat internal Facebook lead-alert acceptance after the worker credential correction |
+| Voice | Twilio | Implemented and processing calls; complete routing, recording, recovery, retention, and deletion acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Optional and disabled; safe to remove after subscription cancellation |
 | Private object storage | S3-compatible/Cloudflare R2 | Optional/pending |
@@ -82,8 +82,10 @@ Copy the root `.env.example` to `.env`. Local defaults use:
 - communication mode: `simulate`
 - external email, SMS, Voice, e-signature, buyer data, and ad delivery: disabled
 
-Clerk can remain blank for local development. The API permits the configured development email
-header only when `APP_ENV` is not production.
+Clerk can remain blank for local development, but development-header authentication is an explicit
+opt-in. Set `DEV_AUTH_ENABLED=true` only in a local or isolated test environment when using
+`X-Dev-User-Email`; the default is `false`, and production rejects the header regardless of this
+value. Shared test and production environments should keep the flag false and use Clerk.
 
 ### Bootstrap
 
@@ -145,6 +147,12 @@ The API startup command:
 
 The worker is deployed from the API application, not the original `apps/worker` heartbeat
 scaffold.
+
+Production API startup is fail-closed. `APP_ENV` must be exactly `production`, and startup stops
+when the Clerk issuer, explicit or issuer-derived JWKS endpoint, secret key, or at least one
+non-local HTTPS authorized party is missing. On the web service, protected production routes return
+`503` when the Clerk publishable or secret key is unavailable instead of being passed through
+unauthenticated.
 
 ## Domain And Cross-Origin Setup
 
@@ -216,6 +224,7 @@ Official references:
 ### Application And Data
 
 - `APP_ENV`
+- `DEV_AUTH_ENABLED` for deliberate local/test header authentication only; keep false in production
 - `LOG_LEVEL`
 - `DATABASE_URL`
 - `REDIS_URL`
@@ -224,7 +233,17 @@ Official references:
 - `BOOTSTRAP_ADMIN_NAME`
 - `API_CORS_ORIGINS`
 - `WORKER_READINESS_REQUIRED`
-- worker heartbeat, retry, and failure-alert variables
+- `WORKER_HEARTBEAT_INTERVAL_SECONDS`
+- `WORKER_STALE_AFTER_SECONDS`
+- `WORKER_OPERATION_STALL_SECONDS=600` in production
+- worker retry and failure-alert variables
+
+The worker's background heartbeat records process liveness independently from main-loop progress
+and the current operation. `/ready` treats a missing or stale heartbeat as a liveness failure, but
+does not call an active loop `stalled` until main-loop progress exceeds
+`WORKER_OPERATION_STALL_SECONDS`. Keep the production value at 600 seconds unless a measured
+provider-operation envelope justifies a reviewed change; this catches a live-but-hung worker
+without false alarms during normal multi-provider calls.
 
 ### Clerk
 
@@ -236,7 +255,28 @@ Official references:
 - `CLERK_AUTHORIZED_PARTIES`
 - Clerk sign-in, sign-up, and fallback redirect variables on web
 
-The Clerk issuer and JWKS URL belong to Clerk. They must never point at the Stonegate API.
+The Clerk issuer and JWKS URL belong to Clerk. They must never point at the Stonegate API. In
+production the issuer is required, the JWKS URL must be explicit or derivable from that issuer,
+`CLERK_SECRET_KEY` must be present, and `CLERK_AUTHORIZED_PARTIES` must contain at least one
+non-local HTTPS origin. `CLERK_AUDIENCE` remains optional when the token configuration does not use
+an audience.
+
+Public-write controls on the API:
+
+- `PUBLIC_INTAKE_RATE_LIMIT_ENABLED`
+- `PUBLIC_INTAKE_RATE_LIMIT_REQUESTS`
+- `PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS`
+- `PUBLIC_CONVERSION_EVENT_RATE_LIMIT_REQUESTS`
+- `PUBLIC_CONVERSION_EVENT_RATE_LIMIT_WINDOW_SECONDS`
+
+Seller creation and enrichment use separate route keys with the tighter intake budget. Public
+conversion events use their own higher budget. In production, the application keys these limits
+from the edge-owned `CF-Connecting-IP` value and ignores caller-supplied `X-Forwarded-For`; without a
+valid Cloudflare address it falls back to the socket peer. Each in-process limiter hard-bounds its
+tracked key set at 2,048 entries so attacker-controlled key cardinality cannot grow memory without
+limit. These remain per-process safeguards: ensure the production origin accepts the client-IP
+header only from the trusted edge, and add distributed edge/WAF limiting before scaled traffic or
+multiple API instances.
 
 ### Monitoring
 
@@ -402,8 +442,22 @@ by the method.
 - `RESEND_RECEIVING_DOMAIN=stonegatehb.com`
 - `RESEND_DEFAULT_FROM_EMAIL`
 - `RESEND_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
+- `RESEND_EVENT_MAX_ATTEMPTS`
+- `RESEND_EVENT_RETRY_BASE_SECONDS`
+- `RESEND_EVENT_RETRY_MAX_SECONDS`
+- `RESEND_EVENT_PROCESSING_LEASE_SECONDS`
 
 Google OAuth variables are superseded and should remain unused.
+
+Resend webhook and recovery records are claimed under a processing lease. Temporary failures use
+capped exponential retry. Every claim has a UUID fence, so an expired lease can be reclaimed without
+allowing the stale worker to overwrite the new attempt. For inbound mail, the validated route is
+committed before later attachment or provider work; a retry reuses that exact destination. Outbound
+lifecycle webhooks that arrive before the matching CRM send record exists retry within the same
+bounded budget. Once `RESEND_EVENT_MAX_ATTEMPTS` is reached, the event becomes `dead_letter` and
+requires manager review instead of being automatically resurrected. The attachment byte limit is
+enforced against provider metadata, HTTP content length, and streamed content so an oversized
+response is not fully buffered in memory.
 
 ### DNS
 
@@ -430,7 +484,10 @@ In Inbox owner administration:
 2. Choose personal, team, general, or restricted visibility.
 3. Grant authorized senders.
 4. Add signatures and templates.
-5. Resolve or assign unmatched inbound routing exceptions.
+5. Resolve or assign unmatched inbound routing exceptions. A restricted alias can be assigned only
+   to a restricted-visibility conversation; automatic and manual routing both enforce this rule.
+6. Use **Failed events** only after correcting a terminal failure. This tab is manager-only, requires
+   a reason to requeue, and writes an audit event.
 
 ### Acceptance
 
@@ -446,6 +503,20 @@ Test each approved alias:
 8. bounce or failure visibility
 9. duplicate webhook handling
 10. unauthorized sender and restricted mailbox denial
+11. one temporary provider-processing failure that retries after its delay
+12. one abandoned processing claim that becomes eligible after the lease expires while the stale
+    claim can no longer finalize or overwrite it
+13. declared-size and streamed oversize attachments that fail safely
+14. one poison event that reaches `dead_letter` without blocking later valid mail and remains
+    available in manager-only **Failed events**
+15. one reason-required requeue after the underlying cause is corrected, including its audit event
+16. one early lifecycle webhook that retries until its outbound CRM record exists
+17. one inbound message whose validated route survives a later attachment/provider failure
+18. automatic and manual denial of a standard-visibility destination for a restricted alias
+
+These checks do not complete external mailbox acceptance by themselves. Confirm real sender/reply
+behavior and either activate malware scanning or approve a documented limited safe-attachment
+procedure before relying on Resend as the only operating mailbox.
 
 Messages reaching spam should be evaluated through SPF, DKIM, DMARC, domain reputation, content,
 and recipient engagement. A successful API response alone does not establish inbox placement.
@@ -523,7 +594,7 @@ if the campaign is for consented seller inquiries.
 
 ### Acceptance
 
-After campaign approval and number attachment:
+After campaign approval and direct-number configuration:
 
 1. Send a controlled outbound SMS.
 2. Confirm sent, delivered, and failed states.
@@ -545,17 +616,20 @@ After campaign approval and number attachment:
 - `TWILIO_VOICE_RECORDING_DISCLOSURE`
 - `CALL_RECORDING_RETENTION_DAYS`
 - `CALL_TRANSCRIPTION_ENABLED`
-- `CALL_TRANSCRIPTION_MODEL`
+- `OPENAI_TRANSCRIPTION_MODEL`
+- `CALL_TRANSCRIPTION_POLL_SECONDS`
+- `CALL_TRANSCRIPTION_MAX_ATTEMPTS`
 - `AI_ENABLED` and `OPENAI_API_KEY`
 
 The Account SID identifies the Twilio account. The Auth Token validates provider requests. API
 keys and a TwiML App are not required for Stonegate's cellphone-forwarding mode.
 `TWILIO_VOICE_FROM_NUMBER` is optional and only supports initial line bootstrap; the active line
 records under **Settings > Communications** control caller ID.
-The disclosure is optional. Stonegate's approved Georgia-only one-party mode leaves it unset and
-records `one_party_consent` without playing an announcement. Set the variable when Stonegate
-chooses or is required to announce recording. Recording-consent rules can differ outside Georgia,
-so review the operating policy before calling into other states.
+The disclosure is optional. Stonegate's Owner-selected Georgia-only one-party mode leaves it unset
+and records `one_party_consent` without playing an announcement. The operating/legal policy still
+requires documented production acceptance. Set the variable when Stonegate chooses or is required
+to announce recording. Recording-consent rules can differ outside Georgia, so review the operating
+policy before calling into other states.
 
 ### Webhooks
 
@@ -574,7 +648,9 @@ All paths use `https://api.stonegatehb.com` as the base.
 3. Inbound call routes to the intended staff identity.
 4. No-answer and missed-call task behavior work.
 5. Status callbacks attach to the correct conversation.
-6. Recording remains off until disclosure and retention policy are approved.
+6. Confirm and document acceptance of the Owner-selected recording-authorization and retention
+   mode. In the Georgia-only one-party mode, the spoken disclosure may intentionally remain blank
+   while the authorization state is still recorded.
 7. When recording is enabled, confirm the authorization state, private recording, speaker-aware
    transcript, structured AI draft, automatic empty-field CRM population, correction, rejection,
    internal seller note/activity entry, follow-up task and date, audit history, failure visibility,
@@ -582,6 +658,11 @@ All paths use `https://api.stonegatehb.com` as the base.
 8. **Settings > Integrations** shows **Call recording and AI notes** as configured. A missing Voice,
    recording, transcription, AI, or OpenAI setting is a launch blocker; an intentionally blank
    disclosure is not.
+9. Force one temporary transcription or note-generation failure. Confirm the worker waits for the
+   exponential retry delay rather than immediately repeating the provider charge.
+10. In a controlled test, exhaust `CALL_TRANSCRIPTION_MAX_ATTEMPTS`, confirm Inbox displays the
+    stopped state, then select **Retry call intelligence** and verify the audited retry succeeds on
+    the same call record.
 
 ## SignWell
 
@@ -615,6 +696,36 @@ All paths use `https://api.stonegatehb.com` as the base.
 6. Confirm event reconciliation and completed-document storage.
 7. Repeat from the field appointment on an iPad.
 8. Confirm unauthorized roles cannot send or download restricted documents.
+9. Configure two isolated Stonegate organizations in a controlled test and confirm an
+   organization-specific webhook credential cannot update another organization's envelope.
+10. Replay duplicate, stale, and out-of-order events and confirm they remain auditable without
+    regressing a later or terminal envelope state. If a legacy global webhook credential remains,
+    confirm it fails closed once provider envelopes span organizations.
+11. Confirm production reconciliation compares the document ID, intended recipients/signers,
+    status, and completed PDF with the SignWell API. The webhook HMAC used by this integration signs
+    event type/time, not the full document/signer/body payload, so organization binding alone is not
+    sufficient within one organization.
+12. Confirm Stonegate creates an unsent provider draft first, persists the SignWell document ID,
+    and then sends that exact draft. Simulate a timeout at both phases and verify no second provider
+    document is created automatically.
+13. Confirm a saved `draft` envelope shows **Resume saved draft** in the transaction workspace,
+    while `sending` or `send_uncertain` requires provider reconciliation before any retry.
+14. Simulate a crash after SignWell creates an unsent draft but before Stonegate saves its ID. In
+    **Signature requests**, use **Attach verified draft** and confirm Stonegate accepts only the exact
+    draft whose metadata, test mode, and recipients match the transaction/package reservation.
+15. Simulate a create timeout where the SignWell account contains no matching document. After at
+    least five minutes and an account search, use **Abandon empty intent**, enter a meaningful audit
+    reason, and confirm the package returns to `approved` without deleting the failed envelope.
+16. Confirm a decline, expiration, cancellation, or provider error releases its package exactly once.
+    Re-send the package, replay/reconcile the old terminal event, and confirm it cannot reset the new
+    delivery.
+17. Confirm offer-plan, concession, price-presentation, and seller-agreement changes are blocked while
+    an approved purchase agreement is being sent or remains signable. For a manually delivered
+    agreement, notify every recipient that it is withdrawn, then use **Withdraw sent package** with a
+    meaningful reason before recording new authority.
+18. Reconcile `sent`, then deliver an older-timestamp `completed` event and confirm completion still
+    advances. With two signers, deliver signed/viewed events out of timestamp order and confirm each
+    recipient progresses while envelope state and timestamps never regress.
 
 Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document-content boundaries.
 
@@ -701,7 +812,7 @@ This is separate from the Pixel and Conversions API. The Pixel reports activity 
 Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead. Stonegate
 does not use a Meta developer app, Graph access token, or direct Meta webhook for lead intake.
 
-Variables on both **oakwell-api** and **oakwell-worker**:
+Processing variables needed on both **oakwell-api** and **oakwell-worker**:
 
 - `ZAPIER_FACEBOOK_LEADS_ENABLED`
 - `ZAPIER_FACEBOOK_PAGE_ID`
@@ -711,6 +822,17 @@ Variables on both **oakwell-api** and **oakwell-worker**:
 - `FACEBOOK_ADDRESS_ENRICHMENT_MAX_ATTEMPTS`
 - `FACEBOOK_ADDRESS_ENRICHMENT_RETRY_BASE_SECONDS`
 - `STAFF_LEAD_ALERT_SMS_MODE` plus its retry values
+
+Ingress safety variables needed on **oakwell-api**:
+
+- `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS`, as a comma-separated list of production form IDs
+- `ZAPIER_FACEBOOK_LEADS_BURST_LIMIT`
+- `ZAPIER_FACEBOOK_LEADS_BURST_WINDOW_SECONDS`
+- `ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT`
+
+The burst circuit is an in-process limit. The rolling 24-hour accepted-lead limit is counted from
+durable database events. A duplicate provider lead ID is recognized before the daily circuit so a
+legitimate Zap replay does not consume another accepted-lead slot.
 
 The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
 address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
@@ -791,7 +913,8 @@ RentCast's AVM value range in comp or offer math.
 
 ### Activation And Acceptance
 
-1. Store the numeric Page ID on both Render services. Leave
+1. Store the numeric Page ID on both Render services. On the API, store the exact production form
+   IDs in `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS`. Leave
    `ZAPIER_FACEBOOK_LEADS_ENABLED=false` until the Zap is completely mapped.
 2. Set `ZAPIER_FACEBOOK_LEADS_ENABLED=true` on the API and worker, redeploy, and immediately run the
    Zapier action test.
@@ -808,11 +931,24 @@ RentCast's AVM value range in comp or offer math.
 8. Publish the Zap only after the controlled test passes. Monitor Zap History and Stonegate
    Marketing readiness during the first campaign.
 
-The endpoint is publicly reachable and does not authenticate requests. It rejects the wrong Page,
-limits request size, and returns quickly after durable storage. The worker performs CRM intake and
-retries temporary internal failures with backoff. Facebook lead IDs are unique per organization,
-so Zapier replays are safe. If a Zap fails, correct the mapping and replay the original run; do not
-manually invent another provider lead ID.
+Production startup and `/ready` fail closed when Zapier intake is enabled without at least one
+configured form ID. Populate `ZAPIER_FACEBOOK_ALLOWED_FORM_IDS` before the enabling deploy.
+
+The endpoint is intentionally secretless, publicly reachable, and does not authenticate requests.
+It rejects the wrong Page or an unapproved configured form, limits request size and bursts, stops at
+the rolling daily acceptance circuit, and returns quickly after durable storage. The Page and form
+values are supplied by the caller, so these controls constrain abuse and cost but do not
+cryptographically prove that a request came from Meta or Zapier. Monitor Zap History, accepted form
+IDs, provider-event volume, and daily-circuit responses during every live campaign.
+
+The Zapier burst limiter follows the same production address rule as other public writes: it uses
+the edge-owned `CF-Connecting-IP`, ignores caller `X-Forwarded-For`, and hard-bounds process-local
+keys. Keep the Render origin behind the trusted Cloudflare path and add distributed edge limiting
+before higher volume or multiple API instances.
+
+The worker performs CRM intake and retries temporary internal failures with backoff. Facebook lead
+IDs are unique per organization, so Zapier replays are safe. If a Zap fails, correct the mapping and
+replay the original run; do not manually invent another provider lead ID.
 
 Facebook form submission authorizes Stonegate to respond by the channels stated on that form. It
 does **not** create seller SMS marketing consent. Stonegate records phone and email contact basis
@@ -826,8 +962,8 @@ should receive them:
 2. Enter the employee's personal cellphone in `+1...` format.
 3. Select **Text new Facebook leads** and save.
 4. Leave `STAFF_LEAD_ALERT_SMS_MODE=disabled` until Stonegate confirms its Twilio registration and
-   Messaging Service cover this internal notification use case and each employee has agreed to
-   receive the alerts.
+   direct sender/campaign or optional Messaging Service covers this internal notification use case,
+   and each employee has agreed to receive the alerts.
 5. Run a non-production `simulate` test, then set the API and worker to `live`, redeploy, and submit
    one controlled Zapier test lead.
 6. Confirm each opted-in employee receives one minimal alert and the delivery callback becomes
@@ -888,20 +1024,30 @@ npm run lint:api
 npm run typecheck:api
 npm run test:api
 npm run lint:web
+npm run typecheck:web
+npm run audit:ia
+npm run audit:underwriting
 npm run build:web
+
+(cd apps/api && uv run pip-audit --strict --desc=off --progress-spinner=off)
+(cd apps/web && npm audit --workspaces=false --audit-level=high)
 ```
 
 ### Backup
 
+Populate `DATABASE_URL` and `BACKUP_DIR` through the approved secret-injection mechanism without
+typing the database URL into shell history. Then run:
+
 ```bash
-DATABASE_URL='...' npm run db:backup
+npm run db:backup
 ```
 
 ### Restore Verification
 
+Populate `RESTORE_DATABASE_URL` through the same history-safe mechanism and set
+`ALLOW_RESTORE_TEST=true`. Then run:
+
 ```bash
-RESTORE_DATABASE_URL='...stonegate_restore_test' \
-ALLOW_RESTORE_TEST=true \
 npm run db:restore-verify -- .backups/stonegate-TIMESTAMP.dump
 ```
 
@@ -921,7 +1067,9 @@ After a production deployment:
 
 1. Render build and startup succeed.
 2. migrations finish once without error.
-3. `/health` and `/ready` pass.
+3. `/health` and `/ready` pass. Confirm `/ready` remains ready through one normal longer provider
+   operation, reports its current operation, and would become `stalled` only after the configured
+   600-second production progress threshold.
 4. public homepage, cash-offer form, privacy, and terms load.
 5. Clerk sign-in reaches the correct OS navigation.
 6. one protected API request succeeds.
@@ -932,20 +1080,24 @@ After a production deployment:
 
 | Work | Owner | Trigger |
 | --- | --- | --- |
-| Resend controlled production acceptance | Stonegate owner/partner | Now |
+| Resend controlled production acceptance, including Failed events recovery | Stonegate owner/partner | Now |
 | Search Console and service-area Business Profile acceptance | Stonegate owner/marketing | Before local search launch |
 | First genuine public proof acceptance | Stonegate owner/marketing | After a documented review or outcome exists |
 | First controlled homepage experiment acceptance | Stonegate owner/marketing | After a stable production baseline exists |
 | Approved public team content and photography | Stonegate owner/marketing | Before PC8 production acceptance |
-| Attach approved acquisitions number and configure Messaging Service callbacks | Stonegate owner | Twilio Console |
+| Confirm direct acquisitions sender and signed Twilio callbacks | Stonegate owner | Twilio Console |
 | Dedicated Twilio SMS, Voice, recording, transcription, and AI-note acceptance | Owner and developer | Before launch |
 | SignWell activation and end-to-end signing | Owner and transaction staff | Before live contracts |
 | RealEstateAPI production connection and acceptance | Owner and acquisitions | Passed; monitor credits and evidence quality |
 | CPA accounting acceptance | Owner, finance, CPA | Before relying on first closed period |
 | Underwriting calibration | Owner/acquisitions | As real outcomes accumulate |
-| Google/Meta conversion activation | Owner/marketing | When ad accounts are ready |
+| Google offline conversion activation; ongoing Meta monitoring | Owner/marketing | When the Google ad account is ready |
 | Production restore drill | Owner/developer | Before broad launch |
 | Sentry and alert webhook | Owner/developer | Optional |
+| Real production Facebook form through CRM, research, and staff-alert acceptance | Owner/developer | Before paid Meta traffic scales |
+| Secretless Zapier allowlist, circuits, Zap History, and volume-monitoring review | Owner/developer | Every live Meta campaign |
+| Controlled manual buyer outreach or implemented live disposition delivery | Owner/dispositions | Before marketing the first contracted deal |
+| Malware-scanning and distributed edge-rate-limit decision; restrict origin/header trust | Owner/developer | Before broad scale |
 
 ## Change Procedure
 

@@ -42,6 +42,8 @@ from app.routers import (
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    settings.require_production_auth_configuration()
+    settings.require_production_zapier_facebook_leads_configuration()
     initialize_error_monitoring(settings, service_name="api")
     app = FastAPI(
         title="Real Estate Wholesaling Operating System API",

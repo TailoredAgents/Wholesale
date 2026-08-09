@@ -61,11 +61,23 @@ class ContractPackageRead(BaseModel):
     closing_date: datetime | None
     inspection_period_days: int | None
     approval_request_id: UUID | None
+    authority_snapshot: dict[str, object] | None = None
     notes: str | None
     approved_at: datetime | None
     sent_at: datetime | None
     executed_at: datetime | None
     created_at: datetime
+
+
+class ManualContractExecutionAttestation(BaseModel):
+    document_id: UUID
+    confirm_fully_executed: Literal[True]
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class ManualContractWithdrawalAttestation(BaseModel):
+    confirm_withdrawn_from_all_recipients: Literal[True]
+    reason: str = Field(min_length=10, max_length=1000)
 
 
 class TransactionDocumentFactCreate(BaseModel):
@@ -233,6 +245,17 @@ class EsignSendRequest(BaseModel):
     message: str | None = Field(default=None, max_length=2000)
     recipients: list[EsignRecipientCreate] = Field(min_length=1, max_length=10)
     delivery_mode: Literal["email", "in_person"] = "email"
+
+
+class EsignDraftRecoveryRequest(BaseModel):
+    provider_document_id: str = Field(min_length=1, max_length=255)
+    confirm_provider_draft_verified: Literal[True]
+    reason: str = Field(min_length=10, max_length=1000)
+
+
+class EsignDraftAbandonRequest(BaseModel):
+    confirm_no_provider_document_exists: Literal[True]
+    reason: str = Field(min_length=10, max_length=1000)
 
 
 class EsignRecipientRead(BaseModel):

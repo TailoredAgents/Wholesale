@@ -17,6 +17,10 @@ class ResendEmailError(EmailProviderError):
     pass
 
 
+class ResendAttachmentTooLargeError(ResendEmailError):
+    pass
+
+
 class ResendEmailDeliveryProvider(EmailDeliveryProvider):
     provider_name = "resend"
 
@@ -125,9 +129,12 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
         parsed = urlparse(download_url)
         if parsed.scheme != "https" or parsed.hostname != "inbound-cdn.resend.com":
             raise ResendEmailError("Resend returned an invalid attachment download URL.")
-        content = self._download(download_url)
-        if len(content) > max_bytes:
-            raise ResendEmailError("The received attachment exceeds Stonegate's size limit.")
+        declared_size = attachment_size(metadata.get("size"))
+        if declared_size is not None and declared_size > max_bytes:
+            raise ResendAttachmentTooLargeError(
+                "The received attachment exceeds Stonegate's size limit."
+            )
+        content = self._download(download_url, max_bytes=max_bytes)
         return metadata, content
 
     def _request(
@@ -176,20 +183,54 @@ class ResendEmailDeliveryProvider(EmailDeliveryProvider):
             raise ResendEmailError("Resend returned an invalid response.")
         return data
 
-    def _download(self, url: str) -> bytes:
+    def _download(self, url: str, *, max_bytes: int) -> bytes:
         try:
             if self.client is not None:
-                response = self.client.get(url)
+                with self.client.stream("GET", url) as response:
+                    return read_bounded_attachment(response, max_bytes=max_bytes)
             else:
-                with httpx.Client(timeout=self.timeout_seconds) as client:
-                    response = client.get(url)
+                with (
+                    httpx.Client(timeout=self.timeout_seconds) as client,
+                    client.stream("GET", url) as response,
+                ):
+                    return read_bounded_attachment(response, max_bytes=max_bytes)
         except httpx.RequestError as exc:
             raise ResendEmailError("Resend attachment content could not be reached.") from exc
-        if response.status_code >= 400:
-            raise ResendEmailError(
-                f"Resend attachment download failed with status {response.status_code}."
+
+
+def read_bounded_attachment(response: httpx.Response, *, max_bytes: int) -> bytes:
+    if response.status_code >= 400:
+        raise ResendEmailError(
+            f"Resend attachment download failed with status {response.status_code}."
+        )
+    content_length = attachment_size(response.headers.get("content-length"))
+    if content_length is not None and content_length > max_bytes:
+        raise ResendAttachmentTooLargeError(
+            "The received attachment exceeds Stonegate's size limit."
+        )
+    content = bytearray()
+    for chunk in response.iter_bytes(chunk_size=64 * 1024):
+        if len(content) + len(chunk) > max_bytes:
+            raise ResendAttachmentTooLargeError(
+                "The received attachment exceeds Stonegate's size limit."
             )
-        return bytes(response.content)
+        content.extend(chunk)
+    return bytes(content)
+
+
+def attachment_size(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        size = value
+    elif isinstance(value, str):
+        try:
+            size = int(value)
+        except ValueError:
+            return None
+    else:
+        return None
+    return size if size >= 0 else None
 
 
 def format_sender(display_name: str, email_address: str) -> str:

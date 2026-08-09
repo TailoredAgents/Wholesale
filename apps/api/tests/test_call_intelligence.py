@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
@@ -28,6 +28,7 @@ from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
     enqueue_call_transcript,
     process_call_transcript,
+    process_next_call_transcript,
 )
 
 OWNER_EMAIL = "owner@example.com"
@@ -177,13 +178,36 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
     )
     db_session.commit()
 
+    transcript.status = "exhausted"
+    transcript.error_message = "Temporary provider failure."
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "attempts": 3,
+        "exhausted_at": datetime.now(UTC).isoformat(),
+    }
+    db_session.commit()
+    retry_client = TestClient(app)
+    retry_response = retry_client.post(
+        f"/api/v1/voice/transcripts/{transcript.id}/retry",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert retry_response.status_code == 202
+    assert retry_response.json()["status"] == "queued"
+    db_session.refresh(transcript)
+    assert transcript.error_message is None
+    assert (transcript.transcript_metadata or {})["attempts"] == 0
+    assert (transcript.transcript_metadata or {})["manual_retry_count"] == 1
+
     monkeypatch.setattr(
         "app.services.call_intelligence.download_twilio_recording",
         lambda *_args: TwilioRecordingMedia(b"audio", "audio/mpeg"),
     )
-    monkeypatch.setattr(
-        "app.services.call_intelligence.OpenAIResponsesClient.create_audio_transcription",
-        lambda *_args, **_kwargs: OpenAIAudioTranscript(
+    audio_transcription_calls = 0
+
+    def transcribe_audio(*_args: object, **_kwargs: object) -> OpenAIAudioTranscript:
+        nonlocal audio_transcription_calls
+        audio_transcription_calls += 1
+        return OpenAIAudioTranscript(
             text="Seller wants to move in 30 days and asks $180,000.",
             language="en",
             segments=[
@@ -197,7 +221,11 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
             total_tokens=1100,
             input_tokens=1000,
             output_tokens=100,
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.services.call_intelligence.OpenAIResponsesClient.create_audio_transcription",
+        transcribe_audio,
     )
     notes_payload = {
         "summary": "Seller discussed timing, price, and roof repairs.",
@@ -224,16 +252,28 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
             }
         ],
     }
-    monkeypatch.setattr(
-        "app.services.call_intelligence.OpenAIResponsesClient.create_structured_response",
-        lambda *_args, **_kwargs: (
+    structured_response_calls = 0
+
+    def create_structured_notes(
+        *_args: object,
+        **_kwargs: object,
+    ) -> tuple[dict[str, object], dict[str, int]]:
+        nonlocal structured_response_calls
+        structured_response_calls += 1
+        if structured_response_calls == 1:
+            raise ValueError("Temporary note-generation failure.")
+        return (
             notes_payload,
             {
                 "input_tokens": 2000,
                 "output_tokens": 500,
                 "total_tokens": 2500,
             },
-        ),
+        )
+
+    monkeypatch.setattr(
+        "app.services.call_intelligence.OpenAIResponsesClient.create_structured_response",
+        create_structured_notes,
     )
     settings = Settings.model_validate(
         {
@@ -242,11 +282,27 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
             "CALL_TRANSCRIPTION_ENABLED": True,
         }
     )
+    first_attempt = process_call_transcript(db_session, transcript.id, settings)
+    assert first_attempt.status == "failed"
+    assert first_attempt.transcript_text
+    assert audio_transcription_calls == 1
+    checkpoint = (first_attempt.transcript_metadata or {}).get("transcription_checkpoint")
+    assert isinstance(checkpoint, dict)
+    assert checkpoint["model"] == "gpt-4o-transcribe-diarize"
+    failed_run = db_session.scalar(select(AiRunLog).where(AiRunLog.status == "failed"))
+    assert failed_run is not None
+    assert failed_run.input_tokens == 1000
+    assert failed_run.output_tokens == 100
+    assert failed_run.total_tokens == 1100
+    assert failed_run.cost_microusd == 3_500
+
     processed = process_call_transcript(db_session, transcript.id, settings)
 
     assert processed.status == "needs_review"
     assert processed.transcript_text
     assert processed.confidence_score == 88
+    assert audio_transcription_calls == 1
+    assert structured_response_calls == 2
     db_session.refresh(lead)
     assert lead.motivation == "Existing verified motivation"
     assert lead.desired_timeline == "30 days"
@@ -264,16 +320,22 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
     lead.occupancy_status = "Tenant occupied"
     db_session.commit()
     assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
-    assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 1
-    ai_run = db_session.scalar(select(AiRunLog))
+    assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 2
+    run_keys = set(db_session.scalars(select(AiRunLog.idempotency_key)))
+    assert len(run_keys) == 2
+    assert all(key and ":manual:1:attempt:" in key for key in run_keys)
+    ai_run = db_session.scalar(select(AiRunLog).where(AiRunLog.status == "needs_review"))
     assert ai_run is not None
-    assert ai_run.input_tokens == 3000
-    assert ai_run.output_tokens == 600
-    assert ai_run.total_tokens == 3600
-    assert ai_run.cost_microusd == 28_500
+    assert ai_run.input_tokens == 2000
+    assert ai_run.output_tokens == 500
+    assert ai_run.total_tokens == 2500
+    assert ai_run.cost_microusd == 25_000
     assert ai_run.cost_cents == 3
     assert ai_run.run_metadata is not None
     assert ai_run.run_metadata["pricing_status"] == "priced"
+    assert ai_run.run_metadata["transcription_reused"] is True
+    total_call_cost = db_session.scalar(select(func.sum(AiRunLog.cost_microusd)))
+    assert total_call_cost == 28_500
     operation_event = db_session.scalar(
         select(AiOrchestratorEvent).where(
             AiOrchestratorEvent.event_key == f"call.notes:{transcript.id}"
@@ -389,6 +451,7 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
         )
         == 1
     )
+
     follow_up_task = db_session.scalar(select(Task).where(Task.task_type == "call_follow_up"))
     assert follow_up_task is not None
     assert follow_up_task.due_at is not None
@@ -414,3 +477,24 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
         )
         == 1
     )
+
+    transcript.status = "failed"
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "attempts": 1,
+        "next_retry_at": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+    }
+    db_session.commit()
+    assert process_next_call_transcript(db_session, settings) is None
+    db_session.refresh(transcript)
+    assert transcript.status == "failed"
+
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "attempts": settings.call_transcription_max_attempts,
+        "next_retry_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+    }
+    db_session.commit()
+    assert process_next_call_transcript(db_session, settings) is None
+    db_session.refresh(transcript)
+    assert transcript.status == "exhausted"

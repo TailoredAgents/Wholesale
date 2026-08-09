@@ -47,12 +47,14 @@ The complete internal workflow is implemented:
 The following still require external configuration, approval, or production acceptance:
 
 - Controlled Resend production mailbox acceptance.
-- Approved Stonegate Twilio acquisitions-number attachment and SMS production acceptance.
+- Repeat the internal Facebook lead-alert delivery test after the worker credential correction;
+  seller-facing SMS production acceptance remains pending.
 - Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until the market-specific authorization and retention policy are approved.
 - SignWell, private production object storage, and approved legal document acceptance.
-- RealEstateAPI production key deployment and controlled property-research acceptance.
-- Live buyer-package and advertising conversion delivery.
+- Ongoing RealEstateAPI credit, match-quality, and duplicate-refresh monitoring.
+- Live buyer-package delivery and Google conversion delivery; the accepted Meta browser/server
+  path still requires ongoing diagnostics and campaign monitoring.
 - CPA acceptance of opening balances and the first Stonegate month close.
 - Real Georgia underwriting calibration and supervised Copilot pilots.
 - Autonomous AI external delivery.
@@ -217,7 +219,7 @@ intentional.
 | --- | --- | --- |
 | Owner / Founder / CEO | Home | Full company access, approvals, coverage, policy, finance, marketing, and AI control |
 | Administrator | Home | User support, records, audit, and acquisition administration |
-| Lead Manager | Seller Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
+| Lead Manager | Leads > Lead Queue | Warm response, qualification, nurture, and appointment setting |
 | Acquisitions Closer | Calendar | Schedule, meeting preparation, property visit, underwriting review, negotiation, and contract |
 | VA Caller | Prospecting | Work assigned screened records, dispositions, callbacks, and warm handoff |
 | Dispositions Manager / Rep | Deals | Buyer matching, package release preparation, offers, buyer outcome, and backup |
@@ -261,7 +263,7 @@ The exact list is reduced by role and permission.
 ### Operations
 
 - **Prospecting:** Campaign preparation, prospect imports, calling work, and warm handoff.
-- **Seller Leads:** Warm-lead qualification, seller records, pipeline, follow-up, and underwriting.
+- **Leads:** Warm-lead qualification, seller records, pipeline, follow-up, and underwriting.
 - **Deals:** Contract, approval, closing, and disposition entry point.
 - **Buyers:** Buyer CRM, criteria, proof of funds, and reliability.
 
@@ -276,7 +278,7 @@ The exact list is reduced by role and permission.
 
 Use **New** to enter a seller lead or compose a company email when authorized. Use each workspace's
 local views for focused work: Campaigns and My Calls in Prospecting; Lead Queue, Pipeline, and
-Underwriting in Seller Leads; and transaction, disposition, and finance sections inside Deals.
+Underwriting in Leads; and transaction, disposition, and finance sections inside Deals.
 **My setup** is always available at the bottom of the sidebar. Global search finds authorized
 primary workspaces. Recent destinations return to recently opened OS pages. On mobile, use the
 menu button to open the navigation drawer. The floating Help button remains at the bottom-right.
@@ -292,7 +294,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Prospecting | `/os/prospecting` |
 | Prospecting: Campaigns | `/os/prospecting?view=campaigns` |
 | Prospecting: My Calls | `/os/prospecting?view=my-calls` |
-| Seller Leads | `/os/leads` |
+| Leads | `/os/leads` |
 | Deals | `/os/deals` |
 | Buyers | `/os/buyers` |
 | Finance | `/os/finance` |
@@ -310,11 +312,11 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Legacy Campaigns redirect | `/os/campaigns` |
 | Legacy Team & Access redirect | `/os/operations?tab=team` |
 | Legacy Email Management redirect | `/os/inbox?manage=email` |
-| Seller Leads: Lead Queue | `/os/leads?view=queue` |
+| Leads: Lead Queue | `/os/leads?view=queue` |
 | Archived Leads | `/os/leads/archived` |
-| Seller Leads: Pipeline | `/os/leads?display=board` |
+| Leads: Pipeline | `/os/leads?display=board` |
 | Calendar: Appointment | `/os/calendar?view=appointment` |
-| Seller Leads: Underwriting | `/os/leads?view=underwriting` |
+| Leads: Underwriting | `/os/leads?view=underwriting` |
 | Tasks: Needs Approval | `/os/tasks?view=approvals` |
 | Legacy Approvals redirect | `/os/approvals` |
 | Deals: Transaction work | `/os/deals?view=closing-exceptions` |
@@ -401,7 +403,7 @@ hardware, but they must not share Stonegate or Clerk credentials.
 
 ### Lead Manager
 
-1. Open **Seller Leads > Lead Queue** for priority and neglected-lead signals.
+1. Open **Leads > Lead Queue** for priority and neglected-lead signals.
 2. Open **Today** and accept new warm handoffs before the SLA expires.
 3. Complete **Qualification** using the approved questions.
 4. Work **Inbox > Needs reply**.
@@ -827,7 +829,7 @@ the assignment itself is wrong; do not share logins.
 
 ## 4. Lead Manager Qualification
 
-Open **Seller Leads > Lead Queue**. Its views are:
+Open **Leads > Lead Queue**. Its views are:
 
 - **Copilot**
 - **Today**
@@ -1072,9 +1074,12 @@ When recording and transcription are active:
 3. Compare the transcript and structured notes with the audio.
 4. Review proposed motivation, timeline, condition, occupancy, asking price, commitments, and
    follow-up.
-5. Select only accurate empty CRM fields to fill.
-6. Accept, correct, or reject the draft.
-7. Keep the human-reviewed decision in the audit history.
+5. Review the eligible empty CRM fields that Call Intelligence already populated from transcript
+   evidence. Existing staff-entered values are never overwritten.
+6. Correct any inaccurate auto-filled value while reviewing the narrative, then approve or reject
+   the note draft.
+7. Keep the human-reviewed decision in the audit history. An exhausted job exposes **Retry call
+   intelligence** on the same call after the provider is healthy.
 
 Early audio deletion requires a reason. Deleting audio does not erase the call, transcript review,
 or audit evidence.
@@ -1122,7 +1127,20 @@ person should receive notifications and visibility without sending authority.
 5. The worker places the message into the selected thread.
 
 Never guess. Leave ambiguous correspondence in review until the correct person or business record
-is confirmed.
+is confirmed. Mail received through a restricted alias can be assigned only to a restricted-
+visibility conversation; both automatic matching and manual assignment enforce that boundary.
+
+**Failed events** is a manager-only recovery tab for Resend events that exhausted automatic retry:
+
+1. Read the event, attempt count, and final error.
+2. Correct the provider, routing, or data problem first.
+3. Enter a specific reason explaining why retry is now safe.
+4. Select **Requeue**. Stonegate resets that one event for the worker and records the action in the
+   audit log.
+
+Do not repeatedly requeue an unresolved event. Production mailbox behavior and the approved safe-
+attachment or malware-scanning procedure must still pass acceptance before email is relied on as
+the only channel.
 
 If SMS, Voice, or email reports that it is not configured, use the approved manual contact process
 and log the communication. Do not put another company's credentials, campaign, domain, or numbers
@@ -1280,11 +1298,11 @@ Use **Resume signing** if the session was interrupted. Do not create another pac
 request for the same approved agreement. The seller handoff screen hides the Stonegate workspace
 until the device is returned.
 
-## 9. Seller Leads And Seller Record
+## 9. Leads And Seller Record
 
-### Seller Leads
+### Leads
 
-Use **Seller Leads** to work from one seller database. Its local views are **Lead Queue**, **All
+Use **Leads** to work from one seller database. Its local views are **Lead Queue**, **All
 Leads**, **Pipeline**, and **Underwriting**.
 
 1. Select **New Lead** for a warm call, referral, networking contact, or other staff-entered seller.
@@ -1305,7 +1323,7 @@ view. Select **Back** in the seller record to return to the same filters and sel
 Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
 Prospecting as prospects until the seller expresses interest.
 
-Use **Archived** from Seller Leads to locate and restore archived records.
+Use **Archived** from Leads to locate and restore archived records.
 
 ### Pipeline
 
@@ -1358,7 +1376,7 @@ independent decisions.
 
 ## 10. Underwriting And Comp Analysis
 
-Open **Seller Leads > Underwriting** to choose an active valuation case. Detailed analysis is
+Open **Leads > Underwriting** to choose an active valuation case. Detailed analysis is
 completed in the seller record's **Valuation & Offer** section. Calibration and provider-quality
 controls are in **Settings > Data & Quality**.
 
@@ -1494,8 +1512,9 @@ Review the result from top to bottom:
    adjusted closed-sale indications without adding a generic provider or confidence envelope.
    Resolve unknown condition, wide adjusted-sale dispersion, expanded-market comps, withheld
    adjustments, large extrapolations, and provider conflicts when shown.
-7. Open **External benchmarks** only when comparison context is useful. RentCast and DealMachine
-   estimates in this section are excluded from ARV and offer math.
+7. Open **External benchmarks** only when comparison context is useful. RentCast and RealEstateAPI
+   estimates in this section are excluded from ARV and offer math. Older saved analyses may retain
+   a clearly labeled legacy DealMachine benchmark.
 8. When **AI Comp Analyst draft** is present, review its include/exclude/review suggestions,
    condition hypotheses, micro-market concerns, missing questions, range explanations, and cited
    evidence IDs. Accept, correct, or reject the suggestions through the normal comp review; the AI
@@ -1626,8 +1645,10 @@ reusing stale approval.
 
 ## 12. Reviews And Approvals In Tasks
 
-Open **Tasks > Needs Approval** for governed and AI decisions visible to your role. The old `/os/approvals`
-address redirects here.
+Open **Tasks > Needs Approval** for governed and AI decisions visible to your role. Without
+`audit:view`, the feed shows only approval types covered by your permissions; `audit:view` is the
+only blanket approval-read authority and still does not let you decide a request. The old
+`/os/approvals` address redirects here.
 
 1. Select the request.
 2. Read the title, summary, due state, source record, and consequences.
@@ -1669,7 +1690,8 @@ The Transactions workspace has:
 
 ### Contract
 
-1. Select or create the contract package.
+1. Confirm the transaction has a current approved offer plan, approved underwriting version, and
+   seller-agreed/current purchase price, then select or create the contract package.
 2. Select Purchase Agreement, Assignment Agreement, or Contract Addendum and confirm the seller,
    property, price, dates, and terms.
 3. Select **Preview PDF** and review the exact agreement before approval.
@@ -1679,7 +1701,9 @@ The Transactions workspace has:
 6. Confirm SignWell is connected. Stonegate generates the signing PDF internally.
 7. Enter the seller or assignee name and email. Add a second seller when needed. Stonegate adds the
    signed-in company user automatically.
-8. Select **Send for signature** only after the exact package version is approved.
+8. Select **Send for signature** only after the exact package version is approved. If the source
+   offer, underwriting version, price, seller agreement, or governing concession changed, create a
+   new package instead of bypassing the stale-authority warning.
 9. Track recipients under **Signature requests**. Use **Refresh status** if a provider update is
    delayed.
 10. Confirm the completed provider PDF appears in Documents before continuing closing work.
@@ -1689,7 +1713,9 @@ Outcome** instead of the email form. Both methods use the same approved package,
 provider status, completed PDF, and audit trail.
 
 Until production SignWell acceptance is complete, use the controlled manual execution workflow.
-Never mark a contract executed merely because a draft was approved or an email was sent.
+Upload the exact package as a **Fully executed signed copy**, link it to that package, verify every
+required signature, and use **Attest executed** with the required explanation. Never mark a
+contract executed merely because a draft was approved or an email was sent.
 See `SETUP_REFERENCE.md` for SignWell account setup and production acceptance.
 
 ### Closing
@@ -1790,8 +1816,10 @@ When DealMachine is configured, **External buyer intelligence** adds deal-specif
 9. Refresh the case's buyer ranking.
 
 The search does not send outreach and does not automatically add every result. Candidates remain
-outside the Buyer CRM until a person approves their import. If DealMachine is not configured,
-maintain buyers manually until the purchased account passes controlled acceptance.
+outside the Buyer CRM until a person approves their import. DealMachine is disabled and is not part
+of the current launch plan; maintain buyers manually unless the Owner deliberately reactivates the
+legacy adapter and completes a new provider-quality, billing, permission, and production acceptance
+test.
 
 ### Offers
 

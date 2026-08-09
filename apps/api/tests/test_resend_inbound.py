@@ -12,9 +12,13 @@ from sqlalchemy.orm import Session
 from svix.webhooks import Webhook
 
 from app.core.config import Settings, get_settings
-from app.integrations.resend_email import ResendEmailDeliveryProvider
+from app.integrations.resend_email import (
+    ResendAttachmentTooLargeError,
+    ResendEmailDeliveryProvider,
+)
 from app.main import app
 from app.models.foundation import (
+    AuditEvent,
     CommunicationParticipant,
     CommunicationProviderEvent,
     CommunicationRecord,
@@ -23,9 +27,17 @@ from app.models.foundation import (
     EmailAttachment,
     User,
 )
+from app.routers import resend_webhooks as resend_webhooks_router
 from app.services.bootstrap import bootstrap_foundation
 from app.services.resend_email_events import (
+    ResendLeaseLostError,
+    ResendLifecycleNotReadyError,
+    claim_next_resend_event,
+    complete_resend_event,
+    finalize_resend_event_claim,
     process_next_resend_event,
+    received_email_is_known,
+    record_resend_event_failure,
     recover_next_received_email,
 )
 
@@ -38,6 +50,7 @@ WEBHOOK_SECRET = "whsec_dGVzdC1yZXNlbmQtd2ViaG9vay1zZWNyZXQ="
 def resend_inbound_settings(monkeypatch: MonkeyPatch) -> Iterator[Settings]:
     values = {
         "APP_ENV": "local",
+        "DEV_AUTH_ENABLED": "true",
         "COMMUNICATION_PROVIDER_MODE": "live",
         "EMAIL_ENABLED": "true",
         "EMAIL_PROVIDER": "resend",
@@ -228,6 +241,23 @@ def provider_for_messages(messages: dict[str, dict[str, Any]]) -> ResendEmailDel
         api_key="re_test",
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
+
+
+def test_resend_webhook_rejects_an_oversized_body_before_verification(
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(resend_webhooks_router, "MAX_WEBHOOK_BYTES", 8)
+
+    response = TestClient(app).post(
+        "/api/v1/webhooks/resend",
+        content=b"123456789",
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 413
+    assert response.json()["detail"] == "Resend webhook payload is too large."
 
 
 def test_signed_inbound_reply_is_durable_threaded_and_replay_safe(
@@ -491,6 +521,66 @@ def test_new_correspondent_routes_to_alias_owner_as_general_conversation(
     assert communication.conversation_id == conversation.id
 
 
+def test_restricted_alias_never_falls_back_to_unrelated_standard_thread(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _standard_alias_id, seller_conversation, _outbound = prepare_conversation(
+        db_session,
+        client,
+    )
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    restricted_alias = client.post(
+        "/api/v1/email/aliases",
+        headers=OWNER_HEADERS,
+        json={
+            "email_address": "closing@stonegatehb.com",
+            "display_name": "Stonegate Closing",
+            "alias_type": "department",
+            "purpose_key": "closing",
+            "owner_user_id": str(owner.id),
+        },
+    )
+    assert restricted_alias.status_code == 201, restricted_alias.text
+    message = inbound_message("restricted-alias-1")
+    message["to"] = ["offers@stonegatehb.com", "closing@stonegatehb.com"]
+    accepted = signed_webhook(
+        client,
+        event_id="evt-restricted-alias",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "restricted-alias-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com", "closing@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    provider = provider_for_messages({"restricted-alias-1": message})
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-restricted-alias"
+        )
+    )
+    assert event is not None
+    assert event.payload["_routing"]["rule"] == "alias_owner_or_team"
+    assert event.conversation_id != seller_conversation.id
+    restricted_conversation = db_session.get(Conversation, event.conversation_id)
+    assert restricted_conversation is not None
+    assert restricted_conversation.visibility_scope == "restricted"
+    assert str(restricted_conversation.source_alias_id) == restricted_alias.json()["id"]
+
+
 def test_inbound_email_from_stonegate_identity_is_ignored_as_a_loop(
     db_session: Session,
     api_db_override: None,
@@ -726,3 +816,728 @@ def test_unmatched_inbound_email_stays_in_the_review_queue(
         ).json()["items"]
         == []
     )
+
+
+def test_poison_event_backoff_does_not_block_a_later_received_email(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    for event_id, provider_message_id in (
+        ("evt-poison", "poison-1"),
+        ("evt-after-poison", "after-poison-1"),
+    ):
+        accepted = signed_webhook(
+            client,
+            event_id=event_id,
+            payload={
+                "type": "email.received",
+                "created_at": datetime.now(UTC).isoformat(),
+                "data": {
+                    "email_id": provider_message_id,
+                    "from": "seller@example.com",
+                    "to": ["offers@stonegatehb.com"],
+                },
+            },
+        )
+        assert accepted.status_code == 200
+
+    good_message = inbound_message("after-poison-1")
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/poison-1"):
+            return httpx.Response(
+                503,
+                json={"message": "temporary provider failure"},
+                request=request,
+            )
+        return httpx.Response(200, json=good_message, request=request)
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(RuntimeError, match="temporary provider failure"):
+        process_next_resend_event(
+            db_session,
+            resend_inbound_settings,
+            client=provider,
+        )
+    poison = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-poison"
+        )
+    )
+    assert poison is not None
+    assert poison.processing_status == "retry"
+    assert poison.attempt_count == 1
+    assert poison.next_attempt_at is not None
+
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    ) is not None
+    good = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-after-poison"
+        )
+    )
+    assert good is not None
+    assert good.processing_status == "processed"
+    assert db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "after-poison-1"
+        )
+    ) is not None
+
+
+def test_stale_processing_event_is_reclaimed_after_its_lease(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-stale-claim",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "stale-claim-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-stale-claim"
+        )
+    )
+    assert event is not None
+    event.processing_status = "processing"
+    event.processing_started_at = datetime.now(UTC) - timedelta(seconds=31)
+    event.attempt_count = 1
+    db_session.commit()
+
+    settings = resend_inbound_settings.model_copy(
+        update={"resend_event_processing_lease_seconds": 30}
+    )
+    provider = provider_for_messages({"stale-claim-1": inbound_message("stale-claim-1")})
+    assert process_next_resend_event(db_session, settings, client=provider) == event.id
+    db_session.refresh(event)
+    assert event.processing_status == "processed"
+    assert event.processing_started_at is None
+    assert event.attempt_count == 2
+
+
+def test_resend_retry_backoff_caps_and_terminally_dead_letters(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-exhausted",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "exhausted-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    request_count = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal request_count
+        request_count += 1
+        return httpx.Response(
+            503,
+            json={"message": "still unavailable"},
+            request=request,
+        )
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    settings = resend_inbound_settings.model_copy(
+        update={
+            "resend_event_max_attempts": 3,
+            "resend_event_retry_base_seconds": 2,
+            "resend_event_retry_max_seconds": 3,
+        }
+    )
+    retry_delays: list[float] = []
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-exhausted"
+        )
+    )
+    assert event is not None
+    for attempt in range(1, 4):
+        with pytest.raises(RuntimeError, match="still unavailable"):
+            process_next_resend_event(db_session, settings, client=provider)
+        after_failure = datetime.now(UTC)
+        db_session.refresh(event)
+        assert event.attempt_count == attempt
+        if attempt < 3:
+            assert event.processing_status == "retry"
+            assert event.next_attempt_at is not None
+            next_attempt_at = event.next_attempt_at
+            if next_attempt_at.tzinfo is None:
+                next_attempt_at = next_attempt_at.replace(tzinfo=UTC)
+            retry_delays.append((next_attempt_at - after_failure).total_seconds())
+            event.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+            db_session.commit()
+
+    assert 1.5 <= retry_delays[0] <= 2.5
+    assert 2.5 <= retry_delays[1] <= 3.5
+    assert event.processing_status == "dead_letter"
+    assert event.next_attempt_at is None
+    assert event.processing_started_at is None
+    assert event.processed_at is not None
+    assert request_count == 3
+    assert process_next_resend_event(db_session, settings, client=provider) is None
+
+
+def test_oversize_attachment_is_rejected_but_email_body_is_retained(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-oversize",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "oversize-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    message = inbound_message("oversize-1", with_attachment=True)
+    message["attachments"][0]["size"] = (
+        resend_inbound_settings.email_max_attachment_bytes + 1
+    )
+    provider = provider_for_messages({"oversize-1": message})
+
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    ) is not None
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "oversize-1"
+        )
+    )
+    assert communication is not None
+    assert communication.body == "Tuesday works for me."
+    attachment = db_session.scalar(
+        select(EmailAttachment).where(
+            EmailAttachment.communication_record_id == communication.id
+        )
+    )
+    assert attachment is not None
+    assert attachment.content_data is None
+    assert attachment.attachment_metadata is not None
+    assert attachment.attachment_metadata["storage_status"] == "rejected"
+    assert "size limit" in attachment.attachment_metadata["error"]
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-oversize"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "processed"
+
+
+@pytest.mark.parametrize(
+    ("headers", "stream"),
+    [
+        ({"content-length": "5"}, httpx.ByteStream(b"x")),
+        ({}, httpx.ByteStream(b"12345")),
+    ],
+)
+def test_resend_attachment_download_enforces_declared_and_actual_byte_caps(
+    headers: dict[str, str],
+    stream: httpx.ByteStream,
+) -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "inbound-cdn.resend.com":
+            return httpx.Response(
+                200,
+                headers=headers,
+                stream=stream,
+                request=request,
+            )
+        return httpx.Response(
+            200,
+            json={
+                "id": "attachment-1",
+                "size": 0,
+                "download_url": "https://inbound-cdn.resend.com/message/attachment-1",
+            },
+            request=request,
+        )
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(ResendAttachmentTooLargeError, match="size limit"):
+        provider.download_received_attachment(
+            "message-1",
+            "attachment-1",
+            max_bytes=4,
+        )
+
+
+def test_recovery_requeues_stale_processing_and_does_not_hide_dead_letters(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, _outbound = prepare_conversation(db_session, client)
+    now = datetime.now(UTC)
+    stale = CommunicationProviderEvent(
+        organization_id=conversation.organization_id,
+        conversation_id=None,
+        provider="resend",
+        event_type="email.received",
+        external_event_id="recovery:stale-recovery-1",
+        processing_status="processing",
+        payload={"type": "email.received", "data": {"email_id": "stale-recovery-1"}},
+        received_at=now - timedelta(minutes=10),
+        processed_at=None,
+        attempt_count=1,
+        next_attempt_at=None,
+        processing_started_at=now - timedelta(minutes=10),
+        error_message=None,
+    )
+    exhausted = CommunicationProviderEvent(
+        organization_id=conversation.organization_id,
+        conversation_id=None,
+        provider="resend",
+        event_type="email.received",
+        external_event_id="recovery:exhausted-recovery-1",
+        processing_status="dead_letter",
+        payload={"type": "email.received", "data": {"email_id": "exhausted-recovery-1"}},
+        received_at=now - timedelta(minutes=9),
+        processed_at=now,
+        attempt_count=resend_inbound_settings.resend_event_max_attempts,
+        next_attempt_at=None,
+        processing_started_at=None,
+        error_message="exhausted",
+    )
+    db_session.add_all([stale, exhausted])
+    db_session.commit()
+    stale_before = now - timedelta(
+        seconds=resend_inbound_settings.resend_event_processing_lease_seconds
+    )
+    assert not received_email_is_known(
+        db_session,
+        "stale-recovery-1",
+        processing_stale_before=stale_before,
+    )
+    assert not received_email_is_known(
+        db_session,
+        "exhausted-recovery-1",
+        processing_stale_before=stale_before,
+    )
+
+    listed_items = [
+        {"id": "stale-recovery-1", "created_at": now.isoformat()},
+        {"id": "exhausted-recovery-1", "created_at": now.isoformat()},
+        {"id": "new-recovery-1", "created_at": now.isoformat()},
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"object": "list", "has_more": False, "data": listed_items},
+            request=request,
+        )
+
+    provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+    assert recover_next_received_email(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    ) == stale.id
+    db_session.refresh(stale)
+    assert stale.processing_status == "retry"
+    assert stale.processing_started_at is None
+
+    new_event_id = recover_next_received_email(
+        db_session,
+        resend_inbound_settings,
+        client=provider,
+    )
+    assert new_event_id is not None
+    new_event = db_session.get(CommunicationProviderEvent, new_event_id)
+    assert new_event is not None
+    assert new_event.external_event_id == "recovery:new-recovery-1"
+
+
+def test_reclaimed_resend_lease_fences_stale_completion_and_failure(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-lease-fence",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "lease-fence-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    settings = resend_inbound_settings.model_copy(
+        update={"resend_event_processing_lease_seconds": 30}
+    )
+    first_claim = claim_next_resend_event(db_session, settings)
+    assert first_claim is not None
+    first_token = first_claim.processing_token
+    first_claim.event.processing_started_at = datetime.now(UTC) - timedelta(seconds=31)
+    db_session.commit()
+
+    second_claim = claim_next_resend_event(db_session, settings)
+    assert second_claim is not None
+    assert second_claim.event.id == first_claim.event.id
+    assert second_claim.processing_token != first_token
+    complete_resend_event(second_claim.event, "processed")
+    with pytest.raises(ResendLeaseLostError, match="reclaimed"):
+        finalize_resend_event_claim(db_session, second_claim.event, first_token)
+    db_session.rollback()
+
+    event = db_session.get(CommunicationProviderEvent, second_claim.event.id)
+    assert event is not None
+    assert event.processing_status == "processing"
+    assert event.processing_token == second_claim.processing_token
+    assert not record_resend_event_failure(
+        db_session,
+        event.id,
+        RuntimeError("stale worker failed"),
+        settings,
+        processing_token=first_token,
+    )
+    db_session.refresh(event)
+    assert event.processing_status == "processing"
+    assert event.processing_token == second_claim.processing_token
+    assert event.error_message is None
+
+
+def test_lifecycle_event_retries_until_outbound_record_is_committed(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, _conversation, outbound = prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-early-delivered",
+        payload={
+            "type": "email.delivered",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "early-lifecycle-1",
+                "to": ["seller@example.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    with pytest.raises(ResendLifecycleNotReadyError, match="before its outbound"):
+        process_next_resend_event(db_session, resend_inbound_settings)
+
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-early-delivered"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "retry"
+    assert event.attempt_count == 1
+    assert event.next_attempt_at is not None
+
+    outbound.provider_message_id = "early-lifecycle-1"
+    event.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.commit()
+    assert process_next_resend_event(db_session, resend_inbound_settings) == event.id
+    db_session.refresh(event)
+    db_session.refresh(outbound)
+    assert event.processing_status == "processed"
+    assert event.attempt_count == 2
+    assert outbound.status == "delivered"
+
+
+def test_matched_route_is_checkpointed_before_attachment_retry(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, _outbound = prepare_conversation(db_session, client)
+    accepted = signed_webhook(
+        client,
+        event_id="evt-route-checkpoint",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "route-checkpoint-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    message = inbound_message("route-checkpoint-1", with_attachment=True)
+
+    def failing_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/attachments/attachment-1"):
+            return httpx.Response(
+                503,
+                json={"message": "attachment service unavailable"},
+                request=request,
+            )
+        return httpx.Response(200, json=message, request=request)
+
+    failing_provider = ResendEmailDeliveryProvider(
+        api_key="re_test",
+        client=httpx.Client(transport=httpx.MockTransport(failing_handler)),
+    )
+    with pytest.raises(RuntimeError, match="attachment service unavailable"):
+        process_next_resend_event(
+            db_session,
+            resend_inbound_settings,
+            client=failing_provider,
+        )
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-route-checkpoint"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "retry"
+    assert event.payload["_routing"]["status"] == "matched"
+    assert event.payload["_routing"]["conversation_id"] == str(conversation.id)
+    assert db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "route-checkpoint-1"
+        )
+    ) is None
+
+    def routing_must_not_run(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise AssertionError("the checkpointed route should be reused")
+
+    monkeypatch.setattr(
+        "app.services.resend_email_events.resolve_inbound_route",
+        routing_must_not_run,
+    )
+    event.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+    db_session.commit()
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider_for_messages({"route-checkpoint-1": message}),
+    ) == event.id
+    routed = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "route-checkpoint-1"
+        )
+    )
+    assert routed is not None
+    assert routed.conversation_id == conversation.id
+
+
+def test_email_manager_can_review_and_audited_requeue_dead_letter(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, conversation, _outbound = prepare_conversation(db_session, client)
+    user_response = client.post(
+        "/api/v1/operations/users",
+        headers=OWNER_HEADERS,
+        json={
+            "email": "rep@example.com",
+            "display_name": "Acquisition Rep",
+            "role_key": "acquisition_rep",
+        },
+    )
+    assert user_response.status_code == 201, user_response.text
+    event = CommunicationProviderEvent(
+        organization_id=conversation.organization_id,
+        conversation_id=None,
+        provider="resend",
+        event_type="email.received",
+        external_event_id="evt-dead-letter-admin",
+        processing_status="dead_letter",
+        payload={
+            "type": "email.received",
+            "data": {
+                "email_id": "dead-letter-admin-1",
+                "from": "seller@example.com",
+                "to": ["offers@stonegatehb.com"],
+                "subject": "Offer follow-up",
+            },
+        },
+        received_at=datetime.now(UTC) - timedelta(minutes=10),
+        processed_at=datetime.now(UTC),
+        attempt_count=resend_inbound_settings.resend_event_max_attempts,
+        next_attempt_at=None,
+        processing_started_at=None,
+        processing_token=None,
+        error_message="Resend remained unavailable.",
+    )
+    db_session.add(event)
+    db_session.commit()
+    rep_headers = {"X-Dev-User-Email": "rep@example.com"}
+    assert client.get("/api/v1/email/dead-letters", headers=rep_headers).status_code == 403
+    assert (
+        client.post(
+            f"/api/v1/email/dead-letters/{event.id}/requeue",
+            headers=rep_headers,
+            json={"reason": "Provider recovered; retry the inbound email."},
+        ).status_code
+        == 403
+    )
+
+    listed = client.get("/api/v1/email/dead-letters", headers=OWNER_HEADERS)
+    assert listed.status_code == 200, listed.text
+    assert event.processed_at is not None
+    assert listed.json()["items"] == [
+        {
+            "id": str(event.id),
+            "event_type": "email.received",
+            "provider_message_id": "dead-letter-admin-1",
+            "sender": "seller@example.com",
+            "recipients": ["offers@stonegatehb.com"],
+            "subject": "Offer follow-up",
+            "received_at": event.received_at.isoformat().replace("+00:00", "Z"),
+            "processed_at": event.processed_at.isoformat().replace("+00:00", "Z"),
+            "attempt_count": resend_inbound_settings.resend_event_max_attempts,
+            "error_message": "Resend remained unavailable.",
+            "processing_status": "dead_letter",
+        }
+    ]
+    reason = "Provider recovered; retry the inbound email."
+    requeued = client.post(
+        f"/api/v1/email/dead-letters/{event.id}/requeue",
+        headers=OWNER_HEADERS,
+        json={"reason": reason},
+    )
+    assert requeued.status_code == 200, requeued.text
+    assert requeued.json()["processing_status"] == "retry"
+    assert requeued.json()["attempt_count"] == 0
+    db_session.refresh(event)
+    assert event.processing_status == "retry"
+    assert event.next_attempt_at is not None
+    assert event.error_message is None
+    audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.action == "email.dead_letter_requeued",
+            AuditEvent.entity_id == event.id,
+        )
+    )
+    assert audit is not None
+    assert audit.actor_type == "user"
+    assert audit.reason == reason
+
+
+def test_restricted_inbound_cannot_auto_or_manually_route_to_standard_conversation(
+    db_session: Session,
+    api_db_override: None,
+    resend_inbound_settings: Settings,
+) -> None:
+    client = TestClient(app)
+    _alias_id, standard_conversation, _outbound = prepare_conversation(db_session, client)
+    restricted_alias = client.post(
+        "/api/v1/email/aliases",
+        headers=OWNER_HEADERS,
+        json={
+            "email_address": "closing@stonegatehb.com",
+            "display_name": "Stonegate Closing",
+            "alias_type": "department",
+            "purpose_key": "closing",
+        },
+    )
+    assert restricted_alias.status_code == 201, restricted_alias.text
+    message = inbound_message("restricted-standard-1")
+    message["to"] = ["closing@stonegatehb.com"]
+    accepted = signed_webhook(
+        client,
+        event_id="evt-restricted-standard",
+        payload={
+            "type": "email.received",
+            "created_at": datetime.now(UTC).isoformat(),
+            "data": {
+                "email_id": "restricted-standard-1",
+                "from": "seller@example.com",
+                "to": ["closing@stonegatehb.com"],
+            },
+        },
+    )
+    assert accepted.status_code == 200
+    assert process_next_resend_event(
+        db_session,
+        resend_inbound_settings,
+        client=provider_for_messages({"restricted-standard-1": message}),
+    ) is not None
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == "evt-restricted-standard"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "unmatched"
+    assert event.conversation_id is None
+    assert event.payload["_routing"]["email_sender_alias_ids"] == [
+        restricted_alias.json()["id"]
+    ]
+
+    resolved = client.post(
+        f"/api/v1/email/routing-exceptions/{event.id}/resolve",
+        headers=OWNER_HEADERS,
+        json={"conversation_id": str(standard_conversation.id)},
+    )
+    assert resolved.status_code == 422, resolved.text
+    assert "Restricted mailbox email" in resolved.json()["detail"]
+    db_session.refresh(event)
+    assert event.processing_status == "unmatched"
+    assert event.conversation_id is None

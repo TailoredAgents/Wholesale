@@ -25,11 +25,14 @@ from app.services.meta_lead_ads import (
 )
 from app.services.operations import (
     COMMUNICATIONS_WORKER,
+    mark_worker_operation_finished,
+    mark_worker_operation_started,
     operation_retry_due,
     record_operation_failure,
     record_worker_heartbeat,
     register_worker,
     resolve_operation_failures,
+    touch_worker_heartbeat,
 )
 from app.services.property_intelligence import (
     backfill_next_property_snapshot,
@@ -44,6 +47,24 @@ from app.services.voice import purge_next_expired_recording
 logger = structlog.get_logger()
 WorkerOperation = Callable[[Session, Settings], UUID | None]
 
+WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
+    ("meta_lead_ads", process_next_meta_lead_event),
+    ("staff_lead_alerts", process_next_staff_lead_alert),
+    ("meta_address_enrichment", process_next_meta_address_enrichment),
+    ("property_intelligence", process_next_property_research),
+    ("ai_operations", process_next_ai_operation),
+    ("call_transcription", process_next_call_transcript),
+    ("recording_retention", purge_next_expired_recording),
+    ("email_sync", sync_next_email_account),
+    ("resend_email_events", process_next_resend_event),
+    ("resend_email_recovery", recover_next_received_email),
+    ("mailbox_notifications", process_next_mailbox_notification),
+    ("acquisition_reminders", process_next_acquisition_reminder),
+    ("lead_manager_escalations", process_next_escalation),
+    ("marketing_conversions", process_next_marketing_conversion),
+    ("property_intelligence_backfill", backfill_next_property_snapshot),
+)
+
 
 def install_shutdown_handlers(stop_event: threading.Event) -> None:
     def request_shutdown(signum: int, _frame: object) -> None:
@@ -52,6 +73,20 @@ def install_shutdown_handlers(stop_event: threading.Event) -> None:
 
     signal.signal(signal.SIGINT, request_shutdown)
     signal.signal(signal.SIGTERM, request_shutdown)
+
+
+def run_heartbeat(stop_event: threading.Event, settings: Settings) -> None:
+    """Keep readiness fresh while a provider operation is still in flight."""
+    interval_seconds = min(
+        settings.worker_heartbeat_interval_seconds,
+        max(1, settings.worker_stale_after_seconds // 3),
+    )
+    while not stop_event.wait(interval_seconds):
+        try:
+            with SessionLocal() as db:
+                touch_worker_heartbeat(db)
+        except Exception:
+            logger.exception("communications_worker_heartbeat_failed")
 
 
 def run_worker(stop_event: threading.Event) -> None:
@@ -64,29 +99,23 @@ def run_worker(stop_event: threading.Event) -> None:
         transcription_enabled=settings.call_transcription_enabled,
         poll_seconds=settings.call_transcription_poll_seconds,
     )
-    operations: tuple[tuple[str, WorkerOperation], ...] = (
-        ("meta_lead_ads", process_next_meta_lead_event),
-        ("staff_lead_alerts", process_next_staff_lead_alert),
-        ("meta_address_enrichment", process_next_meta_address_enrichment),
-        ("property_intelligence", process_next_property_research),
-        ("ai_operations", process_next_ai_operation),
-        ("call_transcription", process_next_call_transcript),
-        ("recording_retention", purge_next_expired_recording),
-        ("email_sync", sync_next_email_account),
-        ("resend_email_events", process_next_resend_event),
-        ("resend_email_recovery", recover_next_received_email),
-        ("mailbox_notifications", process_next_mailbox_notification),
-        ("acquisition_reminders", process_next_acquisition_reminder),
-        ("lead_manager_escalations", process_next_escalation),
-        ("marketing_conversions", process_next_marketing_conversion),
-        ("property_intelligence_backfill", backfill_next_property_snapshot),
+    heartbeat_thread = threading.Thread(
+        target=run_heartbeat,
+        args=(stop_event, settings),
+        name="stonegate-worker-heartbeat",
+        daemon=True,
     )
+    heartbeat_thread.start()
     while not stop_event.is_set():
-        processed_operation: str | None = None
-        processed_id: UUID | None = None
+        processed_any = False
         had_error = False
-        for operation_name, operation in operations:
+        for operation_name, operation in WORKER_OPERATIONS:
+            if stop_event.is_set():
+                break
+            result: UUID | None = None
             try:
+                with SessionLocal() as operations_db:
+                    mark_worker_operation_started(operations_db, operation_name)
                 with SessionLocal() as db:
                     if not operation_retry_due(
                         db,
@@ -134,21 +163,28 @@ def run_worker(stop_event: threading.Event) -> None:
                             operation=operation_name,
                         )
                 continue
+            finally:
+                try:
+                    with SessionLocal() as operations_db:
+                        mark_worker_operation_finished(operations_db, operation_name)
+                except Exception:
+                    logger.exception(
+                        "communications_worker_progress_record_failed",
+                        operation=operation_name,
+                    )
             if result is not None:
-                processed_operation = operation_name
-                processed_id = result
-                break
+                processed_any = True
+                logger.info(
+                    "communications_worker_item_processed",
+                    operation=operation_name,
+                    record_id=str(result),
+                )
         try:
             with SessionLocal() as db:
                 record_worker_heartbeat(db, had_error=had_error)
         except Exception:
             logger.exception("communications_worker_heartbeat_failed")
-        if processed_operation is not None and processed_id is not None:
-            logger.info(
-                "communications_worker_item_processed",
-                operation=processed_operation,
-                record_id=str(processed_id),
-            )
+        if processed_any:
             continue
         stop_event.wait(
             min(
@@ -156,6 +192,7 @@ def run_worker(stop_event: threading.Event) -> None:
                 settings.worker_heartbeat_interval_seconds,
             )
         )
+    heartbeat_thread.join(timeout=1)
     logger.info("worker_stopped", service=COMMUNICATIONS_WORKER)
 
 

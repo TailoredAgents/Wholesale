@@ -29,7 +29,11 @@ def test_ready_checks_database_without_requiring_worker(
     assert response.status_code == 200
     assert response.json() == {
         "status": "ready",
-        "checks": {"database": "ready", "worker": "not_required"},
+        "checks": {
+            "database": "ready",
+            "worker": "not_required",
+            "worker_operation": None,
+        },
     }
 
 
@@ -69,3 +73,30 @@ def test_ready_rejects_degraded_worker(
 
     assert response.status_code == 503
     assert response.json()["detail"]["checks"]["worker"] == "degraded"
+
+
+def test_ready_rejects_production_zapier_without_form_allowlist(
+    api_db_override: None,
+) -> None:
+    app.dependency_overrides[get_settings] = lambda: Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+            "ZAPIER_FACEBOOK_PAGE_ID": "123456789",
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "",
+        }
+    )
+    try:
+        response = TestClient(app).get("/ready")
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == {
+        "status": "not_ready",
+        "checks": {
+            "database": "ready",
+            "zapier_facebook_leads": "not_ready",
+        },
+        "blockers": ["ZAPIER_FACEBOOK_ALLOWED_FORM_IDS"],
+    }

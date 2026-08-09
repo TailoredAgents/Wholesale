@@ -35,17 +35,17 @@ from app.schemas.tasks import (
     TaskWorkspaceItemRead,
     TaskWorkspaceRead,
 )
-from app.services.approvals import approval_to_read
+from app.services.approvals import (
+    APPROVAL_DECISION_PERMISSION_KEYS,
+    APPROVAL_REQUEST_PERMISSIONS,
+    approval_permission_for_request_type,
+    approval_to_read,
+)
 
 SPEED_TO_LEAD_TASK_TYPE = "speed_to_lead"
 OPEN_TASK_STATUSES = ("open", "in_progress")
 TERMINAL_LEAD_STAGES = {"dead", "disqualified", "closed"}
 TERMINAL_DEAL_STAGES = {"funded", "closed", "cancelled", "dead"}
-APPROVAL_PERMISSION_KEYS = {
-    PermissionKeys.VIEW_AUDIT_LOGS,
-    PermissionKeys.APPROVE_OFFERS,
-    PermissionKeys.SEND_CONTRACTS,
-}
 TEAM_PERMISSION_KEYS = {
     PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
     PermissionKeys.VIEW_AUDIT_LOGS,
@@ -304,17 +304,38 @@ def list_task_workspace(db: Session, principal: Principal) -> TaskWorkspaceRead:
             can_manage_team=can_manage_team,
         )
     ]
-    has_broad_approval_access = bool(APPROVAL_PERMISSION_KEYS & principal.permission_keys)
+    has_broad_approval_access = PermissionKeys.VIEW_AUDIT_LOGS in principal.permission_keys
+    has_type_scoped_approval_access = bool(
+        APPROVAL_DECISION_PERMISSION_KEYS & principal.permission_keys
+    )
     can_review_call_notes = (
         PermissionKeys.ACCESS_RECORDINGS in principal.permission_keys
         and PermissionKeys.EDIT_LEADS in principal.permission_keys
     )
-    can_access_approvals = has_broad_approval_access or can_review_call_notes
+    allowed_approval_request_types = [
+        request_type
+        for request_type, permission in APPROVAL_REQUEST_PERMISSIONS.items()
+        if permission in principal.permission_keys
+    ]
+    if can_review_call_notes:
+        allowed_approval_request_types.append("call_notes_review")
+    can_access_approvals = (
+        has_broad_approval_access
+        or has_type_scoped_approval_access
+        or can_review_call_notes
+    )
     if can_access_approvals:
-        approval_rows = db.execute(
+        approval_query = (
             select(ApprovalRequest, User)
             .outerjoin(User, User.id == ApprovalRequest.assigned_to_user_id)
             .where(ApprovalRequest.organization_id == principal.organization_id)
+        )
+        if not has_broad_approval_access:
+            approval_query = approval_query.where(
+                ApprovalRequest.request_type.in_(allowed_approval_request_types)
+            )
+        approval_rows = db.execute(
+            approval_query
             .order_by(
                 ApprovalRequest.status != "pending",
                 ApprovalRequest.due_at.is_(None),
@@ -497,7 +518,11 @@ def approval_visible_to_principal(
     has_broad_access: bool,
 ) -> bool:
     if request.request_type != "call_notes_review":
-        return has_broad_access
+        required_permission = approval_permission_for_request_type(request.request_type)
+        return has_broad_access or (
+            required_permission is not None
+            and required_permission in principal.permission_keys
+        )
     if (
         PermissionKeys.ACCESS_RECORDINGS not in principal.permission_keys
         or PermissionKeys.EDIT_LEADS not in principal.permission_keys
@@ -696,11 +721,8 @@ def parsed_datetime(value: object) -> datetime | None:
 def can_decide_approval(request: ApprovalRequest, principal: Principal) -> bool:
     if request.status != "pending" or request.request_type == "call_notes_review":
         return False
-    if request.request_type in {"offer_ceiling", "offer_concession"}:
-        return PermissionKeys.APPROVE_OFFERS in principal.permission_keys
-    if request.request_type == "contract_send":
-        return PermissionKeys.SEND_CONTRACTS in principal.permission_keys
-    return PermissionKeys.VIEW_AUDIT_LOGS in principal.permission_keys
+    required_permission = approval_permission_for_request_type(request.request_type)
+    return bool(required_permission and required_permission in principal.permission_keys)
 
 
 def can_complete_task(task: Task, principal: Principal) -> bool:

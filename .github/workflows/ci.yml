@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: uv run ruff check .
 
+      - name: Audit dependencies
+        run: uv run pip-audit --strict --desc=off --progress-spinner=off
+
       - name: Check operational scripts
         run: bash -n ../../scripts/db-backup.sh ../../scripts/db-restore-verify.sh ../../scripts/operations-alert-test.sh ../../scripts/smoke-test.sh
 
@@ -62,8 +65,20 @@ jobs:
       - name: Install dependencies
         run: npm ci --workspaces=false
 
+      - name: Audit dependencies
+        run: npm audit --workspaces=false --audit-level=high
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Check OS information architecture contract
         run: npm run audit:ia
+
+      - name: Check underwriting workspace contract
+        run: npm run audit:underwriting
 
       - name: Build
         run: npm run build

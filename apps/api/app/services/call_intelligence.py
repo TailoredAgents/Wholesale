@@ -39,7 +39,7 @@ from app.schemas.voice import (
     LandStructuredCallNotes,
     StructuredCallNotes,
 )
-from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
+from app.services.ai_costs import AiCostEstimate, cents_from_microusd, estimate_openai_cost
 from app.services.ai_operations import (
     enqueue_call_intelligence_ai_work,
     mark_call_intelligence_ai_work,
@@ -190,6 +190,7 @@ def process_next_call_transcript(
     settings: Settings | None = None,
 ) -> UUID | None:
     settings = settings or get_settings()
+    now = datetime.now(UTC)
     candidates = db.scalars(
         select(CallTranscript)
         .where(
@@ -197,23 +198,36 @@ def process_next_call_transcript(
                 CallTranscript.status.in_(("queued", "failed")),
                 (
                     (CallTranscript.status == "processing")
-                    & (CallTranscript.updated_at < datetime.now(UTC) - timedelta(minutes=15))
+                    & (CallTranscript.updated_at < now - timedelta(minutes=15))
                 ),
             )
         )
         .order_by(CallTranscript.created_at.asc())
         .with_for_update(skip_locked=True)
-        .limit(20)
+        .limit(100)
     ).all()
-    transcript = next(
-        (
-            item
-            for item in candidates
-            if int((item.transcript_metadata or {}).get("attempts", 0))
-            < settings.call_transcription_max_attempts
-        ),
-        None,
-    )
+    transcript: CallTranscript | None = None
+    exhausted_legacy_jobs = False
+    for item in candidates:
+        metadata = item.transcript_metadata or {}
+        attempts = int(metadata.get("attempts", 0))
+        if attempts >= settings.call_transcription_max_attempts:
+            item.status = "exhausted"
+            item.transcript_metadata = {
+                **metadata,
+                "exhausted_at": metadata.get("exhausted_at") or now.isoformat(),
+                "next_retry_at": None,
+            }
+            exhausted_legacy_jobs = True
+            continue
+        if item.status == "failed" and not call_transcript_retry_due(item, now=now):
+            continue
+        transcript = item
+        break
+    if exhausted_legacy_jobs:
+        db.flush()
+        if transcript is None:
+            db.commit()
     if transcript is None:
         recording = db.scalar(
             select(CallRecording)
@@ -253,6 +267,7 @@ def process_call_transcript(
         raise CallIntelligenceError("Call transcript job was not found.")
     metadata = dict(transcript.transcript_metadata or {})
     attempts = int(metadata.get("attempts", 0)) + 1
+    manual_retry_count = int(metadata.get("manual_retry_count", 0))
     metadata["attempts"] = attempts
     metadata["processing_started_at"] = datetime.now(UTC).isoformat()
     transcript.transcript_metadata = metadata
@@ -313,31 +328,74 @@ def process_call_transcript(
             error_message=None,
             execution_mode="production",
             capability_key="call.summarize",
-            idempotency_key=f"call-notes:{transcript.id}",
+            attempt_number=attempts,
+            idempotency_key=(
+                f"call-notes:{transcript.id}:manual:{manual_retry_count}:attempt:{attempts}"
+            ),
         )
         db.add(run)
         db.flush()
         run_id = run.id
         db.commit()
 
-        media = download_twilio_recording(settings, recording.provider_recording_id)
-        if len(media.content) > settings.call_transcription_max_audio_bytes:
-            raise CallIntelligenceError("Call recording exceeds OpenAI's 25 MB upload limit.")
         client = OpenAIResponsesClient(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
             timeout_seconds=settings.openai_request_timeout_seconds,
         )
-        audio_result = client.create_audio_transcription(
-            model=settings.openai_transcription_model,
-            audio=media.content,
-            media_type=media.media_type,
-        )
-        if not audio_result.text:
-            raise CallIntelligenceError("OpenAI returned an empty call transcript.")
-        transcript.transcript_text = audio_result.text
-        transcript.speaker_segments = normalize_segments(audio_result.segments)
-        transcript.language = audio_result.language
+        audio_input_tokens: int | None = None
+        audio_output_tokens: int | None = None
+        audio_total_tokens: int | None = None
+        audio_cost: AiCostEstimate | None = None
+        transcription_performed = not bool((transcript.transcript_text or "").strip())
+        if transcription_performed:
+            media = download_twilio_recording(settings, recording.provider_recording_id)
+            if len(media.content) > settings.call_transcription_max_audio_bytes:
+                raise CallIntelligenceError("Call recording exceeds OpenAI's 25 MB upload limit.")
+            audio_result = client.create_audio_transcription(
+                model=settings.openai_transcription_model,
+                audio=media.content,
+                media_type=media.media_type,
+            )
+            if not audio_result.text:
+                raise CallIntelligenceError("OpenAI returned an empty call transcript.")
+            transcript.transcript_text = audio_result.text
+            transcript.speaker_segments = normalize_segments(audio_result.segments)
+            transcript.language = audio_result.language
+            audio_input_tokens = audio_result.input_tokens
+            audio_output_tokens = audio_result.output_tokens
+            audio_total_tokens = audio_result.total_tokens
+            audio_cost = estimate_openai_cost(
+                settings,
+                model=settings.openai_transcription_model,
+                input_tokens=audio_input_tokens,
+                output_tokens=audio_output_tokens,
+            )
+            checkpointed_at = datetime.now(UTC)
+            transcript.transcript_metadata = {
+                **metadata,
+                "transcription_checkpoint": {
+                    "checkpointed_at": checkpointed_at.isoformat(),
+                    "model": settings.openai_transcription_model,
+                    "input_tokens": audio_input_tokens,
+                    "output_tokens": audio_output_tokens,
+                    "total_tokens": audio_total_tokens,
+                },
+            }
+            run.input_tokens = audio_input_tokens
+            run.output_tokens = audio_output_tokens
+            run.total_tokens = audio_total_tokens
+            run.cost_microusd = audio_cost.cost_microusd
+            run.cost_cents = cents_from_microusd(audio_cost.cost_microusd)
+            run.run_metadata = {
+                "pricing_components": [audio_cost.to_metadata()],
+                "pricing_status": audio_cost.pricing_status,
+                "transcription_checkpointed": True,
+            }
+            # Keep the paid transcription even when later note generation fails. A retry
+            # can then resume from the saved text without downloading or transcribing again.
+            db.commit()
+            metadata = dict(transcript.transcript_metadata or {})
 
         notes_payload, note_usage = client.create_structured_response(
             model=settings.openai_default_model,
@@ -364,30 +422,28 @@ def process_call_transcript(
                 "output_tokens": None,
                 "total_tokens": note_usage,
             }
-        audio_cost = estimate_openai_cost(
-            settings,
-            model=settings.openai_transcription_model,
-            input_tokens=audio_result.input_tokens,
-            output_tokens=audio_result.output_tokens,
-        )
         notes_cost = estimate_openai_cost(
             settings,
             model=settings.openai_default_model,
             input_tokens=note_usage["input_tokens"],
             output_tokens=note_usage["output_tokens"],
         )
-        component_costs = [audio_cost.cost_microusd, notes_cost.cost_microusd]
+        pricing_components = [notes_cost.to_metadata()]
+        component_costs = [notes_cost.cost_microusd]
+        if audio_cost is not None:
+            pricing_components.insert(0, audio_cost.to_metadata())
+            component_costs.insert(0, audio_cost.cost_microusd)
         total_cost_microusd = (
             sum(cost for cost in component_costs if cost is not None)
             if all(cost is not None for cost in component_costs)
             else None
         )
         input_tokens = sum_optional_counts(
-            audio_result.input_tokens,
+            audio_input_tokens,
             note_usage["input_tokens"],
         )
         output_tokens = sum_optional_counts(
-            audio_result.output_tokens,
+            audio_output_tokens,
             note_usage["output_tokens"],
         )
         property_record = db.get(Property, lead.property_id) if lead is not None else None
@@ -461,7 +517,7 @@ def process_call_transcript(
         run.total_tokens = (
             sum(
                 value
-                for value in (audio_result.total_tokens, note_usage["total_tokens"])
+                for value in (audio_total_tokens, note_usage["total_tokens"])
                 if value is not None
             )
             or None
@@ -469,11 +525,10 @@ def process_call_transcript(
         run.cost_microusd = total_cost_microusd
         run.cost_cents = cents_from_microusd(total_cost_microusd)
         run.run_metadata = {
-            "pricing_components": [
-                audio_cost.to_metadata(),
-                notes_cost.to_metadata(),
-            ],
+            "pricing_components": pricing_components,
             "pricing_status": ("priced" if total_cost_microusd is not None else "incomplete"),
+            "transcription_checkpointed": transcription_performed,
+            "transcription_reused": not transcription_performed,
         }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
@@ -506,11 +561,22 @@ def process_call_transcript(
             raise
         transcript.status = "failed"
         transcript.error_message = str(exc)[:2000]
+        failed_at = datetime.now(UTC)
+        exhausted = attempts >= settings.call_transcription_max_attempts
+        retry_delay_seconds = min(30 * (2 ** min(attempts - 1, 5)), 900)
         transcript.transcript_metadata = {
             **(transcript.transcript_metadata or {}),
             "attempts": attempts,
-            "last_failed_at": datetime.now(UTC).isoformat(),
+            "last_failed_at": failed_at.isoformat(),
+            "next_retry_at": (
+                None
+                if exhausted
+                else (failed_at + timedelta(seconds=retry_delay_seconds)).isoformat()
+            ),
+            "exhausted_at": failed_at.isoformat() if exhausted else None,
         }
+        if exhausted:
+            transcript.status = "exhausted"
         if run_id is not None:
             persisted_run = db.get(AiRunLog, run_id)
             if persisted_run is not None:
@@ -529,6 +595,74 @@ def process_call_transcript(
         db.commit()
         db.refresh(transcript)
         return transcript
+
+
+def call_transcript_retry_due(
+    transcript: CallTranscript,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    """Return whether a failed transcript's retry delay has elapsed."""
+
+    raw_retry_at = (transcript.transcript_metadata or {}).get("next_retry_at")
+    if not raw_retry_at:
+        return True
+    try:
+        retry_at = datetime.fromisoformat(str(raw_retry_at).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if retry_at.tzinfo is None:
+        retry_at = retry_at.replace(tzinfo=UTC)
+    return retry_at <= (now or datetime.now(UTC))
+
+
+def retry_call_transcript(
+    db: Session,
+    principal: Principal,
+    transcript_id: UUID,
+) -> CallTranscriptRead | None:
+    """Queue a failed transcript again after an authorized human requests it."""
+
+    transcript = db.scalar(
+        select(CallTranscript).where(
+            CallTranscript.id == transcript_id,
+            CallTranscript.organization_id == principal.organization_id,
+        )
+    )
+    if transcript is None:
+        return None
+    if transcript.status not in {"failed", "exhausted"}:
+        raise ValueError("Only a failed call transcript can be retried.")
+    previous_status = transcript.status
+    previous_metadata = dict(transcript.transcript_metadata or {})
+    previous_attempts = int(previous_metadata.get("attempts", 0))
+    transcript.status = "queued"
+    transcript.error_message = None
+    transcript.transcript_metadata = {
+        **previous_metadata,
+        "attempts": 0,
+        "next_retry_at": None,
+        "exhausted_at": None,
+        "manual_retry_count": int(previous_metadata.get("manual_retry_count", 0)) + 1,
+        "manual_retry_requested_at": datetime.now(UTC).isoformat(),
+        "previous_attempts": previous_attempts,
+    }
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="human",
+            action="call_transcript.retry",
+            entity_type="call_transcript",
+            entity_id=transcript.id,
+            previous_value={"status": previous_status, "attempts": previous_attempts},
+            new_value={"status": "queued", "attempts": 0},
+            reason="Authorized user manually retried failed call intelligence.",
+        )
+    )
+    db.commit()
+    db.refresh(transcript)
+    return transcript_to_read(db, transcript)
 
 
 def review_call_transcript(

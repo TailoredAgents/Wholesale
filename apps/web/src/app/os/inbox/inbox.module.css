@@ -919,14 +919,34 @@
   color: var(--brand-strong);
 }
 
+.transcriptStatus[data-status="failed"],
+.transcriptStatus[data-status="exhausted"] {
+  background: #fbe4e2;
+  color: #8f2f29;
+}
+
 .transcriptError {
   color: #a33c35;
   font-size: 11px;
 }
 
 .transcriptPending {
+  align-items: start;
   color: var(--muted);
+  display: grid;
   font-size: 11px;
+  gap: 8px;
+}
+
+.transcriptPending p {
+  margin: 0;
+}
+
+.transcriptPending button {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+  justify-self: start;
 }
 
 .transcriptBody,

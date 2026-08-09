@@ -595,8 +595,9 @@ Every search attempt stores its parameters, returned count, accepted count, prov
 when available, timestamp, and reason for expansion. Results are deduplicated across levels. Fresh
 provider retrieval is cached with the immutable analysis. Ordinary updates, repair changes, and
 comp reviews reuse the same-address snapshot regardless of its age or prior provider outcome and
-make no background paid retry. If the saved comp-intelligence version or DealMachine admission mode
-no longer matches, Stonegate safely rebuilds from the cached RentCast evidence and warns that an
+make no background paid retry. If the saved comp-intelligence version or RealEstateAPI comp
+admission mode no longer matches, Stonegate safely rebuilds from the cached RentCast evidence and
+warns that an
 explicit refresh is needed; it does not spend credits silently. **Refresh market evidence (may use
 credits)** is the only post-analysis action that replaces the provider snapshot. A reuse run records
 zero new credits and preserves the original source credits, estimated-cost marker, and latency for
@@ -1039,7 +1040,7 @@ parallel record, duplicate repair scope, or unexplained number change.
   introduced.
 - **Run Stonegate valuation** performs the initial provider retrieval. **Update Stonegate valuation**
   recalculates from the saved same-address market snapshot and makes no paid provider call, even
-  when that snapshot is old, failed, or returned no DealMachine match. **Refresh market evidence
+  when that snapshot is old, failed, or returned no RealEstateAPI match. **Refresh market evidence
   (may use credits)** is the separate intentional action for replacing the snapshot and retrying
   providers. Provider mode remains an owner configuration rather than a staff choice.
 - The workspace surfaces only the first three highest-value missing lead facts above the analysis

@@ -49,6 +49,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: DEV_AUTH_ENABLED
+        value: false
       - key: DATABASE_URL
         fromDatabase:
           name: oakwell-postgres
@@ -84,6 +86,8 @@ services:
         value: true
       - key: WORKER_STALE_AFTER_SECONDS
         value: 120
+      - key: WORKER_OPERATION_STALL_SECONDS
+        value: 600
       - key: SENTRY_DSN
         sync: false
       - key: SENTRY_ENVIRONMENT
@@ -148,6 +152,14 @@ services:
         value: offers@stonegatehb.com
       - key: RESEND_WEBHOOK_BASE_URL
         value: https://api.stonegatehb.com
+      - key: RESEND_EVENT_MAX_ATTEMPTS
+        value: 5
+      - key: RESEND_EVENT_RETRY_BASE_SECONDS
+        value: 30
+      - key: RESEND_EVENT_RETRY_MAX_SECONDS
+        value: 900
+      - key: RESEND_EVENT_PROCESSING_LEASE_SECONDS
+        value: 300
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET
@@ -274,14 +286,26 @@ services:
         value: true
       - key: ZAPIER_FACEBOOK_PAGE_ID
         sync: false
+      - key: ZAPIER_FACEBOOK_ALLOWED_FORM_IDS
+        sync: false
       - key: ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES
         value: 65536
+      - key: ZAPIER_FACEBOOK_LEADS_BURST_LIMIT
+        value: 60
+      - key: ZAPIER_FACEBOOK_LEADS_BURST_WINDOW_SECONDS
+        value: 60
+      - key: ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT
+        value: 250
       - key: PUBLIC_INTAKE_RATE_LIMIT_ENABLED
         value: true
       - key: PUBLIC_INTAKE_RATE_LIMIT_REQUESTS
         value: 5
       - key: PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS
         value: 600
+      - key: PUBLIC_CONVERSION_EVENT_RATE_LIMIT_REQUESTS
+        value: 120
+      - key: PUBLIC_CONVERSION_EVENT_RATE_LIMIT_WINDOW_SECONDS
+        value: 60
       - key: FACEBOOK_LEAD_INTAKE_MAX_ATTEMPTS
         value: 8
       - key: FACEBOOK_LEAD_INTAKE_RETRY_BASE_SECONDS
@@ -378,6 +402,8 @@ services:
     envVars:
       - key: APP_ENV
         value: production
+      - key: DEV_AUTH_ENABLED
+        value: false
       - key: DATABASE_URL
         fromDatabase:
           name: oakwell-postgres
@@ -393,6 +419,8 @@ services:
         value: 30
       - key: WORKER_STALE_AFTER_SECONDS
         value: 120
+      - key: WORKER_OPERATION_STALL_SECONDS
+        value: 600
       - key: WORKER_RETRY_BASE_SECONDS
         value: 15
       - key: WORKER_RETRY_MAX_SECONDS
@@ -471,6 +499,14 @@ services:
         value: offers@stonegatehb.com
       - key: RESEND_WEBHOOK_BASE_URL
         value: https://api.stonegatehb.com
+      - key: RESEND_EVENT_MAX_ATTEMPTS
+        value: 5
+      - key: RESEND_EVENT_RETRY_BASE_SECONDS
+        value: 30
+      - key: RESEND_EVENT_RETRY_MAX_SECONDS
+        value: 900
+      - key: RESEND_EVENT_PROCESSING_LEASE_SECONDS
+        value: 300
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: GOOGLE_OAUTH_CLIENT_SECRET

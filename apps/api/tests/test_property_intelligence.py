@@ -36,7 +36,9 @@ OWNER_EMAIL = "owner@example.com"
 
 def test_property_snapshot_backfill_locks_only_the_analysis_table() -> None:
     statement = property_snapshot_backfill_candidate_statement()
-    compiled = str(statement.compile(dialect=postgresql.dialect()))
+    compiled = str(
+        statement.compile(dialect=postgresql.dialect())  # type: ignore[no-untyped-call]
+    )
 
     assert "FOR UPDATE OF underwriting_market_analyses SKIP LOCKED" in compiled
 

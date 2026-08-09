@@ -980,6 +980,7 @@ def test_general_email_can_merge_into_an_existing_lead_conversation(
     db_session.refresh(communication)
     db_session.refresh(participant)
     assert source.status == "closed"
+    assert source.conversation_metadata is not None
     assert source.conversation_metadata["merged_into_conversation_id"] == str(target.id)
     assert communication.conversation_id == target.id
     assert communication.lead_id == lead.id
@@ -1035,6 +1036,7 @@ def test_general_email_classification_archives_and_restores_the_conversation(
     db_session.refresh(conversation)
     assert conversation.status == "closed"
     assert conversation.queue_key == "closed"
+    assert conversation.conversation_metadata is not None
     assert conversation.conversation_metadata["mail_category"] == "vendor"
     detail = client.get(
         f"/api/v1/inbox/conversations/{conversation.id}",

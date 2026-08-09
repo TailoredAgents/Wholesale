@@ -70,7 +70,34 @@ def test_read_me_rejects_development_header_in_production(
     monkeypatch: MonkeyPatch,
     api_db_override: None,
 ) -> None:
-    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("APP_ENV", " Production ")
+    get_settings.cache_clear()
+
+    try:
+        response = TestClient(app).get(
+            "/api/v1/me",
+            headers={"X-Dev-User-Email": "owner@example.com"},
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Missing bearer token."
+
+
+def test_read_me_rejects_development_header_when_flag_is_disabled(
+    monkeypatch: MonkeyPatch,
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email="owner@example.com",
+        admin_name="Owner",
+    )
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("DEV_AUTH_ENABLED", "false")
     get_settings.cache_clear()
 
     try:

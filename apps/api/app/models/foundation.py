@@ -1594,6 +1594,14 @@ class ConversationContextLink(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "communication_provider_events"
     __table_args__ = (
+        Index(
+            "ix_provider_events_processing_claim",
+            "provider",
+            "processing_status",
+            "next_attempt_at",
+            "processing_started_at",
+            "received_at",
+        ),
         UniqueConstraint(
             "organization_id",
             "provider",
@@ -1615,6 +1623,14 @@ class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    processing_token: Mapped[uuid.UUID | None] = mapped_column(Uuid, nullable=True)
     error_message: Mapped[str | None] = mapped_column(String(2000), nullable=True)
 
 
@@ -3118,6 +3134,17 @@ class EsignEnvelope(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "provider",
             "provider_document_id",
             name="uq_esign_envelope_provider_document",
+        ),
+        Index(
+            "uq_esign_envelope_active_package",
+            "contract_package_id",
+            unique=True,
+            postgresql_where=text(
+                "status NOT IN ('completed', 'declined', 'expired', 'cancelled', 'error')"
+            ),
+            sqlite_where=text(
+                "status NOT IN ('completed', 'declined', 'expired', 'cancelled', 'error')"
+            ),
         ),
     )
 
@@ -5546,6 +5573,14 @@ class AiOrchestratorEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class AiRunLog(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "ai_run_logs"
+    __table_args__ = (
+        Index(
+            "ix_ai_runs_org_idempotency",
+            "organization_id",
+            "idempotency_key",
+            unique=True,
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True

@@ -1,6 +1,6 @@
 # Stonegate Product Finishing Roadmap
 
-Last updated: August 3, 2026
+Last updated: August 8, 2026
 
 ## Purpose
 
@@ -43,16 +43,16 @@ Do not mark a phase finished from code alone when its exit criteria require prod
 
 | Phase | Current state | Remaining proof |
 | --- | --- | --- |
-| IA private-OS organization | IA1 contract, IA2 11-destination shell, and IA3 permission-filtered Settings consolidation implemented | Implement IA4 through IA10 with route compatibility and role acceptance |
-| F1 Production reliability | Reliability tooling implemented | Restore, revocation, readiness, and optional monitoring acceptance |
+| IA private-OS organization | IA1-IA10 implemented, including the 11-destination shell, consolidated workspaces, compatibility routes, record context, and permission-filtered Settings | Complete real-role acceptance and retain compatibility evidence before removing any legacy route |
+| F1 Production reliability | Reliability tooling, fail-closed authentication, fair worker scheduling, and dependency gates implemented | Restore, revocation, readiness, and optional monitoring acceptance |
 | F2 Company setup | User, role, seat, team, market, and acceptance workflows implemented | Configure and test actual staff and counterparties |
 | F3 Operating policy | Restrictive application gates removed at Owner direction | External policy review as Stonegate prepares live outreach |
-| F4 Documents and e-signature | Storage and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
-| F5 Buyers and dispositions | Buyer CRM implemented; optional DealMachine adapter disabled | Full buyer-placement and disposition simulation |
+| F4 Documents and e-signature | Storage, offer-authority snapshots, execution evidence, and SignWell workflows implemented | Production provider, document, remote-sign, and iPad-sign acceptance |
+| F5 Buyers and dispositions | Buyer CRM implemented; optional DealMachine adapter disabled; campaign delivery is simulation-only | Controlled buyer placement plus a manual or implemented live delivery procedure |
 | F6 Accounting and marketing | Internal books, reports, Copilots, and ad adapters implemented | CPA close and ad-provider acceptance |
 | F7 Underwriting proof | Stonegate Valuation V3.1, RentCast, and RealEstateAPI candidate evidence are implemented; V2.2 is a technical rollback only | Run the AI Comp Analyst pilot, collect verified Georgia outcomes, and monitor accuracy and corrections |
-| F8 Resend email | Two-way mailbox system implemented and provider configured | Controlled production mailbox acceptance |
-| F9 Twilio communications | SMS, Voice, recording, transcription, and reviewed AI notes implemented; seller A2P approved | Voice, recording authorization, AI-note population, failure, retention, and deletion acceptance before launch |
+| F8 Resend email | Two-way mailbox system, leased processing, bounded retry, and dead-letter handling implemented | Controlled production mailbox and failure-path acceptance |
+| F9 Twilio communications | SMS, Voice, recording, transcription, reviewed AI notes, retry/exhaustion, and manual recovery implemented; seller A2P approved | Seller SMS, Voice, recording authorization, AI-note, failure, retention, and deletion acceptance before launch |
 | F10 AI pilots | All Copilots enabled in supervised draft-only mode | Model replay, measured pilots, and narrow promotion decisions |
 
 ## Active Sub-Roadmaps
@@ -79,7 +79,7 @@ The practical order from the current state is:
 2. Finish F8 Resend controlled acceptance.
 3. Complete F2 actual staff setup as people join.
 4. Finish F4 SignWell and contract acceptance before the first live seller agreement.
-5. Resume F9 with the approved acquisitions-number attachment and shared-line acceptance.
+5. Resume F9 with direct-number seller SMS and shared-line Voice acceptance.
 6. Run F5 buyer and disposition acceptance as the first contract approaches.
 7. Run F1 restore and access-revocation checks before broad employee use.
 8. Begin F7 outcome collection with every reviewed analysis.
@@ -96,6 +96,18 @@ Some phases overlap. Their exit criteria remain independent.
 - API health and dependency readiness
 - worker heartbeat and stale-worker readiness checks
 - durable operational failures and retries
+- one-item-per-operation worker sweeps that prevent a busy queue from starving later work
+- independent liveness and main-loop progress/current-operation tracking; production readiness
+  tolerates normal provider work and reports a stalled loop only after 600 seconds
+- production API and protected-web authentication that fail closed when Clerk is incomplete
+- request-type-specific approval visibility and decision checks in both the approval API and Tasks;
+  only `audit:view` grants blanket approval-list visibility, and unknown types have no decision path
+- Python and Node dependency audits plus explicit web lint, typecheck, and contract checks in CI
+- separate throttles for seller intake, seller enrichment, conversion events, and Zapier lead
+  intake; production ignores caller `X-Forwarded-For`, uses the edge-owned Cloudflare address, and
+  hard-bounds process-local limiter keys
+- Resend UUID claim fencing, durable validated-route checkpoints, bounded lifecycle retry,
+  manager-only audited dead-letter requeue, and restricted-mailbox routing isolation
 - optional owner alert webhook
 - optional Sentry integration with default PII capture disabled
 - database backup and guarded restore scripts
@@ -109,8 +121,14 @@ Some phases overlap. Their exit criteria remain independent.
 3. Use a disposable staff account to test deactivation and immediate access loss.
 4. Reassign that account's open work and verify history remains attributable.
 5. Run the production smoke test against the branded website and API.
-6. Confirm `/ready` reports a fresh worker heartbeat.
-7. Optionally configure Sentry and an owner-controlled alert webhook.
+6. Confirm `/ready` reports fresh worker liveness, exposes the current operation, remains ready
+   during a normal long provider call, and reports `stalled` only after the configured 600-second
+   production progress threshold.
+7. Confirm Cloudflare owns the production client-IP header path and add distributed edge/WAF rate
+   limiting before broad traffic or multiple API instances.
+8. Complete controlled Resend mailbox/dead-letter acceptance and decide the attachment malware-
+   scanning control.
+9. Optionally configure Sentry and an owner-controlled alert webhook.
 
 Credential rotation and MFA rollout remain known risks but are excluded from this phase at the
 Owner's current direction.
@@ -207,11 +225,21 @@ Before broad live outreach or recording:
 
 - versioned internal contract sources and generated PDFs
 - contract packages and human approval
+- purchase-agreement authority snapshots tied to the approved offer plan, underwriting version,
+  seller-agreed/current transaction price, and exact governing concession
+- stale-authority revalidation before approval, sending, SignWell delivery, and execution
 - transaction documents, facts, parties, and checklists
 - database and S3-compatible private storage adapters
 - retention, checksum, private-download, and malware-scan state
 - SignWell account verification and webhook registration
 - envelope, recipient, event, status, and completed-document evidence
+- durable one-active-send reservation, unsent-draft-first delivery, saved-draft resume, ambiguous
+  outcome blocking, and monotonic webhook/API reconciliation
+- tenant-scoped verified-draft attachment, audited empty-intent abandonment, one-time terminal
+  failure release, and bounded public webhook ingestion
+- authority mutexes across plans, agreements, concessions, and presentations while any purchase
+  package remains signable, plus audited withdrawal for manually sent packages
+- exact executed-document type/status/scan checks and audited manual execution attestation
 - remote signature and in-person iPad signing
 - simulation and focused automated tests
 
@@ -226,6 +254,14 @@ Before broad live outreach or recording:
 6. Run one complete in-person iPad signing test.
 7. Confirm webhook reconciliation and completed PDF storage.
 8. Run one redacted contract-to-funding simulation with documents and checklist evidence.
+9. Change the approved offer source after creating a test package and confirm approval/send/sign or
+   execution is blocked until a new package captures current authority.
+10. Test manual execution with the wrong document type, a non-executed status, and a valid exact
+    executed copy plus verification reason.
+11. Test the provider-create crash window with both a matching orphan draft and a verified empty
+    provider account; exercise attach and abandon without creating a duplicate document.
+12. Confirm authority stays frozen for every signable provider/manual package, then test provider
+    cancellation/reconciliation and the audited manual withdrawal flow.
 
 Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document boundaries.
 
@@ -235,6 +271,8 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - The completed PDF and provider events attach to the correct transaction.
 - Remote and in-person signatures use the same approved package and audit trail.
 - Missing or conflicting required facts block release.
+- A stale offer plan, underwriting version, seller agreement, price, or concession blocks release.
+- Manual and provider completion retain the exact executed document and authority evidence.
 - Unauthorized roles cannot send or download restricted documents.
 
 ## F5. Buyer And Disposition Acceptance
@@ -244,31 +282,34 @@ Use `GEORGIA_CONTRACT_PACKET.md` and `SIGNWELL_COUNSEL_BRIEF.md` for document bo
 - buyer CRM, criteria, proof, capacity, engagement, and offers
 - disposition cases, package approval, matching, campaigns, selection, and reconciliation
 - deterministic buyer ranking
-- DealMachine adapter, live plan/credit readiness, zero-credit cost preview, discovery runs,
-  candidates, evidence, DNC-safe contact suggestion, and selective import
+- optional disabled DealMachine adapter retained only for deliberate future reactivation
 - duplicate protection and audit history
 - Disposition Copilot in supervised draft-only mode
+- simulation-only campaign release that records the approved recipients without sending outreach
 
 ### Current Provider Decision
 
-DealMachine is the selected first buyer-data provider and the subscription has been purchased.
-Stonegate still requires the account API key, production configuration, and a controlled result-
-quality and credit-use acceptance test before staff rely on it.
+DealMachine is not part of the current launch plan. Its adapter remains disabled and must not be
+presented to staff as a working buyer source. It can be evaluated later only through a deliberate
+Owner decision and a new quality, billing, contact-permission, and production acceptance test.
+
+The current **release campaign** action is also not an external send. It creates a
+`simulated_released` campaign, marks reviewed recipients in the case, and records audit evidence.
+Stonegate therefore needs either a documented controlled manual email/call procedure for the first
+deal or a separately implemented and accepted live disposition-delivery channel.
 
 ### Remaining Actions
 
-1. Create an API key in the paid Stonegate DealMachine account.
-2. Configure the production variables and redeploy.
-3. Confirm the readiness check shows the expected paid plan, billing-cycle reset, and available
-   credits.
-4. Preview and run controlled buyer discovery for a known market and property.
-5. Compare the preview with actual credits and review data quality, contacts, DNC handling,
-   activity, score explanations, and duplicates.
-6. Import only approved candidates into the existing buyer CRM.
-7. Verify initial buyer criteria and proof.
-8. Send one approved deal package after operational email is accepted.
-9. Record engagement, offers, deposits, primary buyer, and backup buyer.
-10. Complete one contract-to-buyer-to-reconciliation simulation.
+1. Build the first internal buyer list and verify criteria, contact permission, capacity, and proof.
+2. Decide and document whether the first controlled deal will use individually reviewed manual
+   email/calls or wait for an implemented live campaign channel.
+3. Send one approved deal package only after operational email and the selected delivery procedure
+   are accepted.
+4. Confirm the simulation action itself sends no email or SMS and cannot be mistaken for delivery.
+5. Record engagement, offers, deposits, primary buyer, backup buyer, and verified proof.
+6. Complete one contract-to-buyer-to-reconciliation simulation before the first live assignment.
+7. If DealMachine or another buyer-data source is reconsidered later, run a separate provider
+   quality, credit/cost, duplicate, DNC, and selective-import acceptance phase first.
 
 ### Exit Criteria
 
@@ -277,6 +318,7 @@ quality and credit-use acceptance test before staff rely on it.
 - Replies and offers attach to the correct case.
 - Proof and buyer-selection approval cannot be bypassed.
 - Reconciliation produces the expected revenue, deductions, compensation, and margin.
+- Staff can tell the difference between simulation evidence and an actual external delivery.
 
 ## F6. Accounting And Marketing Acceptance
 
@@ -305,12 +347,18 @@ quality and credit-use acceptance test before staff rely on it.
 
 ### Remaining Marketing Actions
 
-1. Configure the approved Google and Meta advertising accounts.
+1. Preserve the accepted Meta Pixel/Conversions API configuration and configure Google only when
+   that ad account is ready.
 2. Map qualified lead, appointment, contract, and funded events to provider actions.
 3. Enter credentials in Render.
-4. Use provider test modes for controlled delivery.
+4. Use provider test modes for each newly activated delivery path.
 5. Confirm acceptance, deduplication, retries, and audit history.
 6. Keep budgets and published campaign changes under human authority.
+7. Keep the production Facebook Page ID and allowed instant-form IDs current. Monitor the
+   secretless Zapier endpoint's burst limit, rolling daily circuit, accepted form IDs, and Zap
+   History; these controls reduce abuse but do not cryptographically prove Meta provenance.
+8. Run one real production-form acceptance from Meta through Zapier into the CRM, property
+   research, speed-to-lead work, and each opted-in employee's internal SMS alert.
 
 ### Exit Criteria
 
@@ -451,6 +499,12 @@ Calibration continues after launch.
 - first-response, next-response, and owner-escalation timers
 - provider status, idempotency, and failure evidence
 - production domain, DNS, API key, and webhook configuration
+- UUID-fenced processing leases and stale-claim recovery that prevent an expired worker from
+  overwriting the reclaimed attempt
+- durable validated-route checkpoints and bounded retry for early lifecycle events
+- manager-only **Failed events** review with reason-required audited dead-letter requeue
+- automatic and manual enforcement that restricted aliases route only to restricted conversations
+- attachment-size enforcement from metadata, response length, and streamed bytes
 
 ### Remaining Actions
 
@@ -468,6 +522,17 @@ Using company-controlled addresses:
 10. Confirm duplicate webhooks do not duplicate messages.
 11. Confirm an unauthorized user cannot view or send restricted correspondence.
 12. Activate closing-party and buyer-package email after the tests pass.
+13. Force one temporary processing failure and confirm the event retries after its delay.
+14. Simulate an abandoned processing claim and confirm lease recovery plus stale-worker fencing.
+15. Test declared and streamed oversize attachments, then confirm a poison event reaches dead-letter
+    without blocking later mail and remains visible under manager-only **Failed events**.
+16. Correct the poison event, enter a reason, requeue it once, and confirm the audit event.
+17. Confirm an early lifecycle webhook retries until its outbound CRM record exists and a validated
+    inbound route survives a later attachment/provider failure.
+18. Confirm neither automatic nor manual routing can place restricted-alias mail in a standard-
+    visibility conversation.
+19. Complete external mailbox acceptance and activate malware scanning or formally accept a limited
+    manual safe-attachment procedure.
 
 ### Exit Criteria
 
@@ -487,21 +552,29 @@ Using company-controlled addresses:
 - company lines, cellphone forwarding, inbound routing, status history, and missed-call work
 - recording callbacks, private media, disclosure state, retention, and deletion
 - OpenAI transcription, speaker segments, structured notes, and human review
+- a durable transcription checkpoint before note generation, so note retries reuse paid transcript
+  text, plus exponential retry for temporary Call Intelligence failures, a terminal `exhausted`
+  state, and an audited Inbox action that queues an authorized manual retry
 
 ### Current Status
 
-Stonegate's dedicated seller-inquiry A2P campaign is approved. Number attachment, Render
-configuration, controlled SMS acceptance, shared acquisitions Voice routing, and production Voice
-acceptance remain. Another company's campaign, number, or webhooks must not be used.
+Stonegate's dedicated seller-inquiry A2P campaign is approved, and internal Facebook lead alerts
+have prior controlled-delivery evidence through Stonegate's direct-number setup. Repeat that alert
+acceptance after the worker credential correction before relying on it for a live ad window. Full
+seller SMS acceptance, shared acquisitions Voice routing, and production Voice acceptance remain.
+A Messaging Service is optional for the direct-number mode. Another company's campaign, number, or
+webhooks must not be used.
 
 ### Remaining SMS Actions
 
-1. Open Stonegate's approved dedicated Messaging Service.
-2. Attach the dedicated acquisitions 10DLC number.
-3. Enter the values in Render.
-4. Configure the signed inbound and status callbacks.
-5. Test outbound, delivered, failed, inbound, STOP, blocked send, START, HELP, and callback replay.
-6. Keep the future buyer/dispositions messaging purpose separate unless its traffic is accurately
+1. Confirm Stonegate's dedicated acquisitions 10DLC number remains registered for the approved
+   seller-inquiry campaign.
+2. Confirm the Account SID, Auth Token, direct sender number, and webhook base URL are present on
+   both the API and worker. A Messaging Service SID is optional in this mode.
+3. Configure the signed inbound and status callbacks.
+4. Repeat one internal staff-alert delivery test, then test seller outbound, delivered, failed,
+   inbound, STOP, blocked send, START, HELP, and callback replay as a separate use case.
+5. Keep the future buyer/dispositions messaging purpose separate unless its traffic is accurately
    covered by an approved campaign.
 
 ### Remaining Voice Actions
@@ -514,8 +587,15 @@ acceptance remain. Another company's campaign, number, or webhooks must not be u
 5. Test simultaneous inbound ringing, press-1 acceptance, no-answer, voicemail, missed-call work,
    and reassignment.
 6. Test outbound cellphone bridging, Stonegate caller ID, and conversation history.
-7. Keep recording disabled until the Owner approves the disclosure and retention behavior.
-8. When approved, test recording, transcription, review, private access, and deletion.
+7. For the Owner-selected Georgia-only one-party mode, verify the recorded authorization and
+   retention state even when the optional spoken disclosure is blank. Treat the operating policy
+   as pending documented acceptance, and do not extend it to another state without reviewing the
+   applicable policy.
+8. Test recording, transcription, immediate empty-field CRM population, narrative
+   review, internal Inbox/lead note creation, private access, and deletion.
+9. Force a temporary transcription or note-generation failure and confirm automatic retry.
+10. Exhaust a controlled test transcript, confirm the Inbox explains the state, then use **Retry
+    call intelligence** and confirm the successful result remains tied to the same call.
 
 ### Exit Criteria
 
@@ -523,7 +603,9 @@ acceptance remain. Another company's campaign, number, or webhooks must not be u
 - Every communication attaches to the correct conversation.
 - Seller thread history survives staff reassignment.
 - Opt-out and provider failures remain visible and enforceable.
-- Recording activation is an explicit separate decision.
+- Recording authorization remains an explicit, state-scoped operating decision.
+- Temporary and exhausted Call Intelligence failures are visible and recoverable without creating
+  a duplicate call record.
 
 ## F10. AI Production Pilots
 
@@ -584,6 +666,14 @@ Stonegate is ready for controlled first-market operations when:
 8. Underwriting outcomes are recorded from the first live analyses onward.
 9. Copilots remain supervised until their own pilots pass.
 10. The Owner has current user, setup, recovery, and escalation instructions.
+11. One production Facebook instant form reaches the same CRM record, automatic property research,
+    speed-to-lead work, and every opted-in staff alert without duplication; the form allowlist and
+    secretless-ingress monitoring procedure are recorded.
+12. Purchase-agreement authority and manual/provider execution evidence pass both success and
+    stale-source blocking tests.
+13. Before the first deal is marketed, Stonegate has either an accepted controlled manual buyer-
+    outreach procedure or an implemented live disposition-delivery channel. A simulated campaign
+    alone is not delivery.
 
 Launch-ready does not mean autonomous. It means the human operation can run through one controlled,
 auditable system while unaccepted providers and AI actions remain clearly bounded.

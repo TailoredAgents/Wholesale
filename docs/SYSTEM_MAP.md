@@ -1,6 +1,6 @@
 # Stonegate Home Buyers System Map
 
-Last verified against the repository: August 3, 2026
+Last verified against the repository: August 8, 2026
 
 ## 1. Document Authority
 
@@ -59,11 +59,11 @@ must use Stonegate Home Buyers.
 | Private OS | Implemented and deployed |
 | Clerk authentication | Implemented and active |
 | PostgreSQL data layer | Implemented and active |
-| Resend two-way email | Implemented and configured; controlled production acceptance remains |
-| Twilio SMS | Implemented; seller-inquiry A2P approved, number attachment and acceptance remain |
-| Twilio Voice | Implemented; dedicated number, credentials, and acceptance remain |
+| Resend two-way email | Implemented and configured with UUID-fenced leases, route checkpoints, bounded retry, restricted routing, and manager-only dead-letter recovery; controlled mailbox acceptance and malware decision remain |
+| Twilio SMS | Implemented; internal Facebook lead alerts have prior delivery evidence but require repeat acceptance after the worker credential correction; seller-facing SMS acceptance remains |
+| Twilio Voice | Implemented and processing recordings/transcripts; full routing, recording, failure-recovery, retention, and deletion acceptance remains |
 | RentCast property data | Implemented; provider coverage varies by address |
-| RealEstateAPI property intelligence | Implemented; production key deployment and controlled refresh remain |
+| RealEstateAPI property intelligence | Implemented and active; controlled property research passed |
 | OpenAI copilots | Implemented in governed draft-only form; production pilots remain |
 | SignWell e-signature | Implemented; provider activation and controlled acceptance remain |
 | DealMachine buyer discovery | Legacy optional adapter; disabled and removable after subscription cancellation |
@@ -95,14 +95,20 @@ so staff are not misled by a control that exists but lacks production credential
   permissions, then executes domain services.
 - PostgreSQL is the operational source of truth.
 - Redis supports coordination and background-work behavior; it is not the system of record.
-- Provider callbacks enter through dedicated signed webhook routes.
-- The production worker executes repeatable background jobs and records heartbeat or failure
-  evidence.
+- Provider callbacks enter through dedicated webhook routes. Resend and Twilio callbacks are
+  signature validated. SignWell verification binds organization-specific webhook credentials to
+  the matching organization's envelope and retains duplicate, stale, or out-of-order events
+  without regressing terminal state. The SignWell HMAC covers event type/time rather than the full
+  document/signer/body payload, so within-organization provider reconciliation remains an external
+  acceptance control. The intentionally secretless Zapier lead route uses the compensating controls
+  described in the Marketing section and does not prove Meta provenance cryptographically.
+- The production worker executes repeatable background jobs and records independent liveness,
+  main-loop progress/current-operation, and failure evidence.
 - External AI and provider outputs never replace source records silently.
 
 ### 4.3 Database Evolution
 
-The database has 74 numbered Alembic migrations through `0074_propstream_pipeline`. Migrations are
+The database has 94 numbered Alembic migrations through `0094_esign_send_intents`. Migrations are
 run automatically when the Render API starts and manually with `npm run db:migrate` locally.
 
 Schema changes must be additive or explicitly migrated. Production data must never depend on
@@ -146,7 +152,13 @@ FastAPI routers are grouped by business capability:
 ### 5.1 Authentication
 
 Clerk proves who signed in. The API validates the token issuer, signing keys, audience when
-configured, and authorized party. Production does not trust the local development email header.
+configured, and authorized party. `APP_ENV` accepts only `local`, `test`, or `production`.
+Production API startup fails when the Clerk issuer, explicit or issuer-derived JWKS endpoint,
+secret key, or a non-local HTTPS authorized party is missing. The protected web routes return `503`
+in production when Clerk keys are unavailable instead of passing the request through.
+
+Development-header authentication is off by default. A local or test environment must explicitly
+set `DEV_AUTH_ENABLED=true` before `X-Dev-User-Email` is accepted; production always rejects it.
 
 The Clerk account alone does not grant business access. A matching Stonegate `User` must be active
 inside the organization and have local role assignments.
@@ -197,6 +209,14 @@ The Prospecting service still scopes non-managers to their own batch entries.
 
 The frontend hides irrelevant navigation, but API permission checks are authoritative. Hiding a tab
 is not the security boundary.
+
+Approval visibility and decisions are checked against the request type in both the approval API and
+the Tasks approval feed. Offer ceilings and concessions need offer-approval authority; contract
+packages need contract-send authority; AI promotions and tool calls need AI-prompt authority; and
+follow-up SMS or email needs acquisition-operations authority. Without `audit:view`, a person sees
+only approval types covered by their permissions; `audit:view` is the only blanket organization-
+wide read authority and still grants no decision authority. Unknown approval types have no
+decision path.
 
 ### 5.5 User Provisioning
 
@@ -359,7 +379,7 @@ not presented as competing navigation.
   AI Completed, Exceptions, and Completed, with role-aware visibility.
 - Completing a primary action requires an outcome and a successor when its seller lead or deal
   remains active.
-- Home, Seller Leads, seller records, and Tasks read the same primary next-action record.
+- Home, Leads, seller records, and Tasks read the same primary next-action record.
 - Lead briefs created from new seller events are reviewed inline. Transcript-grounded call notes
   immediately fill empty qualification fields, while the narrative review opens in Inbox so staff
   can hear the source evidence and correct any AI-populated value.
@@ -376,9 +396,9 @@ not presented as competing navigation.
 
 ### 7.2 Operations And Acquisition Tools
 
-The primary Operations destinations are Prospecting, Seller Leads, Deals, and Buyers. Campaign
+The primary Operations destinations are Prospecting, Leads, Deals, and Buyers. Campaign
 management is a local Prospecting view. Lead Queue, Pipeline, and active Underwriting are local
-Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local Calendar views.
+Leads views. Schedule, Dispatch, Appointment, and Availability are local Calendar views.
 
 **Prospecting > Campaigns (`/os/prospecting?view=campaigns`)**
 
@@ -414,7 +434,7 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Current prospect calls open through the device `tel:` handler and the VA records the result in
   Stonegate. External multi-line and predictive dialing are intentionally retired.
 
-**Seller Leads (`/os/leads`)**
+**Leads (`/os/leads`)**
 
 - Canonical seller workspace with Lead Queue, All Leads, Pipeline, and Underwriting local views.
 - Lead Queue supports acceptance, guided qualification, dated next actions, appointments,
@@ -442,7 +462,7 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 - Underwriting shows the active valuation queue; detailed comp work remains on the seller record.
 - Archived records live at `/os/leads/archived`.
 - `/os/lead-manager`, `/os/pipeline`, and `/os/underwriting` preserve old links by redirecting to
-  the corresponding Seller Leads view.
+  the corresponding Leads view.
 
 **Calendar (`/os/calendar`)**
 
@@ -553,7 +573,11 @@ Seller Leads views. Schedule, Dispatch, Appointment, and Availability are local 
 **Communications (`/os/settings/communications`)**
 
 - Embeds the authenticated email administration workspace for senders, routing, signatures,
-  mailbox grants, and unresolved inbound assignments.
+  mailbox grants, unresolved inbound assignments, and manager-only failed-event recovery.
+- Its **Failed events** tab shows terminal Resend failures. Requeue requires a reason and creates an
+  audit event after an authorized manager corrects the cause.
+- Restricted-alias messages can auto-route or be manually assigned only to restricted-visibility
+  conversations; they cannot fall into a standard-visibility thread.
 - Voice-line administrators can add company-owned numbers and update line labels, status, default
   routing, and inbound behavior without receiving email-administration access.
 
@@ -738,11 +762,28 @@ redirect to their new owners.
 1. An approved, versioned contract template provides the base document.
 2. Stonegate creates a contract package from CRM, property, offer, and party facts.
 3. Missing or conflicting required facts block release rather than being invented.
-4. An authorized person requests approval and then sends through the configured e-sign provider.
-5. SignWell hosts the signing ceremony; Stonegate stores envelope, recipient, event, and completed
-   document evidence.
-6. The same provider flow can be launched on an iPad for an in-person seller signature.
-7. Manual sent and executed states remain available for controlled fallback evidence.
+4. A purchase agreement also captures the exact approved offer plan, underwriting version,
+   seller-agreed or current transaction price, and any governing concession as an authority
+   snapshot. A stale or changed source blocks approval, sending, signing, or execution and requires
+   a new package.
+5. An authorized person requests approval and then sends through the configured e-sign provider.
+   Stonegate reserves one active envelope, creates an unsent provider draft, saves its ID, and only
+   then sends it. Lost create responses require verified draft attachment or an audited empty-intent
+   abandonment; no automatic retry creates a second provider document.
+6. SignWell hosts the signing ceremony; Stonegate stores envelope, recipient, event, and completed
+   document evidence. Organization-bound webhook verification prevents one tenant's credential from
+   updating another tenant's envelope, while stale and out-of-order events remain audit evidence
+   without moving the envelope backward. Because the provider HMAC does not bind every body field,
+   production reconciliation must still confirm the document, recipients, status, and completed PDF
+   against SignWell.
+7. Offer plans, concessions, price presentations, and seller agreements cannot change while a
+   purchase package is being delivered or remains signable. Provider terminal failures release that
+   reservation once. A manually sent agreement requires audited withdrawal from every recipient
+   before newer authority can be recorded.
+8. The same provider flow can be launched on an iPad for an in-person seller signature.
+9. Manual execution requires the exact executed document type, an explicit executed evidence
+   status, an acceptable scan state, and an audited human attestation. Provider completion records
+   the completed envelope and executed document evidence.
 
 ### 8.9 Transaction Coordination
 
@@ -931,13 +972,22 @@ When recording is deliberately enabled:
 3. OpenAI transcription produces speaker-aware transcript evidence.
 4. structured notes identify motivation, condition, timeline, occupancy, price, objections,
    commitments, and next action.
-5. a human reviews the transcript and notes before critical CRM fields change.
-6. the AI run and orchestrator event close with the same human decision.
-7. retention and early deletion are tracked.
+5. transcript-grounded values immediately fill only empty CRM qualification fields and create an
+   audit/activity record; existing staff-entered values are not overwritten.
+6. the narrative draft appears beside the recording in Inbox, where a human can compare the audio,
+   correct an auto-filled value, approve or reject the notes, and optionally create follow-up work.
+7. approved notes become an internal conversation note that also appears in the seller history.
+8. successful transcription is checkpointed before structured note generation, so a later note
+   failure can reuse the saved transcript without paying to transcribe the same call again.
+9. temporary failures retry with exponential delay. Repeated failures become `exhausted`, and an
+   authorized user can queue an audited manual retry from Inbox.
+10. the AI run and orchestrator event close with the same human decision, and retention or early
+   deletion remains tracked.
 
 The integration is not launch-ready unless Voice, the approved recording-authorization policy,
 transcription, OpenAI, failure visibility, retention, deletion, and human review/apply have passed
-together. A spoken disclosure is optional in the approved Georgia-only one-party mode.
+together. A spoken disclosure is optional in the Owner-selected Georgia-only one-party mode, whose
+operating policy still requires documented production acceptance.
 
 ## 11. Underwriting System
 
@@ -1072,8 +1122,8 @@ when `BUYER_DATA_PROVIDER=disabled`. If it is deliberately reactivated, the work
 6. Requires a human to review before import.
 7. Links imported records to the existing buyer CRM without sending outreach.
 
-The subscription has been purchased. API-key configuration and controlled production acceptance
-remain before staff should depend on the results.
+The adapter is not required for Stonegate's current launch and should not be treated as an active
+buyer source unless the Owner deliberately reactivates and accepts it later.
 
 ### 13.3 Disposition Authority
 
@@ -1160,14 +1210,24 @@ identifiers are normalized and hashed, event keys are stable, and retries are au
 and Conversions API delivery passed controlled acceptance; Google delivery remains behind its
 account credentials and acceptance tests.
 
-Meta Lead Ads intake uses one Zapier action to send a secret-authenticated, Page-bound payload to
-Stonegate. The API validates and deduplicates the Facebook lead ID, durably stores the original and
-normalized payloads, and lets the worker run normal public seller intake, campaign/ad attribution,
-and internal SMS alert queuing. CRM intake and alert delivery retry with backoff. Stonegate does
-not use a Meta developer app, Graph token, or direct Meta webhook for this workflow. The system
-records requested phone/email contact basis but never infers seller SMS consent from a Meta phone
-field. Staff SMS delivery remains disabled until Twilio approves and accepts that internal alert
-use case.
+Meta Lead Ads intake uses one Zapier action to send a Page-bound payload to Stonegate. At the
+Owner's direction the route is intentionally secretless and publicly reachable. It enforces the
+configured Page ID, a production-required form-ID allowlist, request schema and size limits, an
+in-process burst limit, a database-backed rolling 24-hour acceptance cap, and organization-scoped
+Facebook lead-ID deduplication. It durably stores the original and normalized payloads before the
+worker runs normal seller intake, campaign/ad attribution, property research, and internal SMS
+alert queuing. CRM intake and alert delivery retry with backoff.
+
+Production burst keys use the edge-owned Cloudflare client address and ignore caller
+`X-Forwarded-For`; the in-process limiter hard-bounds tracked keys. This is a controlled-launch
+memory and burst guard, not distributed protection across instances, so the trusted origin path and
+edge/WAF limiting remain scale requirements.
+
+These controls constrain abuse and cost but do not prove that the caller obtained the Page and form
+values from Meta. Stonegate therefore monitors Zapier history, provider-event volume, form IDs, and
+the daily circuit during live campaigns. Stonegate does not use a Meta developer app, Graph token,
+or direct Meta webhook for this workflow. The system records requested phone/email contact basis
+but never infers seller SMS consent from a Meta phone field.
 
 Marketing also owns the public trust-proof library. `marketing:manage_public_proof` allows Owner
 and Marketing Manager roles to prepare, review, publish, unpublish, and retire proof. Other
@@ -1195,7 +1255,7 @@ Employees generally interact with copilots, not a collection of separate chat ro
 | Copilot | Location | Current role |
 | --- | --- | --- |
 | Prospecting | Prospecting | Pre-call brief, script guidance, disposition quality, coaching |
-| Lead Manager | Seller Leads > Lead Queue | Priority, seller brief, missing facts, reply and task proposals |
+| Lead Manager | Leads > Lead Queue | Priority, seller brief, missing facts, reply and task proposals |
 | Acquisitions | Calendar Appointment | Meeting preparation, evidence gaps, negotiation support |
 | Transaction | Transactions | Checklist, document facts, blockers, coordination drafts |
 | Disposition | Dispositions | Package gaps, buyer ranking, outreach and offer review |
@@ -1249,6 +1309,23 @@ The deployed API worker handles recurring operational jobs such as:
 - overdue handoff and workflow escalation
 - provider retry work where implemented
 
+Each sweep gives every operation one opportunity to process work before the next sweep, so a busy
+high-priority queue cannot indefinitely starve call, email, or other later queues. A separate
+heartbeat thread refreshes liveness during long provider calls without clearing an already
+degraded state. Main-loop progress and the current operation are recorded independently. `/ready`
+therefore catches a live-but-hung loop after `WORKER_OPERATION_STALL_SECONDS` (600 seconds in
+production) without classifying a normal multi-provider operation as stalled merely because it
+lasts longer than the heartbeat freshness window.
+
+Resend provider events use a UUID-fenced processing lease, bounded exponential retry, stale-claim
+recovery, and a terminal dead-letter state. A reclaimed event cannot be overwritten by its stale
+worker. The exact validated inbound route is checkpointed before later provider or attachment work,
+so a retry cannot silently choose a different destination; lifecycle webhooks that arrive before
+their outbound CRM record retry within the same bounded budget. Attachment downloads enforce the
+configured limit from declared size, response length, and streamed bytes instead of buffering an
+unbounded response. Dead-letter events require manager review and a reason-required audited requeue;
+they are not automatically resurrected into a poison loop.
+
 Background failures are stored as durable operational records. Repeated failures can notify an
 owner-controlled webhook. API readiness can require a fresh worker heartbeat.
 
@@ -1284,12 +1361,18 @@ Core boundaries include:
 - organization-scoped reads and writes
 - individual employee accounts
 - restricted VA, vendor, partner, finance, recording, and mailbox access
-- signed provider webhooks
+- signed Resend, Twilio, and organization-bound SignWell webhooks, plus a documented secretless
+  Zapier exception with bounded ingress and acceptance controls
+- production client-IP rate-limit keys derived from the edge-owned Cloudflare address while caller
+  `X-Forwarded-For` is ignored, with a hard bound on process-local limiter keys
 - event and dispatch idempotency
 - consent and suppression evidence
 - permission-gated downloads
 - secret values stored in environment configuration, not documentation
 - human approval for consequential financial, contractual, offer, buyer, and AI actions
+- request-type-specific approval read and decision enforcement, with `audit:view` as the only
+  blanket approval-read authority and unknown types having no decision path
+- dependency audits in CI for Python and Node packages
 
 The platform contains controls, but software does not replace legal, tax, accounting, employment,
 telemarketing, recording, or real-estate advice.
@@ -1303,8 +1386,8 @@ telemarketing, recording, or real-estate advice.
 | OpenAI | Copilots, bounded research, transcription | Implemented | API configured; production pilots remain |
 | RentCast | Independent recorded-sale, rent, and market evidence | Implemented | Configured; address coverage varies |
 | RealEstateAPI | Canonical property profile, secondary comps, financial/property signals, and licensed listing image when returned | Implemented with exact-match enforcement, deduplication, saved full record, safe image proxy, and candidate/shadow modes | Active; controlled property research passed |
-| Resend | Outbound and inbound operational email | Implemented | DNS and webhook configured; acceptance remains |
-| Twilio | SMS, Voice, recordings, and Call Intelligence | Implemented | Staff lead alerts active; Voice/recording/transcription/AI-note acceptance remains |
+| Resend | Outbound and inbound operational email | Implemented with signed events, UUID-fenced leases, durable route checkpointing, bounded retry, manager-only audited dead-letter recovery, restricted-mailbox isolation, and bounded attachment downloads | DNS and webhook configured; controlled mailbox acceptance and malware-scanning decision remain |
+| Twilio | SMS, Voice, recordings, and Call Intelligence | Implemented with transcript backoff, exhaustion visibility, and audited manual retry | Staff alerts have prior delivery evidence but require repeat acceptance; seller SMS and Voice/recording/transcription/AI-note acceptance remain |
 | SignWell | Hosted e-signature | Implemented | Activation and acceptance pending |
 | DealMachine | Legacy optional buyer discovery and underwriting adapter | Retained for rollback only | Disabled; removable after subscription cancellation |
 | S3-compatible storage / R2 | Private document storage | Implemented option | Activation optional/pending |
@@ -1312,12 +1395,12 @@ telemarketing, recording, or real-estate advice.
 | Sentry | Error monitoring | Implemented option | Deferred |
 | Google Data Manager | Offline ad conversions | Implemented adapter | Credentials and acceptance pending |
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
-| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented secret-authenticated, Page-ID-restricted Zapier endpoint, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; secret must be synchronized before this release deploys |
-| Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Active; controlled live delivery passed |
+| Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented intentionally secretless endpoint with Page/form restrictions, burst and daily circuits, payload limits, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; residual caller-provenance risk is monitored |
+| Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Prior controlled delivery exists; repeat acceptance is pending after the worker credential correction |
 
 ## 21. Data Domain Map
 
-The primary SQLAlchemy model file contains 192 operational model classes. They group into:
+The primary SQLAlchemy model file contains 198 operational model classes. They group into:
 
 ### Identity And Organization
 
@@ -1401,10 +1484,12 @@ runtime, external-action, orchestrator, run, tool, evaluation, comparison, and p
 Current repository verification includes:
 
 - API unit and integration tests under `apps/api/tests`
-- 52 API test modules
+- 90 API test modules
 - Ruff linting
 - MyPy type checking
-- Next.js lint and production build commands
+- Python and Node dependency vulnerability audits
+- Next.js lint, explicit TypeScript checking, and production build commands
+- OS information-architecture and underwriting-workspace contract checks
 - Alembic migration execution
 - local synthetic demo seed
 - simulated email and SMS
@@ -1419,7 +1504,13 @@ npm run lint:api
 npm run typecheck:api
 npm run test:api
 npm run lint:web
+npm run typecheck:web
+npm run audit:ia
+npm run audit:underwriting
 npm run build:web
+
+(cd apps/api && uv run pip-audit --strict --desc=off --progress-spinner=off)
+(cd apps/web && npm audit --workspaces=false --audit-level=high)
 ```
 
 Provider-backed workflows also require controlled acceptance. Passing unit tests does not prove
@@ -1430,11 +1521,11 @@ DNS, webhook, carrier, mailbox, signing, data-provider, or advertising account c
 The major product workflows are implemented. The remaining risk is primarily production
 acceptance and evidence:
 
-- Twilio acquisitions-number attachment and dedicated Voice, recording, transcription, AI-note
-  review/apply, failure, retention, and deletion acceptance
-- Resend controlled sender, reply, routing, attachment, bounce, and escalation tests
+- Twilio seller SMS plus dedicated Voice, recording, transcription, AI-note
+  review/apply, automatic retry, exhaustion/manual recovery, retention, and deletion acceptance
+- Resend controlled sender, reply, restricted routing, attachment-size/malware procedure,
+  retry/dead-letter/requeue, bounce, and escalation tests
 - SignWell template, webhook, remote signature, and iPad signature acceptance
-- RealEstateAPI API-key deployment and controlled property-research acceptance
 - real Georgia underwriting outcomes and operator calibration
 - first CPA-reviewed opening balances, bank reconciliation, month close, and report package
 - ad-provider credential setup and offline conversion acceptance
@@ -1445,6 +1536,12 @@ acceptance and evidence:
 - real-VA acceptance of the BatchDialer calling and idempotent Stonegate warm-handoff workflow;
   Stonegate one-by-one calling remains the migration fallback
 - real backup restoration and optional monitoring-provider configuration
+- one real Facebook-form-to-CRM-to-property-research-to-staff-alert acceptance run using the
+  production form allowlist, plus continued monitoring of the secretless-ingress residual risk
+- a controlled manual buyer-outreach procedure or a separately implemented live disposition
+  delivery channel; the current campaign release records simulation evidence only
+- an explicit production decision on malware scanning and distributed edge throttling before scale;
+  process-local key storage is bounded but is not a shared multi-instance control
 
 These are tracked in `FINISHING_ROADMAP.md`.
 

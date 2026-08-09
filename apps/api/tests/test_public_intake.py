@@ -1,8 +1,14 @@
+import asyncio
+
+import pytest
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from starlette.requests import Request
+from starlette.types import Message, Scope
 
-from app.core.config import Settings
+from app.core.config import Settings, get_settings
 from app.integrations.marketing_conversions import build_meta_payload
 from app.main import app
 from app.models.foundation import (
@@ -21,7 +27,14 @@ from app.models.foundation import (
     Property,
     Task,
 )
+from app.routers import public as public_router
 from app.services.bootstrap import bootstrap_foundation
+from app.services.request_rate_limit import (
+    FixedWindowRateLimiter,
+    RequestBodyTooLargeError,
+    read_bounded_request_body,
+    trusted_client_address,
+)
 
 
 def public_payload() -> dict[str, object]:
@@ -98,7 +111,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
     assert {consent.channel for consent in consents} == {"email", "phone", "sms"}
     assert all(consent.status == "granted" for consent in consents)
-    assert all(consent.captured_ip == "203.0.113.10" for consent in consents)
+    assert all(consent.captured_ip == "testclient" for consent in consents)
     sms_consent = next(consent for consent in consents if consent.channel == "sms")
     assert sms_consent.wording_version == "seller-sms-web-v2"
     assert "Reply STOP to opt out or HELP for help." in sms_consent.wording
@@ -357,10 +370,160 @@ def test_public_conversion_event_endpoint_records_attribution(
     assert response.json()["id"] == str(event.id)
     assert event.event_type == "form_start"
     assert event.session_id == "session-123"
-    assert event.ip_address == "203.0.113.11"
+    assert event.ip_address == "testclient"
     assert event.source == "meta_ads"
     assert event.medium == "paid_social"
     assert event.event_metadata == {"field": "property_address"}
+
+
+def test_public_write_rate_limits_are_route_specific_and_conversion_friendly(
+    monkeypatch: MonkeyPatch,
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    monkeypatch.setenv("PUBLIC_INTAKE_RATE_LIMIT_ENABLED", "true")
+    monkeypatch.setenv("PUBLIC_INTAKE_RATE_LIMIT_REQUESTS", "1")
+    monkeypatch.setenv("PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS", "600")
+    monkeypatch.setenv("PUBLIC_CONVERSION_EVENT_RATE_LIMIT_REQUESTS", "2")
+    monkeypatch.setenv("PUBLIC_CONVERSION_EVENT_RATE_LIMIT_WINDOW_SECONDS", "600")
+    monkeypatch.setattr(
+        public_router,
+        "public_intake_rate_limiter",
+        FixedWindowRateLimiter(),
+    )
+    get_settings.cache_clear()
+    client = TestClient(app)
+    headers = {"X-Forwarded-For": "198.51.100.200", "User-Agent": "rate-limit-test"}
+
+    try:
+        intake = client.post(
+            "/api/v1/public/seller-leads",
+            json=public_payload(),
+            headers=headers,
+        )
+        blocked_intake = client.post(
+            "/api/v1/public/seller-leads",
+            json=public_payload(),
+            headers=headers,
+        )
+        enrichment_payload = {
+            "enrichment_token": intake.json()["enrichment_token"],
+            "property_condition": "major_repairs",
+        }
+        enrichment = client.post(
+            "/api/v1/public/seller-leads/enrichment",
+            json=enrichment_payload,
+            headers=headers,
+        )
+        blocked_enrichment = client.post(
+            "/api/v1/public/seller-leads/enrichment",
+            json=enrichment_payload,
+            headers=headers,
+        )
+        conversion_payload = {
+            "event_type": "form_start",
+            "session_id": "rate-limit-session",
+            "attribution": {"landing_page": "/get-a-cash-offer"},
+        }
+        conversions = [
+            client.post(
+                "/api/v1/public/conversion-events",
+                json=conversion_payload,
+                headers=headers,
+            )
+            for _ in range(2)
+        ]
+        blocked_conversion = client.post(
+            "/api/v1/public/conversion-events",
+            json=conversion_payload,
+            headers=headers,
+        )
+    finally:
+        get_settings.cache_clear()
+
+    assert intake.status_code == 201
+    assert blocked_intake.status_code == 429
+    assert enrichment.status_code == 200
+    assert blocked_enrichment.status_code == 429
+    assert [response.status_code for response in conversions] == [201, 201]
+    assert blocked_conversion.status_code == 429
+    assert blocked_conversion.json()["detail"] == (
+        "Too many conversion events. Please wait before trying again."
+    )
+    assert int(blocked_conversion.headers["Retry-After"]) >= 1
+
+
+def test_in_process_rate_limiter_has_a_hard_key_bound() -> None:
+    limiter = FixedWindowRateLimiter(max_keys=2)
+
+    assert limiter.check("client-a", limit=5, window_seconds=60, now=1) is None
+    assert limiter.check("client-b", limit=5, window_seconds=60, now=1) is None
+    assert limiter.check("client-c", limit=5, window_seconds=60, now=1) is None
+
+    assert limiter.tracked_key_count == 2
+
+
+def test_client_address_trusts_only_the_production_edge_header() -> None:
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": "/",
+        "raw_path": b"/",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [
+            (b"cf-connecting-ip", b"203.0.113.25"),
+            (b"x-forwarded-for", b"198.51.100.99"),
+        ],
+        "client": ("10.0.0.5", 12345),
+        "server": ("api.stonegate.test", 443),
+    }
+    request = Request(scope)
+    missing_edge_header = Request({**scope, "headers": [(b"x-forwarded-for", b"198.51.100.99")]})
+
+    assert trusted_client_address(request, production=True) == "203.0.113.25"
+    assert trusted_client_address(missing_edge_header, production=True) == "edge-unknown"
+    assert trusted_client_address(request, production=False) == "10.0.0.5"
+
+
+def test_bounded_request_reader_stops_before_buffering_an_oversized_stream() -> None:
+    messages: list[Message] = [
+        {"type": "http.request", "body": b"1234", "more_body": True},
+        {"type": "http.request", "body": b"5678", "more_body": True},
+        {"type": "http.request", "body": b"never-read", "more_body": False},
+    ]
+    receive_count = 0
+
+    async def receive() -> Message:
+        nonlocal receive_count
+        message = messages[receive_count]
+        receive_count += 1
+        return message
+
+    scope: Scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "https",
+        "path": "/",
+        "raw_path": b"/",
+        "query_string": b"",
+        "root_path": "",
+        "headers": [],
+        "client": ("10.0.0.5", 12345),
+        "server": ("api.stonegate.test", 443),
+    }
+    request = Request(scope, receive)
+
+    with pytest.raises(RequestBodyTooLargeError):
+        asyncio.run(read_bounded_request_body(request, max_bytes=6))
+
+    assert receive_count == 2
 
 
 def test_public_page_view_queues_deduplicated_meta_view_content(
@@ -391,7 +554,7 @@ def test_public_page_view_queues_deduplicated_meta_view_content(
     assert export is not None
     assert export.event_name == "ViewContent"
     assert export.event_key == "meta-view-event-123"
-    assert export.payload_snapshot["client_ip_address"] == "203.0.113.12"
+    assert export.payload_snapshot["client_ip_address"] == "testclient"
     assert export.payload_snapshot["client_user_agent"] == "pytest-browser"
     assert export.payload_snapshot["fbp"] == "fb.1.1785875287.987654321"
 
@@ -435,7 +598,7 @@ def test_public_seller_intake_queues_hashed_meta_contact(
     assert meta_event["event_source_url"].endswith("/get-a-cash-offer")
     assert meta_event["user_data"]["em"]
     assert meta_event["user_data"]["external_id"]
-    assert meta_event["user_data"]["client_ip_address"] == "203.0.113.13"
+    assert meta_event["user_data"]["client_ip_address"] == "testclient"
     assert meta_event["user_data"]["client_user_agent"] == "pytest-browser"
     assert meta_event["user_data"]["fbc"] == "fb.1.1785875287.contact-click"
     assert meta_event["user_data"]["fbp"] == "fb.1.1785875287.123456789"

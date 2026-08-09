@@ -55,21 +55,21 @@ If one of these is missing, the lead can be forgotten.
 | Page | What you use it for |
 | --- | --- |
 | **Home** | See urgent work, appointments, and exceptions |
-| **Seller Leads > Lead Queue** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
+| **Leads > Lead Queue** | Accept warm leads, qualify sellers, and use the Lead Manager Copilot |
 | **Inbox** | Read and record seller conversations |
 | **Tasks** | Complete assigned and overdue tasks |
 | **Calendar** | Review appointments, choose a closer, and schedule or dispatch meetings |
-| **Seller Leads** | Search for any active seller |
-| **Seller Leads > Pipeline** | See where sellers are in the process |
+| **Leads** | Search for any active seller |
+| **Leads > Pipeline** | See where sellers are in the process |
 
-Your primary sidebar page is **Seller Leads**. Select **Lead Queue** for guided qualification work,
+Your primary sidebar page is **Leads**. Select **Lead Queue** for guided qualification work,
 **Pipeline** for stage review, or **Underwriting** for valuation work.
 
 ## Starting Your Day
 
 Follow this order every workday:
 
-1. Open **Seller Leads > Lead Queue**.
+1. Open **Leads > Lead Queue**.
 2. Look at the numbers across the top.
 3. Open **Daily queue**.
 4. Accept every new warm handoff assigned to you.
@@ -107,7 +107,7 @@ The Lead Queue contains these tabs:
 
 When a VA, public form, campaign, or team member creates a warm handoff:
 
-1. Open **Seller Leads > Lead Queue**.
+1. Open **Leads > Lead Queue**.
 2. Select **Daily queue**.
 3. Find **Accept warm handoffs**.
 4. Review the seller name, property, source, assigned person, and acceptance deadline.
@@ -362,8 +362,9 @@ risks, confidence, and evidence. Select **Accept brief** when it is useful and a
 adds it as an internal note on that seller's existing timeline. Select **Reject** when it is wrong
 or unhelpful. Neither choice contacts the seller or completes your actual follow-up task.
 
-Call-note reviews open in Inbox because you must compare the draft with the recording and
-transcript before approving any CRM updates.
+Call-note reviews open in Inbox because you must compare the narrative draft with the recording and
+transcript. Eligible empty CRM fields may already be populated from transcript evidence; correct
+any inaccurate value during review, and approve or reject the narrative note separately.
 
 Communication tasks open the conversation. Appointment tasks open the calendar. Other tasks open
 the full lead.

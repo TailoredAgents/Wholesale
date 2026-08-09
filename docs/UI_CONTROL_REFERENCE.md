@@ -1,6 +1,6 @@
 # Stonegate UI Control Reference
 
-Last verified against the application: August 3, 2026
+Last verified against the application: August 8, 2026
 
 ## Purpose
 
@@ -60,7 +60,7 @@ is relevant and the required permission is present.
 | Tasks | Administrator, Lead Manager, Acquisitions, Dispositions, TC, Finance | Relevant work permission |
 | Calendar | Lead Manager, Acquisitions | `underwriting:edit` or `operations:manage` |
 | Prospecting | Lead Manager, VA Caller | `operations:manage` or `calling_lists:work_assigned` |
-| Seller Leads | Administrator, Lead Manager, Acquisitions | `leads:view` |
+| Leads | Administrator, Lead Manager, Acquisitions | `leads:view` |
 | Deals | Acquisitions, Dispositions, TC, Finance, approved partner/vendor | `deals:view` |
 | Buyers | Dispositions | `buyers:view` |
 | Finance | Finance / Accounting | `financials:view` or `compensation:view` |
@@ -68,7 +68,7 @@ is relevant and the required permission is present.
 | Settings | Owner, Administrator | At least one administration permission |
 
 Campaigns and My Calls are local Prospecting views. Lead Queue, Pipeline, and Underwriting are
-local Seller Leads views. Approvals are in Tasks; transaction and disposition work is in Deals;
+local Leads views. Approvals are in Tasks; transaction and disposition work is in Deals;
 administration is in Settings. My Setup remains available to every signed-in employee.
 
 ## Public Website
@@ -203,15 +203,15 @@ change staff-reviewed information.
 | **Calendar** | Opens the company field calendar | Navigation only |
 | Executive Copilot launcher | Opens evidence-backed management analysis | Visible when the Executive Copilot is installed |
 | Overdue metric | Opens overdue tasks | Count is scoped to the signed-in user's visibility |
-| Qualification metric | Opens Seller Leads > Lead Queue | Shows seller records needing qualification |
+| Qualification metric | Opens Leads > Lead Queue | Shows seller records needing qualification |
 | Meetings today metric | Opens Calendar | Includes today's scheduled appointments |
-| Offer prep metric | Opens Seller Leads > Underwriting | Includes underwriting and approval work |
+| Offer prep metric | Opens Leads > Underwriting | Includes underwriting and approval work |
 | Priority title or arrow | Opens the record or workspace for that item | Navigation only |
 | Task completion check | Completes the attached task | Visible only with lead-edit permission; use only after doing the work |
 | **Open full queue** | Opens Tasks | Navigation only |
 | Needs intervention links | Open unread conversations, unassigned leads, unscheduled tasks, or approvals | Team-wide exceptions are hidden from narrowly scoped roles |
-| Pipeline stage | Opens Seller Leads in Board mode filtered to that stage | Navigation only |
-| **Open Pipeline** | Opens Seller Leads in Board mode | Navigation only |
+| Pipeline stage | Opens Leads in Board mode filtered to that stage | Navigation only |
+| **Open Pipeline** | Opens Leads in Board mode | Navigation only |
 
 An **API fallback view** warning means counts are empty fallback data, not proof that no work exists.
 
@@ -275,7 +275,7 @@ buttons. The originating workspace remains authoritative for that decision.
 
 Calendar loading or availability errors do not delete appointments. Refresh after API recovery.
 
-## Seller Leads
+## Leads
 
 | Control or section | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
@@ -288,7 +288,7 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Seller context / Initial note | Preserves known motivation, timeline, condition, occupancy, price, mortgage, and intake notes | Optional; missing facts remain unconfirmed |
 | **Create lead** | Creates the lead, contact methods, property, conversation, attribution context, assignment, and note | Opens the new full lead record after success |
 | Summary metrics | Shows New, Qualified+, Unassigned, No follow-up, and Paid leads | Read-only |
-| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Seller Leads work without changing records | Underwriting requires underwriting access |
+| Lead Queue / All Leads / Pipeline / Underwriting | Switches local Leads work without changing records | Underwriting requires underwriting access |
 | Saved lead views | Filters by predefined operating state and updates the URL | Filter only |
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
@@ -593,7 +593,7 @@ Within My Calls, views are **Work queue**, **Call quality**, **Handoff review** 
 | **Approve** | Makes that draft the approved caller script | Manager only |
 | Caller script history | Shows version, status, and question count | Read-only |
 
-## Seller Leads Lead Queue
+## Leads: Lead Queue
 
 Lead Queue views are **Copilot**, **Today**, **Qualification**, **Performance**, and **Standards**.
 
@@ -730,7 +730,8 @@ history into separate channel threads.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| **Generate AI notes** | Produces a transcript-grounded draft | Requires a completed transcript and enabled Call Intelligence capability |
+| Call Intelligence status | Shows queued, processing, temporary failure, stopped/exhausted, or ready-for-review state | Processing starts from the completed recording; no separate generation button is required |
+| **Retry call intelligence** | Resets an exhausted transcript's attempt counter and queues the same call for another audited run | Visible only after repeated failures stop automatic retry and requires recording access |
 | Summary | Drafts the overall call result | Human review required |
 | Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the draft |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
@@ -742,6 +743,7 @@ history into separate channel threads.
 | Create follow-up task | Creates the reviewed proposed task | Optional approval choice |
 | **Approve** | Saves the reviewed notes and selected low-risk updates | Requires review permission |
 | **Reject** | Records that the full AI narrative should not be used | Auto-filled factual fields remain editable on the lead |
+| Approved call summary | Adds the reviewed narrative as an internal note in the conversation timeline and seller history | Never sent to the seller; remains linked to the transcript and reviewer |
 
 ### Email Administration
 
@@ -752,6 +754,7 @@ Email administration is embedded at `/os/settings/communications`. The legacy
 | --- | --- | --- |
 | **Senders** | Manages approved outbound identities | Owner or communication administrator |
 | **Routing** | Manages inbound address and department routing | Owner or communication administrator |
+| **Failed events** | Lists Resend events that exhausted bounded retry | Email manager only; external mailbox acceptance still must pass |
 | Address / Display name | Defines the sender identity | Domain must be verified in Resend |
 | Sender type | Identifies personal, shared, accounting, offers, or buyer mailbox behavior | Administrator only |
 | Status | Enables or disables an address | Disabled addresses cannot send |
@@ -762,6 +765,9 @@ Email administration is embedded at `/os/settings/communications`. The legacy
 | Sender grant | Gives a user permission to send from an address | Does not grant access to restricted mailbox history by itself |
 | Watcher grant | Gives a user visibility into routed replies | Used for shared coverage |
 | Unresolved inbound assignment | Routes an unmatched reply to a person or team | Requires an unresolved inbound event |
+| Restricted routing destination | Preserves restricted-mailbox visibility during automatic or manual assignment | A restricted alias can target only a restricted-visibility conversation |
+| Requeue reason | Explains why a failed provider event is safe to try again | Required, audited, and available only after the cause is corrected |
+| **Requeue** | Resets one dead-lettered event into the worker's retry queue | Email manager only; does not bypass attachment or routing safeguards |
 | **Save / Update** | Persists sender or routing changes | Administrator only |
 
 ### Voice Line Administration
@@ -1011,7 +1017,7 @@ The Activity section also includes:
 
 ## Valuation And Offer
 
-The seller record's Valuation & Offer section is the working valuation area. **Seller Leads >
+The seller record's Valuation & Offer section is the working valuation area. **Leads >
 Underwriting** is the active queue, while **Settings > Data & Quality** owns calibration,
 provider scorecards, and methodology decisions. A market analysis is decision support, not an
 appraisal or permission to promise a seller a price.
@@ -1066,7 +1072,7 @@ appraisal or permission to promise a seller a price.
 | Confidence | Summarizes evidence quality and unresolved gaps | Does not gate PDF generation |
 | Offer range | Shows policy-based low/high offer guidance after repairs and assignment fee | Staff must use current authority and approval rules |
 | Repair range / Unconfirmed work | Shows saved low, expected, and high repair totals, catalog version, unknown allowance, and specialist warnings | Expected amount drives the current analysis; range is decision support and does not block PDFs |
-| Provider evidence | Shows RentCast/DealMachine status, returned and usable counts, net-new and overlapping transfers, drops, internal duplicates, ineligible transfers, conflicts, current-run credits/latency, and original source credits/latency for reused evidence | Read-only; DealMachine shadow evidence cannot affect valuation and failed calls may show conservative estimated credits |
+| Provider evidence | Shows RentCast/RealEstateAPI status, returned and usable counts, net-new and overlapping transfers, drops, internal duplicates, ineligible transfers, conflicts, current-run credits/latency, and original source credits/latency for reused evidence | Read-only; RealEstateAPI shadow evidence cannot affect valuation and failed calls may show conservative estimated credits; older analyses can retain labeled legacy DealMachine evidence |
 | Closed-sale search summary | Shows the final Preferred, Expanded, Extended, or Manual evidence level, unique and duplicate counts, subdivision support, shortage, and next action | Read-only; Manual means the controlled provider search remained insufficient, not that the analysis disappeared |
 | Search-attempt row | Shows each radius/date level, provider results, newly added sales, usable count, and reason for widening | Read-only; provider errors remain visible |
 | Supporting market context summary | Shows supporting evidence status, active listing count, and ZIP | Read-only; never contributes to ARV or offer math |
@@ -1076,7 +1082,7 @@ appraisal or permission to promise a seller a price.
 | Review rate support and withheld adjustments | Shows sample/pair counts and the exact reason each rate was supported or withheld | Read-only evidence |
 | Review comparable adjustment math | Shows recorded price, every sourced dollar component, extrapolation limit, total adjustment, and adjusted indication | Read-only; review flags require operator judgment |
 | What is driving this range | Shows adjusted-sale dispersion, condition uncertainty, withheld adjustments, expanded-market sales, provider conflicts, and magnitude review | Uses deterministic diagnostics; no generic percentage envelope is added |
-| External benchmarks | Expands RentCast or DealMachine provider value estimates | Collapsed secondary context; explicitly excluded from ARV and offer math |
+| External benchmarks | Expands RentCast or RealEstateAPI provider value estimates | Collapsed secondary context; explicitly excluded from ARV and offer math; older analyses may retain a labeled legacy DealMachine benchmark |
 | AI Comp Analyst draft | Shows evidence-cited include/exclude/review suggestions, condition hypotheses, micro-market concerns, missing questions, and range explanations | Draft-only; cannot mutate comps, set weights or prices, or confirm condition |
 | Public evidence | Shows controlled subject research, AI-discovered closed sales, source grade, and source links | Must be verified before relying on a material fact; one-source sales receive reduced weight |
 | Warnings | Identifies address, comp, price-per-square-foot, renovation, or data-quality concerns | Staff review required |
@@ -1104,7 +1110,7 @@ appraisal or permission to promise a seller a price.
 | Comp grade | Summarizes physical, location, recency, and market-area fit; Extended-only records cannot receive A or B | A grade does not prove renovated condition |
 | Search-level label | Shows whether the sale first appeared in the Preferred, Expanded, Extended, or Manual evidence step | Wider-query duplicates retain their earliest level; Manual identifies operator-entered evidence |
 | Evidence source / **Open source** | Shows provider or manual verification origin and opens a retained source link | Manual reference is always retained; link appears when supplied |
-| Source badges / Cross-sourced / Corroborated / Conflict | Shows RentCast, DealMachine, manual, or public provenance. Cross-sourced means more than one source reported the transfer; Corroborated requires explicit agreement; Conflict identifies material disagreement | Duplicate transfers count once; cross-sourcing alone is not corroboration and conflicts require review |
+| Source badges / Cross-sourced / Corroborated / Conflict | Shows RentCast, RealEstateAPI, manual, or public provenance; older evidence may retain a legacy DealMachine badge. Cross-sourced means more than one source reported the transfer; Corroborated requires explicit agreement; Conflict identifies material disagreement | Duplicate transfers count once; cross-sourcing alone is not corroboration and conflicts require review |
 | AI draft badge | Shows the Comp Analyst's recommendation for the same comp | Advisory only; the reviewer still controls inclusion, reason, condition, and weight |
 | Include | Allows a comparable to contribute to the estimate | Staff judgment; exclusion reason recommended when changed |
 | Condition | Marks renovated, average, distressed, unknown, or other supported state | Unconfirmed renovation reduces confidence but does not block results |
@@ -1150,12 +1156,12 @@ appraisal or permission to promise a seller a price.
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Tasks > Needs Approval view | Limits the unified work queue to governed requests and AI review | Visible only to authorized reviewers |
-| Approval row | Shows source, deadline, owner, status, and warnings | Requires approval permission for that domain |
+| Tasks > Needs Approval view | Limits the unified work queue to governed requests and AI review | Without `audit:view`, it lists only request types covered by the viewer's permissions; `audit:view` is the sole blanket read authority and does not grant decision authority |
+| Approval row | Shows source, deadline, owner, status, and warnings | Requires read scope for that approval type; call-note review also follows its recording/lead assignment rules |
 | Source link | Opens the underlying lead, transaction, finance record, or AI review | Used when the decision needs full context |
 | Decision note | Records reasoning for approval or rejection | Required by some approval types |
-| **Approve** | Authorizes the requested governed action | Only authorized approvers; may be blocked if source review is required |
-| **Reject** | Rejects the request and records the reason | Only authorized approvers |
+| **Approve** | Authorizes the requested governed action | Server checks the request type: offer authority, contract sending, AI changes, or acquisition follow-up each requires its own permission |
+| **Reject** | Rejects the request and records the reason | Same request-type permission check applies; unknown approval types fail closed |
 | Review-at-source state | Directs the approver to decide in the originating workspace | Used when inline approval would omit required context |
 | Legacy `/os/approvals` route | Redirects to Tasks > Needs Approval and preserves a selected approval | Compatibility only |
 
@@ -1224,17 +1230,21 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Template | Chooses an approved contract template | Requires configured template record |
-| Seller/property/purchase fields | Supplies agreement merge data | Required fields depend on template |
+| Seller/property/purchase fields | Supplies agreement merge data | For a purchase agreement, price must match the current seller-agreed/current transaction price and approved offer authority |
 | Closing terms / Special terms | Supplies transaction-specific agreement terms | Must be reviewed before sending |
-| **Create agreement version** | Generates a frozen agreement version from current data | Does not send it |
+| **Create agreement version** | Generates a frozen agreement version and captures its approved plan, underwriting, price, and concession authority | Does not send it; blocked without current purchase authority |
 | Agreement PDF | Opens the exact generated version for review | Requires generated agreement |
-| **Request approval** | Sends the agreement version for internal approval | Required by contract authority rules |
-| **Mark sent manually** | Records that staff delivered the exact agreement outside SignWell | Requires delivery details |
-| **Mark executed manually** | Records a completed externally signed agreement and evidence | Requires execution evidence |
+| **Request approval** | Sends the agreement version for internal approval | Revalidates the captured authority; stale source records require a new package |
+| **Mark sent manually** | Records that staff delivered the exact agreement outside SignWell | Revalidates authority and creates a transaction event; the package stays authority-frozen until execution or audited withdrawal |
+| **Withdraw sent package** | Voids an outstanding manually delivered agreement after staff confirms every recipient can no longer sign it | Requires an explicit confirmation and meaningful audit reason; active SignWell requests must be cancelled and reconciled instead |
+| **Attest executed** | Records a completed externally signed agreement after a human explains how every required party's signature was verified | Requires the exact package document, `executed` evidence status, acceptable scan state, confirmation, and at least 10 characters of reason |
 | SignWell connection status | Shows whether API configuration is usable | Read-only |
 | **Verify SignWell** | Tests the configured provider connection/template | Requires SignWell credentials and template ID |
 | Seller signer / Company signer | Maps actual people to template placeholder roles | Required by template |
-| **Send signature request** | Creates and sends the approved agreement through SignWell | Requires approved agreement, valid signers, and working provider |
+| **Send signature request** | Reserves the approved package, creates and saves an unsent SignWell draft, then sends that exact provider document | Requires valid signers, working provider, and authority that is still identical to the approved package snapshot; uncertain outcomes do not auto-create another document |
+| **Resume saved draft** | Sends an already persisted, reconciled provider draft without creating a replacement document | Appears only for a `draft` envelope; configuration and current authority are rechecked |
+| **Attach verified draft** | Recovers a provider draft created during the narrow response/persistence crash window | Requires the exact unsent SignWell document ID; provider metadata, mode, and signer emails must match the reserved transaction/package |
+| **Abandon empty intent** | Releases a stale creation intent only after staff verifies no matching provider document exists | Available only for placeholder intents after a five-minute safety interval; requires confirmation and a meaningful audit reason |
 | **Reconcile signature status** | Pulls the latest provider status and completed files | Requires an existing signature request |
 | Signature status | Shows prepared, sent, viewed, completed, declined, or failed | Provider-derived |
 
@@ -1244,9 +1254,10 @@ The transaction record uses **Closing**, **Contract**, **Documents**, **Parties*
 | --- | --- | --- |
 | Document type | Classifies contract, amendment, title, closing, assignment, photo, or other file | Required |
 | File upload | Attaches a document to the transaction | File limits apply |
-| Description | Explains what the document contains | Recommended |
-| **Upload** | Stores the file and audit metadata | Requires document permission |
-| Download | Opens the stored document | Requires document access |
+| Evidence status | Marks the upload as **Final / reference copy** or **Fully executed signed copy** | Use executed only after every required party signed the exact package document |
+| Contract package | Links the upload to the frozen agreement version it supports | Required before that document can support manual execution |
+| **Upload privately** | Stores the file, checksum, retention facts, scan state, and audit metadata | An upload alone does not mark a contract executed |
+| Download | Opens the permission-checked stored document | Requires document access and a retained file |
 | Fact confirmation | Confirms a material value or fact supported by the document | Requires reviewer permission |
 | Private evidence marker | Restricts sensitive financial or identity documents | Visibility depends on role |
 
@@ -1309,9 +1320,8 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | **Generate package PDF** | Produces the current investor marketing package | Requires sufficient package data |
 | **Request package approval** | Sends the release package for review | Required before governed release |
 | **Approve package** | Authorizes the current version for marketing | Authorized approver only |
-| Release status | Shows draft, pending, approved, released, or withdrawn | Read-only |
-| **Simulate release** | Shows intended recipients and content without contacting buyers | Available before live release |
-| **Release package** | Sends or records the approved package release | Requires approved current package and enabled channel |
+| Release status | Shows draft, pending, approved, simulated released, or withdrawn | Read-only |
+| **Approve simulated release** | Records the qualified recipient pool and a `simulated_released` campaign | Sends no email or SMS; a manual procedure or future live adapter is required to contact buyers |
 
 ### Buyer Matching
 
@@ -1325,8 +1335,8 @@ The Dispositions workspace opens a case for a contracted property and uses **Pac
 | **Run search (up to N credits)** | Confirms the displayed estimate, requests recent local purchaser candidates, and records actual provider credit use | Disabled until a current preview succeeds; the run is rejected if the estimate changes or credits are insufficient |
 | Candidate result | Shows provider evidence and match context before import; DNC-tagged phone numbers are excluded | Not yet a Stonegate buyer record |
 | **Import selected** | Creates or updates internal buyers from the reviewed, checked candidates | Staff selection and approval required; does not send outreach |
-| Proof of funds upload | Attaches funding evidence | Requires supported document |
-| **Verify / Reject proof of funds** | Records staff review of funding evidence | Authorized role only |
+| Proof of funds upload | Attaches funding evidence with staff-entered institution, amount, and expiry | The current submitter attests to those values; there is no separate second-review step in this flow |
+| **Verify POF** | Uploads the evidence and records the supplied verification facts | Authorized staff only; controlled launch acceptance must verify the operating review procedure |
 | Buyer activity | Logs contact, interest, showing, pass reason, and follow-up | Requires selected buyer |
 | **Log activity** | Saves the buyer touchpoint | Does not send communication unless explicitly using a channel action |
 
@@ -1678,7 +1688,7 @@ It does not create a second AI system. Its views are **Copilots**, **Runtime**,
 | **Create baseline** | Runs the selected approved set against the current production baseline | Requires selected dataset |
 | Run evaluation | Tests a model/contract version against golden cases | Requires runtime |
 | Compare | Compares candidate results with baseline quality, safety, latency, and cost | Requires completed runs |
-| **Promote** | Makes a passing candidate the approved production version | Blocked below quality thresholds or without approvals |
+| **Promote** | Makes a passing candidate the approved production version | Blocked below quality thresholds, without required reviews, or without `ai:change_prompts` authority |
 
 ### Traces And Governance
 
@@ -1695,7 +1705,7 @@ It does not create a second AI system. Its views are **Copilots**, **Runtime**,
 ## Shared Copilot Controls
 
 Role-specific Copilots normally appear near the top of the page where their advice is
-used: Seller Leads, Prospecting, Underwriting/Acquisitions, Deals, Finance, Tax, Marketing, and
+used: Leads, Prospecting, Underwriting/Acquisitions, Deals, Finance, Tax, Marketing, and
 Executive management.
 
 | Control or concept | Purpose and effect | Availability and common blocker |

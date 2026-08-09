@@ -29,6 +29,7 @@ from app.schemas.approvals import (
     OfferNegotiationEventRead,
     OfferNegotiationLedgerRead,
 )
+from app.services.contract_authority_locks import lock_offer_authority_for_mutation
 from app.services.offer_approvals import find_offer_approver_id, offer_plan_to_read
 
 
@@ -80,6 +81,11 @@ def create_concession(
     lead = scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    lock_offer_authority_for_mutation(
+        db,
+        principal.organization_id,
+        lead.id,
+    )
     plan = approved_current_plan(
         db, principal.organization_id, lead, payload.offer_negotiation_plan_id
     )
@@ -264,6 +270,11 @@ def present_concession(
     lead = scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    lock_offer_authority_for_mutation(
+        db,
+        principal.organization_id,
+        lead.id,
+    )
     concession = db.scalar(
         select(OfferConcession).where(
             OfferConcession.id == concession_id,
@@ -335,6 +346,12 @@ def create_negotiation_event(
     lead = scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    if payload.event_type == "agreement":
+        lock_offer_authority_for_mutation(
+            db,
+            principal.organization_id,
+            lead.id,
+        )
     plan = approved_current_plan(
         db, principal.organization_id, lead, payload.offer_negotiation_plan_id
     )
@@ -534,6 +551,11 @@ def record_field_offer(
     lead = scoped_lead(db, principal, lead_id)
     if lead is None:
         raise ValueError("The lead is no longer available.")
+    lock_offer_authority_for_mutation(
+        db,
+        principal.organization_id,
+        lead.id,
+    )
     plan = latest_approved_plan(db, principal.organization_id, lead.id)
     if plan is None:
         raise ValueError("An approved offer plan is required before presenting a price.")
@@ -582,6 +604,11 @@ def record_field_agreement(
     lead = scoped_lead(db, principal, lead_id)
     if lead is None:
         raise ValueError("The lead is no longer available.")
+    lock_offer_authority_for_mutation(
+        db,
+        principal.organization_id,
+        lead.id,
+    )
     plan = latest_approved_plan(db, principal.organization_id, lead.id)
     if plan is None:
         raise ValueError("An approved offer plan is required before recording an agreement.")

@@ -8,6 +8,7 @@ import {
   Inbox,
   Mail,
   Plus,
+  RotateCcw,
   Save,
   Trash2,
   UserRoundCog,
@@ -71,6 +72,20 @@ type RoutingException = {
   received_at: string;
   reason: string;
   candidate_conversation_ids: string[];
+};
+
+type EmailDeadLetter = {
+  id: string;
+  event_type: string;
+  provider_message_id: string;
+  sender: string;
+  recipients: string[];
+  subject: string | null;
+  received_at: string;
+  processed_at: string | null;
+  attempt_count: number;
+  error_message: string | null;
+  processing_status: string;
 };
 
 type ConversationOption = {
@@ -171,10 +186,11 @@ export function EmailAdminPanel({
   variant?: "dialog" | "inline";
 }) {
   const { getToken } = useAuth();
-  const [tab, setTab] = useState<"senders" | "routing">("senders");
+  const [tab, setTab] = useState<"senders" | "routing" | "dead_letters">("senders");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [teams, setTeams] = useState<AdminTeam[]>([]);
   const [exceptions, setExceptions] = useState<RoutingException[]>([]);
+  const [deadLetters, setDeadLetters] = useState<EmailDeadLetter[]>([]);
   const initialAlias = aliases.find((alias) => alias.is_default) ?? aliases[0] ?? null;
   const [selectedAliasId, setSelectedAliasId] = useState<string | null>(
     initialAlias?.id ?? null,
@@ -186,6 +202,7 @@ export function EmailAdminPanel({
   const [grantUserId, setGrantUserId] = useState("");
   const [grantAccessLevel, setGrantAccessLevel] = useState<"sender" | "watcher">("sender");
   const [routingSelections, setRoutingSelections] = useState<Record<string, string>>({});
+  const [requeueReasons, setRequeueReasons] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -224,13 +241,15 @@ export function EmailAdminPanel({
   );
 
   const loadAdministration = useCallback(async () => {
-    const [options, routing] = await Promise.all([
+    const [options, routing, deadLetterResponse] = await Promise.all([
       request<{ users: AdminUser[]; teams: AdminTeam[] }>("/api/v1/email/admin/options"),
       request<{ items: RoutingException[] }>("/api/v1/email/routing-exceptions"),
+      request<{ items: EmailDeadLetter[] }>("/api/v1/email/dead-letters"),
     ]);
     setUsers(options.users);
     setTeams(options.teams);
     setExceptions(routing.items);
+    setDeadLetters(deadLetterResponse.items);
   }, [request]);
 
   useEffect(() => {
@@ -367,6 +386,31 @@ export function EmailAdminPanel({
     }
   }
 
+  async function requeueDeadLetter(eventId: string) {
+    const reason = requeueReasons[eventId]?.trim() ?? "";
+    if (reason.length < 10) return;
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      await request(`/api/v1/email/dead-letters/${eventId}/requeue`, {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+      });
+      setRequeueReasons((current) => ({ ...current, [eventId]: "" }));
+      await loadAdministration();
+      setMessage("Email event requeued. The worker will try it again.");
+    } catch (requeueError) {
+      setError(
+        requeueError instanceof Error
+          ? requeueError.message
+          : "The email event could not be requeued.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (!open) return null;
 
   const panel = (
@@ -418,6 +462,16 @@ export function EmailAdminPanel({
             <Inbox aria-hidden="true" size={16} />
             Routing
             {exceptions.length ? <span>{exceptions.length}</span> : null}
+          </button>
+          <button
+            aria-selected={tab === "dead_letters"}
+            onClick={() => setTab("dead_letters")}
+            role="tab"
+            type="button"
+          >
+            <AlertTriangle aria-hidden="true" size={16} />
+            Failed events
+            {deadLetters.length ? <span>{deadLetters.length}</span> : null}
           </button>
         </nav>
 
@@ -707,7 +761,7 @@ export function EmailAdminPanel({
               ) : null}
             </div>
           </div>
-        ) : (
+        ) : tab === "routing" ? (
           <div className={styles.routing}>
             <div className={styles.routingHeading}>
               <div>
@@ -762,6 +816,63 @@ export function EmailAdminPanel({
                 <Check aria-hidden="true" size={22} />
                 <strong>No routing exceptions</strong>
                 <span>Inbound email is matching Stonegate conversations normally.</span>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className={styles.routing}>
+            <div className={styles.routingHeading}>
+              <div>
+                <span>Operator recovery</span>
+                <h3>Failed Resend events</h3>
+              </div>
+              <strong>{deadLetters.length}</strong>
+            </div>
+            {deadLetters.map((item) => {
+              const reason = requeueReasons[item.id] ?? "";
+              return (
+                <article key={item.id}>
+                  <header>
+                    <div>
+                      <strong>{item.subject || labelize(item.event_type)}</strong>
+                      <span>
+                        {item.sender || item.provider_message_id || "Unknown message"} ·{" "}
+                        {formatDateTime(item.processed_at || item.received_at)}
+                      </span>
+                    </div>
+                    <em>{item.attempt_count} attempts</em>
+                  </header>
+                  <p>{item.error_message || "Processing stopped after repeated failures."}</p>
+                  <div>
+                    <input
+                      aria-label={`Requeue reason for ${item.subject || item.event_type}`}
+                      maxLength={500}
+                      onChange={(event) =>
+                        setRequeueReasons((current) => ({
+                          ...current,
+                          [item.id]: event.target.value,
+                        }))
+                      }
+                      placeholder="Why is it safe to retry this event?"
+                      value={reason}
+                    />
+                    <button
+                      disabled={reason.trim().length < 10 || busy}
+                      onClick={() => void requeueDeadLetter(item.id)}
+                      type="button"
+                    >
+                      <RotateCcw aria-hidden="true" size={14} />
+                      Requeue
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+            {!deadLetters.length ? (
+              <div className={styles.routingEmpty}>
+                <Check aria-hidden="true" size={22} />
+                <strong>No failed email events</strong>
+                <span>Resend events are processing within their retry budget.</span>
               </div>
             ) : null}
           </div>

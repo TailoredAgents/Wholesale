@@ -1,16 +1,21 @@
 import hashlib
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from email.utils import getaddresses
 from html.parser import HTMLParser
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
-from app.integrations.resend_email import ResendEmailDeliveryProvider
+from app.integrations.resend_email import (
+    ResendAttachmentTooLargeError,
+    ResendEmailDeliveryProvider,
+    attachment_size,
+)
 from app.models.foundation import (
     ActivityEvent,
     CommunicationDispatch,
@@ -49,6 +54,21 @@ STATUS_RANK = {
     "complained": 50,
 }
 TERMINAL_STATUSES = {"bounced", "failed", "suppressed", "complained"}
+RESEND_DEAD_LETTER_STATUS = "dead_letter"
+
+
+class ResendLeaseLostError(RuntimeError):
+    pass
+
+
+class ResendLifecycleNotReadyError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True)
+class ResendEventClaim:
+    event: CommunicationProviderEvent
+    processing_token: UUID
 
 
 class _HtmlTextExtractor(HTMLParser):
@@ -95,6 +115,10 @@ def ingest_resend_event(
         payload=payload,
         received_at=datetime.now(UTC),
         processed_at=None,
+        attempt_count=0,
+        next_attempt_at=None,
+        processing_started_at=None,
+        processing_token=None,
         error_message=None,
     )
     db.add(event)
@@ -123,38 +147,204 @@ def process_next_resend_event(
 ) -> UUID | None:
     if not resend_processing_enabled(settings):
         return None
-    event = db.scalar(
-        select(CommunicationProviderEvent)
-        .where(
-            CommunicationProviderEvent.provider == "resend",
-            CommunicationProviderEvent.processing_status.in_(("received", "retry")),
-        )
-        .order_by(CommunicationProviderEvent.received_at.asc())
-    )
-    if event is None:
+    claim = claim_next_resend_event(db, settings)
+    if claim is None:
         return None
-    event.processing_status = "processing"
-    event.error_message = None
-    db.commit()
+    event = claim.event
+    event_id = event.id
     provider = client or ResendEmailDeliveryProvider(api_key=settings.resend_api_key or "")
     try:
         if event.event_type == "email.received":
-            process_received_email(db, event, provider, settings)
+            process_received_email(
+                db,
+                event,
+                provider,
+                settings,
+                processing_token=claim.processing_token,
+            )
         elif event.event_type in LIFECYCLE_STATUSES:
             process_lifecycle_event(db, event)
         else:
-            event.processing_status = "ignored"
-            event.processed_at = datetime.now(UTC)
-            db.commit()
+            complete_resend_event(event, "ignored")
+        finalize_resend_event_claim(db, event, claim.processing_token)
+    except ResendLeaseLostError:
+        db.rollback()
+        return event_id
     except Exception as exc:
         db.rollback()
-        failed_event = db.get(CommunicationProviderEvent, event.id)
-        if failed_event is not None:
-            failed_event.processing_status = "retry"
-            failed_event.error_message = str(exc)[:2000]
-            db.commit()
+        record_resend_event_failure(
+            db,
+            event_id,
+            exc,
+            settings,
+            processing_token=claim.processing_token,
+        )
         raise
-    return event.id
+    return event_id
+
+
+def claim_next_resend_event(
+    db: Session,
+    settings: Settings,
+) -> ResendEventClaim | None:
+    while True:
+        now = datetime.now(UTC)
+        stale_before = now - timedelta(
+            seconds=settings.resend_event_processing_lease_seconds
+        )
+        event = db.scalar(
+            select(CommunicationProviderEvent)
+            .where(
+                CommunicationProviderEvent.provider == "resend",
+                or_(
+                    CommunicationProviderEvent.processing_status == "received",
+                    and_(
+                        CommunicationProviderEvent.processing_status == "retry",
+                        or_(
+                            CommunicationProviderEvent.next_attempt_at.is_(None),
+                            CommunicationProviderEvent.next_attempt_at <= now,
+                        ),
+                    ),
+                    and_(
+                        CommunicationProviderEvent.processing_status == "processing",
+                        or_(
+                            CommunicationProviderEvent.processing_started_at <= stale_before,
+                            and_(
+                                CommunicationProviderEvent.processing_started_at.is_(None),
+                                CommunicationProviderEvent.updated_at <= stale_before,
+                            ),
+                        ),
+                    ),
+                ),
+            )
+            .order_by(CommunicationProviderEvent.received_at.asc())
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        if event is None:
+            return None
+        if event.attempt_count >= settings.resend_event_max_attempts:
+            dead_letter_resend_event(
+                event,
+                now=now,
+                fallback_error="Resend event exhausted its processing attempts.",
+            )
+            db.commit()
+            continue
+        event.processing_status = "processing"
+        processing_token = uuid4()
+        event.processing_started_at = now
+        event.processing_token = processing_token
+        event.processed_at = None
+        event.next_attempt_at = None
+        event.attempt_count += 1
+        event.error_message = None
+        db.commit()
+        return ResendEventClaim(event=event, processing_token=processing_token)
+
+
+def finalize_resend_event_claim(
+    db: Session,
+    event: CommunicationProviderEvent,
+    processing_token: UUID,
+) -> None:
+    ensure_resend_event_claim(db, event.id, processing_token)
+    event.processing_token = None
+    db.commit()
+
+
+def checkpoint_resend_event_claim(
+    db: Session,
+    event: CommunicationProviderEvent,
+    processing_token: UUID,
+) -> None:
+    ensure_resend_event_claim(db, event.id, processing_token)
+    event.processing_started_at = datetime.now(UTC)
+    db.commit()
+
+
+def ensure_resend_event_claim(
+    db: Session,
+    event_id: UUID,
+    processing_token: UUID,
+) -> None:
+    with db.no_autoflush:
+        active_claim = db.execute(
+            select(
+                CommunicationProviderEvent.processing_token,
+                CommunicationProviderEvent.processing_status,
+            )
+            .where(CommunicationProviderEvent.id == event_id)
+            .with_for_update()
+        ).one_or_none()
+    if (
+        active_claim is None
+        or active_claim.processing_token != processing_token
+        or active_claim.processing_status != "processing"
+    ):
+        raise ResendLeaseLostError(
+            "Resend event processing lease was reclaimed by another worker."
+        )
+
+
+def record_resend_event_failure(
+    db: Session,
+    event_id: UUID,
+    exc: Exception,
+    settings: Settings,
+    *,
+    processing_token: UUID,
+) -> bool:
+    event = db.scalar(
+        select(CommunicationProviderEvent)
+        .where(
+            CommunicationProviderEvent.id == event_id,
+            CommunicationProviderEvent.processing_status == "processing",
+            CommunicationProviderEvent.processing_token == processing_token,
+        )
+        .with_for_update()
+    )
+    if event is None:
+        return False
+    now = datetime.now(UTC)
+    event.processing_started_at = None
+    event.processing_token = None
+    event.error_message = str(exc)[:2000]
+    if event.attempt_count >= settings.resend_event_max_attempts:
+        dead_letter_resend_event(event, now=now)
+    else:
+        retry_delay = min(
+            settings.resend_event_retry_base_seconds
+            * (2 ** max(0, event.attempt_count - 1)),
+            settings.resend_event_retry_max_seconds,
+        )
+        event.processing_status = "retry"
+        event.processed_at = None
+        event.next_attempt_at = now + timedelta(seconds=retry_delay)
+    db.commit()
+    return True
+
+
+def dead_letter_resend_event(
+    event: CommunicationProviderEvent,
+    *,
+    now: datetime,
+    fallback_error: str | None = None,
+) -> None:
+    event.processing_status = RESEND_DEAD_LETTER_STATUS
+    event.processing_started_at = None
+    event.processing_token = None
+    event.next_attempt_at = None
+    event.processed_at = now
+    if not event.error_message and fallback_error:
+        event.error_message = fallback_error[:2000]
+
+
+def complete_resend_event(event: CommunicationProviderEvent, status: str) -> None:
+    event.processing_status = status
+    event.processing_started_at = None
+    event.next_attempt_at = None
+    event.processed_at = datetime.now(UTC)
 
 
 def process_received_email(
@@ -162,6 +352,8 @@ def process_received_email(
     event: CommunicationProviderEvent,
     provider: ResendEmailDeliveryProvider,
     settings: Settings,
+    *,
+    processing_token: UUID,
 ) -> None:
     data = event_data(event)
     provider_message_id = required_string(data, "email_id")
@@ -174,9 +366,7 @@ def process_received_email(
     )
     if existing is not None:
         event.conversation_id = existing.conversation_id
-        event.processing_status = "duplicate"
-        event.processed_at = datetime.now(UTC)
-        db.commit()
+        complete_resend_event(event, "duplicate")
         return
 
     message = provider.retrieve_received_email(provider_message_id)
@@ -193,10 +383,12 @@ def process_received_email(
         "_routing": route,
     }
     if route["status"] != "matched":
-        event.processing_status = str(route["status"])
-        event.processed_at = datetime.now(UTC)
-        db.commit()
+        complete_resend_event(event, str(route["status"]))
         return
+
+    # Preserve the exact validated destination before attachment downloads or other
+    # provider work can fail. The lease fence prevents a stale worker from changing it.
+    checkpoint_resend_event_claim(db, event, processing_token)
 
     conversation = db.get(Conversation, UUID(str(route["conversation_id"])))
     if conversation is None:
@@ -285,9 +477,7 @@ def process_received_email(
         )
     )
     event.conversation_id = conversation.id
-    event.processing_status = "processed"
-    event.processed_at = datetime.now(UTC)
-    db.commit()
+    complete_resend_event(event, "processed")
 
 
 def process_lifecycle_event(
@@ -304,10 +494,9 @@ def process_lifecycle_event(
         )
     )
     if communication is None:
-        event.processing_status = "unmatched"
-        event.processed_at = datetime.now(UTC)
-        db.commit()
-        return
+        raise ResendLifecycleNotReadyError(
+            "Resend lifecycle event arrived before its outbound email record was committed."
+        )
     new_status = LIFECYCLE_STATUSES[event.event_type]
     metadata = communication.communication_metadata or {}
     current_status = communication.status
@@ -338,9 +527,7 @@ def process_lifecycle_event(
                 dispatch.error_code = new_status
                 dispatch.error_message = provider_failure_message(data)
     event.conversation_id = communication.conversation_id
-    event.processing_status = "processed"
-    event.processed_at = datetime.now(UTC)
-    db.commit()
+    complete_resend_event(event, "processed")
 
 
 def recover_next_received_email(
@@ -353,6 +540,10 @@ def recover_next_received_email(
     if not resend_processing_enabled(settings) or not settings.email_sync_enabled:
         return None
     provider = client or ResendEmailDeliveryProvider(api_key=settings.resend_api_key or "")
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(
+        seconds=settings.resend_event_processing_lease_seconds
+    )
     after: str | None = None
     for _page in range(max_pages):
         response = provider.list_received_emails(limit=100, after=after)
@@ -366,7 +557,42 @@ def recover_next_received_email(
             if not provider_message_id or received_email_is_known(
                 db,
                 provider_message_id,
+                processing_stale_before=stale_before,
             ):
+                continue
+            recovery_event = db.scalar(
+                select(CommunicationProviderEvent)
+                .where(
+                    CommunicationProviderEvent.provider == "resend",
+                    CommunicationProviderEvent.external_event_id
+                    == f"recovery:{provider_message_id}",
+                )
+                .with_for_update(skip_locked=True)
+            )
+            if recovery_event is not None:
+                if recovery_event.processing_status == "processing" and event_lease_expired(
+                    recovery_event,
+                    stale_before=stale_before,
+                ):
+                    if recovery_event.attempt_count >= settings.resend_event_max_attempts:
+                        dead_letter_resend_event(
+                            recovery_event,
+                            now=now,
+                            fallback_error="Resend event exhausted its processing attempts.",
+                        )
+                    else:
+                        recovery_event.processing_status = "retry"
+                        recovery_event.processing_started_at = None
+                        recovery_event.processing_token = None
+                        recovery_event.next_attempt_at = now
+                        recovery_event.processed_at = None
+                        recovery_event.error_message = (
+                            "Recovered after the Resend processing lease expired."
+                        )
+                    db.commit()
+                    return recovery_event.id
+                # Dead-letter events intentionally require review; they are not successful
+                # imports and must not be resurrected into an automatic poison loop.
                 continue
             payload = {
                 "type": "email.received",
@@ -451,6 +677,15 @@ def resolve_inbound_route(
             "candidate_conversation_ids": [],
         }
 
+    restricted_alias_received = any(
+        inbound_visibility_scope(alias) == "restricted" for alias in aliases
+    )
+    routing_aliases = (
+        [alias for alias in aliases if inbound_visibility_scope(alias) == "restricted"]
+        if restricted_alias_received
+        else aliases
+    )
+
     headers = normalized_headers(message.get("headers"))
     thread_values = [
         headers.get("in-reply-to", ""),
@@ -473,6 +708,27 @@ def resolve_inbound_route(
             and communication.conversation_id is not None
         ):
             thread_matches[communication.conversation_id] = communication
+    if restricted_alias_received and thread_matches:
+        allowed_ids = set(
+            conversations_for_aliases(
+                db,
+                organization_id,
+                list(
+                    db.scalars(
+                        select(Conversation).where(
+                            Conversation.organization_id == organization_id,
+                            Conversation.id.in_(thread_matches),
+                        )
+                    )
+                ),
+                routing_aliases,
+            )
+        )
+        thread_matches = {
+            conversation_id: communication
+            for conversation_id, communication in thread_matches.items()
+            if conversation_id in allowed_ids
+        }
     if len(thread_matches) == 1:
         conversation_id, matched_message = next(iter(thread_matches.items()))
         metadata = matched_message.communication_metadata or {}
@@ -518,6 +774,27 @@ def resolve_inbound_route(
                 and communication.conversation_id is not None
             ):
                 provider_thread_matches[communication.conversation_id] = communication
+    if restricted_alias_received and provider_thread_matches:
+        allowed_ids = set(
+            conversations_for_aliases(
+                db,
+                organization_id,
+                list(
+                    db.scalars(
+                        select(Conversation).where(
+                            Conversation.organization_id == organization_id,
+                            Conversation.id.in_(provider_thread_matches),
+                        )
+                    )
+                ),
+                routing_aliases,
+            )
+        )
+        provider_thread_matches = {
+            conversation_id: communication
+            for conversation_id, communication in provider_thread_matches.items()
+            if conversation_id in allowed_ids
+        }
     if len(provider_thread_matches) == 1:
         conversation_id, matched_message = next(iter(provider_thread_matches.items()))
         metadata = matched_message.communication_metadata or {}
@@ -574,7 +851,7 @@ def resolve_inbound_route(
         db,
         organization_id,
         candidates,
-        aliases,
+        routing_aliases,
     )
     if len(alias_candidate_ids) == 1:
         return {
@@ -602,7 +879,7 @@ def resolve_inbound_route(
             conversation.id for conversation in candidates if conversation.status != "closed"
         )
     )
-    if len(active_candidate_ids) == 1:
+    if not restricted_alias_received and len(active_candidate_ids) == 1:
         return {
             "status": "matched",
             "rule": "unique_active_contact_context",
@@ -613,7 +890,7 @@ def resolve_inbound_route(
             "email_sender_alias_ids": alias_ids,
             "candidate_conversation_ids": [str(active_candidate_ids[0])],
         }
-    if len(active_candidate_ids) > 1:
+    if not restricted_alias_received and len(active_candidate_ids) > 1:
         return {
             "status": "ambiguous",
             "rule": "unique_active_contact_context",
@@ -626,7 +903,7 @@ def resolve_inbound_route(
     routing_alias = next(
         (
             alias
-            for alias in aliases
+            for alias in routing_aliases
             if alias.owner_user_id is not None or alias.assigned_team_id is not None
         ),
         None,
@@ -712,11 +989,25 @@ def conversations_for_aliases(
 ) -> list[UUID]:
     if not candidates or not aliases:
         return []
-    candidate_ids = {conversation.id for conversation in candidates}
+    restricted_alias_received = any(
+        inbound_visibility_scope(alias) == "restricted" for alias in aliases
+    )
+    eligible_candidates = (
+        [
+            conversation
+            for conversation in candidates
+            if conversation.visibility_scope == "restricted"
+        ]
+        if restricted_alias_received
+        else candidates
+    )
+    if not eligible_candidates:
+        return []
+    candidate_ids = {conversation.id for conversation in eligible_candidates}
     alias_ids = {str(alias.id) for alias in aliases}
     matches = {
         conversation.id
-        for conversation in candidates
+        for conversation in eligible_candidates
         if conversation.source_alias_id is not None
         and str(conversation.source_alias_id) in alias_ids
     }
@@ -745,13 +1036,17 @@ def conversations_for_aliases(
             matches.add(communication.conversation_id)
     ordered = [
         conversation.id
-        for conversation in candidates
+        for conversation in eligible_candidates
         if conversation.id in matches and conversation.status != "closed"
     ]
     if ordered:
         return list(dict.fromkeys(ordered))
     return list(
-        dict.fromkeys(conversation.id for conversation in candidates if conversation.id in matches)
+        dict.fromkeys(
+            conversation.id
+            for conversation in eligible_candidates
+            if conversation.id in matches
+        )
     )
 
 
@@ -869,6 +1164,7 @@ def retain_received_attachments(
             continue
         filename = optional_string(item.get("filename"))[:500] or "attachment"
         content_type = optional_string(item.get("content_type"))[:255] or "application/octet-stream"
+        declared_size = attachment_size(item.get("size"))
         record = EmailAttachment(
             organization_id=communication.organization_id,
             communication_record_id=communication.id,
@@ -878,7 +1174,7 @@ def retain_received_attachments(
             provider_attachment_id=attachment_id,
             filename=filename,
             content_type=content_type,
-            size_bytes=int(item.get("size") or 0),
+            size_bytes=declared_size or 0,
             content_id=optional_string(item.get("content_id"))[:500] or None,
             disposition=optional_string(item.get("content_disposition")) or "attachment",
             sha256=None,
@@ -892,6 +1188,10 @@ def retain_received_attachments(
         db.add(record)
         db.flush()
         try:
+            if declared_size is not None and declared_size > settings.email_max_attachment_bytes:
+                raise ResendAttachmentTooLargeError(
+                    "The received attachment exceeds Stonegate's size limit."
+                )
             provider_metadata, content = provider.download_received_attachment(
                 communication.provider_message_id or "",
                 attachment_id,
@@ -917,7 +1217,7 @@ def retain_received_attachments(
                 "storage_status": "retained",
                 "provider_expires_at": provider_metadata.get("expires_at"),
             }
-        except ValueError as exc:
+        except (ResendAttachmentTooLargeError, ValueError) as exc:
             record.attachment_metadata = {
                 "storage_status": "rejected",
                 "error": str(exc)[:500],
@@ -957,7 +1257,12 @@ def resend_processing_enabled(settings: Settings) -> bool:
     )
 
 
-def received_email_is_known(db: Session, provider_message_id: str) -> bool:
+def received_email_is_known(
+    db: Session,
+    provider_message_id: str,
+    *,
+    processing_stale_before: datetime | None = None,
+) -> bool:
     communication = db.scalar(
         select(CommunicationRecord.id).where(
             CommunicationRecord.provider == "resend",
@@ -967,12 +1272,31 @@ def received_email_is_known(db: Session, provider_message_id: str) -> bool:
     if communication is not None:
         return True
     recovery_event = db.scalar(
-        select(CommunicationProviderEvent.id).where(
+        select(CommunicationProviderEvent).where(
             CommunicationProviderEvent.provider == "resend",
             CommunicationProviderEvent.external_event_id == f"recovery:{provider_message_id}",
         )
     )
-    return recovery_event is not None
+    if recovery_event is None or recovery_event.processing_status == RESEND_DEAD_LETTER_STATUS:
+        return False
+    return not (
+        processing_stale_before is not None
+        and recovery_event.processing_status == "processing"
+        and event_lease_expired(recovery_event, stale_before=processing_stale_before)
+    )
+
+
+def event_lease_expired(
+    event: CommunicationProviderEvent,
+    *,
+    stale_before: datetime,
+) -> bool:
+    lease_timestamp = event.processing_started_at or event.updated_at
+    if lease_timestamp.tzinfo is None:
+        lease_timestamp = lease_timestamp.replace(tzinfo=UTC)
+    else:
+        lease_timestamp = lease_timestamp.astimezone(UTC)
+    return lease_timestamp <= stale_before
 
 
 def should_apply_status(

@@ -8,13 +8,25 @@ from app.core.auth import Principal, require_any_permission
 from app.core.database import get_db
 from app.domain.rbac import PermissionKeys
 from app.schemas.approvals import ApprovalDecision, ApprovalListResponse, ApprovalRequestRead
-from app.services.approvals import decide_approval_request, list_approval_requests
+from app.services.approvals import (
+    ApprovalPermissionError,
+    decide_approval_request,
+    list_approval_requests,
+)
 
 router = APIRouter(prefix="/api/v1/approvals", tags=["approvals"])
 view_approvals_dependency = require_any_permission(
     PermissionKeys.VIEW_AUDIT_LOGS,
     PermissionKeys.APPROVE_OFFERS,
     PermissionKeys.SEND_CONTRACTS,
+    PermissionKeys.CHANGE_AI_PROMPTS,
+    PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+)
+decide_approvals_dependency = require_any_permission(
+    PermissionKeys.APPROVE_OFFERS,
+    PermissionKeys.SEND_CONTRACTS,
+    PermissionKeys.CHANGE_AI_PROMPTS,
+    PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
 )
 
 
@@ -31,10 +43,15 @@ def decide_approval(
     approval_id: UUID,
     payload: ApprovalDecision,
     db: Annotated[Session, Depends(get_db)],
-    principal: Annotated[Principal, Depends(view_approvals_dependency)],
+    principal: Annotated[Principal, Depends(decide_approvals_dependency)],
 ) -> ApprovalRequestRead:
     try:
         approval = decide_approval_request(db, principal, approval_id, payload)
+    except ApprovalPermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

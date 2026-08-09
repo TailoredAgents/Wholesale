@@ -78,10 +78,12 @@ Delivered:
 - AI6 Acquisitions Copilot embedded in Field Operations with deterministic readiness, approved
   authority controls, governed appointment and follow-up drafts, human correction, and pilot
   metrics.
-- AI6 U4 Comp Intelligence extension with normalized RentCast and DealMachine closed-sale
+- AI6 U4 Comp Intelligence extension with normalized RentCast and RealEstateAPI closed-sale
   evidence, source conflict and provenance review, deterministic adjusted-sale range diagnostics,
-  and a supplied-evidence-only AI Comp Analyst draft with no valuation or offer authority. Both
-  DealMachine comp admission and the analyst remain behind default-safe rollout modes.
+  and a supplied-evidence-only AI Comp Analyst draft with no valuation or offer authority.
+  RealEstateAPI candidate admission is Owner-controlled and active; the analyst remains behind its
+  default-safe rollout mode. DealMachine evidence is legacy-only while that adapter remains
+  disabled.
 - AI7 provider-independent Transaction Copilot foundation embedded in Transactions with
   deterministic closing readiness, deadline risk, duplicate-file protection, source-page
   confirmed facts, governed coordination drafts, human correction, and no transaction mutation.
@@ -306,8 +308,8 @@ Exit criteria:
 
 ## Phase AI6: Acquisitions Copilot
 
-Implementation status: **complete in code, including the U4 Comp Intelligence extension. The
-DealMachine shadow-to-candidate review, AI Comp Analyst production replay, activation, and measured
+Implementation status: **complete in code, including the U4 Comp Intelligence extension and
+RealEstateAPI candidate evidence. AI Comp Analyst production replay, activation, and a measured
 draft-only pilot remain operator checkpoints.**
 
 Goal: Prepare the closer for seller conversations, appointments, underwriting review, and
@@ -343,7 +345,8 @@ APIs required:
 
 - OpenAI.
 - RentCast.
-- DealMachine in disabled, shadow, or candidate mode with a per-analysis property-data credit cap.
+- RealEstateAPI with exact subject matching, saved snapshot reuse, and owner-controlled
+  shadow/candidate comp admission. DealMachine remains a disabled legacy adapter.
 - Optional licensed MLS/RESO or ATTOM adapter after measured need.
 - Twilio recording/transcription and internal calendar.
 - Optional route estimates only if operating data justifies them.
@@ -353,8 +356,8 @@ Exit criteria:
 - Backtesting uses verified outcomes and human-reviewed comp sets.
 - ARV error, range coverage, provider disagreement, reviewer overrides, and report corrections are
   measured.
-- DealMachine candidate admission occurs only after shadow evidence establishes useful coverage,
-  acceptable conflict and failure rates, and acceptable credit cost for the named market.
+- RealEstateAPI candidate evidence remains subject to named-market coverage, conflict, failure,
+  duplicate-refresh, and credit-cost monitoring even after controlled property research passes.
 - AI Comp Analyst replay and draft-only pilot measure citation coverage, prohibited-output blocks,
   correction burden, latency, cost, and time saved.
 - Meeting briefs are reviewed for accuracy and usefulness.

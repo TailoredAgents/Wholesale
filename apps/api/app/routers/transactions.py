@@ -15,9 +15,13 @@ from app.schemas.transactions import (
     ContractTemplateRead,
     DocumentDeleteRequest,
     DocumentDownloadLinkRead,
+    EsignDraftAbandonRequest,
+    EsignDraftRecoveryRequest,
     EsignEnvelopeRead,
     EsignSendRequest,
     F4IntegrationStatusRead,
+    ManualContractExecutionAttestation,
+    ManualContractWithdrawalAttestation,
     SignWellConnectionRead,
     TransactionClose,
     TransactionCopilotAnalyzeRead,
@@ -37,10 +41,13 @@ from app.schemas.transactions import (
     TransactionUpdate,
 )
 from app.services.esign import (
+    abandon_esign_draft_intent,
+    attach_verified_esign_draft,
     connect_signwell,
     integration_status,
     preview_contract_for_signature,
     reconcile_envelope,
+    resume_esign_draft,
     send_contract_for_signature,
 )
 from app.services.transaction_copilot import (
@@ -70,6 +77,7 @@ from app.services.transactions import (
     update_transaction,
     upload_document,
     upload_template,
+    withdraw_sent_contract_package,
 )
 
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
@@ -306,6 +314,29 @@ def record_contract_sent(
     return result
 
 
+@router.post("/{transaction_id}/contract-packages/{package_id}/withdraw")
+def withdraw_contract_package(
+    transaction_id: UUID,
+    package_id: UUID,
+    payload: ManualContractWithdrawalAttestation,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(contract_dependency)],
+) -> ContractPackageRead:
+    try:
+        result = withdraw_sent_contract_package(
+            db,
+            principal,
+            transaction_id,
+            package_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise not_found()
+    return result
+
+
 @router.post(
     "/{transaction_id}/contract-packages/{package_id}/esign",
     status_code=201,
@@ -376,16 +407,78 @@ def reconcile_contract_signature(
     return result
 
 
+@router.post("/{transaction_id}/esign/{envelope_id}/resume-draft")
+def resume_contract_signature_draft(
+    transaction_id: UUID,
+    envelope_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = resume_esign_draft(db, principal, transaction_id, envelope_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Signature request not found.")
+    return result
+
+
+@router.post("/{transaction_id}/esign/{envelope_id}/attach-draft")
+def attach_contract_signature_draft(
+    transaction_id: UUID,
+    envelope_id: UUID,
+    payload: EsignDraftRecoveryRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = attach_verified_esign_draft(
+            db,
+            principal,
+            transaction_id,
+            envelope_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Signature request not found.")
+    return result
+
+
+@router.post("/{transaction_id}/esign/{envelope_id}/abandon-draft-intent")
+def abandon_contract_signature_draft_intent(
+    transaction_id: UUID,
+    envelope_id: UUID,
+    payload: EsignDraftAbandonRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(send_dependency)],
+) -> EsignEnvelopeRead:
+    try:
+        result = abandon_esign_draft_intent(
+            db,
+            principal,
+            transaction_id,
+            envelope_id,
+            payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(status_code=404, detail="Signature request not found.")
+    return result
+
+
 @router.post("/{transaction_id}/contract-packages/{package_id}/mark-executed")
 def record_contract_executed(
     transaction_id: UUID,
     package_id: UUID,
-    document_id: Annotated[UUID, Query()],
+    payload: ManualContractExecutionAttestation,
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(contract_dependency)],
 ) -> ContractPackageRead:
     try:
-        result = mark_contract_executed(db, principal, transaction_id, package_id, document_id)
+        result = mark_contract_executed(db, principal, transaction_id, package_id, payload)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if result is None:

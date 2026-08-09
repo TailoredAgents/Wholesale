@@ -106,11 +106,11 @@ record.
 Status: line-aware sending and number-aware inbound routing are implemented; Twilio Console,
 Render, and live acceptance remain.
 
-- Attach the acquisitions number to the approved Stonegate Messaging Service and A2P campaign.
-- Set the Messaging Service to **Defer to sender's webhook** and configure the inbound webhook on
-  the acquisitions number itself. Stonegate supplies the delivery callback per outbound message.
-- Enter the approved number, Messaging Service SID, Account SID, Auth Token, and webhook base URL
-  in Render.
+- Keep the acquisitions number registered for Stonegate's approved seller-inquiry A2P campaign.
+- Configure the signed inbound webhook on the acquisitions number itself. Stonegate supplies the
+  delivery callback per outbound message.
+- Enter the approved number, Account SID, Auth Token, and webhook base URL in Render. A Messaging
+  Service SID is optional in Stonegate's direct-number mode.
 - Enable Twilio SMS and run controlled outbound, delivered, inbound, STOP, blocked-send, START,
   HELP, reassignment, and duplicate-callback tests.
 - Keep purchased-list and unsolicited cold SMS out of this seller-inquiry campaign.

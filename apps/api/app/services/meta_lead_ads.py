@@ -4,7 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from pydantic import ValidationError
-from sqlalchemy import and_, false, or_, select
+from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -81,6 +81,12 @@ class MetaLeadNeedsReview(ValueError):
     pass
 
 
+class MetaLeadIntakeThrottled(ValueError):
+    def __init__(self, message: str, *, retry_after_seconds: int) -> None:
+        super().__init__(message)
+        self.retry_after_seconds = retry_after_seconds
+
+
 def receive_zapier_facebook_lead(
     db: Session,
     payload: ZapierFacebookLeadCreate,
@@ -89,6 +95,9 @@ def receive_zapier_facebook_lead(
     organization = get_default_organization(db)
     if payload.page_id != settings.zapier_facebook_page_id:
         raise ValueError("Zapier Facebook lead does not belong to the configured Page.")
+    allowed_form_ids = settings.zapier_facebook_allowed_form_ids
+    if allowed_form_ids and payload.form_id not in allowed_form_ids:
+        raise ValueError("Zapier Facebook lead does not belong to an allowed form.")
     existing = db.scalar(
         select(MetaLeadEvent.id).where(
             MetaLeadEvent.organization_id == organization.id,
@@ -97,6 +106,23 @@ def receive_zapier_facebook_lead(
     )
     if existing is not None:
         return 0
+    rolling_window_started_at = datetime.now(UTC) - timedelta(days=1)
+    accepted_in_window = int(
+        db.scalar(
+            select(func.count())
+            .select_from(MetaLeadEvent)
+            .where(
+                MetaLeadEvent.organization_id == organization.id,
+                MetaLeadEvent.received_at >= rolling_window_started_at,
+            )
+        )
+        or 0
+    )
+    if accepted_in_window >= settings.zapier_facebook_leads_daily_accept_limit:
+        raise MetaLeadIntakeThrottled(
+            "Zapier Facebook lead intake reached its 24-hour safety limit.",
+            retry_after_seconds=3600,
+        )
     lead_payload = payload.normalized_lead_payload()
     db.add(
         MetaLeadEvent(

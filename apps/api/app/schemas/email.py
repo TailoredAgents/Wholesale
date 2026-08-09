@@ -170,6 +170,28 @@ class EmailRoutingResolutionRequest(BaseModel):
     conversation_id: UUID
 
 
+class EmailDeadLetterRead(BaseModel):
+    id: UUID
+    event_type: str
+    provider_message_id: str
+    sender: str
+    recipients: list[str]
+    subject: str | None
+    received_at: datetime
+    processed_at: datetime | None
+    attempt_count: int
+    error_message: str | None
+    processing_status: str
+
+
+class EmailDeadLetterListResponse(BaseModel):
+    items: list[EmailDeadLetterRead]
+
+
+class EmailDeadLetterRequeueRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+
+
 class EmailRecipientOptionRead(BaseModel):
     contact_id: UUID
     display_name: str

@@ -31,7 +31,7 @@ The owner navigation will converge on 11 destinations:
 3. Tasks
 4. Calendar
 5. Prospecting
-6. Seller Leads
+6. Leads
 7. Deals
 8. Buyers
 9. Finance
@@ -42,6 +42,9 @@ The system will preserve separate canonical records for prospects, seller leads,
 campaigns, conversations, tasks, transactions, disposition cases, contracts, and accounting. The
 decision consolidates employee navigation and page composition; it does not collapse database
 entities or weaken permissions.
+
+The destination was renamed from **Seller Leads** to **Leads** on August 8, 2026. The route and
+underlying seller-lead record type did not change.
 
 Current routes and query parameters remain compatible until their target workspace has feature
 parity, role tests pass, Help content is current, and production smoke tests succeed. Restricted

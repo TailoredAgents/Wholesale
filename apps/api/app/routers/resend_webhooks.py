@@ -9,6 +9,7 @@ from app.integrations.resend_webhooks import (
     ResendWebhookVerificationError,
     verify_resend_webhook,
 )
+from app.services.request_rate_limit import RequestBodyTooLargeError, read_bounded_request_body
 from app.services.resend_email_events import ingest_resend_event
 
 router = APIRouter(prefix="/api/v1/webhooks/resend", tags=["resend-webhooks"])
@@ -23,12 +24,13 @@ async def receive_resend_event(
     timestamp: Annotated[str | None, Header(alias="svix-timestamp")] = None,
     signature: Annotated[str | None, Header(alias="svix-signature")] = None,
 ) -> dict[str, object]:
-    raw_body = await request.body()
-    if len(raw_body) > MAX_WEBHOOK_BYTES:
+    try:
+        raw_body = await read_bounded_request_body(request, max_bytes=MAX_WEBHOOK_BYTES)
+    except RequestBodyTooLargeError as exc:
         raise HTTPException(
             status_code=status.HTTP_413_CONTENT_TOO_LARGE,
             detail="Resend webhook payload is too large.",
-        )
+        ) from exc
     try:
         payload = verify_resend_webhook(
             payload=raw_body,

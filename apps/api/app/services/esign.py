@@ -1,19 +1,22 @@
 import base64
 import hmac
 import secrets
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import httpx
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
 from app.domain.assets import require_house_workflow
 from app.models.foundation import (
+    AuditEvent,
     ContractPackage,
     ContractTemplate,
     Deal,
@@ -29,6 +32,8 @@ from app.models.foundation import (
     User,
 )
 from app.schemas.transactions import (
+    EsignDraftAbandonRequest,
+    EsignDraftRecoveryRequest,
     EsignEmbeddedSignerRead,
     EsignEnvelopeRead,
     EsignRecipientCreate,
@@ -37,11 +42,24 @@ from app.schemas.transactions import (
     F4IntegrationStatusRead,
     SignWellConnectionRead,
 )
+from app.services.contract_authority import (
+    ACCEPTABLE_EXECUTION_SCAN_STATUSES,
+    package_document_type,
+    validate_purchase_contract_authority,
+)
 from app.services.contract_documents import GeneratedContract, generate_contract_pdf
 from app.services.document_storage import store_content
 
 TERMINAL_ENVELOPE_STATUSES = {"completed", "declined", "expired", "cancelled", "error"}
+ENVELOPE_STATUS_ORDER = {
+    "draft": -1,
+    "created": 0,
+    "sent": 1,
+    "viewed": 2,
+    "in_progress": 3,
+}
 EVENT_STATUS = {
+    "document_draft": "draft",
     "document_created": "created",
     "document_sent": "sent",
     "document_viewed": "viewed",
@@ -54,6 +72,12 @@ EVENT_STATUS = {
     "document_bounced": "bounced",
     "document_error": "error",
 }
+
+
+@dataclass(frozen=True)
+class SignWellWebhookVerification:
+    organization_id: UUID | None
+    source: Literal["organization", "global", "internal"]
 
 
 class SignWellClient:
@@ -69,6 +93,18 @@ class SignWellClient:
         )
         self._raise(response, "SignWell could not create the signature request")
         return dict(response.json())
+
+    def send_document(self, document_id: str) -> dict[str, Any]:
+        response = httpx.post(
+            f"{self.settings.esign_base_url.rstrip('/')}/documents/{document_id}/send",
+            headers=self.headers,
+            timeout=self.settings.esign_request_timeout_seconds,
+        )
+        self._raise(response, "SignWell could not send the signature request")
+        if not response.content:
+            return {}
+        payload = response.json()
+        return dict(payload) if isinstance(payload, dict) else {}
 
     def get_account(self) -> dict[str, Any]:
         response = httpx.get(
@@ -277,16 +313,6 @@ def send_contract_for_signature(
     payload: EsignSendRequest,
     settings: Settings | None = None,
 ) -> EsignEnvelopeRead | None:
-    transaction = db.scalar(
-        select(Transaction).where(
-            Transaction.id == transaction_id,
-            Transaction.organization_id == principal.organization_id,
-        )
-    )
-    if transaction is None:
-        return None
-    require_house_transaction_workflow(db, transaction)
-
     active = settings or get_settings()
     blockers = active.esign_configuration_blockers
     if blockers:
@@ -300,17 +326,28 @@ def send_contract_for_signature(
         )
         if configuration is None and not active.esign_signwell_webhook_id:
             raise ValueError("Connect SignWell in Transactions before sending a signature request.")
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
+    if transaction is None:
+        return None
+    require_house_transaction_workflow(db, transaction)
     package = db.scalar(
-        select(ContractPackage).where(
+        select(ContractPackage)
+        .where(
             ContractPackage.id == package_id,
             ContractPackage.transaction_id == transaction_id,
             ContractPackage.organization_id == principal.organization_id,
         )
+        .with_for_update(of=ContractPackage)
     )
-    if transaction is None or package is None:
+    if package is None:
         return None
-    if package.status != "approved":
-        raise ValueError("Approve this exact contract package before sending it for signature.")
     template = db.get(ContractTemplate, package.template_id) if package.template_id else None
     if template is not None and (template.deleted_at is not None or template.status != "approved"):
         raise ValueError("The selected internal contract template is not approved.")
@@ -321,7 +358,47 @@ def send_contract_for_signature(
         )
     )
     if existing is not None:
+        if package.status == "sending" and existing.status == "draft":
+            validate_purchase_contract_authority(
+                db,
+                transaction,
+                package,
+                gate="resuming the saved signature draft",
+            )
+            requested_recipients = normalize_contract_recipients(
+                db,
+                principal,
+                payload.recipients,
+                package_document_type(package),
+            )
+            ensure_saved_draft_matches_request(db, existing, payload, requested_recipients)
+            return send_saved_esign_draft(
+                db,
+                principal,
+                transaction,
+                package,
+                existing,
+                active,
+            )
+        if existing.status in {"sending", "send_uncertain"}:
+            raise ValueError(
+                "This signature request may already have been sent. Reconcile its provider "
+                "status before taking another action."
+            )
+        if existing.status in {"creating_draft", "draft_creation_uncertain"}:
+            raise ValueError(
+                "The provider draft outcome is uncertain. Verify the SignWell account before "
+                "creating another contract package."
+            )
         raise ValueError("This package already has an active signature request.")
+    if package.status != "approved":
+        raise ValueError("Approve this exact contract package before sending it for signature.")
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="reserving the signature request",
+    )
     document_type = str(
         package.terms_snapshot.get("document_type")
         or (template.document_type if template else "purchase_agreement")
@@ -362,32 +439,6 @@ def send_contract_for_signature(
         recipients,
         active,
     )
-    if active.esign_provider == "simulate":
-        provider_response: dict[str, Any] = {
-            "id": f"sim-{uuid4()}",
-            "status": "sent",
-            "recipients": [
-                {
-                    "id": str(index),
-                    "email": str(item.email),
-                    **(
-                        {
-                            "embedded_signing_url": (
-                                f"https://www.signwell.com/docs/simulated-{uuid4()}/"
-                            )
-                        }
-                        if payload.delivery_mode == "in_person"
-                        else {}
-                    ),
-                }
-                for index, item in enumerate(recipients, start=1)
-            ],
-        }
-    else:
-        provider_response = SignWellClient(active).create_document(provider_payload)
-    provider_document_id = str(provider_response.get("id") or "").strip()
-    if not provider_document_id:
-        raise ValueError("The e-signature provider did not return a document ID.")
     now = datetime.now(UTC)
     envelope = EsignEnvelope(
         organization_id=principal.organization_id,
@@ -396,14 +447,17 @@ def send_contract_for_signature(
         created_by_user_id=principal.user_id,
         completed_document_id=None,
         provider=active.esign_provider,
-        provider_document_id=provider_document_id,
+        provider_document_id=f"intent-{uuid4()}",
         delivery_mode=payload.delivery_mode,
-        status="sent",
+        status="creating_draft",
         subject=payload.subject,
         message=payload.message,
         test_mode=active.esign_test_mode or active.esign_provider == "simulate",
-        provider_payload=provider_response,
-        sent_at=now,
+        provider_payload={
+            "phase": "creating_draft",
+            "source_document_id": str(source_document.id),
+        },
+        sent_at=None,
         completed_at=None,
         declined_at=None,
         expired_at=None,
@@ -412,63 +466,860 @@ def send_contract_for_signature(
     )
     db.add(envelope)
     db.flush()
-    provider_recipients = {
-        str(item.get("email", "")).strip().lower(): item
-        for item in provider_response.get("recipients", [])
-        if isinstance(item, dict)
-    }
     for item in recipients:
-        provider_item = provider_recipients.get(str(item.email).strip().lower(), {})
         db.add(
             EsignRecipient(
                 organization_id=principal.organization_id,
                 esign_envelope_id=envelope.id,
-                provider_recipient_id=(
-                    str(provider_item.get("id")) if provider_item.get("id") else None
-                ),
-                embedded_signing_url=(
-                    str(provider_item.get("embedded_signing_url"))
-                    if provider_item.get("embedded_signing_url")
-                    else None
-                ),
+                provider_recipient_id=None,
+                embedded_signing_url=None,
                 placeholder_name=item.placeholder_name,
                 name=item.name,
                 email=str(item.email).lower(),
                 signing_order=item.signing_order,
-                status="sent",
+                status="created",
                 viewed_at=None,
                 signed_at=None,
                 declined_at=None,
             )
         )
-    package.status = "sent"
-    package.sent_at = now
-    transaction.status = "sent"
-    transaction.contract_sent_at = now
+    package.status = "sending"
     db.add(
         TransactionEvent(
             organization_id=principal.organization_id,
             transaction_id=transaction.id,
             lead_id=transaction.lead_id,
             actor_user_id=principal.user_id,
-            event_type="esign.sent",
-            summary=(
-                f"Contract package v{package.version_number} prepared for in-person signing."
-                if payload.delivery_mode == "in_person"
-                else f"Contract package v{package.version_number} sent through SignWell."
-            ),
+            event_type="esign.send_reserved",
+            summary=f"Reserved contract package v{package.version_number} for e-signature.",
             details={
                 "envelope_id": str(envelope.id),
-                "provider_document_id": provider_document_id,
                 "source_document_id": str(source_document.id),
-                "test_mode": envelope.test_mode,
                 "delivery_mode": payload.delivery_mode,
             },
             occurred_at=now,
         )
     )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("This package already has an active signature request.") from exc
+
+    if active.esign_provider == "simulate":
+        provider_response: dict[str, Any] = {
+            "id": f"sim-{uuid4()}",
+            "status": "draft",
+            "recipients": [
+                {
+                    "id": str(index),
+                    "email": str(item.email),
+                }
+                for index, item in enumerate(recipients, start=1)
+            ],
+        }
+    else:
+        try:
+            provider_response = SignWellClient(active).create_document(provider_payload)
+        except Exception as exc:
+            mark_esign_intent_uncertain(
+                db,
+                envelope.id,
+                status="draft_creation_uncertain",
+                expected_status="creating_draft",
+                error=exc,
+            )
+            raise ValueError(
+                "SignWell draft creation did not complete cleanly. No automatic retry was "
+                "attempted; verify the SignWell account before continuing."
+            ) from exc
+    provider_document_id = str(provider_response.get("id") or "").strip()
+    if not provider_document_id:
+        error = ValueError("The e-signature provider did not return a document ID.")
+        mark_esign_intent_uncertain(
+            db,
+            envelope.id,
+            status="draft_creation_uncertain",
+            expected_status="creating_draft",
+            error=error,
+            provider_payload=provider_response,
+        )
+        raise error
+    persisted_envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(EsignEnvelope.id == envelope.id)
+        .with_for_update(of=EsignEnvelope)
+    )
+    if persisted_envelope is None:
+        raise ValueError("The durable signature-send reservation is unavailable.")
+    if (
+        persisted_envelope.status != "creating_draft"
+        or not persisted_envelope.provider_document_id.startswith("intent-")
+    ):
+        db.rollback()
+        raise ValueError(
+            "The signature intent changed while SignWell created the draft. Verify and attach "
+            "the returned provider document before any further action."
+        )
+    persisted_envelope.provider_document_id = provider_document_id
+    persisted_envelope.provider_payload = {
+        **provider_response,
+        "phase": "draft",
+        "source_document_id": str(source_document.id),
+    }
+    persisted_envelope.status = "draft"
+    provider_recipients = {
+        str(item.get("email", "")).strip().lower(): item
+        for item in provider_response.get("recipients", [])
+        if isinstance(item, dict)
+    }
+    update_esign_recipient_provider_data(
+        db,
+        persisted_envelope.id,
+        provider_recipients,
+        status="created",
+    )
+    db.commit()
+    return send_saved_esign_draft(
+        db,
+        principal,
+        transaction,
+        package,
+        persisted_envelope,
+        active,
+    )
+
+
+def ensure_saved_draft_matches_request(
+    db: Session,
+    envelope: EsignEnvelope,
+    payload: EsignSendRequest,
+    recipients: list[EsignRecipientCreate],
+) -> None:
+    saved_recipients = list(
+        db.scalars(
+            select(EsignRecipient)
+            .where(EsignRecipient.esign_envelope_id == envelope.id)
+            .order_by(EsignRecipient.signing_order)
+        )
+    )
+    saved = [
+        (
+            item.placeholder_name,
+            item.name,
+            item.email.strip().lower(),
+            item.signing_order,
+        )
+        for item in saved_recipients
+    ]
+    requested = [
+        (
+            item.placeholder_name,
+            item.name,
+            str(item.email).strip().lower(),
+            item.signing_order,
+        )
+        for item in sorted(recipients, key=lambda item: item.signing_order)
+    ]
+    if (
+        envelope.subject != payload.subject
+        or envelope.message != payload.message
+        or envelope.delivery_mode != payload.delivery_mode
+        or saved != requested
+    ):
+        raise ValueError(
+            "The saved SignWell draft must be resumed with the exact original subject, "
+            "message, delivery mode, and signer list."
+        )
+
+
+def update_esign_recipient_provider_data(
+    db: Session,
+    envelope_id: UUID,
+    provider_recipients: dict[str, dict[str, Any]],
+    *,
+    status: str,
+) -> None:
+    for recipient in db.scalars(
+        select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope_id)
+    ).all():
+        provider_item = provider_recipients.get(recipient.email.strip().lower(), {})
+        if provider_item.get("id"):
+            recipient.provider_recipient_id = str(provider_item["id"])
+        if provider_item.get("embedded_signing_url"):
+            recipient.embedded_signing_url = str(provider_item["embedded_signing_url"])
+        if status != "sent" or recipient.status in {"created", "sent"}:
+            recipient.status = status
+
+
+def mark_esign_intent_uncertain(
+    db: Session,
+    envelope_id: UUID,
+    *,
+    status: str,
+    expected_status: str,
+    error: Exception,
+    provider_payload: dict[str, Any] | None = None,
+) -> bool:
+    db.rollback()
+    envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(EsignEnvelope.id == envelope_id)
+        .with_for_update(of=EsignEnvelope)
+    )
+    if envelope is None:
+        return False
+    if envelope.status != expected_status:
+        db.rollback()
+        return False
+    stored_payload = {**(envelope.provider_payload or {}), **(provider_payload or {})}
+    stored_payload.update({"phase": status, "error": str(error)[:500]})
+    envelope.provider_payload = stored_payload
+    envelope.status = status
+    db.commit()
+    return True
+
+
+def finalize_local_esign_send(
+    db: Session,
+    envelope: EsignEnvelope,
+    *,
+    occurred_at: datetime,
+    actor_user_id: UUID | None,
+) -> None:
+    """Idempotently advance the local package after provider delivery is evidenced."""
+    transaction = db.scalar(
+        select(Transaction)
+        .where(Transaction.id == envelope.transaction_id)
+        .with_for_update(of=Transaction)
+    )
+    package = db.scalar(
+        select(ContractPackage)
+        .where(ContractPackage.id == envelope.contract_package_id)
+        .with_for_update(of=ContractPackage)
+    )
+    if transaction is None or package is None:
+        raise ValueError("The signature request no longer matches a Stonegate transaction.")
+    envelope.sent_at = envelope.sent_at or occurred_at
+    # A webhook may have already finalized the same provider delivery before the
+    # synchronous API response returns. Once that durable evidence exists, later
+    # offer-authority changes must not relabel or reject the completed send.
+    if package.status in {"sent", "executed"}:
+        return
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="recording provider delivery",
+    )
+    if package.status != "sending":
+        raise ValueError("The contract package is not reserved for this signature request.")
+    package.status = "sent"
+    package.sent_at = package.sent_at or occurred_at
+    transaction.status = "sent"
+    transaction.contract_sent_at = transaction.contract_sent_at or occurred_at
+    db.add(
+        TransactionEvent(
+            organization_id=envelope.organization_id,
+            transaction_id=transaction.id,
+            lead_id=transaction.lead_id,
+            actor_user_id=actor_user_id,
+            event_type="esign.sent",
+            summary=(
+                f"Contract package v{package.version_number} prepared for in-person signing."
+                if envelope.delivery_mode == "in_person"
+                else f"Contract package v{package.version_number} sent through SignWell."
+            ),
+            details={
+                "envelope_id": str(envelope.id),
+                "provider_document_id": envelope.provider_document_id,
+                "source_document_id": envelope.provider_payload.get("source_document_id"),
+                "test_mode": envelope.test_mode,
+                "delivery_mode": envelope.delivery_mode,
+            },
+            occurred_at=occurred_at,
+        )
+    )
+
+
+def send_saved_esign_draft(
+    db: Session,
+    principal: Principal,
+    transaction: Transaction,
+    package: ContractPackage,
+    envelope: EsignEnvelope,
+    settings: Settings,
+) -> EsignEnvelopeRead:
+    transaction_id = transaction.id
+    package_id = package.id
+    envelope_id = envelope.id
+    # Callers may have read transaction/package first. Release those read locks and
+    # standardize all provider-active paths on envelope -> transaction -> package.
+    db.rollback()
+    locked_envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=EsignEnvelope)
+    )
+    locked_transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
+    locked_package = db.scalar(
+        select(ContractPackage)
+        .where(
+            ContractPackage.id == package_id,
+            ContractPackage.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=ContractPackage)
+    )
+    if locked_transaction is None or locked_package is None or locked_envelope is None:
+        raise ValueError("The saved signature draft is no longer available.")
+    if locked_package.status != "sending" or locked_envelope.status != "draft":
+        raise ValueError("The saved signature draft is not ready to send.")
+    validate_purchase_contract_authority(
+        db,
+        locked_transaction,
+        locked_package,
+        gate="sending the saved provider draft",
+    )
+    locked_envelope.status = "sending"
+    locked_envelope.provider_payload = {
+        **locked_envelope.provider_payload,
+        "phase": "sending",
+    }
+    provider_document_id = locked_envelope.provider_document_id
+    delivery_mode = locked_envelope.delivery_mode
+    db.commit()
+
+    try:
+        if settings.esign_provider == "simulate":
+            simulated_recipients = list(
+                db.scalars(
+                    select(EsignRecipient)
+                    .where(EsignRecipient.esign_envelope_id == envelope_id)
+                    .order_by(EsignRecipient.signing_order)
+                )
+            )
+            provider_response: dict[str, Any] = {
+                "id": provider_document_id,
+                "status": "sent",
+                "recipients": [
+                    {
+                        "id": item.provider_recipient_id or str(index),
+                        "email": item.email,
+                        **(
+                            {
+                                "embedded_signing_url": (
+                                    f"https://www.signwell.com/docs/simulated-{uuid4()}/"
+                                )
+                            }
+                            if delivery_mode == "in_person"
+                            else {}
+                        ),
+                    }
+                    for index, item in enumerate(simulated_recipients, start=1)
+                ],
+            }
+        else:
+            provider_response = SignWellClient(settings).send_document(provider_document_id)
+    except Exception as exc:
+        transitioned = mark_esign_intent_uncertain(
+            db,
+            envelope_id,
+            status="send_uncertain",
+            expected_status="sending",
+            error=exc,
+        )
+        if not transitioned:
+            advanced = db.get(EsignEnvelope, envelope_id)
+            if advanced is not None and advanced.status in {
+                "draft",
+                "sent",
+                "viewed",
+                "in_progress",
+                "completed",
+                "declined",
+                "expired",
+                "cancelled",
+            }:
+                return envelope_read(db, advanced)
+        raise ValueError(
+            "The SignWell send outcome is uncertain. Reconcile this exact provider document "
+            "before any retry."
+        ) from exc
+
+    locked_envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(EsignEnvelope.id == envelope_id)
+        .with_for_update(of=EsignEnvelope)
+    )
+    locked_transaction = db.scalar(
+        select(Transaction).where(Transaction.id == transaction_id).with_for_update(of=Transaction)
+    )
+    locked_package = db.scalar(
+        select(ContractPackage)
+        .where(ContractPackage.id == package_id)
+        .with_for_update(of=ContractPackage)
+    )
+    if locked_transaction is None or locked_package is None or locked_envelope is None:
+        raise ValueError("The sent signature request could not be reconciled locally.")
+    now = datetime.now(UTC)
+    if locked_envelope.status not in {"draft", "sending", "send_uncertain"}:
+        # A provider webhook won the race. Keep its authoritative state and payload
+        # fields while retaining the synchronous response as additional evidence.
+        locked_envelope.provider_payload = {
+            **provider_response,
+            **locked_envelope.provider_payload,
+            "id": locked_envelope.provider_document_id,
+            "send_response": provider_response,
+        }
+        locked_envelope.sent_at = locked_envelope.sent_at or now
+        provider_recipients = {
+            str(item.get("email", "")).strip().lower(): item
+            for item in provider_response.get("recipients", [])
+            if isinstance(item, dict)
+        }
+        update_esign_recipient_provider_data(
+            db,
+            locked_envelope.id,
+            provider_recipients,
+            status="sent",
+        )
+        finalize_local_esign_send(
+            db,
+            locked_envelope,
+            occurred_at=now,
+            actor_user_id=principal.user_id,
+        )
+        db.commit()
+        return envelope_read(db, locked_envelope)
+    try:
+        validate_purchase_contract_authority(
+            db,
+            locked_transaction,
+            locked_package,
+            gate="recording the provider send",
+        )
+    except ValueError as exc:
+        locked_envelope.status = "send_uncertain"
+        locked_envelope.provider_payload = {
+            **locked_envelope.provider_payload,
+            **provider_response,
+            "phase": "authority_conflict_after_send",
+            "error": str(exc)[:500],
+        }
+        db.commit()
+        raise ValueError(
+            "SignWell may have sent the document, but offer authority changed during delivery. "
+            "Escalate and reconcile this envelope immediately."
+        ) from exc
+    if locked_envelope.status in {"draft", "sending", "send_uncertain"}:
+        locked_envelope.status = "sent"
+        locked_envelope.provider_payload = {
+            **locked_envelope.provider_payload,
+            **provider_response,
+            "id": locked_envelope.provider_document_id,
+            "status": "sent",
+            "phase": "sent",
+        }
+    locked_envelope.sent_at = locked_envelope.sent_at or now
+    provider_recipients = {
+        str(item.get("email", "")).strip().lower(): item
+        for item in locked_envelope.provider_payload.get("recipients", [])
+        if isinstance(item, dict)
+    }
+    update_esign_recipient_provider_data(
+        db,
+        locked_envelope.id,
+        provider_recipients,
+        status="sent",
+    )
+    finalize_local_esign_send(
+        db,
+        locked_envelope,
+        occurred_at=now,
+        actor_user_id=principal.user_id,
+    )
+    db.commit()
+    return envelope_read(db, locked_envelope)
+
+
+def attach_verified_esign_draft(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    envelope_id: UUID,
+    payload: EsignDraftRecoveryRequest,
+    settings: Settings | None = None,
+) -> EsignEnvelopeRead | None:
+    """Recover the only unsafe provider-create crash window without creating a duplicate."""
+    active = settings or get_settings()
+    blockers = active.esign_configuration_blockers
+    if blockers:
+        raise ValueError(f"E-signature is missing: {', '.join(blockers)}.")
+    if active.esign_provider != "signwell":
+        raise ValueError("Provider-draft recovery is available only for SignWell.")
+    recovery_reason = payload.reason.strip()
+    if len(recovery_reason) < 10:
+        raise ValueError("Record a specific recovery reason of at least ten characters.")
+
+    # Scope the local intent before touching the shared provider account. This prevents
+    # the recovery action from becoming a cross-tenant provider-document oracle.
+    scoped_envelope = db.scalar(
+        select(EsignEnvelope).where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.transaction_id == transaction_id,
+        )
+    )
+    if scoped_envelope is None:
+        return None
+    if scoped_envelope.status not in {"creating_draft", "draft_creation_uncertain"}:
+        raise ValueError("Only an uncertain SignWell draft-creation intent can be recovered.")
+    if not scoped_envelope.provider_document_id.startswith("intent-"):
+        raise ValueError("This signature request already has a durable provider document ID.")
+
+    provider_document_id = payload.provider_document_id.strip()
+    if provider_document_id.startswith("intent-"):
+        raise ValueError("Enter the real SignWell document ID, not Stonegate's intent ID.")
+    # Establish the provider-active lock order before the authoritative provider read.
+    db.rollback()
+    envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.transaction_id == transaction_id,
+        )
+        .with_for_update(of=EsignEnvelope)
+    )
+    if envelope is None:
+        return None
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
+    package = db.scalar(
+        select(ContractPackage)
+        .where(
+            ContractPackage.id == envelope.contract_package_id,
+            ContractPackage.transaction_id == transaction_id,
+            ContractPackage.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=ContractPackage)
+    )
+    if transaction is None or package is None:
+        raise ValueError("The signature recovery intent no longer matches its transaction.")
+    validate_local_recovery_intent(envelope, package)
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="recovering the verified provider draft",
+    )
+    try:
+        provider_document = SignWellClient(active).get_document(provider_document_id)
+    except Exception as exc:
+        raise ValueError("Stonegate could not verify that SignWell document.") from exc
+    validate_recovery_document(
+        db,
+        envelope,
+        transaction,
+        package,
+        provider_document_id,
+        provider_document,
+    )
+
+    prior_status = envelope.status
+    envelope.provider_document_id = provider_document_id
+    envelope.status = "draft"
+    envelope.provider_payload = {
+        **envelope.provider_payload,
+        **provider_document,
+        "id": provider_document_id,
+        "phase": "draft_recovered",
+        "source_document_id": envelope.provider_payload.get("source_document_id"),
+        "recovery_reason": recovery_reason,
+    }
+    provider_recipients = {
+        str(item.get("email", "")).strip().lower(): item
+        for item in provider_document.get("recipients", [])
+        if isinstance(item, dict)
+    }
+    update_esign_recipient_provider_data(
+        db,
+        envelope.id,
+        provider_recipients,
+        status="created",
+    )
+    db.add(
+        TransactionEvent(
+            organization_id=envelope.organization_id,
+            transaction_id=transaction.id,
+            lead_id=transaction.lead_id,
+            actor_user_id=principal.user_id,
+            event_type="esign.draft_recovered",
+            summary=(
+                f"Attached verified SignWell draft to contract package "
+                f"v{package.version_number}."
+            ),
+            details={
+                "envelope_id": str(envelope.id),
+                "provider_document_id": provider_document_id,
+                "prior_status": prior_status,
+                "operator_attested": payload.confirm_provider_draft_verified,
+                "reason": recovery_reason,
+            },
+            occurred_at=datetime.now(UTC),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=envelope.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="esign.draft.attach",
+            entity_type="esign_envelope",
+            entity_id=envelope.id,
+            previous_value={"status": prior_status, "provider_document_id": "intent"},
+            new_value={
+                "status": "draft",
+                "provider_document_id": provider_document_id,
+                "operator_attested": payload.confirm_provider_draft_verified,
+            },
+            reason=recovery_reason,
+        )
+    )
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ValueError("That SignWell document is already attached to another request.") from exc
+    return envelope_read(db, envelope)
+
+
+def validate_local_recovery_intent(
+    envelope: EsignEnvelope,
+    package: ContractPackage,
+) -> None:
+    if envelope.status not in {"creating_draft", "draft_creation_uncertain"}:
+        raise ValueError("Only an uncertain SignWell draft-creation intent can be recovered.")
+    if not envelope.provider_document_id.startswith("intent-"):
+        raise ValueError("This signature request already has a durable provider document ID.")
+    if package.status != "sending":
+        raise ValueError("The contract package is not reserved for signature recovery.")
+
+
+def abandon_esign_draft_intent(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    envelope_id: UUID,
+    payload: EsignDraftAbandonRequest,
+    settings: Settings | None = None,
+) -> EsignEnvelopeRead | None:
+    """Release a stale create intent after an operator verifies no provider document exists."""
+    active = settings or get_settings()
+    abandon_reason = payload.reason.strip()
+    if len(abandon_reason) < 10:
+        raise ValueError("Record a specific abandonment reason of at least ten characters.")
+    scoped_envelope = db.scalar(
+        select(EsignEnvelope).where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.transaction_id == transaction_id,
+        )
+    )
+    if scoped_envelope is None:
+        return None
+    db.rollback()
+    envelope = db.scalar(
+        select(EsignEnvelope)
+        .where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.transaction_id == transaction_id,
+        )
+        .with_for_update(of=EsignEnvelope)
+    )
+    if envelope is None:
+        return None
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
+    package = db.scalar(
+        select(ContractPackage)
+        .where(
+            ContractPackage.id == envelope.contract_package_id,
+            ContractPackage.transaction_id == transaction_id,
+            ContractPackage.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=ContractPackage)
+    )
+    if transaction is None or package is None:
+        raise ValueError("The signature recovery intent no longer matches its transaction.")
+    validate_local_recovery_intent(envelope, package)
+    minimum_age = timedelta(seconds=max(300, int(active.esign_request_timeout_seconds * 3)))
+    if datetime.now(UTC) - as_utc(envelope.created_at) < minimum_age:
+        raise ValueError(
+            "Wait at least five minutes before abandoning a draft intent, then verify in "
+            "SignWell that no document was created."
+        )
+
+    prior_status = envelope.status
+    envelope.status = "error"
+    envelope.provider_payload = {
+        **envelope.provider_payload,
+        "phase": "draft_creation_abandoned",
+        "abandon_reason": abandon_reason,
+        "operator_confirmed_no_provider_document": (payload.confirm_no_provider_document_exists),
+    }
+    package.status = "approved"
+    db.add(
+        TransactionEvent(
+            organization_id=envelope.organization_id,
+            transaction_id=transaction.id,
+            lead_id=transaction.lead_id,
+            actor_user_id=principal.user_id,
+            event_type="esign.draft_intent_abandoned",
+            summary=(
+                f"Released stale signature intent for contract package v{package.version_number}."
+            ),
+            details={
+                "envelope_id": str(envelope.id),
+                "prior_status": prior_status,
+                "operator_confirmed_no_provider_document": (
+                    payload.confirm_no_provider_document_exists
+                ),
+                "reason": abandon_reason,
+            },
+            occurred_at=datetime.now(UTC),
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=envelope.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="esign.intent.abandon",
+            entity_type="esign_envelope",
+            entity_id=envelope.id,
+            previous_value={"status": prior_status, "package_status": "sending"},
+            new_value={"status": "error", "package_status": "approved"},
+            reason=abandon_reason,
+        )
+    )
     db.commit()
     return envelope_read(db, envelope)
+
+
+def validate_recovery_document(
+    db: Session,
+    envelope: EsignEnvelope,
+    transaction: Transaction,
+    package: ContractPackage,
+    provider_document_id: str,
+    provider_document: dict[str, Any],
+) -> None:
+    returned_id = str(provider_document.get("id") or "").strip()
+    if returned_id != provider_document_id:
+        raise ValueError("SignWell returned a different document than the requested recovery ID.")
+    provider_status = str(provider_document.get("status") or "").strip().lower()
+    if provider_status not in {"created", "draft"}:
+        raise ValueError("Only a verified, unsent SignWell draft can be attached.")
+    metadata = provider_document.get("metadata")
+    if not isinstance(metadata, dict) or (
+        str(metadata.get("stonegate_transaction_id") or "") != str(transaction.id)
+        or str(metadata.get("stonegate_contract_package_id") or "") != str(package.id)
+    ):
+        raise ValueError("The SignWell draft metadata does not match this Stonegate package.")
+    if (
+        "test_mode" in provider_document
+        and bool(provider_document["test_mode"]) != envelope.test_mode
+    ):
+        raise ValueError("The SignWell draft test mode does not match this signature request.")
+    provider_recipients = provider_document.get("recipients")
+    if not isinstance(provider_recipients, list):
+        raise ValueError("SignWell did not return the draft's recipients for verification.")
+    provider_emails = {
+        str(item.get("email") or "").strip().lower()
+        for item in provider_recipients
+        if isinstance(item, dict) and item.get("email")
+    }
+    saved_emails = {
+        item.email.strip().lower()
+        for item in db.scalars(
+            select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope.id)
+        )
+    }
+    if not provider_emails or provider_emails != saved_emails:
+        raise ValueError("The SignWell draft recipients do not match the reserved signer list.")
+
+
+def resume_esign_draft(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    envelope_id: UUID,
+    settings: Settings | None = None,
+) -> EsignEnvelopeRead | None:
+    active = settings or get_settings()
+    blockers = active.esign_configuration_blockers
+    if blockers:
+        raise ValueError(f"E-signature is missing: {', '.join(blockers)}.")
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
+    envelope = db.scalar(
+        select(EsignEnvelope).where(
+            EsignEnvelope.id == envelope_id,
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.transaction_id == transaction_id,
+        )
+    )
+    if transaction is None or envelope is None:
+        return None
+    package = db.scalar(
+        select(ContractPackage).where(
+            ContractPackage.id == envelope.contract_package_id,
+            ContractPackage.organization_id == principal.organization_id,
+            ContractPackage.transaction_id == transaction_id,
+        )
+    )
+    if package is None:
+        return None
+    if envelope.status != "draft":
+        raise ValueError("Only a reconciled, unsent provider draft can be resumed.")
+    if not envelope.provider_document_id or envelope.provider_document_id.startswith("intent-"):
+        raise ValueError("The provider draft does not have a durable SignWell document ID.")
+    return send_saved_esign_draft(
+        db,
+        principal,
+        transaction,
+        package,
+        envelope,
+        active,
+    )
 
 
 def preview_contract_for_signature(
@@ -559,7 +1410,8 @@ def build_signwell_document_payload(
             }
         ],
         "text_tags": True,
-        "draft": False,
+        # Persist the provider document ID before any signer notification is attempted.
+        "draft": True,
         "apply_signing_order": True,
         "reminders": request.delivery_mode == "email",
         "allow_reassign": False,
@@ -731,7 +1583,7 @@ def verify_signwell_event(
     payload: dict[str, Any],
     db: Session | None = None,
     settings: Settings | None = None,
-) -> None:
+) -> SignWellWebhookVerification:
     active = settings or get_settings()
     event_data = payload.get("event")
     if not isinstance(event_data, dict):
@@ -739,45 +1591,139 @@ def verify_signwell_event(
     event_type = str(event_data.get("type") or "").strip()
     event_time = str(event_data.get("time") or "").strip()
     provided = str(event_data.get("hash") or "").strip()
-    webhook_ids = {
-        item
-        for item in (
-            [active.esign_signwell_webhook_id]
-            + (
-                list(
-                    db.scalars(
-                        select(EsignProviderConfiguration.webhook_id).where(
-                            EsignProviderConfiguration.provider == "signwell"
-                        )
-                    ).all()
-                )
-                if db is not None
-                else []
-            )
-        )
-        if item
-    }
-    if not webhook_ids or not event_type or not event_time or not provided:
+    if not event_type or not event_time or not provided:
         raise ValueError("Invalid SignWell event signature.")
-    verified = any(
-        secrets.compare_digest(
+
+    signed_message = f"{event_type}@{event_time}".encode()
+
+    def matches(webhook_id: str) -> bool:
+        return secrets.compare_digest(
             provided,
-            hmac.new(
-                webhook_id.encode(),
-                f"{event_type}@{event_time}".encode(),
-                sha256,
-            ).hexdigest(),
+            hmac.new(webhook_id.encode(), signed_message, sha256).hexdigest(),
         )
-        for webhook_id in webhook_ids
+
+    configurations = (
+        list(
+            db.scalars(
+                select(EsignProviderConfiguration).where(
+                    EsignProviderConfiguration.provider == "signwell"
+                )
+            ).all()
+        )
+        if db is not None
+        else []
     )
-    if not verified:
+    matching_organization_ids = {
+        configuration.organization_id
+        for configuration in configurations
+        if configuration.webhook_id and matches(configuration.webhook_id)
+    }
+    if len(matching_organization_ids) > 1:
+        raise ValueError("Ambiguous SignWell event signature.")
+    if matching_organization_ids:
+        return SignWellWebhookVerification(
+            organization_id=next(iter(matching_organization_ids)),
+            source="organization",
+        )
+    if active.esign_signwell_webhook_id and matches(active.esign_signwell_webhook_id):
+        return SignWellWebhookVerification(organization_id=None, source="global")
+    raise ValueError("Invalid SignWell event signature.")
+
+
+def resolve_signwell_envelope(
+    db: Session,
+    provider_document_id: str,
+    verification: SignWellWebhookVerification,
+) -> EsignEnvelope | None:
+    envelope_filter = (
+        EsignEnvelope.provider_document_id == provider_document_id,
+        EsignEnvelope.provider.in_(("signwell", "simulate")),
+    )
+    if verification.organization_id is not None:
+        envelope = db.scalar(
+            select(EsignEnvelope)
+            .where(
+                *envelope_filter,
+                EsignEnvelope.organization_id == verification.organization_id,
+            )
+            .with_for_update()
+        )
+        if envelope is not None:
+            return envelope
+        cross_organization_match = db.scalar(select(EsignEnvelope.id).where(*envelope_filter))
+        if cross_organization_match is not None:
+            raise ValueError("Invalid SignWell event signature for envelope organization.")
+        return None
+
+    if verification.source != "global":
         raise ValueError("Invalid SignWell event signature.")
+    envelopes = list(
+        db.scalars(select(EsignEnvelope).where(*envelope_filter).with_for_update()).all()
+    )
+    if not envelopes:
+        return None
+    envelope_organization_ids = set(
+        db.scalars(
+            select(EsignEnvelope.organization_id)
+            .where(EsignEnvelope.provider.in_(("signwell", "simulate")))
+            .distinct()
+        ).all()
+    )
+    if len(envelopes) != 1 or envelope_organization_ids != {envelopes[0].organization_id}:
+        raise ValueError("Global SignWell event signature is not valid for multiple organizations.")
+    return envelopes[0]
+
+
+def as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def ignored_provider_event_status(
+    envelope: EsignEnvelope,
+    event_type: str,
+    occurred_at: datetime,
+) -> str | None:
+    next_status = EVENT_STATUS.get(event_type)
+    if next_status is None:
+        if envelope.last_provider_event_at is not None and occurred_at < as_utc(
+            envelope.last_provider_event_at
+        ):
+            return "ignored_stale"
+        return None
+    if envelope.status in TERMINAL_ENVELOPE_STATUSES and next_status != envelope.status:
+        return "ignored_out_of_order"
+    current_order = ENVELOPE_STATUS_ORDER.get(envelope.status)
+    next_order = ENVELOPE_STATUS_ORDER.get(next_status)
+    if current_order is not None and next_order is not None and next_order < current_order:
+        if event_type in {"document_viewed", "document_signed"}:
+            return None
+        return (
+            "ignored_stale"
+            if envelope.last_provider_event_at is not None
+            and occurred_at < as_utc(envelope.last_provider_event_at)
+            else "ignored_out_of_order"
+        )
+    # Reconciliation uses its local observation time. A later-arriving provider event may
+    # carry an older provider timestamp while still proving forward state (especially
+    # completion). Only discard an older event when it does not advance state.
+    if (
+        envelope.last_provider_event_at is not None
+        and occurred_at < as_utc(envelope.last_provider_event_at)
+        and next_status == envelope.status
+        and event_type not in {"document_viewed", "document_signed"}
+    ):
+        return "ignored_stale"
+    return None
 
 
 def process_signwell_event(
     db: Session,
     payload: dict[str, Any],
     settings: Settings | None = None,
+    *,
+    verification: SignWellWebhookVerification,
 ) -> bool:
     active = settings or get_settings()
     event_data = payload.get("event")
@@ -799,51 +1745,67 @@ def process_signwell_event(
             f"{event_data.get('time')}:{related_key}"
         ).encode()
     ).hexdigest()
-    envelope = db.scalar(
-        select(EsignEnvelope).where(
-            EsignEnvelope.provider_document_id == provider_document_id,
-            EsignEnvelope.provider.in_(("signwell", "simulate")),
-        )
-    )
+    envelope = resolve_signwell_envelope(db, provider_document_id, verification)
     if envelope is None:
         return False
-    duplicate = db.scalar(
-        select(EsignProviderEvent.id).where(
+    provider_event = db.scalar(
+        select(EsignProviderEvent).where(
             EsignProviderEvent.organization_id == envelope.organization_id,
             EsignProviderEvent.provider == envelope.provider,
             EsignProviderEvent.provider_event_id == provider_event_id,
         )
     )
-    if duplicate is not None:
-        return True
+    if provider_event is not None:
+        if provider_event.status != "failed":
+            return True
+        stored_event_data = provider_event.payload.get("event")
+        stored_document_data = provider_event.payload.get("data", {}).get("object")
+        if not isinstance(stored_event_data, dict) or not isinstance(stored_document_data, dict):
+            raise ValueError("Stored SignWell event payload is invalid.")
+        event_data = stored_event_data
+        document_data = stored_document_data
     occurred_at = datetime.fromtimestamp(
         int(event_data.get("time") or datetime.now(UTC).timestamp()),
         tz=UTC,
     )
-    provider_event = EsignProviderEvent(
-        organization_id=envelope.organization_id,
-        esign_envelope_id=envelope.id,
-        provider=envelope.provider,
-        provider_event_id=provider_event_id,
-        event_type=event_type,
-        status="processing",
-        payload=payload,
-        occurred_at=occurred_at,
-        received_at=datetime.now(UTC),
-        processed_at=None,
-        processing_error=None,
-    )
-    db.add(provider_event)
-    try:
-        apply_provider_event(db, envelope, event_type, event_data, document_data, active)
-        provider_event.status = "processed"
+    if provider_event is None:
+        provider_event = EsignProviderEvent(
+            organization_id=envelope.organization_id,
+            esign_envelope_id=envelope.id,
+            provider=envelope.provider,
+            provider_event_id=provider_event_id,
+            event_type=event_type,
+            status="processing",
+            payload=payload,
+            occurred_at=occurred_at,
+            received_at=datetime.now(UTC),
+            processed_at=None,
+            processing_error=None,
+        )
+        db.add(provider_event)
+    else:
+        provider_event.status = "processing"
+        provider_event.processed_at = None
+        provider_event.processing_error = None
+    ignored_status = ignored_provider_event_status(envelope, event_type, occurred_at)
+    if ignored_status is not None:
+        provider_event.status = ignored_status
         provider_event.processed_at = datetime.now(UTC)
         db.commit()
+        return True
+    db.flush()
+    try:
+        with db.begin_nested():
+            apply_provider_event(db, envelope, event_type, event_data, document_data, active)
     except Exception as exc:
         provider_event.status = "failed"
+        provider_event.processed_at = datetime.now(UTC)
         provider_event.processing_error = str(exc)[:2000]
         db.commit()
         raise
+    provider_event.status = "processed"
+    provider_event.processed_at = datetime.now(UTC)
+    db.commit()
     return True
 
 
@@ -859,9 +1821,59 @@ def apply_provider_event(
         int(event_data.get("time") or datetime.now(UTC).timestamp()),
         tz=UTC,
     )
-    envelope.last_provider_event_at = occurred_at
-    envelope.provider_payload = document_data
-    envelope.status = EVENT_STATUS.get(event_type, envelope.status)
+    prior_envelope_status = envelope.status
+    provider_delivery_events = {
+        "document_sent",
+        "document_viewed",
+        "document_in_progress",
+        "document_signed",
+        "document_completed",
+        "document_declined",
+        "document_expired",
+        "document_bounced",
+    }
+    provider_terminal_failure_events = {
+        "document_declined",
+        "document_expired",
+        "document_canceled",
+        "document_error",
+    }
+    transaction: Transaction | None = None
+    package: ContractPackage | None = None
+    if event_type in provider_delivery_events | provider_terminal_failure_events:
+        transaction, package = lock_provider_event_contract(db, envelope)
+    if event_type == "document_completed":
+        assert transaction is not None and package is not None
+        validate_purchase_contract_authority(
+            db,
+            transaction,
+            package,
+            gate="accepting provider execution",
+        )
+    if envelope.last_provider_event_at is None or occurred_at > as_utc(
+        envelope.last_provider_event_at
+    ):
+        envelope.last_provider_event_at = occurred_at
+    envelope.provider_payload = {**envelope.provider_payload, **document_data}
+    if event_type in provider_delivery_events and envelope.status in {
+        "creating_draft",
+        "draft",
+        "sending",
+        "send_uncertain",
+    }:
+        finalize_local_esign_send(
+            db,
+            envelope,
+            occurred_at=occurred_at,
+            actor_user_id=None,
+        )
+    next_status = EVENT_STATUS.get(event_type)
+    current_order = ENVELOPE_STATUS_ORDER.get(envelope.status)
+    next_order = ENVELOPE_STATUS_ORDER.get(next_status) if next_status is not None else None
+    if next_status is not None and not (
+        current_order is not None and next_order is not None and next_order < current_order
+    ):
+        envelope.status = next_status
     related = event_data.get("related_signer")
     if isinstance(related, dict):
         email = str(related.get("email") or "").strip().lower()
@@ -873,33 +1885,123 @@ def apply_provider_event(
         )
         if recipient is not None:
             if event_type == "document_viewed":
-                recipient.status = "viewed"
-                recipient.viewed_at = occurred_at
+                if recipient.status not in {"signed", "declined"}:
+                    recipient.status = "viewed"
+                    recipient.viewed_at = recipient.viewed_at or occurred_at
             elif event_type == "document_signed":
-                recipient.status = "signed"
-                recipient.signed_at = occurred_at
-            elif event_type == "document_declined":
+                if recipient.status != "declined":
+                    recipient.status = "signed"
+                    recipient.signed_at = recipient.signed_at or occurred_at
+            elif event_type == "document_declined" and recipient.status != "signed":
                 recipient.status = "declined"
-                recipient.declined_at = occurred_at
+                recipient.declined_at = recipient.declined_at or occurred_at
     if event_type == "document_completed":
-        envelope.completed_at = occurred_at
+        assert transaction is not None and package is not None
+        envelope.completed_at = envelope.completed_at or occurred_at
         for recipient in db.scalars(
             select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope.id)
         ).all():
             recipient.status = "signed"
             recipient.signed_at = recipient.signed_at or occurred_at
-        complete_envelope(db, envelope, document_data, settings)
+        complete_envelope(
+            db,
+            envelope,
+            transaction,
+            package,
+            document_data,
+            settings,
+        )
     elif event_type == "document_declined":
-        envelope.declined_at = occurred_at
+        envelope.declined_at = envelope.declined_at or occurred_at
     elif event_type == "document_expired":
-        envelope.expired_at = occurred_at
+        envelope.expired_at = envelope.expired_at or occurred_at
     elif event_type == "document_canceled":
-        envelope.cancelled_at = occurred_at
+        envelope.cancelled_at = envelope.cancelled_at or occurred_at
+    if event_type in provider_terminal_failure_events:
+        assert transaction is not None and package is not None
+        release_failed_esign_reservation(
+            db,
+            envelope,
+            transaction,
+            package,
+            event_type=event_type,
+            occurred_at=occurred_at,
+            prior_envelope_status=prior_envelope_status,
+        )
+
+
+def lock_provider_event_contract(
+    db: Session,
+    envelope: EsignEnvelope,
+) -> tuple[Transaction, ContractPackage]:
+    """Complete the provider-event lock order: envelope -> transaction -> package."""
+    transaction = db.scalar(
+        select(Transaction)
+        .where(Transaction.id == envelope.transaction_id)
+        .with_for_update(of=Transaction)
+    )
+    package = db.scalar(
+        select(ContractPackage)
+        .where(ContractPackage.id == envelope.contract_package_id)
+        .with_for_update(of=ContractPackage)
+    )
+    if transaction is None or package is None:
+        raise ValueError("The provider envelope no longer matches a Stonegate transaction.")
+    if (
+        transaction.organization_id != envelope.organization_id
+        or package.organization_id != envelope.organization_id
+        or package.transaction_id != transaction.id
+    ):
+        raise ValueError("The provider envelope contract binding is invalid.")
+    return transaction, package
+
+
+def release_failed_esign_reservation(
+    db: Session,
+    envelope: EsignEnvelope,
+    transaction: Transaction,
+    package: ContractPackage,
+    *,
+    event_type: str,
+    occurred_at: datetime,
+    prior_envelope_status: str,
+) -> None:
+    """Release authority only after SignWell proves the document is no longer signable."""
+    if prior_envelope_status in TERMINAL_ENVELOPE_STATUSES:
+        return
+    if package.status not in {"sending", "sent"}:
+        return
+    prior_package_status = package.status
+    package.status = "approved"
+    if transaction.status == "sent":
+        transaction.status = "contract_prep"
+    db.add(
+        TransactionEvent(
+            organization_id=envelope.organization_id,
+            transaction_id=transaction.id,
+            lead_id=transaction.lead_id,
+            actor_user_id=None,
+            event_type="esign.delivery_closed",
+            summary=(
+                f"SignWell closed contract package v{package.version_number} without execution."
+            ),
+            details={
+                "envelope_id": str(envelope.id),
+                "provider_document_id": envelope.provider_document_id,
+                "provider_event_type": event_type,
+                "prior_package_status": prior_package_status,
+                "package_status": package.status,
+            },
+            occurred_at=occurred_at,
+        )
+    )
 
 
 def complete_envelope(
     db: Session,
     envelope: EsignEnvelope,
+    transaction: Transaction,
+    package: ContractPackage,
     document_data: dict[str, Any],
     settings: Settings,
 ) -> None:
@@ -910,10 +2012,12 @@ def complete_envelope(
         content = base64.b64decode(encoded) if encoded else b"%PDF simulated signed agreement"
     else:
         content = SignWellClient(settings).completed_pdf(envelope.provider_document_id)
-    transaction = db.get(Transaction, envelope.transaction_id)
-    package = db.get(ContractPackage, envelope.contract_package_id)
-    if transaction is None or package is None:
-        raise ValueError("The completed envelope no longer matches a Stonegate transaction.")
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="recording provider execution",
+    )
     template = db.get(ContractTemplate, package.template_id) if package.template_id else None
     template_type = str(
         package.terms_snapshot.get("document_type")
@@ -946,6 +2050,8 @@ def complete_envelope(
         content=content,
         settings=settings,
     )
+    if stored.malware_scan_status not in ACCEPTABLE_EXECUTION_SCAN_STATUSES:
+        raise ValueError("The completed agreement does not have an acceptable malware scan state.")
     document = TransactionDocument(
         id=document_id,
         organization_id=envelope.organization_id,
@@ -954,7 +2060,7 @@ def complete_envelope(
         uploaded_by_user_id=envelope.created_by_user_id,
         document_type=document_type,
         title=f"SignWell completed {document_label} v{package.version_number}",
-        status="final",
+        status="executed",
         file_name=file_name,
         content_type="application/pdf",
         file_size=len(content),
@@ -994,6 +2100,8 @@ def complete_envelope(
                 "envelope_id": str(envelope.id),
                 "provider_document_id": envelope.provider_document_id,
                 "document_id": str(document.id),
+                "execution_evidence": "completed_provider_envelope",
+                "malware_scan_status": document.malware_scan_status,
             },
             occurred_at=envelope.completed_at or datetime.now(UTC),
         )
@@ -1022,11 +2130,16 @@ def reconcile_envelope(
     document = SignWellClient(active).get_document(envelope.provider_document_id)
     status = str(document.get("status") or "").lower()
     event_type = {
+        "created": "document_draft",
+        "draft": "document_draft",
         "completed": "document_completed",
         "declined": "document_declined",
         "expired": "document_expired",
         "canceled": "document_canceled",
         "cancelled": "document_canceled",
+        "error": "document_error",
+        "failed": "document_error",
+        "bounced": "document_bounced",
         "pending": "document_in_progress",
         "sent": "document_sent",
     }.get(status, "document_in_progress")
@@ -1041,6 +2154,10 @@ def reconcile_envelope(
             "data": {"object": document},
         },
         active,
+        verification=SignWellWebhookVerification(
+            organization_id=envelope.organization_id,
+            source="internal",
+        ),
     )
     db.refresh(envelope)
     return envelope_read(db, envelope)

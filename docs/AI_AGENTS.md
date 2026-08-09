@@ -171,9 +171,9 @@ after prompts, tools, schemas, retrieval, and representative evals have plateaue
 | Prospecting Intelligence | Rank records, explain priority, flag data gaps | Campaign records, vendor data, suppression evidence, property facts | Internal recommendation |
 | Inbound Lead | Triage seller inquiries, identify urgency, draft first response | CRM, consent, inbox, calendar | Approved external templates after pilot |
 | Lead Manager Support | Find qualification gaps, stale leads, and next actions for the human Lead Manager | CRM, tasks, inbox, calendar, approved scripts | Low-risk internal tasks |
-| Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Approved structured CRM updates after pilot |
+| Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Empty-field evidence auto-fill; reviewed narrative notes and follow-up tasks |
 | Appointment Preparation | Produce seller brief, questions, logistics, and risk flags | CRM, qualification, underwriting, internal calendar, optional routes | Internal brief |
-| Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, controlled DealMachine evidence, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
+| Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, RealEstateAPI, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
 | Negotiation Coach | Prepare questions, objections, options, and ceiling warnings | Approved underwriting, offer authority, seller history | Internal coaching only |
 | Transaction Coordinator | Detect missing documents, deadlines, and closing risks | Transaction records, object storage, e-signature, operational email | Low-risk internal tasks |
 | Disposition | Match buyers and draft approved deal packages and outreach | Buyer CRM, deal facts, documents, approved channels | Draft campaign; human selects buyer |

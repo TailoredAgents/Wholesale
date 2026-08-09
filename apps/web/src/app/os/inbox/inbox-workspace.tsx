@@ -460,6 +460,7 @@ function CallTranscriptPanel({
   transcript,
   canReview,
   onReview,
+  onRetry,
 }: {
   transcript: CallTranscript;
   canReview: boolean;
@@ -473,6 +474,7 @@ function CallTranscriptPanel({
       create_follow_up_task: boolean;
     },
   ) => Promise<void>;
+  onRetry: (transcriptId: string) => Promise<void>;
 }) {
   const [notes, setNotes] = useState<StructuredCallNotes | null>(transcript.structured_notes);
   const [selectedFields, setSelectedFields] = useState<string[]>(
@@ -483,6 +485,7 @@ function CallTranscriptPanel({
   const [createTask, setCreateTask] = useState(Boolean(transcript.structured_notes?.next_action));
   const [decisionNotes, setDecisionNotes] = useState("");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "saving">("idle");
+  const [retryStatus, setRetryStatus] = useState<"idle" | "saving">("idle");
 
   const updateNote = <K extends keyof StructuredCallNotes>(
     key: K,
@@ -662,11 +665,34 @@ function CallTranscriptPanel({
             ) : null}
           </section>
         ) : (
-          <p className={styles.transcriptPending}>
-            {transcript.status === "failed"
-              ? "Transcription will retry automatically."
-              : "Recording is queued for transcription."}
-          </p>
+          <div className={styles.transcriptPending}>
+            <p>
+              {transcript.status === "exhausted"
+                ? "Call intelligence stopped after repeated failures. Retry it when the provider is healthy."
+                : transcript.status === "failed"
+                  ? "Call intelligence hit a temporary problem and will retry automatically."
+                  : transcript.status === "processing"
+                    ? "AI is transcribing this recording and preparing the notes."
+                    : "Recording is queued for transcription."}
+            </p>
+            {transcript.status === "exhausted" ? (
+              <button
+                disabled={retryStatus === "saving"}
+                onClick={async () => {
+                  setRetryStatus("saving");
+                  try {
+                    await onRetry(transcript.id);
+                  } finally {
+                    setRetryStatus("idle");
+                  }
+                }}
+                type="button"
+              >
+                <RefreshCw size={13} aria-hidden="true" />
+                {retryStatus === "saving" ? "Queueing" : "Retry call intelligence"}
+              </button>
+            ) : null}
+          </div>
         )}
         {transcript.speaker_segments.length > 0 ? (
           <details className={styles.transcriptText}>
@@ -910,6 +936,18 @@ export function InboxWorkspace({
       await request(`/api/v1/voice/transcripts/${transcriptId}/review`, {
         method: "PATCH",
         body: JSON.stringify(payload),
+      });
+      if (selectedId) {
+        await Promise.all([loadConversations(), loadDetail(selectedId)]);
+      }
+    },
+    [loadConversations, loadDetail, request, selectedId],
+  );
+
+  const retryTranscript = useCallback(
+    async (transcriptId: string) => {
+      await request(`/api/v1/voice/transcripts/${transcriptId}/retry`, {
+        method: "POST",
       });
       if (selectedId) {
         await Promise.all([loadConversations(), loadDetail(selectedId)]);
@@ -1976,6 +2014,7 @@ export function InboxWorkspace({
                               )}
                               key={item.transcript.id}
                               onReview={reviewTranscript}
+                              onRetry={retryTranscript}
                               transcript={item.transcript}
                             />
                           ) : null}

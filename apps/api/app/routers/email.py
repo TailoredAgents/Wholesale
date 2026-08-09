@@ -17,6 +17,9 @@ from app.schemas.email import (
     EmailAccountRead,
     EmailAccountUpdate,
     EmailAdminOptionsRead,
+    EmailDeadLetterListResponse,
+    EmailDeadLetterRead,
+    EmailDeadLetterRequeueRequest,
     EmailOAuthAuthorizeRead,
     EmailRecipientOptionListResponse,
     EmailRoutingExceptionListResponse,
@@ -58,7 +61,9 @@ from app.services.email import (
 )
 from app.services.email_admin import (
     get_email_admin_options,
+    list_email_dead_letters,
     list_email_routing_exceptions,
+    requeue_email_dead_letter,
     resolve_email_routing_exception,
 )
 from app.services.email_aliases import (
@@ -203,6 +208,30 @@ def resolve_resend_routing_exception(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Email routing exception not found.",
+        )
+    return event
+
+
+@router.get("/dead-letters")
+def read_email_dead_letters(
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailDeadLetterListResponse:
+    return list_email_dead_letters(db, principal)
+
+
+@router.post("/dead-letters/{event_id}/requeue")
+def requeue_resend_dead_letter(
+    event_id: UUID,
+    payload: EmailDeadLetterRequeueRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(email_manager_dependency)],
+) -> EmailDeadLetterRead:
+    event = requeue_email_dead_letter(db, principal, event_id, payload)
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resend dead-letter event not found.",
         )
     return event
 

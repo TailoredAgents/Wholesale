@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -16,6 +16,7 @@ from app.models.foundation import (
     UnderwritingVersion,
 )
 from app.schemas.approvals import ApprovalDecision, ApprovalRequestRead
+from app.services.contract_authority_locks import lock_offer_authority_for_mutation
 from app.services.offer_concessions import (
     apply_concession_decision,
     supersede_prior_offer_authority,
@@ -24,16 +25,54 @@ from app.services.offer_concessions import (
 
 APPROVAL_STATUSES = {"pending", "approved", "rejected", "cancelled"}
 DECISION_STATUSES = {"approved", "rejected", "cancelled"}
+APPROVAL_REQUEST_PERMISSIONS = {
+    "offer_ceiling": PermissionKeys.APPROVE_OFFERS,
+    "offer_concession": PermissionKeys.APPROVE_OFFERS,
+    "contract_send": PermissionKeys.SEND_CONTRACTS,
+    "ai_capability_promotion": PermissionKeys.CHANGE_AI_PROMPTS,
+    "ai_tool_call": PermissionKeys.CHANGE_AI_PROMPTS,
+    "follow_up_sms": PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+    "follow_up_email": PermissionKeys.MANAGE_ACQUISITION_OPERATIONS,
+}
+APPROVAL_DECISION_PERMISSION_KEYS = frozenset(APPROVAL_REQUEST_PERMISSIONS.values())
+
+
+class ApprovalPermissionError(ValueError):
+    pass
+
+
+def approval_permission_for_request_type(request_type: str) -> str | None:
+    return APPROVAL_REQUEST_PERMISSIONS.get(request_type)
 
 
 def list_approval_requests(db: Session, principal: Principal) -> list[ApprovalRequestRead]:
-    requests = db.scalars(
-        select(ApprovalRequest)
-        .where(ApprovalRequest.organization_id == principal.organization_id)
-        .order_by(ApprovalRequest.created_at.desc())
-        .limit(100)
-    ).all()
+    query = select(ApprovalRequest).where(
+        ApprovalRequest.organization_id == principal.organization_id
+    )
+    if PermissionKeys.VIEW_AUDIT_LOGS not in principal.permission_keys:
+        allowed_request_types = [
+            request_type
+            for request_type, permission in APPROVAL_REQUEST_PERMISSIONS.items()
+            if permission in principal.permission_keys
+        ]
+        query = query.where(ApprovalRequest.request_type.in_(allowed_request_types))
+    requests = db.scalars(query.order_by(ApprovalRequest.created_at.desc()).limit(100)).all()
     return [approval_to_read(request) for request in requests]
+
+
+def approval_decision_lock_statement(
+    organization_id: UUID,
+    approval_id: UUID,
+) -> Select[tuple[ApprovalRequest]]:
+    """Lock one approval before rechecking whether it is still pending."""
+    return (
+        select(ApprovalRequest)
+        .where(
+            ApprovalRequest.organization_id == organization_id,
+            ApprovalRequest.id == approval_id,
+        )
+        .with_for_update(of=ApprovalRequest)
+    )
 
 
 def decide_approval_request(
@@ -45,9 +84,9 @@ def decide_approval_request(
     if payload.status not in DECISION_STATUSES:
         raise ValueError(f"Unsupported approval decision: {payload.status}")
     request = db.scalar(
-        select(ApprovalRequest).where(
-            ApprovalRequest.organization_id == principal.organization_id,
-            ApprovalRequest.id == approval_id,
+        approval_decision_lock_statement(
+            principal.organization_id,
+            approval_id,
         )
     )
     if request is None:
@@ -56,6 +95,11 @@ def decide_approval_request(
         raise ValueError("This approval request has already been decided.")
     if request.request_type == "call_notes_review":
         raise ValueError("Call notes must be reviewed with the recording in the shared inbox.")
+    required_permission = approval_permission_for_request_type(request.request_type)
+    if required_permission is None:
+        raise ValueError(f"Unsupported approval request type: {request.request_type}")
+    if required_permission not in principal.permission_keys:
+        raise ApprovalPermissionError(f"Missing permission: {required_permission}")
     offer_context = None
     concession_context = None
     contract_context = None
@@ -86,6 +130,12 @@ def decide_approval_request(
     request.decided_at = datetime.now(UTC)
     if offer_context is not None:
         plan, version, lead = offer_context
+        if payload.status == "approved":
+            lock_offer_authority_for_mutation(
+                db,
+                principal.organization_id,
+                lead.id,
+            )
         plan.status = payload.status
         if payload.status == "approved":
             version.status = "approved"
@@ -127,6 +177,12 @@ def decide_approval_request(
         )
     if concession_context is not None:
         concession, plan, lead = concession_context
+        if payload.status == "approved":
+            lock_offer_authority_for_mutation(
+                db,
+                principal.organization_id,
+                lead.id,
+            )
         apply_concession_decision(concession, principal, payload)
         db.add(
             ActivityEvent(

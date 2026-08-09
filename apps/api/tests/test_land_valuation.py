@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -38,7 +39,7 @@ def comparable(
 def analyze(
     comps: list[dict[str, object]],
     **overrides: object,
-) -> dict[str, object]:
+) -> dict[str, Any]:
     inputs: dict[str, object] = {
         "selected_comps": comps,
         "subject_acres": Decimal("2.0000"),

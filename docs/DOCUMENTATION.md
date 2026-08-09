@@ -1,6 +1,6 @@
 # Stonegate Documentation Guide
 
-Last verified against the repository: July 31, 2026
+Last verified against the repository: August 8, 2026
 
 ## Purpose
 
@@ -37,13 +37,13 @@ current code or canonical documentation.
 | --- | --- | --- |
 | `SYSTEM_MAP.md` | Complete as-built product, architecture, modules, lifecycle, data, integrations, and boundaries | Everyone |
 | `FINISHING_ROADMAP.md` | Remaining work, acceptance tests, and launch gates | Owner and developers |
-| `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Approved target navigation, live IA1-IA7 implementation, workspace consolidation, route migration, role experience, and remaining IA phase plan | Owner, managers, and developers |
+| `CRM_INFORMATION_ARCHITECTURE_ROADMAP.md` | Implemented IA1-IA10 navigation and workspace consolidation, route compatibility, and role-acceptance evidence | Owner, managers, and developers |
 | `PUBLIC_SITE_CONVERSION_ROADMAP.md` | Public seller-site conversion phases, inputs, and acceptance criteria | Owner, marketing, and developers |
-| `VA_DIALER_ROADMAP.md` | One-by-one VA calling workflow, acceptance, handoff, and reporting sequence | Owner, prospecting managers, and developers |
+| `VA_DIALER_ROADMAP.md` | BatchDialer VA calling model, Stonegate one-by-one fallback, warm handoff, acceptance, and reporting sequence | Owner, prospecting managers, and developers |
 | `OPERATING_MODEL.md` | Roles, handoffs, compensation, service standards, and management cadence | Owner and managers |
 | `AI_AGENTS.md` | AI architecture, specialist capabilities, tools, memory, and autonomy rules | Owner, managers, and developers |
 | `AI_AUTOMATION_ROADMAP.md` | Remaining path from copilots to measured automation | Owner and developers |
-| `UNDERWRITING_COMP_METHOD.md` | Current V2.2 comp/offer method plus the approved in-place U3.1-U3.10 underwriting upgrade plan | Acquisitions, underwriting, owner, and developers |
+| `UNDERWRITING_COMP_METHOD.md` | Current Stonegate Valuation V3 method and `v3.1-adjusted-distribution` contract, with V2.2 retained only for history and engineering rollback | Acquisitions, underwriting, owner, and developers |
 | `SETUP_REFERENCE.md` | Local setup, production services, environment variables, and provider activation | Owner and developers |
 | `SETUP_MANUAL.md` | Nontechnical provider, account, staff, launch, and maintenance procedures | Owner and trusted administrators |
 | `USER_MANUAL.md` | Full current operating instructions | All staff |
@@ -55,6 +55,13 @@ current code or canonical documentation.
 | `GEORGIA_CONTRACT_PACKET.md` | Current Georgia contract packet content and limits | Owner and transaction staff |
 | `SIGNWELL_COUNSEL_BRIEF.md` | Questions and evidence for later legal review of e-signature documents | Owner and counsel |
 | `DECISIONS/` | Durable architecture decisions, including the accepted task-centered OS information architecture | Developers |
+
+## Point-In-Time Audit Evidence
+
+`LAUNCH_READINESS_AUDIT_2026-08-08.md` records the August 8, 2026 code audit, automated
+verification, remediations, and the production acceptance runbooks that remain open. It is an
+evidence artifact, not a higher-priority source of current product truth than `SYSTEM_MAP.md` or
+`FINISHING_ROADMAP.md`.
 
 `../apps/web/AGENTS.md` and `../apps/web/CLAUDE.md` are repository tool instructions. They are not
 employee help content and must not be ingested into the staff help assistant.
@@ -80,9 +87,10 @@ employee help content and must not be ingested into the staff help assistant.
 - What calculations and decision rules apply?
 - What must remain under human authority?
 
-`UNDERWRITING_COMP_METHOD.md` explicitly separates current V2.2 behavior from planned V3 behavior.
-The help assistant and staff instructions must answer from the V2.2 sections until each V3 phase is
-implemented and the corresponding current-state documents are updated.
+`UNDERWRITING_COMP_METHOD.md` identifies V3 as the live calculation method and keeps V2.2 readable
+only for historical analyses, calibration, and an engineering-controlled rollback. The help
+assistant and staff instructions must answer from the current V3 sections and must not present V2.2
+as an employee-selectable alternative.
 
 ### Instructions
 

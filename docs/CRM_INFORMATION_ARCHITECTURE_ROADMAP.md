@@ -35,7 +35,7 @@ primary destinations:
 | Work | Tasks |
 | Work | Calendar |
 | Operations | Prospecting |
-| Operations | Seller Leads |
+| Operations | Leads |
 | Operations | Deals |
 | Operations | Buyers |
 | Business | Finance |
@@ -79,7 +79,7 @@ Field Operations, Underwriting, Approvals, Transactions, or Dispositions before 
 ### 4.2 Competing Views Of The Same Work
 
 Lead Desk, All Leads, and Seller Pipeline present the same seller opportunities through different
-routes. Table, board, queue, and saved-filter presentations should be views of one Seller Leads
+routes. Table, board, queue, and saved-filter presentations should be views of the unified **Leads**
 workspace, not competing destinations.
 
 ### 4.3 Setup Is Scattered
@@ -144,7 +144,7 @@ seller CRM lead until Stonegate records genuine interest and performs the approv
 An interested seller opportunity tied to a contact and property. It owns qualification, seller
 communications, appointments, valuation, negotiation, follow-up, and pre-contract work.
 
-The employee-facing label is **Seller Lead**. The top-level workspace label is **Seller Leads**.
+The employee-facing record type is **Seller Lead**. The top-level workspace label is **Leads**.
 This distinguishes the record from cold prospects without introducing unfamiliar terminology.
 
 ### 6.3 Deal
@@ -424,9 +424,9 @@ assignment, and campaign results remain operational Prospecting work.
 VAs keep the focused one-by-one calling interface. They do not receive manager campaign,
 financial, export, buyer, underwriting, contract, or company settings views.
 
-### 8.6 Seller Leads
+### 8.6 Leads
 
-Seller Leads combines:
+Leads combines:
 
 - Lead Desk
 - All Leads
@@ -742,8 +742,8 @@ Settings sections remain permission-filtered. Consolidating navigation does not 
 | Role or seat | Default destination | Normal visible workspaces |
 | --- | --- | --- |
 | Owner and CEO | Home, company view | All target destinations |
-| Lead Manager | Seller Leads, New or Needs Qualification | Home, Inbox, Tasks, Calendar, Seller Leads |
-| Acquisitions Closer | Calendar, today's appointments | Home, Inbox, Tasks, Calendar, Seller Leads, Deals when assigned |
+| Lead Manager | Leads, New or Needs Qualification | Home, Inbox, Tasks, Calendar, Leads |
+| Acquisitions Closer | Calendar, today's appointments | Home, Inbox, Tasks, Calendar, Leads, Deals when assigned |
 | VA Caller | Prospecting, My Calls | Prospecting and account setup only |
 | Transaction Coordinator | Deals, Closing Exceptions | Home, Inbox, Tasks, Calendar, Deals |
 | Dispositions | Deals, Ready For Disposition | Home, Inbox, Tasks, Calendar, Deals, Buyers |
@@ -788,7 +788,7 @@ phase so it answers using the current interface, not the final planned roadmap.
 | `/os/campaigns` | `/os/prospecting?view=campaigns` | Redirect implemented |
 | `/os/prospecting` | `/os/prospecting` | Keep as workspace root |
 | `/os/lead-manager` | `/os/leads?view=needs-qualification` | Redirect after parity |
-| `/os/leads` | `/os/leads` Seller Leads | Keep |
+| `/os/leads` | `/os/leads` Leads | Keep |
 | `/os/pipeline` | `/os/leads?display=board` | Redirect after parity |
 | `/os/field-operations` | `/os/calendar` or selected appointment | Preserve deep links, then redirect list view |
 | `/os/underwriting` | `/os/leads?view=needs-underwriting` | Redirect queue; move calibration to Settings |
@@ -817,7 +817,7 @@ Do not replace working routes with redirects until:
 
 ### 12.1 Queue Pattern
 
-Use for Prospecting, Seller Leads, Tasks, and Deals:
+Use for Prospecting, Leads, Tasks, and Deals:
 
 - local saved views and counts
 - search, filters, sort, and display controls
@@ -947,13 +947,13 @@ Exit criteria:
 - campaign costs and outcomes remain attributable
 - `/os/campaigns` compatibility works
 
-## IA5. Seller Leads Consolidation
+## IA5. Leads Consolidation
 
 Status: **Implemented July 30, 2026**
 
 Scope:
 
-- unify Lead Desk, lead list, and pipeline as views of Seller Leads
+- unify Lead Desk, lead list, and pipeline as views of Leads
 - add table and board display switching
 - standardize saved views
 - incorporate the active underwriting queue
@@ -1114,7 +1114,7 @@ An authorized user can:
 
 - create a campaign from Prospecting in two navigation decisions or fewer
 - import prospects from the selected campaign
-- create a manual seller lead from Seller Leads or the global New menu
+- create a manual seller lead from Leads or the global New menu
 - find a seller from global search
 - open today's appointment from Calendar
 - run valuation from the Seller Lead
@@ -1324,7 +1324,7 @@ IA2 was implemented on July 30, 2026.
 The owner sidebar now contains exactly 11 destinations:
 
 - Work: Home, Inbox, Tasks, Calendar
-- Operations: Prospecting, Seller Leads, Deals, Buyers
+- Operations: Prospecting, Leads, Deals, Buyers
 - Business: Finance, Marketing
 - Administration: Settings
 
@@ -1344,7 +1344,7 @@ workspaces. They do not create parallel business data.
 Legacy routes activate the correct primary destination:
 
 - Campaigns activates Prospecting.
-- Lead Desk, Seller Pipeline, Underwriting, and Seller records activate Seller Leads.
+- Lead Desk, Seller Pipeline, Underwriting, and Seller records activate Leads.
 - Field Operations activates Calendar.
 - Approvals activates Tasks.
 - Transactions and Dispositions activate Deals.
@@ -1497,7 +1497,7 @@ second campaign model.
 IA5 is complete. IA6 moves field meeting execution into Calendar while preserving appointment
 deep links and the iPad workflow.
 
-## 23. IA5 Seller Leads Consolidation Implementation
+## 23. IA5 Leads Consolidation Implementation
 
 ### 23.1 One Seller Workspace
 
@@ -1523,7 +1523,7 @@ their new sections.
 
 ### 23.3 Configuration Boundary
 
-The active underwriting queue remains in Seller Leads. Provider scorecards, formula-governance
+The active underwriting queue remains in Leads. Provider scorecards, formula-governance
 decisions, verified outcome history, and calibration metrics now live in **Settings > Data &
 Quality**, where authorized managers configure and audit valuation quality.
 
@@ -1611,7 +1611,7 @@ primary action through the shared task service.
 
 ### 25.3 Shared Truth
 
-Home, Seller Leads, the seller record, and Tasks read the same primary action. Deal-linked primary
+Home, Leads, the seller record, and Tasks read the same primary action. Deal-linked primary
 work supersedes the pre-contract seller action while retaining both record references. Supporting
 tasks can still be completed directly and do not replace the primary action.
 
@@ -1684,7 +1684,7 @@ management journey strips above their actual record controls.
 ## 28. IA10 Compatibility And Role Acceptance Implementation
 
 The OS exposes only the approved 11 primary destinations, reduced by role and permission. Focused
-queues are local views inside Prospecting, Seller Leads, Tasks, Calendar, Deals, and Settings.
+queues are local views inside Prospecting, Leads, Tasks, Calendar, Deals, and Settings.
 My Setup remains permanently available from the signed-in role block.
 
 Legacy links preserve context without advertising duplicate workspaces:

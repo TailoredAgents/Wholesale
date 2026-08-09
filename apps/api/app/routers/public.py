@@ -18,7 +18,10 @@ from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
 from app.services.marketing_experiments import list_public_experiments
 from app.services.public_intake import create_public_seller_lead, enrich_public_seller_lead
-from app.services.request_rate_limit import public_intake_rate_limiter
+from app.services.request_rate_limit import (
+    public_intake_rate_limiter,
+    trusted_client_address,
+)
 from app.services.trust_proof import get_public_trust_proofs
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
@@ -49,7 +52,7 @@ def create_seller_lead_from_public_form(
     db: Annotated[Session, Depends(get_db)],
     user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ) -> SellerIntakeResponse:
-    enforce_public_intake_rate_limit(request)
+    enforce_public_intake_rate_limit(request, route_key="seller-lead:create")
     return create_public_seller_lead(
         db,
         payload,
@@ -65,6 +68,7 @@ def enrich_seller_lead_from_public_form(
     db: Annotated[Session, Depends(get_db)],
     user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ) -> SellerIntakeEnrichmentResponse:
+    enforce_public_intake_rate_limit(request, route_key="seller-lead:enrichment")
     return enrich_public_seller_lead(
         db,
         payload,
@@ -80,6 +84,7 @@ def create_conversion_event(
     db: Annotated[Session, Depends(get_db)],
     user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,
 ) -> ConversionEventResponse:
+    enforce_public_conversion_event_rate_limit(request)
     event = record_public_conversion_event(
         db,
         payload,
@@ -90,30 +95,53 @@ def create_conversion_event(
 
 
 def get_ip_address(request: Request) -> str | None:
-    cloudflare_address = request.headers.get("cf-connecting-ip")
-    if cloudflare_address:
-        return cloudflare_address.strip()
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return None
+    settings = get_settings()
+    return trusted_client_address(request, production=settings.app_env == "production")
 
 
-def enforce_public_intake_rate_limit(request: Request) -> None:
+def enforce_public_intake_rate_limit(request: Request, *, route_key: str) -> None:
     settings = get_settings()
     if not settings.public_intake_rate_limit_enabled:
         return
-    client_address = get_ip_address(request) or "unknown"
-    retry_after = public_intake_rate_limiter.check(
-        f"seller-lead:{client_address}",
+    enforce_public_rate_limit(
+        request,
+        route_key=route_key,
         limit=settings.public_intake_rate_limit_requests,
         window_seconds=settings.public_intake_rate_limit_window_seconds,
+        detail="Too many offer requests. Please wait before trying again.",
+    )
+
+
+def enforce_public_conversion_event_rate_limit(request: Request) -> None:
+    settings = get_settings()
+    if not settings.public_intake_rate_limit_enabled:
+        return
+    enforce_public_rate_limit(
+        request,
+        route_key="conversion-event:create",
+        limit=settings.public_conversion_event_rate_limit_requests,
+        window_seconds=settings.public_conversion_event_rate_limit_window_seconds,
+        detail="Too many conversion events. Please wait before trying again.",
+    )
+
+
+def enforce_public_rate_limit(
+    request: Request,
+    *,
+    route_key: str,
+    limit: int,
+    window_seconds: int,
+    detail: str,
+) -> None:
+    client_address = get_ip_address(request) or "unknown"
+    retry_after = public_intake_rate_limiter.check(
+        f"public:{route_key}:{client_address}",
+        limit=limit,
+        window_seconds=window_seconds,
     )
     if retry_after is not None:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many offer requests. Please wait before trying again.",
+            detail=detail,
             headers={"Retry-After": str(retry_after)},
         )

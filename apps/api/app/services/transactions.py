@@ -15,6 +15,7 @@ from app.models.foundation import (
     ContractPackage,
     ContractTemplate,
     Deal,
+    EsignEnvelope,
     Lead,
     Property,
     Transaction,
@@ -34,6 +35,8 @@ from app.schemas.transactions import (
     ContractTemplateRead,
     DocumentDeleteRequest,
     DocumentDownloadLinkRead,
+    ManualContractExecutionAttestation,
+    ManualContractWithdrawalAttestation,
     TransactionChecklistRead,
     TransactionClose,
     TransactionDetail,
@@ -49,6 +52,15 @@ from app.schemas.transactions import (
     TransactionQueueItem,
     TransactionUpdate,
 )
+from app.services.contract_authority import (
+    ACCEPTABLE_EXECUTION_SCAN_STATUSES,
+    PURCHASE_AGREEMENT,
+    PURCHASE_AUTHORITY_SNAPSHOT_KEY,
+    capture_purchase_authority,
+    package_document_type,
+    package_purchase_authority_snapshot,
+    validate_purchase_contract_authority,
+)
 from app.services.document_storage import (
     create_download_url,
     delete_content,
@@ -58,11 +70,10 @@ from app.services.document_storage import (
 from app.services.esign import list_envelopes
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
-SIGNED_DOCUMENT_TYPES = {
-    "signed_purchase_agreement",
-    "assignment_contract",
-    "executed_addendum",
-    "executed_contract",
+EXECUTED_DOCUMENT_TYPE_BY_PACKAGE = {
+    PURCHASE_AGREEMENT: "signed_purchase_agreement",
+    "assignment_contract": "assignment_contract",
+    "addendum": "executed_addendum",
 }
 MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
 
@@ -421,6 +432,11 @@ def create_contract_package(
         document_type = template.document_type
     else:
         document_type = payload.document_type
+    authority_snapshot = (
+        capture_purchase_authority(db, transaction, payload.purchase_price_cents)
+        if document_type == PURCHASE_AGREEMENT
+        else None
+    )
     version = (
         db.scalar(
             select(func.max(ContractPackage.version_number)).where(
@@ -448,6 +464,11 @@ def create_contract_package(
         terms_snapshot={
             "document_type": document_type,
             "special_terms": payload.special_terms,
+            **(
+                {PURCHASE_AUTHORITY_SNAPSHOT_KEY: authority_snapshot}
+                if authority_snapshot is not None
+                else {}
+            ),
         },
         notes=payload.notes,
     )
@@ -482,6 +503,12 @@ def request_contract_approval(
     require_house_transaction_workflow(db, transaction)
     if package.status != "draft":
         raise ValueError("Only a draft contract package can be submitted for approval.")
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="requesting contract approval",
+    )
     request = ApprovalRequest(
         organization_id=principal.organization_id,
         requested_by_user_id=principal.user_id,
@@ -535,6 +562,12 @@ def apply_contract_decision(
         raise ValueError("The transaction is no longer available.")
     if payload.status == "approved":
         require_house_transaction_workflow(db, transaction)
+        validate_purchase_contract_authority(
+            db,
+            transaction,
+            package,
+            gate="contract approval",
+        )
     if payload.status in {"rejected", "cancelled"} and not payload.decision_notes:
         raise ValueError("Decision notes are required when a contract package is not approved.")
     if payload.status == "approved":
@@ -560,7 +593,14 @@ def apply_contract_decision(
 def mark_contract_sent(
     db: Session, principal: Principal, transaction_id: UUID, package_id: UUID
 ) -> ContractPackageRead | None:
-    transaction = scoped_transaction(db, principal, transaction_id)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
     package = db.scalar(
         select(ContractPackage).where(
             ContractPackage.id == package_id,
@@ -573,6 +613,12 @@ def mark_contract_sent(
     require_house_transaction_workflow(db, transaction)
     if package.status != "approved":
         raise ValueError("The contract package must be approved before it is sent.")
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="sending the contract",
+    )
     now = datetime.now(UTC)
     package.status = "sent"
     package.sent_at = now
@@ -584,6 +630,101 @@ def mark_contract_sent(
         transaction,
         "contract.sent",
         f"Contract package v{package.version_number} recorded as sent.",
+    )
+    db.commit()
+    db.refresh(package)
+    return package_read(package)
+
+
+def withdraw_sent_contract_package(
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    package_id: UUID,
+    payload: ManualContractWithdrawalAttestation,
+) -> ContractPackageRead | None:
+    """Void a manually delivered package before newer seller authority can be recorded."""
+    withdrawal_reason = payload.reason.strip()
+    if len(withdrawal_reason) < 10:
+        raise ValueError("Record a specific withdrawal reason of at least ten characters.")
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
+    package = db.scalar(
+        select(ContractPackage)
+        .where(
+            ContractPackage.id == package_id,
+            ContractPackage.transaction_id == transaction_id,
+            ContractPackage.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=ContractPackage)
+    )
+    if transaction is None or package is None:
+        return None
+    require_house_transaction_workflow(db, transaction)
+    if package.status != "sent":
+        raise ValueError("Only an outstanding sent contract package can be withdrawn.")
+    completed_envelope = db.scalar(
+        select(EsignEnvelope.id).where(
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.contract_package_id == package.id,
+            EsignEnvelope.status == "completed",
+        )
+    )
+    if completed_envelope is not None:
+        raise ValueError(
+            "A completed SignWell envelope exists for this package; reconcile execution instead."
+        )
+    active_envelope = db.scalar(
+        select(EsignEnvelope.id).where(
+            EsignEnvelope.organization_id == principal.organization_id,
+            EsignEnvelope.contract_package_id == package.id,
+            EsignEnvelope.status.not_in(
+                ("completed", "declined", "expired", "cancelled", "error")
+            ),
+        )
+    )
+    if active_envelope is not None:
+        raise ValueError(
+            "Cancel the active SignWell request and reconcile its terminal status before "
+            "withdrawing this package."
+        )
+    now = datetime.now(UTC)
+    package.status = "void"
+    package.voided_at = now
+    if transaction.status == "sent":
+        transaction.status = "contract_prep"
+    add_event(
+        db,
+        principal,
+        transaction,
+        "contract.withdrawn",
+        f"Contract package v{package.version_number} was withdrawn and voided.",
+        {
+            "reason": withdrawal_reason,
+            "all_recipients_confirmed": payload.confirm_withdrawn_from_all_recipients,
+        },
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="contract.package.withdraw",
+            entity_type="contract_package",
+            entity_id=package.id,
+            previous_value={"status": "sent"},
+            new_value={
+                "status": "void",
+                "all_recipients_confirmed": payload.confirm_withdrawn_from_all_recipients,
+            },
+            reason=withdrawal_reason,
+        )
     )
     db.commit()
     db.refresh(package)
@@ -604,7 +745,14 @@ def upload_document(
     package_id: UUID | None,
     notes: str | None,
 ) -> TransactionDocumentRead | None:
-    transaction = scoped_transaction(db, principal, transaction_id)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
     if transaction is None:
         return None
     require_house_transaction_workflow(db, transaction)
@@ -801,9 +949,20 @@ def delete_document(
 
 
 def mark_contract_executed(
-    db: Session, principal: Principal, transaction_id: UUID, package_id: UUID, document_id: UUID
+    db: Session,
+    principal: Principal,
+    transaction_id: UUID,
+    package_id: UUID,
+    attestation: ManualContractExecutionAttestation,
 ) -> ContractPackageRead | None:
-    transaction = scoped_transaction(db, principal, transaction_id)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
     package = db.scalar(
         select(ContractPackage).where(
             ContractPackage.id == package_id,
@@ -811,24 +970,40 @@ def mark_contract_executed(
             ContractPackage.organization_id == principal.organization_id,
         )
     )
-    document = get_document(db, principal, transaction_id, document_id)
+    document = get_document(db, principal, transaction_id, attestation.document_id)
     if transaction is None or package is None:
         return None
     require_house_transaction_workflow(db, transaction)
     if package.status not in {"approved", "sent"}:
         raise ValueError("Only an approved or sent contract package can be executed.")
-    if (
-        document is None
-        or document.contract_package_id != package.id
-        or document.document_type not in SIGNED_DOCUMENT_TYPES
-    ):
-        raise ValueError("Upload the executed agreement to this package first.")
+    validate_purchase_contract_authority(
+        db,
+        transaction,
+        package,
+        gate="recording execution",
+    )
+    expected_document_type = EXECUTED_DOCUMENT_TYPE_BY_PACKAGE.get(package_document_type(package))
+    if expected_document_type is None:
+        raise ValueError("This contract package type cannot be manually recorded as executed.")
+    if document is None or document.contract_package_id != package.id:
+        raise ValueError("Upload the exact executed agreement to this package first.")
+    if document.document_type != expected_document_type:
+        raise ValueError(
+            f"Execution requires a {expected_document_type.replace('_', ' ')} for this package."
+        )
+    if document.status != "executed":
+        raise ValueError("The execution document must be explicitly marked executed.")
+    if document.malware_scan_status not in ACCEPTABLE_EXECUTION_SCAN_STATUSES:
+        raise ValueError("The execution document does not have an acceptable malware scan state.")
+    reason = attestation.reason.strip()
+    if len(reason) < 10:
+        raise ValueError("Explain how the fully executed agreement was manually verified.")
     now = datetime.now(UTC)
+    previous_package_status = package.status
     package.status = "executed"
     package.executed_at = now
     transaction.status = "executed"
-    template = db.get(ContractTemplate, package.template_id) if package.template_id else None
-    if template is None or template.document_type == "purchase_agreement":
+    if package_document_type(package) == PURCHASE_AGREEMENT:
         transaction.contract_executed_at = now
         lead = db.get(Lead, transaction.lead_id)
         deal = db.get(Deal, transaction.deal_id)
@@ -842,7 +1017,32 @@ def mark_contract_executed(
         transaction,
         "contract.executed",
         f"Contract package v{package.version_number} executed.",
-        {"document_id": str(document.id)},
+        {
+            "document_id": str(document.id),
+            "execution_evidence": "manual_attestation",
+            "attested_by_user_id": str(principal.user_id),
+            "attestation_reason": reason,
+        },
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="contract.execution.manual_attest",
+            entity_type="contract_package",
+            entity_id=package.id,
+            previous_value={"status": previous_package_status},
+            new_value={
+                "status": package.status,
+                "document_id": str(document.id),
+                "document_sha256": document.sha256,
+                "document_status": document.status,
+                "malware_scan_status": document.malware_scan_status,
+                "confirm_fully_executed": attestation.confirm_fully_executed,
+            },
+            reason=reason,
+        )
     )
     db.commit()
     db.refresh(package)
@@ -852,7 +1052,14 @@ def mark_contract_executed(
 def add_party(
     db: Session, principal: Principal, transaction_id: UUID, payload: TransactionPartyCreate
 ) -> TransactionPartyRead | None:
-    transaction = scoped_transaction(db, principal, transaction_id)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .with_for_update(of=Transaction)
+    )
     if transaction is None:
         return None
     require_house_transaction_workflow(db, transaction)
@@ -1166,6 +1373,7 @@ def package_read(item: ContractPackage) -> ContractPackageRead:
         closing_date=item.closing_date,
         inspection_period_days=item.inspection_period_days,
         approval_request_id=item.approval_request_id,
+        authority_snapshot=package_purchase_authority_snapshot(item),
         notes=item.notes,
         approved_at=item.approved_at,
         sent_at=item.sent_at,

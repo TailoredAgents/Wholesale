@@ -11,6 +11,7 @@ from app.models.foundation import (
     AuditEvent,
     CommunicationProviderEvent,
     Conversation,
+    EmailSenderAlias,
     Role,
     RoleAssignment,
     Team,
@@ -20,12 +21,17 @@ from app.schemas.email import (
     EmailAdminOptionsRead,
     EmailAdminTeamRead,
     EmailAdminUserRead,
+    EmailDeadLetterListResponse,
+    EmailDeadLetterRead,
+    EmailDeadLetterRequeueRequest,
     EmailRoutingExceptionListResponse,
     EmailRoutingExceptionRead,
     EmailRoutingResolutionRequest,
 )
+from app.services.resend_email_events import inbound_visibility_scope
 
 ROUTING_EXCEPTION_STATUSES = ("ambiguous", "unmatched")
+RESEND_DEAD_LETTER_STATUS = "dead_letter"
 
 
 def get_email_admin_options(
@@ -125,6 +131,7 @@ def resolve_email_routing_exception(
     )
     if conversation is None:
         raise ValueError("Select a Stonegate conversation from this workspace.")
+    enforce_restricted_routing_destination(db, principal.organization_id, event, conversation)
     previous_status = event.processing_status
     previous_routing = routing_payload(event.payload)
     event.payload = {
@@ -142,6 +149,10 @@ def resolve_email_routing_exception(
     event.conversation_id = conversation.id
     event.processing_status = "received"
     event.processed_at = None
+    event.attempt_count = 0
+    event.next_attempt_at = None
+    event.processing_started_at = None
+    event.processing_token = None
     event.error_message = None
     db.add(
         AuditEvent(
@@ -166,6 +177,78 @@ def resolve_email_routing_exception(
     return routing_exception_to_read(event)
 
 
+def list_email_dead_letters(
+    db: Session,
+    principal: Principal,
+) -> EmailDeadLetterListResponse:
+    require_email_manager(principal)
+    events = db.scalars(
+        select(CommunicationProviderEvent)
+        .where(
+            CommunicationProviderEvent.organization_id == principal.organization_id,
+            CommunicationProviderEvent.provider == "resend",
+            CommunicationProviderEvent.processing_status == RESEND_DEAD_LETTER_STATUS,
+        )
+        .order_by(CommunicationProviderEvent.processed_at.desc())
+        .limit(100)
+    ).all()
+    return EmailDeadLetterListResponse(items=[dead_letter_to_read(event) for event in events])
+
+
+def requeue_email_dead_letter(
+    db: Session,
+    principal: Principal,
+    event_id: UUID,
+    payload: EmailDeadLetterRequeueRequest,
+) -> EmailDeadLetterRead | None:
+    require_email_manager(principal)
+    event = db.scalar(
+        select(CommunicationProviderEvent)
+        .where(
+            CommunicationProviderEvent.organization_id == principal.organization_id,
+            CommunicationProviderEvent.id == event_id,
+            CommunicationProviderEvent.provider == "resend",
+            CommunicationProviderEvent.processing_status == RESEND_DEAD_LETTER_STATUS,
+        )
+        .with_for_update()
+    )
+    if event is None:
+        return None
+    previous_value = {
+        "processing_status": event.processing_status,
+        "attempt_count": event.attempt_count,
+        "error_message": event.error_message,
+        "processed_at": event.processed_at.isoformat() if event.processed_at else None,
+    }
+    now = datetime.now(UTC)
+    event.processing_status = "retry"
+    event.processed_at = None
+    event.attempt_count = 0
+    event.next_attempt_at = now
+    event.processing_started_at = None
+    event.processing_token = None
+    event.error_message = None
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="email.dead_letter_requeued",
+            entity_type="communication_provider_event",
+            entity_id=event.id,
+            previous_value=previous_value,
+            new_value={
+                "processing_status": "retry",
+                "attempt_count": 0,
+                "next_attempt_at": now.isoformat(),
+            },
+            reason=payload.reason.strip(),
+        )
+    )
+    db.commit()
+    return dead_letter_to_read(event)
+
+
 def routing_exception_to_read(
     event: CommunicationProviderEvent,
 ) -> EmailRoutingExceptionRead:
@@ -183,6 +266,48 @@ def routing_exception_to_read(
         reason=string_value(routing.get("reason")) or "The email needs manual routing.",
         candidate_conversation_ids=uuid_list(routing.get("candidate_conversation_ids")),
     )
+
+
+def dead_letter_to_read(event: CommunicationProviderEvent) -> EmailDeadLetterRead:
+    data = event.payload.get("data")
+    normalized_data = data if isinstance(data, dict) else {}
+    return EmailDeadLetterRead(
+        id=event.id,
+        event_type=event.event_type,
+        provider_message_id=string_value(normalized_data.get("email_id")),
+        sender=string_value(normalized_data.get("from")),
+        recipients=string_list(normalized_data.get("to")),
+        subject=string_value(normalized_data.get("subject")) or None,
+        received_at=event.received_at,
+        processed_at=event.processed_at,
+        attempt_count=event.attempt_count,
+        error_message=event.error_message,
+        processing_status=event.processing_status,
+    )
+
+
+def enforce_restricted_routing_destination(
+    db: Session,
+    organization_id: UUID,
+    event: CommunicationProviderEvent,
+    conversation: Conversation,
+) -> None:
+    routing = routing_payload(event.payload)
+    alias_ids = uuid_list(routing.get("email_sender_alias_ids"))
+    if not alias_ids:
+        return
+    aliases = db.scalars(
+        select(EmailSenderAlias).where(
+            EmailSenderAlias.organization_id == organization_id,
+            EmailSenderAlias.id.in_(alias_ids),
+        )
+    ).all()
+    if any(inbound_visibility_scope(alias) == "restricted" for alias in aliases) and (
+        conversation.visibility_scope != "restricted"
+    ):
+        raise ValueError(
+            "Restricted mailbox email can only be assigned to a restricted conversation."
+        )
 
 
 def routing_payload(payload: dict[str, Any]) -> dict[str, Any]:

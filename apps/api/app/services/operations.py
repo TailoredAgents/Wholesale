@@ -17,6 +17,7 @@ class WorkerReadiness:
     required: bool
     heartbeat_at: datetime | None
     consecutive_failures: int
+    current_operation: str | None
 
 
 def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> WorkerHeartbeat:
@@ -34,7 +35,12 @@ def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> W
             last_error_at=None,
             consecutive_failures=0,
             total_failures=0,
-            worker_metadata={"process_started_at": now.isoformat()},
+            worker_metadata={
+                "process_started_at": now.isoformat(),
+                "main_loop_progress_at": now.isoformat(),
+                "current_operation": None,
+                "operation_started_at": None,
+            },
         )
         db.add(heartbeat)
     else:
@@ -43,8 +49,10 @@ def register_worker(db: Session, service_name: str = COMMUNICATIONS_WORKER) -> W
         heartbeat.heartbeat_at = now
         heartbeat.consecutive_failures = 0
         heartbeat.worker_metadata = {
-            **(heartbeat.worker_metadata or {}),
             "process_started_at": now.isoformat(),
+            "main_loop_progress_at": now.isoformat(),
+            "current_operation": None,
+            "operation_started_at": None,
         }
     db.commit()
     db.refresh(heartbeat)
@@ -65,9 +73,78 @@ def record_worker_heartbeat(
         heartbeat = register_worker(db, service_name)
     heartbeat.heartbeat_at = now
     heartbeat.status = "degraded" if had_error else "healthy"
+    heartbeat.worker_metadata = {
+        **(heartbeat.worker_metadata or {}),
+        "main_loop_progress_at": now.isoformat(),
+        "current_operation": None,
+        "operation_started_at": None,
+    }
     if not had_error:
         heartbeat.last_success_at = now
         heartbeat.consecutive_failures = 0
+    db.commit()
+
+
+def touch_worker_heartbeat(
+    db: Session,
+    *,
+    service_name: str = COMMUNICATIONS_WORKER,
+) -> None:
+    """Refresh liveness without hiding a degraded worker state."""
+    now = datetime.now(UTC)
+    heartbeat = db.scalar(
+        select(WorkerHeartbeat).where(WorkerHeartbeat.service_name == service_name)
+    )
+    if heartbeat is None:
+        register_worker(db, service_name)
+        return
+    heartbeat.heartbeat_at = now
+    db.commit()
+
+
+def mark_worker_operation_started(
+    db: Session,
+    operation_name: str,
+    *,
+    service_name: str = COMMUNICATIONS_WORKER,
+) -> None:
+    """Record main-loop progress separately from the liveness heartbeat."""
+    now = datetime.now(UTC)
+    heartbeat = db.scalar(
+        select(WorkerHeartbeat).where(WorkerHeartbeat.service_name == service_name)
+    )
+    if heartbeat is None:
+        heartbeat = register_worker(db, service_name)
+    heartbeat.heartbeat_at = now
+    heartbeat.worker_metadata = {
+        **(heartbeat.worker_metadata or {}),
+        "main_loop_progress_at": now.isoformat(),
+        "current_operation": operation_name,
+        "operation_started_at": now.isoformat(),
+    }
+    db.commit()
+
+
+def mark_worker_operation_finished(
+    db: Session,
+    operation_name: str,
+    *,
+    service_name: str = COMMUNICATIONS_WORKER,
+) -> None:
+    """Clear the in-flight marker without overwriting healthy/degraded state."""
+    now = datetime.now(UTC)
+    heartbeat = db.scalar(
+        select(WorkerHeartbeat).where(WorkerHeartbeat.service_name == service_name)
+    )
+    if heartbeat is None:
+        heartbeat = register_worker(db, service_name)
+    metadata = dict(heartbeat.worker_metadata or {})
+    if metadata.get("current_operation") == operation_name:
+        metadata["current_operation"] = None
+        metadata["operation_started_at"] = None
+    metadata["main_loop_progress_at"] = now.isoformat()
+    heartbeat.worker_metadata = metadata
+    heartbeat.heartbeat_at = now
     db.commit()
 
 
@@ -192,15 +269,37 @@ def get_worker_readiness(db: Session, settings: Settings) -> WorkerReadiness:
             required=settings.worker_readiness_required,
             heartbeat_at=None,
             consecutive_failures=0,
+            current_operation=None,
         )
     heartbeat_at = heartbeat.heartbeat_at
     if heartbeat_at.tzinfo is None:
         heartbeat_at = heartbeat_at.replace(tzinfo=UTC)
-    stale_before = datetime.now(UTC) - timedelta(seconds=settings.worker_stale_after_seconds)
-    status = "stale" if heartbeat_at < stale_before else heartbeat.status
+    now = datetime.now(UTC)
+    stale_before = now - timedelta(seconds=settings.worker_stale_after_seconds)
+    progress_stale_before = now - timedelta(seconds=settings.worker_operation_stall_seconds)
+    metadata = heartbeat.worker_metadata or {}
+    current_operation = str(metadata.get("current_operation") or "").strip() or None
+    progress_at = parse_heartbeat_metadata_datetime(metadata.get("main_loop_progress_at"))
+    if heartbeat_at < stale_before:
+        status = "stale"
+    elif progress_at is not None and progress_at < progress_stale_before:
+        status = "stalled"
+    else:
+        status = heartbeat.status
     return WorkerReadiness(
         status=status,
         required=settings.worker_readiness_required,
         heartbeat_at=heartbeat_at,
         consecutive_failures=heartbeat.consecutive_failures,
+        current_operation=current_operation,
     )
+
+
+def parse_heartbeat_metadata_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed

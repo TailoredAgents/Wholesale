@@ -29,7 +29,7 @@ from app.schemas.voice import (
     VoiceRecordingRead,
     VoiceSessionRead,
 )
-from app.services.call_intelligence import review_call_transcript
+from app.services.call_intelligence import retry_call_transcript, review_call_transcript
 from app.services.voice import (
     VoiceComplianceError,
     VoiceConfigurationError,
@@ -298,6 +298,24 @@ def review_voice_transcript(
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if transcript is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found.")
+    return transcript
+
+
+@router.post("/transcripts/{transcript_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+def retry_voice_transcript(
+    transcript_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_dependency)],
+) -> CallTranscriptRead:
+    try:
+        transcript = retry_call_transcript(db, principal, transcript_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
     if transcript is None:

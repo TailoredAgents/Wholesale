@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -8,7 +9,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    app_env: str = Field(default="local", validation_alias="APP_ENV")
+    app_env: Literal["local", "test", "production"] = Field(
+        default="local",
+        validation_alias="APP_ENV",
+    )
+    dev_auth_enabled: bool = Field(default=False, validation_alias="DEV_AUTH_ENABLED")
     log_level: str = Field(default="info", validation_alias="LOG_LEVEL")
     database_url: str = Field(
         default="postgresql+psycopg:///real_estate_wholesale",
@@ -80,6 +85,12 @@ class Settings(BaseSettings):
         ge=15,
         le=1800,
         validation_alias="WORKER_STALE_AFTER_SECONDS",
+    )
+    worker_operation_stall_seconds: int = Field(
+        default=600,
+        ge=60,
+        le=7200,
+        validation_alias="WORKER_OPERATION_STALL_SECONDS",
     )
     worker_retry_base_seconds: int = Field(
         default=15,
@@ -230,6 +241,30 @@ class Settings(BaseSettings):
     resend_webhook_base_url: str = Field(
         default="http://localhost:8000",
         validation_alias="RESEND_WEBHOOK_BASE_URL",
+    )
+    resend_event_max_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        validation_alias="RESEND_EVENT_MAX_ATTEMPTS",
+    )
+    resend_event_retry_base_seconds: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        validation_alias="RESEND_EVENT_RETRY_BASE_SECONDS",
+    )
+    resend_event_retry_max_seconds: int = Field(
+        default=900,
+        ge=1,
+        le=21600,
+        validation_alias="RESEND_EVENT_RETRY_MAX_SECONDS",
+    )
+    resend_event_processing_lease_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+        validation_alias="RESEND_EVENT_PROCESSING_LEASE_SECONDS",
     )
     document_storage_provider: Literal["database", "s3"] = Field(
         default="database",
@@ -472,11 +507,33 @@ class Settings(BaseSettings):
         default=None,
         validation_alias="ZAPIER_FACEBOOK_PAGE_ID",
     )
+    zapier_facebook_allowed_form_ids_raw: str = Field(
+        default="",
+        validation_alias="ZAPIER_FACEBOOK_ALLOWED_FORM_IDS",
+    )
     zapier_facebook_leads_max_payload_bytes: int = Field(
         default=65_536,
         ge=4096,
         le=1_000_000,
         validation_alias="ZAPIER_FACEBOOK_LEADS_MAX_PAYLOAD_BYTES",
+    )
+    zapier_facebook_leads_burst_limit: int = Field(
+        default=60,
+        ge=1,
+        le=1000,
+        validation_alias="ZAPIER_FACEBOOK_LEADS_BURST_LIMIT",
+    )
+    zapier_facebook_leads_burst_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        validation_alias="ZAPIER_FACEBOOK_LEADS_BURST_WINDOW_SECONDS",
+    )
+    zapier_facebook_leads_daily_accept_limit: int = Field(
+        default=250,
+        ge=1,
+        le=100_000,
+        validation_alias="ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT",
     )
     public_intake_rate_limit_enabled: bool = Field(
         default=False,
@@ -493,6 +550,18 @@ class Settings(BaseSettings):
         ge=60,
         le=86400,
         validation_alias="PUBLIC_INTAKE_RATE_LIMIT_WINDOW_SECONDS",
+    )
+    public_conversion_event_rate_limit_requests: int = Field(
+        default=120,
+        ge=1,
+        le=10_000,
+        validation_alias="PUBLIC_CONVERSION_EVENT_RATE_LIMIT_REQUESTS",
+    )
+    public_conversion_event_rate_limit_window_seconds: int = Field(
+        default=60,
+        ge=1,
+        le=86400,
+        validation_alias="PUBLIC_CONVERSION_EVENT_RATE_LIMIT_WINDOW_SECONDS",
     )
     facebook_lead_intake_max_attempts: int = Field(
         default=8,
@@ -710,6 +779,11 @@ class Settings(BaseSettings):
     )
     clerk_secret_key: str | None = Field(default=None, validation_alias="CLERK_SECRET_KEY")
 
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def normalize_app_environment(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
     @field_validator("database_url")
     @classmethod
     def normalize_postgres_driver(cls, value: str) -> str:
@@ -721,16 +795,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def reject_production_simulation(self) -> "Settings":
-        if self.app_env.lower() == "production" and self.communication_provider_mode == "simulate":
+        if self.app_env == "production" and self.communication_provider_mode == "simulate":
             raise ValueError("COMMUNICATION_PROVIDER_MODE=simulate is forbidden in production.")
-        if self.app_env.lower() == "production" and self.esign_provider == "simulate":
+        if self.app_env == "production" and self.esign_provider == "simulate":
             raise ValueError("ESIGN_PROVIDER=simulate is forbidden in production.")
-        if self.app_env.lower() == "production" and self.marketing_conversion_mode == "simulate":
+        if self.app_env == "production" and self.marketing_conversion_mode == "simulate":
             raise ValueError("MARKETING_CONVERSION_MODE=simulate is forbidden in production.")
-        if self.app_env.lower() == "production" and self.staff_lead_alert_sms_mode == "simulate":
+        if self.app_env == "production" and self.staff_lead_alert_sms_mode == "simulate":
             raise ValueError("STAFF_LEAD_ALERT_SMS_MODE=simulate is forbidden in production.")
         if (
-            self.app_env.lower() == "production"
+            self.app_env == "production"
             and self.email_enabled
             and self.email_provider == "simulate"
         ):
@@ -752,6 +826,36 @@ class Settings(BaseSettings):
             for origin in self.clerk_authorized_parties_raw.split(",")
             if origin.strip()
         ]
+
+    @property
+    def clerk_jwks_endpoint(self) -> str | None:
+        explicit_url = (self.clerk_jwks_url or "").strip()
+        if explicit_url:
+            return explicit_url
+        issuer = (self.clerk_issuer or "").strip()
+        return f"{issuer.rstrip('/')}/.well-known/jwks.json" if issuer else None
+
+    @property
+    def production_auth_configuration_blockers(self) -> tuple[str, ...]:
+        if self.app_env != "production":
+            return ()
+        blockers: list[str] = []
+        if not (self.clerk_issuer or "").strip():
+            blockers.append("CLERK_ISSUER")
+        if not self.clerk_jwks_endpoint:
+            blockers.append("CLERK_JWKS_URL or derivable issuer JWKS")
+        if not (self.clerk_secret_key or "").strip():
+            blockers.append("CLERK_SECRET_KEY")
+        if not any(is_non_local_https_origin(origin) for origin in self.clerk_authorized_parties):
+            blockers.append("CLERK_AUTHORIZED_PARTIES with a non-local HTTPS origin")
+        return tuple(blockers)
+
+    def require_production_auth_configuration(self) -> None:
+        blockers = self.production_auth_configuration_blockers
+        if blockers:
+            raise ValueError(
+                "Production Clerk authentication is missing: " + ", ".join(blockers) + "."
+            )
 
     @property
     def email_configuration_blockers(self) -> tuple[str, ...]:
@@ -949,11 +1053,38 @@ class Settings(BaseSettings):
             blockers.append("ZAPIER_FACEBOOK_LEADS_ENABLED=true")
         if not self.zapier_facebook_page_id:
             blockers.append("ZAPIER_FACEBOOK_PAGE_ID")
+        if (
+            self.app_env == "production"
+            and self.zapier_facebook_leads_enabled
+            and not self.zapier_facebook_allowed_form_ids
+        ):
+            blockers.append("ZAPIER_FACEBOOK_ALLOWED_FORM_IDS")
         return tuple(blockers)
 
     @property
     def zapier_facebook_leads_configured(self) -> bool:
         return not self.zapier_facebook_leads_configuration_blockers
+
+    @property
+    def zapier_facebook_allowed_form_ids(self) -> frozenset[str]:
+        return frozenset(
+            form_id.strip()
+            for form_id in self.zapier_facebook_allowed_form_ids_raw.split(",")
+            if form_id.strip()
+        )
+
+    @property
+    def production_zapier_facebook_leads_configuration_blockers(self) -> tuple[str, ...]:
+        if self.app_env != "production" or not self.zapier_facebook_leads_enabled:
+            return ()
+        return self.zapier_facebook_leads_configuration_blockers
+
+    def require_production_zapier_facebook_leads_configuration(self) -> None:
+        blockers = self.production_zapier_facebook_leads_configuration_blockers
+        if blockers:
+            raise ValueError(
+                "Production Zapier Facebook lead intake is missing: " + ", ".join(blockers) + "."
+            )
 
     @property
     def facebook_address_enrichment_configuration_blockers(self) -> tuple[str, ...]:
@@ -978,6 +1109,17 @@ class Settings(BaseSettings):
         if self.staff_lead_alert_sms_mode == "simulate":
             return ()
         return self.twilio_sms_configuration_blockers
+
+
+def is_non_local_https_origin(value: str) -> bool:
+    parsed = urlparse(value)
+    hostname = (parsed.hostname or "").lower()
+    return bool(
+        parsed.scheme == "https"
+        and hostname
+        and hostname not in {"localhost", "127.0.0.1", "::1"}
+        and not hostname.endswith(".localhost")
+    )
 
 
 @lru_cache

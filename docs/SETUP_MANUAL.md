@@ -531,12 +531,13 @@ Voice, microphone access, API keys, and a TwiML App are not required.
 8. Redeploy the API, then open **Settings > Communications**. The Voice panel must show **Ready for
    forwarded-call testing** before acceptance begins.
 
-Call recording and AI notes are a launch requirement. For Stonegate's approved Georgia-only
+Call recording and AI notes are a launch requirement. For Stonegate's Owner-selected Georgia-only
 one-party operating mode, set `TWILIO_VOICE_RECORDING_ENABLED=true` and leave
 `TWILIO_VOICE_RECORDING_DISCLOSURE` unset; Stonegate records the authorization state without
-playing an announcement. The disclosure variable remains available when Stonegate chooses or is
-required to announce recording. Configure the same recording, transcription, OpenAI, and retention
-values on the API and worker, and review the operating policy before calling into other states.
+playing an announcement. Document production acceptance of the operating/legal policy before live
+recording. The disclosure variable remains available when Stonegate chooses or is required to
+announce recording. Configure the same recording, transcription, OpenAI, and retention values on
+the API and worker, and review the operating policy before calling into other states.
 
 ### Acceptance
 
@@ -730,8 +731,10 @@ makes failures difficult to identify.
 
 - [ ] Twilio SMS after A2P approval.
 - [ ] Twilio Voice after browser and inbound routing tests.
-- [ ] RealEstateAPI key and controlled property-research acceptance.
-- [ ] Google/Meta conversion delivery after ad-account setup.
+- [x] RealEstateAPI key and controlled property-research acceptance; continue monitoring credits,
+      subject matches, and evidence quality.
+- [ ] Google conversion delivery after ad-account setup; continue monitoring the accepted Meta
+      browser/server path.
 - [ ] S3-compatible private storage as document volume grows.
 - [ ] Sentry and separate worker alerts when the owner wants external monitoring.
 

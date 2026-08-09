@@ -28,6 +28,7 @@ from app.services.meta_lead_ads import (
     process_next_meta_lead_event,
     process_next_staff_lead_alert,
 )
+from app.services.request_rate_limit import FixedWindowRateLimiter
 
 PAGE_ID = "123456789"
 PROVIDER_LEAD_ID = "987654321012345"
@@ -119,6 +120,46 @@ class FakePropertyRecordClient:
         return self.record
 
 
+def test_zapier_form_allowlist_is_required_only_for_enabled_production_intake() -> None:
+    common = {
+        "ZAPIER_FACEBOOK_LEADS_ENABLED": True,
+        "ZAPIER_FACEBOOK_PAGE_ID": PAGE_ID,
+        "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": "",
+    }
+
+    local = Settings.model_validate({"APP_ENV": "local", **common})
+    production = Settings.model_validate({"APP_ENV": "production", **common})
+    production_disabled = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            **common,
+            "ZAPIER_FACEBOOK_LEADS_ENABLED": False,
+        }
+    )
+    production_allowed = Settings.model_validate(
+        {
+            "APP_ENV": "production",
+            **common,
+            "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS": " form-123, form-456 ",
+        }
+    )
+
+    assert local.zapier_facebook_leads_configured is True
+    assert "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS" not in (
+        local.zapier_facebook_leads_configuration_blockers
+    )
+    assert production.zapier_facebook_leads_configured is False
+    assert production.production_zapier_facebook_leads_configuration_blockers == (
+        "ZAPIER_FACEBOOK_ALLOWED_FORM_IDS",
+    )
+    assert production_disabled.production_zapier_facebook_leads_configuration_blockers == ()
+    assert production_allowed.zapier_facebook_leads_configured is True
+    assert production_allowed.zapier_facebook_allowed_form_ids == {
+        "form-123",
+        "form-456",
+    }
+
+
 def provider_property_record(
     *,
     street_address: str = "101 Zapier Lane",
@@ -183,6 +224,77 @@ def test_zapier_webhook_rejects_wrong_page_invalid_and_oversized_payloads(
     assert invalid_response.status_code == 422
     assert oversized_response.status_code == 413
     assert int(db_session.scalar(select(func.count()).select_from(MetaLeadEvent)) or 0) == 0
+
+
+def test_zapier_webhook_enforces_optional_form_allowlist(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_ENABLED", "true")
+    monkeypatch.setenv("ZAPIER_FACEBOOK_PAGE_ID", PAGE_ID)
+    monkeypatch.setenv("ZAPIER_FACEBOOK_ALLOWED_FORM_IDS", "allowed-form")
+    get_settings.cache_clear()
+    client = TestClient(app)
+
+    rejected = post_lead(client, webhook_payload())
+    allowed_payload = webhook_payload("987654321012346")
+    allowed_payload["form_id"] = "allowed-form"
+    accepted = post_lead(client, allowed_payload)
+
+    assert rejected.status_code == 400
+    assert accepted.status_code == 200
+    assert accepted.json()["accepted"] == 1
+    assert int(db_session.scalar(select(func.count()).select_from(MetaLeadEvent)) or 0) == 1
+    get_settings.cache_clear()
+
+
+def test_zapier_webhook_has_burst_and_daily_cost_circuits(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_ENABLED", "true")
+    monkeypatch.setenv("ZAPIER_FACEBOOK_PAGE_ID", PAGE_ID)
+    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_BURST_LIMIT", "1")
+    monkeypatch.setenv("ZAPIER_FACEBOOK_LEADS_DAILY_ACCEPT_LIMIT", "1")
+    get_settings.cache_clear()
+    monkeypatch.setattr(
+        "app.routers.zapier_webhooks.zapier_lead_rate_limiter",
+        FixedWindowRateLimiter(),
+    )
+    client = TestClient(app)
+
+    wrong_page = webhook_payload("987654321012340")
+    wrong_page["page_id"] = "999999999"
+    rejected_without_consuming_burst = post_lead(client, wrong_page)
+    first = post_lead(client, webhook_payload())
+    burst_limited = post_lead(client, webhook_payload("987654321012346"))
+
+    assert rejected_without_consuming_burst.status_code == 400
+    assert first.status_code == 200
+    assert burst_limited.status_code == 429
+    assert burst_limited.headers["retry-after"]
+
+    monkeypatch.setattr(
+        "app.routers.zapier_webhooks.zapier_lead_rate_limiter",
+        FixedWindowRateLimiter(),
+    )
+    daily_limited = post_lead(client, webhook_payload("987654321012347"))
+    monkeypatch.setattr(
+        "app.routers.zapier_webhooks.zapier_lead_rate_limiter",
+        FixedWindowRateLimiter(),
+    )
+    duplicate = post_lead(client, webhook_payload())
+
+    assert daily_limited.status_code == 429
+    assert daily_limited.headers["retry-after"] == "3600"
+    assert duplicate.status_code == 200
+    assert duplicate.json()["accepted"] == 0
+    assert int(db_session.scalar(select(func.count()).select_from(MetaLeadEvent)) or 0) == 1
+    get_settings.cache_clear()
 
 
 def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(

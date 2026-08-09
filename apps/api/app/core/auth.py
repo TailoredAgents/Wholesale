@@ -45,7 +45,7 @@ def get_current_principal(
         user = resolve_clerk_user(db, claims)
         return principal_for_user(db, user)
 
-    if settings.app_env == "production":
+    if settings.app_env == "production" or not settings.dev_auth_enabled:
         logger.warning("clerk_bearer_token_missing")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -91,11 +91,7 @@ def principal_for_user(db: Session, user: User) -> Principal:
 def verify_clerk_authorization_header(authorization: str) -> ClerkClaims:
     token = extract_bearer_token(authorization)
     settings = get_settings()
-    jwks_url = settings.clerk_jwks_url or (
-        f"{settings.clerk_issuer.rstrip('/')}/.well-known/jwks.json"
-        if settings.clerk_issuer
-        else None
-    )
+    jwks_url = settings.clerk_jwks_endpoint
     if not settings.clerk_issuer or not jwks_url:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

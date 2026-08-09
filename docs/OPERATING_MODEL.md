@@ -271,7 +271,7 @@ ownership.
 | Prospecting Intelligence | Prioritize records, prepare context, assist scripts, detect data and call-quality problems | Recommend |
 | Inbound Lead | Respond to opted-in inquiries, collect basic facts, schedule Lead Manager contact | Draft; controlled sending pilot later |
 | Lead Manager Copilot | Assist the human Lead Manager with qualification gaps, follow-up drafts, nurture monitoring, appointments, and neglected-lead protection | Draft and recommend |
-| Call Intelligence | Transcribe, separate speakers, extract facts, cite timestamps, score calls | Recommend CRM updates |
+| Call Intelligence | Transcribe, separate speakers, extract facts, cite timestamps, score calls | Auto-fill only eligible empty CRM fields with evidence; narrative notes and follow-up remain review-gated |
 | Appointment Preparation | Produce the Closer's meeting brief and unresolved-question list | Internal execution |
 | Underwriting And Comp | Gather evidence, score comps, explain ranges, calculate scenarios, produce reports | Recommend; no offer approval |
 | Negotiation Coach | Prepare objections, questions, concessions, and approved-price warnings | Internal recommendation |
