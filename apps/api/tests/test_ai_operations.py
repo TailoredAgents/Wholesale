@@ -1,4 +1,7 @@
+from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
+from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
@@ -8,9 +11,11 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
     AiOrchestratorEvent,
     AiRunLog,
     CommunicationRecord,
+    Lead,
 )
 from app.services.ai_operations import process_next_ai_operation
 from tests.test_leads import OWNER_EMAIL, lead_payload, seed_owner
@@ -140,3 +145,52 @@ def test_new_lead_is_prepared_and_reviewed_from_shared_work_queue(
     assert completed_item["outcome"] == "accepted"
 
     get_settings.cache_clear()
+
+
+def test_worker_finalization_does_not_resurrect_ai_event_closed_during_runtime(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    install_runtime(client)
+    created_response = client.post("/api/v1/leads", headers=HEADERS, json=lead_payload())
+    assert created_response.status_code == 201, created_response.text
+    lead_id = UUID(created_response.json()["id"])
+    event = db_session.scalar(select(AiOrchestratorEvent))
+    assert event is not None and event.status == "queued"
+    event_id = event.id
+
+    def close_during_runtime(
+        runtime_db: Session,
+        _principal: object,
+        _payload: object,
+    ) -> SimpleNamespace:
+        lead = runtime_db.get(Lead, lead_id)
+        runtime_event = runtime_db.get(AiOrchestratorEvent, event_id)
+        assert lead is not None and runtime_event is not None
+        closed_at = datetime.now(UTC)
+        lead.stage_key = "dead"
+        lead.archived_at = closed_at
+        lead.close_out_disposition = "dead"
+        lead.close_out_reason = "Seller closed discussions while AI work was running."
+        lead.closed_out_at = closed_at
+        runtime_event.status = "dismissed"
+        runtime_event.processed_at = closed_at
+        runtime_db.commit()
+        return SimpleNamespace(status="needs_review", id=uuid4(), error_message=None)
+
+    monkeypatch.setattr("app.services.ai_runtime.execute_runtime", close_during_runtime)
+    assert process_next_ai_operation(db_session, get_settings()) == event_id
+    db_session.expire_all()
+    persisted_event = db_session.get(AiOrchestratorEvent, event_id)
+    assert persisted_event is not None
+    assert persisted_event.status == "dismissed"
+    assert persisted_event.last_error == "Lead closed while AI next-action work was running."
+    assert db_session.scalar(
+        select(func.count(ActivityEvent.id)).where(
+            ActivityEvent.entity_id == lead_id,
+            ActivityEvent.event_type == "ai_operations.needs_review",
+        )
+    ) == 0

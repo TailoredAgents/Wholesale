@@ -1,4 +1,4 @@
-import { Archive } from "lucide-react";
+import { Archive, CircleOff } from "lucide-react";
 import Link from "next/link";
 
 import {
@@ -9,7 +9,7 @@ import {
   getWorkspaceProfile,
 } from "../../lib/api";
 import { PageHeader, SectionPanel, WorkspacePage } from "../_components/page-contracts";
-import { normalizeLeadViewKey } from "../os-utils";
+import { normalizeLeadSortKey, normalizeLeadViewKey } from "../os-utils";
 import { LeadManagerWorkspace } from "../lead-manager/lead-manager-workspace";
 import { LeadsWorkspace } from "./leads-workspace";
 import { NewLeadControl } from "./new-lead-control";
@@ -31,6 +31,7 @@ export default async function LeadsPage({
 }) {
   const params = (await searchParams) ?? {};
   const requestedView = first(params.view);
+  const requestedSavedView = normalizeLeadViewKey(requestedView);
   const requestedDisplay = first(params.display) === "board" ? "board" : "table";
   const requestedAsset = ["house", "land"].includes(first(params.asset))
     ? first(params.asset)
@@ -88,6 +89,10 @@ export default async function LeadsPage({
                 users={operations?.users ?? []}
               />
             ) : null}
+            <Link href="/os/leads/closed">
+              <CircleOff aria-hidden="true" size={15} />
+              Closed
+            </Link>
             <Link href="/os/leads/archived">
               <Archive aria-hidden="true" size={15} />
               Archived
@@ -132,8 +137,9 @@ export default async function LeadsPage({
           initialLeadId={first(params.lead)}
           initialOwner={first(params.owner) || "all"}
           initialQuery={first(params.q)}
+          initialSort={normalizeLeadSortKey(first(params.sort), requestedSavedView)}
           initialStage={first(params.stage) || "all"}
-          initialView={normalizeLeadViewKey(requestedView)}
+          initialView={requestedSavedView}
           leads={dashboard.leads}
           newPaidLeadCount={dashboard.summary.new_paid_leads}
           tasks={dashboard.openTaskQueue}

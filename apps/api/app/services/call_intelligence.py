@@ -45,6 +45,11 @@ from app.services.ai_operations import (
     mark_call_intelligence_ai_work,
     mark_call_intelligence_reviewed,
 )
+from app.services.lead_lifecycle import (
+    INACTIVE_LEAD_STAGES,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
 
 CALL_INTELLIGENCE_AGENT_KEY = "call_intelligence"
 CALL_INTELLIGENCE_PROMPT = """You prepare factual real-estate acquisition call notes.
@@ -446,7 +451,20 @@ def process_call_transcript(
             audio_output_tokens,
             note_usage["output_tokens"],
         )
-        property_record = db.get(Property, lead.property_id) if lead is not None else None
+        if lead is not None:
+            lead = lock_organization_lead(
+                db,
+                organization_id=transcript.organization_id,
+                lead_id=lead.id,
+            )
+        lead_is_active = bool(
+            lead is not None
+            and lead.archived_at is None
+            and lead.stage_key not in INACTIVE_LEAD_STAGES
+        )
+        property_record = (
+            db.get(Property, lead.property_id) if lead is not None and lead_is_active else None
+        )
         auto_populated_values = (
             auto_populate_call_note_fields(
                 lead,
@@ -454,12 +472,12 @@ def process_call_transcript(
                 db=db,
                 property_record=property_record,
             )
-            if lead is not None
+            if lead is not None and lead_is_active
             else {}
         )
         processing_completed_at = datetime.now(UTC)
         transcript.confidence_score = confidence
-        transcript.status = "needs_review" if lead is not None else "completed"
+        transcript.status = "needs_review" if lead_is_active else "completed"
         transcript.error_message = None
         transcript.transcript_metadata = {
             **metadata,
@@ -467,7 +485,7 @@ def process_call_transcript(
             "structured_notes": notes.model_dump(mode="json"),
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
-            "human_review_required": lead is not None,
+            "human_review_required": lead_is_active,
             "conversation_context": "seller" if lead is not None else "buyer",
             "asset_class": asset_class,
             "evidence_coverage_percent": evidence_coverage_percent(notes),
@@ -475,9 +493,10 @@ def process_call_transcript(
                 processing_completed_at.isoformat() if auto_populated_values else None
             ),
             "crm_auto_populated_values": auto_populated_values,
+            "closed_lead_historical_evidence": bool(lead is not None and not lead_is_active),
         }
         approval: ApprovalRequest | None = None
-        if lead is not None:
+        if lead is not None and lead_is_active:
             if auto_populated_values:
                 auto_populated_fields = ", ".join(auto_populated_values)
                 db.add(
@@ -540,7 +559,7 @@ def process_call_transcript(
             mark_call_intelligence_ai_work(
                 db,
                 event_id=operation_event_id,
-                status="needs_review" if lead is not None else "completed",
+                status="needs_review" if lead_is_active else "completed",
                 run_id=run.id,
                 summary=notes.summary,
                 approval_request_id=approval.id if approval is not None else None,
@@ -695,9 +714,33 @@ def review_call_transcript(
     call = db.get(CallRecord, recording.call_record_id) if recording else None
     if call is None:
         raise ValueError("Call record is unavailable.")
-    lead = db.get(Lead, call.lead_id)
+    lead = (
+        lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=call.lead_id,
+        )
+        if call.lead_id is not None
+        else None
+    )
     if lead is None:
         raise ValueError("Lead is unavailable.")
+    require_lead_open_for_work(lead)
+    transcript = db.scalar(
+        select(CallTranscript)
+        .where(
+            CallTranscript.id == transcript_id,
+            CallTranscript.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if transcript is None:
+        return None
+    if transcript.status not in {"needs_review", "approved", "rejected"}:
+        raise ValueError("Call notes are not ready for review.")
+    if transcript.status in {"approved", "rejected"}:
+        return transcript_to_read(db, transcript)
     approval = get_call_notes_approval(db, transcript)
     previous = {
         "status": transcript.status,

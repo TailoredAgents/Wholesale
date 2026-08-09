@@ -214,11 +214,19 @@ class QualificationCompleteRequest(BaseModel):
     answers: dict[str, str | bool] = Field(default_factory=dict)
     next_action_type: Literal["call", "sms", "email", "appointment", "nurture", "disqualify"]
     next_action_due_at: datetime | None = None
+    disqualification_reason: str | None = Field(default=None, max_length=500)
 
     @model_validator(mode="after")
     def require_due_time(self) -> "QualificationCompleteRequest":
         if self.next_action_type not in {"disqualify"} and self.next_action_due_at is None:
             raise ValueError("A dated next action is required for every active lead.")
+        if self.next_action_type == "disqualify":
+            reason = (self.disqualification_reason or "").strip()
+            if len(reason) < 10:
+                raise ValueError(
+                    "Explain why the lead is being disqualified in at least 10 characters."
+                )
+            self.disqualification_reason = reason
         return self
 
 

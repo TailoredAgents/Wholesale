@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select, update
@@ -35,6 +35,7 @@ from app.models.foundation import (
     EmailSenderAlias,
     EmailSenderGrant,
     Lead,
+    LeadManagementCase,
     Notification,
     Property,
     Role,
@@ -73,6 +74,7 @@ from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
 )
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.mailbox_notifications import (
     MAILBOX_NOTIFICATION_TYPES,
     latest_inbound_channel,
@@ -870,20 +872,206 @@ def update_conversation_activity(
     *,
     direction: str,
     occurred_at: datetime,
+    db: Session | None = None,
+    reactivate_closed_lead: bool = True,
 ) -> None:
-    conversation.last_activity_at = occurred_at
+    if direction == "inbound" and reactivate_closed_lead and db is not None:
+        reactivate_closed_lead_for_inbound(db, conversation, occurred_at=occurred_at)
+        lead = (
+            db.get(Lead, conversation.lead_id)
+            if conversation.conversation_type == "lead" and conversation.lead_id is not None
+            else None
+        )
+        if (
+            lead is not None
+            and lead.archived_at is not None
+            and lead.stage_key in {"dead", "disqualified"}
+            and lead.closed_out_at is not None
+            and _as_utc_datetime(occurred_at) <= _as_utc_datetime(lead.closed_out_at)
+        ):
+            return
+    conversation.last_activity_at = _latest_datetime(
+        conversation.last_activity_at,
+        occurred_at,
+    )
     if direction == "inbound":
-        conversation.last_inbound_at = occurred_at
-        conversation.unread_count += 1
+        conversation.last_inbound_at = _latest_datetime(
+            conversation.last_inbound_at,
+            occurred_at,
+        )
+        if reactivate_closed_lead or conversation.status != "closed":
+            conversation.unread_count += 1
     elif direction == "outbound":
-        conversation.last_outbound_at = occurred_at
+        conversation.last_outbound_at = _latest_datetime(
+            conversation.last_outbound_at,
+            occurred_at,
+        )
+
+
+def reactivate_closed_lead_for_inbound(
+    db: Session,
+    conversation: Conversation,
+    *,
+    occurred_at: datetime,
+) -> Lead | None:
+    if conversation.conversation_type != "lead" or conversation.lead_id is None:
+        return None
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == conversation.organization_id,
+            Lead.id == conversation.lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if lead is None:
+        return None
+    is_business_closed = (
+        lead.archived_at is not None
+        and lead.stage_key in {"dead", "disqualified"}
+        and lead.close_out_disposition in {"dead", "disqualified"}
+        and lead.closed_out_at is not None
+    )
+    if not is_business_closed:
+        if conversation.status == "closed":
+            previous_queue_key = conversation.queue_key
+            conversation.status = "open"
+            conversation.queue_key = "acquisitions_follow_up"
+            conversation.closed_at = None
+            db.add(
+                ConversationAssignmentEvent(
+                    organization_id=conversation.organization_id,
+                    conversation_id=conversation.id,
+                    lead_id=lead.id,
+                    actor_user_id=None,
+                    previous_assigned_user_id=conversation.assigned_user_id,
+                    assigned_user_id=conversation.assigned_user_id,
+                    previous_queue_key=previous_queue_key,
+                    queue_key=conversation.queue_key,
+                    reason="Inbound seller contact reopened the conversation.",
+                    created_at=datetime.now(UTC),
+                )
+            )
+        return None
+    if lead.closed_out_at is not None and _as_utc_datetime(occurred_at) <= _as_utc_datetime(
+        lead.closed_out_at
+    ):
+        return None
+
+    now = datetime.now(UTC)
+    due_at = max(_as_utc_datetime(occurred_at), now) + timedelta(minutes=5)
+    previous = {
+        "stage_key": lead.stage_key,
+        "archived_at": lead.archived_at.isoformat() if lead.archived_at else None,
+        "next_follow_up_at": (
+            lead.next_follow_up_at.isoformat() if lead.next_follow_up_at else None
+        ),
+    }
+    stale_primary_tasks = list(
+        db.scalars(
+            select(Task).where(
+                Task.organization_id == lead.organization_id,
+                Task.lead_id == lead.id,
+                Task.work_kind == "primary_next_action",
+                Task.status.in_(("open", "in_progress")),
+            )
+        ).all()
+    )
+    for task in stale_primary_tasks:
+        task.status = "cancelled"
+        task.completed_at = now
+        task.outcome = "superseded_by_inbound_reactivation"
+    if stale_primary_tasks:
+        db.flush()
+
+    lead.archived_at = None
+    lead.stage_key = "reopened"
+    lead.next_follow_up_at = due_at
+    management_case = db.scalar(
+        select(LeadManagementCase).where(
+            LeadManagementCase.organization_id == lead.organization_id,
+            LeadManagementCase.lead_id == lead.id,
+        )
+    )
+    if management_case is not None:
+        management_case.status = "active"
+        management_case.closed_at = None
+        management_case.accepted_at = management_case.accepted_at or now
+        management_case.accepted_by_user_id = (
+            management_case.accepted_by_user_id or management_case.assigned_user_id
+        )
+        management_case.qualification_started_at = (
+            management_case.qualification_started_at or now
+        )
+        management_case.next_action_type = "respond_to_inbound"
+        management_case.next_action_due_at = due_at
+
+    sync_conversation_to_lead_stage(
+        db,
+        lead,
+        actor_user_id=None,
+        reason="Inbound seller contact automatically reopened the lead.",
+    )
+    task = Task(
+        organization_id=lead.organization_id,
+        lead_id=lead.id,
+        deal_id=None,
+        responsible_user_id=(
+            lead.assigned_user_id
+            or (management_case.assigned_user_id if management_case is not None else None)
+            or conversation.assigned_user_id
+        ),
+        task_type="inbound_reactivation",
+        work_kind="primary_next_action",
+        title="Respond to seller who contacted Stonegate",
+        status="open",
+        priority="urgent",
+        due_at=due_at,
+        completed_at=None,
+    )
+    db.add(task)
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.auto_reopened_from_inbound",
+            summary="Inbound seller contact automatically reopened the lead for urgent follow-up.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            actor_type="system",
+            action="lead.auto_reopen_inbound",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=previous,
+            new_value={
+                "stage_key": "reopened",
+                "archived_at": None,
+                "next_follow_up_at": due_at.isoformat(),
+                "primary_next_action_task_id": str(task.id),
+            },
+            reason="Seller initiated a new inbound communication.",
+        )
+    )
+    return lead
+
+
+def _as_utc_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def sync_conversation_to_lead_stage(
     db: Session,
     lead: Lead,
     *,
-    actor_user_id: UUID,
+    actor_user_id: UUID | None,
     reason: str | None,
 ) -> None:
     queue_by_stage = {
@@ -900,13 +1088,19 @@ def sync_conversation_to_lead_stage(
     conversation = ensure_primary_conversation(db, lead)
     if lead.stage_key in {"qualified", "appointment_scheduled"}:
         add_automatic_owner_watchers(db, conversation)
-    if conversation.queue_key == queue_key:
+    desired_status = "closed" if queue_key == "closed" else "open"
+    state_already_synced = (
+        conversation.queue_key == queue_key
+        and conversation.status == desired_status
+        and ((conversation.closed_at is not None) == (desired_status == "closed"))
+    )
+    if state_already_synced:
         return
 
     previous_queue_key = conversation.queue_key
     conversation.queue_key = queue_key
     conversation.last_activity_at = datetime.now(UTC)
-    if queue_key == "closed":
+    if desired_status == "closed":
         conversation.status = "closed"
         conversation.closed_at = datetime.now(UTC)
     else:
@@ -1462,11 +1656,31 @@ def handoff_conversation(
     conversation_id: UUID,
     payload: ConversationHandoffRequest,
 ) -> ConversationRead | None:
-    conversation = db.scalar(
-        select(Conversation).where(
+    conversation_identity = db.execute(
+        select(Conversation.conversation_type, Conversation.lead_id).where(
             Conversation.organization_id == principal.organization_id,
             Conversation.id == conversation_id,
         )
+    ).one_or_none()
+    if conversation_identity is None:
+        return None
+    if conversation_identity.lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=conversation_identity.lead_id,
+        )
+        if lead is None:
+            return None
+        require_lead_open_for_work(lead)
+    conversation = db.scalar(
+        select(Conversation)
+        .where(
+            Conversation.organization_id == principal.organization_id,
+            Conversation.id == conversation_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
     )
     if conversation is None:
         return None
@@ -1589,12 +1803,7 @@ def handoff_conversation(
     ):
         raise ValueError("Handoff target must be an active acquisition user.")
 
-    lead = db.scalar(
-        select(Lead).where(
-            Lead.organization_id == principal.organization_id,
-            Lead.id == conversation.lead_id,
-        )
-    )
+    lead = db.get(Lead, conversation.lead_id)
     if lead is None:
         return None
     contact = db.get(Contact, lead.contact_id)

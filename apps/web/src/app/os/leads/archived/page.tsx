@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getArchivedLeads } from "../../../lib/api";
+import { getArchivedLeads, getWorkspaceProfile } from "../../../lib/api";
 import { formatDateTime } from "../../os-utils";
 import styles from "../../page.module.css";
 import { LeadLifecycleActions } from "../lead-lifecycle-actions";
@@ -8,7 +8,20 @@ import { LeadLifecycleActions } from "../lead-lifecycle-actions";
 export const dynamic = "force-dynamic";
 
 export default async function ArchivedLeadsPage() {
-  const { leads, apiConnected } = await getArchivedLeads();
+  const [{ leads, apiConnected }, profile] = await Promise.all([
+    getArchivedLeads(),
+    getWorkspaceProfile(),
+  ]);
+  const canArchiveRecords = Boolean(
+    profile?.permissions.includes("records:delete_or_archive"),
+  );
+  const archivedLeads = leads.filter(
+    (lead) => !(
+      ["dead", "disqualified"].includes(lead.stage_key)
+      && lead.close_out_disposition
+      && lead.closed_out_at
+    ),
+  );
 
   return (
     <>
@@ -25,10 +38,14 @@ export default async function ArchivedLeadsPage() {
       <section className={styles.panel}>
         <div className={`${styles.panelHeader} ${styles.archivePanelHeader}`}>
           <div>
-            <h3>Archived records</h3>
-            <small>Restore records or permanently remove confirmed test entries.</small>
+            <h3>Duplicate and test records</h3>
+            <small>
+              {canArchiveRecords
+                ? "Open retained read-only history, restore a record, or permanently remove confirmed test data."
+                : "These duplicate and test records are read only for your role."}
+            </small>
           </div>
-          <span>{leads.length} records</span>
+          <span>{archivedLeads.length} records</span>
         </div>
         {!apiConnected ? <p className={styles.panelMessage}>Archived leads are unavailable.</p> : null}
         <div className={`${styles.tableWrap} ${styles.archiveTable}`}>
@@ -42,18 +59,31 @@ export default async function ArchivedLeadsPage() {
               </tr>
             </thead>
             <tbody>
-              {apiConnected && leads.length === 0 ? (
+              {apiConnected && archivedLeads.length === 0 ? (
                 <tr>
                   <td colSpan={4}>No archived leads</td>
                 </tr>
               ) : null}
-              {leads.map((lead) => (
+              {archivedLeads.map((lead) => (
                 <tr key={lead.id}>
-                  <td data-label="Seller">{lead.seller_name}</td>
+                  <td data-label="Seller">
+                    <Link
+                      className={styles.tableLink}
+                      href={`/os/leads/${lead.id}?returnTo=${encodeURIComponent("/os/leads/archived")}`}
+                    >
+                      {lead.seller_name}
+                    </Link>
+                  </td>
                   <td data-label="Property">{lead.property_address}</td>
                   <td data-label="Archived">{formatDateTime(lead.archived_at)}</td>
                   <td data-label="Actions">
-                    <LeadLifecycleActions archived compact leadId={lead.id} />
+                    <LeadLifecycleActions
+                      archived
+                      canArchiveRecords={canArchiveRecords}
+                      canEditLead={false}
+                      compact
+                      leadId={lead.id}
+                    />
                   </td>
                 </tr>
               ))}

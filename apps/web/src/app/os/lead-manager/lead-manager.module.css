@@ -755,7 +755,8 @@
   font-weight: 800;
 }
 
-.questionGrid small {
+.questionGrid small,
+.nextAction small {
   min-height: 34px;
   color: var(--muted);
   font-size: 0.72rem;
@@ -764,6 +765,7 @@
 }
 
 .questionGrid textarea,
+.nextAction textarea,
 .nextAction input,
 .nextAction select,
 .standardForm input,
@@ -778,9 +780,14 @@
 }
 
 .questionGrid textarea,
+.nextAction textarea,
 .standardForm textarea {
   padding: 10px;
   resize: vertical;
+}
+
+.nextAction textarea {
+  min-height: 76px;
 }
 
 .nextAction {
@@ -803,6 +810,18 @@
 
 .nextAction button {
   min-height: 40px;
+}
+
+.nextAction .disqualifyButton {
+  border-color: #87392f;
+  background: #87392f;
+  color: #ffffff;
+}
+
+.nextAction .disqualifyButton:hover,
+.nextAction .disqualifyButton:focus-visible {
+  border-color: #6f2c24;
+  background: #6f2c24;
 }
 
 .tableWrap {

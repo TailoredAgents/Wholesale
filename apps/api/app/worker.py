@@ -19,6 +19,7 @@ from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
 from app.services.meta_lead_ads import (
+    eligible_staff_alert_recipients,
     process_next_meta_address_enrichment,
     process_next_meta_lead_event,
     process_next_staff_lead_alert,
@@ -93,12 +94,32 @@ def run_worker(stop_event: threading.Event) -> None:
     settings = get_settings()
     with SessionLocal() as db:
         register_worker(db)
+        _recipients, staff_alert_recipients = eligible_staff_alert_recipients(db)
+    staff_alert_blockers = list(settings.staff_lead_alert_configuration_blockers)
     logger.info(
         "worker_started",
         service=COMMUNICATIONS_WORKER,
         transcription_enabled=settings.call_transcription_enabled,
         poll_seconds=settings.call_transcription_poll_seconds,
+        staff_lead_alert_sms_mode=settings.staff_lead_alert_sms_mode,
+        staff_lead_alert_configured=not staff_alert_blockers,
+        staff_lead_alert_configuration_blockers=staff_alert_blockers,
+        staff_lead_alert_active_opted_in_recipients=staff_alert_recipients.active_opted_in,
+        staff_lead_alert_ready_recipients=staff_alert_recipients.ready,
+        staff_lead_alert_recipients_missing_phone=staff_alert_recipients.missing_phone,
+        staff_lead_alert_recipients_with_invalid_phone=staff_alert_recipients.invalid_phone,
     )
+    if staff_alert_blockers or not staff_alert_recipients.ready:
+        logger.warning(
+            "staff_lead_alert_readiness_failed",
+            mode=settings.staff_lead_alert_sms_mode,
+            configured=not staff_alert_blockers,
+            blockers=staff_alert_blockers,
+            active_opted_in_recipients=staff_alert_recipients.active_opted_in,
+            ready_recipients=staff_alert_recipients.ready,
+            recipients_missing_phone=staff_alert_recipients.missing_phone,
+            recipients_with_invalid_phone=staff_alert_recipients.invalid_phone,
+        )
     heartbeat_thread = threading.Thread(
         target=run_heartbeat,
         args=(stop_event, settings),

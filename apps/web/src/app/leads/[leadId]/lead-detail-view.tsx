@@ -2,6 +2,7 @@ import {
   ArrowRight,
   CalendarDays,
   Check,
+  ChevronDown,
   Circle,
   FileSignature,
   FileText,
@@ -10,7 +11,7 @@ import {
 import Link from "next/link";
 
 import { CompleteTaskButton } from "../../complete-task-button";
-import { getBuyers, getLeadDetail, type LeadDetail } from "../../lib/api";
+import { getBuyers, getLeadDetail, getWorkspaceProfile, type LeadDetail } from "../../lib/api";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { RecordTimeline } from "../../os/_components/record-timeline";
 import { AppointmentForm } from "./appointment-form";
@@ -46,7 +47,11 @@ type LeadTab = (typeof tabs)[number][0];
 
 type LeadPageProps = {
   params: Promise<{ leadId: string }>;
-  searchParams?: Promise<{ returnTo?: string | string[]; tab?: string | string[] }>;
+  searchParams?: Promise<{
+    edit?: string | string[];
+    returnTo?: string | string[];
+    tab?: string | string[];
+  }>;
 };
 
 function internalReturnPath(value: string | string[] | undefined) {
@@ -235,7 +240,10 @@ function QualificationPanel({ lead }: { lead: LeadDetail }) {
           </div>
         ))}
       </div>
-      <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=property#edit-lead`}>
+      <Link
+        className={styles.inlineEditLink}
+        href={`/os/leads/${lead.id}?tab=property&edit=lead#edit-lead`}
+      >
         Edit qualification
       </Link>
     </section>
@@ -707,16 +715,36 @@ function ActivityTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
-function PropertyTab({ lead }: { lead: LeadDetail }) {
+function PropertyTab({
+  lead,
+  editLeadOpen,
+}: {
+  lead: LeadDetail;
+  editLeadOpen: boolean;
+}) {
   return (
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
         <PropertyIntelligencePanel lead={lead} />
         <PropertyPanel lead={lead} />
-        <section className={`${styles.sectionPanel} ${styles.editAnchor}`} id="edit-lead">
-          <SectionHeader title="Edit lead" />
+        <details
+          className={`${styles.sectionPanel} ${styles.editAnchor} ${styles.editLeadDisclosure}`}
+          id="edit-lead"
+          open={editLeadOpen}
+        >
+          <summary className={styles.editLeadSummary}>
+            <span className={styles.editLeadSummaryCopy}>
+              <strong>Edit lead</strong>
+              <span>Update seller, property, qualification, and ownership details.</span>
+            </span>
+            <span className={styles.editLeadSummaryAction}>
+              <span className={styles.editLeadOpenLabel}>Open editor</span>
+              <span className={styles.editLeadCloseLabel}>Close editor</span>
+              <ChevronDown aria-hidden="true" size={18} />
+            </span>
+          </summary>
           <div className={styles.sectionBody}><LeadEditForm lead={lead} /></div>
-        </section>
+        </details>
       </div>
       <aside className={styles.sideColumn}>
         <ContactPanel lead={lead} />
@@ -840,15 +868,311 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
+function formatSavedFact(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "Unknown";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.map(formatSavedFact).join(", ");
+  if (typeof value === "object") {
+    return Object.entries(value as Record<string, unknown>)
+      .map(([key, item]) => `${labelize(key)}: ${formatSavedFact(item)}`)
+      .join("; ");
+  }
+  return String(value);
+}
+
+function ReadOnlyPropertyPanel({ lead }: { lead: LeadDetail }) {
+  const savedFacts = Object.entries(lead.property_intelligence.facts)
+    .filter(([, fact]) => fact.value !== undefined && fact.value !== null)
+    .sort(([left], [right]) => left.localeCompare(right));
+  return (
+    <>
+      <section className={styles.sectionPanel}>
+        <SectionHeader title="Property and seller situation" meta="Read only" />
+        <dl className={styles.factGrid}>
+          <div><dt>Address</dt><dd>{lead.property_address}</dd></div>
+          <div><dt>Address status</dt><dd>{labelize(lead.property_validation.status)}</dd></div>
+          <div><dt>Validated address</dt><dd>{lead.property_validation.validated_address ?? "Unknown"}</dd></div>
+          <div><dt>Validation provider</dt><dd>{labelize(lead.property_validation.provider)}</dd></div>
+          <div><dt>Lead type</dt><dd>{labelize(lead.asset_class)}</dd></div>
+          <div><dt>Property type</dt><dd>{labelize(lead.property_type)}</dd></div>
+          <div><dt>Parcel / APN</dt><dd>{lead.property_parcel_id ?? "Unknown"}</dd></div>
+          <div><dt>County</dt><dd>{lead.property_county ?? "Unknown"}</dd></div>
+          <div><dt>Motivation</dt><dd>{lead.motivation ?? "Unknown"}</dd></div>
+          <div><dt>Timeline</dt><dd>{labelize(lead.desired_timeline)}</dd></div>
+          <div><dt>Condition</dt><dd>{labelize(lead.property_condition)}</dd></div>
+          <div><dt>Occupancy</dt><dd>{labelize(lead.occupancy_status)}</dd></div>
+          <div><dt>Asking price</dt><dd>{lead.asking_price ?? "Unknown"}</dd></div>
+          <div><dt>Mortgage</dt><dd>{lead.mortgage_balance ?? "Unknown"}</dd></div>
+        </dl>
+      </section>
+      <section className={styles.sectionPanel}>
+        <SectionHeader title="Saved property research" meta={countLabel(savedFacts.length, "fact")} />
+        {savedFacts.length ? (
+          <dl className={styles.factGrid}>
+            {savedFacts.map(([key, fact]) => (
+              <div key={key}>
+                <dt>{labelize(key)}</dt>
+                <dd>{formatSavedFact(fact.value)}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : (
+          <p className={styles.emptyState}>No saved property research facts are on this record.</p>
+        )}
+      </section>
+    </>
+  );
+}
+
+function ReadOnlyCommunicationPanel({ lead }: { lead: LeadDetail }) {
+  const communications = [...lead.communications].sort(
+    (left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime(),
+  );
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader
+        title="Calls, messages, and internal notes"
+        meta={countLabel(communications.length, "record")}
+      />
+      <div className={styles.communicationTimeline}>
+        {communications.length === 0 ? (
+          <p className={styles.emptyState}>No communication history is saved.</p>
+        ) : null}
+        {communications.map((item) => (
+          <article key={item.id}>
+            <div>
+              <strong>
+                {item.channel === "note" && item.direction === "internal"
+                  ? item.subject ?? "Internal seller note"
+                  : `${labelize(item.direction)} ${labelize(item.channel)}`}
+              </strong>
+              <span>{labelize(item.status)} via {labelize(item.provider)}</span>
+            </div>
+            {item.subject && item.channel !== "note" ? <strong>{item.subject}</strong> : null}
+            <p>{item.body}</p>
+            <small>{formatDate(item.occurred_at)}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReadOnlyActivityPanel({ lead }: { lead: LeadDetail }) {
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader
+        title="Recent activity history"
+        meta={countLabel(lead.recent_activity.length, "event")}
+      />
+      <RecordTimeline items={lead.recent_activity.map((item, index) => ({
+        description: item.summary,
+        id: `${item.event_type}-${item.created_at}-${index}`,
+        meta: formatDate(item.created_at),
+        title: labelize(item.event_type),
+      }))} />
+    </section>
+  );
+}
+
+function ReadOnlyAppointmentsPanel({ lead }: { lead: LeadDetail }) {
+  const appointments = [...lead.appointments].sort(
+    (left, right) => (
+      new Date(right.scheduled_start_at).getTime() - new Date(left.scheduled_start_at).getTime()
+    ),
+  );
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader title="Appointments" meta={countLabel(appointments.length, "appointment")} />
+      <div className={styles.recordList}>
+        {appointments.length === 0 ? (
+          <p className={styles.emptyState}>No appointments were saved.</p>
+        ) : null}
+        {appointments.map((appointment) => (
+          <article key={appointment.id}>
+            <div className={styles.recordTitle}>
+              <strong>{labelize(appointment.appointment_type)}</strong>
+              <span>{labelize(appointment.status)}</span>
+            </div>
+            <p>
+              {formatDate(appointment.scheduled_start_at)}
+              {appointment.scheduled_end_at
+                ? ` to ${formatDate(appointment.scheduled_end_at)}`
+                : ""}
+            </p>
+            <p>{appointment.location ?? `${labelize(appointment.location_type)} appointment`}</p>
+            {appointment.notes ? <p>{appointment.notes}</p> : null}
+            <small>{appointment.outcome ? `Outcome: ${labelize(appointment.outcome)}` : "No outcome recorded"}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReadOnlyValuationPanel({ lead }: { lead: LeadDetail }) {
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader
+        title="Valuation history"
+        meta={countLabel(lead.underwriting_versions.length, "version")}
+      />
+      <div className={styles.recordList}>
+        {lead.underwriting_versions.length === 0 ? (
+          <p className={styles.emptyState}>No valuation version was saved.</p>
+        ) : null}
+        {lead.underwriting_versions.map((version) => (
+          <article key={version.id}>
+            <div className={styles.recordTitle}>
+              <strong>Version {version.version_number}</strong>
+              <span>{labelize(version.status)}</span>
+            </div>
+            <p>
+              ARV {formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)};
+              recommended offer {formatMoney(version.recommended_offer_cents)}
+            </p>
+            <p>
+              Repairs {formatMoney(version.repair_low_cents)} to {formatMoney(version.repair_high_cents)};
+              ceiling {formatMoney(version.seller_contract_ceiling_cents ?? version.max_offer_cents)}
+            </p>
+            {version.notes ? <p>{version.notes}</p> : null}
+            <small>{labelize(version.source)} / {formatDate(version.created_at)}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReadOnlyTransactionsPanel({ lead }: { lead: LeadDetail }) {
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader title="Transaction history" meta={countLabel(lead.transactions.length, "transaction")} />
+      <div className={styles.recordList}>
+        {lead.transactions.length === 0 ? (
+          <p className={styles.emptyState}>No transaction was opened.</p>
+        ) : null}
+        {lead.transactions.map((transaction) => {
+          const completedChecklistItems = transaction.checklist_items.filter(
+            (item) => ["complete", "not_applicable"].includes(item.status),
+          ).length;
+          return (
+            <article key={transaction.id}>
+              <div className={styles.recordTitle}>
+                <strong>{labelize(transaction.contract_type)}</strong>
+                <span>{labelize(transaction.status)}</span>
+              </div>
+              <p>
+                Purchase {formatMoney(transaction.purchase_price_cents)};
+                assignment fee {formatMoney(transaction.assignment_fee_cents)}
+              </p>
+              <p>
+                Closing {formatOptionalDate(transaction.closing_date)};
+                checklist {completedChecklistItems}/{transaction.checklist_items.length} complete
+              </p>
+              <p>
+                Sent {formatOptionalDate(transaction.contract_sent_at)};
+                executed {formatOptionalDate(transaction.contract_executed_at)}
+              </p>
+              {transaction.notes ? <p>{transaction.notes}</p> : null}
+              <small>Opened {formatDate(transaction.created_at)}</small>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ReadOnlyBuyerOffersPanel({ lead }: { lead: LeadDetail }) {
+  const offers = [...lead.buyer_offers].sort(
+    (left, right) => new Date(right.received_at).getTime() - new Date(left.received_at).getTime(),
+  );
+  return (
+    <section className={styles.sectionPanel}>
+      <SectionHeader title="Buyer offer history" meta={countLabel(offers.length, "offer")} />
+      <div className={styles.recordList}>
+        {offers.length === 0 ? (
+          <p className={styles.emptyState}>No buyer offers were saved.</p>
+        ) : null}
+        {offers.map((offer) => (
+          <article key={offer.id}>
+            <div className={styles.recordTitle}>
+              <strong>{offer.buyer_name}</strong>
+              <span>{labelize(offer.status)}</span>
+            </div>
+            <p>
+              Offer {formatMoney(offer.amount_cents)};
+              earnest money {formatMoney(offer.earnest_money_cents)}
+            </p>
+            <p>
+              {labelize(offer.financing_type)} financing;
+              proof of funds {offer.proof_of_funds_received ? "received" : "not received"}
+            </p>
+            {offer.notes ? <p>{offer.notes}</p> : null}
+            <small>Received {formatDate(offer.received_at)}</small>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ArchivedLeadRecord({ lead }: { lead: LeadDetail }) {
+  return (
+    <section className={styles.archivedRecord} aria-label="Read-only archived lead record">
+      <header className={styles.readOnlyRecordHeader}>
+        <div>
+          <span>Read-only history</span>
+          <h2>Saved lead record</h2>
+        </div>
+        <p>
+          The facts and history below remain available for reference. Reopen or restore the lead
+          before changing seller, property, appointment, valuation, or transaction data.
+        </p>
+      </header>
+      <div className={styles.overviewGrid}>
+        <div className={styles.mainColumn}>
+          <ReadOnlyCommunicationPanel lead={lead} />
+          <ReadOnlyActivityPanel lead={lead} />
+          <ReadOnlyAppointmentsPanel lead={lead} />
+          <ReadOnlyValuationPanel lead={lead} />
+          <ReadOnlyTransactionsPanel lead={lead} />
+          <ReadOnlyBuyerOffersPanel lead={lead} />
+        </div>
+        <aside className={styles.sideColumn}>
+          <ContactPanel lead={lead} />
+          <ReadOnlyPropertyPanel lead={lead} />
+          <section className={styles.sectionPanel}>
+            <SectionHeader title="Record history" meta="Read only" />
+            <dl className={styles.compactFacts}>
+              <div><dt>Stage</dt><dd>{labelize(lead.stage_key)}</dd></div>
+              <div><dt>Disposition</dt><dd>{labelize(lead.close_out_disposition)}</dd></div>
+              <div><dt>Closed at</dt><dd>{formatOptionalDate(lead.closed_out_at)}</dd></div>
+              <div><dt>Closed by</dt><dd>{lead.closed_out_by_user_email ?? "Unknown"}</dd></div>
+              <div><dt>Archived at</dt><dd>{formatOptionalDate(lead.archived_at)}</dd></div>
+              <div><dt>Created at</dt><dd>{formatDate(lead.created_at)}</dd></div>
+              <div><dt>Close-out reason</dt><dd>{lead.close_out_reason ?? "Duplicate or test archive"}</dd></div>
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
 export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const [{ leadId }, query] = await Promise.all([params, searchParams]);
   const activeTab = normalizeTab(query?.tab);
+  const requestedEditor = Array.isArray(query?.edit) ? query.edit[0] : query?.edit;
+  const editLeadOpen = requestedEditor === "lead";
   const returnTo = internalReturnPath(query?.returnTo);
-  const [{ lead, apiConnected }, buyerResult] = await Promise.all([
+  const [{ lead, apiConnected }, buyerResult, profile] = await Promise.all([
     getLeadDetail(leadId),
     activeTab === "contract"
       ? getBuyers()
       : Promise.resolve({ buyers: [], apiConnected: true }),
+    getWorkspaceProfile(),
   ]);
   const buyers = buyerResult.buyers;
 
@@ -864,9 +1188,10 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
   const phone = lead.contact_methods.find((method) => method.method_type === "phone")?.value;
   const email = lead.contact_methods.find((method) => method.method_type === "email")?.value;
   const lastContact = lead.communications[0]?.occurred_at ?? null;
-  const tabHref = (tab: LeadTab) => {
+  const tabHref = (tab: LeadTab, options?: { editLead?: boolean }) => {
     const values = new URLSearchParams({ tab });
     if (returnTo !== "/os/leads") values.set("returnTo", returnTo);
+    if (options?.editLead) values.set("edit", "lead");
     return `/os/leads/${lead.id}?${values.toString()}`;
   };
   const activeAppointment = lead.appointments.find(
@@ -893,26 +1218,51 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </div>
         </div>
         <div className={styles.quickActions}>
-          {phone ? <LeadCallButton leadId={lead.id} /> : null}
-          {phone ? <Link href={`/os/inbox?lead=${lead.id}&channel=sms`}>Text</Link> : null}
-          {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
-          <Link href={tabHref("property") + "#edit-lead"}>Edit lead</Link>
-          <Link href={tabHref("activity")}>Log contact</Link>
-          <Link href={tabHref("valuation")}>
-            {lead.asset_class === "land" ? "Run Land valuation" : "Run comps"}
-          </Link>
-          <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
-            {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
-          </Link>
-          <LeadLifecycleActions archived={Boolean(lead.archived_at)} leadId={lead.id} />
+          {!lead.archived_at ? (
+            <>
+              {phone ? <LeadCallButton leadId={lead.id} /> : null}
+              {phone ? <Link href={`/os/inbox?lead=${lead.id}&channel=sms`}>Text</Link> : null}
+              {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
+              <Link href={tabHref("property", { editLead: true }) + "#edit-lead"}>Edit lead</Link>
+              <Link href={tabHref("activity")}>Log contact</Link>
+              <Link href={tabHref("valuation")}>
+                {lead.asset_class === "land" ? "Run Land valuation" : "Run comps"}
+              </Link>
+              <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
+                {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
+              </Link>
+            </>
+          ) : null}
+          <LeadLifecycleActions
+            archived={Boolean(lead.archived_at)}
+            canArchiveRecords={Boolean(
+              profile?.permissions.includes("records:delete_or_archive"),
+            )}
+            canEditLead={Boolean(profile?.permissions.includes("leads:edit"))}
+            leadId={lead.id}
+            stageKey={lead.stage_key}
+          />
         </div>
       </header>
 
       {lead.archived_at ? (
-        <section className={styles.archiveNotice}>
-          <strong>This lead is archived.</strong>
-          <p>Restore it before editing, contacting the seller, or creating new deal activity.</p>
-        </section>
+        <>
+          <section className={styles.archiveNotice}>
+            {lead.close_out_disposition ? (
+              <>
+                <strong>This lead is closed as {labelize(lead.close_out_disposition)}.</strong>
+                <p>Active follow-ups and warnings are stopped. Reopen it to return it to the pipeline with a new next action.</p>
+                {lead.close_out_reason ? <p><strong>Reason:</strong> {lead.close_out_reason}</p> : null}
+              </>
+            ) : (
+              <>
+                <strong>This lead is administratively archived.</strong>
+                <p>Restore it before editing, contacting the seller, or creating new deal activity.</p>
+              </>
+            )}
+          </section>
+          <ArchivedLeadRecord lead={lead} />
+        </>
       ) : (
         <>
           <section className={styles.commandStrip}>
@@ -950,7 +1300,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
               <OverviewTab activeAppointment={activeAppointment} lead={lead} />
             ) : null}
             {activeTab === "activity" ? <ActivityTab lead={lead} /> : null}
-            {activeTab === "property" ? <PropertyTab lead={lead} /> : null}
+            {activeTab === "property" ? (
+              <PropertyTab editLeadOpen={editLeadOpen} lead={lead} />
+            ) : null}
             {activeTab === "valuation" ? (
               lead.asset_class === "land"
                 ? <LandValuationTab lead={lead} />

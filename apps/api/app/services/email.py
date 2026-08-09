@@ -71,6 +71,11 @@ from app.services.inbox import (
     list_conversations,
     update_conversation_activity,
 )
+from app.services.lead_lifecycle import (
+    LeadLifecycleConflictError,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
 
 
 class EmailConfigurationError(RuntimeError):
@@ -530,6 +535,16 @@ def send_conversation_email(
         or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("Email can only be sent from an assigned conversation.")
+    active_lead: Lead | None = None
+    if conversation.conversation_type == "lead" and conversation.lead_id is not None:
+        active_lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=conversation.lead_id,
+        )
+        if active_lead is None:
+            return None
+        require_lead_open_for_work(active_lead)
     if settings.email_configuration_blockers and not simulation_enabled:
         raise EmailConfigurationError(
             "Email is not configured: " + ", ".join(settings.email_configuration_blockers)
@@ -582,7 +597,7 @@ def send_conversation_email(
         sender_signature = account.signature_text
         sender_metadata = {"email_account_id": str(account.id)}
     contact = db.get(Contact, conversation.contact_id)
-    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    lead = active_lead
     if contact is None:
         return None
     recipients = list(payload.to)
@@ -664,6 +679,53 @@ def send_conversation_email(
     db.add(dispatch)
     db.commit()
     dispatch_id = dispatch.id
+
+    if lead is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead.id,
+        )
+        try:
+            if lead is None:
+                raise LeadLifecycleConflictError("The email seller lead is unavailable.")
+            require_lead_open_for_work(lead)
+        except LeadLifecycleConflictError:
+            cancelled_dispatch = db.scalar(
+                select(CommunicationDispatch)
+                .where(CommunicationDispatch.id == dispatch_id)
+                .with_for_update()
+            )
+            if cancelled_dispatch is not None and cancelled_dispatch.status == "pending":
+                cancelled_dispatch.status = "cancelled"
+                cancelled_dispatch.error_code = "lead_closed"
+                cancelled_dispatch.error_message = (
+                    "Email cancelled because the seller lead was closed before provider delivery."
+                )
+                cancelled_dispatch.completed_at = datetime.now(UTC)
+            db.commit()
+            raise
+        locked_conversation = db.scalar(
+            select(Conversation)
+            .where(
+                Conversation.id == conversation.id,
+                Conversation.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if locked_conversation is None:
+            raise EmailConfigurationError("Email conversation is unavailable.")
+        conversation = locked_conversation
+        locked_dispatch = db.scalar(
+            select(CommunicationDispatch)
+            .where(
+                CommunicationDispatch.id == dispatch_id,
+                CommunicationDispatch.status == "pending",
+            )
+            .with_for_update()
+        )
+        if locked_dispatch is None:
+            raise EmailDispatchConflictError("The email dispatch is no longer pending.")
 
     prior_email = db.scalar(
         select(CommunicationRecord)
@@ -790,7 +852,9 @@ def send_conversation_email(
     completed_dispatch.status = "sent"
     completed_dispatch.provider_message_id = provider_message_id
     completed_dispatch.completed_at = occurred_at
-    update_conversation_activity(conversation, direction="outbound", occurred_at=occurred_at)
+    update_conversation_activity(
+        conversation, direction="outbound", occurred_at=occurred_at, db=db
+    )
     db.add(
         ActivityEvent(
             organization_id=principal.organization_id,
@@ -1233,6 +1297,7 @@ def import_gmail_message(
         return False
 
     headers = message_headers(message)
+    email_category = gmail_inbound_email_category(headers)
     from_addresses = normalized_addresses(headers.get("from", ""))
     to_addresses = normalized_addresses(", ".join([headers.get("to", ""), headers.get("cc", "")]))
     account_address = account.email_address.lower()
@@ -1295,12 +1360,19 @@ def import_gmail_message(
             "in_reply_to": headers.get("in-reply-to", ""),
             "from": headers.get("from", ""),
             "to": headers.get("to", ""),
+            "email_category": email_category,
         },
     )
     db.add(communication)
     db.flush()
     index_message_attachments(db, account, communication, message)
-    update_conversation_activity(conversation, direction=direction, occurred_at=occurred_at)
+    update_conversation_activity(
+        conversation,
+        direction=direction,
+        occurred_at=occurred_at,
+        db=db,
+        reactivate_closed_lead=(direction != "inbound" or email_category == "correspondence"),
+    )
     db.add(
         CommunicationProviderEvent(
             organization_id=account.organization_id,
@@ -1512,6 +1584,25 @@ def message_headers(message: dict[str, Any]) -> dict[str, str]:
         for item in headers
         if isinstance(item, dict)
     }
+
+
+def gmail_inbound_email_category(headers: dict[str, str]) -> str:
+    sender = headers.get("from", "").lower()
+    subject = headers.get("subject", "").lower()
+    auto_submitted = headers.get("auto-submitted", "").lower()
+    precedence = headers.get("precedence", "").lower()
+    if "dmarc" in subject or "report domain" in subject:
+        return "dmarc_report"
+    if "mailer-daemon" in sender or "postmaster" in sender:
+        return "delivery_notice"
+    if (auto_submitted and auto_submitted != "no") or precedence in {
+        "auto_reply",
+        "bulk",
+        "junk",
+        "list",
+    }:
+        return "automated"
+    return "correspondence"
 
 
 def normalized_addresses(value: str) -> list[str]:

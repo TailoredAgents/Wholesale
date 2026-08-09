@@ -460,7 +460,18 @@ Leads views. Schedule, Dispatch, Appointment, and Availability are local Calenda
 - Seller and transaction histories use the same chronological activity pattern for event title,
   supporting context, actor, and timestamp.
 - Underwriting shows the active valuation queue; detailed comp work remains on the seller record.
-- Archived records live at `/os/leads/archived`.
+- Dead and disqualified opportunities are closed through one atomic workflow. Close-out records a
+  disposition, reason, actor, and time; cancels active tasks, appointments, automated follow-up,
+  calling and handoff work, and every pending approval tied to the lead; retires pending or
+  approved offer plans and unused offer concessions; closes Lead Queue and Inbox work; and removes
+  routine overdue warnings. Closed records live at `/os/leads/closed`, retain their complete saved
+  contact, property, communication, appointment, valuation, transaction, and buyer-offer history
+  as read-only, and require a reason plus a future next action to reopen. Genuine inbound seller
+  contact automatically reactivates them for urgent follow-up. Active deal, transaction, or
+  disposition work must be cancelled or resolved first; a funded deal remains a completed success
+  and cannot be relabeled dead or disqualified.
+- Administrative archive is reserved for confirmed duplicate and test records at
+  `/os/leads/archived`; it is not a general business disposition.
 - `/os/lead-manager`, `/os/pipeline`, and `/os/underwriting` preserve old links by redirecting to
   the corresponding Leads view.
 
@@ -663,6 +674,11 @@ redirect to their new owners.
 4. The Lead Manager schedules a call, follow-up, or closer appointment.
 5. Overdue handoffs and neglected leads produce tasks or notifications.
 6. The Lead Manager Copilot drafts summaries, questions, replies, and next steps for human review.
+7. A dead or disqualified lead is closed with a structured disposition and reason. Stonegate
+   atomically ends routine work, cancels all lead-related pending approvals, retires unused offer
+   authority, and preserves the complete record as read-only history. Active deal, contract, or
+   disposition work blocks close-out, and funded deals remain successful closed business rather
+   than dead or disqualified leads.
 
 ### 8.5 Appointment And Dispatch
 
@@ -863,6 +879,14 @@ Primary completion records an outcome and completion notes and links the replace
 active source cannot be silently left without a successor. Notifications communicate events such
 as handoffs, appointments, communication assignment, overdue response, owner escalation, and
 approval needs.
+
+Business close-out is distinct from Administrative archive, which is only for confirmed duplicate
+or test records. A closed lead has no active primary action, pending approval or unused offer
+authority, and no routine follow-up warnings. Its complete saved contact, property, communication,
+appointment, valuation, transaction, and buyer-offer history remains viewable but read-only.
+Manual reactivation creates exactly one new primary next action; inbound seller email, SMS, or
+voice reactivation creates urgent response work. Historical close-out metadata remains attached to
+the lead for audit and reporting.
 
 Workers can create escalation evidence, but staff remain responsible for resolving the underlying
 work. Approvals are aggregated into Tasks for discovery but remain separate governed records.

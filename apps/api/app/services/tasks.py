@@ -41,6 +41,7 @@ from app.services.approvals import (
     approval_permission_for_request_type,
     approval_to_read,
 )
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 
 SPEED_TO_LEAD_TASK_TYPE = "speed_to_lead"
 OPEN_TASK_STATUSES = ("open", "in_progress")
@@ -759,13 +760,17 @@ def create_primary_next_action(
         if PermissionKeys.EDIT_LEADS not in principal.permission_keys:
             raise PermissionError("Your role cannot change seller next actions.")
         lead = db.scalar(
-            select(Lead).where(
+            select(Lead)
+            .where(
                 Lead.organization_id == principal.organization_id,
                 Lead.id == payload.source_record_id,
             )
+            .execution_options(populate_existing=True)
+            .with_for_update()
         )
         if lead is None:
             raise ValueError("Seller lead not found.")
+        require_lead_open_for_work(lead)
         supersede_open_primary_tasks(db, lead_id=lead.id)
     else:
         if (
@@ -773,15 +778,30 @@ def create_primary_next_action(
             and PermissionKeys.MANAGE_ACQUISITION_OPERATIONS not in principal.permission_keys
         ):
             raise PermissionError("Your role cannot change deal next actions.")
+        deal_identity = db.execute(
+            select(Deal.id, Deal.lead_id).where(
+                Deal.organization_id == principal.organization_id,
+                Deal.id == payload.source_record_id,
+            )
+        ).one_or_none()
+        if deal_identity is None:
+            raise ValueError("Deal not found.")
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=deal_identity.lead_id,
+        )
+        if lead is None:
+            raise ValueError("The deal's seller lead is unavailable.")
+        require_lead_open_for_work(lead)
         deal = db.scalar(
             select(Deal).where(
                 Deal.organization_id == principal.organization_id,
                 Deal.id == payload.source_record_id,
-            )
+            ).with_for_update()
         )
         if deal is None:
             raise ValueError("Deal not found.")
-        lead = db.get(Lead, deal.lead_id)
         supersede_open_primary_tasks(db, deal_id=deal.id)
 
     task = Task(
@@ -830,20 +850,49 @@ def complete_task(
     *,
     payload: TaskCompleteRequest,
 ) -> TaskRead | None:
-    task = db.scalar(
-        select(Task).where(
+    task_identity = db.execute(
+        select(Task.lead_id, Task.deal_id).where(
             Task.organization_id == principal.organization_id,
             Task.id == task_id,
         )
+    ).one_or_none()
+    if task_identity is None:
+        return None
+    lead_id = task_identity.lead_id
+    if lead_id is None and task_identity.deal_id is not None:
+        lead_id = db.scalar(
+            select(Deal.lead_id).where(
+                Deal.organization_id == principal.organization_id,
+                Deal.id == task_identity.deal_id,
+            )
+        )
+    lead = (
+        lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead_id,
+        )
+        if lead_id is not None
+        else None
+    )
+    if lead is not None:
+        require_lead_open_for_work(lead)
+    task = db.scalar(
+        select(Task)
+        .where(
+            Task.organization_id == principal.organization_id,
+            Task.id == task_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
     )
     if task is None:
         return None
-    if task.status == "completed":
-        return task_to_read(task)
+    if task.status not in OPEN_TASK_STATUSES:
+        raise ValueError("Only an open or in-progress task can be completed.")
     if not can_complete_task(task, principal):
         raise PermissionError("Your role cannot complete this task.")
 
-    lead = db.get(Lead, task.lead_id) if task.lead_id else None
     deal = db.get(Deal, task.deal_id) if task.deal_id else None
     successor: Task | None = None
     successor_owner: User | None = None

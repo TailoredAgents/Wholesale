@@ -23,6 +23,7 @@ from app.schemas.prospecting import (
     ProspectingScriptRead,
     ProspectingWorkbenchOverview,
 )
+from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.prospecting import (
     approve_script,
     complete_attempt,
@@ -135,6 +136,8 @@ def review_prospect_handoff(
 ) -> ProspectHandoffRead:
     try:
         handoff = decide_handoff(db, principal, handoff_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,

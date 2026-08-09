@@ -25,6 +25,7 @@ from app.schemas.approvals import (
     OfferNegotiationPlanListResponse,
     OfferNegotiationPlanRead,
 )
+from app.services.lead_lifecycle import require_lead_open_for_work
 
 APPROVER_ROLE_PRIORITY = {
     "owner": 0,
@@ -66,9 +67,10 @@ def create_offer_negotiation_plan(
     lead_id: UUID,
     payload: OfferNegotiationPlanCreate,
 ) -> OfferNegotiationPlanRead | None:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_lead(db, principal, lead_id, for_update=True)
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     version = db.scalar(
         select(UnderwritingVersion).where(
             UnderwritingVersion.id == payload.underwriting_version_id,
@@ -328,13 +330,20 @@ def offer_plan_to_read(db: Session, plan: OfferNegotiationPlan) -> OfferNegotiat
     )
 
 
-def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
-    lead = db.scalar(
-        select(Lead).where(
-            Lead.id == lead_id,
-            Lead.organization_id == principal.organization_id,
-        )
+def scoped_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    *,
+    for_update: bool = False,
+) -> Lead | None:
+    statement = select(Lead).where(
+        Lead.id == lead_id,
+        Lead.organization_id == principal.organization_id,
     )
+    if for_update:
+        statement = statement.execution_options(populate_existing=True).with_for_update()
+    lead = db.scalar(statement)
     if lead is not None:
         require_house_workflow(lead.asset_class, workflow="Residential offer approval")
     return lead

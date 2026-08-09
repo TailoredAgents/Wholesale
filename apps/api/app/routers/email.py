@@ -73,6 +73,7 @@ from app.services.email_aliases import (
     revoke_email_sender_access,
     update_email_sender_alias,
 )
+from app.services.lead_lifecycle import LeadLifecycleConflictError
 
 router = APIRouter(prefix="/api/v1/email", tags=["email"])
 email_user_dependency = require_any_permission(
@@ -394,6 +395,8 @@ def send_email_message(
 ) -> EmailSendRead:
     try:
         result = send_conversation_email(db, principal, conversation_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except EmailAttachmentError as exc:

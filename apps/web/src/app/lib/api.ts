@@ -88,7 +88,33 @@ export type LeadListItem = {
     due_status: string;
   } | null;
   archived_at: string | null;
+  close_out_disposition: "dead" | "disqualified" | null;
+  close_out_reason: string | null;
+  closed_out_at: string | null;
+  closed_out_by_user_id: string | null;
+  closed_out_by_user_email: string | null;
   created_at: string;
+};
+
+export type LeadCloseOutResponse = {
+  lead: LeadListItem;
+  changed: boolean;
+  cancelled_tasks: number;
+  cancelled_appointments: number;
+  cancelled_follow_up_enrollments: number;
+  cancelled_follow_up_approvals: number;
+  cancelled_pending_approvals: number;
+  completed_calling_list_entries: number;
+  dismissed_ai_next_action_events: number;
+  dismissed_notifications: number;
+  closed_lead_management_case: boolean;
+  closed_conversation: boolean;
+};
+
+export type LeadReopenResponse = {
+  lead: LeadListItem;
+  changed: boolean;
+  follow_up_task_id: string;
 };
 
 export type OperationsUser = {
@@ -3900,6 +3926,45 @@ export async function getArchivedLeads(): Promise<{
     };
   } catch (error) {
     console.error("Stonegate archived leads request failed.", error);
+    return { leads: [], apiConnected: false };
+  }
+}
+
+export async function getClosedLeads({
+  limit = 101,
+  offset = 0,
+  q = "",
+}: {
+  limit?: number;
+  offset?: number;
+  q?: string;
+} = {}): Promise<{
+  leads: LeadListItem[];
+  apiConnected: boolean;
+}> {
+  const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
+  const query = new URLSearchParams({
+    closed: "true",
+    limit: String(limit),
+    offset: String(offset),
+  });
+  if (q.trim()) query.set("q", q.trim());
+
+  try {
+    const headers = await getServerApiHeaders();
+    const response = await fetch(`${apiBaseUrl}/api/v1/leads?${query.toString()}`, {
+      headers,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      throw await apiError(response);
+    }
+    return {
+      leads: ((await response.json()) as LeadListResponse).items,
+      apiConnected: true,
+    };
+  } catch (error) {
+    console.error("Stonegate closed leads request failed.", error);
     return { leads: [], apiConnected: false };
   }
 }

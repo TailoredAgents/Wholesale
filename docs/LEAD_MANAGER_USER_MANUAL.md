@@ -417,8 +417,19 @@ Examples may include:
 - The record is confirmed to be invalid.
 - Management has approved closing the opportunity for a documented reason.
 
-Record the reason clearly. If the seller opted out, also confirm the proper suppression or Do Not
-Contact status.
+Open the full seller record and select **Close out lead**. Choose **Disqualified** and record the
+reason clearly. Use **Dead** instead when the record was a legitimate opportunity but is no longer
+moving forward. Stonegate then stops routine follow-up; cancels every pending approval tied to the
+lead; retires unused offer authority; and keeps seller/property facts, calls, notes, activity,
+appointments, valuations, transactions, and buyer offers under **Closed Leads** as read-only
+history. Active deal, contract, or disposition work must be cancelled or resolved first. A funded
+deal remains a completed success and cannot be marked Dead or Disqualified. Administrative archive
+is only for confirmed duplicate or test records; do not use it for either outcome.
+
+If the seller opted out, also confirm the proper suppression or Do Not Contact status. If a closed
+seller later contacts Stonegate by email, text, or phone, the system automatically reopens the
+lead and creates urgent follow-up work. A manual reopen requires both a reason and a future next
+action.
 
 ## Handling Common Situations
 

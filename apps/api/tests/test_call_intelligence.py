@@ -1,10 +1,12 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import principal_for_user
 from app.core.config import Settings
 from app.integrations.openai_client import OpenAIAudioTranscript, validate_strict_json_schema
 from app.integrations.twilio_recordings import TwilioRecordingMedia
@@ -23,6 +25,7 @@ from app.models.foundation import (
     Property,
     Task,
 )
+from app.schemas.leads import LeadCloseOutRequest
 from app.schemas.voice import CallTranscriptReview, StructuredCallNotes
 from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
@@ -30,6 +33,7 @@ from app.services.call_intelligence import (
     process_call_transcript,
     process_next_call_transcript,
 )
+from app.services.leads import close_out_lead
 
 OWNER_EMAIL = "owner@example.com"
 
@@ -39,6 +43,154 @@ def test_call_note_schema_is_valid_for_openai_strict_mode() -> None:
 
     validate_strict_json_schema(schema)
     assert set(schema["properties"]) == set(schema["required"])
+
+
+def test_close_out_during_transcription_failure_keeps_ai_work_dismissed(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    result = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    assert result.admin_user is not None
+    owner = result.admin_user
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "contact": {"legal_name": "Concurrent Seller", "contact_type": "seller"},
+            "property": {
+                "street_address": "41 Concurrent Way",
+                "city": "Atlanta",
+                "state": "GA",
+                "postal_code": "30303",
+                "property_type": "single_family",
+            },
+            "source": "inbound_call",
+            "stage_key": "contacted",
+        },
+    )
+    assert created.status_code == 201, created.text
+    lead = db_session.get(Lead, UUID(created.json()["id"]))
+    assert lead is not None
+    conversation = db_session.scalar(select(Conversation).where(Conversation.lead_id == lead.id))
+    assert conversation is not None
+    communication = CommunicationRecord(
+        organization_id=lead.organization_id,
+        conversation_id=conversation.id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        actor_user_id=owner.id,
+        direction="outbound",
+        channel="call",
+        status="completed",
+        provider="twilio",
+        provider_message_id="CA-close-during-transcription",
+        subject=None,
+        body="Outbound call",
+        occurred_at=datetime.now(UTC),
+        external_payload=None,
+        communication_metadata=None,
+    )
+    db_session.add(communication)
+    db_session.flush()
+    call = CallRecord(
+        organization_id=lead.organization_id,
+        conversation_id=conversation.id,
+        lead_id=lead.id,
+        contact_id=lead.contact_id,
+        actor_user_id=owner.id,
+        communication_record_id=communication.id,
+        voice_line_id=None,
+        call_intent_id=None,
+        provider="twilio",
+        provider_call_id="CA-close-during-transcription",
+        child_provider_call_id=None,
+        direction="outbound",
+        status="completed",
+        from_number="+14045550100",
+        to_number="+14045550101",
+        started_at=datetime.now(UTC),
+        answered_at=datetime.now(UTC),
+        ended_at=datetime.now(UTC),
+        duration_seconds=60,
+        disposition=None,
+        recording_consent_status="disclosed",
+        call_metadata=None,
+    )
+    db_session.add(call)
+    db_session.flush()
+    recording = CallRecording(
+        organization_id=lead.organization_id,
+        call_record_id=call.id,
+        provider="twilio",
+        provider_recording_id="RE-close-during-transcription",
+        status="completed",
+        media_reference="twilio://recordings/RE-close-during-transcription",
+        duration_seconds=60,
+        channel_count=2,
+        consent_status="disclosed",
+        recorded_at=datetime.now(UTC),
+        deleted_at=None,
+        recording_metadata=None,
+    )
+    db_session.add(recording)
+    db_session.flush()
+    transcript = enqueue_call_transcript(
+        db_session,
+        recording,
+        model_name="gpt-4o-transcribe-diarize",
+    )
+    db_session.commit()
+
+    monkeypatch.setattr(
+        "app.services.call_intelligence.download_twilio_recording",
+        lambda *_args: TwilioRecordingMedia(b"audio", "audio/mpeg"),
+    )
+
+    def close_then_fail(*_args: object, **_kwargs: object) -> OpenAIAudioTranscript:
+        closed = close_out_lead(
+            db_session,
+            principal_for_user(db_session, owner),
+            lead.id,
+            LeadCloseOutRequest(
+                disposition="dead",
+                reason="The seller ended discussions while call processing was still running.",
+            ),
+        )
+        assert closed is not None
+        raise ValueError("Provider failed after the lead was closed.")
+
+    monkeypatch.setattr(
+        "app.services.call_intelligence.OpenAIResponsesClient.create_audio_transcription",
+        close_then_fail,
+    )
+    settings = Settings.model_validate(
+        {
+            "DATABASE_URL": "sqlite+pysqlite:///:memory:",
+            "OPENAI_API_KEY": "test-key",
+            "CALL_TRANSCRIPTION_ENABLED": True,
+        }
+    )
+
+    processed = process_call_transcript(db_session, transcript.id, settings)
+
+    assert processed.status == "failed"
+    db_session.expire_all()
+    operation_event = db_session.scalar(
+        select(AiOrchestratorEvent).where(
+            AiOrchestratorEvent.event_key == f"call.notes:{transcript.id}"
+        )
+    )
+    assert operation_event is not None
+    assert operation_event.status == "dismissed"
+    assert operation_event.last_error is not None
+    assert operation_event.last_error.startswith("Lead closed out:")
 
 
 def test_call_transcription_auto_populates_empty_fields_before_review(

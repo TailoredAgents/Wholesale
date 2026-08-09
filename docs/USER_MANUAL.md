@@ -192,7 +192,9 @@ the current form before changing tabs when the page warns about unsaved work.
 - **Approved** means a named person authorized that version.
 - **Sent** means a provider request was accepted; it does not necessarily mean delivered, signed,
   replied to, paid, or funded.
-- **Archived** means retained outside normal active views.
+- **Closed** means a dead or disqualified seller opportunity whose routine follow-up has stopped.
+- **Archived** means a confirmed duplicate or test record retained outside normal active views.
+  Administrative archive is not a business disposition for a real seller opportunity.
 
 ### Saving And Refreshing
 
@@ -313,6 +315,7 @@ menu button to open the navigation drawer. The floating Help button remains at t
 | Legacy Team & Access redirect | `/os/operations?tab=team` |
 | Legacy Email Management redirect | `/os/inbox?manage=email` |
 | Leads: Lead Queue | `/os/leads?view=queue` |
+| Closed Leads | `/os/leads/closed` |
 | Archived Leads | `/os/leads/archived` |
 | Leads: Pipeline | `/os/leads?display=board` |
 | Calendar: Appointment | `/os/calendar?view=appointment` |
@@ -1315,7 +1318,10 @@ Leads**, **Pipeline**, and **Underwriting**.
 8. Filter by owner, stage, or saved view.
 9. Review status and next action in the local detail drawer.
 10. Open the full seller record when deeper work is required.
-11. Archive a dead or duplicate record only with the required authority and reason.
+11. Select **Close out lead** when a real opportunity is dead or disqualified. Choose the
+    disposition and record a specific reason.
+12. Use **Administrative archive** only for a confirmed duplicate or test record. Never use it to
+    remove a real seller opportunity from the pipeline.
 
 When you open **Full record** from a filtered list or Pipeline view, Stonegate remembers that exact
 view. Select **Back** in the seller record to return to the same filters and selected seller.
@@ -1323,7 +1329,20 @@ view. Select **Back** in the seller record to return to the same filters and sel
 Use **New Lead** only for a genuine CRM opportunity. Cold list records belong in Campaigns and
 Prospecting as prospects until the seller expresses interest.
 
-Use **Archived** from Leads to locate and restore archived records.
+Closing a lead cancels its open tasks, scheduled appointments, automated follow-up, calling and
+handoff work, every pending approval tied to the lead, and unused offer authority. It closes the
+Lead Queue case and active Inbox route so routine overdue warnings stop. Active deal, contract, or
+disposition work must be cancelled or resolved first. A funded deal is already a completed success
+and cannot be closed as dead or disqualified.
+
+The record remains under **Closed** with its saved seller and property facts, calls and internal
+notes, recent activity, appointments, valuation versions, transactions, and buyer offers available
+as read-only history. To resume work, select **Reopen lead**, explain why, and schedule a future
+next action. A genuine inbound seller email, text, or call automatically reopens a closed lead and
+creates urgent follow-up work.
+
+Use **Archived** from Leads only to inspect, restore, or permanently remove confirmed duplicate and
+test records.
 
 ### Pipeline
 

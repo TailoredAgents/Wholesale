@@ -23,6 +23,7 @@ from app.models.foundation import (
 )
 from app.schemas.ai import AiRuntimeExecuteCreate
 from app.schemas.tasks import AiOperationReviewRead, AiOperationReviewRequest
+from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES, lock_organization_lead
 
 SUPPORTED_EVENT_CAPABILITIES = {
     "lead.created": "lead.next_action",
@@ -190,8 +191,38 @@ def mark_call_intelligence_ai_work(
     approval_request_id: UUID | None = None,
     error_message: str | None = None,
 ) -> None:
-    event = db.get(AiOrchestratorEvent, event_id)
+    event_identity = db.execute(
+        select(
+            AiOrchestratorEvent.organization_id,
+            AiOrchestratorEvent.entity_type,
+            AiOrchestratorEvent.entity_id,
+        ).where(AiOrchestratorEvent.id == event_id)
+    ).one_or_none()
+    if event_identity is None:
+        return
+    lead: Lead | None = None
+    if event_identity.entity_type == "lead":
+        lead = lock_organization_lead(
+            db,
+            organization_id=event_identity.organization_id,
+            lead_id=event_identity.entity_id,
+        )
+    event = db.scalar(
+        select(AiOrchestratorEvent)
+        .where(AiOrchestratorEvent.id == event_id)
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if event is None:
+        return
+    if event.status == "dismissed":
+        return
+    if lead is not None and (
+        lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES
+    ):
+        event.status = "dismissed"
+        event.processed_at = event.processed_at or datetime.now(UTC)
+        event.last_error = event.last_error or "Seller lead became inactive during call processing."
         return
     payload = dict(event.payload or {})
     if run_id is not None:
@@ -266,12 +297,17 @@ def process_next_ai_operation(
     }
     db.commit()
     event_id = event.id
+    event_organization_id = event.organization_id
+    lead_id: UUID | None = None
 
     try:
         event = db.get(AiOrchestratorEvent, event_id)
         if event is None or event.entity_type != "lead" or event.entity_id is None:
             raise ValueError("AI operations event is missing its seller lead.")
-        lead = db.get(Lead, event.entity_id)
+        if event.status == "dismissed":
+            raise ValueError("AI operations event was dismissed before execution.")
+        lead_id = event.entity_id
+        lead = db.get(Lead, lead_id)
         if lead is None or lead.archived_at is not None:
             raise ValueError("The seller lead is no longer available.")
         assigned_user_id = payload_uuid((event.payload or {}).get("assigned_user_id"))
@@ -311,8 +347,24 @@ def process_next_ai_operation(
                 orchestrator_event_id=event.id,
             ),
         )
-        event = db.get(AiOrchestratorEvent, event_id)
+        lead, event = lock_ai_lead_and_event(
+            db,
+            organization_id=event_organization_id,
+            lead_id=lead_id,
+            event_id=event_id,
+        )
         if event is None:
+            return event_id
+        if (
+            event.status == "dismissed"
+            or lead is None
+            or lead.archived_at is not None
+            or lead.stage_key in {"dead", "disqualified"}
+        ):
+            event.status = "dismissed"
+            event.processed_at = datetime.now(UTC)
+            event.last_error = "Lead closed while AI next-action work was running."
+            db.commit()
             return event_id
         event.status = normalize_run_status(run.status)
         event.processed_at = datetime.now(UTC)
@@ -341,8 +393,31 @@ def process_next_ai_operation(
         return event_id
     except Exception as exc:
         db.rollback()
-        event = db.get(AiOrchestratorEvent, event_id)
+        if lead_id is None:
+            event_identity = db.scalar(
+                select(AiOrchestratorEvent.entity_id).where(
+                    AiOrchestratorEvent.organization_id == event_organization_id,
+                    AiOrchestratorEvent.id == event_id,
+                )
+            )
+            lead_id = event_identity
+        lead, event = lock_ai_lead_and_event(
+            db,
+            organization_id=event_organization_id,
+            lead_id=lead_id,
+            event_id=event_id,
+        )
         if event is not None:
+            if (
+                event.status == "dismissed"
+                or lead is not None
+                and (lead.archived_at is not None or lead.stage_key in {"dead", "disqualified"})
+            ):
+                event.status = "dismissed"
+                event.processed_at = datetime.now(UTC)
+                event.last_error = "Lead closed while AI next-action work was running."
+                db.commit()
+                return event_id
             event.status = "failed"
             event.processed_at = datetime.now(UTC)
             event.last_error = str(exc)[:2000]
@@ -360,21 +435,36 @@ def review_ai_operation(
     event_id: UUID,
     payload: AiOperationReviewRequest,
 ) -> AiOperationReviewRead | None:
-    event = db.scalar(
-        select(AiOrchestratorEvent).where(
+    event_identity = db.execute(
+        select(
+            AiOrchestratorEvent.event_type,
+            AiOrchestratorEvent.entity_id,
+        ).where(
             AiOrchestratorEvent.organization_id == principal.organization_id,
             AiOrchestratorEvent.id == event_id,
         )
+    ).one_or_none()
+    if event_identity is None:
+        return None
+    event_type, lead_id = event_identity
+    if event_type not in SUPPORTED_EVENT_CAPABILITIES or lead_id is None:
+        raise ValueError("Open the source workspace to review this AI result.")
+    lead, event = lock_ai_lead_and_event(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=lead_id,
+        event_id=event_id,
     )
     if event is None:
         return None
-    if event.status != "needs_review":
-        raise ValueError("This AI work item is no longer awaiting review.")
-    if event.event_type not in SUPPORTED_EVENT_CAPABILITIES or event.entity_id is None:
-        raise ValueError("Open the source workspace to review this AI result.")
-    lead = db.get(Lead, event.entity_id)
+    if event.entity_type != "lead" or event.entity_id != lead_id:
+        raise ValueError("The AI work item's seller lead changed before review.")
     if lead is None:
         raise ValueError("The source seller lead is unavailable.")
+    if lead.archived_at is not None or lead.stage_key in {"dead", "disqualified"}:
+        raise ValueError("Reopen the closed lead before reviewing its AI next action.")
+    if event.status != "needs_review":
+        raise ValueError("This AI work item is no longer awaiting review.")
     if not can_review_event(principal, event, lead):
         raise PermissionError("This AI work item is not assigned to you.")
     run = db.scalar(
@@ -437,6 +527,38 @@ def review_ai_operation(
         outcome=payload.decision,
         reviewed_at=reviewed_at,
     )
+
+
+def lock_ai_lead_and_event(
+    db: Session,
+    *,
+    organization_id: UUID,
+    lead_id: UUID | None,
+    event_id: UUID,
+) -> tuple[Lead | None, AiOrchestratorEvent | None]:
+    lead = (
+        db.scalar(
+            select(Lead)
+            .where(
+                Lead.organization_id == organization_id,
+                Lead.id == lead_id,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if lead_id is not None
+        else None
+    )
+    event = db.scalar(
+        select(AiOrchestratorEvent)
+        .where(
+            AiOrchestratorEvent.organization_id == organization_id,
+            AiOrchestratorEvent.id == event_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    return lead, event
 
 
 def record_approved_lead_brief(

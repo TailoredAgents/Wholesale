@@ -41,6 +41,11 @@ from app.services.communication_compliance import (
     phone_lookup_values,
 )
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
+from app.services.lead_lifecycle import (
+    LeadLifecycleConflictError,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
 
 STOP_WORDS = {"cancel", "end", "quit", "stop", "stopall", "unsubscribe"}
 START_WORDS = {"start", "unstop"}
@@ -76,6 +81,16 @@ def send_conversation_sms(
         raise PermissionError("SMS can only be sent from an assigned conversation.")
     if conversation.conversation_type not in {"lead", "buyer"}:
         raise SmsConfigurationError("SMS is only available from seller and buyer conversations.")
+    active_lead: Lead | None = None
+    if conversation.conversation_type == "lead" and conversation.lead_id is not None:
+        active_lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=conversation.lead_id,
+        )
+        if active_lead is None:
+            return None
+        require_lead_open_for_work(active_lead)
 
     body = payload.body.strip()
     body_hash = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -109,7 +124,7 @@ def send_conversation_sms(
             f"This SMS request is already {existing_dispatch.status}; use a new request to retry."
         )
 
-    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    lead = active_lead if conversation.conversation_type == "lead" else None
     contact = db.get(Contact, conversation.contact_id)
     if conversation.conversation_type == "lead" and lead is None:
         return None
@@ -173,6 +188,53 @@ def send_conversation_sms(
     db.add(dispatch)
     db.commit()
     dispatch_id = dispatch.id
+
+    if lead is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead.id,
+        )
+        try:
+            if lead is None:
+                raise LeadLifecycleConflictError("The SMS seller lead is unavailable.")
+            require_lead_open_for_work(lead)
+        except LeadLifecycleConflictError:
+            cancelled_dispatch = db.scalar(
+                select(CommunicationDispatch)
+                .where(CommunicationDispatch.id == dispatch_id)
+                .with_for_update()
+            )
+            if cancelled_dispatch is not None and cancelled_dispatch.status == "pending":
+                cancelled_dispatch.status = "cancelled"
+                cancelled_dispatch.error_code = "lead_closed"
+                cancelled_dispatch.error_message = (
+                    "SMS cancelled because the seller lead was closed before provider delivery."
+                )
+                cancelled_dispatch.completed_at = datetime.now(UTC)
+            db.commit()
+            raise
+        locked_conversation = db.scalar(
+            select(Conversation)
+            .where(
+                Conversation.id == conversation.id,
+                Conversation.organization_id == principal.organization_id,
+            )
+            .execution_options(populate_existing=True)
+        )
+        if locked_conversation is None:
+            raise SmsConfigurationError("SMS conversation is unavailable.")
+        conversation = locked_conversation
+        locked_dispatch = db.scalar(
+            select(CommunicationDispatch)
+            .where(
+                CommunicationDispatch.id == dispatch_id,
+                CommunicationDispatch.status == "pending",
+            )
+            .with_for_update()
+        )
+        if locked_dispatch is None:
+            raise SmsDispatchConflictError("The SMS dispatch is no longer pending.")
 
     if settings.communication_provider_mode == "disabled" or (
         not settings.communication_simulation_enabled and not settings.twilio_sms_configured
@@ -261,6 +323,7 @@ def send_conversation_sms(
         conversation,
         direction="outbound",
         occurred_at=occurred_at,
+        db=db,
     )
     entity_type, entity_id = conversation_activity_entity(db, conversation)
     db.add(
@@ -406,6 +469,8 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
         conversation,
         direction="inbound",
         occurred_at=occurred_at,
+        db=db,
+        reactivate_closed_lead=opt_out_type not in {"STOP", "START"},
     )
     if opt_out_type in {"STOP", "START"}:
         apply_sms_preference(

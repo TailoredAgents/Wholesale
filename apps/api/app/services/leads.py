@@ -5,7 +5,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, delete, exists, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
@@ -29,6 +29,7 @@ from app.integrations.rentcast_client import (
 )
 from app.models.foundation import (
     ActivityEvent,
+    AiOrchestratorEvent,
     AiRunLog,
     Appointment,
     ApprovalRequest,
@@ -37,6 +38,8 @@ from app.models.foundation import (
     Buyer,
     BuyerEngagement,
     BuyerOffer,
+    CalendarEvent,
+    CallingListEntry,
     CommunicationRecord,
     ConsentRecord,
     Contact,
@@ -53,13 +56,20 @@ from app.models.foundation import (
     DispositionCampaign,
     DispositionCase,
     DispositionMatch,
+    FollowUpEnrollment,
     LandValuationAnalysis,
     Lead,
     LeadFormSubmission,
+    LeadManagementCase,
+    Notification,
+    OfferConcession,
     OfferNegotiationPlan,
     OfflineConversionExport,
     Permission,
     Property,
+    ProspectCallingBatchEntry,
+    ProspectHandoff,
+    ProspectingAttempt,
     RepairEstimate,
     RevenueRecord,
     RoleAssignment,
@@ -78,6 +88,7 @@ from app.models.foundation import (
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
     User,
+    VoiceCallIntent,
 )
 from app.schemas.leads import (
     ActivityEventRead,
@@ -92,6 +103,8 @@ from app.schemas.leads import (
     LeadAppointmentCreate,
     LeadAssignableUserRead,
     LeadBuyerOfferCreate,
+    LeadCloseOutRead,
+    LeadCloseOutRequest,
     LeadCommunicationCreate,
     LeadContactMethodUpdate,
     LeadCreate,
@@ -105,6 +118,8 @@ from app.schemas.leads import (
     LeadNextBestAction,
     LeadNoteCreate,
     LeadRead,
+    LeadReopenRead,
+    LeadReopenRequest,
     LeadStaffUpdate,
     LeadStageUpdate,
     LeadTaskRead,
@@ -134,6 +149,11 @@ from app.services.inbox import (
     ensure_primary_conversation,
     sync_conversation_to_lead_stage,
     update_conversation_activity,
+)
+from app.services.lead_lifecycle import (
+    TERMINAL_CLOSE_OUT_STAGES,
+    LeadLifecycleConflictError,
+    require_lead_open_for_work,
 )
 from app.services.property_identity import (
     find_property_by_identity,
@@ -215,6 +235,13 @@ APPOINTMENT_TYPES = {"seller_call", "walkthrough", "offer_review", "follow_up"}
 APPOINTMENT_STATUSES = {"scheduled", "completed", "cancelled", "no_show", "rescheduled"}
 APPOINTMENT_LOCATION_TYPES = {"phone", "property", "video", "office", "other"}
 ACTIVE_APPOINTMENT_STATUSES = {"scheduled", "rescheduled"}
+ACTIVE_LEAD_APPOINTMENT_STATUSES = {
+    "appointment_requested",
+    "needs_scheduling",
+    "scheduled",
+    "rescheduled",
+    "confirmed",
+}
 UNDERWRITING_STATUSES = {"draft", "needs_review", "approved", "rejected"}
 TRANSACTION_CONTRACT_TYPES = {"purchase_agreement", "assignment_contract", "novation"}
 BUYER_OFFER_STATUSES = {"received", "countered", "accepted", "rejected", "withdrawn"}
@@ -297,9 +324,10 @@ LAND_UNAVAILABLE_EXECUTION_STAGES = {
     "negotiating",
     "under_contract",
 }
-
-
+TERMINAL_DEAL_STAGES = {"cancelled", "canceled", "closed", "dead", "funded"}
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
+    if payload.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError("Create the lead in an active stage, then use Close out lead.")
     assigned_user_id = payload.assigned_user_id or principal.user_id
     assigned_user = db.scalar(
         select(User).where(
@@ -485,23 +513,83 @@ def list_leads(
     principal: Principal,
     *,
     archived: bool = False,
+    closed: bool = False,
     asset_class: str | None = None,
     limit: int = 100,
+    offset: int = 0,
+    q: str | None = None,
 ) -> list[LeadRead]:
-    archive_filter = Lead.archived_at.is_not(None) if archived else Lead.archived_at.is_(None)
+    archive_filter = (
+        Lead.archived_at.is_not(None) if archived or closed else Lead.archived_at.is_(None)
+    )
     filters = [
         Lead.organization_id == principal.organization_id,
         archive_filter,
     ]
     if asset_class is not None:
         filters.append(Lead.asset_class == normalize_asset_class(asset_class))
+    search_term = (q or "").strip()
+    if search_term:
+        search_pattern = f"%{search_term}%"
+        filters.append(
+            or_(
+                Lead.close_out_disposition.ilike(search_pattern),
+                Lead.close_out_reason.ilike(search_pattern),
+                exists(
+                    select(Contact.id).where(
+                        Contact.id == Lead.contact_id,
+                        or_(
+                            Contact.legal_name.ilike(search_pattern),
+                            Contact.preferred_name.ilike(search_pattern),
+                        ),
+                    )
+                ),
+                exists(
+                    select(ContactMethod.id).where(
+                        ContactMethod.contact_id == Lead.contact_id,
+                        ContactMethod.value.ilike(search_pattern),
+                    )
+                ),
+                exists(
+                    select(Property.id).where(
+                        Property.id == Lead.property_id,
+                        or_(
+                            Property.street_address.ilike(search_pattern),
+                            Property.city.ilike(search_pattern),
+                            Property.state.ilike(search_pattern),
+                            Property.postal_code.ilike(search_pattern),
+                            Property.county.ilike(search_pattern),
+                            Property.parcel_id.ilike(search_pattern),
+                        ),
+                    )
+                ),
+            )
+        )
+    if closed:
+        filters.extend(
+            (
+                Lead.stage_key.in_(TERMINAL_CLOSE_OUT_STAGES),
+                Lead.close_out_disposition.in_(TERMINAL_CLOSE_OUT_STAGES),
+            )
+        )
+    elif archived:
+        filters.append(Lead.stage_key.not_in(TERMINAL_CLOSE_OUT_STAGES))
     if (
         PermissionKeys.VIEW_LEADS not in principal.permission_keys
         and PermissionKeys.EDIT_LEADS not in principal.permission_keys
     ):
         filters.append(Lead.assigned_user_id == principal.user_id)
+    order_by = (
+        (Lead.closed_out_at.desc(), Lead.created_at.desc(), Lead.id.desc())
+        if closed
+        else (Lead.created_at.desc(), Lead.id.desc())
+    )
     leads = db.scalars(
-        select(Lead).where(*filters).order_by(Lead.created_at.desc()).limit(limit)
+        select(Lead)
+        .where(*filters)
+        .order_by(*order_by)
+        .offset(offset)
+        .limit(limit)
     ).all()
     return [lead_to_read(db, lead) for lead in leads]
 
@@ -897,6 +985,26 @@ def build_lead_intelligence(
     contact_methods: list[ContactMethod],
     open_tasks: list[Task],
 ) -> LeadIntelligence:
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        next_best_action = LeadNextBestAction(
+            action_type="reopen_required",
+            label="No follow-up required",
+            description="This lead is closed. Reopen it to resume follow-up.",
+            priority="normal",
+        )
+        return LeadIntelligence(
+            quality_score=0,
+            urgency_score=0,
+            priority_label="routine",
+            missing_fields=[],
+            next_best_action=next_best_action,
+            ai_ready_summary=get_ai_ready_summary(
+                lead,
+                [],
+                next_best_action,
+                0,
+            ),
+        )
     missing_fields = get_missing_fields(lead, contact_methods)
     quality_score = get_quality_score(missing_fields)
     urgency_score = get_urgency_score(lead, open_tasks)
@@ -952,6 +1060,8 @@ def get_quality_score(missing_fields: list[LeadMissingField]) -> int:
 
 
 def get_urgency_score(lead: Lead, open_tasks: list[Task]) -> int:
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        return 0
     score = 0
     if lead.lead_temperature == "hot":
         score += 30
@@ -998,6 +1108,13 @@ def get_next_best_action(
     open_tasks: list[Task],
     quality_score: int,
 ) -> LeadNextBestAction:
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        return LeadNextBestAction(
+            action_type="reopen_required",
+            label="No follow-up required",
+            description="This lead is closed. Reopen it to resume follow-up.",
+            priority="normal",
+        )
     overdue_task = get_first_overdue_task(open_tasks)
     if overdue_task is not None:
         return LeadNextBestAction(
@@ -1113,10 +1230,22 @@ def update_lead_stage(
 ) -> LeadDetail | None:
     if payload.stage_key not in SELLER_PIPELINE_STAGES:
         raise ValueError(f"Unsupported seller pipeline stage: {payload.stage_key}")
+    if payload.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError(
+            "Use Close out lead so the disposition, reason, tasks, reminders, and inbox are "
+            "updated together."
+        )
 
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+    )
     if lead is None:
         return None
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError("Reopen this closed lead before changing its pipeline stage.")
     previous_stage = lead.stage_key
     if previous_stage == payload.stage_key:
         return get_lead_detail(db, principal, lead_id)
@@ -1201,9 +1330,16 @@ def create_lead_follow_up_task(
     lead_id: UUID,
     payload: LeadFollowUpTaskCreate,
 ) -> LeadDetail | None:
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
 
     supersede_open_primary_tasks(db, lead_id=lead.id)
     task = Task(
@@ -1273,9 +1409,17 @@ def add_lead_communication(
     if payload.status not in COMMUNICATION_STATUSES:
         raise ValueError(f"Unsupported communication status: {payload.status}")
 
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    if payload.direction != "inbound":
+        require_lead_open_for_work(lead)
 
     conversation = ensure_primary_conversation(db, lead)
     occurred_at = payload.occurred_at or datetime.now(UTC)
@@ -1304,6 +1448,7 @@ def add_lead_communication(
         conversation,
         direction=payload.direction,
         occurred_at=occurred_at,
+        db=db,
     )
     db.flush()
 
@@ -1362,9 +1507,16 @@ def create_lead_appointment(
     ):
         raise ValueError("Appointment end time must be after start time.")
 
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
 
     owner_user_id = payload.owner_user_id or lead.assigned_user_id or principal.user_id
     owner = db.scalar(
@@ -1524,9 +1676,16 @@ def create_lead_underwriting_version(
     lead_id: UUID,
     payload: LeadUnderwritingCreate,
 ) -> LeadDetail | None:
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential underwriting")
 
     if payload.status not in UNDERWRITING_STATUSES:
@@ -1753,9 +1912,15 @@ def create_lead_market_analysis(
 ) -> LeadMarketAnalysisRead | None:
     analysis_started_at = perf_counter()
     payload = payload or LeadMarketAnalysisCreate()
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential comp analysis")
 
     settings = get_settings()
@@ -2475,6 +2640,16 @@ def create_lead_market_analysis(
         "avm_error": avm_error,
     }
 
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
+    if lead is None:
+        return None
+    require_lead_open_for_work(lead)
     latest_version = db.scalar(
         select(func.max(UnderwritingVersion.version_number)).where(
             UnderwritingVersion.organization_id == principal.organization_id,
@@ -2692,9 +2867,16 @@ def create_lead_transaction(
     if payload.contract_type not in TRANSACTION_CONTRACT_TYPES:
         raise ValueError(f"Unsupported contract type: {payload.contract_type}")
 
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential contract and transaction")
 
     existing_transaction = db.scalar(
@@ -2843,9 +3025,16 @@ def create_lead_buyer_offer(
     if payload.financing_type not in BUYER_OFFER_FINANCING_TYPES:
         raise ValueError(f"Unsupported buyer offer financing type: {payload.financing_type}")
 
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
 
     buyer = db.scalar(
@@ -2922,9 +3111,16 @@ def update_lead_staff_details(
     lead_id: UUID,
     payload: LeadStaffUpdate,
 ) -> LeadDetail | None:
-    lead = get_scoped_lead(db, principal, lead_id)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
 
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
@@ -3369,6 +3565,7 @@ def get_scoped_lead(
     lead_id: UUID,
     *,
     include_archived: bool = False,
+    for_update: bool = False,
 ) -> Lead | None:
     filters = [
         Lead.organization_id == principal.organization_id,
@@ -3381,15 +3578,768 @@ def get_scoped_lead(
         and PermissionKeys.EDIT_LEADS not in principal.permission_keys
     ):
         filters.append(Lead.assigned_user_id == principal.user_id)
-    return db.scalar(select(Lead).where(*filters))
+    statement = select(Lead).where(*filters)
+    if for_update:
+        statement = statement.execution_options(populate_existing=True).with_for_update()
+    return db.scalar(statement)
+
+
+def apply_lead_close_out_transition(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadCloseOutRequest,
+    *,
+    commit: bool = False,
+) -> LeadCloseOutRead | None:
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if lead is None:
+        return None
+    if payload.disposition not in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError(f"Unsupported close-out disposition: {payload.disposition}")
+
+    funded_deal_id = db.scalar(
+        select(Deal.id).where(
+            Deal.organization_id == principal.organization_id,
+            Deal.lead_id == lead.id,
+            Deal.stage_key == "funded",
+        )
+    )
+    funded_transaction_id = db.scalar(
+        select(Transaction.id).where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.lead_id == lead.id,
+            Transaction.status == "funded",
+        )
+    )
+    if funded_deal_id is not None or funded_transaction_id is not None:
+        raise LeadLifecycleConflictError(
+            "A funded deal is a completed success and cannot be closed as dead or disqualified."
+        )
+
+    active_deal_id = db.scalar(
+        select(Deal.id).where(
+            Deal.organization_id == principal.organization_id,
+            Deal.lead_id == lead.id,
+            Deal.stage_key.not_in(TERMINAL_DEAL_STAGES),
+        )
+    )
+    active_transaction_id = db.scalar(
+        select(Transaction.id).where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.lead_id == lead.id,
+            Transaction.status.not_in(("cancelled", "canceled", "closed", "funded")),
+        )
+    )
+    active_disposition_id = db.scalar(
+        select(DispositionCase.id).where(
+            DispositionCase.organization_id == principal.organization_id,
+            DispositionCase.lead_id == lead.id,
+            DispositionCase.status.not_in(("closed", "cancelled", "canceled", "reconciled")),
+        )
+    )
+    if (
+        active_deal_id is not None
+        or active_transaction_id is not None
+        or active_disposition_id is not None
+    ):
+        raise LeadLifecycleConflictError(
+            "Cancel or complete the active deal, contract, and disposition work before closing "
+            "out this lead."
+        )
+    if (
+        lead.archived_at is not None
+        and lead.stage_key in TERMINAL_CLOSE_OUT_STAGES
+        and lead.stage_key != payload.disposition
+    ):
+        raise LeadLifecycleConflictError(
+            "This lead is already closed with a different disposition. Reopen it before "
+            "changing the disposition."
+        )
+
+    now = datetime.now(UTC)
+    previous_lead = {
+        "stage_key": lead.stage_key,
+        "archived_at": lead.archived_at.isoformat() if lead.archived_at else None,
+        "next_follow_up_at": (
+            lead.next_follow_up_at.isoformat() if lead.next_follow_up_at else None
+        ),
+        "appointment_status": lead.appointment_status,
+        "close_out_disposition": lead.close_out_disposition,
+        "close_out_reason": lead.close_out_reason,
+        "closed_out_at": lead.closed_out_at.isoformat() if lead.closed_out_at else None,
+        "closed_out_by_user_id": (
+            str(lead.closed_out_by_user_id) if lead.closed_out_by_user_id else None
+        ),
+    }
+    fresh_close_transition = (
+        lead.archived_at is None or lead.stage_key not in TERMINAL_CLOSE_OUT_STAGES
+    )
+    close_metadata_changed = (
+        fresh_close_transition
+        or lead.close_out_disposition != payload.disposition
+        or lead.close_out_reason != payload.reason
+        or lead.closed_out_at is None
+        or lead.closed_out_by_user_id is None
+    )
+    appointment_status_requires_close = (
+        lead.appointment_status in ACTIVE_LEAD_APPOINTMENT_STATUSES
+    )
+    lead_changed = (
+        lead.stage_key != payload.disposition
+        or lead.archived_at is None
+        or lead.next_follow_up_at is not None
+        or appointment_status_requires_close
+        or close_metadata_changed
+    )
+    lead.stage_key = payload.disposition
+    lead.archived_at = lead.archived_at or now
+    lead.next_follow_up_at = None
+    if close_metadata_changed:
+        lead.close_out_disposition = payload.disposition
+        lead.close_out_reason = payload.reason
+        lead.closed_out_at = now
+        lead.closed_out_by_user_id = principal.user_id
+
+    tasks = list(
+        db.scalars(
+            select(Task).where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == lead.id,
+                Task.status.in_(("open", "in_progress")),
+            )
+        ).all()
+    )
+    for task in tasks:
+        task.status = "cancelled"
+        task.completed_at = now
+        task.completed_by_user_id = principal.user_id
+        task.outcome = "lead_closed_out"
+        task.completion_notes = payload.reason
+
+    appointments = list(
+        db.scalars(
+            select(Appointment).where(
+                Appointment.organization_id == principal.organization_id,
+                Appointment.lead_id == lead.id,
+                Appointment.status.in_(ACTIVE_APPOINTMENT_STATUSES),
+            )
+        ).all()
+    )
+    for appointment in appointments:
+        appointment.status = "cancelled"
+        appointment.outcome = f"Cancelled because lead was closed: {payload.reason}"[:1000]
+        appointment.appointment_metadata = {
+            **dict(appointment.appointment_metadata or {}),
+            "lead_close_out": {
+                "actor_user_id": str(principal.user_id),
+                "closed_at": now.isoformat(),
+                "disposition": payload.disposition,
+                "reason": payload.reason,
+            },
+        }
+        _sync_cancelled_internal_calendar_event(db, appointment)
+    if appointments or appointment_status_requires_close:
+        lead.appointment_status = "cancelled"
+
+    enrollments = list(
+        db.scalars(
+            select(FollowUpEnrollment).where(
+                FollowUpEnrollment.organization_id == principal.organization_id,
+                FollowUpEnrollment.lead_id == lead.id,
+                FollowUpEnrollment.status == "active",
+            )
+        ).all()
+    )
+    for enrollment in enrollments:
+        enrollment.status = f"cancelled:{enrollment.id}"
+        enrollment.completed_at = now
+
+    pending_lead_approvals = list(
+        db.scalars(
+            select(ApprovalRequest).where(
+                ApprovalRequest.organization_id == principal.organization_id,
+                ApprovalRequest.status == "pending",
+            )
+        ).all()
+    )
+    lead_approvals = [
+        approval
+        for approval in pending_lead_approvals
+        if (
+            approval.entity_type == "lead" and approval.entity_id == lead.id
+            or str((approval.approval_metadata or {}).get("lead_id", "")) == str(lead.id)
+        )
+    ]
+    follow_up_approval_count = sum(
+        approval.request_type.startswith("follow_up_") for approval in lead_approvals
+    )
+    for approval in lead_approvals:
+        approval.status = "cancelled"
+        approval.decided_by_user_id = principal.user_id
+        approval.decided_at = now
+        approval.decision_notes = f"Lead closed out: {payload.reason}"[:2000]
+
+    retired_offer_plans = list(
+        db.scalars(
+            select(OfferNegotiationPlan).where(
+                OfferNegotiationPlan.organization_id == principal.organization_id,
+                OfferNegotiationPlan.lead_id == lead.id,
+                OfferNegotiationPlan.status.in_(("pending", "approved")),
+            )
+        ).all()
+    )
+    for plan in retired_offer_plans:
+        plan.status = "cancelled"
+
+    unused_concessions = list(
+        db.scalars(
+            select(OfferConcession).where(
+                OfferConcession.organization_id == principal.organization_id,
+                OfferConcession.lead_id == lead.id,
+                OfferConcession.status.in_(("pending", "authorized", "approved")),
+            )
+        ).all()
+    )
+    for concession in unused_concessions:
+        concession.status = "cancelled"
+        concession.decided_by_user_id = principal.user_id
+        concession.decided_at = now
+        concession.decision_notes = f"Lead closed out: {payload.reason}"[:2000]
+
+    calling_list_entries = list(
+        db.scalars(
+            select(CallingListEntry).where(
+                CallingListEntry.organization_id == principal.organization_id,
+                CallingListEntry.lead_id == lead.id,
+                CallingListEntry.status != "completed",
+            )
+        ).all()
+    )
+    for entry in calling_list_entries:
+        entry.status = "completed"
+        entry.disposition = payload.disposition
+        entry.notes = f"Lead closed out: {payload.reason}"[:1000]
+        entry.completed_at = now
+
+    ai_next_action_events = list(
+        db.scalars(
+            select(AiOrchestratorEvent)
+            .where(
+                AiOrchestratorEvent.organization_id == principal.organization_id,
+                AiOrchestratorEvent.entity_type == "lead",
+                AiOrchestratorEvent.entity_id == lead.id,
+                AiOrchestratorEvent.status.in_(("queued", "processing", "needs_review")),
+            )
+            .with_for_update()
+        ).all()
+    )
+    for event in ai_next_action_events:
+        event.status = "dismissed"
+        event.processed_at = now
+        event.last_error = f"Lead closed out: {payload.reason}"[:2000]
+
+    pending_call_intents = list(
+        db.scalars(
+            select(VoiceCallIntent).where(
+                VoiceCallIntent.organization_id == principal.organization_id,
+                VoiceCallIntent.lead_id == lead.id,
+                VoiceCallIntent.status.in_(("pending", "started")),
+            )
+        ).all()
+    )
+    for intent in pending_call_intents:
+        intent.status = "cancelled"
+
+    pending_handoffs = list(
+        db.scalars(
+            select(ProspectHandoff).where(
+                ProspectHandoff.organization_id == principal.organization_id,
+                ProspectHandoff.lead_id == lead.id,
+                ProspectHandoff.status == "pending",
+            )
+        ).all()
+    )
+    for handoff in pending_handoffs:
+        handoff.status = "cancelled"
+        handoff.reviewed_by_user_id = principal.user_id
+        handoff.reviewed_at = now
+        handoff.decision_code = "rejected_other"
+        handoff.review_reason = f"Lead closed out: {payload.reason}"[:1000]
+        entry = db.scalar(
+            select(ProspectCallingBatchEntry)
+            .join(
+                ProspectingAttempt,
+                ProspectingAttempt.batch_entry_id == ProspectCallingBatchEntry.id,
+            )
+            .where(ProspectingAttempt.id == handoff.attempt_id)
+        )
+        if entry is not None:
+            entry.status = "completed"
+            entry.completed_at = entry.completed_at or now
+
+    management_case = db.scalar(
+        select(LeadManagementCase).where(
+            LeadManagementCase.organization_id == principal.organization_id,
+            LeadManagementCase.lead_id == lead.id,
+        )
+    )
+    case_changed = False
+    if management_case is not None:
+        case_changed = (
+            management_case.status != "closed"
+            or management_case.closed_at is None
+            or management_case.next_action_type is not None
+            or management_case.next_action_due_at is not None
+        )
+        management_case.status = "closed"
+        management_case.closed_at = management_case.closed_at or now
+        management_case.next_action_type = None
+        management_case.next_action_due_at = None
+
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.organization_id == principal.organization_id,
+            Conversation.lead_id == lead.id,
+        )
+    )
+    conversation_before = (
+        (
+            conversation.status,
+            conversation.queue_key,
+            conversation.closed_at,
+            conversation.unread_count,
+        )
+        if conversation is not None
+        else None
+    )
+    sync_conversation_to_lead_stage(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason=payload.reason,
+    )
+    conversation = db.scalar(
+        select(Conversation).where(
+            Conversation.organization_id == principal.organization_id,
+            Conversation.lead_id == lead.id,
+        )
+    )
+    if conversation is not None:
+        conversation.status = "closed"
+        conversation.queue_key = "closed"
+        conversation.closed_at = conversation.closed_at or now
+        conversation.unread_count = 0
+    conversation_after = (
+        (
+            conversation.status,
+            conversation.queue_key,
+            conversation.closed_at,
+            conversation.unread_count,
+        )
+        if conversation is not None
+        else None
+    )
+    conversation_changed = conversation_before != conversation_after
+
+    notification_filters: list[Any] = []
+    notification_filters.append(
+        and_(
+            Notification.entity_type == "task",
+            Notification.entity_id.in_(
+                select(Task.id).where(
+                    Task.organization_id == principal.organization_id,
+                    Task.lead_id == lead.id,
+                )
+            ),
+        )
+    )
+    notification_filters.append(
+        and_(
+            Notification.entity_type == "appointment",
+            Notification.entity_id.in_(
+                select(Appointment.id).where(
+                    Appointment.organization_id == principal.organization_id,
+                    Appointment.lead_id == lead.id,
+                )
+            ),
+        )
+    )
+    if management_case is not None:
+        notification_filters.append(
+            and_(
+                Notification.entity_type == "lead_management_case",
+                Notification.entity_id == management_case.id,
+            )
+        )
+    if conversation is not None:
+        notification_filters.append(
+            and_(
+                Notification.entity_type == "conversation",
+                Notification.entity_id == conversation.id,
+            )
+        )
+    if pending_handoffs:
+        notification_filters.append(
+            and_(
+                Notification.entity_type == "prospect_handoff",
+                Notification.entity_id.in_([handoff.id for handoff in pending_handoffs]),
+            )
+        )
+    notification_filters.append(
+        and_(
+            Notification.entity_type == "lead",
+            Notification.entity_id == lead.id,
+        )
+    )
+    notifications = (
+        list(
+            db.scalars(
+                select(Notification).where(
+                    Notification.organization_id == principal.organization_id,
+                    Notification.read_at.is_(None),
+                    or_(*notification_filters),
+                )
+            ).all()
+        )
+        if notification_filters
+        else []
+    )
+    for notification in notifications:
+        notification.read_at = now
+
+    changed = any(
+        (
+            lead_changed,
+            bool(tasks),
+            bool(appointments),
+            bool(enrollments),
+            bool(lead_approvals),
+            bool(retired_offer_plans),
+            bool(unused_concessions),
+            bool(calling_list_entries),
+            bool(ai_next_action_events),
+            bool(pending_call_intents),
+            bool(pending_handoffs),
+            bool(notifications),
+            case_changed,
+            conversation_changed,
+        )
+    )
+    if changed:
+        db.add(
+            ActivityEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type="lead.closed_out",
+                summary=(
+                    f"Lead closed as {payload.disposition.replace('_', ' ')}. "
+                    f"Reason: {payload.reason}"
+                )[:500],
+            )
+        )
+        db.add(
+            AuditEvent(
+                organization_id=principal.organization_id,
+                actor_user_id=principal.user_id,
+                actor_type="user",
+                action="lead.close_out",
+                entity_type="lead",
+                entity_id=lead.id,
+                previous_value=previous_lead,
+                new_value={
+                    "stage_key": lead.stage_key,
+                    "archived_at": lead.archived_at.isoformat(),
+                    "next_follow_up_at": None,
+                    "cancelled_tasks": len(tasks),
+                    "cancelled_appointments": len(appointments),
+                    "cancelled_follow_up_enrollments": len(enrollments),
+                    "cancelled_follow_up_approvals": follow_up_approval_count,
+                    "cancelled_pending_approvals": len(lead_approvals),
+                    "cancelled_active_offer_plans": len(retired_offer_plans),
+                    "cancelled_unused_offer_concessions": len(unused_concessions),
+                    "completed_calling_list_entries": len(calling_list_entries),
+                    "dismissed_ai_next_action_events": len(ai_next_action_events),
+                    "cancelled_voice_call_intents": len(pending_call_intents),
+                    "cancelled_pending_prospect_handoffs": len(pending_handoffs),
+                    "dismissed_notifications": len(notifications),
+                    "lead_management_case_closed": management_case is not None,
+                    "conversation_closed": conversation is not None,
+                },
+                reason=payload.reason,
+            )
+        )
+
+    if commit:
+        db.commit()
+        db.refresh(lead)
+    else:
+        db.flush()
+    return LeadCloseOutRead(
+        lead=lead_to_read(db, lead),
+        changed=changed,
+        cancelled_tasks=len(tasks),
+        cancelled_appointments=len(appointments),
+        cancelled_follow_up_enrollments=len(enrollments),
+        cancelled_follow_up_approvals=follow_up_approval_count,
+        cancelled_pending_approvals=len(lead_approvals),
+        completed_calling_list_entries=len(calling_list_entries),
+        dismissed_ai_next_action_events=len(ai_next_action_events),
+        dismissed_notifications=len(notifications),
+        closed_lead_management_case=(
+            management_case is not None and management_case.status == "closed"
+        ),
+        closed_conversation=(conversation is not None and conversation.status == "closed"),
+    )
+
+
+def close_out_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadCloseOutRequest,
+) -> LeadCloseOutRead | None:
+    return apply_lead_close_out_transition(
+        db,
+        principal,
+        lead_id,
+        payload,
+        commit=True,
+    )
+
+
+def reopen_lead(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: LeadReopenRequest,
+) -> LeadReopenRead | None:
+    now = datetime.now(UTC)
+    next_action_due_at = _utc_datetime(payload.next_action_due_at)
+    if next_action_due_at <= now:
+        raise ValueError("The reopened lead's next action must be scheduled in the future.")
+
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if lead is None:
+        return None
+
+    active_primary_tasks = list(
+        db.scalars(
+            select(Task).where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == lead.id,
+                Task.work_kind == "primary_next_action",
+                Task.status.in_(("open", "in_progress")),
+            )
+        ).all()
+    )
+    if lead.archived_at is None and lead.stage_key == "reopened":
+        if (
+            len(active_primary_tasks) == 1
+            and active_primary_tasks[0].due_at is not None
+            and _utc_datetime(active_primary_tasks[0].due_at) == next_action_due_at
+            and active_primary_tasks[0].title == payload.next_action_title
+        ):
+            return LeadReopenRead(
+                lead=lead_to_read(db, lead),
+                changed=False,
+                follow_up_task_id=active_primary_tasks[0].id,
+            )
+        raise LeadLifecycleConflictError(
+            "This lead is already active. Update its existing next action instead of reopening it."
+        )
+    if lead.archived_at is None:
+        raise LeadLifecycleConflictError("Only a closed lead can be reopened.")
+    if lead.stage_key not in TERMINAL_CLOSE_OUT_STAGES:
+        raise LeadLifecycleConflictError(
+            "This record was archived without a close-out disposition. Restore it from the archive "
+            "instead."
+        )
+
+    previous_lead = {
+        "stage_key": lead.stage_key,
+        "archived_at": lead.archived_at.isoformat(),
+        "next_follow_up_at": (
+            lead.next_follow_up_at.isoformat() if lead.next_follow_up_at else None
+        ),
+    }
+    stale_tasks = list(
+        db.scalars(
+            select(Task).where(
+                Task.organization_id == principal.organization_id,
+                Task.lead_id == lead.id,
+                Task.status.in_(("open", "in_progress")),
+            )
+        ).all()
+    )
+    for task in stale_tasks:
+        task.status = "cancelled"
+        task.completed_at = now
+        task.completed_by_user_id = principal.user_id
+        task.outcome = "superseded_on_reopen"
+        task.completion_notes = payload.reason
+
+    lead.archived_at = None
+    lead.stage_key = "reopened"
+    lead.next_follow_up_at = next_action_due_at
+
+    management_case = db.scalar(
+        select(LeadManagementCase).where(
+            LeadManagementCase.organization_id == principal.organization_id,
+            LeadManagementCase.lead_id == lead.id,
+        )
+    )
+    if management_case is not None:
+        management_case.status = "active"
+        management_case.closed_at = None
+        management_case.accepted_at = management_case.accepted_at or now
+        management_case.accepted_by_user_id = (
+            management_case.accepted_by_user_id or principal.user_id
+        )
+        management_case.qualification_started_at = (
+            management_case.qualification_started_at or now
+        )
+        management_case.next_action_type = "follow_up"
+        management_case.next_action_due_at = next_action_due_at
+
+    sync_conversation_to_lead_stage(
+        db,
+        lead,
+        actor_user_id=principal.user_id,
+        reason=payload.reason,
+    )
+    follow_up_task = Task(
+        organization_id=principal.organization_id,
+        lead_id=lead.id,
+        deal_id=None,
+        responsible_user_id=(
+            lead.assigned_user_id
+            or (management_case.assigned_user_id if management_case is not None else None)
+            or principal.user_id
+        ),
+        task_type="reopened_lead_follow_up",
+        work_kind="primary_next_action",
+        title=payload.next_action_title,
+        status="open",
+        priority="high",
+        due_at=next_action_due_at,
+        completed_at=None,
+    )
+    db.add(follow_up_task)
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.reopened",
+            summary=f"Lead reopened. Reason: {payload.reason}"[:500],
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.reopen",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=previous_lead,
+            new_value={
+                "stage_key": "reopened",
+                "archived_at": None,
+                "next_follow_up_at": next_action_due_at.isoformat(),
+                "primary_next_action_task_id": str(follow_up_task.id),
+            },
+            reason=payload.reason,
+        )
+    )
+    db.commit()
+    db.refresh(lead)
+    return LeadReopenRead(
+        lead=lead_to_read(db, lead),
+        changed=True,
+        follow_up_task_id=follow_up_task.id,
+    )
+
+
+def _sync_cancelled_internal_calendar_event(db: Session, appointment: Appointment) -> None:
+    event = db.scalar(
+        select(CalendarEvent).where(
+            CalendarEvent.organization_id == appointment.organization_id,
+            CalendarEvent.appointment_id == appointment.id,
+            CalendarEvent.provider == "internal",
+        )
+    )
+    event_payload = {
+        "appointment_type": appointment.appointment_type,
+        "status": appointment.status,
+        "start": appointment.scheduled_start_at.isoformat(),
+        "end": (
+            appointment.scheduled_end_at.isoformat() if appointment.scheduled_end_at else None
+        ),
+        "location": appointment.location,
+        "notes": appointment.notes,
+    }
+    if event is None:
+        db.add(
+            CalendarEvent(
+                organization_id=appointment.organization_id,
+                appointment_id=appointment.id,
+                owner_user_id=appointment.owner_user_id,
+                provider="internal",
+                external_event_id=None,
+                status="cancelled",
+                event_payload=event_payload,
+                last_error=None,
+                synced_at=None,
+            )
+        )
+        return
+    event.owner_user_id = appointment.owner_user_id
+    event.status = "cancelled"
+    event.event_payload = event_payload
+
+
+def _utc_datetime(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
 
 
 def archive_lead(db: Session, principal: Principal, lead_id: UUID) -> LeadRead | None:
-    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
     if lead.archived_at is not None:
         return lead_to_read(db, lead)
+    if lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError(
+            "Use Close out lead so the terminal disposition and cleanup are recorded together."
+        )
 
     archived_at = datetime.now(UTC)
     lead.archived_at = archived_at
@@ -3422,11 +4372,21 @@ def archive_lead(db: Session, principal: Principal, lead_id: UUID) -> LeadRead |
 
 
 def restore_lead(db: Session, principal: Principal, lead_id: UUID) -> LeadRead | None:
-    lead = get_scoped_lead(db, principal, lead_id, include_archived=True)
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
     if lead is None:
         return None
     if lead.archived_at is None:
         return lead_to_read(db, lead)
+    if lead.stage_key in TERMINAL_CLOSE_OUT_STAGES:
+        raise ValueError(
+            "Closed leads must be reopened with a reason and a future dated next action."
+        )
 
     previous_archived_at = lead.archived_at
     lead.archived_at = None
@@ -4920,6 +5880,9 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
     assigned_user = db.get(User, lead.assigned_user_id) if lead.assigned_user_id else None
+    closed_out_by_user = (
+        db.get(User, lead.closed_out_by_user_id) if lead.closed_out_by_user_id else None
+    )
     if contact is None or property_record is None:
         raise RuntimeError("lead is missing required contact or property")
 
@@ -4959,5 +5922,10 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
             lead_id=lead.id,
         ),
         archived_at=lead.archived_at,
+        close_out_disposition=lead.close_out_disposition,
+        close_out_reason=lead.close_out_reason,
+        closed_out_at=lead.closed_out_at,
+        closed_out_by_user_id=lead.closed_out_by_user_id,
+        closed_out_by_user_email=closed_out_by_user.email if closed_out_by_user else None,
         created_at=lead.created_at,
     )

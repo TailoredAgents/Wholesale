@@ -9,9 +9,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
+from app.integrations.communications import OutboundMessageRequest, OutboundMessageResult
 from app.integrations.rentcast_client import RentCastClientError
+from app.integrations.twilio_messaging import TwilioMessagingError
 from app.main import app
 from app.models.foundation import (
+    ActivityEvent,
+    AuditEvent,
     ConsentRecord,
     Contact,
     Lead,
@@ -118,6 +122,19 @@ class FakePropertyRecordClient:
         if self.error is not None:
             raise self.error
         return self.record
+
+
+class FailingStaffAlertProvider:
+    provider_name = "twilio"
+
+    def send(
+        self,
+        request: OutboundMessageRequest,
+        *,
+        dry_run: bool = True,
+    ) -> OutboundMessageResult:
+        del request, dry_run
+        raise TwilioMessagingError("Twilio rejected the staff alert for testing.")
 
 
 def test_zapier_form_allowlist_is_required_only_for_enabled_production_intake() -> None:
@@ -358,6 +375,220 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     )
     db_session.refresh(alert)
     assert alert.status == "delivered"
+
+
+def test_processed_lead_without_eligible_sms_recipient_records_durable_evidence(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session, enable_sms_alerts=False)
+    client = TestClient(app)
+    assert post_lead(client, webhook_payload("987654321012401")).status_code == 200
+
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None and event.lead_id is not None
+    assert db_session.scalar(select(StaffLeadAlert)) is None
+    activity = db_session.scalar(
+        select(ActivityEvent).where(
+            ActivityEvent.entity_id == event.lead_id,
+            ActivityEvent.event_type == "lead.staff_sms_alert_not_queued",
+        )
+    )
+    assert activity is not None
+    notification = db_session.scalar(
+        select(Notification).where(
+            Notification.recipient_user_id == owner.id,
+            Notification.notification_type == "staff_lead_alert_not_queued",
+        )
+    )
+    assert notification is not None
+    audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_id == event.id,
+            AuditEvent.action == "communication.staff_lead_alerts_not_queued",
+        )
+    )
+    assert audit is not None
+    assert audit.new_value is not None
+    assert audit.new_value["ready_recipients"] == 0
+
+
+def test_staff_alert_worker_recovers_recent_processed_lead_after_recipient_opts_in(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session, enable_sms_alerts=False)
+    assert post_lead(TestClient(app), webhook_payload("987654321012402")).status_code == 200
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    assert event_id is not None
+    assert db_session.scalar(select(StaffLeadAlert)) is None
+
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+    alert_id = process_next_staff_lead_alert(db_session, zapier_settings)
+
+    alert = db_session.get(StaffLeadAlert, alert_id)
+    assert alert is not None
+    assert alert.meta_lead_event_id == event_id
+    assert alert.status == "simulated"
+    assert alert.attempt_count == 1
+    assert process_next_staff_lead_alert(db_session, zapier_settings) is None
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+
+def test_staff_alert_worker_recovers_a_newly_eligible_recipient_for_an_alerted_lead(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session)
+    second_recipient = User(
+        organization_id=owner.organization_id,
+        email="second-recipient@example.com",
+        display_name="Second Recipient",
+        is_active=True,
+        voice_forwarding_number="+14045550124",
+        lead_alert_sms_enabled=False,
+    )
+    db_session.add(second_recipient)
+    db_session.commit()
+    assert post_lead(TestClient(app), webhook_payload("987654321012406")).status_code == 200
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    assert event_id is not None
+
+    owner_alert_id = process_next_staff_lead_alert(db_session, zapier_settings)
+    owner_alert = db_session.get(StaffLeadAlert, owner_alert_id)
+    assert owner_alert is not None
+    assert owner_alert.recipient_user_id == owner.id
+    assert owner_alert.status == "simulated"
+
+    second_recipient.lead_alert_sms_enabled = True
+    db_session.commit()
+    second_alert_id = process_next_staff_lead_alert(db_session, zapier_settings)
+
+    second_alert = db_session.get(StaffLeadAlert, second_alert_id)
+    assert second_alert is not None
+    assert second_alert.meta_lead_event_id == event_id
+    assert second_alert.recipient_user_id == second_recipient.id
+    assert second_alert.status == "simulated"
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 2
+
+
+def test_staff_alert_failure_is_visible_and_manual_requeue_is_audited(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session)
+    client = TestClient(app)
+    assert post_lead(client, webhook_payload("987654321012403")).status_code == 200
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+
+    alert_id = process_next_staff_lead_alert(
+        db_session,
+        zapier_settings,
+        FailingStaffAlertProvider(),
+    )
+    alert = db_session.get(StaffLeadAlert, alert_id)
+    assert alert is not None
+    assert alert.status == "retry"
+    assert alert.attempt_count == 1
+    assert alert.next_attempt_at is not None
+    assert "rejected" in (alert.last_error or "")
+
+    response = client.post(
+        f"/api/v1/voice/staff-lead-alerts/{event_id}/requeue",
+        headers={"X-Dev-User-Email": owner.email},
+        json={"reason": "Operator confirmed Twilio configuration is repaired."},
+    )
+    assert response.status_code == 202, response.text
+    assert response.json()["requeued"] == 1
+    db_session.refresh(alert)
+    assert alert.status == "pending"
+    assert alert.attempt_count == 0
+    assert alert.next_attempt_at is None
+    audit = db_session.scalar(
+        select(AuditEvent).where(
+            AuditEvent.entity_id == event_id,
+            AuditEvent.action == "communication.staff_lead_alerts_requeued",
+        )
+    )
+    assert audit is not None
+    assert audit.reason == "Operator confirmed Twilio configuration is repaired."
+
+    alert.status = "delivered"
+    db_session.commit()
+    delivered = client.post(
+        f"/api/v1/voice/staff-lead-alerts/{event_id}/requeue",
+        headers={"X-Dev-User-Email": owner.email},
+        json={"reason": "Verify a delivered alert cannot be sent a second time."},
+    )
+    assert delivered.status_code == 202, delivered.text
+    assert delivered.json()["requeued"] == 0
+    assert delivered.json()["skipped_active_or_delivered"] == 1
+    db_session.refresh(alert)
+    assert alert.status == "delivered"
+
+
+def test_staff_alert_manual_requeue_does_not_bypass_current_staff_opt_in(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session)
+    client = TestClient(app)
+    assert post_lead(client, webhook_payload("987654321012404")).status_code == 200
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    alert.status = "exhausted"
+    owner.lead_alert_sms_enabled = False
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/voice/staff-lead-alerts/{event_id}/requeue",
+        headers={"X-Dev-User-Email": owner.email},
+        json={"reason": "Attempt to recover while the recipient is opted out."},
+    )
+
+    assert response.status_code == 409
+    assert "opted in" in response.json()["detail"]
+    db_session.refresh(alert)
+    assert alert.status == "exhausted"
+
+
+def test_staff_alert_recovery_is_tenant_scoped(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    owner = seed_owner(db_session)
+    client = TestClient(app)
+    assert post_lead(client, webhook_payload("987654321012405")).status_code == 200
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+    other = bootstrap_foundation(
+        db_session,
+        organization_name="Other Home Buyers",
+        admin_email="other-owner@example.com",
+        admin_name="Other Owner",
+    ).admin_user
+    assert other is not None
+
+    response = client.post(
+        f"/api/v1/voice/staff-lead-alerts/{event_id}/requeue",
+        headers={"X-Dev-User-Email": other.email},
+        json={"reason": "Attempt recovery from a different organization tenant."},
+    )
+
+    assert response.status_code == 404
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    assert alert.recipient_user_id == owner.id
+    assert alert.status == "pending"
 
 
 def test_zapier_land_lead_preserves_asset_and_parcel_identity(

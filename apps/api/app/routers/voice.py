@@ -13,6 +13,10 @@ from app.integrations.twilio_recordings import (
     download_twilio_recording,
 )
 from app.integrations.twilio_voice_calls import TwilioVoiceCallError
+from app.schemas.staff_lead_alerts import (
+    StaffLeadAlertRecoveryRead,
+    StaffLeadAlertRecoveryRequest,
+)
 from app.schemas.voice import (
     CallTranscriptRead,
     CallTranscriptReview,
@@ -30,6 +34,10 @@ from app.schemas.voice import (
     VoiceSessionRead,
 )
 from app.services.call_intelligence import retry_call_transcript, review_call_transcript
+from app.services.lead_lifecycle import LeadLifecycleConflictError
+from app.services.meta_lead_ads import (
+    requeue_staff_lead_alerts,
+)
 from app.services.voice import (
     VoiceComplianceError,
     VoiceConfigurationError,
@@ -76,6 +84,8 @@ def create_conversation_call_intent(
 ) -> VoiceCallIntentRead:
     try:
         intent = create_call_intent(db, principal, conversation_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except VoiceComplianceError as exc:
@@ -104,6 +114,8 @@ def create_forwarded_conversation_call(
 ) -> VoiceCallIntentRead:
     try:
         intent = start_forwarded_call(db, principal, conversation_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except VoiceComplianceError as exc:
@@ -132,6 +144,8 @@ def create_forwarded_lead_call(
 ) -> VoiceCallIntentRead:
     try:
         intent = start_forwarded_lead_call(db, principal, lead_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except VoiceComplianceError as exc:
@@ -224,6 +238,34 @@ def update_staff_voice_forwarding(
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Staff member not found.")
     return user
+
+
+@router.post(
+    "/staff-lead-alerts/{event_id}/requeue",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def requeue_staff_lead_alert_delivery(
+    event_id: UUID,
+    payload: StaffLeadAlertRecoveryRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(manage_lines_dependency)],
+) -> StaffLeadAlertRecoveryRead:
+    try:
+        result = requeue_staff_lead_alerts(
+            db,
+            principal,
+            get_settings(),
+            event_id,
+            reason=payload.reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meta lead event not found.",
+        )
+    return result
 
 
 @router.get("/recordings/{recording_id}/media")

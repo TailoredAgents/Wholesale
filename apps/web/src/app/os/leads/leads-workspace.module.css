@@ -10,7 +10,7 @@
 .views .activeView { border-color: #9ebcab; background: var(--brand-soft); color: var(--brand-strong); }
 .views strong { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); color: inherit; }
 .leadDesk { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
-.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(240px, 1fr) 140px 170px 160px auto auto; align-items: center; gap: 8px; }
+.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(220px, 1fr) 130px 150px 140px 145px auto auto; align-items: center; gap: 8px; }
 .toolbar label { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); display: flex; align-items: center; gap: 7px; }
 .toolbar label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
 .toolbar input, .toolbar select { min-width: 0; width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
@@ -21,7 +21,7 @@
 .content { min-height: 560px; display: grid; grid-template-columns: minmax(620px, 1fr) minmax(290px, 0.38fr); }
 .boardContent { grid-template-columns: minmax(0, 1fr) minmax(290px, 0.38fr); }
 .list { min-width: 0; border-right: 1px solid var(--line); }
-.listHeader, .list > button { min-width: 0; display: grid; grid-template-columns: minmax(260px, 1.25fr) minmax(130px, 0.7fr) minmax(120px, 0.55fr) minmax(150px, 0.7fr); align-items: center; gap: 12px; }
+.listHeader, .list > button { min-width: 0; display: grid; grid-template-columns: minmax(200px, 1.1fr) minmax(112px, 0.55fr) minmax(120px, 0.6fr) minmax(105px, 0.5fr) minmax(135px, 0.7fr); align-items: center; gap: 12px; }
 .listHeader { min-height: 38px; padding: 0 14px; border-bottom: 1px solid var(--line-soft); color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
 .list > button { width: 100%; min-height: 79px; padding: 11px 14px; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .list > button:hover, .list .selectedRow { background: var(--surface-soft); }
@@ -31,6 +31,8 @@
 .identity strong { font-size: 13px; }
 .identity small, .next small { color: var(--muted); font-size: 11px; }
 .identity em { color: var(--text-soft); font-size: 10px; font-style: normal; }
+.received, .cardReceived { color: var(--muted); font-size: 10px; font-style: normal; white-space: nowrap; }
+.status { min-width: 0; }
 .owner { min-width: 0; color: var(--text-soft); display: flex; align-items: center; gap: 5px; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .next strong { color: var(--brand-strong); font-size: 11px; }
 .board { min-width: 0; padding: 12px; border-right: 1px solid var(--line); background: var(--surface-muted); display: grid; grid-auto-flow: column; grid-auto-columns: minmax(228px, 1fr); align-items: stretch; gap: 9px; overflow-x: auto; }
@@ -47,6 +49,7 @@
 .cardTop strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .cardTop em { color: var(--muted); font-size: 9px; font-style: normal; font-weight: 800; text-transform: uppercase; }
 .cardAddress { min-height: 31px; color: var(--text-soft); font-size: 11px; line-height: 1.4; }
+.cardReceived { display: block; }
 .cardMeta { color: var(--muted); font-size: 10px; }
 .cardMeta > span { min-width: 0; display: flex; align-items: center; gap: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cardAction { padding-top: 7px; border-top: 1px solid var(--line-soft); color: var(--brand-strong); display: flex; align-items: center; justify-content: space-between; font-size: 10px; font-weight: 850; }
@@ -73,18 +76,16 @@
 .empty strong { color: var(--text); }
 .backdrop { display: none; }
 
-@media (max-width: 1180px) {
+@media (max-width: 1400px) {
   .metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
-  .toolbar { grid-template-columns: minmax(220px, 1fr) 120px 140px 130px auto; }
+  .toolbar { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .toolbar > strong { display: none; }
-  .content { grid-template-columns: minmax(560px, 1fr) minmax(270px, 0.4fr); }
-  .listHeader, .list > button { grid-template-columns: minmax(220px, 1fr) 120px 110px 130px; }
+  .listHeader, .list > button { grid-template-columns: minmax(170px, 1fr) 105px 110px minmax(110px, 0.7fr); }
+  .listHeader > span:nth-child(4), .owner { display: none; }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1260px) {
   .leadDesk { overflow: visible; }
-  .toolbar { grid-template-columns: 1fr 1fr; }
-  .toolbar .search { grid-column: 1 / -1; }
   .content { min-height: 520px; grid-template-columns: minmax(0, 1fr); }
   .board { border-right: 0; }
   .list { border-right: 0; }
@@ -92,6 +93,11 @@
   .previewOpen { transform: translateX(0); }
   .preview header button { display: grid; }
   .backdrop { position: fixed; z-index: 79; inset: 0; border: 0; background: rgba(16, 25, 24, 0.36); display: block; }
+}
+
+@media (max-width: 900px) {
+  .toolbar { grid-template-columns: 1fr 1fr; }
+  .toolbar .search { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
@@ -105,6 +111,8 @@
   .listHeader { display: none; }
   .list > button { min-height: 102px; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; }
   .identity { grid-column: 1 / -1; }
+  .received { grid-column: 1; }
+  .status { grid-column: 2; justify-self: end; }
   .owner { display: none; }
-  .next { text-align: right; }
+  .next { grid-column: 1 / -1; text-align: right; }
 }

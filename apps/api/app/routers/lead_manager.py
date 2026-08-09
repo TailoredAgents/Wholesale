@@ -20,6 +20,7 @@ from app.schemas.lead_manager import (
     QualificationScriptRead,
     QualificationSessionRead,
 )
+from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.lead_manager import (
     accept_case,
     approve_script,
@@ -100,6 +101,8 @@ def complete_guided_qualification(
 ) -> QualificationSessionRead:
     try:
         session = complete_qualification(db, principal, case_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:

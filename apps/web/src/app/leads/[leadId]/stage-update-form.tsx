@@ -20,9 +20,6 @@ const stages = [
   ["negotiating", "Negotiating"],
   ["long_term_follow_up", "Long-term follow-up"],
   ["under_contract", "Under contract"],
-  ["disqualified", "Disqualified"],
-  ["dead", "Dead"],
-  ["reopened", "Reopened"],
 ];
 
 const landUnavailableStages = new Set([
@@ -32,6 +29,12 @@ const landUnavailableStages = new Set([
   "negotiating",
   "under_contract",
 ]);
+
+const lifecycleStageLabels: Record<string, string> = {
+  dead: "Dead",
+  disqualified: "Disqualified",
+  reopened: "Reopened",
+};
 
 type Status = "idle" | "saving" | "saved" | "error";
 
@@ -94,6 +97,9 @@ export function StageUpdateForm({
       <label>
         <span>Stage</span>
         <select name="stage_key" defaultValue={currentStage}>
+          {lifecycleStageLabels[currentStage] ? (
+            <option disabled value={currentStage}>{lifecycleStageLabels[currentStage]}</option>
+          ) : null}
           {stages.filter(([value]) => (
             assetClass === "house" || !landUnavailableStages.has(value) || value === currentStage
           )).map(([value, label]) => (

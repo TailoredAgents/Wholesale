@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
 from app.schemas.tasks import PrimaryNextActionRead
@@ -122,6 +122,11 @@ class LeadRead(BaseModel):
     next_follow_up_at: datetime | None
     primary_next_action: PrimaryNextActionRead | None
     archived_at: datetime | None
+    close_out_disposition: str | None
+    close_out_reason: str | None
+    closed_out_at: datetime | None
+    closed_out_by_user_id: UUID | None
+    closed_out_by_user_email: str | None
     created_at: datetime
 
 
@@ -917,6 +922,52 @@ class LeadDetail(LeadRead):
 class LeadStageUpdate(BaseModel):
     stage_key: str = Field(min_length=1, max_length=120)
     reason: str | None = Field(default=None, max_length=500)
+
+
+class LeadCloseOutRequest(BaseModel):
+    disposition: Literal["dead", "disqualified"]
+    reason: str = Field(min_length=10, max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def strip_reason(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class LeadReopenRequest(BaseModel):
+    reason: str = Field(min_length=10, max_length=500)
+    next_action_due_at: datetime
+    next_action_title: str = Field(
+        default="Follow up with reopened lead",
+        min_length=3,
+        max_length=255,
+    )
+
+    @field_validator("reason", "next_action_title", mode="before")
+    @classmethod
+    def strip_text(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
+
+
+class LeadCloseOutRead(BaseModel):
+    lead: LeadRead
+    changed: bool
+    cancelled_tasks: int
+    cancelled_appointments: int
+    cancelled_follow_up_enrollments: int
+    cancelled_follow_up_approvals: int
+    cancelled_pending_approvals: int
+    completed_calling_list_entries: int
+    dismissed_ai_next_action_events: int
+    dismissed_notifications: int
+    closed_lead_management_case: bool
+    closed_conversation: bool
+
+
+class LeadReopenRead(BaseModel):
+    lead: LeadRead
+    changed: bool
+    follow_up_task_id: UUID
 
 
 class LeadContactMethodUpdate(BaseModel):

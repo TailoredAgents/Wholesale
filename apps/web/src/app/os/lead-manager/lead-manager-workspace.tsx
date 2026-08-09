@@ -28,6 +28,7 @@ import { labelize } from "../os-utils";
 import styles from "./lead-manager.module.css";
 
 type View = "today" | "qualification" | "performance" | "standards";
+type QualificationNextAction = "call" | "sms" | "email" | "appointment" | "nurture" | "disqualify";
 
 const houseStandardQuestions = [
   ["ownership", "Ownership", "Please confirm who owns the property and how title is held.", true],
@@ -130,6 +131,9 @@ export function LeadManagerWorkspace({
   );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [qualificationNextAction, setQualificationNextAction] =
+    useState<QualificationNextAction>("call");
+  const [disqualificationReason, setDisqualificationReason] = useState("");
   const [selectedCopilotCaseId, setSelectedCopilotCaseId] = useState(
     initialCopilotItem?.case_id ?? data.copilot.work_items[0]?.case_id ?? "",
   );
@@ -252,16 +256,48 @@ export function LeadManagerWorkspace({
         .map((question) => [question.key, String(formData.get(question.key) ?? "").trim()])
         .filter(([, answer]) => Boolean(answer)),
     );
+    const nextActionType = String(
+      formData.get("next_action_type") ?? qualificationNextAction,
+    ) as QualificationNextAction;
     const nextActionDue = String(formData.get("next_action_due_at") ?? "");
+    const normalizedDisqualificationReason = String(
+      formData.get("disqualification_reason") ?? "",
+    ).trim();
+    if (nextActionType === "disqualify" && normalizedDisqualificationReason.length < 10) {
+      setMessage("Explain why this lead should be disqualified in at least 10 characters.");
+      return;
+    }
+    if (nextActionType !== "disqualify" && !nextActionDue) {
+      setMessage("Choose a due date and time for the active lead's next action.");
+      return;
+    }
+    const parsedNextActionDue = nextActionDue ? new Date(nextActionDue) : null;
+    if (parsedNextActionDue && Number.isNaN(parsedNextActionDue.getTime())) {
+      setMessage("Choose a valid due date and time for the next action.");
+      return;
+    }
     const saved = await request(
       `/api/v1/lead-manager/cases/${selectedCase.id}/qualification`,
       {
         answers,
-        next_action_type: String(formData.get("next_action_type") ?? "call"),
-        next_action_due_at: nextActionDue ? new Date(nextActionDue).toISOString() : null,
+        next_action_type: nextActionType,
+        next_action_due_at: parsedNextActionDue?.toISOString() ?? null,
+        disqualification_reason:
+          nextActionType === "disqualify" ? normalizedDisqualificationReason : null,
       },
     );
-    if (saved) form.reset();
+    if (saved) {
+      form.reset();
+      setQualificationNextAction("call");
+      setDisqualificationReason("");
+    }
+  }
+
+  function selectQualificationCase(caseId: string) {
+    setSelectedCaseId(caseId);
+    setQualificationNextAction("call");
+    setDisqualificationReason("");
+    setMessage("");
   }
 
   async function createScript(event: FormEvent<HTMLFormElement>) {
@@ -541,20 +577,70 @@ export function LeadManagerWorkspace({
           <aside className={styles.qualificationList}>
             <div className={styles.sectionHeader}><div><span>Assigned queue</span><h3>Needs qualification</h3></div></div>
             {data.qualification_queue.map((item) => (
-              <button className={selectedCaseId === item.id ? styles.selectedCase : ""} key={item.id} onClick={() => setSelectedCaseId(item.id)} type="button"><strong>{item.seller_name}</strong><span>{labelize(item.asset_class)} · {item.property_address}</span></button>
+              <button className={selectedCaseId === item.id ? styles.selectedCase : ""} key={item.id} onClick={() => selectQualificationCase(item.id)} type="button"><strong>{item.seller_name}</strong><span>{labelize(item.asset_class)} · {item.property_address}</span></button>
             ))}
             {!data.qualification_queue.length ? <p className={styles.empty}>Qualification queue is clear.</p> : null}
           </aside>
           <section className={styles.qualificationForm}>
             {selectedCase && activeScript ? (
-              <form onSubmit={submitQualification}>
+              <form key={selectedCase.id} onSubmit={submitQualification}>
                 <div className={styles.scriptHeader}><div><span>{labelize(selectedCase.asset_class)} · Script v{activeScript.version_number}</span><h3>{selectedCase.seller_name}</h3><p>{activeScript.introduction}</p></div><Link href={selectedCase.lead_url}>Open full lead</Link></div>
                 <div className={styles.questionGrid}>
                   {activeScript.questions.map((question) => (
                     <label key={question.key}><span>{question.label}{question.required ? " *" : ""}</span><small>{question.prompt}</small><textarea name={question.key} required={question.required} rows={2} /></label>
                   ))}
                 </div>
-                <div className={styles.nextAction}><label><span>Next action</span><select name="next_action_type"><option value="call">Call</option><option value="sms">Text</option><option value="email">Email</option><option value="appointment">Seller appointment</option><option value="nurture">Nurture follow-up</option><option value="disqualify">Disqualify</option></select></label><label><span>Due date and time</span><input name="next_action_due_at" type="datetime-local" /></label><button disabled={saving} type="submit"><Check size={16} />Complete qualification</button></div>
+                <div className={styles.nextAction}>
+                  <label>
+                    <span>Next action</span>
+                    <select
+                      name="next_action_type"
+                      onChange={(event) => {
+                        const nextAction = event.target.value as QualificationNextAction;
+                        setQualificationNextAction(nextAction);
+                        if (nextAction !== "disqualify") setDisqualificationReason("");
+                      }}
+                      value={qualificationNextAction}
+                    >
+                      <option value="call">Call</option>
+                      <option value="sms">Text</option>
+                      <option value="email">Email</option>
+                      <option value="appointment">Seller appointment</option>
+                      <option value="nurture">Nurture follow-up</option>
+                      <option value="disqualify">Disqualify and close</option>
+                    </select>
+                  </label>
+                  {qualificationNextAction === "disqualify" ? (
+                    <label>
+                      <span>Disqualification reason *</span>
+                      <small>This closes the lead and stops its tasks, reminders, appointments, and overdue follow-up warnings.</small>
+                      <textarea
+                        autoFocus
+                        maxLength={500}
+                        minLength={10}
+                        name="disqualification_reason"
+                        onChange={(event) => setDisqualificationReason(event.target.value)}
+                        placeholder="Example: Spam submission with an invalid phone number."
+                        required
+                        rows={3}
+                        value={disqualificationReason}
+                      />
+                    </label>
+                  ) : (
+                    <label>
+                      <span>Due date and time *</span>
+                      <input name="next_action_due_at" required type="datetime-local" />
+                    </label>
+                  )}
+                  <button
+                    className={qualificationNextAction === "disqualify" ? styles.disqualifyButton : undefined}
+                    disabled={saving}
+                    type="submit"
+                  >
+                    <Check size={16} />
+                    {qualificationNextAction === "disqualify" ? "Close as disqualified" : "Complete qualification"}
+                  </button>
+                </div>
               </form>
             ) : <p className={styles.empty}>{selectedCase ? `A manager must approve a ${labelize(selectedCase.asset_class)} qualification standard before this lead can be worked.` : "Select a lead to begin."}</p>}
           </section>

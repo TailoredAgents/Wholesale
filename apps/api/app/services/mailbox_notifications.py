@@ -20,6 +20,7 @@ from app.models.foundation import (
     TeamMembership,
     User,
 )
+from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES, lock_organization_lead
 
 OWNER_ROLE_KEYS = {"owner", "founder_operator", "ceo"}
 MAILBOX_NOTIFICATION_TYPES = {
@@ -111,6 +112,37 @@ def process_next_mailbox_notification(
         .limit(100)
     ).all()
     for conversation in conversations:
+        if conversation.lead_id is not None:
+            lead = lock_organization_lead(
+                db,
+                organization_id=conversation.organization_id,
+                lead_id=conversation.lead_id,
+            )
+            if (
+                lead is None
+                or lead.archived_at is not None
+                or lead.stage_key in INACTIVE_LEAD_STAGES
+            ):
+                db.rollback()
+                continue
+        locked_conversation = db.scalar(
+            select(Conversation)
+            .where(
+                Conversation.id == conversation.id,
+                Conversation.status == "open",
+                Conversation.last_inbound_at.is_not(None),
+                or_(
+                    Conversation.last_outbound_at.is_(None),
+                    Conversation.last_inbound_at > Conversation.last_outbound_at,
+                ),
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if locked_conversation is None:
+            db.rollback()
+            continue
+        conversation = locked_conversation
         channel = latest_inbound_channel(db, conversation)
         response = mailbox_response_status(
             conversation,
@@ -194,6 +226,7 @@ def process_next_mailbox_notification(
                 if notification is not None:
                     db.commit()
                     return notification.id
+        db.rollback()
     db.commit()
     return None
 

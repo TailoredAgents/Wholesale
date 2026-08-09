@@ -36,6 +36,7 @@ from app.services.inbox import (
     mark_conversation_read,
     remove_conversation_watcher,
 )
+from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.messaging import (
     SmsComplianceError,
     SmsConfigurationError,
@@ -57,6 +58,7 @@ send_sms_dependency = require_any_permission(
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
 )
+
 edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
 
 
@@ -180,6 +182,8 @@ def send_inbox_sms(
 ) -> SmsSendRead:
     try:
         result = send_conversation_sms(db, principal, conversation_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except SmsComplianceError as exc:
@@ -218,6 +222,8 @@ def handoff_inbox_conversation(
 ) -> ConversationRead:
     try:
         conversation = handoff_conversation(db, principal, conversation_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except PermissionError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except ValueError as exc:

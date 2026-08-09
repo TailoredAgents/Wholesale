@@ -43,12 +43,21 @@ from app.schemas.lead_manager import (
     QualificationScriptRead,
     QualificationSessionRead,
 )
+from app.schemas.leads import LeadCloseOutRequest
 from app.schemas.prospecting import ProspectHandoffDecision
 from app.services.acquisition_operations import (
     create_notification,
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.lead_lifecycle import (
+    INACTIVE_LEAD_STAGES,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
+from app.services.leads import (
+    apply_lead_close_out_transition,
+)
 from app.services.tasks import supersede_open_primary_tasks
 
 DEFAULT_COMPLETION_RULES = {
@@ -80,6 +89,18 @@ def create_case_for_handoff(
     submitted_at: datetime,
     sla_minutes: int,
 ) -> LeadManagementCase:
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == organization_id,
+            Lead.id == lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if lead is None:
+        raise ValueError("The handoff's seller lead is unavailable.")
+    require_lead_open_for_work(lead)
     existing = db.scalar(select(LeadManagementCase).where(LeadManagementCase.lead_id == lead_id))
     if existing is not None:
         existing.handoff_id = handoff_id
@@ -403,6 +424,18 @@ def accept_case(
     if case is None:
         return None
     ensure_case_access(principal, case)
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == case.lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if lead is None:
+        raise ValueError("The Lead Manager case points to a missing lead.")
+    require_lead_open_for_work(lead)
     if case.status not in {"awaiting_acceptance", "overdue"}:
         raise ValueError("This warm lead has already been accepted or returned.")
     if case.handoff_id is not None:
@@ -424,9 +457,7 @@ def accept_case(
         case.accepted_at = now
         case.accepted_by_user_id = principal.user_id
         case.qualification_started_at = now
-        lead = db.get(Lead, case.lead_id)
-        if lead is not None:
-            lead.stage_key = "qualification_in_progress"
+        lead.stage_key = "qualification_in_progress"
         audit(
             db,
             principal,
@@ -455,9 +486,18 @@ def complete_qualification(
         raise ValueError("Accept the warm handoff before completing qualification.")
     if case.status == "closed":
         raise ValueError("A closed Lead Manager case cannot be qualified again.")
-    lead = db.get(Lead, case.lead_id)
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == case.lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if lead is None:
         raise ValueError("The Lead Manager case points to a missing lead.")
+    require_lead_open_for_work(lead)
     asset_class = normalize_asset_class(lead.asset_class)
     script = get_active_script(
         db,
@@ -519,7 +559,7 @@ def complete_qualification(
                     source_lead_id=lead.id,
                     trigger_source="lead_manager_parcel_qualification",
                 )
-    apply_next_action(db, case, lead, payload, now)
+    apply_next_action(db, case, lead, payload, now, principal=principal)
     session = LeadQualificationSession(
         organization_id=principal.organization_id,
         case_id=case.id,
@@ -539,8 +579,12 @@ def complete_qualification(
     case.qualification_started_at = case.qualification_started_at or now
     case.qualification_completed_at = now
     case.qualification_quality_basis_points = quality
-    case.next_action_type = payload.next_action_type
-    case.next_action_due_at = payload.next_action_due_at
+    if payload.next_action_type == "disqualify":
+        case.next_action_type = None
+        case.next_action_due_at = None
+    else:
+        case.next_action_type = payload.next_action_type
+        case.next_action_due_at = payload.next_action_due_at
     audit(
         db,
         principal,
@@ -576,6 +620,32 @@ def process_next_escalation(db: Session, _settings: Settings) -> UUID | None:
         .limit(1)
     )
     if case is None:
+        return None
+    lead = lock_organization_lead(
+        db,
+        organization_id=case.organization_id,
+        lead_id=case.lead_id,
+    )
+    if (
+        lead is None
+        or lead.archived_at is not None
+        or lead.stage_key in INACTIVE_LEAD_STAGES
+    ):
+        db.rollback()
+        return None
+    case = db.scalar(
+        select(LeadManagementCase)
+        .where(
+            LeadManagementCase.id == case.id,
+            LeadManagementCase.status == "awaiting_acceptance",
+            LeadManagementCase.acceptance_due_at <= now,
+            LeadManagementCase.escalated_at.is_(None),
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if case is None:
+        db.rollback()
         return None
     case.status = "overdue"
     case.escalated_at = now
@@ -616,13 +686,25 @@ def apply_next_action(
     lead: Lead,
     payload: QualificationCompleteRequest,
     now: datetime,
+    *,
+    principal: Principal | None = None,
 ) -> None:
     if payload.next_action_type == "disqualify":
-        supersede_open_primary_tasks(db, lead_id=lead.id)
-        case.status = "closed"
-        case.closed_at = now
-        lead.stage_key = "disqualified"
-        lead.next_follow_up_at = None
+        if principal is None:
+            raise ValueError("A qualified actor is required to disqualify a seller lead.")
+        assert payload.disqualification_reason is not None
+        result = apply_lead_close_out_transition(
+            db,
+            principal,
+            lead.id,
+            LeadCloseOutRequest(
+                disposition="disqualified",
+                reason=payload.disqualification_reason,
+            ),
+            commit=False,
+        )
+        if result is None:
+            raise ValueError("The seller lead is no longer available.")
         return
     assert payload.next_action_due_at is not None
     lead.next_follow_up_at = payload.next_action_due_at

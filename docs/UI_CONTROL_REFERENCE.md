@@ -293,25 +293,44 @@ Calendar loading or availability errors do not delete appointments. Refresh afte
 | Search active leads | Searches seller, property, source, and owner | Active records only |
 | Owner filter | Shows all, unassigned, or one owner | Filter only |
 | Stage filter | Shows one normalized pipeline stage | Filter only |
+| Sort | Orders the visible leads by Newest, Oldest, or Highest priority | All Leads defaults to Newest; saved operational queues default to Highest priority |
 | Table / Board | Changes display while preserving saved view, search, owner, stage, and selected seller | Display only |
+| Received | Shows when the lead entered Stonegate in the table and board card | Read-only; displayed in the user's local timezone |
 | Seller row | Selects the local seller preview | Does not edit the lead |
 | Primary next-action link | Opens Lead Queue, Inbox, Calendar dispatch, Underwriting, Negotiation, or the full record based on status | Navigation only |
 | **Conversation** | Opens Inbox on this seller | Requires conversation access |
 | **Full record** | Opens the seven-section seller record and preserves the current list or board return context | Requires lead access |
 | **Calendar** | Opens Calendar | Appears when appointment status exists |
 | Close seller preview | Closes the mobile preview drawer | Mobile only |
-| Archived Leads link | Opens archived seller records | Requires lifecycle visibility |
+| **Close out lead** | Opens the business close-out dialog | Active leads only; requires `leads:edit` |
+| Dead / Disqualified | Records why routine seller work should end | One disposition is required |
+| Close-out reason | Preserves the business reason in activity and audit history | At least 10 characters required |
+| Final **Close out lead** | Atomically stops active tasks, appointments, automated follow-up, calling and handoff work; cancels every pending approval tied to the lead; retires pending or approved offer plans and unused offer concessions; closes the Lead Queue case and Inbox conversation; clears routine warnings; and moves the record to Closed Leads | Blocked while an active deal, contract, or disposition case exists; a funded deal is a completed success and can never be relabeled dead or disqualified |
+| Closed Leads link | Opens dead and disqualified seller opportunities | Requires lead visibility |
+| Archived Leads link | Opens confirmed duplicate and test records | Requires lifecycle visibility; Administrative archive is not a business disposition |
+
+## Closed Leads
+
+| Control | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| Seller / property | Opens retained contact and property facts, calls and internal notes, recent activity, appointments, valuations, transactions, and buyer offers | Full history is display-only until the lead is reopened |
+| Disposition / reason / closed time / closed by | Shows the auditable close-out decision | Read-only |
+| **Reopen lead** | Opens the controlled reactivation dialog | Requires `leads:edit` |
+| Reason for reopening | Records why seller work should resume | At least 10 characters required |
+| Next action / Next action due | Creates one new primary follow-up task and returns the seller to active Leads | A future due date and clear title are required |
+| Inbound seller email, SMS, or call | Automatically reopens a closed lead, restores the Inbox route, and creates urgent response work | Genuine inbound contact only; SMS opt-out keywords do not reopen the lead |
 
 ## Archived Leads
 
 | Control | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | **Back to active leads** | Returns to All Leads | Navigation only |
+| Seller / property | Opens the retained duplicate or test record | Full history is display-only until restored |
 | **Restore** | Returns an archived lead to active lists | Disabled while saving |
 | **Permanently delete** | Opens irreversible deletion confirmation | Intended only for confirmed test records |
 | Type `DELETE` | Satisfies permanent-deletion confirmation | Exact uppercase value required |
 | Final **Permanently delete** | Deletes the seller and operational history | Disabled until `DELETE` is entered; may still be blocked by related evidence or role |
-| **Archive lead** | Removes an active lead from normal queues while retaining history | Confirmation required |
+| **Administrative archive** | Removes a confirmed duplicate or test record from normal queues while retaining read-only history | Confirmation required; never use for a real seller opportunity, including dead or disqualified leads |
 | **Cancel** | Closes an archive or deletion dialog without changing the record | Dialog only |
 
 ### Pipeline Display
@@ -948,7 +967,7 @@ changing ownership or stage does not create a second record.
 | **Save lead** | Atomically persists ownership, contact methods, seller, property, and qualification changes | Disabled while saving; validation errors are shown in the editor |
 | Stage / Stage reason | Changes pipeline status and records why | Reason may be required by target stage |
 | **Update stage** | Applies the stage change | Permission and transition rules apply |
-| Archive | Removes the lead from active queues without deleting history | Requires archive permission |
+| Administrative archive | Removes a confirmed duplicate or test record from active queues without deleting history | Requires archive permission; real opportunities must use business close-out |
 
 ### Property Validation
 

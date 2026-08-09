@@ -83,6 +83,14 @@ export const savedLeadViews = [
 
 export type SavedLeadViewKey = (typeof savedLeadViews)[number]["key"];
 
+export const leadSortOptions = [
+  { key: "newest", label: "Newest" },
+  { key: "oldest", label: "Oldest" },
+  { key: "priority", label: "Highest priority" },
+] as const;
+
+export type LeadSortKey = (typeof leadSortOptions)[number]["key"];
+
 export function formatMoney(cents: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -217,6 +225,20 @@ export function normalizeLeadViewKey(value: string | string[] | null | undefined
     : "all";
 }
 
+export function defaultLeadSortKey(viewKey: SavedLeadViewKey): LeadSortKey {
+  return viewKey === "all" ? "newest" : "priority";
+}
+
+export function normalizeLeadSortKey(
+  value: string | string[] | null | undefined,
+  viewKey: SavedLeadViewKey,
+): LeadSortKey {
+  const sortKey = Array.isArray(value) ? value[0] : value;
+  return leadSortOptions.some((option) => option.key === sortKey)
+    ? (sortKey as LeadSortKey)
+    : defaultLeadSortKey(viewKey);
+}
+
 export function getSavedLeadViewCounts(leads: LeadListItem[], openTasks: SpeedToLeadTask[]) {
   return savedLeadViews.map((view) => ({
     ...view,
@@ -228,10 +250,12 @@ export function getFilteredLeads(
   leads: LeadListItem[],
   openTasks: SpeedToLeadTask[],
   viewKey: SavedLeadViewKey,
+  sortKey: LeadSortKey = defaultLeadSortKey(viewKey),
 ) {
-  return sortLeadsForWork(
+  return sortLeads(
     leads.filter((lead) => leadMatchesView(lead, openTasks, viewKey)),
     openTasks,
+    sortKey,
   );
 }
 
@@ -335,10 +359,29 @@ function leadMatchesView(
   return ["long_term_follow_up", "negotiating", "offer_presented"].includes(lead.stage_key);
 }
 
-function sortLeadsForWork(leads: LeadListItem[], openTasks: SpeedToLeadTask[]) {
-  return [...leads].sort(
-    (first, second) => leadWorkRank(second, openTasks) - leadWorkRank(first, openTasks),
-  );
+function sortLeads(
+  leads: LeadListItem[],
+  openTasks: SpeedToLeadTask[],
+  sortKey: LeadSortKey,
+) {
+  return [...leads].sort((first, second) => {
+    const firstCreatedAt = Date.parse(first.created_at);
+    const secondCreatedAt = Date.parse(second.created_at);
+    const createdDifference =
+      (Number.isNaN(secondCreatedAt) ? 0 : secondCreatedAt) -
+      (Number.isNaN(firstCreatedAt) ? 0 : firstCreatedAt);
+    if (sortKey === "newest") {
+      return createdDifference || first.id.localeCompare(second.id);
+    }
+    if (sortKey === "oldest") {
+      return -createdDifference || first.id.localeCompare(second.id);
+    }
+    return (
+      leadWorkRank(second, openTasks) - leadWorkRank(first, openTasks) ||
+      createdDifference ||
+      first.id.localeCompare(second.id)
+    );
+  });
 }
 
 function leadWorkRank(lead: LeadListItem, openTasks: SpeedToLeadTask[]) {

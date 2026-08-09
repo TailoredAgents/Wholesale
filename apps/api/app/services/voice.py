@@ -76,7 +76,13 @@ from app.services.inbox import (
     ensure_buyer_conversation,
     ensure_primary_conversation,
     get_scoped_conversation,
+    reactivate_closed_lead_for_inbound,
     update_conversation_activity,
+)
+from app.services.lead_lifecycle import (
+    INACTIVE_LEAD_STAGES,
+    lock_organization_lead,
+    require_lead_open_for_work,
 )
 
 VOICE_LINE_ROUTES = {"conversation_owner", "assigned_user"}
@@ -552,6 +558,20 @@ def create_call_intent(
         or conversation.assigned_user_id != principal.user_id
     ):
         raise PermissionError("Calls can only be placed from an assigned conversation.")
+    if conversation.conversation_type not in {"lead", "buyer"}:
+        raise VoiceConfigurationError(
+            "Calling is only available from seller and buyer conversations."
+        )
+    active_lead: Lead | None = None
+    if conversation.conversation_type == "lead" and conversation.lead_id is not None:
+        active_lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=conversation.lead_id,
+        )
+        if active_lead is None:
+            return None
+        require_lead_open_for_work(active_lead)
     existing = db.scalar(
         select(VoiceCallIntent).where(
             VoiceCallIntent.organization_id == principal.organization_id,
@@ -566,12 +586,8 @@ def create_call_intent(
             raise VoiceConfigurationError("The selected Stonegate voice line no longer exists.")
         return call_intent_to_read(existing, line, get_settings())
 
-    if conversation.conversation_type not in {"lead", "buyer"}:
-        raise VoiceConfigurationError(
-            "Calling is only available from seller and buyer conversations."
-        )
     contact = db.get(Contact, conversation.contact_id)
-    lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
+    lead = active_lead
     if conversation.conversation_type == "lead" and lead is None:
         return None
     if contact is None:
@@ -631,6 +647,15 @@ def start_forwarded_call(
     intent = db.get(VoiceCallIntent, intent_read.id)
     if intent is None:
         return None
+    if intent.lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=intent.organization_id,
+            lead_id=intent.lead_id,
+        )
+        if lead is None:
+            return None
+        require_lead_open_for_work(lead)
     line = db.get(VoiceLine, intent.voice_line_id)
     user = db.get(User, principal.user_id)
     if line is None or line.status != "active":
@@ -732,15 +757,14 @@ def start_forwarded_lead_call(
     *,
     provider: TwilioVoiceCallProvider | None = None,
 ) -> VoiceCallIntentRead | None:
-    lead = db.scalar(
-        select(Lead).where(
-            Lead.id == lead_id,
-            Lead.organization_id == principal.organization_id,
-            Lead.archived_at.is_(None),
-        )
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=lead_id,
     )
     if lead is None:
         return None
+    require_lead_open_for_work(lead)
     conversation = ensure_primary_conversation(db, lead)
     return start_forwarded_call(
         db,
@@ -762,6 +786,26 @@ def process_forwarded_voice_connect(
         raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
     if payload.get("Digits") != "1":
         return hangup_twiml()
+    if intent.lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=intent.organization_id,
+            lead_id=intent.lead_id,
+        )
+        if lead is None:
+            raise VoiceConfigurationError("The call's seller lead is unavailable.")
+        require_lead_open_for_work(lead)
+        intent = db.scalar(
+            select(VoiceCallIntent)
+            .where(
+                VoiceCallIntent.id == intent_id,
+                VoiceCallIntent.organization_id == lead.organization_id,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if intent is None or intent.status != "started":
+            raise VoiceConfigurationError("Stonegate forwarded call is unavailable.")
     line = db.get(VoiceLine, intent.voice_line_id)
     if line is None or line.status != "active":
         raise VoiceConfigurationError("Stonegate voice line is unavailable.")
@@ -784,6 +828,15 @@ def process_outbound_voice_request(
     intent = db.get(VoiceCallIntent, intent_id)
     if intent is None:
         raise ValueError("Unknown Stonegate call intent.")
+    if intent.lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=intent.organization_id,
+            lead_id=intent.lead_id,
+        )
+        if lead is None:
+            raise VoiceConfigurationError("The call's seller lead is unavailable.")
+        require_lead_open_for_work(lead)
     if as_utc(intent.expires_at) < datetime.now(UTC):
         intent.status = "expired"
         db.commit()
@@ -943,6 +996,7 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         conversation,
         direction="inbound",
         occurred_at=call.started_at or datetime.now(UTC),
+        db=db,
     )
     entity_type, entity_id = conversation_activity_entity(db, conversation)
     db.add(
@@ -1520,6 +1574,37 @@ def apply_call_status(
 
 
 def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
+    conversation = db.get(Conversation, call.conversation_id)
+    if conversation is not None:
+        reactivated_lead = reactivate_closed_lead_for_inbound(
+            db,
+            conversation,
+            occurred_at=call.started_at or datetime.now(UTC),
+        )
+        if reactivated_lead is not None:
+            return
+    if call.lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=call.organization_id,
+            lead_id=call.lead_id,
+        )
+        if (
+            lead is None
+            or lead.archived_at is not None
+            or lead.stage_key in INACTIVE_LEAD_STAGES
+        ):
+            return
+        inbound_reactivation_task = db.scalar(
+            select(Task.id).where(
+                Task.organization_id == call.organization_id,
+                Task.lead_id == call.lead_id,
+                Task.task_type == "inbound_reactivation",
+                Task.status.in_(("open", "in_progress")),
+            )
+        )
+        if inbound_reactivation_task is not None:
+            return
     existing = db.scalar(
         select(Task).where(
             Task.organization_id == call.organization_id,
@@ -1538,7 +1623,6 @@ def ensure_missed_call_task(db: Session, call: CallRecord) -> None:
             responsible_user_id = UUID(str(raw_owner_id)) if raw_owner_id else None
         except ValueError:
             responsible_user_id = None
-    conversation = db.get(Conversation, call.conversation_id)
     entity_type, entity_id = (
         conversation_activity_entity(db, conversation)
         if conversation is not None
@@ -1643,6 +1727,7 @@ def create_call_records(
             conversation,
             direction="outbound",
             occurred_at=occurred_at,
+            db=db,
         )
     return communication, call
 

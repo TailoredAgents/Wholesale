@@ -78,6 +78,11 @@ from app.schemas.operations import (
     TerritoryRead,
 )
 from app.services.inbox import ensure_primary_conversation, handoff_conversation
+from app.services.lead_lifecycle import (
+    INACTIVE_LEAD_STAGES,
+    lock_organization_lead,
+    require_lead_open_for_work,
+)
 from app.services.leads import get_lead_detail
 from app.services.property_validation import canonical_address_key
 from app.services.tasks import supersede_open_primary_tasks
@@ -1258,15 +1263,14 @@ def add_calling_list_leads(
     if assignee_id and assignee is None:
         raise ValueError("Calling-list assignee must be an active workspace user.")
     for lead_id in payload.lead_ids:
-        lead = db.scalar(
-            select(Lead).where(
-                Lead.organization_id == principal.organization_id,
-                Lead.id == lead_id,
-                Lead.archived_at.is_(None),
-            )
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead_id,
         )
         if lead is None:
             raise ValueError(f"Lead {lead_id} is unavailable.")
+        require_lead_open_for_work(lead)
         existing = db.scalar(
             select(CallingListEntry).where(
                 CallingListEntry.calling_list_id == calling_list.id,
@@ -1343,14 +1347,35 @@ def update_calling_list_entry(
     entry_id: UUID,
     payload: CallingListEntryUpdate,
 ) -> CallingListEntryRead | None:
-    entry = db.scalar(
-        select(CallingListEntry).where(
+    entry_lead_id = db.scalar(
+        select(CallingListEntry.lead_id).where(
             CallingListEntry.organization_id == principal.organization_id,
             CallingListEntry.id == entry_id,
         )
     )
+    if entry_lead_id is None:
+        return None
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=entry_lead_id,
+    )
+    if lead is None:
+        raise ValueError("The calling-list lead is no longer available.")
+    require_lead_open_for_work(lead)
+    entry = db.scalar(
+        select(CallingListEntry)
+        .where(
+            CallingListEntry.organization_id == principal.organization_id,
+            CallingListEntry.id == entry_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if entry is None:
         return None
+    if entry.status == "completed":
+        raise ValueError("This calling-list record is already completed.")
     if not can_manage_operations(principal) and entry.assigned_user_id != principal.user_id:
         raise PermissionError("You can update only calling-list records assigned to you.")
     previous = {
@@ -1367,9 +1392,6 @@ def update_calling_list_entry(
     if payload.disposition in INTERESTED_DISPOSITIONS:
         if payload.handoff_user_id is None:
             raise ValueError("Interested records require an acquisitions handoff owner.")
-        lead = db.get(Lead, entry.lead_id)
-        if lead is None:
-            raise ValueError("The calling-list lead is no longer available.")
         conversation = ensure_primary_conversation(db, lead)
         handoff_conversation(
             db,
@@ -1863,14 +1885,17 @@ def enroll_follow_up_plan(
     if plan is None:
         return None
     lead = db.scalar(
-        select(Lead).where(
+        select(Lead)
+        .where(
             Lead.organization_id == principal.organization_id,
             Lead.id == payload.lead_id,
-            Lead.archived_at.is_(None),
         )
+        .execution_options(populate_existing=True)
+        .with_for_update()
     )
     if lead is None:
         raise ValueError("Select an active seller lead.")
+    require_lead_open_for_work(lead)
     existing = db.scalar(
         select(FollowUpEnrollment).where(
             FollowUpEnrollment.follow_up_plan_id == plan.id,
@@ -2020,11 +2045,16 @@ def update_appointment(
     payload: LeadAppointmentUpdate,
 ) -> LeadDetail | None:
     lead = db.scalar(
-        select(Lead).where(
+        select(Lead)
+        .where(
             Lead.organization_id == principal.organization_id,
             Lead.id == lead_id,
         )
+        .execution_options(populate_existing=True)
+        .with_for_update()
     )
+    if lead is not None:
+        require_lead_open_for_work(lead)
     appointment = db.scalar(
         select(Appointment).where(
             Appointment.organization_id == principal.organization_id,
@@ -2196,6 +2226,34 @@ def process_next_acquisition_reminder(db: Session, _settings: Settings) -> UUID 
     for appointment in appointments:
         if appointment.owner_user_id is None:
             continue
+        lead = lock_organization_lead(
+            db,
+            organization_id=appointment.organization_id,
+            lead_id=appointment.lead_id,
+        )
+        if (
+            lead is None
+            or lead.archived_at is not None
+            or lead.stage_key in INACTIVE_LEAD_STAGES
+        ):
+            db.rollback()
+            continue
+        locked_appointment = db.scalar(
+            select(Appointment)
+            .where(
+                Appointment.id == appointment.id,
+                Appointment.status.in_(("scheduled", "rescheduled")),
+                Appointment.scheduled_start_at >= now,
+                Appointment.scheduled_start_at <= now + timedelta(hours=24),
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if locked_appointment is None or locked_appointment.owner_user_id is None:
+            db.rollback()
+            continue
+        appointment = locked_appointment
+        assert appointment.owner_user_id is not None
         dedupe_key = f"appointment-24h:{appointment.id}"
         if notification_exists(
             db,
@@ -2232,6 +2290,34 @@ def process_next_acquisition_reminder(db: Session, _settings: Settings) -> UUID 
     for overdue_task in overdue_tasks:
         if overdue_task.responsible_user_id is None:
             continue
+        if overdue_task.lead_id is not None:
+            lead = lock_organization_lead(
+                db,
+                organization_id=overdue_task.organization_id,
+                lead_id=overdue_task.lead_id,
+            )
+            if (
+                lead is None
+                or lead.archived_at is not None
+                or lead.stage_key in INACTIVE_LEAD_STAGES
+            ):
+                db.rollback()
+                continue
+        locked_overdue_task = db.scalar(
+            select(Task)
+            .where(
+                Task.id == overdue_task.id,
+                Task.status.in_(("open", "in_progress")),
+                Task.due_at < now,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
+        if locked_overdue_task is None or locked_overdue_task.responsible_user_id is None:
+            db.rollback()
+            continue
+        overdue_task = locked_overdue_task
+        assert overdue_task.responsible_user_id is not None
         dedupe_key = f"overdue-task:{overdue_task.id}"
         if notification_exists(
             db,

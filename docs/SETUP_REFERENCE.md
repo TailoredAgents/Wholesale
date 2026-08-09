@@ -974,6 +974,28 @@ Production forbids staff-alert `simulate` mode. Disabling alerts never disables 
 ingestion. When the use case is approved and the controlled delivery test is ready,
 `STAFF_LEAD_ALERT_SMS_MODE=live` must be present on both the API and worker.
 
+At worker startup, inspect `worker_started` and `staff_lead_alert_readiness_failed`. They report the
+delivery mode, missing Twilio configuration, active opted-in employees, valid recipients, missing
+cellphones, and invalid cellphones without exposing full phone numbers. For each processed Meta
+lead, `staff_lead_alert_queue_evaluated` records whether alerts were created, already existed, or
+could not be queued. A zero-recipient result is also written to the lead activity timeline, the
+audit log, and an in-app notification for the assigned owner, so the failure is not silent.
+
+The worker checks the previous 24 hours for processed Meta leads that have no staff-alert rows. If
+an active opted-in employee now has a valid cellphone, it creates the missing alert exactly once
+and logs `staff_lead_alert_missing_rows_recovered`. Delivery acceptance, retry, exhaustion,
+configuration blocking, and Twilio callback status each have their own structured log event. An
+administrator with `communications:manage_voice_lines` can also use the audited recovery endpoint
+`POST /api/v1/voice/staff-lead-alerts/{meta_lead_event_id}/requeue` after correcting the cause. A
+meaningful reason is required, current employee opt-in is rechecked, and queued, sent, or delivered
+alerts cannot be resent through that endpoint.
+
+If a worker log contains `meta_lead_ads` for a lead but no `staff_lead_alerts`, first find the
+matching `staff_lead_alert_queue_evaluated` event. If `ready_recipients=0`, correct the employee's
+cellphone or **Text new Facebook leads** preference. If an alert exists but delivery is blocked,
+correct the listed worker configuration. A Twilio Console message appears only after
+`staff_lead_alert_delivery_accepted`; its absence before that event is expected.
+
 ## Public Trust Proof Acceptance
 
 The trust-and-proof system is internal and does not require another provider account or secret.

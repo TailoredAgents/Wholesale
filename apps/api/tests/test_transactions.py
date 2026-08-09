@@ -22,6 +22,7 @@ from app.models.foundation import (
     AuditEvent,
     ContractPackage,
     EsignEnvelope,
+    EsignProviderEvent,
     EsignRecipient,
     Lead,
     OfferConcession,
@@ -1679,6 +1680,275 @@ def test_signwell_delayed_completion_advances_after_newer_reconcile_timestamp(
     assert db_session.get(ContractPackage, package_id).status == "executed"  # type: ignore[union-attr]
     assert db_session.get(Transaction, UUID(transaction_id)).status == "executed"  # type: ignore[union-attr]
     get_settings.cache_clear()
+
+
+def test_transaction_cancellation_rejects_a_live_signature_request(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ESIGN_PROVIDER", "simulate")
+    monkeypatch.setenv("ESIGN_SIGNWELL_WEBHOOK_ID", "test-signwell-webhook-id")
+    monkeypatch.setenv("ESIGN_TEST_MODE", "true")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    _, transaction_id = setup_transaction(db_session, client)
+    package = approve_purchase_package(client, transaction_id)
+    package_id = UUID(str(package["id"]))
+    sent = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/esign",
+        headers=HEADERS,
+        json=esign_send_payload(),
+    )
+    assert sent.status_code == 201, sent.text
+
+    cancelled = client.post(
+        f"/api/v1/transactions/{transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "cancelled", "notes": "Seller withdrew from the transaction."},
+    )
+
+    assert cancelled.status_code == 422
+    assert "Cancel the active SignWell request" in cancelled.json()["detail"]
+    db_session.expire_all()
+    assert db_session.get(Transaction, UUID(transaction_id)).status == "sent"  # type: ignore[union-attr]
+    assert db_session.get(ContractPackage, package_id).status == "sent"  # type: ignore[union-attr]
+    assert db_session.get(EsignEnvelope, UUID(str(sent.json()["id"]))).status == "sent"  # type: ignore[union-attr]
+    get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("terminal_state", ["cancelled_transaction", "closed_lead"])
+def test_delayed_provider_completion_is_quarantined_after_terminal_state(
+    db_session: Session,
+    api_db_override: None,
+    monkeypatch: MonkeyPatch,
+    terminal_state: str,
+) -> None:
+    monkeypatch.setenv("ESIGN_PROVIDER", "simulate")
+    monkeypatch.setenv("ESIGN_SIGNWELL_WEBHOOK_ID", "test-signwell-webhook-id")
+    monkeypatch.setenv("ESIGN_TEST_MODE", "true")
+    get_settings.cache_clear()
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+    package = approve_purchase_package(client, transaction_id)
+    package_id = UUID(str(package["id"]))
+    sent = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/esign",
+        headers=HEADERS,
+        json=esign_send_payload(),
+    )
+    assert sent.status_code == 201, sent.text
+    envelope_id = UUID(str(sent.json()["id"]))
+    transaction = db_session.get(Transaction, UUID(transaction_id))
+    lead = db_session.get(Lead, UUID(lead_id))
+    envelope = db_session.get(EsignEnvelope, envelope_id)
+    assert transaction is not None and lead is not None and envelope is not None
+    terminal_at = datetime.now(UTC)
+    if terminal_state == "cancelled_transaction":
+        transaction.status = "cancelled"
+        transaction.cancelled_at = terminal_at
+        lead.stage_key = "follow_up"
+    else:
+        lead.stage_key = "dead"
+        lead.archived_at = terminal_at
+        lead.closed_out_at = terminal_at
+        lead.close_out_disposition = "dead"
+        lead.close_out_reason = "Seller confirmed they do not want to proceed."
+    original_provider_payload = dict(envelope.provider_payload or {})
+    db_session.commit()
+
+    def reject_completed_document_storage(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("A quarantined completion must not store an executed document.")
+
+    monkeypatch.setattr(esign_service, "store_content", reject_completed_document_storage)
+    processed = esign_service.process_signwell_event(
+        db_session,
+        {
+            "event": {
+                "hash": f"terminal-completion-{terminal_state}",
+                "time": int((terminal_at + timedelta(seconds=1)).timestamp()),
+                "type": "document_completed",
+            },
+            "data": {
+                "object": {
+                    "id": envelope.provider_document_id,
+                    "status": "completed",
+                    "completed_pdf_base64": base64.b64encode(
+                        b"%PDF delayed terminal agreement"
+                    ).decode(),
+                }
+            },
+        },
+        get_settings(),
+        verification=esign_service.SignWellWebhookVerification(
+            organization_id=envelope.organization_id,
+            source="internal",
+        ),
+    )
+
+    assert processed is True
+    db_session.expire_all()
+    stored_envelope = db_session.get(EsignEnvelope, envelope_id)
+    stored_package = db_session.get(ContractPackage, package_id)
+    stored_transaction = db_session.get(Transaction, UUID(transaction_id))
+    stored_lead = db_session.get(Lead, UUID(lead_id))
+    assert stored_envelope is not None and stored_envelope.status == "sent"
+    assert stored_envelope.completed_at is None
+    assert stored_envelope.completed_document_id is None
+    assert stored_envelope.provider_payload == original_provider_payload
+    assert stored_package is not None and stored_package.status == "sent"
+    assert stored_transaction is not None
+    assert stored_transaction.status == (
+        "cancelled" if terminal_state == "cancelled_transaction" else "sent"
+    )
+    assert stored_lead is not None
+    assert stored_lead.stage_key == (
+        "follow_up" if terminal_state == "cancelled_transaction" else "dead"
+    )
+    provider_event = db_session.scalar(
+        select(EsignProviderEvent).where(
+            EsignProviderEvent.esign_envelope_id == envelope_id,
+            EsignProviderEvent.event_type == "document_completed",
+        )
+    )
+    assert provider_event is not None and provider_event.status == "quarantined"
+    assert provider_event.processing_error is not None
+    assert "cannot execute" in provider_event.processing_error
+    quarantine_event = db_session.scalar(
+        select(TransactionEvent).where(
+            TransactionEvent.transaction_id == UUID(transaction_id),
+            TransactionEvent.event_type == "esign.completion_quarantined",
+        )
+    )
+    assert quarantine_event is not None
+    assert (
+        db_session.scalar(
+            select(TransactionDocument.id).where(
+                TransactionDocument.contract_package_id == package_id,
+                TransactionDocument.document_type == "signed_purchase_agreement",
+            )
+        )
+        is None
+    )
+    recipient = db_session.scalar(
+        select(EsignRecipient).where(EsignRecipient.esign_envelope_id == envelope_id)
+    )
+    assert recipient is not None and recipient.status == "sent"
+    get_settings.cache_clear()
+
+
+def test_cancel_replay_does_not_reopen_a_subsequently_closed_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+    first = client.post(
+        f"/api/v1/transactions/{transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "cancelled", "notes": "Seller ended the transaction."},
+    )
+    assert first.status_code == 200, first.text
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    closed_at = datetime.now(UTC)
+    lead.stage_key = "dead"
+    lead.archived_at = closed_at
+    lead.closed_out_at = closed_at
+    lead.close_out_disposition = "dead"
+    lead.close_out_reason = "Seller confirmed they no longer want to sell."
+    db_session.commit()
+
+    replay = client.post(
+        f"/api/v1/transactions/{transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "cancelled", "notes": "Duplicate cancellation delivery."},
+    )
+
+    assert replay.status_code == 200, replay.text
+    assert replay.json()["status"] == "cancelled"
+    db_session.expire_all()
+    stored_lead = db_session.get(Lead, UUID(lead_id))
+    stored_transaction = db_session.get(Transaction, UUID(transaction_id))
+    assert stored_lead is not None and stored_lead.stage_key == "dead"
+    assert stored_lead.archived_at is not None
+    assert stored_lead.archived_at.replace(tzinfo=UTC) == closed_at
+    assert stored_transaction is not None
+    assert stored_transaction.notes == "Seller ended the transaction."
+    cancellation_events = list(
+        db_session.scalars(
+            select(TransactionEvent).where(
+                TransactionEvent.transaction_id == UUID(transaction_id),
+                TransactionEvent.event_type == "transaction.cancelled",
+            )
+        ).all()
+    )
+    assert len(cancellation_events) == 1
+
+
+def test_manual_execution_cannot_resurrect_a_cancelled_transaction_or_closed_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    client = TestClient(app)
+    lead_id, transaction_id = setup_transaction(db_session, client)
+    package = approve_purchase_package(client, transaction_id)
+    package_id = UUID(str(package["id"]))
+    document = client.post(
+        (
+            f"/api/v1/transactions/{transaction_id}/documents"
+            "?file_name=manual-signed.pdf"
+            "&document_type=signed_purchase_agreement"
+            "&title=Manually%20signed%20purchase%20agreement"
+            "&document_status=executed"
+            f"&package_id={package_id}"
+        ),
+        headers={**HEADERS, "Content-Type": "application/pdf"},
+        content=b"%PDF manually signed purchase agreement",
+    )
+    assert document.status_code == 201, document.text
+    cancelled = client.post(
+        f"/api/v1/transactions/{transaction_id}/close",
+        headers=HEADERS,
+        json={"outcome": "cancelled", "notes": "Seller ended the transaction."},
+    )
+    assert cancelled.status_code == 200, cancelled.text
+    db_session.expire_all()
+    assert db_session.get(ContractPackage, package_id).status == "void"  # type: ignore[union-attr]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    lead.stage_key = "disqualified"
+    lead.archived_at = datetime.now(UTC)
+    lead.closed_out_at = lead.archived_at
+    lead.close_out_disposition = "disqualified"
+    lead.close_out_reason = "Title issue makes this seller lead ineligible."
+    db_session.commit()
+
+    executed = client.post(
+        f"/api/v1/transactions/{transaction_id}/contract-packages/{package_id}/mark-executed",
+        headers=HEADERS,
+        json={
+            "document_id": document.json()["id"],
+            "confirm_fully_executed": True,
+            "reason": "Compared every signature against the approved package.",
+        },
+    )
+
+    assert executed.status_code == 422
+    assert "terminal transaction" in executed.json()["detail"]
+    db_session.expire_all()
+    assert db_session.get(Transaction, UUID(transaction_id)).status == "cancelled"  # type: ignore[union-attr]
+    assert db_session.get(ContractPackage, package_id).status == "void"  # type: ignore[union-attr]
+    assert db_session.get(Lead, UUID(lead_id)).stage_key == "disqualified"  # type: ignore[union-attr]
+    assert (
+        db_session.scalar(
+            select(AuditEvent.id).where(
+                AuditEvent.entity_id == package_id,
+                AuditEvent.action == "contract.execution.manual_attest",
+            )
+        )
+        is None
+    )
 
 
 def test_contract_reservation_freezes_new_seller_agreement_authority(

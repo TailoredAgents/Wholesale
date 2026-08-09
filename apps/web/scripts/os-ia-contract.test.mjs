@@ -3,6 +3,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
+
+import ts from "typescript";
 
 import {
   canonicalHelpDocuments,
@@ -86,6 +89,21 @@ function sourceRouteLiterals() {
     }
   }
   return literals;
+}
+
+function loadTypeScriptModule(path) {
+  const commonJsModule = { exports: {} };
+  const compiled = ts.transpileModule(readFileSync(path, "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  });
+  vm.runInNewContext(compiled.outputText, {
+    exports: commonJsModule.exports,
+    module: commonJsModule,
+  });
+  return commonJsModule.exports;
 }
 
 test("target navigation contains exactly 11 unique destinations in approved groups", () => {
@@ -253,6 +271,93 @@ test("IA9 canonical records preserve context and load only active specialist dat
   assert.match(prospectingPage, /canManage && view === "campaigns"/);
 });
 
+test("seller lead close-out is atomic, auditable, and separate from administrative archive", () => {
+  const leadsPage = readFileSync(resolve(osSourceRoot, "leads/page.tsx"), "utf8");
+  const lifecycle = readFileSync(
+    resolve(osSourceRoot, "leads/lead-lifecycle-actions.tsx"),
+    "utf8",
+  );
+  const closedPage = readFileSync(resolve(osSourceRoot, "leads/closed/page.tsx"), "utf8");
+  const archivedPage = readFileSync(resolve(osSourceRoot, "leads/archived/page.tsx"), "utf8");
+  const leadManager = readFileSync(
+    resolve(osSourceRoot, "lead-manager/lead-manager-workspace.tsx"),
+    "utf8",
+  );
+  const leadDetail = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+  const api = readFileSync(resolve(applicationSourceRoot, "app/lib/api.ts"), "utf8");
+  const stageForm = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/stage-update-form.tsx"),
+    "utf8",
+  );
+
+  assert.match(leadsPage, /href="\/os\/leads\/closed"/);
+  assert.match(lifecycle, /\/api\/v1\/leads\/\$\{leadId\}\/close-out/);
+  assert.match(lifecycle, /\/api\/v1\/leads\/\$\{leadId\}\/reopen/);
+  assert.match(lifecycle, /minLength=\{10\}/);
+  assert.match(lifecycle, /next_action_due_at: dueAt\.toISOString\(\)/);
+  assert.match(lifecycle, /Cancel every pending approval tied to this lead/);
+  assert.match(
+    lifecycle,
+    /Retire pending or approved offer plans and unused offer concessions/,
+  );
+  assert.match(lifecycle, /A funded deal\s+remains a completed success/);
+  assert.match(lifecycle, /confirmed duplicate or test records/);
+  assert.match(closedPage, /getClosedLeads\(\{ limit: pageSize \+ 1, offset, q \}\)/);
+  assert.match(
+    closedPage,
+    /full read-only seller, property, communication, appointment, valuation, transaction, and buyer-offer history/,
+  );
+  assert.match(closedPage, /LeadReopenControl/);
+  assert.match(closedPage, /close_out_reason/);
+  assert.match(closedPage, /closed_out_by_user_email/);
+  assert.match(closedPage, /Boolean\(lead\.archived_at\)/);
+  assert.match(archivedPage, /getArchivedLeads\(\)/);
+  assert.match(archivedPage, /Duplicate and test records/);
+  assert.match(archivedPage, /encodeURIComponent\("\/os\/leads\/archived"\)/);
+  assert.match(archivedPage, /lead\.close_out_disposition/);
+  assert.match(archivedPage, /lead\.closed_out_at/);
+  assert.match(lifecycle, /Permanently delete/);
+  assert.doesNotMatch(stageForm, /\["dead",\s*"Dead"\]/);
+  assert.doesNotMatch(stageForm, /\["disqualified",\s*"Disqualified"\]/);
+  assert.match(leadManager, /Disqualify and close/);
+  assert.match(leadManager, /qualificationNextAction === "disqualify"/);
+  assert.match(leadManager, /name="disqualification_reason"/);
+  assert.match(leadManager, /disqualification_reason:\s*nextActionType === "disqualify"/);
+  assert.match(leadManager, /minLength=\{10\}/);
+  assert.match(leadManager, /name="next_action_due_at" required type="datetime-local"/);
+  assert.match(leadManager, /stops its tasks, reminders, appointments, and overdue follow-up warnings/);
+  assert.match(leadDetail, /getWorkspaceProfile\(\)/);
+  assert.match(leadDetail, /permissions\.includes\("leads:edit"\)/);
+  assert.match(leadDetail, /permissions\.includes\("records:delete_or_archive"\)/);
+  assert.match(leadDetail, /function ArchivedLeadRecord/);
+  assert.match(leadDetail, /<ArchivedLeadRecord lead=\{lead\} \/>/);
+  assert.match(leadDetail, /Calls, messages, and internal notes/);
+  assert.match(leadDetail, /Recent activity history/);
+  assert.match(leadDetail, /ReadOnlyAppointmentsPanel/);
+  assert.match(leadDetail, /ReadOnlyValuationPanel/);
+  assert.match(leadDetail, /ReadOnlyTransactionsPanel/);
+  assert.match(leadDetail, /ReadOnlyBuyerOffersPanel/);
+  assert.match(lifecycle, /canEditLead \? \(/);
+  assert.match(lifecycle, /canArchiveRecords \? \(/);
+  assert.match(lifecycle, />\s*Read only\s*<\/span>/);
+  assert.match(closedPage, /getWorkspaceProfile\(\)/);
+  assert.match(closedPage, /limit: pageSize \+ 1, offset, q/);
+  assert.match(closedPage, /name="q"/);
+  assert.match(closedPage, /pageHref\(page - 1, q\)/);
+  assert.match(closedPage, /pageHref\(page \+ 1, q\)/);
+  assert.match(archivedPage, /permissions\.includes\("records:delete_or_archive"\)/);
+  assert.match(api, /closed: "true",\s*limit: String\(limit\),\s*offset: String\(offset\)/);
+  assert.match(api, /cancelled_pending_approvals: number/);
+  const closedRoute = currentRouteInventory.find(
+    (route) => route.routePattern === "/os/leads/closed",
+  );
+  assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "q"));
+  assert.ok(closedRoute?.queryParameters.some((parameter) => parameter.name === "page"));
+});
+
 test("RBAC permission and role inventories remain synchronized with the API", () => {
   const source = readFileSync(resolve(repositoryRoot, "apps/api/app/domain/rbac.py"), "utf8");
   const permissionClass = source.slice(
@@ -358,4 +463,76 @@ test("Calendar owns one quick appointment workflow with contextual entry points"
   assert.match(fieldCalendar, /Appointment color legend/);
   assert.match(leadRecord, /view=appointment&schedule=1&lead=/);
   assert.match(inbox, /view=appointment&schedule=1&lead=/);
+});
+
+test("Property lead editing stays collapsed until the operator asks to open it", () => {
+  const leadRecord = readFileSync(
+    resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
+    "utf8",
+  );
+
+  assert.match(leadRecord, /<details[\s\S]*styles\.editLeadDisclosure/);
+  assert.match(leadRecord, /open=\{editLeadOpen\}/);
+  assert.match(leadRecord, /const editLeadOpen = requestedEditor === "lead"/);
+  assert.match(leadRecord, /tab=property&edit=lead#edit-lead/);
+  assert.match(leadRecord, /Open editor/);
+  assert.match(leadRecord, /Close editor/);
+});
+
+test("All Leads is chronological by default while operational lead views stay priority-first", () => {
+  const utilities = loadTypeScriptModule(resolve(osSourceRoot, "os-utils.ts"));
+  const makeLead = (id, createdAt, overrides = {}) => ({
+    id,
+    created_at: createdAt,
+    lead_temperature: null,
+    source: "referral",
+    stage_key: "new",
+    motivation: null,
+    desired_timeline: null,
+    property_condition: null,
+    occupancy_status: null,
+    asking_price: null,
+    mortgage_balance: null,
+    appointment_status: null,
+    ...overrides,
+  });
+  const hotOlderLead = makeLead("hot-older", "2026-08-07T12:00:00Z", {
+    lead_temperature: "hot",
+  });
+  const fastTimelineLead = makeLead("fast-timeline", "2026-08-08T12:00:00Z", {
+    desired_timeline: "ASAP",
+  });
+  const newestLead = makeLead("newest", "2026-08-09T12:00:00Z");
+  const leads = [hotOlderLead, newestLead, fastTimelineLead];
+
+  assert.equal(
+    utilities.getFilteredLeads(leads, [], "all").map((lead) => lead.id).join(","),
+    "newest,fast-timeline,hot-older",
+  );
+  assert.equal(
+    utilities.getFilteredLeads(leads, [], "all", "oldest").map((lead) => lead.id).join(","),
+    "hot-older,fast-timeline,newest",
+  );
+  assert.equal(
+    utilities.getFilteredLeads(leads, [], "urgent").map((lead) => lead.id).join(","),
+    "hot-older,fast-timeline",
+  );
+  assert.equal(utilities.normalizeLeadSortKey("invalid", "all"), "newest");
+  assert.equal(utilities.normalizeLeadSortKey("invalid", "urgent"), "priority");
+});
+
+test("Leads exposes received timestamps and URL-backed sort controls", () => {
+  const page = readFileSync(resolve(osSourceRoot, "leads/page.tsx"), "utf8");
+  const workspace = readFileSync(
+    resolve(osSourceRoot, "leads/leads-workspace.tsx"),
+    "utf8",
+  );
+  const leadsRoute = currentRouteInventory.find((route) => route.routePattern === "/os/leads");
+
+  assert.match(page, /initialSort=\{normalizeLeadSortKey\(first\(params\.sort\)/);
+  assert.match(workspace, /leadSortOptions\.map/);
+  assert.match(workspace, /params\.set\("sort", next\.sort\)/);
+  assert.match(workspace, /<span>Received<\/span>/);
+  assert.match(workspace, /className=\{styles\.received\} dateTime=\{lead\.created_at\}/);
+  assert.ok(leadsRoute?.queryParameters.some((parameter) => parameter.name === "sort"));
 });

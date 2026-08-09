@@ -1,12 +1,15 @@
 import re
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
+import structlog
 from pydantic import ValidationError
 from sqlalchemy import and_, false, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.auth import Principal
 from app.core.config import Settings
 from app.integrations.communications import (
     CommunicationProvider,
@@ -20,16 +23,22 @@ from app.integrations.twilio_messaging import (
 )
 from app.models.foundation import (
     ActivityEvent,
+    AuditEvent,
     Contact,
     Lead,
     MetaLeadEvent,
+    Notification,
     Property,
     StaffLeadAlert,
     User,
 )
 from app.schemas.public_intake import SellerIntakeCreate
+from app.schemas.staff_lead_alerts import (
+    StaffLeadAlertRecoveryRead,
+)
 from app.schemas.zapier import ZapierFacebookLeadCreate
 from app.services.communication_compliance import format_e164
+from app.services.lead_lifecycle import INACTIVE_LEAD_STAGES, lock_organization_lead
 from app.services.property_validation import (
     PropertyRecordClient,
     normalize_postal_code,
@@ -41,6 +50,26 @@ META_CONTACT_CONSENT_VERSION = "meta-lead-form-contact-v1"
 META_CONTACT_CONSENT_WORDING = (
     "Seller submitted a Meta instant form requesting contact about a property offer."
 )
+STAFF_ALERT_RECOVERY_WINDOW = timedelta(hours=24)
+STAFF_ALERT_REQUEUEABLE_STATUSES = {
+    "blocked",
+    "canceled",
+    "exhausted",
+    "failed",
+    "retry",
+    "simulated",
+    "undelivered",
+}
+STAFF_ALERT_PROVIDER_FAILURE_STATUSES = {"canceled", "failed", "undelivered"}
+logger = structlog.get_logger()
+
+
+@dataclass(frozen=True)
+class StaffAlertRecipientDiagnostics:
+    active_opted_in: int
+    ready: int
+    missing_phone: int
+    invalid_phone: int
 
 FIELD_ALIASES = {
     "name": ("full_name", "name", "your_name"),
@@ -308,6 +337,13 @@ def process_next_meta_address_enrichment(
             status="needs_review",
             error="Facebook lead is missing its CRM lead or property record.",
         )
+    if lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES:
+        return finish_meta_address_enrichment(
+            db,
+            event_id,
+            status="skipped",
+            error="Facebook lead was closed before address enrichment started.",
+        )
     if not usable_meta_property_address(property_record):
         return finish_meta_address_enrichment(
             db,
@@ -329,6 +365,17 @@ def process_next_meta_address_enrichment(
             event.address_enrichment_last_error = str(exc)[:2000]
             db.commit()
         return event_id
+
+    refreshed_lead = lock_organization_lead(
+        db,
+        organization_id=lead.organization_id,
+        lead_id=lead.id,
+    )
+    lead_is_active = bool(
+        refreshed_lead is not None
+        and refreshed_lead.archived_at is None
+        and refreshed_lead.stage_key not in INACTIVE_LEAD_STAGES
+    )
 
     postal_code = normalize_postal_code(property_record.postal_code)
     if property_record.address_validation_status == "provider_confirmed" and postal_code:
@@ -358,7 +405,7 @@ def process_next_meta_address_enrichment(
     event.address_enrichment_status = status_value
     event.address_enrichment_last_error = error[:2000] if error else None
     event.address_enriched_at = datetime.now(UTC)
-    if status_value == "enriched":
+    if status_value == "enriched" and lead_is_active:
         from app.services.property_intelligence import enqueue_property_research
 
         enqueue_property_research(
@@ -366,6 +413,11 @@ def process_next_meta_address_enrichment(
             property_record,
             source_lead_id=lead.id,
             trigger_source="facebook_address_enriched",
+        )
+    elif status_value == "enriched":
+        event.address_enrichment_last_error = (
+            "Address facts were saved, but property research was not queued because the lead "
+            "closed during enrichment."
         )
     db.commit()
     return event.id
@@ -423,25 +475,31 @@ def mark_meta_address_enrichment_failure(
 
 def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
     if event.lead_id is None:
+        logger.warning(
+            "staff_lead_alert_queue_skipped",
+            event_id=str(event.id),
+            reason="missing_lead_id",
+        )
         return 0
     lead = db.get(Lead, event.lead_id)
     if lead is None:
+        logger.warning(
+            "staff_lead_alert_queue_skipped",
+            event_id=str(event.id),
+            lead_id=str(event.lead_id),
+            reason="missing_lead",
+        )
         return 0
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
-    recipients = db.scalars(
-        select(User).where(
-            User.organization_id == event.organization_id,
-            User.is_active.is_(True),
-            User.lead_alert_sms_enabled.is_(True),
-            User.voice_forwarding_number.is_not(None),
-        )
-    ).all()
+    recipients, diagnostics = eligible_staff_alert_recipients(
+        db, organization_id=event.organization_id
+    )
     created = 0
+    existing_count = 0
     for recipient in recipients:
         phone = format_e164(recipient.voice_forwarding_number or "")
-        if phone is None:
-            continue
+        assert phone is not None
         existing = db.scalar(
             select(StaffLeadAlert.id).where(
                 StaffLeadAlert.meta_lead_event_id == event.id,
@@ -449,6 +507,7 @@ def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
             )
         )
         if existing is not None:
+            existing_count += 1
             continue
         contact_name = contact.legal_name if contact else "New seller"
         market = (
@@ -483,7 +542,185 @@ def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
             )
         )
         created += 1
+    queue_snapshot = {
+        "lead_id": str(lead.id),
+        "active_opted_in_recipients": diagnostics.active_opted_in,
+        "ready_recipients": diagnostics.ready,
+        "recipients_missing_phone": diagnostics.missing_phone,
+        "recipients_with_invalid_phone": diagnostics.invalid_phone,
+        "alerts_created": created,
+        "alerts_already_present": existing_count,
+    }
+    if created:
+        audit_action = "communication.staff_lead_alerts_queued"
+        audit_reason = "Queued internal SMS alerts for active opted-in staff recipients."
+    elif existing_count:
+        audit_action = "communication.staff_lead_alerts_already_queued"
+        audit_reason = "Internal SMS alerts already existed for every eligible staff recipient."
+    else:
+        audit_action = "communication.staff_lead_alerts_not_queued"
+        audit_reason = "No internal SMS alert could be queued for this processed Meta lead."
+    db.add(
+        AuditEvent(
+            organization_id=event.organization_id,
+            actor_user_id=None,
+            actor_type="system",
+            action=audit_action,
+            entity_type="meta_lead_event",
+            entity_id=event.id,
+            previous_value=None,
+            new_value=queue_snapshot,
+            reason=audit_reason,
+        )
+    )
+    log = logger.info if created or existing_count else logger.warning
+    log("staff_lead_alert_queue_evaluated", event_id=str(event.id), **queue_snapshot)
+    if not created and not existing_count:
+        record_staff_alert_queue_gap(db, event=event, lead=lead)
     db.flush()
+    return created
+
+
+def eligible_staff_alert_recipients(
+    db: Session,
+    *,
+    organization_id: UUID | None = None,
+) -> tuple[list[User], StaffAlertRecipientDiagnostics]:
+    statement = select(User).where(
+        User.is_active.is_(True),
+        User.lead_alert_sms_enabled.is_(True),
+    )
+    if organization_id is not None:
+        statement = statement.where(User.organization_id == organization_id)
+    opted_in = list(db.scalars(statement).all())
+    ready: list[User] = []
+    missing_phone = 0
+    invalid_phone = 0
+    for user in opted_in:
+        if not user.voice_forwarding_number:
+            missing_phone += 1
+            continue
+        if format_e164(user.voice_forwarding_number) is None:
+            invalid_phone += 1
+            continue
+        ready.append(user)
+    return ready, StaffAlertRecipientDiagnostics(
+        active_opted_in=len(opted_in),
+        ready=len(ready),
+        missing_phone=missing_phone,
+        invalid_phone=invalid_phone,
+    )
+
+
+def record_staff_alert_queue_gap(
+    db: Session,
+    *,
+    event: MetaLeadEvent,
+    lead: Lead,
+) -> None:
+    event_type = "lead.staff_sms_alert_not_queued"
+    existing_activity = db.scalar(
+        select(ActivityEvent.id).where(
+            ActivityEvent.organization_id == event.organization_id,
+            ActivityEvent.entity_type == "lead",
+            ActivityEvent.entity_id == lead.id,
+            ActivityEvent.event_type == event_type,
+        )
+    )
+    if existing_activity is None:
+        db.add(
+            ActivityEvent(
+                organization_id=event.organization_id,
+                actor_user_id=None,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type=event_type,
+                summary=(
+                    "Internal new-lead SMS was not queued because no active opted-in staff "
+                    "cellphone was eligible."
+                ),
+            )
+        )
+    if lead.assigned_user_id is None:
+        return
+    existing_notification = db.scalar(
+        select(Notification.id).where(
+            Notification.organization_id == event.organization_id,
+            Notification.recipient_user_id == lead.assigned_user_id,
+            Notification.dedupe_key == f"staff-lead-alert-gap:{event.id}",
+        )
+    )
+    if existing_notification is None:
+        db.add(
+            Notification(
+                organization_id=event.organization_id,
+                recipient_user_id=lead.assigned_user_id,
+                notification_type="staff_lead_alert_not_queued",
+                title="New lead text alert was not queued",
+                body=(
+                    "This Facebook lead reached the CRM, but no active opted-in staff "
+                    "cellphone was eligible for the internal SMS alert."
+                ),
+                entity_type="lead",
+                entity_id=lead.id,
+                action_url=f"/os/leads/{lead.id}",
+                dedupe_key=f"staff-lead-alert-gap:{event.id}",
+                read_at=None,
+            )
+        )
+
+
+def recover_recent_unalerted_meta_lead(db: Session) -> int:
+    now = datetime.now(UTC)
+    ready_recipients, _diagnostics = eligible_staff_alert_recipients(db)
+    recipients_by_organization: dict[UUID, list[UUID]] = {}
+    for recipient in ready_recipients:
+        recipients_by_organization.setdefault(recipient.organization_id, []).append(recipient.id)
+    if not recipients_by_organization:
+        return 0
+    missing_recipient_conditions = []
+    for organization_id, recipient_ids in recipients_by_organization.items():
+        missing_alert_conditions = [
+            ~select(StaffLeadAlert.id)
+            .where(
+                StaffLeadAlert.meta_lead_event_id == MetaLeadEvent.id,
+                StaffLeadAlert.recipient_user_id == recipient_id,
+            )
+            .exists()
+            for recipient_id in recipient_ids
+        ]
+        missing_recipient_conditions.append(
+            and_(
+                MetaLeadEvent.organization_id == organization_id,
+                or_(*missing_alert_conditions),
+            )
+        )
+    event = db.scalar(
+        select(MetaLeadEvent)
+        .where(
+            MetaLeadEvent.status == "processed",
+            MetaLeadEvent.lead_id.is_not(None),
+            MetaLeadEvent.processed_at.is_not(None),
+            MetaLeadEvent.processed_at >= now - STAFF_ALERT_RECOVERY_WINDOW,
+            or_(*missing_recipient_conditions),
+        )
+        .order_by(MetaLeadEvent.processed_at, MetaLeadEvent.created_at)
+        .with_for_update(skip_locked=True)
+    )
+    if event is None:
+        return 0
+    created = queue_staff_lead_alerts(db, event)
+    if created:
+        # Persist the recovered alert before making an external provider call. If the provider
+        # fails after accepting a request, the durable row preserves the idempotency boundary.
+        db.commit()
+        logger.warning(
+            "staff_lead_alert_missing_rows_recovered",
+            event_id=str(event.id),
+            lead_id=str(event.lead_id),
+            alerts_created=created,
+            recovery_window_hours=int(STAFF_ALERT_RECOVERY_WINDOW.total_seconds() // 3600),
+        )
     return created
 
 
@@ -494,6 +731,7 @@ def process_next_staff_lead_alert(
 ) -> UUID | None:
     if settings.staff_lead_alert_sms_mode == "disabled":
         return None
+    recover_recent_unalerted_meta_lead(db)
     now = datetime.now(UTC)
     configured = not settings.staff_lead_alert_configuration_blockers
     alert = db.scalar(
@@ -519,6 +757,14 @@ def process_next_staff_lead_alert(
             settings.staff_lead_alert_configuration_blockers
         )
         db.commit()
+        logger.error(
+            "staff_lead_alert_delivery_blocked",
+            alert_id=str(alert.id),
+            event_id=str(alert.meta_lead_event_id),
+            lead_id=str(alert.lead_id),
+            attempt_count=alert.attempt_count,
+            blockers=list(settings.staff_lead_alert_configuration_blockers),
+        )
         return alert.id
     delivery_provider = provider
     if delivery_provider is None:
@@ -544,6 +790,7 @@ def process_next_staff_lead_alert(
         alert.last_error = str(exc)[:2000]
         if alert.attempt_count >= settings.staff_lead_alert_max_attempts:
             alert.status = "exhausted"
+            alert.next_attempt_at = None
         else:
             alert.status = "retry"
             alert.next_attempt_at = now + timedelta(
@@ -551,6 +798,18 @@ def process_next_staff_lead_alert(
                 * (2 ** max(0, alert.attempt_count - 1))
             )
         db.commit()
+        logger.error(
+            "staff_lead_alert_delivery_failed",
+            alert_id=str(alert.id),
+            event_id=str(alert.meta_lead_event_id),
+            lead_id=str(alert.lead_id),
+            status=alert.status,
+            attempt_count=alert.attempt_count,
+            next_attempt_at=(
+                alert.next_attempt_at.isoformat() if alert.next_attempt_at is not None else None
+            ),
+            error=alert.last_error,
+        )
         return alert.id
     alert.provider = result.provider
     alert.provider_message_id = result.provider_message_id
@@ -561,6 +820,16 @@ def process_next_staff_lead_alert(
     alert.sent_at = now
     alert.last_error = None
     db.commit()
+    logger.info(
+        "staff_lead_alert_delivery_accepted",
+        alert_id=str(alert.id),
+        event_id=str(alert.meta_lead_event_id),
+        lead_id=str(alert.lead_id),
+        provider=alert.provider,
+        provider_message_id=alert.provider_message_id,
+        status=alert.status,
+        attempt_count=alert.attempt_count,
+    )
     return alert.id
 
 
@@ -588,7 +857,155 @@ def update_staff_alert_delivery_status(
     if message_status == "delivered":
         alert.delivered_at = datetime.now(UTC)
     db.flush()
+    log = (
+        logger.warning
+        if message_status in STAFF_ALERT_PROVIDER_FAILURE_STATUSES
+        else logger.info
+    )
+    log(
+        "staff_lead_alert_delivery_status_updated",
+        alert_id=str(alert.id),
+        event_id=str(alert.meta_lead_event_id),
+        lead_id=str(alert.lead_id),
+        provider_message_id=message_sid,
+        status=message_status,
+        error_code=error_code,
+        error_message=error_message,
+    )
     return True
+
+
+def requeue_staff_lead_alerts(
+    db: Session,
+    principal: Principal,
+    settings: Settings,
+    event_id: UUID,
+    *,
+    reason: str,
+) -> StaffLeadAlertRecoveryRead | None:
+    event = db.scalar(
+        select(MetaLeadEvent)
+        .where(
+            MetaLeadEvent.id == event_id,
+            MetaLeadEvent.organization_id == principal.organization_id,
+        )
+        .with_for_update()
+    )
+    if event is None:
+        return None
+    if event.status != "processed" or event.lead_id is None:
+        raise ValueError("Only a processed Facebook lead can have its staff alerts recovered.")
+    recipients, _diagnostics = eligible_staff_alert_recipients(
+        db, organization_id=principal.organization_id
+    )
+    eligible_phones: dict[UUID, str] = {}
+    for recipient in recipients:
+        phone = format_e164(recipient.voice_forwarding_number or "")
+        if phone is not None:
+            eligible_phones[recipient.id] = phone
+    if not eligible_phones:
+        raise ValueError(
+            "No active staff member is both opted in to lead alerts and configured with a "
+            "valid cellphone."
+        )
+    existing_alert_ids = set(
+        db.scalars(
+            select(StaffLeadAlert.id).where(
+                StaffLeadAlert.organization_id == principal.organization_id,
+                StaffLeadAlert.meta_lead_event_id == event.id,
+            )
+        ).all()
+    )
+    created = queue_staff_lead_alerts(db, event)
+    alerts = list(
+        db.scalars(
+            select(StaffLeadAlert)
+            .where(
+                StaffLeadAlert.organization_id == principal.organization_id,
+                StaffLeadAlert.meta_lead_event_id == event.id,
+            )
+            .order_by(StaffLeadAlert.created_at)
+            .with_for_update()
+        ).all()
+    )
+    requeued = 0
+    skipped_active_or_delivered = 0
+    skipped_ineligible = 0
+    previous_alerts: list[dict[str, object]] = []
+    for alert in alerts:
+        if alert.id not in existing_alert_ids:
+            continue
+        phone = eligible_phones.get(alert.recipient_user_id)
+        if phone is None:
+            skipped_ineligible += 1
+            continue
+        if alert.status not in STAFF_ALERT_REQUEUEABLE_STATUSES:
+            skipped_active_or_delivered += 1
+            continue
+        previous_alerts.append(
+            {
+                "alert_id": str(alert.id),
+                "status": alert.status,
+                "attempt_count": alert.attempt_count,
+                "provider_message_id": alert.provider_message_id,
+                "last_error": alert.last_error,
+            }
+        )
+        alert.recipient_phone = phone
+        alert.status = "pending"
+        alert.attempt_count = 0
+        alert.last_attempt_at = None
+        alert.next_attempt_at = None
+        alert.sent_at = None
+        alert.delivered_at = None
+        alert.provider = None
+        alert.provider_message_id = None
+        alert.provider_response = None
+        alert.last_error = None
+        requeued += 1
+    blockers = list(settings.staff_lead_alert_configuration_blockers)
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="communication.staff_lead_alerts_requeued",
+            entity_type="meta_lead_event",
+            entity_id=event.id,
+            previous_value={"alerts": previous_alerts},
+            new_value={
+                "created": created,
+                "requeued": requeued,
+                "skipped_active_or_delivered": skipped_active_or_delivered,
+                "skipped_ineligible": skipped_ineligible,
+                "delivery_configured": not blockers,
+            },
+            reason=reason.strip(),
+        )
+    )
+    db.commit()
+    logger.warning(
+        "staff_lead_alert_manual_recovery_queued",
+        event_id=str(event.id),
+        lead_id=str(event.lead_id),
+        actor_user_id=str(principal.user_id),
+        created=created,
+        requeued=requeued,
+        skipped_active_or_delivered=skipped_active_or_delivered,
+        skipped_ineligible=skipped_ineligible,
+        delivery_configured=not blockers,
+        blockers=blockers,
+    )
+    return StaffLeadAlertRecoveryRead(
+        event_id=event.id,
+        lead_id=event.lead_id,
+        created=created,
+        requeued=requeued,
+        skipped_active_or_delivered=skipped_active_or_delivered,
+        skipped_ineligible=skipped_ineligible,
+        delivery_configured=not blockers,
+        configuration_blockers=blockers,
+    )
 
 
 def meta_lead_to_intake(

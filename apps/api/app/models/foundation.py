@@ -1217,6 +1217,14 @@ class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
+    close_out_disposition: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    close_out_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    closed_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+    closed_out_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):

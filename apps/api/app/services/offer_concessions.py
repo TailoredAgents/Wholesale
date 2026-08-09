@@ -30,6 +30,7 @@ from app.schemas.approvals import (
     OfferNegotiationLedgerRead,
 )
 from app.services.contract_authority_locks import lock_offer_authority_for_mutation
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.offer_approvals import find_offer_approver_id, offer_plan_to_read
 
 
@@ -78,7 +79,7 @@ def create_concession(
     lead_id: UUID,
     payload: OfferConcessionCreate,
 ) -> OfferConcessionRead | None:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_open_lead(db, principal, lead_id)
     if lead is None:
         return None
     lock_offer_authority_for_mutation(
@@ -267,7 +268,7 @@ def present_concession(
     concession_id: UUID,
     payload: OfferConcessionPresent,
 ) -> OfferConcessionRead | None:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_open_lead(db, principal, lead_id)
     if lead is None:
         return None
     lock_offer_authority_for_mutation(
@@ -343,7 +344,7 @@ def create_negotiation_event(
     lead_id: UUID,
     payload: OfferNegotiationEventCreate,
 ) -> OfferNegotiationEventRead | None:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_open_lead(db, principal, lead_id)
     if lead is None:
         return None
     if payload.event_type == "agreement":
@@ -548,7 +549,7 @@ def record_field_offer(
     seller_counter_cents: int | None,
     notes: str,
 ) -> tuple[OfferNegotiationPlan, OfferConcession | None]:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_open_lead(db, principal, lead_id)
     if lead is None:
         raise ValueError("The lead is no longer available.")
     lock_offer_authority_for_mutation(
@@ -601,7 +602,7 @@ def record_field_agreement(
     amount_cents: int,
     notes: str,
 ) -> OfferConcession | None:
-    lead = scoped_lead(db, principal, lead_id)
+    lead = scoped_open_lead(db, principal, lead_id)
     if lead is None:
         raise ValueError("The lead is no longer available.")
     lock_offer_authority_for_mutation(
@@ -773,6 +774,18 @@ def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None
         )
     )
     if lead is not None:
+        require_house_workflow(lead.asset_class, workflow="Residential offer negotiation")
+    return lead
+
+
+def scoped_open_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=lead_id,
+    )
+    if lead is not None:
+        require_lead_open_for_work(lead)
         require_house_workflow(lead.asset_class, workflow="Residential offer negotiation")
     return lead
 

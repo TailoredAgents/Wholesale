@@ -70,6 +70,8 @@ from app.services.document_storage import (
 from app.services.esign import list_envelopes
 
 ACTIVE_STATUSES = ("contract_prep", "approval_pending", "sent", "executed", "closing")
+TERMINAL_TRANSACTION_STATUSES = {"cancelled", "canceled", "closed", "funded"}
+TERMINAL_LEAD_STAGES = {"dead", "disqualified", "lost", "closed"}
 EXECUTED_DOCUMENT_TYPE_BY_PACKAGE = {
     PURCHASE_AGREEMENT: "signed_purchase_agreement",
     "assignment_contract": "assignment_contract",
@@ -964,16 +966,38 @@ def mark_contract_executed(
         .with_for_update(of=Transaction)
     )
     package = db.scalar(
-        select(ContractPackage).where(
+        select(ContractPackage)
+        .where(
             ContractPackage.id == package_id,
             ContractPackage.transaction_id == transaction_id,
             ContractPackage.organization_id == principal.organization_id,
         )
+        .with_for_update(of=ContractPackage)
     )
     document = get_document(db, principal, transaction_id, attestation.document_id)
     if transaction is None or package is None:
         return None
     require_house_transaction_workflow(db, transaction)
+    if (
+        transaction.status in TERMINAL_TRANSACTION_STATUSES
+        or transaction.cancelled_at is not None
+        or transaction.closed_at is not None
+        or transaction.funded_at is not None
+    ):
+        raise ValueError("A terminal transaction cannot be recorded as executed.")
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == transaction.lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
+    if lead is None:
+        raise ValueError("The transaction lead is no longer available.")
+    if lead.archived_at is not None or lead.stage_key in TERMINAL_LEAD_STAGES:
+        raise ValueError("Reopen the closed lead before recording contract execution.")
     if package.status not in {"approved", "sent"}:
         raise ValueError("Only an approved or sent contract package can be executed.")
     validate_purchase_contract_authority(
@@ -1005,10 +1029,8 @@ def mark_contract_executed(
     transaction.status = "executed"
     if package_document_type(package) == PURCHASE_AGREEMENT:
         transaction.contract_executed_at = now
-        lead = db.get(Lead, transaction.lead_id)
         deal = db.get(Deal, transaction.deal_id)
-        if lead:
-            lead.stage_key = "under_contract"
+        lead.stage_key = "under_contract"
         if deal:
             deal.stage_key = "under_contract"
     add_event(
@@ -1156,15 +1178,49 @@ def record_note(
 def close_transaction(
     db: Session, principal: Principal, transaction_id: UUID, payload: TransactionClose
 ) -> TransactionDetail | None:
-    transaction = scoped_transaction(db, principal, transaction_id)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.organization_id == principal.organization_id,
+            Transaction.id == transaction_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Transaction)
+    )
     if transaction is None:
         return None
+    already_finalized = (
+        payload.outcome == "funded" and transaction.status == "funded"
+    ) or (
+        payload.outcome == "cancelled" and transaction.status in {"cancelled", "canceled"}
+    )
+    if already_finalized:
+        # Retried close requests are idempotent and must never rewrite a lead that was
+        # subsequently closed out or otherwise moved to a terminal stage.
+        db.commit()
+        return get_transaction_detail(db, principal, transaction.id)
+    if transaction.status in TERMINAL_TRANSACTION_STATUSES:
+        raise ValueError(
+            f"This transaction is already terminal with status '{transaction.status}'."
+        )
     if payload.outcome == "funded":
         require_house_transaction_workflow(db, transaction)
     now = datetime.now(UTC)
-    lead = db.get(Lead, transaction.lead_id)
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == transaction.lead_id,
+            Lead.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
     deal = db.get(Deal, transaction.deal_id)
     if payload.outcome == "funded":
+        if lead is None:
+            raise ValueError("The transaction lead is no longer available.")
+        if lead.archived_at is not None or lead.stage_key in TERMINAL_LEAD_STAGES:
+            raise ValueError("Reopen the closed lead before recording transaction funding.")
         executed = db.scalar(
             select(ContractPackage.id).where(
                 ContractPackage.transaction_id == transaction.id,
@@ -1201,9 +1257,46 @@ def close_transaction(
         if deal:
             deal.stage_key = "closed"
     else:
+        signable_envelope = db.scalar(
+            select(EsignEnvelope.id).where(
+                EsignEnvelope.organization_id == principal.organization_id,
+                EsignEnvelope.transaction_id == transaction.id,
+                EsignEnvelope.status.not_in(
+                    ("completed", "declined", "expired", "cancelled", "error")
+                ),
+            )
+        )
+        if signable_envelope is not None:
+            raise ValueError(
+                "Cancel the active SignWell request and reconcile its terminal status before "
+                "cancelling this transaction."
+            )
+        outstanding_sent_package = db.scalar(
+            select(ContractPackage.id).where(
+                ContractPackage.organization_id == principal.organization_id,
+                ContractPackage.transaction_id == transaction.id,
+                ContractPackage.status.in_(("sending", "sent")),
+            )
+        )
+        if outstanding_sent_package is not None:
+            raise ValueError(
+                "Withdraw the outstanding contract package before cancelling this transaction."
+            )
+        retired_packages = list(
+            db.scalars(
+                select(ContractPackage).where(
+                    ContractPackage.organization_id == principal.organization_id,
+                    ContractPackage.transaction_id == transaction.id,
+                    ContractPackage.status.in_(("draft", "pending_approval", "approved")),
+                )
+            ).all()
+        )
+        for package in retired_packages:
+            package.status = "void"
+            package.voided_at = package.voided_at or now
         transaction.status = "cancelled"
         transaction.cancelled_at = now
-        if lead:
+        if lead and lead.archived_at is None and lead.stage_key not in TERMINAL_LEAD_STAGES:
             lead.stage_key = "follow_up"
         if deal:
             deal.stage_key = "cancelled"
@@ -1214,7 +1307,14 @@ def close_transaction(
         transaction,
         f"transaction.{payload.outcome}",
         f"Transaction {payload.outcome}.",
-        {"notes": payload.notes},
+        {
+            "notes": payload.notes,
+            **(
+                {"retired_contract_package_ids": [str(item.id) for item in retired_packages]}
+                if payload.outcome == "cancelled"
+                else {}
+            ),
+        },
     )
     db.commit()
     return get_transaction_detail(db, principal, transaction.id)

@@ -49,6 +49,7 @@ from app.schemas.field_operations import (
     FieldOperationsMetrics,
     FieldOperationsOverview,
 )
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 
 ELIGIBLE_CLOSER_ROLES = {
     "administrator",
@@ -836,9 +837,14 @@ def dispatch_appointment(
         if not can_manage(principal):
             raise PermissionError("Only an acquisition manager can override dispatch conflicts.")
 
-    lead = db.get(Lead, payload.lead_id)
-    if lead is None or lead.organization_id != principal.organization_id:
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=payload.lead_id,
+    )
+    if lead is None:
         return None
+    require_lead_open_for_work(lead)
     contact = db.get(Contact, lead.contact_id)
     property_record = db.get(Property, lead.property_id)
     if contact is None or property_record is None:

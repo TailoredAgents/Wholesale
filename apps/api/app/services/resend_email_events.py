@@ -401,6 +401,7 @@ def process_received_email(
     if contact is None:
         raise RuntimeError("Matched Resend conversation is missing contact context.")
     headers = normalized_headers(message.get("headers"))
+    email_category = inbound_email_category(message, headers)
     occurred_at = parse_datetime(message.get("created_at")) or datetime.now(UTC)
     communication = CommunicationRecord(
         organization_id=event.organization_id,
@@ -433,6 +434,7 @@ def process_received_email(
             "cc": string_list(message.get("cc")),
             "bcc": string_list(message.get("bcc")),
             "html_available": bool(message.get("html")),
+            "email_category": email_category,
         },
     )
     db.add(communication)
@@ -463,6 +465,8 @@ def process_received_email(
         conversation,
         direction="inbound",
         occurred_at=occurred_at,
+        db=db,
+        reactivate_closed_lead=email_category == "correspondence",
     )
     db.add(
         ActivityEvent(

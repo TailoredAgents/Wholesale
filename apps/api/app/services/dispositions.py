@@ -53,6 +53,11 @@ from app.schemas.dispositions import (
     ReconciliationRead,
 )
 from app.services.document_storage import read_content, store_content
+from app.services.lead_lifecycle import (
+    INACTIVE_LEAD_STAGES,
+    lock_organization_lead,
+    require_lead_not_closed_out,
+)
 
 MAX_FILE_BYTES = 15 * 1024 * 1024
 
@@ -64,6 +69,46 @@ def scoped_case(db: Session, principal: Principal, case_id: UUID) -> Disposition
             DispositionCase.organization_id == principal.organization_id,
         )
     )
+
+
+def scoped_case_for_mutation(
+    db: Session,
+    principal: Principal,
+    case_id: UUID,
+    *,
+    allowed_statuses: set[str],
+) -> DispositionCase | None:
+    """Lock the lead before its disposition case and enforce the workflow transition."""
+    existing = scoped_case(db, principal, case_id)
+    if existing is None:
+        return None
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=existing.lead_id,
+    )
+    if lead is None:
+        raise ValueError("The disposition lead is no longer available.")
+    require_lead_not_closed_out(lead)
+    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
+    case = db.scalar(
+        select(DispositionCase)
+        .where(
+            DispositionCase.id == case_id,
+            DispositionCase.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if case is None:
+        return None
+    if case.status not in allowed_statuses:
+        expected = ", ".join(sorted(value.replace("_", " ") for value in allowed_statuses))
+        raise ValueError(
+            f"This disposition action requires case status {expected}; "
+            f"the case is {case.status.replace('_', ' ')}."
+        )
+    return case
 
 
 def require_house_case_workflow(db: Session, case: DispositionCase) -> None:
@@ -111,6 +156,8 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
             Transaction.organization_id == principal.organization_id,
             Transaction.status.in_(("executed", "closing", "funded")),
             Lead.asset_class == "house",
+            Lead.archived_at.is_(None),
+            Lead.stage_key.not_in(INACTIVE_LEAD_STAGES),
         )
         .order_by(Transaction.created_at.desc())
     ).all()
@@ -162,9 +209,25 @@ def create_case(
     )
     if transaction is None or transaction.status not in {"executed", "closing", "funded"}:
         raise ValueError("An executed transaction is required.")
-    lead = db.get(Lead, transaction.lead_id)
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=transaction.lead_id,
+    )
     if lead is None:
         raise ValueError("The transaction lead is no longer available.")
+    require_lead_not_closed_out(lead)
+    transaction = db.scalar(
+        select(Transaction)
+        .where(
+            Transaction.id == payload.transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if transaction is None or transaction.status not in {"executed", "closing", "funded"}:
+        raise ValueError("An executed transaction is required.")
     require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
     if payload.minimum_acceptable_cents > payload.asking_price_cents:
         raise ValueError("Minimum acceptable price cannot exceed asking price.")
@@ -241,10 +304,11 @@ def create_case(
 
 
 def approve_package(db: Session, principal: Principal, case_id: UUID) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"package_prep"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     case.package_status = "approved"
     case.package_approved_by_user_id = principal.user_id
     case.package_approved_at = datetime.now(UTC)
@@ -265,10 +329,11 @@ def approve_package(db: Session, principal: Principal, case_id: UUID) -> Disposi
 def generate_matches(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"buyer_matching"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before matching buyers.")
     property_record = db.get(Property, case.property_id)
@@ -361,10 +426,13 @@ def generate_matches(
 def release_campaign(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"buyer_matching"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
+    if case.package_status != "approved":
+        raise ValueError("Approve the deal package before releasing a campaign.")
     matches = db.scalars(
         select(DispositionMatch).where(
             DispositionMatch.disposition_case_id == case.id,
@@ -474,10 +542,14 @@ def get_proof_content(
 def create_offer(
     db: Session, principal: Principal, case_id: UUID, payload: OfferCreate
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses={"package_prep", "buyer_matching", "marketed", "offers_received"},
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     buyer = db.scalar(
         select(Buyer).where(
             Buyer.id == payload.buyer_id, Buyer.organization_id == principal.organization_id
@@ -515,10 +587,14 @@ def create_offer(
 def add_engagement(
     db: Session, principal: Principal, case_id: UUID, payload: EngagementCreate
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db,
+        principal,
+        case_id,
+        allowed_statuses={"buyer_matching", "marketed", "offers_received", "buyer_selected"},
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     buyer = db.scalar(
         select(Buyer).where(
             Buyer.id == payload.buyer_id,
@@ -547,10 +623,11 @@ def add_engagement(
 def select_buyer(
     db: Session, principal: Principal, case_id: UUID, payload: BuyerSelection
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"offers_received"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     primary = db.scalar(
         select(BuyerOffer).where(
             BuyerOffer.id == payload.primary_offer_id, BuyerOffer.disposition_case_id == case.id
@@ -616,10 +693,11 @@ def select_buyer(
 def build_reconciliation(
     db: Session, principal: Principal, case_id: UUID
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"buyer_selected"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     transaction = db.get(Transaction, case.transaction_id)
     if transaction is None or transaction.status != "funded" or case.selected_buyer_id is None:
         raise ValueError("Funded transaction and approved buyer selection are required.")
@@ -767,10 +845,11 @@ def build_reconciliation(
 def decide_reconciliation(
     db: Session, principal: Principal, case_id: UUID, payload: ReconciliationDecision
 ) -> DispositionCaseRead | None:
-    case = scoped_case(db, principal, case_id)
+    case = scoped_case_for_mutation(
+        db, principal, case_id, allowed_statuses={"buyer_selected"}
+    )
     if case is None:
         return None
-    require_house_case_workflow(db, case)
     reconciliation = db.scalar(
         select(DealReconciliation).where(DealReconciliation.disposition_case_id == case.id)
     )

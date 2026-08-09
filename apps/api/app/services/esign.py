@@ -51,6 +51,8 @@ from app.services.contract_documents import GeneratedContract, generate_contract
 from app.services.document_storage import store_content
 
 TERMINAL_ENVELOPE_STATUSES = {"completed", "declined", "expired", "cancelled", "error"}
+TERMINAL_TRANSACTION_STATUSES = {"cancelled", "canceled", "closed", "funded"}
+TERMINAL_LEAD_STAGES = {"dead", "disqualified", "lost", "closed"}
 ENVELOPE_STATUS_ORDER = {
     "draft": -1,
     "created": 0,
@@ -1794,17 +1796,26 @@ def process_signwell_event(
         db.commit()
         return True
     db.flush()
+    quarantine_reason: str | None = None
     try:
         with db.begin_nested():
-            apply_provider_event(db, envelope, event_type, event_data, document_data, active)
+            quarantine_reason = apply_provider_event(
+                db,
+                envelope,
+                event_type,
+                event_data,
+                document_data,
+                active,
+            )
     except Exception as exc:
         provider_event.status = "failed"
         provider_event.processed_at = datetime.now(UTC)
         provider_event.processing_error = str(exc)[:2000]
         db.commit()
         raise
-    provider_event.status = "processed"
+    provider_event.status = "quarantined" if quarantine_reason else "processed"
     provider_event.processed_at = datetime.now(UTC)
+    provider_event.processing_error = quarantine_reason[:2000] if quarantine_reason else None
     db.commit()
     return True
 
@@ -1816,7 +1827,7 @@ def apply_provider_event(
     event_data: dict[str, Any],
     document_data: dict[str, Any],
     settings: Settings,
-) -> None:
+) -> str | None:
     occurred_at = datetime.fromtimestamp(
         int(event_data.get("time") or datetime.now(UTC).timestamp()),
         tz=UTC,
@@ -1844,6 +1855,30 @@ def apply_provider_event(
         transaction, package = lock_provider_event_contract(db, envelope)
     if event_type == "document_completed":
         assert transaction is not None and package is not None
+        quarantine_reason = provider_completion_quarantine_reason(db, transaction, package)
+        if quarantine_reason is not None:
+            db.add(
+                TransactionEvent(
+                    organization_id=envelope.organization_id,
+                    transaction_id=transaction.id,
+                    lead_id=transaction.lead_id,
+                    actor_user_id=None,
+                    event_type="esign.completion_quarantined",
+                    summary=(
+                        "A delayed provider completion was quarantined because the transaction "
+                        "or lead is closed."
+                    ),
+                    details={
+                        "envelope_id": str(envelope.id),
+                        "provider_document_id": envelope.provider_document_id,
+                        "provider_event_type": event_type,
+                        "reason": quarantine_reason,
+                        "transaction_status": transaction.status,
+                    },
+                    occurred_at=occurred_at,
+                )
+            )
+            return quarantine_reason
         validate_purchase_contract_authority(
             db,
             transaction,
@@ -1928,6 +1963,44 @@ def apply_provider_event(
             occurred_at=occurred_at,
             prior_envelope_status=prior_envelope_status,
         )
+    return None
+
+
+def provider_completion_quarantine_reason(
+    db: Session,
+    transaction: Transaction,
+    package: ContractPackage,
+) -> str | None:
+    """Refuse delayed execution after Stonegate has made the record terminal."""
+    if (
+        transaction.status in TERMINAL_TRANSACTION_STATUSES
+        or transaction.cancelled_at is not None
+        or transaction.closed_at is not None
+        or transaction.funded_at is not None
+    ):
+        return (
+            "Provider completion cannot execute a terminal Stonegate transaction "
+            f"(status: {transaction.status})."
+        )
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.id == transaction.lead_id,
+            Lead.organization_id == transaction.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update(of=Lead)
+    )
+    if lead is None and package_document_type(package) == "purchase_agreement":
+        return "Provider completion cannot execute because the transaction lead is unavailable."
+    if lead is not None and (
+        lead.archived_at is not None or lead.stage_key in TERMINAL_LEAD_STAGES
+    ):
+        return (
+            "Provider completion cannot execute a closed or archived Stonegate lead "
+            f"(stage: {lead.stage_key})."
+        )
+    return None
 
 
 def lock_provider_event_contract(

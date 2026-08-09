@@ -54,6 +54,7 @@ from app.schemas.field_operations import (
 from app.schemas.transactions import EsignEnvelopeRead, EsignSendRequest
 from app.services.document_storage import delete_content, read_content, store_content
 from app.services.esign import envelope_read, send_contract_for_signature
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.offer_concessions import record_field_agreement, record_field_offer
 from app.services.repair_catalog import evaluate_repair_scope, repair_catalog_payload
 
@@ -790,7 +791,26 @@ def save_negotiation(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
-    require_house_appointment_workflow(db, appointment, workflow="Residential offer negotiation")
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=appointment.lead_id,
+    )
+    if lead is None:
+        raise ValueError("The appointment lead is no longer available.")
+    require_lead_open_for_work(lead)
+    require_house_workflow(lead.asset_class, workflow="Residential offer negotiation")
+    appointment = db.scalar(
+        select(Appointment)
+        .where(
+            Appointment.id == appointment_id,
+            Appointment.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if appointment is None:
+        return None
     negotiation = db.scalar(
         select(FieldNegotiationSession).where(
             FieldNegotiationSession.appointment_id == appointment.id
@@ -859,16 +879,14 @@ def save_negotiation(
     negotiation.next_follow_up_at = (
         as_utc(payload.next_follow_up_at) if payload.next_follow_up_at else None
     )
-    lead = db.get(Lead, appointment.lead_id)
     if payload.outcome != "pending":
         appointment.status = "completed"
         appointment.outcome = negotiation_outcome_summary(payload)
-    if lead:
-        lead.next_follow_up_at = negotiation.next_follow_up_at
-        if payload.outcome == "accepted":
-            lead.stage_key = "offer_ready"
-        elif payload.outcome in {"follow_up", "not_decided", "declined"}:
-            lead.stage_key = "qualified"
+    lead.next_follow_up_at = negotiation.next_follow_up_at
+    if payload.outcome == "accepted":
+        lead.stage_key = "offer_ready"
+    elif payload.outcome in {"follow_up", "not_decided", "declined"}:
+        lead.stage_key = "qualified"
     db.flush()
     add_activity(
         db,
@@ -902,6 +920,25 @@ def transfer_to_underwriting(
     if not can_review_underwriting(principal):
         raise PermissionError("Underwriting edit access is required to review field evidence.")
     inspection = scoped_inspection(db, principal, inspection_id)
+    if inspection is None:
+        return None
+    lead = lock_organization_lead(
+        db,
+        organization_id=principal.organization_id,
+        lead_id=inspection.lead_id,
+    )
+    if lead is None:
+        raise ValueError("The inspection lead is no longer available.")
+    require_lead_open_for_work(lead)
+    inspection = db.scalar(
+        select(FieldInspection)
+        .where(
+            FieldInspection.id == inspection_id,
+            FieldInspection.organization_id == principal.organization_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     if inspection is None:
         return None
     if inspection.status not in {"submitted", "reviewed"}:
@@ -1031,9 +1068,7 @@ def transfer_to_underwriting(
     inspection.status = "reviewed"
     inspection.reviewed_at = datetime.now(UTC)
     inspection.reviewed_by_user_id = principal.user_id
-    lead = db.get(Lead, inspection.lead_id)
-    if lead:
-        lead.stage_key = "underwriting"
+    lead.stage_key = "underwriting"
     db.flush()
     add_activity(
         db,

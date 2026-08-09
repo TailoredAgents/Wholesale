@@ -39,6 +39,7 @@ from app.models.foundation import (
     SuppressionRecord,
     User,
 )
+from app.schemas.leads import LeadCloseOutRequest
 from app.schemas.operations import OperationsUserRead
 from app.schemas.prospecting import (
     ProspectHandoffDecision,
@@ -62,7 +63,11 @@ from app.services.acquisition_operations import (
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
+from app.services.lead_lifecycle import require_lead_open_for_work
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
+from app.services.leads import (
+    apply_lead_close_out_transition,
+)
 from app.services.property_identity import (
     find_property_by_identity,
     refresh_property_identity_keys,
@@ -498,10 +503,19 @@ def decide_handoff(
         )
         .where(ProspectingAttempt.id == handoff.attempt_id)
     )
-    lead = db.get(Lead, handoff.lead_id)
+    lead = db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == handoff.lead_id,
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
     prospect = db.get(Prospect, handoff.prospect_id)
     if entry is None or lead is None or prospect is None:
         raise ValueError("The handoff record is incomplete.")
+    require_lead_open_for_work(lead)
     now = datetime.now(UTC)
     attempt = db.get(ProspectingAttempt, handoff.attempt_id)
     decision_code = payload.reason_code or default_handoff_decision_code(
@@ -538,8 +552,26 @@ def decide_handoff(
         entry.completed_at = None
         prospect.status = "handoff_correction"
     else:
-        lead.stage_key = "disqualified"
-        lead.next_follow_up_at = None
+        result = apply_lead_close_out_transition(
+            db,
+            principal,
+            lead.id,
+            LeadCloseOutRequest(
+                disposition="disqualified",
+                reason=(
+                    f"Prospecting handoff rejected ({decision_code}): "
+                    f"{handoff.review_reason}"
+                )[:500],
+            ),
+            commit=False,
+        )
+        if result is None:
+            raise ValueError("The handoff's seller lead is no longer available.")
+        handoff.status = payload.decision
+        handoff.reviewed_by_user_id = principal.user_id
+        handoff.reviewed_at = now
+        handoff.decision_code = decision_code
+        handoff.review_reason = clean_text(payload.reason)
         entry.status = "completed"
         entry.completed_at = now
         prospect.status = "handoff_rejected"
@@ -679,9 +711,18 @@ def convert_prospect_to_lead(
     answers: dict[str, str],
 ) -> Lead:
     if prospect.converted_lead_id:
-        existing = db.get(Lead, prospect.converted_lead_id)
+        existing = db.scalar(
+            select(Lead)
+            .where(
+                Lead.organization_id == principal.organization_id,
+                Lead.id == prospect.converted_lead_id,
+            )
+            .execution_options(populate_existing=True)
+            .with_for_update()
+        )
         if existing is None:
             raise ValueError("The prospect points to a missing CRM lead.")
+        require_lead_open_for_work(existing)
         existing.assigned_user_id = assigned_user_id
         update_lead_qualification(existing, answers)
         conversation = ensure_primary_conversation(db, existing, queue_key="qualified")

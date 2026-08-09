@@ -3,13 +3,14 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal, TypedDict
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.models.foundation import (
     AiRunLog,
     Appointment,
+    Deal,
     DealReconciliation,
     Lead,
     OperationalFailure,
@@ -751,13 +752,39 @@ def _operations_facts(
     dashboard = get_dashboard_summary(db, principal)
     finance = get_finance_overview(db, principal, period_days)
     marketing = get_marketing_overview(db, principal, period_days)
-    overdue_tasks = _count(
-        db,
-        Task,
-        Task.organization_id == principal.organization_id,
-        Task.status != "completed",
-        Task.due_at.is_not(None),
-        Task.due_at < now,
+    overdue_tasks = int(
+        db.scalar(
+            select(func.count(Task.id)).where(
+                Task.organization_id == principal.organization_id,
+                Task.status.in_(("open", "in_progress")),
+                Task.due_at.is_not(None),
+                Task.due_at < now,
+                and_(
+                    or_(
+                        Task.lead_id.is_(None),
+                        Task.lead_id.in_(
+                            select(Lead.id).where(
+                                Lead.organization_id == principal.organization_id,
+                                Lead.archived_at.is_(None),
+                                Lead.stage_key.not_in(("dead", "disqualified")),
+                            )
+                        ),
+                    ),
+                    or_(
+                        Task.deal_id.is_(None),
+                        Task.deal_id.in_(
+                            select(Deal.id).where(
+                                Deal.organization_id == principal.organization_id,
+                                Deal.stage_key.not_in(
+                                    ("cancelled", "canceled", "closed", "dead", "funded")
+                                ),
+                            )
+                        ),
+                    ),
+                ),
+            )
+        )
+        or 0
     )
     unassigned_leads = _count(
         db,

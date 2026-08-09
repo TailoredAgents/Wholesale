@@ -17,15 +17,18 @@ import { useMemo, useState } from "react";
 import type { LeadListItem, SpeedToLeadTask } from "../../lib/api";
 import { StatusBadge } from "../_components/design-system";
 import {
+  defaultLeadSortKey,
   formatDateTime,
   getFilteredLeads,
   getLeadOperatingStatus,
   getPipelineStage,
   getSavedLeadViewCounts,
+  leadSortOptions,
   labelize,
   pipelineStages,
   qualificationFieldCount,
   qualificationFieldTarget,
+  type LeadSortKey,
   type SavedLeadViewKey,
 } from "../os-utils";
 import styles from "./leads-workspace.module.css";
@@ -84,6 +87,7 @@ export function LeadsWorkspace({
   initialLeadId,
   initialOwner,
   initialQuery,
+  initialSort,
   initialStage,
   initialView,
   leads,
@@ -95,6 +99,7 @@ export function LeadsWorkspace({
   initialLeadId: string;
   initialOwner: string;
   initialQuery: string;
+  initialSort: LeadSortKey;
   initialStage: string;
   initialView: SavedLeadViewKey;
   leads: LeadListItem[];
@@ -106,6 +111,7 @@ export function LeadsWorkspace({
   const [display, setDisplay] = useState<"table" | "board">(initialDisplay);
   const [query, setQuery] = useState(initialQuery);
   const [owner, setOwner] = useState(initialOwner);
+  const [sort, setSort] = useState<LeadSortKey>(initialSort);
   const [stage, setStage] = useState(initialStage);
   const [selectedLeadId, setSelectedLeadId] = useState(initialLeadId);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -117,7 +123,10 @@ export function LeadsWorkspace({
       ).sort(),
     [leads],
   );
-  const baseLeads = useMemo(() => getFilteredLeads(leads, tasks, view), [leads, tasks, view]);
+  const baseLeads = useMemo(
+    () => getFilteredLeads(leads, tasks, view, sort),
+    [leads, sort, tasks, view],
+  );
   const visibleLeads = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return baseLeads.filter((lead) => {
@@ -167,6 +176,7 @@ export function LeadsWorkspace({
     leadId?: string;
     owner?: string;
     query?: string;
+    sort?: LeadSortKey;
     stage?: string;
     view?: SavedLeadViewKey;
   } = {}) {
@@ -176,6 +186,7 @@ export function LeadsWorkspace({
       leadId: overrides.leadId ?? selectedLeadId,
       owner: overrides.owner ?? owner,
       query: overrides.query ?? query,
+      sort: overrides.sort ?? sort,
       stage: overrides.stage ?? stage,
       view: overrides.view ?? view,
     };
@@ -185,6 +196,7 @@ export function LeadsWorkspace({
     if (next.display === "board") params.set("display", "board");
     if (next.query.trim()) params.set("q", next.query.trim());
     if (next.owner !== "all") params.set("owner", next.owner);
+    if (next.sort !== defaultLeadSortKey(next.view)) params.set("sort", next.sort);
     if (next.stage !== "all") params.set("stage", next.stage);
     if (next.leadId) params.set("lead", next.leadId);
     const suffix = params.toString();
@@ -192,8 +204,10 @@ export function LeadsWorkspace({
   }
 
   function chooseView(nextView: SavedLeadViewKey) {
+    const nextSort = defaultLeadSortKey(nextView);
     setView(nextView);
-    replaceLocation({ view: nextView });
+    setSort(nextSort);
+    replaceLocation({ sort: nextSort, view: nextView });
   }
 
   function chooseDisplay(nextDisplay: "table" | "board") {
@@ -208,7 +222,7 @@ export function LeadsWorkspace({
   }
 
   function fullRecordHref(leadId: string) {
-    const values = new URLSearchParams({ asset, display, lead: leadId, owner, stage, view });
+    const values = new URLSearchParams({ asset, display, lead: leadId, owner, sort, stage, view });
     if (query) values.set("q", query);
     return `/os/leads/${leadId}?returnTo=${encodeURIComponent(`/os/leads?${values.toString()}`)}`;
   }
@@ -285,6 +299,18 @@ export function LeadsWorkspace({
               {pipelineStages.map((item) => <option key={item.key} value={item.key}>{item.label}</option>)}
             </select>
           </label>
+          <label>
+            <span>Sort</span>
+            <select onChange={(event) => {
+              const nextSort = event.target.value as LeadSortKey;
+              setSort(nextSort);
+              replaceLocation({ sort: nextSort });
+            }} value={sort}>
+              {leadSortOptions.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
+          </label>
           <div aria-label="Lead display" className={styles.displayControl}>
             <button aria-pressed={display === "table"} onClick={() => chooseDisplay("table")} title="Table view" type="button"><Table2 aria-hidden="true" size={15} /><span>Table</span></button>
             <button aria-pressed={display === "board"} onClick={() => chooseDisplay("board")} title="Board view" type="button"><Columns3 aria-hidden="true" size={15} /><span>Board</span></button>
@@ -295,7 +321,7 @@ export function LeadsWorkspace({
         <div className={`${styles.content} ${display === "board" ? styles.boardContent : ""}`}>
           {display === "table" ? <div className={styles.list}>
             <div className={styles.listHeader}>
-              <span>Seller</span><span>Status</span><span>Owner</span><span>Next action</span>
+              <span>Seller</span><span>Received</span><span>Status</span><span>Owner</span><span>Next action</span>
             </div>
             {visibleLeads.map((lead) => {
               const status = getLeadOperatingStatus(lead, tasks);
@@ -312,7 +338,8 @@ export function LeadsWorkspace({
                     <strong>{lead.seller_name}</strong><small>{lead.property_address}</small>
                     <em>{labelize(lead.asset_class)} · {labelize(lead.source)} · {labelize(lead.stage_key)}</em>
                   </span>
-                  <StatusBadge tone={operatingTone(status)}>{status}</StatusBadge>
+                  <time className={styles.received} dateTime={lead.created_at}>{formatDateTime(lead.created_at)}</time>
+                  <span className={styles.status}><StatusBadge tone={operatingTone(status)}>{status}</StatusBadge></span>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
                   <span className={styles.next}>
                     <strong>{action.label}</strong><small>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</small>
@@ -346,6 +373,7 @@ export function LeadsWorkspace({
                           >
                             <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)} · {labelize(lead.lead_temperature)}</em></span>
                             <span className={styles.cardAddress}>{lead.property_address}</span>
+                            <time className={styles.cardReceived} dateTime={lead.created_at}>Received {formatDateTime(lead.created_at)}</time>
                             <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
                             <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
                             <span className={styles.cardAction}>{action.label}<ArrowRight size={13} /></span>

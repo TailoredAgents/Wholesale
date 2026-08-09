@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import Select, func, select
@@ -17,6 +18,7 @@ from app.models.foundation import (
 )
 from app.schemas.approvals import ApprovalDecision, ApprovalRequestRead
 from app.services.contract_authority_locks import lock_offer_authority_for_mutation
+from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.offer_concessions import (
     apply_concession_decision,
     supersede_prior_offer_authority,
@@ -83,6 +85,29 @@ def decide_approval_request(
 ) -> ApprovalRequestRead | None:
     if payload.status not in DECISION_STATUSES:
         raise ValueError(f"Unsupported approval decision: {payload.status}")
+    request_identity = db.execute(
+        select(
+            ApprovalRequest.request_type,
+            ApprovalRequest.entity_type,
+            ApprovalRequest.entity_id,
+            ApprovalRequest.approval_metadata,
+        ).where(
+            ApprovalRequest.organization_id == principal.organization_id,
+            ApprovalRequest.id == approval_id,
+        )
+    ).one_or_none()
+    if request_identity is None:
+        return None
+    lead_id = approval_lead_id(db, principal, request_identity)
+    if lead_id is not None:
+        lead = lock_organization_lead(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead_id,
+        )
+        if lead is None:
+            raise ValueError("The approval's seller lead is unavailable.")
+        require_lead_open_for_work(lead)
     request = db.scalar(
         approval_decision_lock_statement(
             principal.organization_id,
@@ -257,6 +282,34 @@ def decide_approval_request(
     db.commit()
     db.refresh(request)
     return approval_to_read(request)
+
+
+def approval_lead_id(
+    db: Session,
+    principal: Principal,
+    request_identity: Any,
+) -> UUID | None:
+    metadata = getattr(request_identity, "approval_metadata", None) or {}
+    raw_lead_id = metadata.get("lead_id") if isinstance(metadata, dict) else None
+    if raw_lead_id:
+        try:
+            return UUID(str(raw_lead_id))
+        except ValueError:
+            pass
+    if (
+        getattr(request_identity, "entity_type", None) == "lead"
+        and getattr(request_identity, "entity_id", None) is not None
+    ):
+        entity_id = request_identity.entity_id
+        return entity_id if isinstance(entity_id, UUID) else None
+    if getattr(request_identity, "request_type", None) == "offer_ceiling":
+        return db.scalar(
+            select(OfferNegotiationPlan.lead_id).where(
+                OfferNegotiationPlan.organization_id == principal.organization_id,
+                OfferNegotiationPlan.id == getattr(request_identity, "entity_id", None),
+            )
+        )
+    return None
 
 
 def approval_to_read(request: ApprovalRequest) -> ApprovalRequestRead:
