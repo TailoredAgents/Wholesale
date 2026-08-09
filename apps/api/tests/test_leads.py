@@ -173,6 +173,230 @@ def test_create_and_list_lead(
     )
 
 
+def test_land_lead_is_inferred_from_property_type_and_filterable(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    property_payload = cast(dict[str, object], payload["property"])
+    property_payload.update(
+        {
+            "street_address": "0 Old Mill Road",
+            "city": "Jasper",
+            "postal_code": "30143",
+            "county": "Pickens",
+            "property_type": "vacant_land",
+            "parcel_id": "0123-045-067",
+        }
+    )
+
+    response = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+
+    assert response.status_code == 201, response.text
+    created = response.json()
+    assert created["asset_class"] == "land"
+    assert created["property_type"] == "vacant_land"
+    assert created["property_parcel_id"] == "0123-045-067"
+    assert created["qualification_context"] == {}
+
+    land_items = client.get(
+        "/api/v1/leads?asset_class=land",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()["items"]
+    house_items = client.get(
+        "/api/v1/leads?asset_class=house",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    ).json()["items"]
+    assert [item["id"] for item in land_items] == [created["id"]]
+    assert house_items == []
+
+
+def test_lead_api_rejects_dual_identity_conflicts_in_both_directions(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    initial = lead_payload()
+    initial["contact"] = {"legal_name": "Original Parcel Seller"}
+    initial_property = cast(dict[str, object], initial["property"])
+    initial_property.update(
+        {
+            "street_address": "123 Main Street",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "county": "Fulton",
+            "property_type": "vacant_land",
+            "parcel_id": "001-002",
+        }
+    )
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=initial,
+    )
+    assert created.status_code == 201, created.text
+
+    wrong_address = lead_payload()
+    wrong_address["contact"] = {"legal_name": "Wrong Address Seller"}
+    wrong_address_property = cast(dict[str, object], wrong_address["property"])
+    wrong_address_property.update(
+        {
+            "street_address": "999 Different Street",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "county": "Fulton",
+            "property_type": "vacant_land",
+            "parcel_id": "001-002",
+        }
+    )
+    address_conflict = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=wrong_address,
+    )
+    assert address_conflict.status_code == 422, address_conflict.text
+    assert "address and APN conflict" in address_conflict.json()["detail"]
+    db_session.rollback()
+
+    wrong_parcel = lead_payload()
+    wrong_parcel["contact"] = {"legal_name": "Wrong Parcel Seller"}
+    wrong_parcel_property = cast(dict[str, object], wrong_parcel["property"])
+    wrong_parcel_property.update(
+        {
+            "street_address": "123 Main Street",
+            "city": "Atlanta",
+            "state": "GA",
+            "postal_code": "30303",
+            "county": "Fulton",
+            "property_type": "vacant_land",
+            "parcel_id": "DIFFERENT-APN",
+        }
+    )
+    parcel_conflict = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=wrong_parcel,
+    )
+    assert parcel_conflict.status_code == 422, parcel_conflict.text
+    assert "address and APN conflict" in parcel_conflict.json()["detail"]
+    db_session.rollback()
+
+    properties = db_session.scalars(select(Property)).all()
+    assert len(properties) == 1
+    assert properties[0].street_address == "123 Main Street"
+    assert properties[0].parcel_id == "001-002"
+
+
+def test_lead_api_enriches_only_a_missing_counterpart_identity(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    parcel_only = lead_payload()
+    parcel_only["contact"] = {"legal_name": "Parcel First Seller"}
+    parcel_only_property = cast(dict[str, object], parcel_only["property"])
+    parcel_only_property.update(
+        {
+            "street_address": "",
+            "city": "",
+            "state": "GA",
+            "postal_code": "",
+            "county": "Pickens County",
+            "property_type": "vacant_land",
+            "parcel_id": "100-200",
+        }
+    )
+    first = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=parcel_only,
+    )
+    assert first.status_code == 201, first.text
+
+    parcel_with_address = lead_payload()
+    parcel_with_address["contact"] = {"legal_name": "Address Enrichment Seller"}
+    parcel_with_address_property = cast(
+        dict[str, object], parcel_with_address["property"]
+    )
+    parcel_with_address_property.update(
+        {
+            "street_address": "50 Mountain Road",
+            "city": "Jasper",
+            "state": "GA",
+            "postal_code": "30143",
+            "county": "Pickens",
+            "property_type": "vacant_land",
+            "parcel_id": "100200",
+        }
+    )
+    enriched_address = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=parcel_with_address,
+    )
+    assert enriched_address.status_code == 201, enriched_address.text
+    assert enriched_address.json()["property_address"] == "50 Mountain Road, Jasper, GA 30143"
+    assert enriched_address.json()["property_id"] == first.json()["property_id"]
+
+    address_only = lead_payload()
+    address_only["contact"] = {"legal_name": "Address First Seller"}
+    address_only_property = cast(dict[str, object], address_only["property"])
+    address_only_property.update(
+        {
+            "street_address": "75 Orchard Lane",
+            "city": "Ellijay",
+            "state": "GA",
+            "postal_code": "30540",
+            "county": None,
+            "property_type": "vacant_land",
+            "parcel_id": None,
+        }
+    )
+    third = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=address_only,
+    )
+    assert third.status_code == 201, third.text
+
+    address_with_parcel = lead_payload()
+    address_with_parcel["contact"] = {"legal_name": "Parcel Enrichment Seller"}
+    address_with_parcel_property = cast(
+        dict[str, object], address_with_parcel["property"]
+    )
+    address_with_parcel_property.update(
+        {
+            "street_address": "75 Orchard Lane",
+            "city": "Ellijay",
+            "state": "GA",
+            "postal_code": "30540",
+            "county": "Gilmer",
+            "property_type": "vacant_land",
+            "parcel_id": "300-400",
+        }
+    )
+    enriched_parcel = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=address_with_parcel,
+    )
+    assert enriched_parcel.status_code == 201, enriched_parcel.text
+    assert enriched_parcel.json()["property_id"] == third.json()["property_id"]
+    assert enriched_parcel.json()["property_parcel_id"] == "300-400"
+    assert enriched_parcel.json()["property_county"] == "Gilmer"
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 2
+
+
 def test_validate_property_address_preserves_crm_address_and_provider_provenance(
     db_session: Session,
     api_db_override: None,

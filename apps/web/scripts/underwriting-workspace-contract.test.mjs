@@ -31,6 +31,10 @@ const comparableReview = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/comparable-review-workbench.tsx"),
   "utf8",
 );
+const landValuation = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/land-valuation-workspace.tsx"),
+  "utf8",
+);
 const calibrationOutcome = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/calibration-outcome-form.tsx"),
   "utf8",
@@ -60,6 +64,19 @@ test("valuation updates reuse evidence and market refresh stays explicit", () =>
   assert.match(marketValue, /Run Stonegate valuation/);
   assert.match(marketValue, /Refresh market evidence/);
   assert.match(marketValue, /paid provider credits/);
+});
+
+test("Land comp review can restore or reject saved candidates without a provider search", () => {
+  assert.match(landValuation, /new Map<string, ComparableReviewCandidate>/);
+  assert.match(landValuation, /analysis\.selected_comps\.forEach/);
+  assert.match(landValuation, /analysis\.rejected_comps\.forEach/);
+  assert.match(landValuation, /savedComparableCandidates\.length > 0/);
+  assert.match(landValuation, /savedComparableCandidates\.map/);
+  assert.match(landValuation, /options\.selectedKeys !== undefined/);
+  assert.match(landValuation, /if \(refreshComps\) body\.idempotency_key = crypto\.randomUUID\(\)/);
+  assert.match(landValuation, /makes no provider call/);
+  assert.match(landValuation, /Saved status:/);
+  assert.match(landValuation, /Latest saved analysis/);
 });
 
 test("decision summary connects existing downstream workspaces", () => {

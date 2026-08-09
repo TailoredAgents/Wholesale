@@ -29,6 +29,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     Contact,
     Lead,
@@ -151,6 +152,7 @@ def load_report_context(
     property_record = db.get(Property, analysis.property_id)
     if lead is None or property_record is None:
         return None
+    require_house_workflow(lead.asset_class, workflow="Residential valuation reporting")
 
     contact = db.get(Contact, lead.contact_id)
     underwriting_version = (

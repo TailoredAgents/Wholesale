@@ -2,8 +2,9 @@ from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
 from app.schemas.tasks import PrimaryNextActionRead
 
 
@@ -14,12 +15,13 @@ class ContactCreate(BaseModel):
 
 
 class PropertyCreate(BaseModel):
-    street_address: str = Field(min_length=1, max_length=255)
-    city: str = Field(min_length=1, max_length=120)
+    street_address: str = Field(default="", max_length=255)
+    city: str = Field(default="", max_length=120)
     state: str = Field(min_length=2, max_length=2)
-    postal_code: str = Field(min_length=1, max_length=20)
+    postal_code: str = Field(default="", max_length=20)
     county: str | None = Field(default=None, max_length=120)
     property_type: str | None = Field(default=None, max_length=80)
+    parcel_id: str | None = Field(default=None, max_length=255)
 
 
 class LeadCreate(BaseModel):
@@ -29,6 +31,7 @@ class LeadCreate(BaseModel):
     email: str | None = Field(default=None, max_length=320)
     assigned_user_id: UUID | None = None
     source: str = Field(default="manual", max_length=120)
+    asset_class: Literal["house", "land"] | None = None
     stage_key: str = Field(default="new", max_length=120)
     lead_temperature: str | None = Field(default=None, max_length=80)
     motivation: str | None = Field(default=None, max_length=500)
@@ -40,6 +43,39 @@ class LeadCreate(BaseModel):
     appointment_status: str | None = Field(default=None, max_length=120)
     next_follow_up_at: datetime | None = None
     initial_note: str | None = Field(default=None, max_length=500)
+    qualification_context: dict[str, Any] = Field(default_factory=dict, max_length=50)
+
+    @model_validator(mode="after")
+    def require_asset_specific_property_identity(self) -> "LeadCreate":
+        asset_class = asset_class_for_property_type(
+            self.property.property_type,
+            explicit_asset_class=self.asset_class,
+        )
+        has_address = all(
+            value.strip()
+            for value in (
+                self.property.street_address,
+                self.property.city,
+                self.property.state,
+                self.property.postal_code,
+            )
+        )
+        has_parcel = bool(
+            self.property.parcel_id
+            and self.property.parcel_id.strip()
+            and self.property.county
+            and self.property.county.strip()
+            and self.property.state.strip()
+        )
+        if asset_class == LAND_ASSET_CLASS and (has_address or has_parcel):
+            return self
+        if asset_class == LAND_ASSET_CLASS:
+            raise ValueError(
+                "Land leads require either a complete address or APN with county and state."
+            )
+        if not has_address:
+            raise ValueError("House leads require a complete street address, city, state, and ZIP.")
+        return self
 
 
 class PropertyValidationRead(BaseModel):
@@ -59,6 +95,7 @@ class LeadRead(BaseModel):
     contact_id: UUID
     property_id: UUID
     source: str
+    asset_class: Literal["house", "land"]
     stage_key: str
     lead_temperature: str | None
     seller_name: str
@@ -70,6 +107,7 @@ class LeadRead(BaseModel):
     property_postal_code: str
     property_county: str | None
     property_type: str | None
+    property_parcel_id: str | None
     property_validation: PropertyValidationRead
     assigned_user_id: UUID | None
     assigned_user_email: str | None
@@ -80,6 +118,7 @@ class LeadRead(BaseModel):
     asking_price: str | None
     mortgage_balance: str | None
     appointment_status: str | None
+    qualification_context: dict[str, Any]
     next_follow_up_at: datetime | None
     primary_next_action: PrimaryNextActionRead | None
     archived_at: datetime | None
@@ -811,6 +850,7 @@ class LeadMissingField(BaseModel):
 
 class PropertyIntelligenceRead(BaseModel):
     research_status: str
+    research_profile: str = "house_v1"
     snapshot_id: UUID | None = None
     version_number: int | None = None
     snapshot_status: str | None = None
@@ -896,12 +936,14 @@ class LeadStaffUpdate(BaseModel):
         max_length=20,
     )
     assigned_user_id: UUID | None = None
-    property_street_address: str | None = Field(default=None, min_length=1, max_length=255)
-    property_city: str | None = Field(default=None, min_length=1, max_length=120)
+    asset_class: Literal["house", "land"] | None = None
+    property_street_address: str | None = Field(default=None, max_length=255)
+    property_city: str | None = Field(default=None, max_length=120)
     property_state: str | None = Field(default=None, min_length=2, max_length=2)
-    property_postal_code: str | None = Field(default=None, min_length=1, max_length=20)
+    property_postal_code: str | None = Field(default=None, max_length=20)
     property_county: str | None = Field(default=None, max_length=120)
     property_type: str | None = Field(default=None, max_length=80)
+    property_parcel_id: str | None = Field(default=None, max_length=255)
     source: str | None = Field(default=None, min_length=1, max_length=120)
     lead_temperature: str | None = Field(default=None, max_length=80)
     motivation: str | None = Field(default=None, max_length=500)
@@ -911,6 +953,10 @@ class LeadStaffUpdate(BaseModel):
     asking_price: str | None = Field(default=None, max_length=120)
     mortgage_balance: str | None = Field(default=None, max_length=120)
     appointment_status: str | None = Field(default=None, max_length=120)
+    qualification_context: dict[str, Any] | None = Field(
+        default=None,
+        max_length=50,
+    )
     next_follow_up_at: datetime | None = None
     reason: str | None = Field(default=None, max_length=500)
 

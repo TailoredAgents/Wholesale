@@ -23,6 +23,7 @@ class QualificationQuestion(BaseModel):
 
 
 class QualificationScriptCreate(BaseModel):
+    asset_class: Literal["house", "land"] = "house"
     title: str = Field(min_length=1, max_length=160)
     introduction: str = Field(min_length=1, max_length=3000)
     questions: list[QualificationQuestion] = Field(min_length=1, max_length=30)
@@ -41,6 +42,7 @@ class QualificationScriptCreate(BaseModel):
 class QualificationScriptRead(BaseModel):
     id: UUID
     version_number: int
+    asset_class: Literal["house", "land"]
     title: str
     status: str
     introduction: str
@@ -55,6 +57,7 @@ class LeadManagerCaseRead(BaseModel):
     handoff_id: UUID | None
     seller_name: str
     property_address: str
+    asset_class: Literal["house", "land"]
     source: str
     stage_key: str
     assigned_user_id: UUID
@@ -192,6 +195,7 @@ class LeadManagerOverview(BaseModel):
     can_manage: bool
     metrics: LeadManagerMetrics
     active_script: QualificationScriptRead | None
+    active_scripts: dict[str, QualificationScriptRead]
     scripts: list[QualificationScriptRead]
     awaiting_acceptance: list[LeadManagerCaseRead]
     qualification_queue: list[LeadManagerCaseRead]

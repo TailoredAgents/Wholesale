@@ -248,6 +248,41 @@ def test_zapier_lead_creates_crm_lead_once_and_queues_staff_alert(
     assert alert.status == "delivered"
 
 
+def test_zapier_land_lead_preserves_asset_and_parcel_identity(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session)
+    payload = webhook_payload("987654321012399")
+    payload.update(
+        {
+            "property_address": "Lot 12 Talking Rock Road",
+            "property_city": "Talking Rock",
+            "property_zip_code": "30175",
+            "property_type": "vacant_land",
+            "asset_class": "Land",
+            "parcel_id": "1234-012-099",
+        }
+    )
+
+    response = post_lead(TestClient(app), payload)
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+
+    assert response.status_code == 200, response.text
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None and event.lead_id is not None
+    lead = db_session.get(Lead, event.lead_id)
+    assert lead is not None and lead.asset_class == "land"
+    property_record = db_session.get(Property, lead.property_id)
+    assert property_record is not None
+    assert property_record.property_type == "vacant_land"
+    assert property_record.parcel_id == "1234-012-099"
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    assert alert.message_body.startswith("New Facebook Land lead:")
+
+
 def test_facebook_address_enrichment_fills_zip_and_county_after_staff_alert(
     db_session: Session,
     api_db_override: None,

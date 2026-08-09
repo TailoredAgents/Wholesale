@@ -1850,6 +1850,51 @@
   gap: 10px;
 }
 
+.generalEmailActions,
+.generalEmailResolution {
+  display: grid;
+  gap: 8px;
+}
+
+.generalEmailActions button,
+.generalEmailResolution button {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.generalEmailResolution p {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.generalEmailResolution p strong {
+  text-transform: capitalize;
+}
+
+.generalEmailForm {
+  display: grid;
+  gap: 14px;
+}
+
+.generalEmailFormGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.generalEmailFormGrid:first-of-type {
+  grid-template-columns: minmax(0, 1fr) 84px minmax(110px, 0.7fr);
+}
+
+@media (max-width: 720px) {
+  .generalEmailFormGrid,
+  .generalEmailFormGrid:first-of-type {
+    grid-template-columns: 1fr;
+  }
+}
+
 .callNotesList {
   max-height: 360px;
   display: grid;

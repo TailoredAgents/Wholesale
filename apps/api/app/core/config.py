@@ -327,6 +327,16 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED",
     )
+    land_workflow_enabled: bool = Field(
+        default=False,
+        validation_alias="LAND_WORKFLOW_ENABLED",
+    )
+    land_valuation_max_provider_results: int = Field(
+        default=25,
+        ge=3,
+        le=50,
+        validation_alias="LAND_VALUATION_MAX_PROVIDER_RESULTS",
+    )
     property_intelligence_fresh_days: int = Field(
         default=30,
         ge=1,

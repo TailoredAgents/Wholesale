@@ -536,6 +536,7 @@ class FieldContractSigningRead(BaseModel):
 
 
 class FieldAppointmentWorkspaceRead(BaseModel):
+    asset_class: Literal["house", "land"]
     appointment: FieldCalendarAppointmentRead
     brief: FieldMeetingBriefRead | None
     inspection: FieldInspectionRead | None

@@ -24,6 +24,7 @@ from app.models.foundation import (
     EmailSenderAlias,
     Lead,
     Organization,
+    Property,
     Role,
     RoleAssignment,
     Task,
@@ -788,3 +789,267 @@ def test_restricted_general_mailbox_is_visible_only_to_owner_or_assigned_team(
     )
     assert va_items.status_code == 200
     assert str(conversation.id) not in {item["id"] for item in va_items.json()["items"]}
+
+
+def test_general_email_can_be_converted_to_a_lead_without_losing_the_thread(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, _, _ = seed_workspace(db_session)
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Email Seller",
+        preferred_name="Email",
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=owner.organization_id,
+            contact_id=contact.id,
+            method_type="email",
+            value="seller@example.com",
+            normalized_value="seller@example.com",
+            is_primary=True,
+        )
+    )
+    conversation = create_general_conversation(
+        db_session,
+        organization_id=owner.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=owner.id,
+    )
+    communication = CommunicationRecord(
+        organization_id=owner.organization_id,
+        conversation_id=conversation.id,
+        lead_id=None,
+        contact_id=contact.id,
+        actor_user_id=None,
+        direction="inbound",
+        channel="email",
+        status="received",
+        provider="resend",
+        provider_message_id="convert-email-1",
+        subject="I need to sell",
+        body="I would like an offer for my vacant land.",
+        occurred_at=datetime.now(UTC),
+        external_payload=None,
+        communication_metadata={"source": "test"},
+    )
+    db_session.add(communication)
+    db_session.commit()
+
+    response = TestClient(app).post(
+        f"/api/v1/inbox/conversations/{conversation.id}/convert-to-lead",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "property": {
+                "street_address": "123 Email Way",
+                "city": "Atlanta",
+                "state": "GA",
+                "postal_code": "30303",
+                "property_type": "vacant_land",
+                "parcel_id": "INBOX-123-LAND",
+            },
+            "source": "inbound_email",
+            "asset_class": "land",
+        },
+    )
+
+    assert response.status_code == 201
+    result = response.json()
+    assert result["conversation_id"] == str(conversation.id)
+    lead = db_session.get(Lead, UUID(result["lead_id"]))
+    db_session.refresh(conversation)
+    db_session.refresh(contact)
+    db_session.refresh(communication)
+    assert lead is not None
+    assert lead.asset_class == "land"
+    assert lead.contact_id == contact.id
+    assert conversation.conversation_type == "lead"
+    assert conversation.lead_id == lead.id
+    assert conversation.queue_key == "acquisitions_follow_up"
+    assert contact.contact_type == "seller"
+    assert communication.lead_id == lead.id
+    property_record = db_session.get(Property, lead.property_id)
+    assert property_record is not None
+    assert property_record.street_address == "123 Email Way"
+    assert property_record.property_type == "vacant_land"
+    assert property_record.parcel_id == "INBOX-123-LAND"
+    assert db_session.scalar(
+        select(func.count()).select_from(Task).where(Task.lead_id == lead.id)
+    ) == 1
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(ConversationContextLink)
+        .where(
+            ConversationContextLink.conversation_id == conversation.id,
+            ConversationContextLink.lead_id == lead.id,
+            ConversationContextLink.is_primary.is_(True),
+        )
+    ) == 1
+
+
+def test_general_email_can_merge_into_an_existing_lead_conversation(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, _, _ = seed_workspace(db_session)
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    lead_response = client.post(
+        "/api/v1/leads",
+        headers=headers,
+        json=lead_payload("456 Existing Lead St"),
+    )
+    assert lead_response.status_code == 201
+    lead = db_session.get(Lead, UUID(lead_response.json()["id"]))
+    assert lead is not None
+    target = db_session.scalar(select(Conversation).where(Conversation.lead_id == lead.id))
+    assert target is not None
+
+    source_contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Existing Seller Alias",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(source_contact)
+    db_session.flush()
+    db_session.add(
+        ContactMethod(
+            organization_id=owner.organization_id,
+            contact_id=source_contact.id,
+            method_type="email",
+            value="existing.seller@example.com",
+            normalized_value="existing.seller@example.com",
+            is_primary=True,
+        )
+    )
+    source = create_general_conversation(
+        db_session,
+        organization_id=owner.organization_id,
+        contact_id=source_contact.id,
+        assigned_user_id=owner.id,
+    )
+    communication = CommunicationRecord(
+        organization_id=owner.organization_id,
+        conversation_id=source.id,
+        lead_id=None,
+        contact_id=source_contact.id,
+        actor_user_id=None,
+        direction="inbound",
+        channel="email",
+        status="received",
+        provider="resend",
+        provider_message_id="link-email-1",
+        subject="More property details",
+        body="Here is the information you requested.",
+        occurred_at=datetime.now(UTC),
+        external_payload=None,
+        communication_metadata={"source": "test"},
+    )
+    db_session.add(communication)
+    db_session.flush()
+    participant = record_email_participants(
+        db_session,
+        communication,
+        from_values="Existing Seller <existing.seller@example.com>",
+        to_values="austin@stonegatehb.com",
+        external_contact_id=source_contact.id,
+        external_roles={"from"},
+        sender_user_id=None,
+        source="test",
+    )[0]
+    update_conversation_activity(source, direction="inbound", occurred_at=communication.occurred_at)
+    db_session.commit()
+
+    response = client.post(
+        f"/api/v1/inbox/conversations/{source.id}/link-to-lead",
+        headers=headers,
+        json={"lead_id": str(lead.id)},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["conversation_id"] == str(target.id)
+    db_session.refresh(source)
+    db_session.refresh(target)
+    db_session.refresh(communication)
+    db_session.refresh(participant)
+    assert source.status == "closed"
+    assert source.conversation_metadata["merged_into_conversation_id"] == str(target.id)
+    assert communication.conversation_id == target.id
+    assert communication.lead_id == lead.id
+    assert communication.contact_id == lead.contact_id
+    assert participant.conversation_id == target.id
+    assert participant.contact_id == lead.contact_id
+    archived_source = client.get(
+        f"/api/v1/inbox/conversations/{source.id}",
+        headers=headers,
+    )
+    assert archived_source.status_code == 200
+    assert archived_source.json()["merged_into_conversation_id"] == str(target.id)
+    assert db_session.scalar(
+        select(func.count())
+        .select_from(ContactMethod)
+        .where(
+            ContactMethod.contact_id == lead.contact_id,
+            ContactMethod.normalized_value == "existing.seller@example.com",
+        )
+    ) == 1
+
+
+def test_general_email_classification_archives_and_restores_the_conversation(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    owner, _, _ = seed_workspace(db_session)
+    contact = Contact(
+        organization_id=owner.organization_id,
+        legal_name="Supply Vendor",
+        preferred_name=None,
+        contact_type="business_contact",
+        assigned_user_id=owner.id,
+    )
+    db_session.add(contact)
+    db_session.flush()
+    conversation = create_general_conversation(
+        db_session,
+        organization_id=owner.organization_id,
+        contact_id=contact.id,
+        assigned_user_id=owner.id,
+    )
+    db_session.commit()
+    client = TestClient(app)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    archived = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/classification",
+        headers=headers,
+        json={"category": "vendor", "close": True, "reason": "Supply invoice"},
+    )
+    assert archived.status_code == 200
+    db_session.refresh(conversation)
+    assert conversation.status == "closed"
+    assert conversation.queue_key == "closed"
+    assert conversation.conversation_metadata["mail_category"] == "vendor"
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers=headers,
+    )
+    assert detail.status_code == 200
+    assert detail.json()["mail_category"] == "vendor"
+
+    restored = client.post(
+        f"/api/v1/inbox/conversations/{conversation.id}/classification",
+        headers=headers,
+        json={"category": "vendor", "close": False},
+    )
+    assert restored.status_code == 200
+    db_session.refresh(conversation)
+    assert conversation.status == "open"
+    assert conversation.queue_key == "unassigned"
+    assert conversation.closed_at is None

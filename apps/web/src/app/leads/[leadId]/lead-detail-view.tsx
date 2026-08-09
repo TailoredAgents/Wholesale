@@ -20,6 +20,7 @@ import { CommunicationLogForm } from "./communication-log-form";
 import { LeadActionForm } from "./lead-action-form";
 import { LeadCallButton } from "./lead-call-button";
 import { LeadEditForm } from "./lead-edit-form";
+import { LandValuationWorkspace } from "./land-valuation-workspace";
 import { MarketValuePreview } from "./market-value-preview";
 import { NegotiationGovernance } from "./negotiation-governance";
 import { OfferApprovalControl } from "./offer-approval-control";
@@ -168,6 +169,7 @@ function PropertyPanel({ lead }: { lead: LeadDetail }) {
         leadId={lead.id}
       />
       <dl className={styles.factGrid}>
+        <div><dt>Lead type</dt><dd>{labelize(lead.asset_class)}</dd></div>
         <div><dt>Motivation</dt><dd>{lead.motivation ?? "Unknown"}</dd></div>
         <div><dt>Timeline</dt><dd>{labelize(lead.desired_timeline)}</dd></div>
         <div><dt>Condition</dt><dd>{labelize(lead.property_condition)}</dd></div>
@@ -175,6 +177,7 @@ function PropertyPanel({ lead }: { lead: LeadDetail }) {
         <div><dt>Asking price</dt><dd>{lead.asking_price ?? "Unknown"}</dd></div>
         <div><dt>Mortgage</dt><dd>{lead.mortgage_balance ?? "Unknown"}</dd></div>
         <div><dt>Property type</dt><dd>{labelize(lead.property_type)}</dd></div>
+        <div><dt>Parcel / APN</dt><dd>{lead.property_parcel_id ?? "Unknown"}</dd></div>
         <div><dt>County</dt><dd>{lead.property_county ?? "Unknown"}</dd></div>
       </dl>
     </section>
@@ -318,7 +321,11 @@ function OverviewTab({
             <div><dt>Appointment</dt><dd>{labelize(lead.appointment_status)}</dd></div>
           </dl>
           <ActionDisclosure label="Change pipeline stage">
-            <StageUpdateForm currentStage={lead.stage_key} leadId={lead.id} />
+            <StageUpdateForm
+              assetClass={lead.asset_class}
+              currentStage={lead.stage_key}
+              leadId={lead.id}
+            />
           </ActionDisclosure>
           <div className={styles.appointmentPreparation}>
             <span>{activeAppointment ? "Next seller appointment" : "Appointment preparation"}</span>
@@ -562,7 +569,32 @@ function UnderwritingTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
+function LandValuationTab({ lead }: { lead: LeadDetail }) {
+  return <LandValuationWorkspace leadId={lead.id} />;
+}
+
 function DealTab({ lead, buyers }: { lead: LeadDetail; buyers: Awaited<ReturnType<typeof getBuyers>>["buyers"] }) {
+  if (lead.asset_class === "land") {
+    return (
+      <div className={styles.tabGrid}>
+        <section className={styles.sectionPanel}>
+          <SectionHeader title="Land contract and deal workflow" meta="Intentionally blocked" />
+          <div className={styles.sectionBody}>
+            <p className={styles.emptyState}>
+              Stonegate will not open a residential transaction, create a House purchase package,
+              send a House agreement for signature, or start residential buyer disposition for a
+              Land lead. This workspace will unlock only after a counsel-approved Georgia Land
+              agreement, parcel diligence checklist, Land valuation and Land buyer package are
+              implemented and verified.
+            </p>
+            <Link className={styles.inlineEditLink} href={`/os/leads/${lead.id}?tab=property`}>
+              Continue Land research <ArrowRight size={14} />
+            </Link>
+          </div>
+        </section>
+      </div>
+    );
+  }
   return (
     <div className={styles.tabGrid}>
       <div className={styles.mainColumn}>
@@ -737,26 +769,54 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
         <div className={styles.recordList}>
           {lead.underwriting_versions.map((version) => (
             <article key={version.id}>
-              <div className={styles.recordTitle}>
-                <strong>Valuation report version {version.version_number}</strong>
-                <span>{labelize(version.report_stage)}</span>
-              </div>
-              <p>{formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)} ARV</p>
-              <Link className={styles.transactionWorkspaceLink} href={`/os/leads/${lead.id}?tab=valuation`}>
-                Open report and PDF controls
-              </Link>
+              {lead.asset_class === "land" ? (
+                <>
+                  <div className={styles.recordTitle}>
+                    <strong>Legacy residential valuation version {version.version_number}</strong>
+                    <span>Incompatible with Land</span>
+                  </div>
+                  <p>
+                    Retained for audit history after reclassification. Do not use its ARV, repair,
+                    comp or offer figures for this Land opportunity.
+                  </p>
+                  <Link className={styles.transactionWorkspaceLink} href={`/os/leads/${lead.id}?tab=property`}>
+                    Review current Land evidence
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div className={styles.recordTitle}>
+                    <strong>Valuation report version {version.version_number}</strong>
+                    <span>{labelize(version.report_stage)}</span>
+                  </div>
+                  <p>{formatMoney(version.arv_low_cents)} to {formatMoney(version.arv_high_cents)} ARV</p>
+                  <Link className={styles.transactionWorkspaceLink} href={`/os/leads/${lead.id}?tab=valuation`}>
+                    Open report and PDF controls
+                  </Link>
+                </>
+              )}
             </article>
           ))}
           {lead.transactions.map((transaction) => (
             <article key={transaction.id}>
               <div className={styles.recordTitle}>
-                <strong>{labelize(transaction.contract_type)}</strong>
-                <span>{labelize(transaction.status)}</span>
+                <strong>
+                  {lead.asset_class === "land"
+                    ? `Legacy residential ${labelize(transaction.contract_type)}`
+                    : labelize(transaction.contract_type)}
+                </strong>
+                <span>{lead.asset_class === "land" ? "Incompatible with Land" : labelize(transaction.status)}</span>
               </div>
-              <p>{transaction.title_company ?? "Title company not assigned"}</p>
-              <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
-                Open contracts and closing files
-              </Link>
+              <p>
+                {lead.asset_class === "land"
+                  ? "Retained for audit after reclassification; residential execution is locked."
+                  : transaction.title_company ?? "Title company not assigned"}
+              </p>
+              {lead.asset_class === "house" ? (
+                <Link className={styles.transactionWorkspaceLink} href={`/os/transactions?transaction=${transaction.id}`}>
+                  Open contracts and closing files
+                </Link>
+              ) : null}
             </article>
           ))}
           {!lead.underwriting_versions.length && !lead.transactions.length ? (
@@ -769,8 +829,9 @@ function FilesTab({ lead }: { lead: LeadDetail }) {
           <SectionHeader title="Where files are created" />
           <div className={styles.sectionBody}>
             <p className={styles.emptyState}>
-              Investor and client PDFs are generated in Valuation & Offer. Contracts, signatures,
-              title files, and closing documents are managed in the transaction workspace.
+              {lead.asset_class === "land"
+                ? "Land valuation reports and contract packages remain unavailable until their dedicated workflows are verified. Legacy House files are audit history only."
+                : "Investor and client PDFs are generated in Valuation & Offer. Contracts, signatures, title files, and closing documents are managed in the transaction workspace."}
             </p>
           </div>
         </section>
@@ -837,7 +898,9 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           {email ? <Link href={`/os/inbox?lead=${lead.id}&channel=email`}>Email</Link> : null}
           <Link href={tabHref("property") + "#edit-lead"}>Edit lead</Link>
           <Link href={tabHref("activity")}>Log contact</Link>
-          <Link href={tabHref("valuation")}>Run comps</Link>
+          <Link href={tabHref("valuation")}>
+            {lead.asset_class === "land" ? "Run Land valuation" : "Run comps"}
+          </Link>
           <Link className={styles.appointmentCommand} href={appointmentWorkspaceHref}>
             {activeAppointment ? "Prepare appointment" : "Schedule appointment"}
           </Link>
@@ -868,9 +931,18 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
           </section>
 
           <nav className={styles.tabs} aria-label="Lead workspace views">
-            {tabs.map(([key, label]) => (
-              <Link aria-current={activeTab === key ? "page" : undefined} className={activeTab === key ? styles.activeTab : undefined} href={tabHref(key)} key={key}>{label}</Link>
-            ))}
+            {tabs.map(([key, label]) => {
+              const visibleLabel = lead.asset_class === "land"
+                ? key === "valuation"
+                  ? "Land Valuation"
+                  : key === "contract"
+                    ? "Land Contract"
+                    : label
+                : label;
+              return (
+                <Link aria-current={activeTab === key ? "page" : undefined} className={activeTab === key ? styles.activeTab : undefined} href={tabHref(key)} key={key}>{visibleLabel}</Link>
+              );
+            })}
           </nav>
 
           <section className={styles.tabContent}>
@@ -879,7 +951,11 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
             ) : null}
             {activeTab === "activity" ? <ActivityTab lead={lead} /> : null}
             {activeTab === "property" ? <PropertyTab lead={lead} /> : null}
-            {activeTab === "valuation" ? <UnderwritingTab lead={lead} /> : null}
+            {activeTab === "valuation" ? (
+              lead.asset_class === "land"
+                ? <LandValuationTab lead={lead} />
+                : <UnderwritingTab lead={lead} />
+            ) : null}
             {activeTab === "appointments" ? <AppointmentsTab lead={lead} /> : null}
             {activeTab === "contract" ? <DealTab buyers={buyers} lead={lead} /> : null}
             {activeTab === "files" ? <FilesTab lead={lead} /> : null}

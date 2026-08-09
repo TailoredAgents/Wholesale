@@ -33,7 +33,7 @@ from app.schemas.dispositions import (
     DispositionRiskAlert,
 )
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
-from app.services.dispositions import scoped_case
+from app.services.dispositions import require_house_case_workflow, scoped_case
 
 
 class DispositionFacts(TypedDict):
@@ -59,6 +59,7 @@ def get_disposition_copilot_overview(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     facts = _disposition_facts(db, principal, case)
     runtime = get_runtime_overview(db, principal)
     statuses = {item.capability_key: item.status for item in runtime.capabilities}
@@ -101,6 +102,7 @@ def analyze_disposition(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     facts = _disposition_facts(db, principal, case)
     agent = db.scalar(
         select(AiAgentDefinition).where(
@@ -249,6 +251,7 @@ def review_recommendation(
     case = scoped_case(db, principal, recommendation.disposition_case_id)
     if case is None:
         raise ValueError("Disposition case not found.")
+    require_house_case_workflow(db, case)
     facts = _disposition_facts(db, principal, case)
     if payload.decision == "edited":
         assert payload.final_output is not None

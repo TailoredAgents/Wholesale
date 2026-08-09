@@ -610,20 +610,135 @@ def build_lead_context(
         )
         .order_by(LeadFormSubmission.created_at.desc())
     )
-    from app.services.property_intelligence import current_property_snapshot
+    from app.services.land_valuation_state import (
+        active_land_offer_policy_id,
+        current_land_analysis_reasons,
+    )
+    from app.services.property_intelligence import (
+        current_property_snapshot,
+        land_comparable_overlay,
+        land_valuation_overlay,
+        latest_land_valuation_for_snapshot,
+        property_research_signature,
+        research_profile_for_lead,
+    )
 
+    research_profile = research_profile_for_lead(lead)
     property_snapshot = (
         current_property_snapshot(
             db,
             organization_id=principal.organization_id,
             property_id=property_record.id,
+            research_profile=research_profile,
         )
         if property_record is not None
         else None
     )
+    current_identity_signature = (
+        property_research_signature(
+            property_record,
+            research_profile=research_profile,
+        )
+        if property_record is not None
+        else None
+    )
+    if (
+        property_snapshot is not None
+        and property_snapshot.address_signature != current_identity_signature
+    ):
+        property_snapshot = None
+    property_intelligence: dict[str, object] | None = None
+    if property_snapshot is not None:
+        valuation = dict(property_snapshot.valuation)
+        comparables = list(property_snapshot.comparables[:8])
+        market_context = dict(property_snapshot.market_context)
+        sources = list(property_snapshot.sources)
+        confidence_score = property_snapshot.confidence_score
+        if lead.asset_class == "land":
+            land_analysis = latest_land_valuation_for_snapshot(
+                db,
+                organization_id=principal.organization_id,
+                lead_id=lead.id,
+                property_snapshot_id=property_snapshot.id,
+            )
+            if land_analysis is not None:
+                current_state_reasons = current_land_analysis_reasons(
+                    land_analysis,
+                    property_record=property_record,
+                    current_snapshot=property_snapshot,
+                    current_identity_signature=current_identity_signature,
+                    active_policy_id=active_land_offer_policy_id(
+                        db, principal.organization_id
+                    ),
+                )
+                combined_blockers = list(
+                    dict.fromkeys(
+                        [*land_analysis.guidance_blockers, *current_state_reasons]
+                    )
+                )
+                combined_review_reasons = list(
+                    dict.fromkeys(
+                        [*land_analysis.review_reasons, *current_state_reasons]
+                    )
+                )
+                valuation = land_valuation_overlay(
+                    land_analysis,
+                    current_state_reasons=current_state_reasons,
+                )
+                comparables = [
+                    land_comparable_overlay(item)
+                    for item in land_analysis.selected_comps[:8]
+                ]
+                confidence_score = land_analysis.confidence_score
+                market_context = {
+                    **market_context,
+                    "land_valuation": {
+                        "analysis_id": str(land_analysis.id),
+                        "version_number": land_analysis.version_number,
+                        "status": (
+                            "needs_review"
+                            if current_state_reasons
+                            and land_analysis.status != "insufficient_evidence"
+                            else land_analysis.status
+                        ),
+                        "guidance_status": (
+                            "withheld"
+                            if current_state_reasons
+                            else land_analysis.guidance_status
+                        ),
+                        "is_current": not current_state_reasons,
+                        "valuation_basis": land_analysis.valuation_basis,
+                        "review_reasons": combined_review_reasons,
+                        "guidance_blockers": combined_blockers,
+                    },
+                }
+                sources.append(
+                    {
+                        "source": "stonegate",
+                        "captured_at": land_analysis.created_at.isoformat(),
+                        "role": "dedicated_land_comparable_and_offer_analysis",
+                    }
+                )
+        property_intelligence = {
+            "snapshot_id": str(property_snapshot.id),
+            "version_number": property_snapshot.version_number,
+            "research_profile": property_snapshot.research_profile,
+            "status": property_snapshot.status,
+            "captured_at": property_snapshot.captured_at.isoformat(),
+            "expires_at": property_snapshot.expires_at.isoformat(),
+            "completeness_score": property_snapshot.completeness_score,
+            "confidence_score": confidence_score,
+            "facts": property_snapshot.facts,
+            "valuation": valuation,
+            "comparables": comparables,
+            "market_context": market_context,
+            "sources": sources,
+            "conflicts": property_snapshot.conflicts[:20],
+        }
     return {
         "lead": {
             "id": str(lead.id),
+            "asset_class": lead.asset_class,
             "source": lead.source,
             "stage": lead.stage_key,
             "temperature": lead.lead_temperature,
@@ -634,6 +749,7 @@ def build_lead_context(
             "asking_price": lead.asking_price,
             "mortgage_balance": lead.mortgage_balance,
             "appointment_status": lead.appointment_status,
+            "qualification_context": dict(lead.qualification_context or {}),
             "next_follow_up_at": lead.next_follow_up_at.isoformat()
             if lead.next_follow_up_at
             else None,
@@ -658,26 +774,9 @@ def build_lead_context(
             "postal_code": property_record.postal_code if property_record else None,
             "county": property_record.county if property_record else None,
             "property_type": property_record.property_type if property_record else None,
+            "parcel_id": property_record.parcel_id if property_record else None,
         },
-        "property_intelligence": (
-            {
-                "snapshot_id": str(property_snapshot.id),
-                "version_number": property_snapshot.version_number,
-                "status": property_snapshot.status,
-                "captured_at": property_snapshot.captured_at.isoformat(),
-                "expires_at": property_snapshot.expires_at.isoformat(),
-                "completeness_score": property_snapshot.completeness_score,
-                "confidence_score": property_snapshot.confidence_score,
-                "facts": property_snapshot.facts,
-                "valuation": property_snapshot.valuation,
-                "comparables": property_snapshot.comparables[:8],
-                "market_context": property_snapshot.market_context,
-                "sources": property_snapshot.sources,
-                "conflicts": property_snapshot.conflicts[:20],
-            }
-            if property_snapshot is not None
-            else None
-        ),
+        "property_intelligence": property_intelligence,
         "latest_form_submission": submission.raw_payload if submission is not None else None,
     }
 

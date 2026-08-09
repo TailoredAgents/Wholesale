@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     ActivityEvent,
     AuditEvent,
@@ -445,12 +446,15 @@ def compact_address(value: str | None) -> str:
 
 
 def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
-    return db.scalar(
+    lead = db.scalar(
         select(Lead).where(
             Lead.id == lead_id,
             Lead.organization_id == principal.organization_id,
         )
     )
+    if lead is not None:
+        require_house_workflow(lead.asset_class, workflow="Residential manual comps")
+    return lead
 
 
 def clean(value: Any) -> str | None:

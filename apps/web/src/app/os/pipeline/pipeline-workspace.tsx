@@ -36,8 +36,16 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
   if (status === "Overdue follow-up") return { href: `/os/inbox?lead=${lead.id}`, label: "Reply now" };
   if (status === "Needs qualification") return { href: `/os/leads?view=queue&lead=${lead.id}`, label: "Qualify" };
   if (status === "Appointment work") return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Schedule" };
-  if (status === "Offer prep") return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
-  if (status === "Negotiation") return { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Negotiate" };
+  if (status === "Offer prep") {
+    return lead.asset_class === "land"
+      ? { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" }
+      : { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
+  }
+  if (status === "Negotiation") {
+    return lead.asset_class === "land"
+      ? { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" }
+      : { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Negotiate" };
+  }
   if (status === "Nurture") return { href: `/os/inbox?lead=${lead.id}`, label: "Follow up" };
   return { href: `/os/leads/${lead.id}`, label: "Open record" };
 }

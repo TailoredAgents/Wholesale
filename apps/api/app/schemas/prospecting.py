@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.domain.assets import HOUSE_ASSET_CLASS, AssetClass
 from app.schemas.operations import OperationsUserRead
 
 ProspectingOutcome = Literal[
@@ -54,6 +55,7 @@ class ScriptQuestion(BaseModel):
 
 
 class ProspectingScriptCreate(BaseModel):
+    asset_class: AssetClass = HOUSE_ASSET_CLASS
     title: str = Field(min_length=1, max_length=160)
     opening_script: str = Field(min_length=20, max_length=5000)
     qualification_questions: list[ScriptQuestion] = Field(min_length=1, max_length=30)
@@ -69,6 +71,7 @@ class ProspectingScriptCreate(BaseModel):
 class ProspectingScriptRead(BaseModel):
     id: UUID
     version_number: int
+    asset_class: AssetClass
     title: str
     status: str
     opening_script: str
@@ -124,6 +127,7 @@ class ProspectingEntryRead(BaseModel):
     assigned_user_id: UUID
     assigned_user_name: str
     prospect_id: UUID
+    asset_class: AssetClass
     legal_name: str
     phone: str | None
     email: str | None
@@ -178,6 +182,7 @@ class ProspectHandoffRead(BaseModel):
     prospect_id: UUID
     attempt_id: UUID
     lead_id: UUID
+    asset_class: AssetClass
     seller_name: str
     property_address: str | None
     caller_name: str

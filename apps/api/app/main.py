@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 from app.core.observability import initialize_error_monitoring
+from app.domain.assets import AssetWorkflowUnavailableError
 from app.routers import (
     ai,
     approvals,
@@ -19,6 +21,7 @@ from app.routers import (
     help,
     inbox,
     integrations,
+    land_underwriting,
     lead_manager,
     leads,
     marketing,
@@ -55,6 +58,13 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    @app.exception_handler(AssetWorkflowUnavailableError)
+    async def asset_workflow_unavailable(
+        _request: Request,
+        exc: AssetWorkflowUnavailableError,
+    ) -> JSONResponse:
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     app.include_router(health.router)
     app.include_router(help.router)
     app.include_router(ai.router)
@@ -70,6 +80,7 @@ def create_app() -> FastAPI:
     app.include_router(finance.router)
     app.include_router(inbox.router)
     app.include_router(integrations.router)
+    app.include_router(land_underwriting.router)
     app.include_router(lead_manager.router)
     app.include_router(leads.router)
     app.include_router(marketing.router)

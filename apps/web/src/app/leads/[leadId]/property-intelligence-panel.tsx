@@ -228,7 +228,8 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
 
   const status = intelligence.is_stale ? "stale" : intelligence.research_status;
   const valuation = intelligence.valuation;
-  const facts = [
+  const isLand = lead.asset_class === "land";
+  const houseFacts = [
     ["Property type", displaySavedFact(intelligence, "property_type")],
     ["Bedrooms", displaySavedFact(intelligence, "bedrooms")],
     ["Bathrooms", displaySavedFact(intelligence, "bathrooms")],
@@ -242,7 +243,21 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Construction", displaySavedFact(intelligence, "construction_type")],
     ["Recorded condition", displaySavedFact(intelligence, "building_condition")],
   ];
-  const propertySignals = [
+  const landFacts = [
+    ["Property type", displaySavedFact(intelligence, "property_type")],
+    ["Parcel / APN", displaySavedFact(intelligence, "parcel_id")],
+    ["Lot area", displaySavedFact(intelligence, "lot_size_acres")],
+    ["Lot square footage", displaySavedFact(intelligence, "lot_size")],
+    ["Lot number", displaySavedFact(intelligence, "lot_number")],
+    ["Subdivision", displaySavedFact(intelligence, "subdivision")],
+    ["Legal description", displaySavedFact(intelligence, "legal_description")],
+    ["Zoning record", displaySavedFact(intelligence, "zoning")],
+    ["Water record", displaySavedFact(intelligence, "water")],
+    ["Sewer record", displaySavedFact(intelligence, "sewer")],
+    ["Flood zone", displaySavedFact(intelligence, "flood_zone")],
+    ["Assessed land value", displaySavedFact(intelligence, "assessed_land_value")],
+  ];
+  const housePropertySignals = [
     ["Last sale date", displaySavedFact(intelligence, "last_sale_date")],
     ["Last sale price", displaySavedFact(intelligence, "last_sale_price")],
     ["Estimated equity", displaySavedFact(intelligence, "estimated_equity_amount")],
@@ -261,7 +276,23 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Owner occupied", displaySavedFact(intelligence, "owner_occupied")],
     ["Free and clear", displaySavedFact(intelligence, "free_and_clear")],
   ];
-  const additionalFacts = [
+  const landPropertySignals = [
+    ["Last sale date", displaySavedFact(intelligence, "last_sale_date")],
+    ["Last sale price", displaySavedFact(intelligence, "last_sale_price")],
+    ["Market status", displaySavedFact(intelligence, "market_status")],
+    ["Current listing price", displaySavedFact(intelligence, "current_listing_price")],
+    ["Days on market", displaySavedFact(intelligence, "days_on_market")],
+    ["Assessed land value", displaySavedFact(intelligence, "assessed_land_value")],
+    ["Assessed total value", displaySavedFact(intelligence, "assessed_total_value")],
+    ["Annual property tax", displaySavedFact(intelligence, "annual_property_tax")],
+    ["Recorded owner", displaySavedFact(intelligence, "recorded_owner")],
+    ["Ownership length", displaySavedFact(intelligence, "ownership_length_months")],
+    ["Active liens", displaySavedFact(intelligence, "active_lien_count")],
+    ["Lien reported", displaySavedFact(intelligence, "lien_reported")],
+  ];
+  const facts = isLand ? landFacts : houseFacts;
+  const propertySignals = isLand ? landPropertySignals : housePropertySignals;
+  const houseAdditionalFacts = [
     ["School district", "school_district"],
     ["Property class", "property_class"],
     ["Building style", "building_style"],
@@ -281,21 +312,49 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
     ["Recorded co-owner", "recorded_co_owner"],
     ["Owner company", "owner_company"],
     ["Ownership length", "ownership_length_months"],
-  ].map(([label, key]) => [label, displaySavedFact(intelligence, key)]);
-  const propertyAddress = [
-    lead.property_street_address,
-    lead.property_city,
-    lead.property_state,
-    lead.property_postal_code,
+  ];
+  const landAdditionalFacts = [
+    ["County", "county"],
+    ["Municipality", "municipality"],
+    ["School district", "school_district"],
+    ["Property class", "property_class"],
+    ["Flood description", "flood_zone_description"],
+    ["Tax assessment year", "tax_assessment_year"],
+    ["Recorded co-owner", "recorded_co_owner"],
+    ["Owner company", "owner_company"],
+    ["Owner mailing street", "owner_mailing_street"],
+    ["Owner mailing city", "owner_mailing_city"],
+    ["Owner mailing state", "owner_mailing_state"],
+  ];
+  const additionalFacts = (isLand ? landAdditionalFacts : houseAdditionalFacts).map(
+    ([label, key]) => [label, displaySavedFact(intelligence, key)],
+  );
+  const propertyAddress = lead.property_street_address
+    ? [
+        lead.property_street_address,
+        lead.property_city,
+        lead.property_state,
+        lead.property_postal_code,
+      ].filter(Boolean).join(", ")
+    : [
+        lead.property_parcel_id ? `APN ${lead.property_parcel_id}` : null,
+        lead.property_county,
+        lead.property_state,
+      ].filter(Boolean).join(", ");
+  const propertyLocality = [
+    lead.property_city || lead.property_county,
+    [lead.property_state, lead.property_postal_code].filter(Boolean).join(" "),
   ].filter(Boolean).join(", ");
+  const propertyIdentity = lead.property_street_address
+    || (lead.property_parcel_id ? `APN ${lead.property_parcel_id}` : "Property identity pending");
 
   return (
     <section className={`${styles.sectionPanel} ${styles.propertyIntelligencePanel}`}>
       <div className={styles.propertyIntelligenceHeader}>
         <div>
           <span className={styles.sectionEyebrow}>Property intelligence</span>
-          <h2>{lead.property_street_address}</h2>
-          <p><MapPin size={14} />{lead.property_city}, {lead.property_state} {lead.property_postal_code}</p>
+          <h2>{propertyIdentity}</h2>
+          <p><MapPin size={14} />{propertyLocality}</p>
         </div>
         <div className={styles.propertyResearchActions}>
           <span className={styles.propertyResearchStatus} data-status={status}>
@@ -312,13 +371,13 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
         <PropertyImage intelligence={intelligence} leadId={lead.id} />
         <div className={styles.propertyResearchSummary}>
           <div><span>Profile complete</span><strong>{intelligence.completeness_score}%</strong></div>
-          <div><span>Valuation confidence</span><strong>{intelligence.confidence_score}%</strong></div>
-          <div><span>Selected comps</span><strong>{intelligence.comparables.length}</strong></div>
+          <div><span>{isLand && !intelligence.market_context.land_valuation ? "Research confidence" : "Valuation confidence"}</span><strong>{intelligence.confidence_score}%</strong></div>
+          <div><span>{isLand ? "Saved land sales" : "Selected comps"}</span><strong>{intelligence.comparables.length}</strong></div>
           <div><span>Snapshot</span><strong>{intelligence.version_number ? `v${intelligence.version_number}` : "Pending"}</strong></div>
           <small>
             {intelligence.captured_at
               ? `Evidence captured ${new Date(intelligence.captured_at).toLocaleString()}`
-              : "Research will run after the address is confirmed."}
+              : "Research will run after the property identity is confirmed."}
           </small>
         </div>
       </div>
@@ -347,21 +406,35 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
         </div>
 
         <div className={styles.propertyValueSection}>
-          <h3>Saved value evidence</h3>
-          <div className={styles.propertyValueCards}>
-            <div><span>Stonegate ARV</span><strong>{money(valuation.arv_point_cents)}</strong></div>
-            <div><span>Supported low</span><strong>{money(valuation.arv_low_cents)}</strong></div>
-            <div><span>Supported high</span><strong>{money(valuation.arv_high_cents)}</strong></div>
-            <div><span>External benchmark</span><strong>{money(valuation.estimated_value_cents)}</strong></div>
-          </div>
-          <p>{String(valuation.source_note ?? "Value evidence has not been collected yet.")}</p>
+          <h3>{isLand ? "Land value evidence" : "Saved value evidence"}</h3>
+          {isLand ? (
+            <>
+              <div className={styles.propertyValueCards}>
+                <div><span>Supported land value</span><strong>{money(valuation.land_value_point_cents)}</strong></div>
+                <div><span>Supported low</span><strong>{money(valuation.land_value_low_cents)}</strong></div>
+                <div><span>Supported high</span><strong>{money(valuation.land_value_high_cents)}</strong></div>
+                <div><span>External benchmark</span><strong>{money(valuation.estimated_value_cents)}</strong></div>
+              </div>
+              <p>{String(valuation.source_note ?? "Land value has not been established from reviewed comparable sales.")}</p>
+            </>
+          ) : (
+            <>
+              <div className={styles.propertyValueCards}>
+                <div><span>Stonegate ARV</span><strong>{money(valuation.arv_point_cents)}</strong></div>
+                <div><span>Supported low</span><strong>{money(valuation.arv_low_cents)}</strong></div>
+                <div><span>Supported high</span><strong>{money(valuation.arv_high_cents)}</strong></div>
+                <div><span>External benchmark</span><strong>{money(valuation.estimated_value_cents)}</strong></div>
+              </div>
+              <p>{String(valuation.source_note ?? "Value evidence has not been collected yet.")}</p>
+            </>
+          )}
         </div>
       </div>
 
       <div className={styles.propertySignalSection}>
         <div>
           <h3>Property and market signals</h3>
-          <p>Provider estimates are research signals, not seller-confirmed balances or offer math.</p>
+          <p>{isLand ? "Recorded zoning, utilities, access, flood, and environmental facts are screening evidence—not legal opinions or guarantees that a parcel is buildable." : "Provider estimates are research signals, not seller-confirmed balances or offer math."}</p>
         </div>
         <dl>
           {propertySignals.map(([label, value]) => (
@@ -381,9 +454,9 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
 
       <div className={styles.propertyCompPreview}>
         <div className={styles.propertySectionTitle}>
-          <div><Database size={16} /><h3>Comparable evidence already on file</h3></div>
-          <Link href={`/os/leads/${lead.id}?tab=valuation#valuation-analysis`}>
-            Open full valuation
+          <div><Database size={16} /><h3>{isLand ? "Land sale evidence already on file" : "Comparable evidence already on file"}</h3></div>
+          <Link href={`/os/leads/${lead.id}?tab=valuation${isLand ? "" : "#valuation-analysis"}`}>
+            {isLand ? "Open Land valuation" : "Open full valuation"}
           </Link>
         </div>
         {intelligence.comparables.length ? (
@@ -401,7 +474,7 @@ export function PropertyIntelligencePanel({ lead }: { lead: LeadDetail }) {
             ))}
           </div>
         ) : (
-          <p className={styles.emptyState}>Comparable evidence is still being researched.</p>
+          <p className={styles.emptyState}>{isLand ? "Reviewed land sale evidence has not been added yet." : "Comparable evidence is still being researched."}</p>
         )}
       </div>
 

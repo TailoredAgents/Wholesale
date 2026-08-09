@@ -767,6 +767,7 @@
 .nextAction input,
 .nextAction select,
 .standardForm input,
+.standardForm select,
 .standardForm textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -794,7 +795,8 @@
 
 .nextAction input,
 .nextAction select,
-.standardForm input {
+.standardForm input,
+.standardForm select {
   min-height: 40px;
   padding: 0 10px;
 }

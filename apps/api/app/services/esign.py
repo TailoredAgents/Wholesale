@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
+from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     ContractPackage,
     ContractTemplate,
@@ -276,6 +277,16 @@ def send_contract_for_signature(
     payload: EsignSendRequest,
     settings: Settings | None = None,
 ) -> EsignEnvelopeRead | None:
+    transaction = db.scalar(
+        select(Transaction).where(
+            Transaction.id == transaction_id,
+            Transaction.organization_id == principal.organization_id,
+        )
+    )
+    if transaction is None:
+        return None
+    require_house_transaction_workflow(db, transaction)
+
     active = settings or get_settings()
     blockers = active.esign_configuration_blockers
     if blockers:
@@ -289,12 +300,6 @@ def send_contract_for_signature(
         )
         if configuration is None and not active.esign_signwell_webhook_id:
             raise ValueError("Connect SignWell in Transactions before sending a signature request.")
-    transaction = db.scalar(
-        select(Transaction).where(
-            Transaction.id == transaction_id,
-            Transaction.organization_id == principal.organization_id,
-        )
-    )
     package = db.scalar(
         select(ContractPackage).where(
             ContractPackage.id == package_id,
@@ -478,6 +483,8 @@ def preview_contract_for_signature(
             Transaction.organization_id == principal.organization_id,
         )
     )
+    if transaction is not None:
+        require_house_transaction_workflow(db, transaction)
     package = db.scalar(
         select(ContractPackage).where(
             ContractPackage.id == package_id,
@@ -1037,3 +1044,10 @@ def reconcile_envelope(
     )
     db.refresh(envelope)
     return envelope_read(db, envelope)
+
+
+def require_house_transaction_workflow(db: Session, transaction: Transaction) -> None:
+    lead = db.get(Lead, transaction.lead_id)
+    if lead is None:
+        raise ValueError("The transaction lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential contract and e-signature")

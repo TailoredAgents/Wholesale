@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     ApprovalRequest,
     AuditEvent,
@@ -88,6 +89,13 @@ def scoped_transaction(
             Transaction.id == transaction_id,
         )
     )
+
+
+def require_house_transaction_workflow(db: Session, transaction: Transaction) -> None:
+    lead = db.get(Lead, transaction.lead_id)
+    if lead is None:
+        raise ValueError("The transaction lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential contract and transaction")
 
 
 def add_event(
@@ -347,6 +355,7 @@ def update_transaction(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     changes = payload.model_dump(exclude_unset=True)
     if "coordinator_user_id" in changes and changes["coordinator_user_id"] is not None:
         user = db.scalar(
@@ -396,6 +405,7 @@ def create_contract_package(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if transaction.status not in ACTIVE_STATUSES:
         raise ValueError("A contract package cannot be created for a completed transaction.")
     if payload.template_id:
@@ -469,6 +479,7 @@ def request_contract_approval(
     )
     if transaction is None or package is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if package.status != "draft":
         raise ValueError("Only a draft contract package can be submitted for approval.")
     request = ApprovalRequest(
@@ -522,6 +533,8 @@ def apply_contract_decision(
     transaction = scoped_transaction(db, principal, package.transaction_id)
     if transaction is None:
         raise ValueError("The transaction is no longer available.")
+    if payload.status == "approved":
+        require_house_transaction_workflow(db, transaction)
     if payload.status in {"rejected", "cancelled"} and not payload.decision_notes:
         raise ValueError("Decision notes are required when a contract package is not approved.")
     if payload.status == "approved":
@@ -557,6 +570,7 @@ def mark_contract_sent(
     )
     if transaction is None or package is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if package.status != "approved":
         raise ValueError("The contract package must be approved before it is sent.")
     now = datetime.now(UTC)
@@ -593,6 +607,7 @@ def upload_document(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if not content or len(content) > MAX_DOCUMENT_BYTES:
         raise ValueError("Document must be between 1 byte and 15 MB.")
     if (
@@ -673,6 +688,7 @@ def add_document_fact(
     document = get_document(db, principal, transaction_id, document_id)
     if transaction is None or document is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     user = db.get(User, principal.user_id)
     now = datetime.now(UTC)
     fact = TransactionDocumentFact(
@@ -753,6 +769,7 @@ def delete_document(
     document = get_document(db, principal, transaction_id, document_id)
     if transaction is None or document is None:
         return False
+    require_house_transaction_workflow(db, transaction)
     delete_content(provider=document.storage_provider, key=document.storage_key)
     now = datetime.now(UTC)
     document.deleted_at = now
@@ -797,6 +814,7 @@ def mark_contract_executed(
     document = get_document(db, principal, transaction_id, document_id)
     if transaction is None or package is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if package.status not in {"approved", "sent"}:
         raise ValueError("Only an approved or sent contract package can be executed.")
     if (
@@ -837,6 +855,7 @@ def add_party(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     if payload.is_primary:
         for existing in db.scalars(
             select(TransactionParty).where(
@@ -881,6 +900,7 @@ def update_checklist_item(
     )
     if transaction is None or item is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("status") == "complete" and item.dependency_item_id:
         dependency = db.get(TransactionChecklistItem, item.dependency_item_id)
@@ -912,6 +932,7 @@ def record_note(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     event = add_event(db, principal, transaction, payload.event_type, payload.summary)
     db.commit()
     db.refresh(event)
@@ -931,6 +952,8 @@ def close_transaction(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    if payload.outcome == "funded":
+        require_house_transaction_workflow(db, transaction)
     now = datetime.now(UTC)
     lead = db.get(Lead, transaction.lead_id)
     deal = db.get(Deal, transaction.deal_id)

@@ -198,6 +198,10 @@ services:
         value: rentcast
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
         value: true
+      - key: LAND_WORKFLOW_ENABLED
+        value: false
+      - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
+        value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
         value: 30
       - key: PROPERTY_INTELLIGENCE_MAX_ATTEMPTS
@@ -527,6 +531,10 @@ services:
         value: rentcast
       - key: PROPERTY_INTELLIGENCE_AUTO_RESEARCH_ENABLED
         value: true
+      - key: LAND_WORKFLOW_ENABLED
+        value: false
+      - key: LAND_VALUATION_MAX_PROVIDER_RESULTS
+        value: 25
       - key: PROPERTY_INTELLIGENCE_FRESH_DAYS
         value: 30
       - key: PROPERTY_INTELLIGENCE_MAX_ATTEMPTS

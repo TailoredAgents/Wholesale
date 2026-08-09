@@ -10,7 +10,7 @@
 .views .activeView { border-color: #9ebcab; background: var(--brand-soft); color: var(--brand-strong); }
 .views strong { padding: 2px 6px; border-radius: 999px; background: var(--surface-muted); color: inherit; }
 .leadDesk { min-width: 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-soft); overflow: hidden; }
-.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(260px, 1fr) 180px 170px auto auto; align-items: center; gap: 8px; }
+.toolbar { min-height: 62px; padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--surface-soft); display: grid; grid-template-columns: minmax(240px, 1fr) 140px 170px 160px auto auto; align-items: center; gap: 8px; }
 .toolbar label { min-width: 0; min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); display: flex; align-items: center; gap: 7px; }
 .toolbar label > span { color: var(--muted); font-size: 10px; font-weight: 850; text-transform: uppercase; }
 .toolbar input, .toolbar select { min-width: 0; width: 100%; min-height: 38px; border: 0; outline: 0; background: transparent; color: var(--text); font: inherit; font-size: 12px; }
@@ -75,7 +75,7 @@
 
 @media (max-width: 1180px) {
   .metrics { grid-template-columns: repeat(5, minmax(120px, 1fr)); overflow-x: auto; }
-  .toolbar { grid-template-columns: minmax(240px, 1fr) 150px 140px auto; }
+  .toolbar { grid-template-columns: minmax(220px, 1fr) 120px 140px 130px auto; }
   .toolbar > strong { display: none; }
   .content { grid-template-columns: minmax(560px, 1fr) minmax(270px, 0.4fr); }
   .listHeader, .list > button { grid-template-columns: minmax(220px, 1fr) 120px 110px 130px; }

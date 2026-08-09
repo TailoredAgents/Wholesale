@@ -2,6 +2,7 @@
 
 import { useAuth } from "@clerk/nextjs";
 import {
+  Archive,
   ArrowRightLeft,
   Bot,
   CalendarClock,
@@ -39,6 +40,10 @@ import {
   type EmailSenderAlias,
 } from "./email-admin-panel";
 import { GlobalEmailCompose } from "./global-email-compose";
+import {
+  GeneralEmailActions,
+  type LinkableLead,
+} from "./general-email-actions";
 import styles from "./inbox.module.css";
 
 type Me = {
@@ -73,6 +78,8 @@ type Conversation = {
   status: string;
   queue_key: string;
   priority: string;
+  mail_category: string | null;
+  merged_into_conversation_id: string | null;
   unread_count: number;
   last_activity_at: string | null;
   last_inbound_at: string | null;
@@ -82,6 +89,7 @@ type Conversation = {
   response_age_minutes: number | null;
   response_target_minutes: number | null;
   response_due_at: string | null;
+  closed_at: string | null;
   watchers: Watcher[];
   created_at: string;
   updated_at: string;
@@ -139,6 +147,15 @@ type StructuredCallNotes = {
   appointment_details: string | null;
   confidence: number;
   evidence: CallNoteEvidence[];
+  parcel_id?: string | null;
+  acreage?: string | null;
+  legal_description?: string | null;
+  access_or_frontage?: string | null;
+  utilities?: string | null;
+  zoning_or_use?: string | null;
+  septic_or_perc?: string | null;
+  taxes_or_hoa?: string | null;
+  terrain_or_environmental_concerns?: string | null;
 };
 
 type CallTranscript = {
@@ -179,6 +196,8 @@ type ConversationDetail = Conversation & {
   appointment_status: string | null;
   next_follow_up_at: string | null;
   property_type: string | null;
+  asset_class: "house" | "land" | null;
+  property_parcel_id: string | null;
   property_county: string | null;
   timeline: TimelineItem[];
   open_tasks: Array<{
@@ -236,13 +255,23 @@ type EmailTemplate = {
   is_active: boolean;
 };
 
+type ConversationResolution = {
+  action: string;
+  source_conversation_id: string;
+  conversation_id: string;
+  lead_id: string | null;
+  status: string;
+  message: string;
+};
+
 export type InboxFilterKey =
   | "mine"
   | "unassigned"
   | "team"
   | "needs_reply"
   | "appointments"
-  | "unread";
+  | "unread"
+  | "archived";
 type MobilePane = "conversations" | "thread" | "details";
 export type ComposerChannel = "sms" | "email" | "call" | "note";
 const filters: Array<{
@@ -256,6 +285,7 @@ const filters: Array<{
   { key: "needs_reply", label: "Needs reply", icon: Reply },
   { key: "appointments", label: "Appointments", icon: CalendarClock },
   { key: "unread", label: "Unread", icon: MailOpen },
+  { key: "archived", label: "Archived", icon: Archive },
 ];
 
 const composerChannels: Array<{
@@ -400,6 +430,21 @@ const callNoteFieldOptions: Array<{
   { key: "mortgage_balance", label: "Mortgage balance/payoff" },
 ];
 
+const landCallNoteFieldOptions: Array<{
+  key: keyof StructuredCallNotes;
+  label: string;
+}> = [
+  { key: "parcel_id", label: "Parcel / APN" },
+  { key: "acreage", label: "Acreage" },
+  { key: "legal_description", label: "Legal description" },
+  { key: "access_or_frontage", label: "Access / frontage" },
+  { key: "utilities", label: "Utilities" },
+  { key: "zoning_or_use", label: "Zoning / stated use" },
+  { key: "septic_or_perc", label: "Septic / perc" },
+  { key: "taxes_or_hoa", label: "Taxes / HOA" },
+  { key: "terrain_or_environmental_concerns", label: "Terrain / environmental concerns" },
+];
+
 function listToText(values: string[]) {
   return values.join("\n");
 }
@@ -528,6 +573,20 @@ function CallTranscriptPanel({
                 />
               </label>
             </div>
+            {landCallNoteFieldOptions.some((item) => Boolean(notes[item.key])) ? (
+              <div className={styles.notesGrid}>
+                {landCallNoteFieldOptions.map((item) => (
+                  <label key={item.key}>
+                    {item.label}
+                    <input
+                      disabled={!canReview || transcript.status !== "needs_review"}
+                      onChange={(event) => updateNote(item.key, event.target.value || null)}
+                      value={String(notes[item.key] ?? "")}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
             <div className={styles.notesGrid}>
               {(["repairs", "objections", "commitments"] as const).map((key) => (
                 <label key={key}>
@@ -671,6 +730,8 @@ export function InboxWorkspace({
   const [emailAttachments, setEmailAttachments] = useState<File[]>([]);
   const [emailCc, setEmailCc] = useState("");
   const [emailBcc, setEmailBcc] = useState("");
+  const [linkableLeads, setLinkableLeads] = useState<LinkableLead[]>([]);
+  const [linkableLeadsLoading, setLinkableLeadsLoading] = useState(false);
 
   const [globalComposeOpen, setGlobalComposeOpen] = useState(initialGlobalComposeOpen);
   const [mailboxAliasId, setMailboxAliasId] = useState<string | null>(null);
@@ -999,6 +1060,30 @@ export function InboxWorkspace({
   }, [loadDetail, selectedId]);
 
   useEffect(() => {
+    if (detail?.conversation_type !== "general" || !me?.permissions.includes("leads:edit")) {
+      return;
+    }
+    let active = true;
+    async function loadLinkableLeads() {
+      setLinkableLeadsLoading(true);
+      try {
+        const payload = await request<{ items: LinkableLead[] }>("/api/v1/leads");
+        if (active) setLinkableLeads(payload.items);
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : "Unable to load seller leads.");
+        }
+      } finally {
+        if (active) setLinkableLeadsLoading(false);
+      }
+    }
+    void loadLinkableLeads();
+    return () => {
+      active = false;
+    };
+  }, [detail?.conversation_type, me?.permissions, request]);
+
+  useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ block: "end" });
   }, [detail?.id, detail?.timeline.length]);
 
@@ -1013,14 +1098,16 @@ export function InboxWorkspace({
 
   const counts = useMemo(() => {
     const currentUserId = me?.user_id;
+    const active = conversations.filter((item) => item.status !== "closed");
     return {
-      mine: conversations.filter((item) => item.assigned_user_id === currentUserId).length,
-      unassigned: conversations.filter((item) => !item.assigned_user_id).length,
-      team: conversations.length,
-      needs_reply: conversations.filter(hasNeedsReply).length,
-      appointments: conversations.filter((item) => item.queue_key === "appointment_set").length,
-      unread: conversations.filter((item) => item.unread_count > 0).length,
-      overdue: conversations.filter((item) => item.response_state === "overdue").length,
+      mine: active.filter((item) => item.assigned_user_id === currentUserId).length,
+      unassigned: active.filter((item) => !item.assigned_user_id).length,
+      team: active.length,
+      needs_reply: active.filter(hasNeedsReply).length,
+      appointments: active.filter((item) => item.queue_key === "appointment_set").length,
+      unread: active.filter((item) => item.unread_count > 0).length,
+      archived: conversations.filter((item) => item.status === "closed").length,
+      overdue: active.filter((item) => item.response_state === "overdue").length,
     };
   }, [conversations, me?.user_id]);
 
@@ -1055,12 +1142,15 @@ export function InboxWorkspace({
       const matchesMailbox =
         mailboxAliasId === null || item.source_alias_id === mailboxAliasId;
       const matchesFilter =
-        filter === "team" ||
-        (filter === "mine" && item.assigned_user_id === me?.user_id) ||
-        (filter === "unassigned" && !item.assigned_user_id) ||
-        (filter === "needs_reply" && hasNeedsReply(item)) ||
-        (filter === "appointments" && item.queue_key === "appointment_set") ||
-        (filter === "unread" && item.unread_count > 0);
+        filter === "archived"
+          ? item.status === "closed"
+          : item.status !== "closed" &&
+            (filter === "team" ||
+              (filter === "mine" && item.assigned_user_id === me?.user_id) ||
+              (filter === "unassigned" && !item.assigned_user_id) ||
+              (filter === "needs_reply" && hasNeedsReply(item)) ||
+              (filter === "appointments" && item.queue_key === "appointment_set") ||
+              (filter === "unread" && item.unread_count > 0));
       const matchesSearch =
         !normalizedSearch ||
         item.seller_name.toLowerCase().includes(normalizedSearch) ||
@@ -1138,6 +1228,95 @@ export function InboxWorkspace({
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : "Unable to refresh inbox.");
     }
+  }
+
+  async function convertGeneralEmailToLead(property: {
+    asset_class: "house" | "land";
+    street_address: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    county: string | null;
+    property_type: string | null;
+    parcel_id: string | null;
+  }) {
+    if (!detail) return;
+    setError(null);
+    try {
+      const { asset_class, ...propertyPayload } = property;
+      const result = await request<ConversationResolution>(
+        `/api/v1/inbox/conversations/${detail.id}/convert-to-lead`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            asset_class,
+            property: propertyPayload,
+            source: "inbound_email",
+          }),
+        },
+      );
+      setMailboxAliasId(null);
+      setFilter("team");
+      await loadConversations();
+      setSelectedId(result.conversation_id);
+      await loadDetail(result.conversation_id);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Email could not be converted.");
+      throw actionError;
+    }
+  }
+
+  async function linkGeneralEmailToLead(leadId: string) {
+    if (!detail) return;
+    setError(null);
+    try {
+      const result = await request<ConversationResolution>(
+        `/api/v1/inbox/conversations/${detail.id}/link-to-lead`,
+        { method: "POST", body: JSON.stringify({ lead_id: leadId }) },
+      );
+      setMailboxAliasId(null);
+      setFilter("team");
+      await loadConversations();
+      setSelectedId(result.conversation_id);
+      await loadDetail(result.conversation_id);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Email could not be linked.");
+      throw actionError;
+    }
+  }
+
+  async function classifyGeneralEmail(
+    category: "general" | "vendor" | "administrative" | "spam" | "archived",
+    close: boolean,
+    reason?: string,
+  ) {
+    if (!detail) return;
+    setError(null);
+    try {
+      const result = await request<ConversationResolution>(
+        `/api/v1/inbox/conversations/${detail.id}/classification`,
+        {
+          method: "POST",
+          body: JSON.stringify({ category, close, reason: reason ?? null }),
+        },
+      );
+      setMailboxAliasId(null);
+      setFilter(close ? "archived" : "team");
+      await loadConversations();
+      setSelectedId(result.conversation_id);
+      await loadDetail(result.conversation_id);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "Email could not be classified.");
+      throw actionError;
+    }
+  }
+
+  async function openMergedConversation(conversationId: string) {
+    setMailboxAliasId(null);
+    setFilter("team");
+    setSelectedId(conversationId);
+    await loadConversations();
+    await loadDetail(conversationId);
   }
 
   async function handleGlobalEmailSent(conversationId: string) {
@@ -1447,7 +1626,9 @@ export function InboxWorkspace({
                     <span>{label}</span>
                     {aliases.map((alias) => {
                       const aliasConversations = conversations.filter(
-                        (conversation) => conversation.source_alias_id === alias.id,
+                        (conversation) =>
+                          conversation.source_alias_id === alias.id &&
+                          conversation.status !== "closed",
                       );
                       const aliasUnread = aliasConversations.reduce(
                         (total, conversation) => total + conversation.unread_count,
@@ -1571,7 +1752,9 @@ export function InboxWorkspace({
                     <h3>{detail.preferred_name || detail.seller_name}</h3>
                     <span className={styles.stageBadge}>
                       {detail.conversation_type === "general"
-                        ? "General email"
+                        ? detail.status === "closed"
+                          ? labelize(detail.mail_category || "archived")
+                          : "General email"
                         : detail.conversation_type === "buyer"
                           ? "Buyer"
                           : labelize(detail.stage_key)}
@@ -2316,23 +2499,47 @@ export function InboxWorkspace({
               </section>
 
               {detail.conversation_type === "general" ? (
-                <section className={styles.detailSection}>
-                  <h4>Mailbox</h4>
-                  <dl className={styles.detailList}>
-                    <div>
-                      <dt>Receiving address</dt>
-                      <dd>
-                        {emailAliases.find(
-                          (alias) => alias.id === detail.source_alias_id,
-                        )?.email_address || "Stonegate company address"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Visibility</dt>
-                      <dd>{labelize(detail.visibility_scope)}</dd>
-                    </div>
-                  </dl>
-                </section>
+                <>
+                  <section className={styles.detailSection}>
+                    <h4>Handle this email</h4>
+                    <GeneralEmailActions
+                      canClassify={Boolean(canHandoff)}
+                      canManage={Boolean(me?.permissions.includes("leads:edit"))}
+                      category={detail.mail_category}
+                      closed={detail.status === "closed"}
+                      leads={linkableLeads}
+                      leadsLoading={linkableLeadsLoading}
+                      mergedConversationId={detail.merged_into_conversation_id}
+                      onClassify={classifyGeneralEmail}
+                      onConvert={convertGeneralEmailToLead}
+                      onLink={linkGeneralEmailToLead}
+                      onOpenMerged={openMergedConversation}
+                    />
+                  </section>
+                  <section className={styles.detailSection}>
+                    <h4>Mailbox</h4>
+                    <dl className={styles.detailList}>
+                      <div>
+                        <dt>Receiving address</dt>
+                        <dd>
+                          {emailAliases.find(
+                            (alias) => alias.id === detail.source_alias_id,
+                          )?.email_address || "Stonegate company address"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Visibility</dt>
+                        <dd>{labelize(detail.visibility_scope)}</dd>
+                      </div>
+                      {detail.mail_category ? (
+                        <div>
+                          <dt>Category</dt>
+                          <dd>{labelize(detail.mail_category)}</dd>
+                        </div>
+                      ) : null}
+                    </dl>
+                  </section>
+                </>
               ) : detail.conversation_type === "buyer" ? (
                 <section className={styles.detailSection}>
                   <h4>Dispositions</h4>
@@ -2349,12 +2556,20 @@ export function InboxWorkspace({
                     <p className={styles.propertyAddress}>{detail.property_address}</p>
                     <dl className={styles.contextGrid}>
                       <div>
+                        <dt>Lead type</dt>
+                        <dd>{labelize(detail.asset_class)}</dd>
+                      </div>
+                      <div>
                         <dt>Type</dt>
                         <dd>{labelize(detail.property_type)}</dd>
                       </div>
                       <div>
                         <dt>County</dt>
                         <dd>{detail.property_county || "Not captured"}</dd>
+                      </div>
+                      <div>
+                        <dt>Parcel / APN</dt>
+                        <dd>{detail.property_parcel_id || "Not captured"}</dd>
                       </div>
                       <div>
                         <dt>Source</dt>
@@ -2410,6 +2625,9 @@ export function InboxWorkspace({
                                   <span>Next:</span> {notes.next_action}
                                 </p>
                               ) : null}
+                              {notes.parcel_id ? <p><span>Parcel:</span> {notes.parcel_id}</p> : null}
+                              {notes.acreage ? <p><span>Acreage:</span> {notes.acreage}</p> : null}
+                              {notes.access_or_frontage ? <p><span>Access:</span> {notes.access_or_frontage}</p> : null}
                               <a href={`#call-${item.call_id}`}>
                                 Open call in thread
                                 <ChevronRight size={12} aria-hidden="true" />

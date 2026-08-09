@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
+from app.domain.assets import asset_class_for_property_type
 from app.models.foundation import (
     ActivityEvent,
     AttributionTouch,
@@ -40,8 +41,12 @@ from app.services.conversion_events import record_conversion_event, with_meta_br
 from app.services.inbox import ensure_primary_conversation
 from app.services.lead_manager import ensure_inbound_case
 from app.services.marketing import enqueue_meta_web_conversion
+from app.services.property_identity import (
+    find_property_by_identity,
+    normalized_address_key_or_none,
+    refresh_property_identity_keys,
+)
 from app.services.property_intelligence import enqueue_property_research
-from app.services.property_validation import canonical_address_key
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -410,12 +415,17 @@ def find_duplicate_match(
     property_record = find_matching_property(db, organization, payload)
     lead = None
     if contact is not None and property_record is not None:
+        asset_class = asset_class_for_property_type(
+            payload.property_type or property_record.property_type,
+            explicit_asset_class=payload.asset_class,
+        )
         lead = db.scalar(
             select(Lead).where(
                 Lead.organization_id == organization.id,
                 Lead.archived_at.is_(None),
                 Lead.contact_id == contact.id,
                 Lead.property_id == property_record.id,
+                Lead.asset_class == asset_class,
                 Lead.stage_key.in_(ACTIVE_LEAD_STAGES),
             )
         )
@@ -453,13 +463,17 @@ def find_matching_property(
     organization: Organization,
     payload: SellerIntakeCreate,
 ) -> Property | None:
-    normalized_address_key = normalize_address_key(payload)
-    return db.scalar(
-        select(Property).where(
-            Property.organization_id == organization.id,
-            Property.normalized_address_key == normalized_address_key,
-        )
+    property_record, _, _ = find_property_by_identity(
+        db,
+        organization_id=organization.id,
+        street_address=payload.property_address,
+        city=payload.property_city,
+        state=payload.property_state,
+        postal_code=payload.property_postal_code,
+        parcel_id=payload.parcel_id,
+        county=payload.property_county,
     )
+    return property_record
 
 
 def create_contact(db: Session, organization: Organization, payload: SellerIntakeCreate) -> Contact:
@@ -540,15 +554,27 @@ def create_property(
     organization: Organization,
     payload: SellerIntakeCreate,
 ) -> Property:
+    _, normalized_address_key, normalized_parcel_key = find_property_by_identity(
+        db,
+        organization_id=organization.id,
+        street_address=payload.property_address,
+        city=payload.property_city,
+        state=payload.property_state,
+        postal_code=payload.property_postal_code,
+        parcel_id=payload.parcel_id,
+        county=payload.property_county,
+    )
     property_record = Property(
         organization_id=organization.id,
         street_address=payload.property_address,
         city=payload.property_city,
         state=payload.property_state.upper(),
         postal_code=payload.property_postal_code,
-        county=None,
+        county=payload.property_county,
         property_type=payload.property_type,
-        normalized_address_key=normalize_address_key(payload),
+        parcel_id=payload.parcel_id,
+        normalized_parcel_key=normalized_parcel_key,
+        normalized_address_key=normalized_address_key,
     )
     db.add(property_record)
     db.flush()
@@ -568,6 +594,10 @@ def create_lead(
         property_id=property_record.id,
         assigned_user_id=None,
         source=payload.attribution.utm_source or "website",
+        asset_class=asset_class_for_property_type(
+            property_record.property_type,
+            explicit_asset_class=payload.asset_class,
+        ),
         stage_key="new",
         lead_temperature=None,
         motivation=payload.reason_for_selling,
@@ -579,6 +609,8 @@ def create_lead(
         appointment_status=None,
         next_follow_up_at=None,
     )
+    if lead.asset_class == "land" and not property_record.property_type:
+        property_record.property_type = "land"
     db.add(lead)
     db.flush()
     ensure_primary_conversation(db, lead)
@@ -593,6 +625,18 @@ def apply_public_intake_context(
     """Fill missing CRM context without overwriting staff-reviewed values."""
     if not property_record.property_type and payload.property_type:
         property_record.property_type = payload.property_type
+    if not property_record.parcel_id and payload.parcel_id:
+        property_record.parcel_id = payload.parcel_id
+    if not property_record.county and payload.property_county:
+        property_record.county = payload.property_county
+    refresh_property_identity_keys(property_record)
+    if payload.asset_class is not None or payload.property_type is not None:
+        lead.asset_class = asset_class_for_property_type(
+            payload.property_type or property_record.property_type,
+            explicit_asset_class=payload.asset_class,
+        )
+        if lead.asset_class == "land" and not property_record.property_type:
+            property_record.property_type = "land"
 
     fields = {
         "motivation": payload.reason_for_selling,
@@ -674,12 +718,12 @@ def normalize_phone(value: str) -> str:
     return "".join(character for character in value if character.isdigit())
 
 
-def normalize_address_key(payload: SellerIntakeCreate) -> str:
-    return canonical_address_key(
-        payload.property_address,
-        payload.property_city,
-        payload.property_state,
-        payload.property_postal_code,
+def normalize_address_key(payload: SellerIntakeCreate) -> str | None:
+    return normalized_address_key_or_none(
+        street_address=payload.property_address,
+        city=payload.property_city,
+        state=payload.property_state,
+        postal_code=payload.property_postal_code,
     )
 
 

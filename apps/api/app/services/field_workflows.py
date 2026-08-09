@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import LAND_ASSET_CLASS, normalize_asset_class, require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -167,6 +168,47 @@ def appointment_workspace(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
+    lead = db.get(Lead, appointment.lead_id)
+    if lead is None:
+        raise ValueError("The appointment lead is no longer available.")
+    asset_class = normalize_asset_class(lead.asset_class)
+    if asset_class == LAND_ASSET_CLASS:
+        return FieldAppointmentWorkspaceRead(
+            asset_class=asset_class,
+            appointment=calendar_appointment_read(db, appointment),
+            brief=None,
+            inspection=None,
+            negotiation=None,
+            underwriting_transfer=None,
+            contract_signing=FieldContractSigningRead(
+                transaction_id=None,
+                transaction_status=None,
+                package_id=None,
+                package_version=None,
+                package_status=None,
+                seller_name=None,
+                purchase_price_cents=None,
+                closing_date=None,
+                agreed_price_cents=None,
+                ready=False,
+                blocker=(
+                    "Land contract signing is unavailable until a counsel-approved Land "
+                    "agreement and diligence controls are active."
+                ),
+                can_send=False,
+                envelope=None,
+            ),
+            copilot=get_acquisitions_copilot_overview(db, principal, appointment),
+            repair_catalog={
+                "version": "land_site_visit_pending",
+                "source_note": (
+                    "Residential room and repair catalogs are intentionally unavailable for Land."
+                ),
+                "items": [],
+            },
+            can_edit=False,
+            can_review_underwriting=False,
+        )
     brief = db.scalar(
         select(FieldMeetingBrief)
         .where(
@@ -193,6 +235,7 @@ def appointment_workspace(
         else None
     )
     return FieldAppointmentWorkspaceRead(
+        asset_class=asset_class,
         appointment=calendar_appointment_read(db, appointment),
         brief=brief_read(brief) if brief else None,
         inspection=inspection_read(db, inspection) if inspection else None,
@@ -313,6 +356,11 @@ def start_field_in_person_signing(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
+    require_house_appointment_workflow(
+        db,
+        appointment,
+        workflow="Residential in-person contract signing",
+    )
     negotiation = db.scalar(
         select(FieldNegotiationSession).where(
             FieldNegotiationSession.appointment_id == appointment.id
@@ -350,6 +398,7 @@ def generate_meeting_brief(
     property_record = db.get(Property, appointment.property_id)
     if lead is None or contact is None or property_record is None:
         raise ValueError("The appointment requires an active lead, seller, and property.")
+    require_house_workflow(lead.asset_class, workflow="Residential meeting preparation")
     qualification = db.scalar(
         select(LeadQualificationSession)
         .where(LeadQualificationSession.lead_id == lead.id)
@@ -494,6 +543,7 @@ def start_inspection(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
+    require_house_appointment_workflow(db, appointment, workflow="Residential field inspection")
     inspection = db.scalar(
         select(FieldInspection).where(FieldInspection.appointment_id == appointment.id)
     )
@@ -740,6 +790,7 @@ def save_negotiation(
     appointment = scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
+    require_house_appointment_workflow(db, appointment, workflow="Residential offer negotiation")
     negotiation = db.scalar(
         select(FieldNegotiationSession).where(
             FieldNegotiationSession.appointment_id == appointment.id
@@ -1016,7 +1067,24 @@ def scoped_inspection(
     if inspection is None:
         return None
     scoped_appointment(db, principal, inspection.appointment_id)
+    lead = db.get(Lead, inspection.lead_id)
+    if lead is None:
+        raise ValueError("The inspection lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential field inspection")
     return inspection
+
+
+def require_house_appointment_workflow(
+    db: Session,
+    appointment: Appointment,
+    *,
+    workflow: str,
+) -> Lead:
+    lead = db.get(Lead, appointment.lead_id)
+    if lead is None:
+        raise ValueError("The appointment lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow=workflow)
+    return lead
 
 
 def inspection_read(db: Session, inspection: FieldInspection) -> FieldInspectionRead:

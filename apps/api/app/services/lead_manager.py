@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings
+from app.domain.assets import (
+    HOUSE_ASSET_CLASS,
+    normalize_asset_class,
+    property_identity_label,
+)
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     Appointment,
@@ -268,7 +273,19 @@ def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
         )
     ]
     scripts = list_scripts(db, principal) if manageable else []
-    active_script = get_active_script(db, principal.organization_id)
+    active_scripts = {
+        asset_class: script_read(script)
+        for asset_class in ("house", "land")
+        if (
+            script := get_active_script(
+                db,
+                principal.organization_id,
+                asset_class=asset_class,
+            )
+        )
+        is not None
+    }
+    active_script = active_scripts.get(HOUSE_ASSET_CLASS)
     return LeadManagerOverview(
         current_user_id=user.id,
         current_user_name=user.display_name,
@@ -281,7 +298,8 @@ def get_overview(db: Session, principal: Principal) -> LeadManagerOverview:
             appointments_today=len(appointments_today),
             neglected_leads=len(neglected),
         ),
-        active_script=script_read(active_script) if active_script else None,
+        active_script=active_script,
+        active_scripts=active_scripts,
         scripts=scripts,
         awaiting_acceptance=awaiting,
         qualification_queue=qualification,
@@ -310,6 +328,7 @@ def create_script(
     script = LeadQualificationScriptVersion(
         organization_id=principal.organization_id,
         version_number=next_version,
+        asset_class=payload.asset_class,
         title=payload.title.strip(),
         status="draft",
         introduction=payload.introduction.strip(),
@@ -328,7 +347,11 @@ def create_script(
         "lead_qualification_script",
         script.id,
         None,
-        {"version_number": next_version, "status": "draft"},
+        {
+            "version_number": next_version,
+            "status": "draft",
+            "asset_class": payload.asset_class,
+        },
         "Versioned Lead Manager qualification script created",
     )
     db.commit()
@@ -348,6 +371,7 @@ def approve_script(
         select(LeadQualificationScriptVersion).where(
             LeadQualificationScriptVersion.organization_id == principal.organization_id,
             LeadQualificationScriptVersion.status == "approved",
+            LeadQualificationScriptVersion.asset_class == script.asset_class,
         )
     ):
         approved.status = "retired"
@@ -361,7 +385,11 @@ def approve_script(
         "lead_qualification_script",
         script.id,
         {"status": "draft"},
-        {"status": "approved", "version_number": script.version_number},
+        {
+            "status": "approved",
+            "version_number": script.version_number,
+            "asset_class": script.asset_class,
+        },
         "Lead Manager qualification script approved",
     )
     db.commit()
@@ -427,9 +455,19 @@ def complete_qualification(
         raise ValueError("Accept the warm handoff before completing qualification.")
     if case.status == "closed":
         raise ValueError("A closed Lead Manager case cannot be qualified again.")
-    script = get_active_script(db, principal.organization_id)
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("The Lead Manager case points to a missing lead.")
+    asset_class = normalize_asset_class(lead.asset_class)
+    script = get_active_script(
+        db,
+        principal.organization_id,
+        asset_class=asset_class,
+    )
     if script is None:
-        raise ValueError("Approve a Lead Manager qualification script first.")
+        raise ValueError(
+            f"Approve a {asset_class.title()} Lead Manager qualification script first."
+        )
     answers = clean_answers(payload.answers)
     missing = [
         str(question["key"])
@@ -452,13 +490,35 @@ def complete_qualification(
             raise ValueError(f"Select an approved answer for {key}.")
     answered_count = sum(has_answer(answers.get(key)) for key in question_by_key)
     quality = round(answered_count / len(script.questions) * 10000) if script.questions else 0
-    lead = db.get(Lead, case.lead_id)
-    if lead is None:
-        raise ValueError("The Lead Manager case points to a missing lead.")
     for answer_key, lead_field in LEAD_FIELD_MAP.items():
         value = answers.get(answer_key)
         if has_answer(value):
             setattr(lead, lead_field, str(value))
+    qualification_context = dict(lead.qualification_context or {})
+    for answer_key, value in answers.items():
+        if answer_key not in LEAD_FIELD_MAP and has_answer(value):
+            qualification_context[answer_key] = value
+    lead.qualification_context = qualification_context
+    parcel_answer = answers.get("parcel_id")
+    if has_answer(parcel_answer):
+        property_record = db.get(Property, lead.property_id)
+        if property_record is not None and not property_record.parcel_id:
+            property_record.parcel_id = str(parcel_answer).strip()
+            from app.services.property_identity import refresh_property_identity_keys
+            from app.services.property_intelligence import (
+                enqueue_property_research,
+                invalidate_property_intelligence,
+            )
+
+            refresh_property_identity_keys(property_record)
+            if property_record.normalized_parcel_key:
+                invalidate_property_intelligence(db, property_record)
+                enqueue_property_research(
+                    db,
+                    property_record,
+                    source_lead_id=lead.id,
+                    trigger_source="lead_manager_parcel_qualification",
+                )
     apply_next_action(db, case, lead, payload, now)
     session = LeadQualificationSession(
         organization_id=principal.organization_id,
@@ -490,6 +550,7 @@ def complete_qualification(
         None,
         {
             "script_version": script.version_number,
+            "asset_class": asset_class,
             "quality_basis_points": quality,
             "next_action_type": payload.next_action_type,
             "next_action_due_at": (
@@ -750,10 +811,15 @@ def case_read(db: Session, case: LeadManagementCase, now: datetime) -> LeadManag
         lead_id=lead.id,
         handoff_id=case.handoff_id,
         seller_name=contact.preferred_name or contact.legal_name,
-        property_address=(
-            f"{property_record.street_address}, {property_record.city}, "
-            f"{property_record.state} {property_record.postal_code}"
+        property_address=property_identity_label(
+            street_address=property_record.street_address,
+            city=property_record.city,
+            state=property_record.state,
+            postal_code=property_record.postal_code,
+            parcel_id=property_record.parcel_id,
+            county=property_record.county,
         ),
+        asset_class=normalize_asset_class(lead.asset_class),
         source=lead.source,
         stage_key=lead.stage_key,
         assigned_user_id=case.assigned_user_id,
@@ -785,11 +851,17 @@ def list_scripts(db: Session, principal: Principal) -> list[QualificationScriptR
     ]
 
 
-def get_active_script(db: Session, organization_id: UUID) -> LeadQualificationScriptVersion | None:
+def get_active_script(
+    db: Session,
+    organization_id: UUID,
+    *,
+    asset_class: str = HOUSE_ASSET_CLASS,
+) -> LeadQualificationScriptVersion | None:
     return db.scalar(
         select(LeadQualificationScriptVersion).where(
             LeadQualificationScriptVersion.organization_id == organization_id,
             LeadQualificationScriptVersion.status == "approved",
+            LeadQualificationScriptVersion.asset_class == normalize_asset_class(asset_class),
         )
     )
 
@@ -798,6 +870,7 @@ def script_read(script: LeadQualificationScriptVersion) -> QualificationScriptRe
     return QualificationScriptRead(
         id=script.id,
         version_number=script.version_number,
+        asset_class=normalize_asset_class(script.asset_class),
         title=script.title,
         status=script.status,
         introduction=script.introduction,

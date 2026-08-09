@@ -150,6 +150,66 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert payload["enrichment_token"] not in str(submission.raw_payload)
 
 
+def test_public_land_intake_preserves_asset_and_parcel_identity(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload.update(
+        {
+            "property_address": "",
+            "property_city": "",
+            "property_postal_code": "",
+            "property_county": "Gilmer County",
+            "property_type": "vacant_land",
+            "asset_class": "Land",
+            "parcel_id": "3050-007-007",
+        }
+    )
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201, response.text
+    lead = db_session.scalar(select(Lead))
+    property_record = db_session.scalar(select(Property))
+    assert lead is not None and lead.asset_class == "land"
+    assert property_record is not None
+    assert property_record.property_type == "vacant_land"
+    assert property_record.parcel_id == "3050-007-007"
+    assert property_record.normalized_address_key is None
+    assert property_record.normalized_parcel_key == "GA|gilmer|3050007007"
+
+    payload["parcel_id"] = "3050007007"
+    payload["property_county"] = "Gilmer"
+    duplicate = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+    assert duplicate.status_code == 201, duplicate.text
+    assert duplicate.json()["matched_existing_lead"] is True
+    assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
+
+
+def test_public_duplicate_matching_does_not_merge_house_and_land_lanes(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    house_payload = public_payload()
+    land_payload = public_payload()
+    land_payload.update({"asset_class": "land", "property_type": "vacant_land"})
+
+    house = client.post("/api/v1/public/seller-leads", json=house_payload)
+    land = client.post("/api/v1/public/seller-leads", json=land_payload)
+
+    assert house.status_code == 201, house.text
+    assert land.status_code == 201, land.text
+    assert house.json()["matched_existing_lead"] is False
+    assert land.json()["matched_existing_lead"] is False
+    leads = db_session.scalars(select(Lead).order_by(Lead.created_at)).all()
+    assert {lead.asset_class for lead in leads} == {"house", "land"}
+    assert len({lead.property_id for lead in leads}) == 1
+
+
 def test_public_intake_enrichment_updates_same_lead_without_overwriting_staff_values(
     db_session: Session,
     api_db_override: None,

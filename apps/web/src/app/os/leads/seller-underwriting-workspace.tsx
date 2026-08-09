@@ -28,7 +28,9 @@ export function SellerUnderwritingWorkspace({
   initialLeadId: string;
   leads: LeadListItem[];
 }) {
-  const underwritingLeads = leads.filter((lead) => underwritingStages.includes(lead.stage_key));
+  const underwritingLeads = leads.filter(
+    (lead) => lead.asset_class === "house" && underwritingStages.includes(lead.stage_key),
+  );
   const selected =
     underwritingLeads.find((lead) => lead.id === initialLeadId) ?? underwritingLeads[0] ?? null;
   const sampleCount = calibration?.overall.sample_count ?? 0;

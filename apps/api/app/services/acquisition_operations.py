@@ -10,6 +10,7 @@ from sqlalchemy.sql.schema import Column, Table
 
 from app.core.auth import Principal
 from app.core.config import Settings
+from app.domain.assets import normalize_asset_class, property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.base import Base
 from app.models.foundation import (
@@ -383,6 +384,7 @@ def campaign_read(db: Session, campaign: Campaign) -> CampaignRead:
         name=campaign.name,
         code=campaign.code,
         channel=campaign.channel,
+        asset_class=normalize_asset_class(campaign.asset_class),
         status=campaign.status,
         starts_on=campaign.starts_on,
         ends_on=campaign.ends_on,
@@ -431,6 +433,7 @@ def create_campaign(db: Session, principal: Principal, payload: CampaignCreate) 
         name=payload.name.strip(),
         code=payload.code.strip().lower(),
         channel=payload.channel,
+        asset_class=normalize_asset_class(payload.asset_class),
         status="draft",
         starts_on=payload.starts_on,
         ends_on=payload.ends_on,
@@ -455,6 +458,7 @@ def create_campaign(db: Session, principal: Principal, payload: CampaignCreate) 
             "name": campaign.name,
             "code": campaign.code,
             "channel": campaign.channel,
+            "asset_class": campaign.asset_class,
         },
         "Outreach campaign created",
     )
@@ -476,12 +480,7 @@ def prospect_read(db: Session, prospect: Prospect) -> ProspectRead:
     campaign = db.get(Campaign, prospect.campaign_id)
     territory = db.get(Territory, prospect.territory_id) if prospect.territory_id else None
     assignee = db.get(User, prospect.assigned_user_id) if prospect.assigned_user_id else None
-    address_parts = [
-        prospect.street_address,
-        prospect.city,
-        prospect.state_code,
-        prospect.postal_code,
-    ]
+    parcel_id, county, property_type = prospect_property_metadata(prospect)
     return ProspectRead(
         id=prospect.id,
         campaign_id=prospect.campaign_id,
@@ -492,11 +491,23 @@ def prospect_read(db: Session, prospect: Prospect) -> ProspectRead:
         assigned_user_name=assignee.display_name if assignee else None,
         converted_lead_id=prospect.converted_lead_id,
         source_record_key=prospect.source_record_key,
+        asset_class=normalize_asset_class(prospect.asset_class),
         status=prospect.status,
         legal_name=prospect.legal_name,
         phone=prospect.phone,
         email=prospect.email,
-        property_address=", ".join(value for value in address_parts if value) or None,
+        property_address=property_identity_label(
+            street_address=prospect.street_address,
+            city=prospect.city,
+            state=prospect.state_code,
+            postal_code=prospect.postal_code,
+            parcel_id=parcel_id,
+            county=county,
+        )
+        or None,
+        county=county,
+        parcel_id=parcel_id,
+        property_type=property_type,
         suppression_status=prospect.suppression_status,
         phone_validation_status=prospect.phone_validation_status,
         address_validation_status=prospect.address_validation_status,
@@ -535,9 +546,14 @@ def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) 
             payload.state_code,
             payload.postal_code,
         )
+    if normalize_asset_class(campaign.asset_class) == "land" and not (
+        normalized_address or (payload.parcel_id and payload.county and payload.state_code)
+    ):
+        raise ValueError("Land prospects require a complete address or APN with county and state.")
     prospect = Prospect(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
+        asset_class=normalize_asset_class(campaign.asset_class),
         territory_id=territory.id if territory else None,
         assigned_user_id=assignee.id if assignee else None,
         converted_lead_id=None,
@@ -559,7 +575,12 @@ def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) 
         address_validation_status="normalized" if normalized_address else "missing",
         call_eligibility="review_required",
         last_contacted_at=None,
-        source_payload=payload.source_payload,
+        source_payload=prospect_source_payload(
+            payload.source_payload,
+            county=payload.county,
+            parcel_id=payload.parcel_id,
+            property_type=payload.property_type,
+        ),
     )
     db.add(prospect)
     try:
@@ -578,6 +599,7 @@ def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) 
             "campaign_id": str(campaign.id),
             "territory_id": str(territory.id) if territory else None,
             "assigned_user_id": str(assignee.id) if assignee else None,
+            "asset_class": prospect.asset_class,
             "status": prospect.status,
             "suppression_status": prospect.suppression_status,
         },
@@ -585,6 +607,53 @@ def create_prospect(db: Session, principal: Principal, payload: ProspectCreate) 
     )
     db.commit()
     return prospect_read(db, prospect)
+
+
+def prospect_source_payload(
+    source_payload: Mapping[str, Any] | None,
+    *,
+    county: str | None,
+    parcel_id: str | None,
+    property_type: str | None,
+) -> dict[str, Any] | None:
+    payload = dict(source_payload or {})
+    existing_metadata = payload.get("_stonegate_property")
+    metadata = dict(existing_metadata) if isinstance(existing_metadata, Mapping) else {}
+    cleaned_parcel_id = parcel_id.strip() if parcel_id else None
+    cleaned_county = county.strip() if county else None
+    cleaned_property_type = property_type.strip() if property_type else None
+    if cleaned_parcel_id:
+        metadata["parcel_id"] = cleaned_parcel_id
+    if cleaned_county:
+        metadata["county"] = cleaned_county
+    if cleaned_property_type:
+        metadata["property_type"] = cleaned_property_type
+    if metadata:
+        payload["_stonegate_property"] = metadata
+    return payload or None
+
+
+def prospect_property_metadata(
+    prospect: Prospect,
+) -> tuple[str | None, str | None, str | None]:
+    payload = prospect.source_payload
+    if not isinstance(payload, Mapping):
+        return None, None, None
+    metadata = payload.get("_stonegate_property")
+    if not isinstance(metadata, Mapping):
+        return None, None, None
+    parcel_id = metadata.get("parcel_id")
+    county = metadata.get("county")
+    property_type = metadata.get("property_type")
+    return (
+        parcel_id.strip() if isinstance(parcel_id, str) and parcel_id.strip() else None,
+        county.strip() if isinstance(county, str) and county.strip() else None,
+        (
+            property_type.strip()
+            if isinstance(property_type, str) and property_type.strip()
+            else None
+        ),
+    )
 
 
 def get_market(db: Session, organization_id: UUID, market_id: UUID) -> Market | None:
@@ -1108,7 +1177,13 @@ def calling_list_entry_read(db: Session, entry: CallingListEntry) -> CallingList
         lead_id=entry.lead_id,
         seller_name=contact.legal_name if contact else "Unknown seller",
         property_address=(
-            f"{property_record.street_address}, {property_record.city}, {property_record.state}"
+            property_identity_label(
+                street_address=property_record.street_address,
+                city=property_record.city,
+                state=property_record.state,
+                parcel_id=property_record.parcel_id,
+                county=property_record.county,
+            )
             if property_record
             else "Unknown property"
         ),
@@ -1914,8 +1989,13 @@ def list_operational_appointments(
                 lead_id=appointment.lead_id,
                 seller_name=contact.legal_name if contact else "Unknown seller",
                 property_address=(
-                    f"{property_record.street_address}, {property_record.city}, "
-                    f"{property_record.state}"
+                    property_identity_label(
+                        street_address=property_record.street_address,
+                        city=property_record.city,
+                        state=property_record.state,
+                        parcel_id=property_record.parcel_id,
+                        county=property_record.county,
+                    )
                     if property_record
                     else "Unknown property"
                 ),
@@ -1982,8 +2062,28 @@ def update_appointment(
         lead.stage_key = "appointment_scheduled"
         lead.next_follow_up_at = new_start
     elif payload.status == "completed":
-        lead.stage_key = "underwriting"
-        lead.next_follow_up_at = payload.next_follow_up_at
+        if normalize_asset_class(lead.asset_class) == "land":
+            lead.stage_key = "qualified"
+            lead.next_follow_up_at = payload.next_follow_up_at or datetime.now(UTC)
+            supersede_open_primary_tasks(db, lead_id=lead.id)
+            db.add(
+                Task(
+                    organization_id=principal.organization_id,
+                    lead_id=lead.id,
+                    deal_id=None,
+                    responsible_user_id=appointment.owner_user_id,
+                    task_type="land_appointment_review",
+                    work_kind="primary_next_action",
+                    title="Review completed Land appointment and evidence",
+                    status="open",
+                    priority="high",
+                    due_at=lead.next_follow_up_at,
+                    completed_at=None,
+                )
+            )
+        else:
+            lead.stage_key = "underwriting"
+            lead.next_follow_up_at = payload.next_follow_up_at
     elif payload.status in {"cancelled", "no_show"}:
         lead.stage_key = "qualification_in_progress" if payload.status == "no_show" else "qualified"
         lead.next_follow_up_at = payload.next_follow_up_at or datetime.now(UTC) + timedelta(days=1)

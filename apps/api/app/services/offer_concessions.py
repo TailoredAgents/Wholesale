@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -413,6 +414,8 @@ def validate_concession_decision(
     lead = db.get(Lead, concession.lead_id)
     if lead is None:
         raise ValueError("The concession lead is no longer available.")
+    if payload.status == "approved":
+        require_house_workflow(lead.asset_class, workflow="Residential offer negotiation")
     plan = approved_current_plan(
         db, principal.organization_id, lead, concession.offer_negotiation_plan_id
     )
@@ -736,12 +739,15 @@ def validate_appointment(
 
 
 def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
-    return db.scalar(
+    lead = db.scalar(
         select(Lead).where(
             Lead.id == lead_id,
             Lead.organization_id == principal.organization_id,
         )
     )
+    if lead is not None:
+        require_house_workflow(lead.asset_class, workflow="Residential offer negotiation")
+    return lead
 
 
 def add_event(

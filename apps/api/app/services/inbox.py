@@ -1,12 +1,17 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.assets import (
+    asset_class_for_property_type,
+    normalize_asset_class,
+    property_identity_label,
+)
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -17,6 +22,8 @@ from app.models.foundation import (
     CallRecording,
     CallTranscript,
     CommunicationDispatch,
+    CommunicationParticipant,
+    CommunicationProviderEvent,
     CommunicationRecord,
     Contact,
     ContactMethod,
@@ -36,6 +43,7 @@ from app.models.foundation import (
     Team,
     TeamMembership,
     User,
+    VoiceCallIntent,
     VoiceLine,
 )
 from app.schemas.email import EmailAttachmentRead
@@ -46,10 +54,14 @@ from app.schemas.inbox import (
     ConversationDetailRead,
     ConversationHandoffRequest,
     ConversationRead,
+    ConversationResolutionRead,
     ConversationTaskRead,
     ConversationTimelineItemRead,
     ConversationWatcherCreate,
     ConversationWatcherRead,
+    GeneralConversationClassification,
+    GeneralConversationLeadCreate,
+    GeneralConversationLeadLink,
     InboxAssigneeRead,
     MailboxResponseBucketRead,
     MailboxResponseOverviewRead,
@@ -383,6 +395,474 @@ def create_general_conversation(
     )
     db.flush()
     return conversation
+
+
+def convert_general_conversation_to_lead(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+    payload: GeneralConversationLeadCreate,
+) -> ConversationResolutionRead | None:
+    conversation = get_scoped_conversation(db, principal, conversation_id)
+    if conversation is None:
+        return None
+    _require_general_conversation(conversation)
+
+    assigned_user_id = (
+        payload.assigned_user_id or conversation.assigned_user_id or principal.user_id
+    )
+    assigned_user = db.scalar(
+        select(User).where(
+            User.organization_id == principal.organization_id,
+            User.id == assigned_user_id,
+            User.is_active.is_(True),
+        )
+    )
+    if assigned_user is None or not get_user_role_keys(db, assigned_user).intersection(
+        ELIGIBLE_ACQUISITION_ROLE_KEYS
+    ):
+        raise ValueError("Select an active acquisitions or management owner for this lead.")
+
+    contact = db.get(Contact, conversation.contact_id)
+    if contact is None or contact.organization_id != principal.organization_id:
+        raise ValueError("The conversation contact is not available in this workspace.")
+
+    from app.services.ai_operations import enqueue_lead_created_ai_work
+    from app.services.property_identity import (
+        find_property_by_identity,
+        refresh_property_identity_keys,
+        require_valid_property_identity,
+    )
+    from app.services.property_intelligence import enqueue_property_research
+    from app.services.tasks import create_initial_lead_next_action
+
+    property_payload = payload.property
+    asset_class = asset_class_for_property_type(
+        property_payload.property_type,
+        explicit_asset_class=payload.asset_class,
+    )
+    property_record, normalized_property_key, normalized_parcel_key = (
+        find_property_by_identity(
+            db,
+            organization_id=principal.organization_id,
+            street_address=property_payload.street_address,
+            city=property_payload.city,
+            state=property_payload.state,
+            postal_code=property_payload.postal_code,
+            parcel_id=property_payload.parcel_id,
+            county=property_payload.county,
+        )
+    )
+    if property_record is None:
+        property_record = Property(
+            organization_id=principal.organization_id,
+            street_address=property_payload.street_address.strip(),
+            city=property_payload.city.strip(),
+            state=property_payload.state.strip().upper(),
+            postal_code=property_payload.postal_code.strip(),
+            county=property_payload.county,
+            property_type=property_payload.property_type or (
+                "land" if asset_class == "land" else None
+            ),
+            parcel_id=property_payload.parcel_id,
+            normalized_parcel_key=normalized_parcel_key,
+            normalized_address_key=normalized_property_key,
+            address_validation_status="unverified",
+        )
+        db.add(property_record)
+        db.flush()
+    else:
+        if property_payload.property_type and not property_record.property_type:
+            property_record.property_type = property_payload.property_type
+        if property_payload.parcel_id and not property_record.parcel_id:
+            property_record.parcel_id = property_payload.parcel_id
+        if property_payload.county and not property_record.county:
+            property_record.county = property_payload.county
+        refresh_property_identity_keys(property_record)
+    require_valid_property_identity(property_record, asset_class=asset_class)
+
+    lead = Lead(
+        organization_id=principal.organization_id,
+        contact_id=contact.id,
+        property_id=property_record.id,
+        assigned_user_id=assigned_user.id,
+        source=payload.source.strip(),
+        asset_class=asset_class,
+        stage_key="new",
+        lead_temperature=None,
+        motivation=None,
+        desired_timeline=None,
+        property_condition=None,
+        occupancy_status=None,
+        asking_price=None,
+        mortgage_balance=None,
+        appointment_status=None,
+        next_follow_up_at=None,
+        archived_at=None,
+    )
+    db.add(lead)
+    db.flush()
+
+    now = datetime.now(UTC)
+    previous_queue_key = conversation.queue_key
+    previous_assigned_user_id = conversation.assigned_user_id
+    conversation.conversation_type = "lead"
+    conversation.lead_id = lead.id
+    conversation.assigned_user_id = assigned_user.id
+    conversation.assigned_team_id = None
+    conversation.status = "open"
+    conversation.queue_key = "acquisitions_follow_up"
+    conversation.closed_at = None
+    conversation.last_activity_at = now
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "source": "inbound_email",
+        "resolution": "converted_to_lead",
+        "resolved_at": now.isoformat(),
+        "resolved_by_user_id": str(principal.user_id),
+    }
+    contact.contact_type = "seller"
+    contact.assigned_user_id = assigned_user.id
+    db.add(
+        ConversationContextLink(
+            organization_id=principal.organization_id,
+            conversation_id=conversation.id,
+            context_type="lead",
+            lead_id=lead.id,
+            transaction_id=None,
+            buyer_id=None,
+            disposition_case_id=None,
+            created_by_user_id=principal.user_id,
+            is_primary=True,
+            link_metadata={"source": "inbox_conversion"},
+        )
+    )
+    db.add(
+        ConversationAssignmentEvent(
+            organization_id=principal.organization_id,
+            conversation_id=conversation.id,
+            lead_id=lead.id,
+            actor_user_id=principal.user_id,
+            previous_assigned_user_id=previous_assigned_user_id,
+            assigned_user_id=assigned_user.id,
+            previous_queue_key=previous_queue_key,
+            queue_key=conversation.queue_key,
+            reason="General email converted to a seller lead.",
+        )
+    )
+    for communication in db.scalars(
+        select(CommunicationRecord).where(
+            CommunicationRecord.organization_id == principal.organization_id,
+            CommunicationRecord.conversation_id == conversation.id,
+        )
+    ).all():
+        communication.lead_id = lead.id
+
+    create_initial_lead_next_action(db, lead, actor_user_id=principal.user_id)
+    enqueue_lead_created_ai_work(db, lead, source="inbound_email")
+    enqueue_property_research(
+        db,
+        property_record,
+        source_lead_id=lead.id,
+        trigger_source="inbound_email",
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.created_from_email",
+            summary=f"Inbound email converted to a lead for {contact.legal_name}.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="inbox.convert_to_lead",
+            entity_type="conversation",
+            entity_id=conversation.id,
+            previous_value={"conversation_type": "general", "lead_id": None},
+            new_value={"conversation_type": "lead", "lead_id": str(lead.id)},
+            reason="Promoted inbound company email to seller lead",
+        )
+    )
+    db.commit()
+    return ConversationResolutionRead(
+        action="converted_to_lead",
+        source_conversation_id=conversation.id,
+        conversation_id=conversation.id,
+        lead_id=lead.id,
+        status="open",
+        message="Email converted to a seller lead. Property research has been queued.",
+    )
+
+
+def link_general_conversation_to_lead(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+    payload: GeneralConversationLeadLink,
+) -> ConversationResolutionRead | None:
+    source = get_scoped_conversation(db, principal, conversation_id)
+    if source is None:
+        return None
+    _require_general_conversation(source)
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == payload.lead_id,
+            Lead.archived_at.is_(None),
+        )
+    )
+    if lead is None:
+        raise ValueError("Select an active seller lead in this workspace.")
+    target = ensure_primary_conversation(db, lead)
+    target_contact = db.get(Contact, lead.contact_id)
+    source_contact = db.get(Contact, source.contact_id)
+    if target_contact is None or source_contact is None:
+        raise ValueError("The email or lead contact is unavailable.")
+
+    target_methods = {
+        (method.method_type, method.normalized_value)
+        for method in db.scalars(
+            select(ContactMethod).where(
+                ContactMethod.organization_id == principal.organization_id,
+                ContactMethod.contact_id == target_contact.id,
+            )
+        ).all()
+    }
+    has_target_methods = bool(target_methods)
+    for method in db.scalars(
+        select(ContactMethod).where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == source_contact.id,
+        )
+    ).all():
+        key = (method.method_type, method.normalized_value)
+        if key in target_methods:
+            continue
+        db.add(
+            ContactMethod(
+                organization_id=principal.organization_id,
+                contact_id=target_contact.id,
+                method_type=method.method_type,
+                value=method.value,
+                normalized_value=method.normalized_value,
+                is_primary=not has_target_methods,
+            )
+        )
+        has_target_methods = True
+        target_methods.add(key)
+
+    communications = db.scalars(
+        select(CommunicationRecord).where(
+            CommunicationRecord.organization_id == principal.organization_id,
+            CommunicationRecord.conversation_id == source.id,
+        )
+    ).all()
+    communication_ids = [communication.id for communication in communications]
+    for communication in communications:
+        communication.conversation_id = target.id
+        communication.lead_id = lead.id
+        communication.contact_id = target_contact.id
+    db.execute(
+        update(CommunicationParticipant)
+        .where(
+            CommunicationParticipant.organization_id == principal.organization_id,
+            CommunicationParticipant.conversation_id == source.id,
+        )
+        .values(conversation_id=target.id)
+    )
+    db.execute(
+        update(CommunicationParticipant)
+        .where(
+            CommunicationParticipant.organization_id == principal.organization_id,
+            CommunicationParticipant.conversation_id == target.id,
+            CommunicationParticipant.contact_id == source_contact.id,
+        )
+        .values(contact_id=target_contact.id)
+    )
+    db.execute(
+        update(CommunicationProviderEvent)
+        .where(
+            CommunicationProviderEvent.organization_id == principal.organization_id,
+            CommunicationProviderEvent.conversation_id == source.id,
+        )
+        .values(conversation_id=target.id)
+    )
+    db.execute(
+        update(CommunicationDispatch)
+        .where(
+            CommunicationDispatch.organization_id == principal.organization_id,
+            CommunicationDispatch.conversation_id == source.id,
+        )
+        .values(conversation_id=target.id, lead_id=lead.id, contact_id=target_contact.id)
+    )
+    db.execute(
+        update(VoiceCallIntent)
+        .where(
+            VoiceCallIntent.organization_id == principal.organization_id,
+            VoiceCallIntent.conversation_id == source.id,
+        )
+        .values(conversation_id=target.id, lead_id=lead.id, contact_id=target_contact.id)
+    )
+    db.execute(
+        update(CallRecord)
+        .where(
+            CallRecord.organization_id == principal.organization_id,
+            CallRecord.conversation_id == source.id,
+        )
+        .values(conversation_id=target.id, lead_id=lead.id, contact_id=target_contact.id)
+    )
+
+    now = datetime.now(UTC)
+    target.source_alias_id = target.source_alias_id or source.source_alias_id
+    target.last_activity_at = _latest_datetime(
+        target.last_activity_at,
+        source.last_activity_at,
+        now,
+    )
+    target.last_inbound_at = _latest_datetime(target.last_inbound_at, source.last_inbound_at)
+    target.last_outbound_at = _latest_datetime(target.last_outbound_at, source.last_outbound_at)
+    target.unread_count += source.unread_count
+    target.status = "open"
+    target.closed_at = None
+    target.conversation_metadata = {
+        **(target.conversation_metadata or {}),
+        "linked_general_conversation_id": str(source.id),
+        "linked_general_conversation_at": now.isoformat(),
+    }
+    source.status = "closed"
+    source.queue_key = "closed"
+    source.closed_at = now
+    source.unread_count = 0
+    source.conversation_metadata = {
+        **(source.conversation_metadata or {}),
+        "mail_category": "linked_to_lead",
+        "resolution": "linked_to_existing_lead",
+        "resolved_at": now.isoformat(),
+        "resolved_by_user_id": str(principal.user_id),
+        "merged_into_conversation_id": str(target.id),
+        "lead_id": str(lead.id),
+    }
+    db.add(
+        ConversationAssignmentEvent(
+            organization_id=principal.organization_id,
+            conversation_id=target.id,
+            lead_id=lead.id,
+            actor_user_id=principal.user_id,
+            previous_assigned_user_id=target.assigned_user_id,
+            assigned_user_id=target.assigned_user_id,
+            previous_queue_key=target.queue_key,
+            queue_key=target.queue_key,
+            reason="General email linked to this existing seller lead.",
+        )
+    )
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.email_linked",
+            summary=f"Inbound email from {source_contact.legal_name} linked to this lead.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="inbox.link_to_lead",
+            entity_type="conversation",
+            entity_id=source.id,
+            previous_value={"lead_id": None, "communication_count": len(communication_ids)},
+            new_value={"lead_id": str(lead.id), "conversation_id": str(target.id)},
+            reason="Merged general email into existing seller conversation",
+        )
+    )
+    db.commit()
+    return ConversationResolutionRead(
+        action="linked_to_existing_lead",
+        source_conversation_id=source.id,
+        conversation_id=target.id,
+        lead_id=lead.id,
+        status="open",
+        message="Email history linked to the existing seller lead.",
+    )
+
+
+def classify_general_conversation(
+    db: Session,
+    principal: Principal,
+    conversation_id: UUID,
+    payload: GeneralConversationClassification,
+) -> ConversationResolutionRead | None:
+    conversation = get_scoped_conversation(db, principal, conversation_id)
+    if conversation is None:
+        return None
+    _require_general_conversation(conversation)
+    now = datetime.now(UTC)
+    conversation.status = "closed" if payload.close else "open"
+    conversation.queue_key = "closed" if payload.close else "unassigned"
+    conversation.closed_at = now if payload.close else None
+    if payload.close:
+        conversation.unread_count = 0
+    conversation.conversation_metadata = {
+        **(conversation.conversation_metadata or {}),
+        "mail_category": payload.category,
+        "classified_at": now.isoformat(),
+        "classified_by_user_id": str(principal.user_id),
+        "classification_reason": payload.reason.strip() if payload.reason else None,
+    }
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="inbox.classify_general_email",
+            entity_type="conversation",
+            entity_id=conversation.id,
+            previous_value=None,
+            new_value={"category": payload.category, "closed": payload.close},
+            reason=payload.reason or "Classified from the Stonegate inbox",
+        )
+    )
+    db.commit()
+    return ConversationResolutionRead(
+        action="classified",
+        source_conversation_id=conversation.id,
+        conversation_id=conversation.id,
+        lead_id=None,
+        status=conversation.status,
+        message=(
+            f"Email marked as {payload.category.replace('_', ' ')} and archived."
+            if payload.close
+            else "Email restored to the active inbox."
+        ),
+    )
+
+
+def _require_general_conversation(conversation: Conversation) -> None:
+    if conversation.conversation_type != "general" or conversation.lead_id is not None:
+        raise ValueError("Only general email conversations can use this action.")
+
+
+def _latest_datetime(*values: datetime | None) -> datetime | None:
+    available = [value for value in values if value is not None]
+    return (
+        max(
+            available,
+            key=lambda value: (
+                value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+            ),
+        )
+        if available
+        else None
+    )
 
 
 def update_conversation_activity(
@@ -866,6 +1346,8 @@ def get_conversation_detail(
         appointment_status=lead.appointment_status if lead is not None else None,
         next_follow_up_at=lead.next_follow_up_at if lead is not None else None,
         property_type=property_record.property_type if property_record is not None else None,
+        asset_class=normalize_asset_class(lead.asset_class) if lead is not None else None,
+        property_parcel_id=property_record.parcel_id if property_record is not None else None,
         property_county=property_record.county if property_record is not None else None,
         timeline=timeline,
         open_tasks=[
@@ -1497,6 +1979,7 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
             ConversationContextLink.context_type == "buyer",
         )
     )
+    metadata = conversation.conversation_metadata or {}
     return ConversationRead(
         id=conversation.id,
         conversation_type=conversation.conversation_type,
@@ -1505,8 +1988,14 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         contact_id=conversation.contact_id,
         seller_name=contact.legal_name,
         property_address=(
-            f"{property_record.street_address}, {property_record.city}, "
-            f"{property_record.state} {property_record.postal_code}"
+            property_identity_label(
+                street_address=property_record.street_address,
+                city=property_record.city,
+                state=property_record.state,
+                postal_code=property_record.postal_code,
+                parcel_id=property_record.parcel_id,
+                county=property_record.county,
+            )
             if property_record is not None
             else (
                 "Buyer relationship"
@@ -1523,6 +2012,14 @@ def conversation_to_read(db: Session, conversation: Conversation) -> Conversatio
         status=conversation.status,
         queue_key=conversation.queue_key,
         priority=conversation.priority,
+        mail_category=(
+            str(metadata["mail_category"]) if metadata.get("mail_category") else None
+        ),
+        merged_into_conversation_id=(
+            UUID(str(metadata["merged_into_conversation_id"]))
+            if metadata.get("merged_into_conversation_id")
+            else None
+        ),
         unread_count=conversation.unread_count,
         last_activity_at=conversation.last_activity_at,
         last_inbound_at=conversation.last_inbound_at,

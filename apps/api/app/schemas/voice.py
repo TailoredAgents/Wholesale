@@ -184,6 +184,23 @@ class StructuredCallNotes(BaseModel):
     evidence: list[CallNoteEvidence] = Field(max_length=40)
 
 
+class LandStructuredCallNotes(StructuredCallNotes):
+    """Transcript-grounded seller facts that are specific to vacant land."""
+
+    parcel_id: str | None = Field(max_length=255)
+    acreage: str | None = Field(max_length=120)
+    legal_description: str | None = Field(max_length=1000)
+    access_or_frontage: str | None = Field(max_length=500)
+    utilities: str | None = Field(max_length=500)
+    zoning_or_use: str | None = Field(max_length=500)
+    septic_or_perc: str | None = Field(max_length=500)
+    taxes_or_hoa: str | None = Field(max_length=500)
+    terrain_or_environmental_concerns: str | None = Field(max_length=1000)
+
+
+CallNotes = LandStructuredCallNotes | StructuredCallNotes
+
+
 class CallTranscriptRead(BaseModel):
     id: UUID
     status: str
@@ -192,7 +209,7 @@ class CallTranscriptRead(BaseModel):
     transcript_text: str | None
     speaker_segments: list[dict[str, object]]
     confidence_score: int | None
-    structured_notes: StructuredCallNotes | None
+    structured_notes: CallNotes | None
     approval_request_id: UUID | None
     approved_by_user_id: UUID | None
     approved_at: datetime | None
@@ -201,7 +218,7 @@ class CallTranscriptRead(BaseModel):
 
 class CallTranscriptReview(BaseModel):
     status: str = Field(pattern="^(approved|rejected)$")
-    structured_notes: StructuredCallNotes
+    structured_notes: CallNotes
     decision_notes: str | None = Field(default=None, max_length=2000)
     apply_field_updates: list[str] = Field(default_factory=list, max_length=6)
     create_follow_up_task: bool = True

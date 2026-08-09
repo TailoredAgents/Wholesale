@@ -13,7 +13,11 @@ from app.schemas.inbox import (
     ConversationHandoffRequest,
     ConversationListResponse,
     ConversationRead,
+    ConversationResolutionRead,
     ConversationWatcherCreate,
+    GeneralConversationClassification,
+    GeneralConversationLeadCreate,
+    GeneralConversationLeadLink,
     InboxAssigneeListResponse,
     MailboxResponseOverviewRead,
     SmsSendRead,
@@ -21,9 +25,12 @@ from app.schemas.inbox import (
 )
 from app.services.inbox import (
     add_conversation_watcher,
+    classify_general_conversation,
+    convert_general_conversation_to_lead,
     get_conversation_detail,
     get_mailbox_response_overview,
     handoff_conversation,
+    link_general_conversation_to_lead,
     list_conversations,
     list_eligible_assignees,
     mark_conversation_read,
@@ -50,6 +57,7 @@ send_sms_dependency = require_any_permission(
     PermissionKeys.SEND_SMS,
     PermissionKeys.SEND_ASSIGNED_SMS,
 )
+edit_leads_dependency = require_permission(PermissionKeys.EDIT_LEADS)
 
 
 @router.get("/conversations")
@@ -104,6 +112,63 @@ def mark_inbox_conversation_read(
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return conversation
+
+
+@router.post("/conversations/{conversation_id}/convert-to-lead", status_code=201)
+def convert_inbox_conversation_to_lead(
+    conversation_id: UUID,
+    payload: GeneralConversationLeadCreate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> ConversationResolutionRead:
+    try:
+        result = convert_general_conversation_to_lead(db, principal, conversation_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return result
+
+
+@router.post("/conversations/{conversation_id}/link-to-lead")
+def link_inbox_conversation_to_lead(
+    conversation_id: UUID,
+    payload: GeneralConversationLeadLink,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> ConversationResolutionRead:
+    try:
+        result = link_general_conversation_to_lead(db, principal, conversation_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return result
+
+
+@router.post("/conversations/{conversation_id}/classification")
+def classify_inbox_general_conversation(
+    conversation_id: UUID,
+    payload: GeneralConversationClassification,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(handoff_dependency)],
+) -> ConversationResolutionRead:
+    try:
+        result = classify_general_conversation(db, principal, conversation_id, payload)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
+    return result
 
 
 @router.post("/conversations/{conversation_id}/messages/sms", status_code=201)

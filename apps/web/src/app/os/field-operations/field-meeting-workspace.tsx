@@ -575,6 +575,24 @@ export function FieldMeetingWorkspace({
         {error ? <p className={styles.error}>{error}</p> : null}
         {message ? <p className={styles.notice}>{message}</p> : null}
         {workspace && !loading ? (
+          workspace.asset_class === "land" ? (
+            <div className={styles.briefWorkspace}>
+              <div className={styles.briefActions}>
+                <div>
+                  <span>Land appointment</span>
+                  <strong>Calendar and lead record are ready</strong>
+                </div>
+                <Link href={workspace.appointment.lead_url}>Open Land lead</Link>
+              </div>
+              <p className={styles.emptyState}>
+                The residential walkthrough, room-by-room repair scope, ARV presentation,
+                acquisitions copilot, offer negotiation and house contract signing tools are
+                intentionally locked for this Land lead. The dedicated Land site-visit workspace
+                will capture access, frontage, utilities, terrain, drainage, boundaries and parcel
+                photos without applying house repair math.
+              </p>
+            </div>
+          ) : (
           <>
             <header className={styles.meetingHeader}>
               <div>
@@ -802,6 +820,7 @@ export function FieldMeetingWorkspace({
               </div>
             ) : null}
           </>
+          )
         ) : null}
       </div>
       </section>

@@ -33,6 +33,7 @@ def test_integration_status_is_secret_free(
         "twilio-voice",
         "signwell",
         "dealmachine",
+        "land-property-research",
     }
     serialized = response.text
     assert "sk-" not in serialized

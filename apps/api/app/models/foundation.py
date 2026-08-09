@@ -162,7 +162,13 @@ class Territory(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class Campaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "campaigns"
-    __table_args__ = (UniqueConstraint("organization_id", "code", name="uq_campaigns_org_code"),)
+    __table_args__ = (
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_campaigns_asset_class",
+        ),
+        UniqueConstraint("organization_id", "code", name="uq_campaigns_org_code"),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -177,6 +183,9 @@ class Campaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(160), nullable=False)
     code: Mapped[str] = mapped_column(String(80), nullable=False)
     channel: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    asset_class: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="house", server_default="house", index=True
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     starts_on: Mapped[date | None] = mapped_column(nullable=True)
     ends_on: Mapped[date | None] = mapped_column(nullable=True)
@@ -186,6 +195,10 @@ class Campaign(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class Prospect(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prospects"
     __table_args__ = (
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_prospects_asset_class",
+        ),
         UniqueConstraint(
             "campaign_id",
             "source_record_key",
@@ -197,6 +210,9 @@ class Prospect(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("organizations.id"), index=True
     )
     campaign_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("campaigns.id"), index=True)
+    asset_class: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="house", server_default="house", index=True
+    )
     territory_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("territories.id"), index=True
     )
@@ -577,6 +593,10 @@ class ProspectCallingBatchEntry(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class ProspectingScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "prospecting_script_versions"
     __table_args__ = (
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_prospecting_script_versions_asset_class",
+        ),
         UniqueConstraint(
             "organization_id",
             "version_number",
@@ -586,6 +606,9 @@ class ProspectingScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
+    )
+    asset_class: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="house", server_default="house", index=True
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -843,6 +866,10 @@ class ProspectHandoff(UuidPrimaryKeyMixin, TimestampMixin, Base):
 class LeadQualificationScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "lead_qualification_script_versions"
     __table_args__ = (
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_lead_qualification_script_versions_asset_class",
+        ),
         UniqueConstraint(
             "organization_id",
             "version_number",
@@ -852,6 +879,9 @@ class LeadQualificationScriptVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
+    )
+    asset_class: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="house", server_default="house", index=True
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(160), nullable=False)
@@ -1031,6 +1061,10 @@ class Property(UuidPrimaryKeyMixin, TimestampMixin, Base):
     postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
     county: Mapped[str | None] = mapped_column(String(120), nullable=True)
     property_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    parcel_id: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    normalized_parcel_key: Mapped[str | None] = mapped_column(
+        String(500), nullable=True, index=True
+    )
     normalized_address_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     address_validation_status: Mapped[str] = mapped_column(
         String(40), nullable=False, default="unverified", server_default="unverified"
@@ -1059,8 +1093,9 @@ class PropertyIntelligenceSnapshot(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         UniqueConstraint(
             "property_id",
+            "research_profile",
             "version_number",
-            name="uq_property_intelligence_property_version",
+            name="uq_property_intelligence_property_profile_version",
         ),
     )
 
@@ -1080,6 +1115,9 @@ class PropertyIntelligenceSnapshot(UuidPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    research_profile: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="house_v1", server_default="house_v1", index=True
+    )
     status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     is_current: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true", index=True
@@ -1122,6 +1160,9 @@ class PropertyResearchRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source_lead_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("leads.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    research_profile: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="house_v1", server_default="house_v1", index=True
+    )
     idempotency_key: Mapped[str] = mapped_column(String(500), nullable=False)
     trigger_source: Mapped[str] = mapped_column(String(120), nullable=False)
     address_signature: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -1141,6 +1182,12 @@ class PropertyResearchRun(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
 class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "leads"
+    __table_args__ = (
+        CheckConstraint(
+            "asset_class IN ('house', 'land')",
+            name="ck_leads_asset_class",
+        ),
+    )
 
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
@@ -1149,6 +1196,12 @@ class Lead(UuidPrimaryKeyMixin, TimestampMixin, Base):
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"))
     assigned_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     source: Mapped[str] = mapped_column(String(120), nullable=False)
+    asset_class: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="house", server_default="house", index=True
+    )
+    qualification_context: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     stage_key: Mapped[str] = mapped_column(String(120), nullable=False)
     lead_temperature: Mapped[str | None] = mapped_column(String(80), nullable=True)
     motivation: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -2412,6 +2465,9 @@ class UnderwritingVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
     property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    valuation_profile: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="house_v3", server_default="house_v3", index=True
+    )
     status: Mapped[str] = mapped_column(String(80), nullable=False)
     arv_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     arv_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -2440,6 +2496,9 @@ class UnderwritingMarketAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("users.id"))
     provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    valuation_profile: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="house_v3", server_default="house_v3", index=True
+    )
     requested_address: Mapped[str] = mapped_column(String(500), nullable=False)
     estimated_value_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     estimated_value_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
@@ -2510,6 +2569,134 @@ class UnderwritingManualComparable(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     verification_notes: Mapped[str] = mapped_column(String(2000), nullable=False)
     voided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class LandValuationAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Immutable, Land-only comparable and offer-guidance evidence."""
+
+    __tablename__ = "land_valuation_analyses"
+    __table_args__ = (
+        CheckConstraint(
+            "subject_acres_ten_thousandths > 0",
+            name="ck_land_valuation_positive_acres",
+        ),
+        UniqueConstraint(
+            "lead_id",
+            "version_number",
+            name="uq_land_valuation_lead_version",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "lead_id",
+            "analysis_fingerprint",
+            name="uq_land_valuation_lead_fingerprint",
+        ),
+        UniqueConstraint(
+            "organization_id",
+            "lead_id",
+            "request_idempotency_key",
+            name="uq_land_valuation_lead_idempotency",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    property_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("properties.id"), index=True
+    )
+    property_snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("property_intelligence_snapshots.id"), index=True
+    )
+    source_analysis_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("land_valuation_analyses.id"), nullable=True, index=True
+    )
+    policy_version_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("land_offer_policy_versions.id"), nullable=True, index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    valuation_profile: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="land_v1", server_default="land_v1", index=True
+    )
+    methodology_version: Mapped[str] = mapped_column(
+        String(80), nullable=False, default="land_v1", server_default="land_v1"
+    )
+    analysis_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    request_idempotency_key: Mapped[str | None] = mapped_column(
+        String(160), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    guidance_status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    valuation_basis: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="per_acre", server_default="per_acre"
+    )
+    access_evidence_status: Mapped[str] = mapped_column(String(40), nullable=False)
+    subject_acres_ten_thousandths: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    subject_lot_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    supported_value_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    supported_value_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    supported_value_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    quick_sale_low_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    quick_sale_high_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    opening_offer_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    seller_contract_ceiling_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    assignment_fee_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    closing_title_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    curative_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    uncertainty_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    confidence_score: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_comp_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    rejected_comp_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    selected_comps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    rejected_comps: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    subject_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    search_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    assumptions: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    review_reasons: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    guidance_blockers: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    policy_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    analysis_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        "metadata", JSON, nullable=True
+    )
+
+
+class LandOfferPolicyVersion(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    """Owner-approved policy used to turn Land value evidence into offer guidance."""
+
+    __tablename__ = "land_offer_policy_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "version_number",
+            name="uq_land_offer_policy_org_version",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    created_by_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"))
+    approved_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id"), nullable=True
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String(160), nullable=False)
+    quick_sale_discount_low_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    quick_sale_discount_high_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    opening_reserve_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    assignment_fee_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    closing_title_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    curative_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    uncertainty_reserve_cents: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    maximum_dispersion_basis_points: Mapped[int] = mapped_column(Integer, nullable=False)
+    minimum_comparable_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String(2000), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class UnderwritingCalibrationCase(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -3294,6 +3481,9 @@ class BuyerCriteria(UuidPrimaryKeyMixin, TimestampMixin, Base):
     min_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     max_price_cents: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     rehab_levels: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    criteria_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
     notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
 

@@ -10,6 +10,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AiAgentDefinition,
@@ -45,7 +46,7 @@ from app.schemas.prospecting import (
     ProspectingCopilotReviewRequest,
     ProspectingCopilotWorkItemRead,
 )
-from app.services.acquisition_operations import create_notification
+from app.services.acquisition_operations import create_notification, prospect_property_metadata
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
 
 MANAGER_ROLE_KEYS = {
@@ -577,11 +578,16 @@ def _work_item(
         action = "Review attempt history before the next outreach."
     if prospect.phone_validation_status not in {"valid", "verified"}:
         warnings.append(f"Phone status is {prospect.phone_validation_status.replace('_', ' ')}.")
-    if prospect.address_validation_status not in {"valid", "verified"}:
+    if prospect.address_validation_status not in {"valid", "verified", "parcel_only"}:
         warnings.append(
             f"Address status is {prospect.address_validation_status.replace('_', ' ')}."
         )
-    if not all((prospect.street_address, prospect.city, prospect.state_code, prospect.postal_code)):
+    has_address = all(
+        (prospect.street_address, prospect.city, prospect.state_code, prospect.postal_code)
+    )
+    parcel_id, county, _ = prospect_property_metadata(prospect)
+    has_parcel_identity = bool(parcel_id and county and prospect.state_code)
+    if not has_address and not has_parcel_identity:
         warnings.append("Property address is incomplete.")
     evidence = [
         f"Call eligibility is {prospect.call_eligibility}.",
@@ -865,14 +871,15 @@ def _priority_band(score: int) -> str:
 
 
 def _property_address(prospect: Prospect) -> str | None:
-    parts = [
-        prospect.street_address,
-        prospect.city,
-        prospect.state_code,
-        prospect.postal_code,
-    ]
-    value = ", ".join(part for part in parts if part)
-    return value or None
+    parcel_id, county, _ = prospect_property_metadata(prospect)
+    return property_identity_label(
+        street_address=prospect.street_address,
+        city=prospect.city,
+        state=prospect.state_code,
+        postal_code=prospect.postal_code,
+        parcel_id=parcel_id,
+        county=county,
+    ) or None
 
 
 def _audit(

@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.domain.assets import HOUSE_ASSET_CLASS, AssetClass
+
 
 def normalize_operating_code(value: Any) -> Any:
     if not isinstance(value, str):
@@ -280,6 +282,7 @@ class CampaignRead(BaseModel):
     name: str
     code: str
     channel: str
+    asset_class: AssetClass
     status: str
     starts_on: date | None
     ends_on: date | None
@@ -304,6 +307,7 @@ class CampaignCreate(BaseModel):
         "referral",
         "other",
     ]
+    asset_class: AssetClass = HOUSE_ASSET_CLASS
     starts_on: date | None = None
     ends_on: date | None = None
     budget_cents: int | None = Field(default=None, ge=0)
@@ -330,11 +334,15 @@ class ProspectRead(BaseModel):
     assigned_user_name: str | None
     converted_lead_id: UUID | None
     source_record_key: str | None
+    asset_class: AssetClass
     status: str
     legal_name: str
     phone: str | None
     email: str | None
     property_address: str | None
+    county: str | None
+    parcel_id: str | None
+    property_type: str | None
     suppression_status: str
     phone_validation_status: str
     address_validation_status: str
@@ -354,6 +362,9 @@ class ProspectCreate(BaseModel):
     city: str | None = Field(default=None, max_length=120)
     state_code: str | None = Field(default=None, min_length=2, max_length=2)
     postal_code: str | None = Field(default=None, max_length=20)
+    county: str | None = Field(default=None, max_length=120)
+    parcel_id: str | None = Field(default=None, max_length=255)
+    property_type: str | None = Field(default=None, max_length=80)
     source_payload: dict[str, Any] | None = None
 
     @model_validator(mode="after")
@@ -361,7 +372,8 @@ class ProspectCreate(BaseModel):
         if not self.phone and not self.email:
             raise ValueError("A prospect requires a phone number or email address.")
         address_values = (self.street_address, self.city, self.state_code, self.postal_code)
-        if any(address_values) and not all(address_values):
+        has_parcel_identity = bool(self.parcel_id and self.county and self.state_code)
+        if any(address_values) and not all(address_values) and not has_parcel_identity:
             raise ValueError(
                 "Enter the complete property address or leave every address field blank."
             )

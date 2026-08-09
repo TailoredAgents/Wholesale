@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
+from app.domain.assets import HOUSE_ASSET_CLASS, LAND_ASSET_CLASS, normalize_asset_class
 from app.domain.rbac import PermissionKeys
 from app.integrations.openai_client import OpenAIClientError, OpenAIResponsesClient
 from app.integrations.twilio_recordings import (
@@ -32,8 +33,10 @@ from app.models.foundation import (
     Task,
 )
 from app.schemas.voice import (
+    CallNotes,
     CallTranscriptRead,
     CallTranscriptReview,
+    LandStructuredCallNotes,
     StructuredCallNotes,
 )
 from app.services.ai_costs import cents_from_microusd, estimate_openai_cost
@@ -52,6 +55,14 @@ ownership, or title context. Use null or an empty list when the call does not su
 Keep seller language precise and operational.
 Evidence entries must point to the supplied segment index and start time. This is a draft for
 human review and must not claim that Stonegate made a binding offer or contractual commitment."""
+LAND_CALL_INTELLIGENCE_PROMPT = """This call concerns vacant land. Capture only explicit
+seller statements for parcel/APN, acreage, legal description, access or road frontage,
+utilities, zoning or intended use, septic or perc testing, taxes or HOA, and terrain or
+environmental concerns. Attribute these as unverified seller statements. Never conclude or
+promise buildability, legal access, zoning compliance, utility availability, surveyed acreage
+or boundaries, title quality, septic suitability, or environmental clearance. Do not turn a
+seller's intended use into a verified permitted use. Every populated land-specific field must
+have a matching evidence entry using that field's exact schema name."""
 LEAD_UPDATE_FIELDS = {
     "motivation": "motivation",
     "timeline": "desired_timeline",
@@ -77,10 +88,65 @@ QUALITY_NOTE_FIELDS = (
     "appointment_details",
 )
 EVIDENCE_NOTE_FIELDS = QUALITY_NOTE_FIELDS[1:]
+LAND_QUALIFICATION_FIELDS = (
+    "parcel_id",
+    "acreage",
+    "legal_description",
+    "access_or_frontage",
+    "utilities",
+    "zoning_or_use",
+    "septic_or_perc",
+    "taxes_or_hoa",
+    "terrain_or_environmental_concerns",
+)
 
 
 class CallIntelligenceError(RuntimeError):
     pass
+
+
+def call_notes_model_for_asset(asset_class: object) -> type[StructuredCallNotes]:
+    if normalize_asset_class(asset_class) == LAND_ASSET_CLASS:
+        return LandStructuredCallNotes
+    return StructuredCallNotes
+
+
+def call_notes_system_prompt(base_prompt: str, asset_class: object) -> str:
+    if normalize_asset_class(asset_class) != LAND_ASSET_CLASS:
+        return base_prompt
+    return f"{base_prompt}\n\n{LAND_CALL_INTELLIGENCE_PROMPT}"
+
+
+def validate_call_notes_for_asset(notes: CallNotes, asset_class: object) -> CallNotes:
+    return validate_call_notes_payload_for_asset(
+        notes.model_dump(mode="json"),
+        asset_class,
+    )
+
+
+def validate_call_notes_payload_for_asset(payload: object, asset_class: object) -> CallNotes:
+    notes_model = call_notes_model_for_asset(asset_class)
+    if notes_model is LandStructuredCallNotes and isinstance(payload, dict):
+        payload = {**payload}
+        for field in LAND_QUALIFICATION_FIELDS:
+            payload.setdefault(field, None)
+    return notes_model.model_validate(payload)
+
+
+def resolve_transcript_asset_class(db: Session, transcript: CallTranscript) -> str:
+    recording = db.get(CallRecording, transcript.recording_id)
+    call = db.get(CallRecord, recording.call_record_id) if recording is not None else None
+    lead = (
+        db.get(Lead, call.lead_id)
+        if call is not None and call.lead_id is not None
+        else None
+    )
+    if lead is not None:
+        return normalize_asset_class(lead.asset_class)
+    return normalize_asset_class(
+        (transcript.transcript_metadata or {}).get("asset_class"),
+        default=HOUSE_ASSET_CLASS,
+    )
 
 
 def enqueue_call_transcript(
@@ -210,6 +276,10 @@ def process_call_transcript(
         if call is None:
             raise CallIntelligenceError("The call record is unavailable.")
         lead = db.get(Lead, call.lead_id) if call.lead_id is not None else None
+        asset_class = normalize_asset_class(
+            lead.asset_class if lead is not None else HOUSE_ASSET_CLASS
+        )
+        notes_model = call_notes_model_for_asset(asset_class)
         if lead is not None:
             operation_event = enqueue_call_intelligence_ai_work(
                 db,
@@ -271,13 +341,22 @@ def process_call_transcript(
 
         notes_payload, note_usage = client.create_structured_response(
             model=settings.openai_default_model,
-            system_prompt=prompt.prompt_text,
-            user_prompt=build_call_notes_prompt(db, call, transcript),
-            schema_name="stonegate_call_notes",
-            json_schema=StructuredCallNotes.model_json_schema(),
+            system_prompt=call_notes_system_prompt(prompt.prompt_text, asset_class),
+            user_prompt=build_call_notes_prompt(
+                db,
+                call,
+                transcript,
+                asset_class=asset_class,
+            ),
+            schema_name=(
+                "stonegate_land_call_notes"
+                if asset_class == LAND_ASSET_CLASS
+                else "stonegate_call_notes"
+            ),
+            json_schema=notes_model.model_json_schema(),
             reasoning_effort=settings.openai_reasoning_effort,
         )
-        notes = StructuredCallNotes.model_validate(notes_payload)
+        notes = notes_model.model_validate(notes_payload)
         confidence = notes.confidence
         if isinstance(note_usage, int):
             note_usage = {
@@ -311,8 +390,16 @@ def process_call_transcript(
             audio_result.output_tokens,
             note_usage["output_tokens"],
         )
+        property_record = db.get(Property, lead.property_id) if lead is not None else None
         auto_populated_values = (
-            auto_populate_call_note_fields(lead, notes) if lead is not None else {}
+            auto_populate_call_note_fields(
+                lead,
+                notes,
+                db=db,
+                property_record=property_record,
+            )
+            if lead is not None
+            else {}
         )
         processing_completed_at = datetime.now(UTC)
         transcript.confidence_score = confidence
@@ -326,6 +413,7 @@ def process_call_transcript(
             "notes_model": settings.openai_default_model,
             "human_review_required": lead is not None,
             "conversation_context": "seller" if lead is not None else "buyer",
+            "asset_class": asset_class,
             "evidence_coverage_percent": evidence_coverage_percent(notes),
             "crm_auto_populated_at": (
                 processing_completed_at.isoformat() if auto_populated_values else None
@@ -481,7 +569,7 @@ def review_call_transcript(
         "status": transcript.status,
         "structured_notes": (transcript.transcript_metadata or {}).get("structured_notes"),
     }
-    notes = payload.structured_notes
+    notes = validate_call_notes_for_asset(payload.structured_notes, lead.asset_class)
     review_metrics = calculate_review_metrics(
         previous.get("structured_notes"),
         notes,
@@ -554,7 +642,14 @@ def transcript_to_read(db: Session, transcript: CallTranscript) -> CallTranscrip
     metadata = transcript.transcript_metadata or {}
     raw_notes = metadata.get("structured_notes")
     try:
-        notes = StructuredCallNotes.model_validate(raw_notes) if raw_notes else None
+        notes = (
+            validate_call_notes_payload_for_asset(
+                raw_notes,
+                resolve_transcript_asset_class(db, transcript),
+            )
+            if raw_notes
+            else None
+        )
     except ValidationError:
         notes = None
     approval = get_call_notes_approval(db, transcript)
@@ -627,7 +722,7 @@ def ensure_call_notes_approval(
     transcript: CallTranscript,
     call: CallRecord,
     lead: Lead,
-    notes: StructuredCallNotes,
+    notes: CallNotes,
 ) -> ApprovalRequest:
     existing = get_call_notes_approval(db, transcript)
     if existing is not None:
@@ -672,30 +767,48 @@ def get_call_notes_approval(
     )
 
 
-def build_call_notes_prompt(db: Session, call: CallRecord, transcript: CallTranscript) -> str:
+def build_call_notes_prompt(
+    db: Session,
+    call: CallRecord,
+    transcript: CallTranscript,
+    *,
+    asset_class: str | None = None,
+) -> str:
     contact = db.get(Contact, call.contact_id)
     lead = db.get(Lead, call.lead_id)
     property_record = db.get(Property, lead.property_id) if lead else None
     segments = transcript.speaker_segments or []
     contact_name = contact.preferred_name or contact.legal_name if contact else "Unknown"
-    return json.dumps(
+    resolved_asset_class = normalize_asset_class(
+        asset_class if asset_class is not None else (lead.asset_class if lead else None)
+    )
+    property_payload: dict[str, object] | None = (
         {
-            "party_type": "seller" if lead is not None else "buyer",
-            "seller": contact_name if lead is not None else None,
-            "buyer": contact_name if lead is None else None,
-            "property": (
-                {
-                    "address": property_record.street_address,
-                    "city": property_record.city,
-                    "state": property_record.state,
-                }
-                if property_record
-                else None
-            ),
-            "call_direction": call.direction,
-            "segments": segments,
-            "full_transcript": transcript.transcript_text,
-        },
+            "address": property_record.street_address,
+            "city": property_record.city,
+            "state": property_record.state,
+        }
+        if property_record
+        else None
+    )
+    if property_payload is not None and resolved_asset_class == LAND_ASSET_CLASS:
+        property_payload = {
+            **property_payload,
+            "parcel_id": property_record.parcel_id if property_record else None,
+        }
+    payload: dict[str, object] = {
+        "party_type": "seller" if lead is not None else "buyer",
+        "seller": contact_name if lead is not None else None,
+        "buyer": contact_name if lead is None else None,
+        "property": property_payload,
+        "call_direction": call.direction,
+        "segments": segments,
+        "full_transcript": transcript.transcript_text,
+    }
+    if resolved_asset_class == LAND_ASSET_CLASS:
+        payload["asset_class"] = LAND_ASSET_CLASS
+    return json.dumps(
+        payload,
         indent=2,
     )
 
@@ -735,7 +848,7 @@ def apply_approved_call_notes(
     transcript: CallTranscript,
     call: CallRecord,
     lead: Lead,
-    notes: StructuredCallNotes,
+    notes: CallNotes,
     *,
     apply_field_updates: list[str],
     create_follow_up_task: bool,
@@ -815,7 +928,10 @@ def apply_approved_call_notes(
 
 def auto_populate_call_note_fields(
     lead: Lead,
-    notes: StructuredCallNotes,
+    notes: CallNotes,
+    *,
+    db: Session | None = None,
+    property_record: Property | None = None,
 ) -> dict[str, object]:
     populated_values: dict[str, object] = {}
     note_values = notes.model_dump()
@@ -825,14 +941,96 @@ def auto_populate_call_note_fields(
             continue
         setattr(lead, lead_field, value)
         populated_values[lead_field] = value
+    if (
+        not isinstance(notes, LandStructuredCallNotes)
+        or normalize_asset_class(lead.asset_class) != LAND_ASSET_CLASS
+    ):
+        return populated_values
+
+    qualification_context = dict(lead.qualification_context or {})
+    context_changed = False
+    for field in LAND_QUALIFICATION_FIELDS:
+        value = note_values.get(field)
+        if (
+            crm_field_is_empty(value)
+            or not crm_field_is_empty(qualification_context.get(field))
+            or not evidence_supports_land_field(notes, field)
+            or (
+                field == "parcel_id"
+                and isinstance(value, str)
+                and not evidence_explicitly_contains_value(notes, field, value)
+            )
+        ):
+            continue
+        qualification_context[field] = value
+        populated_values[f"qualification_context.{field}"] = value
+        context_changed = True
+    if context_changed:
+        lead.qualification_context = qualification_context
+
+    if (
+        property_record is not None
+        and crm_field_is_empty(property_record.parcel_id)
+        and notes.parcel_id
+        and evidence_explicitly_contains_value(notes, "parcel_id", notes.parcel_id)
+    ):
+        property_record.parcel_id = notes.parcel_id.strip()
+        populated_values["property.parcel_id"] = property_record.parcel_id
+        from app.services.property_identity import refresh_property_identity_keys
+        from app.services.property_intelligence import (
+            enqueue_property_research,
+            invalidate_property_intelligence,
+        )
+
+        refresh_property_identity_keys(property_record)
+        if db is not None and property_record.normalized_parcel_key:
+            invalidate_property_intelligence(db, property_record)
+            enqueue_property_research(
+                db,
+                property_record,
+                source_lead_id=lead.id,
+                trigger_source="call_intelligence_parcel_autofill",
+            )
     return populated_values
 
 
 def crm_field_is_empty(value: object) -> bool:
-    return value is None or (isinstance(value, str) and not value.strip())
+    if value is None:
+        return True
+    if isinstance(value, str):
+        return not value.strip()
+    if isinstance(value, list | tuple | dict | set):
+        return not value
+    return False
 
 
-def format_approved_notes(notes: StructuredCallNotes) -> str:
+def evidence_supports_land_field(notes: LandStructuredCallNotes, field: str) -> bool:
+    return any(
+        evidence.field == field and evidence.supporting_text.strip()
+        for evidence in notes.evidence
+    )
+
+
+def evidence_explicitly_contains_value(
+    notes: LandStructuredCallNotes,
+    field: str,
+    value: str,
+) -> bool:
+    normalized_value = normalize_identifier_evidence(value)
+    if len(normalized_value) < 3:
+        return False
+    return any(
+        evidence.field == field
+        and normalized_value in normalize_identifier_evidence(evidence.supporting_text)
+        for evidence in notes.evidence
+    )
+
+
+def normalize_identifier_evidence(value: str) -> str:
+    return "".join(character.lower() for character in value if character.isalnum())
+
+
+def format_approved_notes(notes: CallNotes) -> str:
     lines = [notes.summary]
     details = (
         ("Motivation", notes.motivation),
@@ -846,6 +1044,22 @@ def format_approved_notes(notes: StructuredCallNotes) -> str:
         ("Appointment", notes.appointment_details),
     )
     lines.extend(f"{label}: {value}" for label, value in details if value)
+    if isinstance(notes, LandStructuredCallNotes):
+        land_details = (
+            ("Parcel/APN (seller stated)", notes.parcel_id),
+            ("Acreage (seller stated)", notes.acreage),
+            ("Legal description (seller stated)", notes.legal_description),
+            ("Access/frontage (seller stated)", notes.access_or_frontage),
+            ("Utilities (seller stated)", notes.utilities),
+            ("Zoning/intended use (unverified)", notes.zoning_or_use),
+            ("Septic/perc (seller stated)", notes.septic_or_perc),
+            ("Taxes/HOA (seller stated)", notes.taxes_or_hoa),
+            (
+                "Terrain/environmental concerns (seller stated)",
+                notes.terrain_or_environmental_concerns,
+            ),
+        )
+        lines.extend(f"{label}: {value}" for label, value in land_details if value)
     for label, values in (
         ("Repairs", notes.repairs),
         ("Objections", notes.objections),
@@ -893,16 +1107,17 @@ def mark_ai_run_reviewed(
 
 def calculate_review_metrics(
     raw_draft: object,
-    reviewed_notes: StructuredCallNotes,
+    reviewed_notes: CallNotes,
 ) -> dict[str, object]:
     draft = raw_draft if isinstance(raw_draft, dict) else {}
     reviewed = reviewed_notes.model_dump(mode="json")
+    quality_fields = quality_note_fields(reviewed_notes)
     changed_fields = [
         field
-        for field in QUALITY_NOTE_FIELDS
+        for field in quality_fields
         if normalize_quality_value(draft.get(field)) != normalize_quality_value(reviewed.get(field))
     ]
-    evaluated_count = len(QUALITY_NOTE_FIELDS)
+    evaluated_count = len(quality_fields)
     agreement = round(100 * (evaluated_count - len(changed_fields)) / evaluated_count)
     return {
         "evaluated_field_count": evaluated_count,
@@ -913,11 +1128,12 @@ def calculate_review_metrics(
     }
 
 
-def evidence_coverage_percent(notes: StructuredCallNotes) -> int | None:
+def evidence_coverage_percent(notes: CallNotes) -> int | None:
     payload = notes.model_dump(mode="json")
+    evidence_fields = evidence_note_fields(notes)
     populated_fields = {
         field
-        for field in EVIDENCE_NOTE_FIELDS
+        for field in evidence_fields
         if normalize_quality_value(payload.get(field)) not in (None, (), "")
     }
     if not populated_fields:
@@ -926,6 +1142,18 @@ def evidence_coverage_percent(notes: StructuredCallNotes) -> int | None:
         evidence.field for evidence in notes.evidence if evidence.supporting_text.strip()
     }
     return round(100 * len(populated_fields & evidenced_fields) / len(populated_fields))
+
+
+def quality_note_fields(notes: CallNotes) -> tuple[str, ...]:
+    if isinstance(notes, LandStructuredCallNotes):
+        return QUALITY_NOTE_FIELDS + LAND_QUALIFICATION_FIELDS
+    return QUALITY_NOTE_FIELDS
+
+
+def evidence_note_fields(notes: CallNotes) -> tuple[str, ...]:
+    if isinstance(notes, LandStructuredCallNotes):
+        return EVIDENCE_NOTE_FIELDS + LAND_QUALIFICATION_FIELDS
+    return EVIDENCE_NOTE_FIELDS
 
 
 def normalize_quality_value(value: object) -> object:

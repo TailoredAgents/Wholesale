@@ -1,6 +1,6 @@
 # Stonegate Operating System User Manual
 
-Last verified against the application: July 31, 2026
+Last verified against the application: August 8, 2026
 
 ## Purpose
 
@@ -56,9 +56,82 @@ The following still require external configuration, approval, or production acce
 - CPA acceptance of opening balances and the first Stonegate month close.
 - Real Georgia underwriting calibration and supervised Copilot pilots.
 - Autonomous AI external delivery.
+- Production Land-wholesaling activation. House/Land intake, VA handoff, qualification, call
+  notes, parcel facts, profile-safe research, and the first dedicated Land valuation workspace are
+  implemented, but official diligence sources, site visits, legal templates, offer approval,
+  reports, and disposition packaging remain behind the launch boundary.
 
 When a provider is unavailable, Stonegate records and manual workflows still operate. Do not
 interpret a provider-disabled message as lost CRM data.
+
+### House And Land Workflow Boundary
+
+Stonegate uses one **Leads** workspace for both business lines. A record is explicitly labeled
+**House** or **Land**; use the **Type** filter in Leads to focus the list. Do not create a second
+contact, Inbox thread, or deal pipeline solely because the property is Land.
+
+Current Land pilot controls include:
+
+- House/Land selection on manual lead creation, Inbox email conversion, campaigns, imports, and
+  approved VA/Lead Manager scripts.
+- Land propagation through warm handoff, the Lead Queue, staff Facebook-lead text alerts, call
+  intelligence, Activity, and AI context.
+- Parcel/APN capture and Land-specific seller facts such as acreage, access/frontage, utilities,
+  stated zoning/use, septic/perc, taxes/HOA, and known terrain or environmental concerns.
+- A dedicated `land_v1` property-research profile. When enabled, RealEstateAPI collects saved
+  property-record facts and optional licensed imagery without running residential comps or ARV.
+- Addressed parcels and parcels identified only by APN + county + state use the same Land research
+  path. APN matching is county-scoped, and a provider identity mismatch fails closed without
+  overwriting the CRM parcel.
+- A dedicated **Land Valuation** tab searches arms-length closed Land sales only after a user
+  presses the explicit search button. The first analysis makes at most one RealEstateAPI property
+  search; reopening the tab and saving a reviewed comparable set reuse saved evidence with zero
+  provider calls.
+- Land value ranges are calculated deterministically from saved price-per-acre evidence. Provider
+  AVMs, residential ARV, building square footage, and repair formulas are excluded.
+- The latest Land valuation and selected saved sales are included in the lead's governed AI
+  context. AI may summarize that evidence and identify missing research; it does not select,
+  calculate, or silently change the deterministic value or offer fields.
+- Opening guidance and the seller contract ceiling remain withheld until parcel identity, fresh
+  acreage, compatible sale evidence, acceptable dispersion, human-verified legal access, and an
+  active owner-approved Land offer policy all pass. A supported research range may still appear
+  while those consequential offer fields are withheld.
+- Separate House and Land snapshot caches so one workflow cannot reuse the other workflow's
+  evidence.
+- A hard safety boundary around residential valuation and execution. Land leads cannot create or
+  approve House ARV/comps, repair estimates, offer authority, residential field inspections,
+  acquisitions-copilot output, valuation PDFs, residential transactions, House contract packages,
+  e-signatures, or residential buyer disposition. The CRM shows Land-specific holding screens
+  instead. Legacy House versions and execution records remain readable/cancellable audit history,
+  but cannot advance as Land work.
+
+`LAND_WORKFLOW_ENABLED` is `false` by default. A disabled Land research message means the lead is
+safe in the CRM and the residential valuation path was intentionally skipped. Managers can verify
+the feature and RealEstateAPI readiness under **Settings > Integrations**.
+
+To use the current internal Land valuation pilot:
+
+1. Confirm the lead is marked **Land** and review the APN, county, state, acreage, land use, and
+   coordinates under **Property**. Refresh research if the saved identity is stale or incomplete.
+2. Open **Land Valuation**. Choose a search tier, record the access evidence status and source,
+   optionally map the subject to a human-reviewed Land-use group with a cited source, and press
+   **Search closed Land sales and save analysis** only when a provider search is intended.
+3. Review every selected sale. Uncheck unsuitable evidence and save the reviewed set; that creates
+   a new immutable version without another provider search. Rejecting every candidate is allowed
+   and produces an insufficient-evidence result.
+4. An owner may create the recommended offer-policy draft, inspect its discounts and reserves, and
+   activate it explicitly. Activation never changes an older saved analysis; rerun or review the
+   analysis to apply the active policy.
+5. Treat **Withheld** as a hard stop. Do not copy a supported value range into an offer when the
+   workspace lists access, identity, evidence, dispersion, freshness, or policy blockers.
+
+Until the remaining Land stages are released:
+
+1. Do not try to bypass the system's House ARV, repair, room, or living-area guards for Land.
+2. Treat provider zoning, flood, utility, access, soil, wetland, and similar results as screening
+   evidence, not proof of legal access or buildability.
+3. Do not send Stonegate's residential purchase agreement for a Land transaction.
+4. Keep valuation, offer, contract, and disposition work under manual management review.
 
 ## Core Rules
 
@@ -812,6 +885,7 @@ Conversation views:
 - **Needs reply**
 - **Appointments**
 - **Unread**
+- **Archived**
 
 Email mailbox groups appear below the general views when the employee can access them:
 
@@ -901,6 +975,24 @@ other person without an existing conversation. Do not create a fake property lea
 Stonegate creates a general company conversation and opens it in Inbox. Future replies should
 return to that thread through the selected receiving alias. General conversations support email
 only until they are deliberately connected to another business context.
+
+### Handle An Incoming General Email
+
+An email from a sender who is not already matched to a seller becomes a general company
+conversation rather than a fake lead. Open the conversation and use **Handle this email** in the
+right panel:
+
+- **Convert to seller lead:** enter the property address. Stonegate reuses the sender contact,
+  keeps the complete email thread on the new lead, creates the first follow-up task, and queues AI
+  preparation and property research.
+- **Link to existing lead:** select the seller already in Stonegate. The messages, attachments,
+  and sender email are merged into that seller's canonical Inbox thread.
+- **Mark non-lead and archive:** classify vendor, administrative, spam, or other handled mail and
+  remove it from active Inbox views without deleting it.
+
+Use **Archived** to review retained mail. Select **Restore to inbox** when a general conversation
+was classified incorrectly. Do not convert receipts, account notices, vendors, or unsolicited
+mail into seller leads.
 
 ### Use Templates And Signatures
 

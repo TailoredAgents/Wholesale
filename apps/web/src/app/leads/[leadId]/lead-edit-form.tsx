@@ -176,12 +176,14 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
             is_primary,
           })),
           assigned_user_id: optionalFormString(formData, "assigned_user_id"),
+          asset_class: formString(formData, "asset_class"),
           property_street_address: formString(formData, "property_street_address"),
           property_city: formString(formData, "property_city"),
           property_state: formString(formData, "property_state"),
           property_postal_code: formString(formData, "property_postal_code"),
           property_county: optionalFormString(formData, "property_county"),
           property_type: optionalFormString(formData, "property_type"),
+          property_parcel_id: optionalFormString(formData, "property_parcel_id"),
           source: formString(formData, "source"),
           lead_temperature: optionalFormString(formData, "lead_temperature"),
           motivation: optionalFormString(formData, "motivation"),
@@ -286,6 +288,13 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
             ))}
           </select>
         </label>
+        <label>
+          <span>Lead type</span>
+          <select name="asset_class" defaultValue={lead.asset_class}>
+            <option value="house">House</option>
+            <option value="land">Land</option>
+          </select>
+        </label>
         <div className={`${styles.contactMethodEditor} ${styles.editWide}`}>
           <div className={styles.contactMethodHeading}>
             <strong>Phone numbers and emails</strong>
@@ -384,6 +393,14 @@ export function LeadEditForm({ lead }: { lead: LeadDetail }) {
         <label>
           <span>Property type</span>
           <input name="property_type" defaultValue={lead.property_type ?? ""} maxLength={80} />
+        </label>
+        <label>
+          <span>Parcel / APN</span>
+          <input
+            name="property_parcel_id"
+            defaultValue={lead.property_parcel_id ?? ""}
+            maxLength={255}
+          />
         </label>
         <label>
           <span>Source</span>

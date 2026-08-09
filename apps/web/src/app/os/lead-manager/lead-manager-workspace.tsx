@@ -29,7 +29,7 @@ import styles from "./lead-manager.module.css";
 
 type View = "today" | "qualification" | "performance" | "standards";
 
-const standardQuestions = [
+const houseStandardQuestions = [
   ["ownership", "Ownership", "Please confirm who owns the property and how title is held.", true],
   ["decision_makers", "Decision makers", "Who must agree before the property can be sold?", true],
   ["motivation", "Reason for selling", "What has you considering a sale now?", true],
@@ -39,6 +39,23 @@ const standardQuestions = [
   ["asking_price", "Price expectation", "Do you have a price in mind?", false],
   ["mortgage_balance", "Mortgage or liens", "Is there a mortgage, lien, or other balance?", false],
   ["access", "Property access", "How and when can the property be viewed?", true],
+] as const;
+
+const landStandardQuestions = [
+  ["ownership", "Ownership", "Please confirm who owns the parcel and how title is held.", true],
+  ["decision_makers", "Decision makers", "Who must agree before the parcel can be sold?", true],
+  ["motivation", "Reason for selling", "What has you considering selling the land now?", true],
+  ["timeline", "Timeline", "When would you ideally like to complete a sale?", true],
+  ["parcel_id", "Parcel / APN", "What is the parcel number or APN, if available?", false],
+  ["acreage", "Acreage", "Approximately how many acres are included?", true],
+  ["access_frontage", "Access and frontage", "How is the parcel accessed, and what road frontage is known?", true],
+  ["utilities", "Utilities", "What utilities are at the road or already connected?", false],
+  ["zoning_use", "Zoning or known use", "What zoning or permitted-use information have you been given?", false],
+  ["septic_perc", "Septic / perc", "Has any soil, perc, septic, or sewer work been completed?", false],
+  ["taxes_hoa", "Taxes / HOA", "What annual taxes, HOA dues, or road fees apply?", false],
+  ["terrain_environmental", "Terrain and environmental", "Are you aware of slope, drainage, flood, wetland, or dumping concerns?", false],
+  ["asking_price", "Price expectation", "Do you have a price in mind?", false],
+  ["mortgage_balance", "Liens or balances", "Is there a mortgage, lien, tax balance, or other payoff?", false],
 ] as const;
 
 function formatDateTime(value: string | null) {
@@ -71,6 +88,7 @@ function CaseRow({
         <span>{item.property_address}</span>
       </div>
       <div className={styles.caseMeta}>
+        <span>{labelize(item.asset_class)}</span>
         <span>{labelize(item.source)}</span>
         <span>{item.assigned_user_name}</span>
         <span className={item.is_acceptance_overdue || item.is_next_action_overdue ? styles.late : ""}>
@@ -130,6 +148,9 @@ export function LeadManagerWorkspace({
     [],
   );
   const selectedCase = data.qualification_queue.find((item) => item.id === selectedCaseId) ?? null;
+  const activeScript = selectedCase
+    ? data.active_scripts[selectedCase.asset_class] ?? null
+    : null;
   const selectedCopilotItem =
     data.copilot.work_items.find((item) => item.case_id === selectedCopilotCaseId) ?? null;
   const recommendation =
@@ -223,11 +244,11 @@ export function LeadManagerWorkspace({
 
   async function submitQualification(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedCase || !data.active_script) return;
+    if (!selectedCase || !activeScript) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
     const answers = Object.fromEntries(
-      data.active_script.questions
+      activeScript.questions
         .map((question) => [question.key, String(formData.get(question.key) ?? "").trim()])
         .filter(([, answer]) => Boolean(answer)),
     );
@@ -247,7 +268,10 @@ export function LeadManagerWorkspace({
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
+    const assetClass = String(formData.get("asset_class") ?? "house") as "house" | "land";
+    const standardQuestions = assetClass === "land" ? landStandardQuestions : houseStandardQuestions;
     const saved = await request("/api/v1/lead-manager/scripts", {
+      asset_class: assetClass,
       title: String(formData.get("title") ?? "").trim(),
       introduction: String(formData.get("introduction") ?? "").trim(),
       questions: standardQuestions.map(([key, label, prompt, required]) => ({
@@ -517,22 +541,22 @@ export function LeadManagerWorkspace({
           <aside className={styles.qualificationList}>
             <div className={styles.sectionHeader}><div><span>Assigned queue</span><h3>Needs qualification</h3></div></div>
             {data.qualification_queue.map((item) => (
-              <button className={selectedCaseId === item.id ? styles.selectedCase : ""} key={item.id} onClick={() => setSelectedCaseId(item.id)} type="button"><strong>{item.seller_name}</strong><span>{item.property_address}</span></button>
+              <button className={selectedCaseId === item.id ? styles.selectedCase : ""} key={item.id} onClick={() => setSelectedCaseId(item.id)} type="button"><strong>{item.seller_name}</strong><span>{labelize(item.asset_class)} · {item.property_address}</span></button>
             ))}
             {!data.qualification_queue.length ? <p className={styles.empty}>Qualification queue is clear.</p> : null}
           </aside>
           <section className={styles.qualificationForm}>
-            {selectedCase && data.active_script ? (
+            {selectedCase && activeScript ? (
               <form onSubmit={submitQualification}>
-                <div className={styles.scriptHeader}><div><span>Script v{data.active_script.version_number}</span><h3>{selectedCase.seller_name}</h3><p>{data.active_script.introduction}</p></div><Link href={selectedCase.lead_url}>Open full lead</Link></div>
+                <div className={styles.scriptHeader}><div><span>{labelize(selectedCase.asset_class)} · Script v{activeScript.version_number}</span><h3>{selectedCase.seller_name}</h3><p>{activeScript.introduction}</p></div><Link href={selectedCase.lead_url}>Open full lead</Link></div>
                 <div className={styles.questionGrid}>
-                  {data.active_script.questions.map((question) => (
+                  {activeScript.questions.map((question) => (
                     <label key={question.key}><span>{question.label}{question.required ? " *" : ""}</span><small>{question.prompt}</small><textarea name={question.key} required={question.required} rows={2} /></label>
                   ))}
                 </div>
                 <div className={styles.nextAction}><label><span>Next action</span><select name="next_action_type"><option value="call">Call</option><option value="sms">Text</option><option value="email">Email</option><option value="appointment">Seller appointment</option><option value="nurture">Nurture follow-up</option><option value="disqualify">Disqualify</option></select></label><label><span>Due date and time</span><input name="next_action_due_at" type="datetime-local" /></label><button disabled={saving} type="submit"><Check size={16} />Complete qualification</button></div>
               </form>
-            ) : <p className={styles.empty}>{data.active_script ? "Select a seller to begin." : "A manager must approve a qualification standard before this queue can be worked."}</p>}
+            ) : <p className={styles.empty}>{selectedCase ? `A manager must approve a ${labelize(selectedCase.asset_class)} qualification standard before this lead can be worked.` : "Select a lead to begin."}</p>}
           </section>
         </div>
       ) : null}
@@ -546,8 +570,20 @@ export function LeadManagerWorkspace({
 
       {view === "standards" && data.can_manage ? (
         <div className={styles.standardsGrid}>
-          <section className={styles.standardForm}><div className={styles.sectionHeader}><div><span>Controlled process</span><h3>Create qualification version</h3></div></div><form onSubmit={createScript}><label><span>Version name</span><input defaultValue="Stonegate Seller Qualification" name="title" required /></label><label><span>Opening guidance</span><textarea defaultValue="Confirm the seller's situation carefully. Explain that these questions help Stonegate determine whether a direct sale is a reasonable fit." name="introduction" required rows={4} /></label><p>{standardQuestions.length} standardized questions will be included.</p><button disabled={saving} type="submit">Create draft</button></form></section>
-          <section className={styles.versionList}><div className={styles.sectionHeader}><div><span>Version history</span><h3>Qualification standards</h3></div></div>{data.scripts.map((script) => <div className={styles.versionRow} key={script.id}><div><strong>v{script.version_number} · {script.title}</strong><span>{labelize(script.status)} · {script.questions.length} questions</span></div>{script.status === "draft" ? <button disabled={saving} onClick={() => request(`/api/v1/lead-manager/scripts/${script.id}/approve`)} type="button">Approve</button> : <span className={styles.approved}>Approved</span>}</div>)}</section>
+          <section className={styles.standardForm}>
+            <div className={styles.sectionHeader}><div><span>Controlled process</span><h3>Create qualification version</h3></div></div>
+            <form onSubmit={createScript}>
+              <label><span>Lead type</span><select defaultValue="house" name="asset_class"><option value="house">House</option><option value="land">Land</option></select></label>
+              <label><span>Version name</span><input defaultValue="Stonegate Lead Qualification" name="title" required /></label>
+              <label><span>Opening guidance</span><textarea defaultValue="Confirm the seller's situation carefully. Explain that these questions help Stonegate determine whether a direct sale is a reasonable fit." name="introduction" required rows={4} /></label>
+              <p>House drafts include {houseStandardQuestions.length} questions; Land drafts include {landStandardQuestions.length} land-specific questions.</p>
+              <button disabled={saving} type="submit">Create draft</button>
+            </form>
+          </section>
+          <section className={styles.versionList}>
+            <div className={styles.sectionHeader}><div><span>Version history</span><h3>Qualification standards</h3></div></div>
+            {data.scripts.map((script) => <div className={styles.versionRow} key={script.id}><div><strong>{labelize(script.asset_class)} · v{script.version_number} · {script.title}</strong><span>{labelize(script.status)} · {script.questions.length} questions</span></div>{script.status === "draft" ? <button disabled={saving} onClick={() => request(`/api/v1/lead-manager/scripts/${script.id}/approve`)} type="button">Approve</button> : <span className={styles.approved}>Approved</span>}</div>)}
+          </section>
         </div>
       ) : null}
     </div>

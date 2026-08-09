@@ -43,6 +43,7 @@ export type IntegrationStatus = {
 export type LeadListItem = {
   id: string;
   source: string;
+  asset_class: "house" | "land";
   stage_key: string;
   lead_temperature: string | null;
   seller_name: string;
@@ -54,6 +55,7 @@ export type LeadListItem = {
   property_postal_code: string;
   property_county: string | null;
   property_type: string | null;
+  property_parcel_id: string | null;
   property_validation: {
     status: "unverified" | "provider_confirmed" | "needs_review" | "not_found";
     provider: string | null;
@@ -74,6 +76,7 @@ export type LeadListItem = {
   asking_price: string | null;
   mortgage_balance: string | null;
   appointment_status: string | null;
+  qualification_context: Record<string, unknown>;
   next_follow_up_at: string | null;
   primary_next_action: {
     task_id: string;
@@ -909,6 +912,7 @@ export type ProspectingWorkbenchOverview = {
 export type LeadManagerQualificationScript = {
   id: string;
   version_number: number;
+  asset_class: "house" | "land";
   title: string;
   status: string;
   introduction: string;
@@ -930,6 +934,7 @@ export type LeadManagerCase = {
   handoff_id: string | null;
   seller_name: string;
   property_address: string;
+  asset_class: "house" | "land";
   source: string;
   stage_key: string;
   assigned_user_id: string;
@@ -1002,6 +1007,7 @@ export type LeadManagerOverview = {
     neglected_leads: number;
   };
   active_script: LeadManagerQualificationScript | null;
+  active_scripts: Partial<Record<"house" | "land", LeadManagerQualificationScript>>;
   scripts: LeadManagerQualificationScript[];
   awaiting_acceptance: LeadManagerCase[];
   qualification_queue: LeadManagerCase[];
@@ -1346,6 +1352,7 @@ export type AcquisitionsCopilotOverview = {
 };
 
 export type FieldAppointmentWorkspace = {
+  asset_class: "house" | "land";
   appointment: FieldCalendarAppointment;
   brief: FieldMeetingBrief | null;
   inspection: FieldInspection | null;
@@ -1393,6 +1400,7 @@ export type FieldAppointmentWorkspace = {
 export type LeadDetail = LeadListItem & {
   property_intelligence: {
     research_status: string;
+    research_profile: string;
     snapshot_id: string | null;
     version_number: number | null;
     snapshot_status: string | null;

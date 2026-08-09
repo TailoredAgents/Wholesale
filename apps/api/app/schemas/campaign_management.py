@@ -36,6 +36,9 @@ SUPPORTED_IMPORT_FIELDS = {
     "city",
     "state_code",
     "postal_code",
+    "county",
+    "parcel_id",
+    "property_type",
     "dnc_status",
 }
 
@@ -297,6 +300,7 @@ class ProspectingCohortRead(BaseModel):
     id: UUID
     campaign_id: UUID
     campaign_name: str
+    asset_class: Literal["house", "land"]
     script_version_id: UUID | None
     created_by_user_id: UUID
     created_by_name: str

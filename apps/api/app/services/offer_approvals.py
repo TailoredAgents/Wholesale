@@ -5,6 +5,7 @@ from sqlalchemy import case, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -328,12 +329,15 @@ def offer_plan_to_read(db: Session, plan: OfferNegotiationPlan) -> OfferNegotiat
 
 
 def scoped_lead(db: Session, principal: Principal, lead_id: UUID) -> Lead | None:
-    return db.scalar(
+    lead = db.scalar(
         select(Lead).where(
             Lead.id == lead_id,
             Lead.organization_id == principal.organization_id,
         )
     )
+    if lead is not None:
+        require_house_workflow(lead.asset_class, workflow="Residential offer approval")
+    return lead
 
 
 def optional_int(value: object) -> int | None:

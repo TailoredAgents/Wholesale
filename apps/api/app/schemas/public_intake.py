@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
+from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
+
 CONSENT_WORDING_VERSION = "seller-contact-web-v2"
 CONSENT_WORDING = (
     "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
@@ -56,11 +58,14 @@ class ConversionEventResponse(BaseModel):
 
 
 class SellerIntakeCreate(BaseModel):
-    property_address: str = Field(min_length=3, max_length=255)
-    property_city: str = Field(min_length=1, max_length=120)
+    property_address: str = Field(default="", max_length=255)
+    property_city: str = Field(default="", max_length=120)
     property_state: str = Field(default="GA", min_length=2, max_length=2)
-    property_postal_code: str = Field(min_length=1, max_length=20)
+    property_postal_code: str = Field(default="", max_length=20)
+    property_county: str | None = Field(default=None, max_length=120)
     property_type: str | None = Field(default=None, max_length=80)
+    asset_class: str | None = Field(default=None, max_length=40)
+    parcel_id: str | None = Field(default=None, max_length=255)
     name: str = Field(min_length=1, max_length=255)
     phone: str | None = Field(default=None, max_length=40)
     email: EmailStr | None = None
@@ -103,6 +108,32 @@ class SellerIntakeCreate(BaseModel):
             raise ValueError("A phone number is required when phone is selected.")
         if self.preferred_contact_method == "email" and not self.email:
             raise ValueError("An email address is required when email is selected.")
+        asset_class = asset_class_for_property_type(
+            self.property_type,
+            explicit_asset_class=self.asset_class,
+        )
+        has_address = all(
+            value.strip()
+            for value in (
+                self.property_address,
+                self.property_city,
+                self.property_state,
+                self.property_postal_code,
+            )
+        )
+        has_parcel = bool(
+            self.parcel_id
+            and self.parcel_id.strip()
+            and self.property_county
+            and self.property_county.strip()
+            and self.property_state.strip()
+        )
+        if asset_class == LAND_ASSET_CLASS and not (has_address or has_parcel):
+            raise ValueError(
+                "Land leads require either a complete address or APN with county and state."
+            )
+        if asset_class != LAND_ASSET_CLASS and not has_address:
+            raise ValueError("A complete property address is required.")
         return self
 
 

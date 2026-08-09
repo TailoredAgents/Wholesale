@@ -26,6 +26,16 @@ class RealEstateAPIPropertyDetail:
     raw_response: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class RealEstateAPIPropertySearch:
+    properties: list[dict[str, Any]]
+    result_count: int | None
+    response_count: int
+    status_code: int
+    status_message: str | None
+    raw_response: dict[str, Any]
+
+
 class RealEstateAPIClient:
     def __init__(
         self,
@@ -43,9 +53,43 @@ class RealEstateAPIClient:
     def get_property_detail(
         self,
         *,
-        address: str,
+        address: str | None = None,
+        apn: str | None = None,
+        county: str | None = None,
+        state: str | None = None,
         include_comps: bool = True,
     ) -> RealEstateAPIPropertyDetail:
+        clean_address = address.strip() if address and address.strip() else None
+        clean_apn = apn.strip() if apn and apn.strip() else None
+        if clean_address and clean_apn:
+            raise RealEstateAPIError(
+                "RealEstateAPI property detail accepts one lookup identity at a time."
+            )
+        if clean_address:
+            # Preserve the legacy House request shape and ordering.
+            request_payload: dict[str, Any] = {
+                "address": clean_address,
+                "exact_match": True,
+                "comps": include_comps,
+            }
+        elif (
+            clean_apn
+            and county
+            and county.strip()
+            and state
+            and len(state.strip()) == 2
+        ):
+            request_payload = {
+                "apn": clean_apn,
+                "county": county.strip(),
+                "state": state.strip().upper(),
+                "exact_match": True,
+                "comps": include_comps,
+            }
+        else:
+            raise RealEstateAPIError(
+                "RealEstateAPI property detail requires an address or APN with county and state."
+            )
         try:
             request = self.client.post if self.client is not None else httpx.post
             response = request(
@@ -55,11 +99,7 @@ class RealEstateAPIClient:
                     "Content-Type": "application/json",
                     "x-api-key": self.api_key,
                 },
-                json={
-                    "address": address,
-                    "exact_match": True,
-                    "comps": include_comps,
-                },
+                json=request_payload,
                 timeout=self.timeout_seconds,
             )
         except httpx.HTTPError as exc:
@@ -108,6 +148,91 @@ class RealEstateAPIClient:
             else [],
             status_code=payload_status,
             status_message=status_message,
+            raw_response=payload,
+        )
+
+    def search_land_sales(
+        self,
+        *,
+        state: str,
+        county: str | None,
+        latitude: float | None,
+        longitude: float | None,
+        radius_miles: float,
+        sale_date_min: str,
+        lot_size_min: int,
+        lot_size_max: int,
+        size: int,
+    ) -> RealEstateAPIPropertySearch:
+        if not state.strip() or len(state.strip()) != 2:
+            raise RealEstateAPIError("Land comparable search requires a two-letter state.")
+        if (latitude is None) != (longitude is None):
+            raise RealEstateAPIError(
+                "Land comparable search requires both latitude and longitude."
+            )
+        request_payload: dict[str, Any] = {
+            "count": False,
+            "size": size,
+            "resultIndex": 0,
+            "property_type": "LAND",
+            "last_sale_arms_length": True,
+            "last_sale_date_min": sale_date_min,
+            "lot_size_min": lot_size_min,
+            "lot_size_max": lot_size_max,
+            "state": state.strip().upper(),
+        }
+        if latitude is not None and longitude is not None:
+            request_payload.update(
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "radius": radius_miles,
+                }
+            )
+        elif county and county.strip():
+            request_payload["county"] = county.strip()
+        else:
+            raise RealEstateAPIError(
+                "Land comparable search requires coordinates or a county."
+            )
+        try:
+            request = self.client.post if self.client is not None else httpx.post
+            response = request(
+                f"{self.base_url}/v2/PropertySearch",
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/json",
+                    "x-api-key": self.api_key,
+                },
+                json=request_payload,
+                timeout=self.timeout_seconds,
+            )
+        except httpx.HTTPError as exc:
+            raise RealEstateAPIError(
+                f"RealEstateAPI land comparable request failed: {exc}"
+            ) from exc
+        if response.is_error:
+            raise RealEstateAPIError(_http_error_message(response))
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            raise RealEstateAPIError("RealEstateAPI returned invalid JSON.") from exc
+        if not isinstance(payload, dict):
+            raise RealEstateAPIError("RealEstateAPI returned an unexpected response shape.")
+        data = payload.get("data")
+        if isinstance(data, dict):
+            nested = data.get("results") or data.get("properties") or data.get("data")
+            records = nested if isinstance(nested, list) else []
+        else:
+            records = data if isinstance(data, list) else []
+        properties = [item for item in records if isinstance(item, dict)]
+        payload_status = _integer(payload.get("statusCode")) or response.status_code
+        return RealEstateAPIPropertySearch(
+            properties=properties,
+            result_count=_integer(payload.get("resultCount")),
+            response_count=_integer(payload.get("responseCount")) or len(properties),
+            status_code=payload_status,
+            status_message=_string(payload.get("statusMessage")),
             raw_response=payload,
         )
 

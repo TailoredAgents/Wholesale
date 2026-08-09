@@ -8,8 +8,19 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, principal_for_user
 from app.core.config import Settings, get_settings
+from app.domain.assets import (
+    HOUSE_RESEARCH_PROFILE,
+    LAND_ASSET_CLASS,
+    LAND_RESEARCH_PROFILE,
+    normalize_parcel_id,
+    parcel_identity_key,
+    property_identity_label,
+    research_profile_for_asset,
+)
 from app.domain.rbac import PermissionKeys
 from app.integrations.realestateapi_client import (
+    RealEstateAPIClient,
+    RealEstateAPIError,
     get_realestateapi_image,
     is_realestateapi_image_url,
     realestateapi_primary_image_url,
@@ -18,6 +29,7 @@ from app.models.foundation import (
     ActivityEvent,
     FieldInspection,
     FieldInspectionPhoto,
+    LandValuationAnalysis,
     Lead,
     Property,
     PropertyIntelligenceSnapshot,
@@ -27,10 +39,27 @@ from app.models.foundation import (
 )
 from app.schemas.leads import LeadMarketAnalysisCreate, PropertyIntelligenceRead
 from app.services.document_storage import read_content
+from app.services.land_valuation_state import (
+    active_land_offer_policy_id,
+    current_land_analysis_reasons,
+)
 from app.services.property_validation import canonical_address_key, normalize_postal_code
+from app.services.underwriting_comparable_evidence import normalize_address_key
 
 ACTIVE_RESEARCH_STATUSES = {"queued", "processing", "retry"}
 PROPERTY_IMAGE_VIEWS = ("listing",)
+LAND_WORKFLOW_DISABLED_MESSAGE = (
+    "Land property research is disabled. Enable LAND_WORKFLOW_ENABLED to collect the "
+    "land property record; residential comps and value math were not run."
+)
+LAND_VALUATION_PENDING_MESSAGE = (
+    "Land property research is ready. Run Land Valuation when you want to search closed "
+    "land sales and calculate evidence-backed guidance."
+)
+LAND_RESIDENTIAL_SKIP_MESSAGE = (
+    "Land leads use the dedicated Land valuation workflow; residential ARV and repair "
+    "math were intentionally skipped."
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +82,77 @@ def property_address_signature(property_record: Property) -> str:
     )
 
 
+def property_research_signature(
+    property_record: Property,
+    *,
+    research_profile: str,
+) -> str:
+    if research_profile == LAND_RESEARCH_PROFILE:
+        parcel_key = parcel_identity_key(
+            property_record.parcel_id,
+            county=property_record.county,
+            state=property_record.state,
+        )
+        property_record.normalized_parcel_key = parcel_key
+        if parcel_key:
+            return f"parcel:{parcel_key}"
+    # Preserve the legacy address signature byte-for-byte so existing House and
+    # addressed-Land snapshots remain reusable after this upgrade.
+    return property_address_signature(property_record)
+
+
+def research_profile_for_lead(lead: Lead) -> str:
+    """Return the property-research profile owned by this lead's asset lane."""
+    return research_profile_for_asset(lead.asset_class)
+
+
+def research_lead_for_request(
+    db: Session,
+    property_record: Property,
+    source_lead_id: UUID | None,
+) -> Lead | None:
+    if source_lead_id is not None:
+        lead = db.get(Lead, source_lead_id)
+        if (
+            lead is None
+            or lead.organization_id != property_record.organization_id
+            or lead.property_id != property_record.id
+        ):
+            raise ValueError("The property research request does not belong to its source lead.")
+        return lead
+    return db.scalar(
+        select(Lead)
+        .where(
+            Lead.organization_id == property_record.organization_id,
+            Lead.property_id == property_record.id,
+            Lead.archived_at.is_(None),
+        )
+        .order_by(Lead.created_at.desc())
+    )
+
+
+def next_property_snapshot_version(
+    db: Session,
+    *,
+    property_id: UUID,
+    research_profile: str,
+) -> int:
+    return (
+        int(
+            db.scalar(
+                select(
+                    func.coalesce(func.max(PropertyIntelligenceSnapshot.version_number), 0)
+                ).where(
+                    PropertyIntelligenceSnapshot.property_id == property_id,
+                    PropertyIntelligenceSnapshot.research_profile == research_profile,
+                )
+            )
+            or 0
+        )
+        + 1
+    )
+
+
 def usable_research_address(property_record: Property) -> bool:
     street = property_record.street_address.strip().lower()
     city = property_record.city.strip().lower()
@@ -65,17 +165,36 @@ def usable_research_address(property_record: Property) -> bool:
     )
 
 
+def usable_research_identity(
+    property_record: Property,
+    *,
+    research_profile: str,
+) -> bool:
+    if usable_research_address(property_record):
+        return True
+    return bool(
+        research_profile == LAND_RESEARCH_PROFILE
+        and parcel_identity_key(
+            property_record.parcel_id,
+            county=property_record.county,
+            state=property_record.state,
+        )
+    )
+
+
 def current_property_snapshot(
     db: Session,
     *,
     organization_id: UUID,
     property_id: UUID,
+    research_profile: str,
 ) -> PropertyIntelligenceSnapshot | None:
     return db.scalar(
         select(PropertyIntelligenceSnapshot)
         .where(
             PropertyIntelligenceSnapshot.organization_id == organization_id,
             PropertyIntelligenceSnapshot.property_id == property_id,
+            PropertyIntelligenceSnapshot.research_profile == research_profile,
             PropertyIntelligenceSnapshot.is_current.is_(True),
         )
         .order_by(
@@ -95,18 +214,45 @@ def enqueue_property_research(
     settings: Settings | None = None,
 ) -> PropertyResearchRun | None:
     active_settings = settings or get_settings()
+    source_lead = research_lead_for_request(db, property_record, source_lead_id)
+    research_profile = (
+        research_profile_for_lead(source_lead)
+        if source_lead is not None
+        else HOUSE_RESEARCH_PROFILE
+    )
+    signature = property_research_signature(
+        property_record,
+        research_profile=research_profile,
+    )
+    if (
+        source_lead is not None
+        and source_lead.asset_class == LAND_ASSET_CLASS
+        and not active_settings.land_workflow_enabled
+    ):
+        return record_disabled_land_research(
+            db,
+            property_record,
+            source_lead=source_lead,
+            research_profile=research_profile,
+            address_signature=signature,
+            trigger_source=trigger_source,
+            force_refresh=force_refresh,
+        )
     if not active_settings.property_intelligence_auto_research_enabled and not force_refresh:
         return None
-    if not usable_research_address(property_record):
-        property_record.research_status = "needs_address"
-        property_record.research_last_error = "A complete street address and city are required."
+    if not usable_research_identity(property_record, research_profile=research_profile):
+        property_record.research_status = "needs_identity"
+        property_record.research_last_error = (
+            "House research requires a complete address. Land research requires either a "
+            "complete address or APN with county and state."
+        )
         return None
-    signature = property_address_signature(property_record)
     now = datetime.now(UTC)
     snapshot = current_property_snapshot(
         db,
         organization_id=property_record.organization_id,
         property_id=property_record.id,
+        research_profile=research_profile,
     )
     if (
         not force_refresh
@@ -122,29 +268,37 @@ def enqueue_property_research(
         select(PropertyResearchRun).where(
             PropertyResearchRun.organization_id == property_record.organization_id,
             PropertyResearchRun.property_id == property_record.id,
+            PropertyResearchRun.research_profile == research_profile,
             PropertyResearchRun.address_signature == signature,
             PropertyResearchRun.status.in_(ACTIVE_RESEARCH_STATUSES),
         )
     )
     if active is not None:
         return active
-    next_version = (
-        int(
-            db.scalar(
-                select(
-                    func.coalesce(func.max(PropertyIntelligenceSnapshot.version_number), 0)
-                ).where(PropertyIntelligenceSnapshot.property_id == property_record.id)
-            )
-            or 0
-        )
-        + 1
+    next_version = next_property_snapshot_version(
+        db,
+        property_id=property_record.id,
+        research_profile=research_profile,
     )
     mode = "refresh" if force_refresh else "automatic"
+    idempotency_key = (
+        f"property-research:{property_record.id}:{research_profile}:{signature}:"
+        f"v{next_version}:{mode}"
+    )
+    existing = db.scalar(
+        select(PropertyResearchRun).where(
+            PropertyResearchRun.organization_id == property_record.organization_id,
+            PropertyResearchRun.idempotency_key == idempotency_key,
+        )
+    )
+    if existing is not None:
+        return existing
     run = PropertyResearchRun(
         organization_id=property_record.organization_id,
         property_id=property_record.id,
         source_lead_id=source_lead_id,
-        idempotency_key=f"property-research:{property_record.id}:{signature}:v{next_version}:{mode}",
+        research_profile=research_profile,
+        idempotency_key=idempotency_key,
         trigger_source=trigger_source[:120],
         address_signature=signature,
         status="queued",
@@ -158,6 +312,57 @@ def enqueue_property_research(
     property_record.research_last_error = None
     db.flush()
     return run
+
+
+def record_disabled_land_research(
+    db: Session,
+    property_record: Property,
+    *,
+    source_lead: Lead,
+    research_profile: str,
+    address_signature: str,
+    trigger_source: str,
+    force_refresh: bool,
+) -> PropertyResearchRun:
+    idempotency_key = (
+        f"property-research:{property_record.id}:{research_profile}:{address_signature}:"
+        "land-workflow-disabled"
+    )
+    existing = db.scalar(
+        select(PropertyResearchRun).where(
+            PropertyResearchRun.organization_id == property_record.organization_id,
+            PropertyResearchRun.idempotency_key == idempotency_key,
+        )
+    )
+    now = datetime.now(UTC)
+    if existing is None:
+        existing = PropertyResearchRun(
+            organization_id=property_record.organization_id,
+            property_id=property_record.id,
+            source_lead_id=source_lead.id,
+            research_profile=research_profile,
+            idempotency_key=idempotency_key,
+            trigger_source=trigger_source[:120],
+            address_signature=address_signature,
+            status="needs_review",
+            force_refresh=force_refresh,
+            attempt_count=0,
+            completed_at=now,
+            last_error=LAND_WORKFLOW_DISABLED_MESSAGE,
+            run_metadata={
+                "requested_at": now.isoformat(),
+                "completed_at": now.isoformat(),
+                "reason_code": "land_workflow_disabled",
+                "residential_market_analysis_skipped": True,
+            },
+        )
+        db.add(existing)
+    property_record.research_status = "needs_review"
+    property_record.research_requested_at = now
+    property_record.research_completed_at = now
+    property_record.research_last_error = LAND_WORKFLOW_DISABLED_MESSAGE
+    db.flush()
+    return existing
 
 
 def invalidate_property_intelligence(db: Session, property_record: Property) -> None:
@@ -220,16 +425,37 @@ def process_next_property_research(db: Session, settings: Settings) -> UUID | No
         property_record = db.get(Property, run.property_id)
         if property_record is None:
             return finish_research_needs_review(db, run, "The property record no longer exists.")
-        if property_address_signature(property_record) != run.address_signature:
+        if (
+            property_research_signature(
+                property_record,
+                research_profile=run.research_profile,
+            )
+            != run.address_signature
+        ):
             return finish_research_needs_review(
                 db,
                 run,
-                "The property address changed while research was queued. Request a new refresh.",
+                "The property identity changed while research was queued. Request a new refresh.",
             )
+        lead = research_lead(db, run)
+        if lead is None:
+            return finish_research_needs_review(
+                db, run, "No active lead is available to host the research evidence."
+            )
+        expected_profile = research_profile_for_lead(lead)
+        if run.research_profile != expected_profile:
+            return finish_research_needs_review(
+                db,
+                run,
+                "The lead asset class changed while research was queued. Request a new refresh.",
+            )
+        if lead.asset_class == LAND_ASSET_CLASS and not settings.land_workflow_enabled:
+            return finish_research_needs_review(db, run, LAND_WORKFLOW_DISABLED_MESSAGE)
         existing_snapshot = current_property_snapshot(
             db,
             organization_id=run.organization_id,
             property_id=run.property_id,
+            research_profile=run.research_profile,
         )
         if (
             not run.force_refresh
@@ -250,14 +476,23 @@ def process_next_property_research(db: Session, settings: Settings) -> UUID | No
             property_record.research_last_error = None
             db.commit()
             return run_id
-        if not usable_research_address(property_record):
+        if not usable_research_identity(
+            property_record,
+            research_profile=run.research_profile,
+        ):
             return finish_research_needs_review(
-                db, run, "A complete street address and city are required."
+                db,
+                run,
+                "House research requires a complete address. Land research requires either a "
+                "complete address or APN with county and state.",
             )
-        lead = research_lead(db, run)
-        if lead is None:
-            return finish_research_needs_review(
-                db, run, "No active lead is available to host the valuation evidence."
+        if lead.asset_class == LAND_ASSET_CLASS:
+            return process_land_property_research(
+                db,
+                settings,
+                run=run,
+                property_record=property_record,
+                lead=lead,
             )
         user = research_owner(db, lead)
         if user is None:
@@ -327,6 +562,413 @@ def process_next_property_research(db: Session, settings: Settings) -> UUID | No
         return mark_research_failure(db, run_id, settings, str(exc))
 
 
+def process_land_property_research(
+    db: Session,
+    settings: Settings,
+    *,
+    run: PropertyResearchRun,
+    property_record: Property,
+    lead: Lead,
+) -> UUID:
+    """Collect land property facts without entering the residential valuation pipeline."""
+    if not settings.realestateapi_api_key:
+        return finish_research_needs_review(
+            db,
+            run,
+            "Land property research requires REALESTATEAPI_API_KEY. Residential comps and "
+            "value math were not run.",
+        )
+    use_address = usable_research_address(property_record)
+    try:
+        detail = RealEstateAPIClient(settings).get_property_detail(
+            address=format_property_address(property_record) if use_address else None,
+            apn=property_record.parcel_id if not use_address else None,
+            county=property_record.county if not use_address else None,
+            state=property_record.state if not use_address else None,
+            include_comps=False,
+        )
+    except RealEstateAPIError as exc:
+        raise RuntimeError(str(exc)) from exc
+    if not detail.found:
+        return finish_research_needs_review(
+            db,
+            run,
+            "RealEstateAPI found no exact land property match. Residential comps and value "
+            "math were not run.",
+        )
+    requested_parcel = normalize_parcel_id(property_record.parcel_id)
+    returned_parcel = normalize_parcel_id(realestateapi_property_parcel_id(detail.property))
+    returned_components = realestateapi_property_address_components(detail.property)
+    requested_parcel_key = parcel_identity_key(
+        property_record.parcel_id,
+        county=property_record.county,
+        state=property_record.state,
+    )
+    returned_parcel_key = parcel_identity_key(
+        returned_parcel,
+        county=returned_components.get("county"),
+        state=returned_components.get("state"),
+    )
+    if requested_parcel and (
+        returned_parcel != requested_parcel
+        or (not use_address and returned_parcel_key != requested_parcel_key)
+    ):
+        return finish_research_needs_review(
+            db,
+            run,
+            "RealEstateAPI returned a different Land parcel/APN. Its facts were excluded, "
+            "and residential comps and value math were not run.",
+        )
+    returned_address = realestateapi_property_address(detail.property)
+    requested_address = format_property_address(property_record)
+    if (
+        use_address
+        and returned_address
+        and normalize_address_key(returned_address) != normalize_address_key(requested_address)
+    ):
+        return finish_research_needs_review(
+            db,
+            run,
+            "RealEstateAPI returned a different land property address. Its facts were excluded, "
+            "and residential comps and value math were not run.",
+        )
+    if not use_address:
+        apply_realestateapi_parcel_address(property_record, detail.property)
+        property_record.address_validation_status = "provider_confirmed"
+        property_record.address_validation_provider = "realestateapi"
+        property_record.provider_property_id = string_value(detail.property.get("id"))
+        property_record.validated_formatted_address = returned_address
+        property_record.address_validated_at = datetime.now(UTC)
+        property_record.address_validation_metadata = {
+            "lookup_mode": "parcel",
+            "requested_parcel_key": requested_parcel_key,
+            "returned_parcel_key": returned_parcel_key,
+            "match_score": 100,
+            "issues": [],
+        }
+    snapshot = create_land_property_snapshot(
+        db,
+        settings,
+        property_record=property_record,
+        lead=lead,
+        property_payload=detail.property,
+        trigger_source=run.trigger_source,
+        lookup_mode="address" if use_address else "parcel",
+        requested_identity=(
+            requested_address if use_address else requested_parcel_key or "parcel-unavailable"
+        ),
+    )
+    completed_at = datetime.now(UTC)
+    run.status = snapshot.status
+    run.completed_at = completed_at
+    run.last_error = None
+    run.run_metadata = {
+        **(run.run_metadata or {}),
+        "snapshot_id": str(snapshot.id),
+        "completed_at": completed_at.isoformat(),
+        "provider": "realestateapi",
+        "provider_status": "completed",
+        "provider_credits_estimated": 1,
+        "lookup_mode": "address" if use_address else "parcel",
+        "requested_identity": (
+            format_property_address(property_record)
+            if use_address
+            else requested_parcel_key
+        ),
+        "residential_market_analysis_skipped": True,
+    }
+    property_record.research_status = snapshot.status
+    property_record.research_completed_at = snapshot.captured_at
+    property_record.research_last_error = None
+    db.add(
+        ActivityEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="property.research_ready",
+            summary=(
+                "Land property-record research is ready. Residential comps and value math "
+                "were intentionally skipped."
+            ),
+        )
+    )
+    db.commit()
+    return run.id
+
+
+def create_land_property_snapshot(
+    db: Session,
+    settings: Settings,
+    *,
+    property_record: Property,
+    lead: Lead,
+    property_payload: dict[str, Any],
+    trigger_source: str,
+    lookup_mode: str = "address",
+    requested_identity: str | None = None,
+) -> PropertyIntelligenceSnapshot:
+    research_profile = research_profile_for_lead(lead)
+    if lead.asset_class != LAND_ASSET_CLASS:
+        raise ValueError("Land property snapshots require a Land lead.")
+    captured_at = datetime.now(UTC)
+    facts = fallback_property_facts(property_record)
+    formatted_address = format_property_address(property_record)
+    if formatted_address and usable_research_address(property_record):
+        facts["address"] = fact_value(
+            formatted_address,
+            property_record.address_validation_provider or "stonegate_crm",
+            captured_at,
+        )
+    facts["asset_class"] = fact_value("land", "stonegate_crm", captured_at)
+    conflicts = merge_realestateapi_property_facts(facts, property_payload, captured_at)
+    # RealEstateAPI's generic AVM is not land valuation evidence. Keep raw record facts such
+    # as sale history and assessed land value, but do not expose its estimate as a conclusion.
+    facts.pop("realestateapi_estimated_value", None)
+    parcel_fact = facts.get("parcel_id")
+    parcel_value = parcel_fact.get("value") if isinstance(parcel_fact, dict) else None
+    normalized_parcel = string_value(parcel_value)
+    if not property_record.parcel_id and normalized_parcel:
+        property_record.parcel_id = normalized_parcel
+    property_record.normalized_parcel_key = parcel_identity_key(
+        property_record.parcel_id,
+        county=property_record.county,
+        state=property_record.state,
+    )
+    media = realestateapi_media_snapshot(property_payload)
+    completeness_score = land_property_completeness_score(facts, media)
+    status = "ready" if completeness_score >= 65 else "partial"
+    db.execute(
+        update(PropertyIntelligenceSnapshot)
+        .where(
+            PropertyIntelligenceSnapshot.organization_id == property_record.organization_id,
+            PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.research_profile == research_profile,
+            PropertyIntelligenceSnapshot.is_current.is_(True),
+        )
+        .values(is_current=False)
+    )
+    snapshot = PropertyIntelligenceSnapshot(
+        organization_id=property_record.organization_id,
+        property_id=property_record.id,
+        source_lead_id=lead.id,
+        source_market_analysis_id=None,
+        research_profile=research_profile,
+        version_number=next_property_snapshot_version(
+            db,
+            property_id=property_record.id,
+            research_profile=research_profile,
+        ),
+        status=status,
+        is_current=True,
+        address_signature=property_research_signature(
+            property_record,
+            research_profile=research_profile,
+        ),
+        completeness_score=completeness_score,
+        confidence_score=50,
+        facts=facts,
+        valuation={},
+        comparables=[],
+        market_context={
+            "asset_class": "land",
+            "research_profile": research_profile,
+            "provider_property_records": {
+                "realestateapi": safe_provider_property_payload(property_payload)
+            },
+            "residential_market_analysis": {
+                "status": "skipped",
+                "reason": LAND_RESIDENTIAL_SKIP_MESSAGE,
+            },
+            "manual_review_required": True,
+            "review_reasons": [LAND_VALUATION_PENDING_MESSAGE],
+        },
+        sources=[
+            {
+                "source": "realestateapi",
+                "captured_at": captured_at.isoformat(),
+                "role": "canonical_land_property_record",
+            },
+            {
+                "source": "stonegate",
+                "captured_at": captured_at.isoformat(),
+                "role": "crm_property_identity",
+            },
+        ],
+        conflicts=conflicts[:100],
+        media=media,
+        snapshot_metadata={
+            "trigger_source": trigger_source,
+            "asset_class": "land",
+            "research_profile": research_profile,
+            "lookup_mode": lookup_mode,
+            "requested_identity": requested_identity,
+            "residential_market_analysis_skipped": True,
+            "land_valuation_status": "not_started",
+        },
+        captured_at=captured_at,
+        expires_at=captured_at + timedelta(days=settings.property_intelligence_fresh_days),
+    )
+    db.add(snapshot)
+    db.flush()
+    return snapshot
+
+
+def realestateapi_property_address(property_payload: dict[str, Any]) -> str | None:
+    info = property_payload.get("propertyInfo")
+    info_values = info if isinstance(info, dict) else {}
+    address = info_values.get("address")
+    if not isinstance(address, dict):
+        raw_address = property_payload.get("address")
+        address = raw_address if isinstance(raw_address, dict) else {}
+    direct = string_value(address.get("formattedAddress")) or string_value(
+        address.get("fullAddress")
+    )
+    if direct:
+        return direct
+    street = (
+        string_value(address.get("address"))
+        or string_value(address.get("addressLine1"))
+        or string_value(address.get("streetAddress"))
+    )
+    if not street:
+        return None
+    locality = ", ".join(
+        value
+        for value in (
+            string_value(address.get("city")),
+            string_value(address.get("state")),
+        )
+        if value
+    )
+    postal_code = (
+        string_value(address.get("zip"))
+        or string_value(address.get("zipCode"))
+        or string_value(address.get("postalCode"))
+    )
+    return ", ".join(value for value in (street, locality) if value) + (
+        f" {postal_code}" if postal_code else ""
+    )
+
+
+def realestateapi_property_parcel_id(property_payload: dict[str, Any]) -> str | None:
+    lot_info = property_payload.get("lotInfo")
+    lot_values = lot_info if isinstance(lot_info, dict) else {}
+    return (
+        string_value(lot_values.get("apn"))
+        or string_value(lot_values.get("apnUnformatted"))
+        or string_value(property_payload.get("apn"))
+    )
+
+
+def realestateapi_property_address_components(
+    property_payload: dict[str, Any],
+) -> dict[str, str | None]:
+    info = property_payload.get("propertyInfo")
+    info_values = info if isinstance(info, dict) else {}
+    address_value = info_values.get("address")
+    if not isinstance(address_value, dict):
+        direct = property_payload.get("address")
+        address_value = direct if isinstance(direct, dict) else {}
+    return {
+        "street_address": (
+            string_value(address_value.get("address"))
+            or string_value(address_value.get("addressLine1"))
+            or string_value(address_value.get("streetAddress"))
+            or string_value(address_value.get("street"))
+        ),
+        "city": string_value(address_value.get("city")),
+        "state": string_value(address_value.get("state")),
+        "postal_code": (
+            string_value(address_value.get("zip"))
+            or string_value(address_value.get("zipCode"))
+            or string_value(address_value.get("postalCode"))
+        ),
+        "county": string_value(address_value.get("county")),
+    }
+
+
+def apply_realestateapi_parcel_address(
+    property_record: Property,
+    property_payload: dict[str, Any],
+) -> None:
+    """Fill missing address parts only after an APN lookup has been verified."""
+    components = realestateapi_property_address_components(property_payload)
+    street = string_value(components.get("street_address"))
+    city = string_value(components.get("city"))
+    state = string_value(components.get("state"))
+    postal_code = string_value(components.get("postal_code"))
+    county = string_value(components.get("county"))
+    if street and (
+        not property_record.street_address.strip()
+        or property_record.street_address.lower().startswith("address pending")
+    ):
+        property_record.street_address = street
+    if city and (
+        not property_record.city.strip() or property_record.city.strip().lower() == "unknown"
+    ):
+        property_record.city = city
+    if state and len(state) == 2 and not property_record.state.strip():
+        property_record.state = state.upper()
+    if postal_code and (
+        not property_record.postal_code.strip()
+        or property_record.postal_code.strip().lower() == "unknown"
+    ):
+        property_record.postal_code = postal_code
+    if county and not property_record.county:
+        property_record.county = county
+    if usable_research_address(property_record):
+        property_record.normalized_address_key = canonical_address_key(
+            property_record.street_address,
+            property_record.city,
+            property_record.state,
+            property_record.postal_code,
+        )
+    property_record.normalized_parcel_key = parcel_identity_key(
+        property_record.parcel_id,
+        county=property_record.county,
+        state=property_record.state,
+    )
+
+
+def safe_provider_property_payload(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            str(key): safe_provider_property_payload(item)
+            for key, item in value.items()
+            if "phone" not in str(key).lower()
+            and "email" not in str(key).lower()
+            and str(key).lower() not in {"comps", "comparables", "estimatedvalue"}
+        }
+    if isinstance(value, list):
+        return [safe_provider_property_payload(item) for item in value]
+    return value
+
+
+def land_property_completeness_score(
+    facts: dict[str, Any],
+    media: dict[str, Any],
+) -> int:
+    required_facts = {
+        "address",
+        "property_type",
+        "parcel_id",
+        "lot_size",
+        "lot_size_acres",
+        "zoning",
+        "latitude",
+        "longitude",
+        "annual_property_tax",
+        "assessed_land_value",
+    }
+    fact_points = round(95 * len(required_facts.intersection(facts)) / len(required_facts))
+    realestateapi = media.get("realestateapi")
+    image_points = (
+        5 if isinstance(realestateapi, dict) and realestateapi.get("status") == "available" else 0
+    )
+    return min(100, fact_points + image_points)
+
+
 def research_lead(db: Session, run: PropertyResearchRun) -> Lead | None:
     if run.source_lead_id is not None:
         lead = db.get(Lead, run.source_lead_id)
@@ -364,6 +1006,11 @@ def create_snapshot_from_analysis(
     analysis: UnderwritingMarketAnalysis,
     trigger_source: str,
 ) -> PropertyIntelligenceSnapshot:
+    research_profile = research_profile_for_lead(lead)
+    if lead.asset_class == LAND_ASSET_CLASS:
+        raise ValueError(
+            "Residential market analysis cannot create a Land property intelligence snapshot."
+        )
     captured_at = datetime.now(UTC)
     metadata = analysis.analysis_metadata or {}
     assumptions = metadata.get("assumptions")
@@ -456,30 +1103,29 @@ def create_snapshot_from_analysis(
         .where(
             PropertyIntelligenceSnapshot.organization_id == property_record.organization_id,
             PropertyIntelligenceSnapshot.property_id == property_record.id,
+            PropertyIntelligenceSnapshot.research_profile == research_profile,
             PropertyIntelligenceSnapshot.is_current.is_(True),
         )
         .values(is_current=False)
     )
-    version_number = (
-        int(
-            db.scalar(
-                select(
-                    func.coalesce(func.max(PropertyIntelligenceSnapshot.version_number), 0)
-                ).where(PropertyIntelligenceSnapshot.property_id == property_record.id)
-            )
-            or 0
-        )
-        + 1
+    version_number = next_property_snapshot_version(
+        db,
+        property_id=property_record.id,
+        research_profile=research_profile,
     )
     snapshot = PropertyIntelligenceSnapshot(
         organization_id=property_record.organization_id,
         property_id=property_record.id,
         source_lead_id=lead.id,
         source_market_analysis_id=analysis.id,
+        research_profile=research_profile,
         version_number=version_number,
         status=status,
         is_current=True,
-        address_signature=property_address_signature(property_record),
+        address_signature=property_research_signature(
+            property_record,
+            research_profile=research_profile,
+        ),
         completeness_score=completeness_score,
         confidence_score=max(0, min(100, analysis.confidence_score)),
         facts=facts,
@@ -491,6 +1137,8 @@ def create_snapshot_from_analysis(
         media=media,
         snapshot_metadata={
             "trigger_source": trigger_source,
+            "asset_class": lead.asset_class,
+            "research_profile": research_profile,
             "rejected_comparable_count": len(rejected),
             "methodology_version": metadata.get("methodology_version"),
             "market_data_reused": metadata.get("market_data_reused") is True,
@@ -515,7 +1163,7 @@ def normalized_fact_snapshot(
         "year_built": "yearBuilt",
         "subdivision": "subdivision",
         "county": "county",
-        "parcel_id": "id",
+        "rentcast_property_id": "id",
         "latitude": "latitude",
         "longitude": "longitude",
         "last_sale_date": "lastSaleDate",
@@ -572,12 +1220,23 @@ REALESTATEAPI_PROPERTY_FACTS: tuple[tuple[tuple[str, ...], str, str | None], ...
     (("propertyInfo", "airConditioningType"), "air_conditioning", None),
     (("propertyInfo", "waterSource"), "water", None),
     (("propertyInfo", "sewer"), "sewer", None),
+    (("propertyInfo", "address", "county"), "county", None),
+    (("propertyInfo", "address", "state"), "state", None),
+    (("propertyInfo", "address", "fips"), "county_fips", None),
+    (("propertyInfo", "latitude"), "latitude", None),
+    (("propertyInfo", "longitude"), "longitude", None),
+    (("propertyInfo", "propertyUse"), "property_use", None),
+    (("propertyInfo", "propertyUseCode"), "property_use_code", None),
+    (("latitude",), "latitude", None),
+    (("longitude",), "longitude", None),
     (("lotInfo", "apn"), "parcel_id", None),
     (("lotInfo", "lotSquareFeet"), "lot_size", "square_feet"),
     (("lotInfo", "lotAcres"), "lot_size_acres", "acres"),
     (("lotInfo", "legalDescription"), "legal_description", None),
     (("lotInfo", "lotNumber"), "lot_number", None),
     (("lotInfo", "zoning"), "zoning", None),
+    (("lotInfo", "landUse"), "land_use", None),
+    (("lotInfo", "propertyClass"), "property_class", None),
     (("taxInfo", "taxAmount"), "annual_property_tax", "dollars"),
     (("taxInfo", "assessedValue"), "assessed_total_value", "dollars"),
     (("taxInfo", "assessedImprovementValue"), "assessed_improvement_value", "dollars"),
@@ -800,6 +1459,69 @@ def source_role(name: str) -> str:
     }.get(name, "supporting_evidence")
 
 
+def latest_property_research_run(
+    db: Session,
+    *,
+    organization_id: UUID,
+    property_id: UUID,
+    research_profile: str,
+    address_signature: str,
+) -> PropertyResearchRun | None:
+    return db.scalar(
+        select(PropertyResearchRun)
+        .where(
+            PropertyResearchRun.organization_id == organization_id,
+            PropertyResearchRun.property_id == property_id,
+            PropertyResearchRun.research_profile == research_profile,
+            PropertyResearchRun.address_signature == address_signature,
+        )
+        .order_by(PropertyResearchRun.created_at.desc(), PropertyResearchRun.id.desc())
+    )
+
+
+def profile_research_state(
+    property_record: Property,
+    *,
+    research_profile: str,
+    snapshot: PropertyIntelligenceSnapshot | None,
+    run: PropertyResearchRun | None,
+) -> tuple[str, str | None, dict[str, Any]]:
+    run_is_newer = bool(
+        run is not None
+        and (
+            snapshot is None
+            or as_utc(run.created_at) >= as_utc(snapshot.captured_at)
+        )
+    )
+    if run is not None and run_is_newer and run.status in {
+        *ACTIVE_RESEARCH_STATUSES,
+        "failed",
+        "needs_review",
+    }:
+        metadata = run.run_metadata or {}
+        context = (
+            {
+                "asset_class": "land",
+                "research_profile": research_profile,
+                "workflow_status": "disabled",
+                "residential_market_analysis": {
+                    "status": "skipped",
+                    "reason": run.last_error or LAND_WORKFLOW_DISABLED_MESSAGE,
+                },
+                "manual_review_required": True,
+                "review_reasons": [run.last_error or LAND_WORKFLOW_DISABLED_MESSAGE],
+            }
+            if metadata.get("reason_code") == "land_workflow_disabled"
+            else {}
+        )
+        return run.status, run.last_error, context
+    if snapshot is not None:
+        return snapshot.status, None, {}
+    if property_record.research_status in {"needs_address", "needs_identity"}:
+        return property_record.research_status, property_record.research_last_error, {}
+    return "not_started", None, {}
+
+
 def build_property_intelligence_read(
     db: Session,
     principal: Principal,
@@ -807,16 +1529,36 @@ def build_property_intelligence_read(
 ) -> PropertyIntelligenceRead:
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
-        return PropertyIntelligenceRead(research_status="unavailable")
+        return PropertyIntelligenceRead(
+            research_status="unavailable",
+            research_profile=research_profile_for_lead(lead),
+        )
+    research_profile = research_profile_for_lead(lead)
+    address_signature = property_research_signature(
+        property_record,
+        research_profile=research_profile,
+    )
     snapshot = current_property_snapshot(
         db,
         organization_id=principal.organization_id,
         property_id=property_record.id,
+        research_profile=research_profile,
     )
-    if snapshot is not None and snapshot.address_signature != property_address_signature(
-        property_record
-    ):
+    if snapshot is not None and snapshot.address_signature != address_signature:
         snapshot = None
+    latest_run = latest_property_research_run(
+        db,
+        organization_id=principal.organization_id,
+        property_id=property_record.id,
+        research_profile=research_profile,
+        address_signature=address_signature,
+    )
+    research_status, last_error, fallback_market_context = profile_research_state(
+        property_record,
+        research_profile=research_profile,
+        snapshot=snapshot,
+        run=latest_run,
+    )
     image_source = "placeholder"
     image_available = False
     image_views: list[str] = []
@@ -842,21 +1584,100 @@ def build_property_intelligence_read(
         image_attribution = str(
             realestateapi_media.get("attribution") or "RealEstateAPI licensed listing media"
         )
+    valuation = dict(snapshot.valuation) if snapshot else {}
+    comparables = list(snapshot.comparables) if snapshot else []
+    market_context = dict(snapshot.market_context) if snapshot else dict(fallback_market_context)
+    sources = list(snapshot.sources) if snapshot else []
+    confidence_score = snapshot.confidence_score if snapshot else 0
+    if lead.asset_class == LAND_ASSET_CLASS and snapshot is not None:
+        land_analysis = latest_land_valuation_for_snapshot(
+            db,
+            organization_id=principal.organization_id,
+            lead_id=lead.id,
+            property_snapshot_id=snapshot.id,
+        )
+        if land_analysis is not None:
+            current_state_reasons = current_land_analysis_reasons(
+                land_analysis,
+                property_record=property_record,
+                current_snapshot=snapshot,
+                current_identity_signature=address_signature,
+                active_policy_id=active_land_offer_policy_id(
+                    db, principal.organization_id
+                ),
+            )
+            combined_blockers = list(
+                dict.fromkeys(
+                    [*land_analysis.guidance_blockers, *current_state_reasons]
+                )
+            )
+            combined_review_reasons = list(
+                dict.fromkeys([*land_analysis.review_reasons, *current_state_reasons])
+            )
+            valuation = land_valuation_overlay(
+                land_analysis,
+                current_state_reasons=current_state_reasons,
+            )
+            comparables = [land_comparable_overlay(item) for item in land_analysis.selected_comps]
+            confidence_score = land_analysis.confidence_score
+            market_context = {
+                **market_context,
+                "manual_review_required": bool(
+                    combined_review_reasons or combined_blockers
+                ),
+                "review_reasons": list(
+                    dict.fromkeys(
+                        [
+                            *combined_review_reasons,
+                            *combined_blockers,
+                        ]
+                    )
+                ),
+                "land_valuation": {
+                    "analysis_id": str(land_analysis.id),
+                    "version_number": land_analysis.version_number,
+                    "status": (
+                        "needs_review"
+                        if current_state_reasons
+                        and land_analysis.status != "insufficient_evidence"
+                        else land_analysis.status
+                    ),
+                    "guidance_status": (
+                        "withheld"
+                        if current_state_reasons
+                        else land_analysis.guidance_status
+                    ),
+                    "is_current": not current_state_reasons,
+                    "valuation_basis": land_analysis.valuation_basis,
+                    "review_reasons": combined_review_reasons,
+                    "guidance_blockers": combined_blockers,
+                    "created_at": as_utc(land_analysis.created_at).isoformat(),
+                },
+            }
+            sources = [
+                *sources,
+                {
+                    "source": "stonegate",
+                    "captured_at": as_utc(land_analysis.created_at).isoformat(),
+                    "role": "dedicated_land_comparable_and_offer_analysis",
+                },
+            ]
     return PropertyIntelligenceRead(
-        research_status=property_record.research_status,
+        research_status=research_status,
+        research_profile=research_profile,
         snapshot_id=snapshot.id if snapshot else None,
         version_number=snapshot.version_number if snapshot else None,
         snapshot_status=snapshot.status if snapshot else None,
         completeness_score=snapshot.completeness_score if snapshot else 0,
-        confidence_score=snapshot.confidence_score if snapshot else 0,
+        confidence_score=confidence_score,
         captured_at=as_utc(snapshot.captured_at) if snapshot else None,
         expires_at=as_utc(snapshot.expires_at) if snapshot else None,
         is_stale=bool(snapshot and as_utc(snapshot.expires_at) <= datetime.now(UTC)),
         facts=snapshot.facts if snapshot else fallback_property_facts(property_record),
-        valuation=snapshot.valuation if snapshot else {},
-        comparables=snapshot.comparables if snapshot else [],
-        market_context=snapshot.market_context if snapshot else {},
-        sources=snapshot.sources if snapshot else [],
+        valuation=valuation,
+        comparables=comparables,
+        market_context=market_context,
+        sources=sources,
         conflicts=snapshot.conflicts if snapshot else [],
         image_source=image_source,
         image_available=image_available,
@@ -864,8 +1685,67 @@ def build_property_intelligence_read(
         image_url=f"/api/v1/leads/{lead.id}/property-image" if image_available else None,
         image_attribution=image_attribution,
         imagery_date=imagery_date,
-        last_error=property_record.research_last_error,
+        last_error=last_error,
     )
+
+
+def latest_land_valuation_for_snapshot(
+    db: Session,
+    *,
+    organization_id: UUID,
+    lead_id: UUID,
+    property_snapshot_id: UUID,
+) -> LandValuationAnalysis | None:
+    return db.scalar(
+        select(LandValuationAnalysis)
+        .where(
+            LandValuationAnalysis.organization_id == organization_id,
+            LandValuationAnalysis.lead_id == lead_id,
+            LandValuationAnalysis.property_snapshot_id == property_snapshot_id,
+        )
+        .order_by(
+            LandValuationAnalysis.version_number.desc(),
+            LandValuationAnalysis.created_at.desc(),
+        )
+    )
+
+
+def land_valuation_overlay(
+    analysis: LandValuationAnalysis,
+    *,
+    current_state_reasons: list[str],
+) -> dict[str, Any]:
+    guidance_is_current = not current_state_reasons
+    return {
+        "land_value_low_cents": analysis.supported_value_low_cents,
+        "land_value_point_cents": analysis.supported_value_cents,
+        "land_value_high_cents": analysis.supported_value_high_cents,
+        "quick_sale_low_cents": (
+            analysis.quick_sale_low_cents if guidance_is_current else None
+        ),
+        "quick_sale_high_cents": (
+            analysis.quick_sale_high_cents if guidance_is_current else None
+        ),
+        "opening_offer_cents": analysis.opening_offer_cents if guidance_is_current else None,
+        "seller_contract_ceiling_cents": (
+            analysis.seller_contract_ceiling_cents if guidance_is_current else None
+        ),
+        "guidance_status": analysis.guidance_status if guidance_is_current else "withheld",
+        "is_current": guidance_is_current,
+        "valuation_basis": analysis.valuation_basis,
+        "source_note": (
+            "Stonegate Land math uses saved, reviewed closed-sale evidence. "
+            "Residential ARV and provider AVMs are excluded."
+        ),
+    }
+
+
+def land_comparable_overlay(comparable: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **comparable,
+        "price_cents": comparable.get("sale_price_cents"),
+        "comp_grade": comparable.get("evidence_tier"),
+    }
 
 
 def request_property_research(
@@ -891,12 +1771,16 @@ def request_property_research(
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
         raise ValueError("Lead is missing its property record.")
-    enqueue_property_research(
+    run = enqueue_property_research(
         db,
         property_record,
         source_lead_id=lead.id,
         trigger_source="manual_property_refresh",
         force_refresh=True,
+    )
+    disabled_land = bool(
+        run is not None
+        and (run.run_metadata or {}).get("reason_code") == "land_workflow_disabled"
     )
     db.add(
         ActivityEvent(
@@ -905,7 +1789,12 @@ def request_property_research(
             entity_type="lead",
             entity_id=lead.id,
             event_type="property.research_requested",
-            summary="Property research refresh requested; provider calls or credits may be used.",
+            summary=(
+                "Land property research needs review because the Land workflow is disabled; "
+                "residential comps and value math were not run."
+                if disabled_land
+                else "Property research refresh requested; provider calls or credits may be used."
+            ),
         )
     )
     db.commit()
@@ -914,13 +1803,18 @@ def request_property_research(
 
 def fallback_property_facts(property_record: Property) -> dict[str, Any]:
     now = property_record.updated_at
-    facts = {
-        "address": fact_value(format_property_address(property_record), "stonegate_crm", now),
-    }
+    formatted_address = format_property_address(property_record)
+    facts = (
+        {"address": fact_value(formatted_address, "stonegate_crm", now)}
+        if formatted_address and usable_research_address(property_record)
+        else {}
+    )
     if property_record.property_type:
         facts["property_type"] = fact_value(property_record.property_type, "stonegate_crm", now)
     if property_record.county:
         facts["county"] = fact_value(property_record.county, "stonegate_crm", now)
+    if property_record.parcel_id:
+        facts["parcel_id"] = fact_value(property_record.parcel_id, "stonegate_crm", now)
     metadata_facts = (property_record.address_validation_metadata or {}).get("facts")
     if isinstance(metadata_facts, dict):
         facts.update(normalized_fact_snapshot(metadata_facts, {}, now))
@@ -983,6 +1877,7 @@ def get_property_image_content(
         db,
         organization_id=principal.organization_id,
         property_id=lead.property_id,
+        research_profile=research_profile_for_lead(lead),
     )
     realestateapi = snapshot.media.get("realestateapi") if snapshot else None
     image_url = (
@@ -1048,14 +1943,19 @@ def property_snapshot_backfill_candidate_statement() -> Select[tuple[Underwritin
     return (
         select(UnderwritingMarketAnalysis)
         .join(Property, Property.id == UnderwritingMarketAnalysis.property_id)
+        .join(Lead, Lead.id == UnderwritingMarketAnalysis.lead_id)
         .outerjoin(
             PropertyIntelligenceSnapshot,
             and_(
                 PropertyIntelligenceSnapshot.property_id == UnderwritingMarketAnalysis.property_id,
+                PropertyIntelligenceSnapshot.research_profile == HOUSE_RESEARCH_PROFILE,
                 PropertyIntelligenceSnapshot.is_current.is_(True),
             ),
         )
-        .where(PropertyIntelligenceSnapshot.id.is_(None))
+        .where(
+            Lead.asset_class != LAND_ASSET_CLASS,
+            PropertyIntelligenceSnapshot.id.is_(None),
+        )
         .order_by(UnderwritingMarketAnalysis.created_at.desc())
         .with_for_update(of=UnderwritingMarketAnalysis, skip_locked=True)
     )
@@ -1085,6 +1985,7 @@ def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | N
         select(PropertyResearchRun).where(
             PropertyResearchRun.organization_id == property_record.organization_id,
             PropertyResearchRun.property_id == property_record.id,
+            PropertyResearchRun.research_profile == snapshot.research_profile,
             PropertyResearchRun.address_signature == snapshot.address_signature,
             PropertyResearchRun.force_refresh.is_(False),
             PropertyResearchRun.status.in_(ACTIVE_RESEARCH_STATUSES),
@@ -1104,22 +2005,13 @@ def backfill_next_property_snapshot(db: Session, settings: Settings) -> UUID | N
 
 
 def format_property_address(property_record: Property) -> str:
-    locality = " ".join(
-        value
-        for value in (
-            property_record.state.strip().upper(),
-            normalize_postal_code(property_record.postal_code),
-        )
-        if value
-    )
-    return ", ".join(
-        value
-        for value in (
-            property_record.street_address.strip(),
-            property_record.city.strip(),
-            locality,
-        )
-        if value
+    return property_identity_label(
+        street_address=property_record.street_address,
+        city=property_record.city,
+        state=property_record.state.strip().upper(),
+        postal_code=normalize_postal_code(property_record.postal_code),
+        parcel_id=property_record.parcel_id,
+        county=property_record.county,
     )
 
 

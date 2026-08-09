@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.assets import property_identity_label
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -1033,9 +1034,13 @@ def task_to_read(task: Task) -> TaskRead:
 
 
 def format_property_address(property_record: Property) -> str:
-    return (
-        f"{property_record.street_address}, {property_record.city}, "
-        f"{property_record.state} {property_record.postal_code}"
+    return property_identity_label(
+        street_address=property_record.street_address,
+        city=property_record.city,
+        state=property_record.state,
+        postal_code=property_record.postal_code,
+        parcel_id=property_record.parcel_id,
+        county=property_record.county,
     )
 
 

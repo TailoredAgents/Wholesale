@@ -61,9 +61,15 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
     return { href: `/os/calendar?view=dispatch&lead=${lead.id}`, label: "Open dispatch" };
   }
   if (status === "Offer prep") {
+    if (lead.asset_class === "land") {
+      return { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" };
+    }
     return { href: `/os/leads/${lead.id}?tab=valuation`, label: "Prepare offer" };
   }
   if (status === "Negotiation") {
+    if (lead.asset_class === "land") {
+      return { href: `/os/leads/${lead.id}?tab=property`, label: "Review Land evidence" };
+    }
     return { href: `/os/leads/${lead.id}?tab=contract#negotiation`, label: "Continue negotiation" };
   }
   if (status === "Nurture") {
@@ -73,6 +79,7 @@ function nextAction(lead: LeadListItem, tasks: SpeedToLeadTask[]) {
 }
 
 export function LeadsWorkspace({
+  initialAsset,
   initialDisplay,
   initialLeadId,
   initialOwner,
@@ -83,6 +90,7 @@ export function LeadsWorkspace({
   newPaidLeadCount,
   tasks,
 }: {
+  initialAsset: "all" | "house" | "land";
   initialDisplay: "table" | "board";
   initialLeadId: string;
   initialOwner: string;
@@ -94,6 +102,7 @@ export function LeadsWorkspace({
   tasks: SpeedToLeadTask[];
 }) {
   const [view, setView] = useState<SavedLeadViewKey>(initialView);
+  const [asset, setAsset] = useState<"all" | "house" | "land">(initialAsset);
   const [display, setDisplay] = useState<"table" | "board">(initialDisplay);
   const [query, setQuery] = useState(initialQuery);
   const [owner, setOwner] = useState(initialOwner);
@@ -122,9 +131,10 @@ export function LeadsWorkspace({
         (owner === "unassigned" && !lead.assigned_user_email) ||
         lead.assigned_user_email === owner;
       const matchesStage = stage === "all" || getPipelineStage(lead.stage_key)?.key === stage;
-      return matchesQuery && matchesOwner && matchesStage;
+      const matchesAsset = asset === "all" || lead.asset_class === asset;
+      return matchesQuery && matchesOwner && matchesStage && matchesAsset;
     });
-  }, [baseLeads, owner, query, stage]);
+  }, [asset, baseLeads, owner, query, stage]);
   const selectedLead =
     visibleLeads.find((lead) => lead.id === selectedLeadId) ?? visibleLeads[0] ?? null;
   const selectedStatus = selectedLead ? getLeadOperatingStatus(selectedLead, tasks) : null;
@@ -152,6 +162,7 @@ export function LeadsWorkspace({
   ).length;
 
   function replaceLocation(overrides: {
+    asset?: "all" | "house" | "land";
     display?: "table" | "board";
     leadId?: string;
     owner?: string;
@@ -160,6 +171,7 @@ export function LeadsWorkspace({
     view?: SavedLeadViewKey;
   } = {}) {
     const next = {
+      asset: overrides.asset ?? asset,
       display: overrides.display ?? display,
       leadId: overrides.leadId ?? selectedLeadId,
       owner: overrides.owner ?? owner,
@@ -169,6 +181,7 @@ export function LeadsWorkspace({
     };
     const params = new URLSearchParams();
     if (next.view !== "all") params.set("view", next.view);
+    if (next.asset !== "all") params.set("asset", next.asset);
     if (next.display === "board") params.set("display", "board");
     if (next.query.trim()) params.set("q", next.query.trim());
     if (next.owner !== "all") params.set("owner", next.owner);
@@ -195,7 +208,7 @@ export function LeadsWorkspace({
   }
 
   function fullRecordHref(leadId: string) {
-    const values = new URLSearchParams({ display, lead: leadId, owner, stage, view });
+    const values = new URLSearchParams({ asset, display, lead: leadId, owner, stage, view });
     if (query) values.set("q", query);
     return `/os/leads/${leadId}?returnTo=${encodeURIComponent(`/os/leads?${values.toString()}`)}`;
   }
@@ -238,6 +251,18 @@ export function LeadsWorkspace({
               type="search"
               value={query}
             />
+          </label>
+          <label>
+            <span>Type</span>
+            <select onChange={(event) => {
+              const nextAsset = event.target.value as "all" | "house" | "land";
+              setAsset(nextAsset);
+              replaceLocation({ asset: nextAsset });
+            }} value={asset}>
+              <option value="all">House &amp; land</option>
+              <option value="house">House</option>
+              <option value="land">Land</option>
+            </select>
           </label>
           <label>
             <span>Owner</span>
@@ -285,7 +310,7 @@ export function LeadsWorkspace({
                 >
                   <span className={styles.identity}>
                     <strong>{lead.seller_name}</strong><small>{lead.property_address}</small>
-                    <em>{labelize(lead.source)} · {labelize(lead.stage_key)}</em>
+                    <em>{labelize(lead.asset_class)} · {labelize(lead.source)} · {labelize(lead.stage_key)}</em>
                   </span>
                   <StatusBadge tone={operatingTone(status)}>{status}</StatusBadge>
                   <span className={styles.owner}><UserRound aria-hidden="true" size={14} />{ownerLabel(lead.assigned_user_email)}</span>
@@ -319,7 +344,7 @@ export function LeadsWorkspace({
                             onClick={() => selectLead(lead.id)}
                             type="button"
                           >
-                            <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.lead_temperature)}</em></span>
+                            <span className={styles.cardTop}><strong>{lead.seller_name}</strong><em>{labelize(lead.asset_class)} · {labelize(lead.lead_temperature)}</em></span>
                             <span className={styles.cardAddress}>{lead.property_address}</span>
                             <StatusBadge tone={operatingTone(operatingStatus)}>{operatingStatus}</StatusBadge>
                             <span className={styles.cardMeta}><span><UserRound size={13} />{ownerLabel(lead.assigned_user_email)}</span><span>{formatDateTime(lead.primary_next_action?.due_at ?? lead.next_follow_up_at)}</span></span>
@@ -344,11 +369,13 @@ export function LeadsWorkspace({
                 </header>
                 <div className={styles.previewStatus}>
                   <StatusBadge tone={operatingTone(selectedStatus)}>{selectedStatus}</StatusBadge>
-                  <span>{labelize(selectedLead.stage_key)}</span>
+                  <span>{labelize(selectedLead.asset_class)} · {labelize(selectedLead.stage_key)}</span>
                 </div>
                 <dl>
                   <div><dt>Owner</dt><dd>{ownerLabel(selectedLead.assigned_user_email)}</dd></div>
                   <div><dt>Source</dt><dd>{labelize(selectedLead.source)}</dd></div>
+                  <div><dt>Lead type</dt><dd>{labelize(selectedLead.asset_class)}</dd></div>
+                  <div><dt>Parcel / APN</dt><dd>{selectedLead.property_parcel_id ?? "Not captured"}</dd></div>
                   <div><dt>Created</dt><dd>{formatDateTime(selectedLead.created_at)}</dd></div>
                   <div><dt>Primary action</dt><dd>{selectedLead.primary_next_action?.title ?? "Not set"}</dd></div>
                   <div><dt>Action owner</dt><dd>{ownerLabel(selectedLead.primary_next_action?.responsible_user_email ?? null)}</dd></div>

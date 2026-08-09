@@ -70,6 +70,12 @@ def read_integration_status(
     if not settings.realestateapi_api_key:
         realestateapi_blockers.append("REALESTATEAPI_API_KEY")
 
+    land_workflow_blockers = []
+    if not settings.land_workflow_enabled:
+        land_workflow_blockers.append("LAND_WORKFLOW_ENABLED=true")
+    if not settings.realestateapi_api_key:
+        land_workflow_blockers.append("REALESTATEAPI_API_KEY")
+
     comp_analyst_blockers = []
     if settings.underwriting_ai_comp_analyst_mode == "disabled":
         comp_analyst_blockers.append("UNDERWRITING_AI_COMP_ANALYST_MODE=draft")
@@ -166,6 +172,14 @@ def read_integration_status(
                 mode=settings.underwriting_realestateapi_comps_mode,
                 enabled=settings.underwriting_realestateapi_comps_mode != "disabled",
                 blockers=realestateapi_blockers,
+            ),
+            _status(
+                key="land-property-research",
+                name="Land property research",
+                category="Property intelligence",
+                mode="enabled" if settings.land_workflow_enabled else "disabled",
+                enabled=settings.land_workflow_enabled,
+                blockers=land_workflow_blockers,
             ),
             _status(
                 key="ai-comp-analyst",

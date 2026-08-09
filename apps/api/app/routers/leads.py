@@ -118,8 +118,16 @@ def read_leads(
     db: Annotated[Session, Depends(get_db)],
     principal: Annotated[Principal, Depends(view_leads_dependency)],
     archived: bool = Query(default=False),
+    asset_class: Literal["house", "land"] | None = Query(default=None),
 ) -> LeadListResponse:
-    return LeadListResponse(items=list_leads(db, principal, archived=archived))
+    return LeadListResponse(
+        items=list_leads(
+            db,
+            principal,
+            archived=archived,
+            asset_class=asset_class,
+        )
+    )
 
 
 @router.post("", status_code=201)

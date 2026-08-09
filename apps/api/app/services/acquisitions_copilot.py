@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import LAND_ASSET_CLASS, normalize_asset_class, require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     AcquisitionsCopilotRecommendation,
@@ -98,6 +99,24 @@ def get_acquisitions_copilot_overview(
     principal: Principal,
     appointment: Appointment,
 ) -> AcquisitionsCopilotOverview:
+    lead = db.get(Lead, appointment.lead_id)
+    if lead is not None and normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS:
+        return AcquisitionsCopilotOverview(
+            pilot_mode="land_workflow_pending",
+            runtime_status="blocked",
+            preparation_capability_status="unavailable_for_land",
+            follow_up_capability_status="unavailable_for_land",
+            repair_scope_capability_status="unavailable_for_land",
+            external_actions_blocked=True,
+            readiness_score=0,
+            readiness_band="not_available",
+            readiness_gaps=["The dedicated Land site-visit copilot has not been released."],
+            evidence_available=[],
+            authority_status="Residential offer authority is blocked for Land leads.",
+            approved_ceiling_cents=None,
+            recommendations=[],
+            metrics=_metrics(db, principal),
+        )
     facts = _appointment_facts(db, principal, appointment)
     runtime = get_runtime_overview(db, principal)
     statuses = {item.capability_key: item.status for item in runtime.capabilities}
@@ -140,6 +159,10 @@ def analyze_appointment(
     appointment = _scoped_appointment(db, principal, appointment_id)
     if appointment is None:
         return None
+    lead = db.get(Lead, appointment.lead_id)
+    if lead is None:
+        raise ValueError("The appointment lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential acquisitions copilot")
     facts = _appointment_facts(db, principal, appointment)
     if facts["brief"] is None:
         raise ValueError("Generate the deterministic meeting brief before using the copilot.")
@@ -303,6 +326,10 @@ def review_recommendation(
     appointment = _scoped_appointment(db, principal, recommendation.appointment_id)
     if appointment is None:
         raise ValueError("The recommendation points to a missing appointment.")
+    lead = db.get(Lead, appointment.lead_id)
+    if lead is None:
+        raise ValueError("The appointment lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential acquisitions copilot")
     existing = db.scalar(
         select(AcquisitionsCopilotReview).where(
             AcquisitionsCopilotReview.recommendation_id == recommendation.id

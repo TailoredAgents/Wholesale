@@ -10,6 +10,13 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.assets import (
+    LAND_ASSET_CLASS,
+    asset_class_for_property_type,
+    normalize_asset_class,
+    property_identity_label,
+    require_house_workflow,
+)
 from app.domain.rbac import PermissionKeys
 from app.integrations.openai_client import OpenAIResponsesClient
 from app.integrations.rentcast_client import (
@@ -46,6 +53,7 @@ from app.models.foundation import (
     DispositionCampaign,
     DispositionCase,
     DispositionMatch,
+    LandValuationAnalysis,
     Lead,
     LeadFormSubmission,
     OfferNegotiationPlan,
@@ -127,13 +135,17 @@ from app.services.inbox import (
     sync_conversation_to_lead_stage,
     update_conversation_activity,
 )
+from app.services.property_identity import (
+    find_property_by_identity,
+    refresh_property_identity_keys,
+    require_valid_property_identity,
+)
 from app.services.property_intelligence import (
     build_property_intelligence_read,
     enqueue_property_research,
     invalidate_property_intelligence,
 )
 from app.services.property_validation import (
-    canonical_address_key,
     reset_property_validation,
     validate_property_with_provider,
     validate_provider_record,
@@ -278,6 +290,13 @@ SELLER_PIPELINE_STAGES = {
     "dead",
     "reopened",
 }
+LAND_UNAVAILABLE_EXECUTION_STAGES = {
+    "offer_pending_approval",
+    "offer_ready",
+    "offer_presented",
+    "negotiating",
+    "under_contract",
+}
 
 
 def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadRead:
@@ -334,16 +353,20 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         )
         has_primary_method = True
 
-    normalized_property_key = canonical_address_key(
-        payload.property.street_address,
-        payload.property.city,
-        payload.property.state,
-        payload.property.postal_code,
+    asset_class = asset_class_for_property_type(
+        payload.property.property_type,
+        explicit_asset_class=payload.asset_class,
     )
-    property_record = db.scalar(
-        select(Property).where(
-            Property.organization_id == principal.organization_id,
-            Property.normalized_address_key == normalized_property_key,
+    property_record, normalized_property_key, normalized_parcel_key = (
+        find_property_by_identity(
+            db,
+            organization_id=principal.organization_id,
+            street_address=payload.property.street_address,
+            city=payload.property.city,
+            state=payload.property.state,
+            postal_code=payload.property.postal_code,
+            parcel_id=payload.property.parcel_id,
+            county=payload.property.county,
         )
     )
     if property_record is None:
@@ -355,11 +378,24 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
             postal_code=payload.property.postal_code,
             county=payload.property.county,
             property_type=payload.property.property_type,
+            parcel_id=payload.property.parcel_id,
+            normalized_parcel_key=normalized_parcel_key,
             normalized_address_key=normalized_property_key,
             address_validation_status="unverified",
         )
         db.add(property_record)
         db.flush()
+    else:
+        if payload.property.property_type and not property_record.property_type:
+            property_record.property_type = payload.property.property_type
+        if payload.property.parcel_id and not property_record.parcel_id:
+            property_record.parcel_id = payload.property.parcel_id
+        if payload.property.county and not property_record.county:
+            property_record.county = payload.property.county
+        refresh_property_identity_keys(property_record)
+    require_valid_property_identity(property_record, asset_class=asset_class)
+    if asset_class == "land" and not property_record.property_type:
+        property_record.property_type = "land"
 
     lead = Lead(
         organization_id=principal.organization_id,
@@ -367,6 +403,8 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
         property_id=property_record.id,
         assigned_user_id=assigned_user.id,
         source=payload.source,
+        asset_class=asset_class,
+        qualification_context=dict(payload.qualification_context),
         stage_key=payload.stage_key,
         lead_temperature=payload.lead_temperature,
         motivation=payload.motivation,
@@ -428,6 +466,7 @@ def create_lead(db: Session, principal: Principal, payload: LeadCreate) -> LeadR
             previous_value=None,
             new_value={
                 "source": lead.source,
+                "asset_class": lead.asset_class,
                 "stage_key": lead.stage_key,
                 "assigned_user_id": str(assigned_user.id),
                 "phone_recorded": bool(payload.phone),
@@ -446,6 +485,7 @@ def list_leads(
     principal: Principal,
     *,
     archived: bool = False,
+    asset_class: str | None = None,
     limit: int = 100,
 ) -> list[LeadRead]:
     archive_filter = Lead.archived_at.is_not(None) if archived else Lead.archived_at.is_(None)
@@ -453,6 +493,8 @@ def list_leads(
         Lead.organization_id == principal.organization_id,
         archive_filter,
     ]
+    if asset_class is not None:
+        filters.append(Lead.asset_class == normalize_asset_class(asset_class))
     if (
         PermissionKeys.VIEW_LEADS not in principal.permission_keys
         and PermissionKeys.EDIT_LEADS not in principal.permission_keys
@@ -988,6 +1030,16 @@ def get_next_best_action(
         )
 
     if lead.stage_key in {"qualified", "appointment_scheduled", "underwriting"}:
+        if normalize_asset_class(lead.asset_class) == LAND_ASSET_CLASS:
+            return LeadNextBestAction(
+                action_type="prepare_land_valuation",
+                label="Review Land valuation",
+                description=(
+                    "Confirm parcel evidence, review closed Land sales, and resolve any "
+                    "withheld-guidance blockers."
+                ),
+                priority="normal",
+            )
         return LeadNextBestAction(
             action_type="prepare_underwriting",
             label="Prepare underwriting review",
@@ -1068,6 +1120,8 @@ def update_lead_stage(
     previous_stage = lead.stage_key
     if previous_stage == payload.stage_key:
         return get_lead_detail(db, principal, lead_id)
+    if payload.stage_key in LAND_UNAVAILABLE_EXECUTION_STAGES:
+        require_house_workflow(lead.asset_class, workflow="Residential execution stage")
 
     lead.stage_key = payload.stage_key
     sync_conversation_to_lead_stage(
@@ -1470,6 +1524,11 @@ def create_lead_underwriting_version(
     lead_id: UUID,
     payload: LeadUnderwritingCreate,
 ) -> LeadDetail | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    require_house_workflow(lead.asset_class, workflow="Residential underwriting")
+
     if payload.status not in UNDERWRITING_STATUSES:
         raise ValueError(f"Unsupported underwriting status: {payload.status}")
     validate_money_range("ARV", payload.arv_low_cents, payload.arv_high_cents)
@@ -1480,10 +1539,6 @@ def create_lead_underwriting_version(
         and payload.recommended_offer_cents > payload.max_offer_cents
     ):
         raise ValueError("Recommended offer cannot exceed maximum offer.")
-
-    lead = get_scoped_lead(db, principal, lead_id)
-    if lead is None:
-        return None
 
     latest_version = db.scalar(
         select(func.max(UnderwritingVersion.version_number)).where(
@@ -1563,15 +1618,17 @@ def preview_lead_market_value(
     principal: Principal,
     lead_id: UUID,
 ) -> LeadMarketValueEstimateRead | None:
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    require_house_workflow(lead.asset_class, workflow="Residential value preview")
+
     settings = get_settings()
     if settings.property_data_provider.lower() != "rentcast":
         raise ValueError("PROPERTY_DATA_PROVIDER must be set to rentcast for this preview.")
     if not settings.rentcast_api_key:
         raise ValueError("RENTCAST_API_KEY is not configured.")
 
-    lead = get_scoped_lead(db, principal, lead_id)
-    if lead is None:
-        return None
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
@@ -1696,6 +1753,11 @@ def create_lead_market_analysis(
 ) -> LeadMarketAnalysisRead | None:
     analysis_started_at = perf_counter()
     payload = payload or LeadMarketAnalysisCreate()
+    lead = get_scoped_lead(db, principal, lead_id)
+    if lead is None:
+        return None
+    require_house_workflow(lead.asset_class, workflow="Residential comp analysis")
+
     settings = get_settings()
     methodology_control = resolve_underwriting_methodology(settings)
     if settings.property_data_provider.lower() != "rentcast":
@@ -1703,9 +1765,6 @@ def create_lead_market_analysis(
     if not settings.rentcast_api_key:
         raise ValueError("RENTCAST_API_KEY is not configured.")
 
-    lead = get_scoped_lead(db, principal, lead_id)
-    if lead is None:
-        return None
     property_record = db.get(Property, lead.property_id)
     if property_record is None:
         raise ValueError("Lead is missing a property record.")
@@ -2602,6 +2661,7 @@ def get_latest_lead_market_analysis(
     lead = get_scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    require_house_workflow(lead.asset_class, workflow="Residential comp analysis")
 
     analysis = db.scalar(
         select(UnderwritingMarketAnalysis)
@@ -2635,6 +2695,7 @@ def create_lead_transaction(
     lead = get_scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    require_house_workflow(lead.asset_class, workflow="Residential contract and transaction")
 
     existing_transaction = db.scalar(
         select(Transaction).where(
@@ -2785,6 +2846,7 @@ def create_lead_buyer_offer(
     lead = get_scoped_lead(db, principal, lead_id)
     if lead is None:
         return None
+    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
 
     buyer = db.scalar(
         select(Buyer).where(
@@ -2885,6 +2947,27 @@ def update_lead_staff_details(
             new_values,
             reason=payload.reason,
         )
+
+    requested_asset_class = payload.asset_class
+    if requested_asset_class is None and "property_type" in provided_fields:
+        requested_asset_class = asset_class_for_property_type(payload.property_type)
+    if requested_asset_class is not None and requested_asset_class != lead.asset_class:
+        ensure_asset_reclassification_is_safe(db, lead)
+    update_value(
+        previous_values,
+        new_values,
+        lead,
+        "asset_class",
+        requested_asset_class,
+    )
+    update_nullable_raw_value(
+        previous_values,
+        new_values,
+        lead,
+        "qualification_context",
+        dict(payload.qualification_context or {}),
+        provided_fields,
+    )
 
     update_value(previous_values, new_values, contact, "legal_name", payload.seller_name)
     update_nullable_value(
@@ -3008,6 +3091,19 @@ def update_lead_staff_details(
         payload.property_type,
         provided_fields,
     )
+    if lead.asset_class == "land" and not property_record.property_type:
+        previous_values["property_type"] = None
+        new_values["property_type"] = "land"
+        property_record.property_type = "land"
+    update_nullable_value(
+        previous_values,
+        new_values,
+        property_record,
+        "parcel_id",
+        payload.property_parcel_id,
+        provided_fields,
+        provided_field_name="property_parcel_id",
+    )
 
     if payload.contact_methods is not None:
         contact_methods_changed = sync_lead_contact_methods(
@@ -3040,15 +3136,17 @@ def update_lead_staff_details(
             value=payload.email,
         )
 
-    if property_fields_changed(previous_values) or property_fields_changed(new_values):
-        property_record.normalized_address_key = canonical_address_key(
-            property_record.street_address,
-            property_record.city,
-            property_record.state,
-            property_record.postal_code,
-        )
+    property_identity_changed = property_fields_changed(
+        previous_values
+    ) or property_fields_changed(new_values)
+    asset_class_changed = "asset_class" in previous_values or "asset_class" in new_values
+    if property_identity_changed or asset_class_changed:
+        require_valid_property_identity(property_record, asset_class=lead.asset_class)
+    if property_identity_changed:
+        refresh_property_identity_keys(property_record)
         reset_property_validation(property_record)
         invalidate_property_intelligence(db, property_record)
+    if property_identity_changed or asset_class_changed:
         enqueue_property_research(
             db,
             property_record,
@@ -3084,6 +3182,28 @@ def update_lead_staff_details(
         db.refresh(lead)
 
     return get_lead_detail(db, principal, lead_id)
+
+
+def ensure_asset_reclassification_is_safe(db: Session, lead: Lead) -> None:
+    active_transaction = db.scalar(
+        select(Transaction.id).where(
+            Transaction.organization_id == lead.organization_id,
+            Transaction.lead_id == lead.id,
+            Transaction.status.not_in(("cancelled", "funded")),
+        )
+    )
+    active_disposition = db.scalar(
+        select(DispositionCase.id).where(
+            DispositionCase.organization_id == lead.organization_id,
+            DispositionCase.lead_id == lead.id,
+            DispositionCase.status.not_in(("closed", "cancelled")),
+        )
+    )
+    if active_transaction is not None or active_disposition is not None:
+        raise ValueError(
+            "Cancel or complete the active transaction and disposition work before changing "
+            "this lead between House and Land."
+        )
 
 
 def get_dashboard_summary(db: Session, principal: Principal) -> DashboardSummary:
@@ -3488,6 +3608,7 @@ def permanently_delete_lead(db: Session, principal: Principal, lead_id: UUID) ->
     db.execute(delete(BuyerOffer).where(BuyerOffer.lead_id == lead.id))
     db.execute(delete(RoleCredit).where(RoleCredit.lead_id == lead.id))
     for deletion_model in (
+        LandValuationAnalysis,
         UnderwritingCalibrationCase,
         UnderwritingMarketAnalysis,
         RepairEstimate,
@@ -3984,9 +4105,13 @@ def normalize_phone(value: str) -> str:
 
 
 def format_property_address(property_record: Property) -> str:
-    return (
-        f"{property_record.street_address}, {property_record.city}, "
-        f"{property_record.state} {property_record.postal_code}"
+    return property_identity_label(
+        street_address=property_record.street_address,
+        city=property_record.city,
+        state=property_record.state,
+        postal_code=property_record.postal_code,
+        parcel_id=property_record.parcel_id,
+        county=property_record.county,
     )
 
 
@@ -4765,7 +4890,14 @@ def optional_int(value: Any) -> int | None:
 
 
 def property_fields_changed(values: dict[str, Any]) -> bool:
-    property_keys = {"street_address", "city", "state", "postal_code"}
+    property_keys = {
+        "street_address",
+        "city",
+        "state",
+        "postal_code",
+        "county",
+        "parcel_id",
+    }
     return any(key in values for key in property_keys)
 
 
@@ -4796,6 +4928,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         contact_id=lead.contact_id,
         property_id=lead.property_id,
         source=lead.source,
+        asset_class=normalize_asset_class(lead.asset_class),
         stage_key=lead.stage_key,
         lead_temperature=lead.lead_temperature,
         seller_name=contact.legal_name,
@@ -4807,6 +4940,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         property_postal_code=property_record.postal_code,
         property_county=property_record.county,
         property_type=property_record.property_type,
+        property_parcel_id=property_record.parcel_id,
         property_validation=property_validation_to_read(property_record),
         assigned_user_id=lead.assigned_user_id,
         assigned_user_email=assigned_user.email if assigned_user else None,
@@ -4817,6 +4951,7 @@ def lead_to_read(db: Session, lead: Lead) -> LeadRead:
         asking_price=lead.asking_price,
         mortgage_balance=lead.mortgage_balance,
         appointment_status=lead.appointment_status,
+        qualification_context=dict(lead.qualification_context or {}),
         next_follow_up_at=lead.next_follow_up_at,
         primary_next_action=get_primary_next_action(
             db,

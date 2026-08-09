@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.assets import require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.integrations.openai_client import OpenAIClientError, OpenAIResponsesClient
 from app.models.foundation import (
@@ -1591,6 +1592,15 @@ def _disposition_context(
     )
     if case is None:
         raise ValueError("Disposition case not found.")
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == case.lead_id,
+        )
+    )
+    if lead is None:
+        raise ValueError("Lead not found.")
+    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition copilot")
     if payload.lead_id is not None and payload.lead_id != case.lead_id:
         raise ValueError("The disposition case and lead do not match.")
 
@@ -1783,6 +1793,15 @@ def _transaction_context(
     )
     if transaction is None:
         raise ValueError("Transaction not found.")
+    lead = db.scalar(
+        select(Lead).where(
+            Lead.organization_id == principal.organization_id,
+            Lead.id == transaction.lead_id,
+        )
+    )
+    if lead is None:
+        raise ValueError("Lead not found.")
+    require_house_workflow(lead.asset_class, workflow="Residential transaction copilot")
     if payload.lead_id is not None and payload.lead_id != transaction.lead_id:
         raise ValueError("The transaction and lead do not match.")
     packages = list(
@@ -1988,6 +2007,9 @@ def _acquisitions_context(
             Lead.id == appointment.lead_id,
         )
     )
+    if lead is None:
+        raise ValueError("Lead not found.")
+    require_house_workflow(lead.asset_class, workflow="Residential acquisitions copilot")
     brief = db.scalar(
         select(FieldMeetingBrief)
         .where(

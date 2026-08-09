@@ -32,6 +32,9 @@ export default async function LeadsPage({
   const params = (await searchParams) ?? {};
   const requestedView = first(params.view);
   const requestedDisplay = first(params.display) === "board" ? "board" : "table";
+  const requestedAsset = ["house", "land"].includes(first(params.asset))
+    ? first(params.asset)
+    : "all";
   const operationalView: SellerLeadsView =
     requestedView === "queue"
       ? "queue"
@@ -65,7 +68,7 @@ export default async function LeadsPage({
       ? "Lead Queue"
       : activeView === "underwriting"
         ? "Underwriting Queue"
-        : "Seller Leads";
+        : "Leads";
   const description =
     activeView === "queue"
       ? "Work warm handoffs, qualification, appointments, follow-up, and neglected-lead exceptions."
@@ -125,6 +128,7 @@ export default async function LeadsPage({
       {activeView === "database" ? (
         <LeadsWorkspace
           initialDisplay={display}
+          initialAsset={requestedAsset as "all" | "house" | "land"}
           initialLeadId={first(params.lead)}
           initialOwner={first(params.owner) || "all"}
           initialQuery={first(params.q)}

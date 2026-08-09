@@ -104,6 +104,9 @@ def analyze_case(
         return None
     ensure_case_access(principal, case)
     now = datetime.now(UTC)
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("Lead Manager case points to a missing lead.")
     work_item = _work_item(db, case, now)
     agent = db.scalar(
         select(AiAgentDefinition).where(
@@ -139,6 +142,7 @@ def analyze_case(
             idempotency_key=idempotency_key,
             input_payload={
                 "pilot_mode": "draft_only",
+                "asset_class": lead.asset_class,
                 "priority_score": work_item.priority_score,
                 "priority_band": work_item.priority_band,
                 "recommended_action": work_item.recommended_action,
@@ -434,7 +438,11 @@ def _qualification_gaps(
     case: LeadManagementCase,
     lead: Lead,
 ) -> tuple[list[str], list[str]]:
-    script = get_active_script(db, case.organization_id)
+    script = get_active_script(
+        db,
+        case.organization_id,
+        asset_class=lead.asset_class,
+    )
     if script is None:
         return ["Approved qualification standard"], [
             "Ask a manager to approve the qualification standard."
@@ -473,7 +481,12 @@ def _analysis_idempotency_key(
             Conversation.lead_id == case.lead_id,
         )
     )
-    script: LeadQualificationScriptVersion | None = get_active_script(db, case.organization_id)
+    lead = db.get(Lead, case.lead_id)
+    script: LeadQualificationScriptVersion | None = get_active_script(
+        db,
+        case.organization_id,
+        asset_class=lead.asset_class if lead is not None else "house",
+    )
     fingerprint = {
         "case_id": str(case.id),
         "case_updated_at": as_utc(case.updated_at).isoformat(),

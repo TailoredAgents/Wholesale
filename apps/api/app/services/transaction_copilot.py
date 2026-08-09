@@ -34,7 +34,11 @@ from app.schemas.transactions import (
     TransactionDeadlineRisk,
 )
 from app.services.ai_runtime import execute_runtime, get_runtime_overview
-from app.services.transactions import scoped_transaction, utc_datetime
+from app.services.transactions import (
+    require_house_transaction_workflow,
+    scoped_transaction,
+    utc_datetime,
+)
 
 
 class TransactionFacts(TypedDict):
@@ -58,6 +62,7 @@ def get_transaction_copilot_overview(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     facts = _transaction_facts(db, principal, transaction)
     runtime = get_runtime_overview(db, principal)
     statuses = {item.capability_key: item.status for item in runtime.capabilities}
@@ -98,6 +103,7 @@ def analyze_transaction(
     transaction = scoped_transaction(db, principal, transaction_id)
     if transaction is None:
         return None
+    require_house_transaction_workflow(db, transaction)
     facts = _transaction_facts(db, principal, transaction)
     agent = db.scalar(
         select(AiAgentDefinition).where(
@@ -222,6 +228,10 @@ def review_recommendation(
     )
     if recommendation is None:
         return None
+    transaction = scoped_transaction(db, principal, recommendation.transaction_id)
+    if transaction is None:
+        raise ValueError("The recommendation transaction is no longer available.")
+    require_house_transaction_workflow(db, transaction)
     existing = db.scalar(
         select(TransactionCopilotReview).where(
             TransactionCopilotReview.recommendation_id == recommendation.id

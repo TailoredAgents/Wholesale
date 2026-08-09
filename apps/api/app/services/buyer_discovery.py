@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import Settings, get_settings
+from app.domain.assets import require_house_workflow
 from app.integrations.dealmachine_client import DealMachineClient, DealMachineError
 from app.models.foundation import (
     ActivityEvent,
@@ -19,6 +20,7 @@ from app.models.foundation import (
     BuyerDiscoveryCandidate,
     BuyerDiscoveryRun,
     DispositionCase,
+    Lead,
     Property,
 )
 from app.schemas.buyers import (
@@ -321,6 +323,10 @@ def import_candidates(
     )
     if run is None:
         return None
+    case = db.get(DispositionCase, run.disposition_case_id)
+    if case is None:
+        raise ValueError("The source disposition case is unavailable.")
+    require_house_discovery_workflow(db, case)
     candidates = list(
         db.scalars(
             select(BuyerDiscoveryCandidate).where(
@@ -332,9 +338,8 @@ def import_candidates(
     )
     if len(candidates) != len(set(payload.candidate_ids)):
         raise ValueError("One or more buyer candidates are unavailable.")
-    case = db.get(DispositionCase, run.disposition_case_id)
     property_record = db.get(Property, case.property_id) if case else None
-    if case is None or property_record is None:
+    if property_record is None:
         raise ValueError("The source disposition case is unavailable.")
 
     existing_buyers = list(
@@ -544,6 +549,7 @@ def _discovery_context(
     )
     if case is None:
         raise ValueError("Disposition case not found.")
+    require_house_discovery_workflow(db, case)
     property_record = db.scalar(
         select(Property).where(
             Property.id == case.property_id,
@@ -556,6 +562,13 @@ def _discovery_context(
     if not re.fullmatch(r"\d{5}", postal_code):
         raise ValueError("A five-digit property ZIP code is required for buyer discovery.")
     return case, property_record, _provider_request(case, property_record, payload, settings)
+
+
+def require_house_discovery_workflow(db: Session, case: DispositionCase) -> None:
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("The disposition lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential cash-buyer discovery")
 
 
 def _estimate_read(

@@ -1,9 +1,12 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
 from app.schemas.email import EmailAttachmentRead
+from app.schemas.leads import PropertyCreate
 from app.schemas.voice import CallTranscriptRead
 
 
@@ -113,6 +116,8 @@ class ConversationRead(BaseModel):
     status: str
     queue_key: str
     priority: str
+    mail_category: str | None
+    merged_into_conversation_id: UUID | None
     unread_count: int
     last_activity_at: datetime | None
     last_inbound_at: datetime | None
@@ -142,6 +147,8 @@ class ConversationDetailRead(ConversationRead):
     appointment_status: str | None
     next_follow_up_at: datetime | None
     property_type: str | None
+    asset_class: Literal["house", "land"] | None
+    property_parcel_id: str | None
     property_county: str | None
     timeline: list[ConversationTimelineItemRead]
     open_tasks: list[ConversationTaskRead]
@@ -194,6 +201,62 @@ class SmsSendRead(BaseModel):
 class ConversationWatcherCreate(BaseModel):
     user_id: UUID
     notification_level: str = Field(default="all", max_length=80)
+
+
+class GeneralConversationLeadCreate(BaseModel):
+    property: PropertyCreate
+    assigned_user_id: UUID | None = None
+    source: str = Field(default="inbound_email", min_length=1, max_length=120)
+    asset_class: Literal["house", "land"] | None = None
+
+    @model_validator(mode="after")
+    def require_asset_specific_property_identity(self) -> "GeneralConversationLeadCreate":
+        asset_class = asset_class_for_property_type(
+            self.property.property_type,
+            explicit_asset_class=self.asset_class,
+        )
+        has_address = all(
+            value.strip()
+            for value in (
+                self.property.street_address,
+                self.property.city,
+                self.property.state,
+                self.property.postal_code,
+            )
+        )
+        has_parcel = bool(
+            self.property.parcel_id
+            and self.property.county
+            and self.property.state.strip()
+        )
+        if asset_class == LAND_ASSET_CLASS and (has_address or has_parcel):
+            return self
+        if asset_class == LAND_ASSET_CLASS:
+            raise ValueError(
+                "Land leads require either a complete address or APN with county and state."
+            )
+        if not has_address:
+            raise ValueError("House leads require a complete property address.")
+        return self
+
+
+class GeneralConversationLeadLink(BaseModel):
+    lead_id: UUID
+
+
+class GeneralConversationClassification(BaseModel):
+    category: Literal["general", "vendor", "administrative", "spam", "archived"]
+    close: bool = True
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class ConversationResolutionRead(BaseModel):
+    action: str
+    source_conversation_id: UUID
+    conversation_id: UUID
+    lead_id: UUID | None
+    status: str
+    message: str
 
 
 class InboxAssigneeRead(BaseModel):

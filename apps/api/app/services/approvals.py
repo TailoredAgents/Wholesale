@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -258,6 +259,8 @@ def validate_offer_decision(
     lead = db.get(Lead, plan.lead_id)
     if version is None or lead is None:
         raise ValueError("The source underwriting record is no longer available.")
+    if payload.status == "approved":
+        require_house_workflow(lead.asset_class, workflow="Residential offer approval")
     latest_version = db.scalar(
         select(func.max(UnderwritingVersion.version_number)).where(
             UnderwritingVersion.organization_id == principal.organization_id,

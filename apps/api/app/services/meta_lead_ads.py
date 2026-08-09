@@ -56,6 +56,7 @@ FIELD_ALIASES = {
     ),
     "property_city": ("property_city", "city"),
     "property_state": ("property_state", "state", "state_code"),
+    "property_county": ("property_county", "county", "county_name"),
     "property_postal_code": (
         "property_zip_code",
         "property_postal_code",
@@ -64,6 +65,8 @@ FIELD_ALIASES = {
         "post_code",
     ),
     "property_type": ("property_type", "home_type"),
+    "asset_class": ("asset_class", "lead_type", "asset_type"),
+    "parcel_id": ("parcel_id", "parcel_number", "apn"),
     "reason_for_selling": ("reason_for_selling", "selling_reason", "motivation"),
     "desired_timeline": ("desired_timeline", "selling_timeline", "timeline"),
     "property_condition": ("property_condition", "condition"),
@@ -422,7 +425,14 @@ def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
         if existing is not None:
             continue
         contact_name = contact.legal_name if contact else "New seller"
-        market = property_record.city if property_record else "Georgia"
+        market = (
+            property_record.city
+            or property_record.county
+            or property_record.state
+            if property_record
+            else "Georgia"
+        )
+        asset_label = lead.asset_class.title()
         db.add(
             StaffLeadAlert(
                 organization_id=event.organization_id,
@@ -431,7 +441,7 @@ def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
                 recipient_user_id=recipient.id,
                 recipient_phone=phone,
                 message_body=(
-                    f"New Facebook seller lead: {contact_name}, {market}. "
+                    f"New Facebook {asset_label} lead: {contact_name}, {market}. "
                     f"Open Stonegate: https://www.stonegatehb.com/os/leads/{lead.id}"
                 ),
                 status="pending",
@@ -586,7 +596,10 @@ def meta_lead_to_intake(
             "property_city": field_value(fields, "property_city") or "Unknown",
             "property_state": state,
             "property_postal_code": field_value(fields, "property_postal_code") or "Unknown",
+            "property_county": field_value(fields, "property_county"),
             "property_type": field_value(fields, "property_type"),
+            "asset_class": field_value(fields, "asset_class"),
+            "parcel_id": field_value(fields, "parcel_id"),
             "name": name,
             "phone": phone,
             "email": email,

@@ -10,6 +10,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import require_house_workflow
 from app.models.foundation import (
     AuditEvent,
     Buyer,
@@ -65,6 +66,13 @@ def scoped_case(db: Session, principal: Principal, case_id: UUID) -> Disposition
     )
 
 
+def require_house_case_workflow(db: Session, case: DispositionCase) -> None:
+    lead = db.get(Lead, case.lead_id)
+    if lead is None:
+        raise ValueError("The disposition lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
+
+
 def audit(
     db: Session,
     principal: Principal,
@@ -98,9 +106,11 @@ def overview(db: Session, principal: Principal) -> DispositionOverview:
     used = {item.transaction_id for item in cases}
     transactions = db.scalars(
         select(Transaction)
+        .join(Lead, Lead.id == Transaction.lead_id)
         .where(
             Transaction.organization_id == principal.organization_id,
             Transaction.status.in_(("executed", "closing", "funded")),
+            Lead.asset_class == "house",
         )
         .order_by(Transaction.created_at.desc())
     ).all()
@@ -152,6 +162,10 @@ def create_case(
     )
     if transaction is None or transaction.status not in {"executed", "closing", "funded"}:
         raise ValueError("An executed transaction is required.")
+    lead = db.get(Lead, transaction.lead_id)
+    if lead is None:
+        raise ValueError("The transaction lead is no longer available.")
+    require_house_workflow(lead.asset_class, workflow="Residential buyer disposition")
     if payload.minimum_acceptable_cents > payload.asking_price_cents:
         raise ValueError("Minimum acceptable price cannot exceed asking price.")
     if db.scalar(
@@ -175,7 +189,6 @@ def create_case(
     )
     if mode is None:
         raise ValueError("Select an active disposition operating mode.")
-    lead = db.get(Lead, transaction.lead_id)
     contact = db.get(Contact, transaction.contact_id)
     property_record = db.get(Property, transaction.property_id)
     case = DispositionCase(
@@ -231,6 +244,7 @@ def approve_package(db: Session, principal: Principal, case_id: UUID) -> Disposi
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     case.package_status = "approved"
     case.package_approved_by_user_id = principal.user_id
     case.package_approved_at = datetime.now(UTC)
@@ -254,6 +268,7 @@ def generate_matches(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     if case.package_status != "approved":
         raise ValueError("Approve the deal package before matching buyers.")
     property_record = db.get(Property, case.property_id)
@@ -349,6 +364,7 @@ def release_campaign(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     matches = db.scalars(
         select(DispositionMatch).where(
             DispositionMatch.disposition_case_id == case.id,
@@ -461,6 +477,7 @@ def create_offer(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     buyer = db.scalar(
         select(Buyer).where(
             Buyer.id == payload.buyer_id, Buyer.organization_id == principal.organization_id
@@ -501,6 +518,7 @@ def add_engagement(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     buyer = db.scalar(
         select(Buyer).where(
             Buyer.id == payload.buyer_id,
@@ -532,6 +550,7 @@ def select_buyer(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     primary = db.scalar(
         select(BuyerOffer).where(
             BuyerOffer.id == payload.primary_offer_id, BuyerOffer.disposition_case_id == case.id
@@ -600,6 +619,7 @@ def build_reconciliation(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     transaction = db.get(Transaction, case.transaction_id)
     if transaction is None or transaction.status != "funded" or case.selected_buyer_id is None:
         raise ValueError("Funded transaction and approved buyer selection are required.")
@@ -750,6 +770,7 @@ def decide_reconciliation(
     case = scoped_case(db, principal, case_id)
     if case is None:
         return None
+    require_house_case_workflow(db, case)
     reconciliation = db.scalar(
         select(DealReconciliation).where(DealReconciliation.disposition_case_id == case.id)
     )
@@ -806,6 +827,7 @@ def package_pdf(db: Session, principal: Principal, case_id: UUID) -> tuple[bytes
     case = scoped_case(db, principal, case_id)
     if case is None or case.package_status != "approved":
         return None
+    require_house_case_workflow(db, case)
     stream = BytesIO()
     pdf = canvas.Canvas(stream, pagesize=letter)
     pdf.setTitle("Stonegate Deal Package")

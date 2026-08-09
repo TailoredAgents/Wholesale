@@ -68,7 +68,9 @@ export function NewLeadControl({
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers.Authorization = `Bearer ${token}`;
       else headers["X-Dev-User-Email"] = devUserEmail;
-      const nextFollowUp = value(data, "next_follow_up_at");
+    const nextFollowUp = value(data, "next_follow_up_at");
+    const assetClass = value(data, "asset_class") || "house";
+    const selectedPropertyType = value(data, "property_type");
       const response = await fetch(`${apiBaseUrl}/api/v1/leads`, {
         method: "POST",
         headers,
@@ -84,12 +86,14 @@ export function NewLeadControl({
             state: value(data, "state"),
             postal_code: value(data, "postal_code"),
             county: value(data, "county") || null,
-            property_type: value(data, "property_type") || null,
+            property_type: selectedPropertyType || (assetClass === "land" ? "land" : null),
+            parcel_id: value(data, "parcel_id") || null,
           },
           phone: phone || null,
           email: email || null,
           assigned_user_id: value(data, "assigned_user_id") || currentUserId,
           source: value(data, "source"),
+          asset_class: assetClass,
           stage_key: "new",
           lead_temperature: value(data, "lead_temperature") || null,
           motivation: value(data, "motivation") || null,
@@ -142,7 +146,7 @@ export function NewLeadControl({
         onClose={() => setOpen(false)}
         open={open}
         size="wide"
-        title="New seller lead"
+        title="New lead"
       >
             <form className={styles.form} id="new-lead-form" onSubmit={submit}>
               <fieldset>
@@ -155,11 +159,13 @@ export function NewLeadControl({
 
               <fieldset>
                 <legend>Property</legend>
+                <label><span>Lead type</span><select defaultValue="house" name="asset_class" required><option value="house">House</option><option value="land">Land</option></select></label>
                 <label className={styles.wide}><span>Street address</span><input autoComplete="street-address" name="street_address" required /></label>
                 <label><span>City</span><input autoComplete="address-level2" name="city" required /></label>
                 <label><span>State</span><input autoComplete="address-level1" defaultValue="GA" maxLength={2} name="state" required /></label>
                 <label><span>ZIP code</span><input autoComplete="postal-code" name="postal_code" required /></label>
                 <label><span>County</span><input name="county" /></label>
+                <label><span>Parcel / APN</span><input maxLength={255} name="parcel_id" /></label>
                 <label><span>Property type</span><select name="property_type"><option value="">Unknown</option><option value="single_family">Single family</option><option value="townhouse">Townhouse</option><option value="condo">Condo</option><option value="multi_family">Multi-family</option><option value="mobile_home">Mobile home</option><option value="land">Land</option><option value="other">Other</option></select></label>
               </fieldset>
 

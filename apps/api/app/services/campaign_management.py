@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
+from app.domain.assets import normalize_asset_class, property_identity_label
 from app.models.foundation import (
     AuditEvent,
     Campaign,
@@ -60,6 +61,8 @@ from app.services.acquisition_operations import (
     list_campaigns,
     list_users,
     normalize_prospect_phone,
+    prospect_property_metadata,
+    prospect_source_payload,
 )
 from app.services.property_validation import canonical_address_key
 from app.services.prospecting_measurement import (
@@ -296,7 +299,7 @@ def validate_prospect_import(
     payload: ProspectImportRequest,
 ) -> ProspectImportPreview:
     campaign, mapping, _, _ = validate_import_context(db, principal, payload)
-    headers, prepared_rows = prepare_import_rows(db, principal, payload, mapping)
+    headers, prepared_rows = prepare_import_rows(db, principal, payload, campaign, mapping)
     market = db.get(Market, campaign.market_id)
     return import_preview(
         headers,
@@ -322,7 +325,7 @@ def create_prospect_import(
     )
     if previous_batch is not None:
         raise ValueError("This exact file has already been imported into the campaign.")
-    _, prepared_rows = prepare_import_rows(db, principal, payload, mapping)
+    _, prepared_rows = prepare_import_rows(db, principal, payload, campaign, mapping)
     counts = import_counts(prepared_rows)
     if not prepared_rows:
         raise ValueError("The CSV does not contain any data rows.")
@@ -499,6 +502,7 @@ def prepare_import_rows(
     db: Session,
     principal: Principal,
     payload: ProspectImportRequest,
+    campaign: Campaign,
     mapping: ProspectImportMapping,
 ) -> tuple[list[str], list[PreparedImportRow]]:
     headers, rows = parse_csv(payload.csv_content)
@@ -507,8 +511,12 @@ def prepare_import_rows(
         raise ValueError(f"CSV is missing mapped columns: {', '.join(missing_headers)}.")
 
     existing_prospects = db.scalars(
-        select(Prospect).where(Prospect.organization_id == principal.organization_id)
+        select(Prospect).where(
+            Prospect.organization_id == principal.organization_id,
+            Prospect.asset_class == normalize_asset_class(campaign.asset_class),
+        )
     ).all()
+    existing_prospect_ids = {prospect.id for prospect in existing_prospects}
     phone_matches = {
         prospect.normalized_phone: prospect.id
         for prospect in existing_prospects
@@ -525,6 +533,8 @@ def prepare_import_rows(
         )
     ).all()
     for contact_point in contact_points:
+        if contact_point.prospect_id not in existing_prospect_ids:
+            continue
         target = phone_matches if contact_point.contact_type == "phone" else email_matches
         target.setdefault(contact_point.normalized_value, contact_point.prospect_id)
     address_matches = {
@@ -546,7 +556,7 @@ def prepare_import_rows(
         )
     ).all()
     for membership in memberships:
-        if membership.source_record_key:
+        if membership.prospect_id in existing_prospect_ids and membership.source_record_key:
             source_matches.setdefault(membership.source_record_key, membership.prospect_id)
     relationship_states = prospect_relationship_states(db, existing_prospects)
     active_voice_suppressions = active_company_suppressions(db, principal.organization_id)
@@ -564,6 +574,7 @@ def prepare_import_rows(
             active_voice_suppressions,
             seen_identities,
             relationship_states,
+            asset_class=campaign.asset_class,
         )
         prepared_rows.append(prepared)
     return headers, prepared_rows
@@ -607,6 +618,8 @@ def prepare_row(
     active_voice_suppressions: dict[str, SuppressionRecord],
     seen_identities: set[str],
     relationship_states: dict[UUID, str],
+    *,
+    asset_class: str,
 ) -> PreparedImportRow:
     values = {
         field: clean_text(raw.get(column)) or clean_text(mapping.default_values.get(field))
@@ -724,10 +737,14 @@ def prepare_row(
     city = values.get("city")
     state = values.get("state_code")
     postal = values.get("postal_code")
+    county = values.get("county")
+    parcel_id = values.get("parcel_id")
     address_values = (street, city, state, postal)
     normalized_address = None
     address_status = "missing"
-    if any(address_values) and not all(address_values):
+    is_land = normalize_asset_class(asset_class) == "land"
+    has_parcel_identity = bool(parcel_id and county and state and len(state) == 2)
+    if any(address_values) and not all(address_values) and not has_parcel_identity:
         errors.append("Property address is incomplete.")
         address_status = "invalid"
     elif all(address_values):
@@ -742,8 +759,16 @@ def prepare_row(
                 street or "", city or "", state or "", postal or ""
             )
             address_status = "normalized"
+    elif has_parcel_identity:
+        address_status = "parcel_only"
+    if is_land and not all(address_values) and not has_parcel_identity:
+        errors.append("Land rows require a complete address or APN with county and state.")
     if values.get("source_record_key") and len(values.get("source_record_key") or "") > 255:
         errors.append("Source record key exceeds 255 characters.")
+    if values.get("parcel_id") and len(values.get("parcel_id") or "") > 255:
+        errors.append("Parcel ID exceeds 255 characters.")
+    if values.get("property_type") and len(values.get("property_type") or "") > 80:
+        errors.append("Property type exceeds 80 characters.")
 
     normalized: dict[str, Any] = {
         "source_record_key": values.get("source_record_key"),
@@ -756,6 +781,9 @@ def prepare_row(
         "city": city,
         "state_code": state.upper() if state else None,
         "postal_code": postal,
+        "county": county,
+        "parcel_id": parcel_id,
+        "property_type": values.get("property_type"),
         "normalized_address_key": normalized_address,
         "address_validation_status": address_status,
         "dnc_status": values.get("dnc_status"),
@@ -900,6 +928,7 @@ def prospect_from_import(
     return Prospect(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
+        asset_class=normalize_asset_class(campaign.asset_class),
         territory_id=campaign.territory_id,
         assigned_user_id=assignee.id if assignee else None,
         converted_lead_id=None,
@@ -928,7 +957,12 @@ def prospect_from_import(
         address_validation_status=data.get("address_validation_status") or "missing",
         call_eligibility=call_eligibility,
         last_contacted_at=None,
-        source_payload=prepared.raw_data,
+        source_payload=prospect_source_payload(
+            prepared.raw_data,
+            county=data.get("county"),
+            parcel_id=data.get("parcel_id"),
+            property_type=data.get("property_type"),
+        ),
     )
 
 
@@ -995,6 +1029,12 @@ def refresh_untouched_prospect(
         prospect.address_validation_status = (
             string_value(data.get("address_validation_status")) or "missing"
         )
+    prospect.source_payload = prospect_source_payload(
+        prospect.source_payload,
+        county=string_value(data.get("county")),
+        parcel_id=string_value(data.get("parcel_id")),
+        property_type=string_value(data.get("property_type")),
+    )
 
 
 def upsert_source_membership(
@@ -1412,6 +1452,10 @@ def create_prospecting_cohort(
         )
         if script is None:
             raise ValueError("Selected caller script does not belong to this workspace.")
+        if normalize_asset_class(script.asset_class) != normalize_asset_class(
+            campaign.asset_class
+        ):
+            raise ValueError("Selected caller script must match the campaign asset class.")
     cohort = ProspectingCohort(
         organization_id=principal.organization_id,
         campaign_id=campaign.id,
@@ -1478,6 +1522,7 @@ def prospecting_cohort_read(
         id=cohort.id,
         campaign_id=cohort.campaign_id,
         campaign_name=campaign.name if campaign else "Unknown campaign",
+        asset_class=normalize_asset_class(campaign.asset_class if campaign else None),
         script_version_id=cohort.script_version_id,
         created_by_user_id=cohort.created_by_user_id,
         created_by_name=creator.display_name if creator else "Unknown user",
@@ -1909,11 +1954,16 @@ def calling_batch_entry_read(
     entry: ProspectCallingBatchEntry,
 ) -> ProspectCallingBatchEntryRead:
     prospect = db.get(Prospect, entry.prospect_id)
+    parcel_id, county, _ = (
+        prospect_property_metadata(prospect) if prospect is not None else (None, None, None)
+    )
     data = {
         "street_address": prospect.street_address if prospect else None,
         "city": prospect.city if prospect else None,
         "state_code": prospect.state_code if prospect else None,
         "postal_code": prospect.postal_code if prospect else None,
+        "parcel_id": parcel_id,
+        "county": county,
     }
     return ProspectCallingBatchEntryRead(
         id=entry.id,
@@ -2114,13 +2164,14 @@ def active_user(db: Session, organization_id: UUID, user_id: UUID) -> User | Non
 
 
 def property_address(data: Mapping[str, object]) -> str | None:
-    parts = [
-        string_value(data.get("street_address")),
-        string_value(data.get("city")),
-        string_value(data.get("state_code")),
-        string_value(data.get("postal_code")),
-    ]
-    return ", ".join(part for part in parts if part) or None
+    return property_identity_label(
+        street_address=string_value(data.get("street_address")),
+        city=string_value(data.get("city")),
+        state=string_value(data.get("state_code")),
+        postal_code=string_value(data.get("postal_code")),
+        parcel_id=string_value(data.get("parcel_id")),
+        county=string_value(data.get("county")),
+    ) or None
 
 
 def string_value(value: object) -> str | None:

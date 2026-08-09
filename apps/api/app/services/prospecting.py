@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.core.auth import Principal
 from app.core.config import get_settings
+from app.domain.assets import (
+    HOUSE_ASSET_CLASS,
+    LAND_ASSET_CLASS,
+    normalize_asset_class,
+    property_identity_label,
+)
 from app.domain.rbac import PermissionKeys
 from app.models.foundation import (
     ActivityEvent,
@@ -52,11 +58,16 @@ from app.schemas.prospecting import (
 from app.services.acquisition_operations import (
     create_notification,
     operations_user_read,
+    prospect_property_metadata,
     upsert_internal_calendar_event,
 )
 from app.services.inbox import add_automatic_owner_watchers, ensure_primary_conversation
 from app.services.lead_manager import create_case_for_handoff, sync_case_handoff_decision
-from app.services.property_validation import canonical_address_key
+from app.services.property_identity import (
+    find_property_by_identity,
+    refresh_property_identity_keys,
+    require_valid_property_identity,
+)
 from app.services.prospecting_measurement import (
     apply_outcome_measurement,
     default_handoff_decision_code,
@@ -108,7 +119,11 @@ def get_prospecting_overview(
     scripts = list_scripts(db, principal) if manageable else []
     current_entry = get_current_entry(db, principal)
     queue_entries = list_queue_entries(db, principal, manageable=manageable)
-    active_script = get_active_script(db, principal.organization_id)
+    active_script = get_active_script(
+        db,
+        principal.organization_id,
+        current_entry.asset_class if current_entry else HOUSE_ASSET_CLASS,
+    )
     if current_entry and current_entry.active_attempt:
         active_script = db.get(
             ProspectingScriptVersion,
@@ -160,6 +175,7 @@ def create_script(
     )
     script = ProspectingScriptVersion(
         organization_id=principal.organization_id,
+        asset_class=normalize_asset_class(payload.asset_class),
         version_number=next_version,
         title=payload.title.strip(),
         status="draft",
@@ -181,7 +197,11 @@ def create_script(
         entity_type="prospecting_script_version",
         entity_id=script.id,
         previous=None,
-        new={"version_number": script.version_number, "status": script.status},
+        new={
+            "version_number": script.version_number,
+            "asset_class": script.asset_class,
+            "status": script.status,
+        },
         reason="Caller script draft created",
     )
     db.commit()
@@ -206,6 +226,7 @@ def approve_script(
     previous_active = db.scalars(
         select(ProspectingScriptVersion).where(
             ProspectingScriptVersion.organization_id == principal.organization_id,
+            ProspectingScriptVersion.asset_class == normalize_asset_class(script.asset_class),
             ProspectingScriptVersion.status == "approved",
             ProspectingScriptVersion.id != script.id,
         )
@@ -223,7 +244,11 @@ def approve_script(
         entity_type="prospecting_script_version",
         entity_id=script.id,
         previous=previous,
-        new={"status": script.status, "version_number": script.version_number},
+        new={
+            "status": script.status,
+            "version_number": script.version_number,
+            "asset_class": script.asset_class,
+        },
         reason="Caller script approved for live queue use",
     )
     db.commit()
@@ -266,7 +291,7 @@ def start_attempt(
         raise ValueError("The prospect is no longer available.")
     if prospect.call_eligibility != "eligible":
         raise ValueError("This prospect is not cleared for calling.")
-    script = get_active_script(db, principal.organization_id)
+    script = get_active_script(db, principal.organization_id, prospect.asset_class)
     if script is None:
         raise ValueError("An owner must approve a caller script before prospecting begins.")
     batch = db.get(ProspectCallingBatch, entry.prospect_calling_batch_id)
@@ -363,9 +388,21 @@ def complete_attempt(
             raise ValueError(
                 "Complete every required warm-handoff question: " + ", ".join(missing) + "."
             )
-        if not all(
+        has_address = all(
             (prospect.street_address, prospect.city, prospect.state_code, prospect.postal_code)
-        ):
+        )
+        parcel_id, county, _ = prospect_property_metadata(prospect)
+        has_land_parcel_identity = bool(
+            normalize_asset_class(prospect.asset_class) == LAND_ASSET_CLASS
+            and parcel_id
+            and county
+            and prospect.state_code
+        )
+        if not has_address and not has_land_parcel_identity:
+            if normalize_asset_class(prospect.asset_class) == LAND_ASSET_CLASS:
+                raise ValueError(
+                    "A Land warm handoff requires a complete address or APN with county and state."
+                )
             raise ValueError("A complete property address is required before a warm handoff.")
         validate_acquisition_user(db, principal.organization_id, payload.handoff_user_id)
     now = datetime.now(UTC)
@@ -652,13 +689,20 @@ def convert_prospect_to_lead(
         conversation.queue_key = "qualified"
         add_automatic_owner_watchers(db, conversation)
         return existing
-    street_address = prospect.street_address
-    city = prospect.city
-    state_code = prospect.state_code
-    postal_code = prospect.postal_code
-    if not all((street_address, city, state_code, postal_code)):
+    street_address = prospect.street_address or ""
+    city = prospect.city or ""
+    state_code = prospect.state_code or ""
+    postal_code = prospect.postal_code or ""
+    asset_class = normalize_asset_class(prospect.asset_class)
+    parcel_id, county, source_property_type = prospect_property_metadata(prospect)
+    has_address = all((street_address, city, state_code, postal_code))
+    has_parcel_identity = bool(parcel_id and county and state_code)
+    if asset_class == LAND_ASSET_CLASS and not (has_address or has_parcel_identity):
+        raise ValueError(
+            "A Land warm handoff requires a complete address or APN with county and state."
+        )
+    if asset_class != LAND_ASSET_CLASS and not has_address:
         raise ValueError("A complete property address is required before a warm handoff.")
-    assert street_address and city and state_code and postal_code
     contact = Contact(
         organization_id=principal.organization_id,
         legal_name=prospect.legal_name,
@@ -690,16 +734,19 @@ def convert_prospect_to_lead(
                 is_primary=not bool(prospect.phone),
             )
         )
-    normalized_property_key = prospect.normalized_address_key or canonical_address_key(
-        street_address,
-        city,
-        state_code,
-        postal_code,
+    property_type = source_property_type or (
+        LAND_ASSET_CLASS if asset_class == LAND_ASSET_CLASS else None
     )
-    property_record = db.scalar(
-        select(Property).where(
-            Property.organization_id == principal.organization_id,
-            Property.normalized_address_key == normalized_property_key,
+    property_record, normalized_property_key, normalized_parcel_key = (
+        find_property_by_identity(
+            db,
+            organization_id=principal.organization_id,
+            street_address=street_address,
+            city=city,
+            state=state_code,
+            postal_code=postal_code,
+            parcel_id=parcel_id,
+            county=county,
         )
     )
     if property_record is None:
@@ -709,13 +756,24 @@ def convert_prospect_to_lead(
             city=city,
             state=state_code,
             postal_code=postal_code,
-            county=None,
-            property_type=None,
+            county=county,
+            property_type=property_type,
+            parcel_id=parcel_id,
+            normalized_parcel_key=normalized_parcel_key,
             normalized_address_key=normalized_property_key,
             address_validation_status=prospect.address_validation_status,
         )
         db.add(property_record)
         db.flush()
+    else:
+        if parcel_id and not property_record.parcel_id:
+            property_record.parcel_id = parcel_id
+        if county and not property_record.county:
+            property_record.county = county
+        if property_type and not property_record.property_type:
+            property_record.property_type = property_type
+        refresh_property_identity_keys(property_record)
+    require_valid_property_identity(property_record, asset_class=asset_class)
     campaign = db.get(Campaign, prospect.campaign_id)
     lead = Lead(
         organization_id=principal.organization_id,
@@ -723,6 +781,8 @@ def convert_prospect_to_lead(
         property_id=property_record.id,
         assigned_user_id=assigned_user_id,
         source="cold_call",
+        asset_class=asset_class,
+        qualification_context={},
         stage_key="qualification_in_progress",
         lead_temperature="warm",
         motivation=None,
@@ -782,6 +842,7 @@ def convert_prospect_to_lead(
         "source": "prospect_handoff",
         "prospect_id": str(prospect.id),
         "campaign_id": str(prospect.campaign_id),
+        "asset_class": asset_class,
         "unified_timeline": True,
     }
     add_automatic_owner_watchers(db, conversation)
@@ -1060,6 +1121,7 @@ def entry_read(db: Session, entry: ProspectCallingBatchEntry) -> ProspectingEntr
         assigned_user_id=entry.assigned_user_id,
         assigned_user_name=assignee.display_name if assignee else "Unassigned caller",
         prospect_id=prospect.id,
+        asset_class=normalize_asset_class(prospect.asset_class),
         legal_name=prospect.legal_name,
         phone=prospect.phone,
         email=prospect.email,
@@ -1152,6 +1214,7 @@ def script_read(db: Session, script: ProspectingScriptVersion) -> ProspectingScr
     return ProspectingScriptRead(
         id=script.id,
         version_number=script.version_number,
+        asset_class=normalize_asset_class(script.asset_class),
         title=script.title,
         status=script.status,
         opening_script=script.opening_script,
@@ -1174,11 +1237,13 @@ def required_question_count(script: ProspectingScriptVersion) -> int:
 def get_active_script(
     db: Session,
     organization_id: UUID,
+    asset_class: str = HOUSE_ASSET_CLASS,
 ) -> ProspectingScriptVersion | None:
     return db.scalar(
         select(ProspectingScriptVersion)
         .where(
             ProspectingScriptVersion.organization_id == organization_id,
+            ProspectingScriptVersion.asset_class == normalize_asset_class(asset_class),
             ProspectingScriptVersion.status == "approved",
         )
         .order_by(ProspectingScriptVersion.version_number.desc())
@@ -1257,6 +1322,7 @@ def handoff_read(db: Session, handoff: ProspectHandoff) -> ProspectHandoffRead:
         prospect_id=handoff.prospect_id,
         attempt_id=handoff.attempt_id,
         lead_id=handoff.lead_id,
+        asset_class=normalize_asset_class(prospect.asset_class),
         seller_name=prospect.legal_name,
         property_address=format_property_address(prospect),
         caller_name=caller.display_name if caller else "Unknown caller",
@@ -1401,8 +1467,15 @@ def refresh_batch_status(db: Session, batch_id: UUID) -> None:
 
 
 def format_property_address(prospect: Prospect) -> str | None:
-    values = [prospect.street_address, prospect.city, prospect.state_code, prospect.postal_code]
-    return ", ".join(value for value in values if value) or None
+    parcel_id, county, _ = prospect_property_metadata(prospect)
+    return property_identity_label(
+        street_address=prospect.street_address,
+        city=prospect.city,
+        state=prospect.state_code,
+        postal_code=prospect.postal_code,
+        parcel_id=parcel_id,
+        county=county,
+    ) or None
 
 
 def clean_answers(values: dict[str, str]) -> dict[str, str]:

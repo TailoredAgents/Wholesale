@@ -25,14 +25,24 @@ const stages = [
   ["reopened", "Reopened"],
 ];
 
+const landUnavailableStages = new Set([
+  "offer_pending_approval",
+  "offer_ready",
+  "offer_presented",
+  "negotiating",
+  "under_contract",
+]);
+
 type Status = "idle" | "saving" | "saved" | "error";
 
 export function StageUpdateForm({
   leadId,
   currentStage,
+  assetClass,
 }: {
   leadId: string;
   currentStage: string;
+  assetClass: "house" | "land";
 }) {
   const router = useRouter();
   const { getToken } = useAuth();
@@ -84,7 +94,9 @@ export function StageUpdateForm({
       <label>
         <span>Stage</span>
         <select name="stage_key" defaultValue={currentStage}>
-          {stages.map(([value, label]) => (
+          {stages.filter(([value]) => (
+            assetClass === "house" || !landUnavailableStages.has(value) || value === currentStage
+          )).map(([value, label]) => (
             <option key={value} value={value}>
               {label}
             </option>
