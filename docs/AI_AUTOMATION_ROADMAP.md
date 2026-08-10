@@ -68,7 +68,7 @@ Delivered:
 - Eight human-owned copilot definitions, specialist mappings, and versioned capability contracts.
 - Data-governance policies, authoritative knowledge registry, source snapshots, checksums, and
   deterministic data-quality rules.
-- AI2 Lead Manager and Call Intelligence golden-case libraries with dual-review gates.
+- AI2 Lead Manager and Call Intelligence golden-case libraries with governed quality review.
 - AI3 structured production runtime, model routes, field-scoped read tools, redacted traces,
   rate/spend/circuit limits, source-use evidence, regression comparison, and emergency shutdown.
 - AI4 Lead Manager Copilot workspace with deterministic priority, governed seller briefs,
@@ -108,12 +108,12 @@ Delivered:
   the existing `lead.next_action` capability, routes the result to the responsible employee in
   Tasks, and requires acceptance or rejection before an approved brief is added to the seller
   timeline.
-- Call Intelligence runs now link to the same orchestrator-event history. Transcript review closes
-  the corresponding AI work item while preserving the recording, transcript, structured draft,
-  reviewer decision, field updates, cost, and evidence as separate records.
+- Call Intelligence runs now link to the same orchestrator-event history. Successful processing
+  automatically closes the work item and posts the internal note while preserving the recording,
+  transcript, structured output, field updates, cost, and evidence as separate records.
 - Lead-intake summaries.
-- Recorded-call transcription, speaker segments, evidence-backed notes, and reviewed CRM update
-  proposals.
+- Recorded-call transcription, speaker segments, automatically posted evidence-backed notes, and
+  non-overwriting CRM updates.
 - External execution blocked in the baseline tool policies.
 
 Still required:

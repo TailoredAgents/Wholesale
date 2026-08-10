@@ -1632,9 +1632,7 @@ class CommunicationProviderEvent(UuidPrimaryKeyMixin, TimestampMixin, Base):
     received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    next_attempt_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processing_started_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -2549,6 +2547,83 @@ class UnderwritingMarketAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
+class UnderwritingCompCopilotThread(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_comp_copilot_threads"
+    __table_args__ = (
+        UniqueConstraint(
+            "organization_id",
+            "market_analysis_id",
+            name="uq_underwriting_comp_copilot_analysis",
+        ),
+        Index(
+            "ix_underwriting_comp_copilot_lead",
+            "organization_id",
+            "lead_id",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("leads.id", ondelete="CASCADE"), index=True
+    )
+    market_analysis_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("underwriting_market_analyses.id", ondelete="CASCADE"),
+        index=True,
+    )
+    created_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="active", server_default="active", index=True
+    )
+    last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+
+class UnderwritingCompCopilotMessage(UuidPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "underwriting_comp_copilot_messages"
+    __table_args__ = (
+        Index(
+            "ix_underwriting_comp_copilot_message_thread",
+            "thread_id",
+            "created_at",
+        ),
+        Index(
+            "ix_underwriting_comp_copilot_message_org",
+            "organization_id",
+            "created_at",
+        ),
+    )
+
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("organizations.id"), index=True
+    )
+    thread_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("underwriting_comp_copilot_threads.id", ondelete="CASCADE"),
+        index=True,
+    )
+    author_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    suggested_actions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False)
+    confidence: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    limitations: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    used_ai: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    model: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
 class UnderwritingManualComparable(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "underwriting_manual_comparables"
 
@@ -2627,9 +2702,7 @@ class LandValuationAnalysis(UuidPrimaryKeyMixin, TimestampMixin, Base):
         Uuid, ForeignKey("organizations.id"), index=True
     )
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
-    property_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("properties.id"), index=True
-    )
+    property_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("properties.id"), index=True)
     property_snapshot_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("property_intelligence_snapshots.id"), index=True
     )
@@ -5088,6 +5161,13 @@ class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
             "recipient_user_id",
             name="uq_staff_lead_alerts_event_recipient",
         ),
+        UniqueConstraint(
+            "organization_id",
+            "source_type",
+            "source_event_id",
+            "recipient_user_id",
+            name="uq_staff_lead_alerts_source_recipient",
+        ),
         Index(
             "ix_staff_lead_alerts_org_status_due",
             "organization_id",
@@ -5099,9 +5179,14 @@ class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
     organization_id: Mapped[uuid.UUID] = mapped_column(
         Uuid, ForeignKey("organizations.id"), index=True
     )
-    meta_lead_event_id: Mapped[uuid.UUID] = mapped_column(
-        Uuid, ForeignKey("meta_lead_events.id", ondelete="CASCADE"), index=True
+    meta_lead_event_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("meta_lead_events.id", ondelete="CASCADE"),
+        index=True,
+        nullable=True,
     )
+    source_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_event_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
     lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
     recipient_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     recipient_phone: Mapped[str] = mapped_column(String(40), nullable=False)

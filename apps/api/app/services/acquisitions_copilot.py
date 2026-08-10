@@ -663,7 +663,7 @@ def _appointment_facts(
         or 0
     )
     if approved_call_note_count:
-        evidence.append("Approved call notes")
+        evidence.append("Saved call notes")
     score = max(0, score)
     band = "ready" if score >= 80 else "needs_review" if score >= 55 else "blocked"
     if approved_plan:

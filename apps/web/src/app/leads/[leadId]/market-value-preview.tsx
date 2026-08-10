@@ -6,6 +6,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CalibrationOutcomeForm } from "./calibration-outcome-form";
 import {
+  CompCopilotPanel,
+  type CompCopilotAction,
+} from "./comp-copilot-panel";
+import {
   MarketAdjustmentPanel,
   type MarketAdjustment,
 } from "./adjustment-shadow-panel";
@@ -753,6 +757,11 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
   );
   const [compReview, setCompReview] = useState<Record<string, CompReviewDraft>>({});
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [copilotFocus, setCopilotFocus] = useState<{
+    compKey: string | null;
+    nonce: number;
+    view: "compare" | "location";
+  } | null>(null);
   const [selectedManualCompIds, setSelectedManualCompIds] = useState<string[] | null>(null);
   const apiBaseUrl = useMemo(
     () => process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000",
@@ -1029,6 +1038,27 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
     markInputsReviewed();
   }
 
+  function handleCopilotAction(action: CompCopilotAction) {
+    if (action.action_type === "refresh_evidence") {
+      document.getElementById("valuation-run-controls")?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      return;
+    }
+    setCopilotFocus({
+      compKey: action.comp_key,
+      nonce: Date.now(),
+      view: action.action_type === "verify_micro_market" ? "location" : "compare",
+    });
+    requestAnimationFrame(() => {
+      document.getElementById("comparable-review")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+
   async function applyCompReview() {
     if (!estimate?.id) {
       return;
@@ -1156,7 +1186,7 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
           <strong>Market-supported sales and buyer economics</strong>
           <span>Human-reviewed evidence for ARV, repairs, and seller negotiation limits</span>
         </div>
-        <div className={styles.marketValueActions}>
+        <div className={styles.marketValueActions} id="valuation-run-controls">
           <button
             disabled={isLoading}
             onClick={() => void createAnalysis(false)}
@@ -1821,6 +1851,16 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
 
           {estimate.id ? <CalibrationOutcomeForm analysisId={estimate.id} /> : null}
 
+          {estimate.id ? (
+            <CompCopilotPanel
+              analysisId={estimate.id}
+              apiBaseUrl={apiBaseUrl}
+              getHeaders={getHeaders}
+              leadId={leadId}
+              onSuggestedAction={handleCopilotAction}
+            />
+          ) : null}
+
           {aiCompAnalyst ? <AiCompAnalystPanel envelope={aiCompAnalyst} /> : null}
 
           <ComparableReviewWorkbench
@@ -1829,6 +1869,8 @@ export function MarketValuePreview({ leadId }: { leadId: string }) {
             comparables={reviewComps}
             conditionOverrides={conditionOverrides}
             disabled={isLoading}
+            focusRequest={copilotFocus}
+            key={`comp-review-${copilotFocus?.nonce ?? 0}`}
             onApply={applyCompReview}
             onConditionChange={updateCompCondition}
             onRestoreRecommendation={restoreSystemCompSet}

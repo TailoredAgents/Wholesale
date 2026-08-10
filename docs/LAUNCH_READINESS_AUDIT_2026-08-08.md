@@ -92,7 +92,7 @@ history.
 | Database head in this phase | `0094_esign_send_intents` is the expected single head after applying the audit migrations. |
 | Auth | Clerk identity plus local Stonegate user, organization, roles, and permissions. |
 | Primary operational truth | PostgreSQL; provider payloads and AI outputs are supporting evidence, not silent replacements. |
-| AI boundary | Draft/recommendation by default; call intelligence may populate eligible CRM facts automatically while the transcript-grounded note still requires review. |
+| AI boundary | Draft/recommendation by default; call intelligence may populate eligible empty CRM facts and post its transcript-grounded internal note automatically. |
 | Financial and legal boundary | Offers, concessions, contracts, buyer selection, wires, funding, and posted accounting remain human-controlled. |
 
 ## Repository Verification
@@ -425,7 +425,7 @@ capability, not current Render configuration.
 | Staff new-lead SMS | Can send live Twilio SMS; production forbids simulation | Keep at least one manual Inbox/lead-queue fallback and confirm provider delivery, not just worker processing. |
 | Property research | Can make paid RentCast/RealEstateAPI requests | Confirm exact subject match and source freshness; never treat an address mismatch or AVM as offer authority. |
 | Twilio Voice and recordings | Provider-backed and consequential | Keep disabled until number, routing, recording policy, webhook, retention, and failure paths pass together. |
-| AI call notes | Transcript-grounded notes require review; eligible CRM facts may auto-populate with evidence metadata | Compare the note with the recording, correct errors, and approve/reject the note. Never treat AI inference as seller confirmation. |
+| AI call notes | Transcript-grounded internal notes and eligible empty CRM facts post automatically with evidence metadata | Sample the note against recordings and correct inaccurate CRM facts or add a clarifying note. Never treat AI inference as seller confirmation. |
 | AI copilots | Draft-only by default | A human owns every offer, follow-up, contract, buyer, finance, and external action. |
 | Underwriting | Saved comp evidence and versioned calculations are implemented | A human verifies the subject, selects defensible closed comps, reviews repairs, and approves the offer plan. Provider AVMs are benchmarks only. |
 | Contract package | Approval-gated and tied to current approved offer authority | Do not bypass price/version gates. Use only counsel-approved sources and retain executed evidence. |
@@ -567,7 +567,7 @@ result, screenshots/log links, and cleanup action when each test is performed.
 | PA-06 | Twilio staff lead SMS | Implemented | Worker item, Twilio SID, `Delivered`, correct opted-in recipient, sanitized body, working CRM link | Primary and backup recipients plus failure escalation | Not run |
 | PA-07 | Twilio seller SMS | Implemented | Inbound/outbound thread, signature validation, STOP/START, failure and quiet-hours behavior | A2P/number configuration matches actual use | Not run |
 | PA-08 | Twilio Voice/recording | Implemented | Inbound/outbound, forwarding, voicemail/missed call, recording SID, linked conversation, deletion | Approved recording/retention policy and failure test | Not run |
-| PA-09 | OpenAI transcription/call notes | Implemented | Transcript, structured note, Inbox right rail, lead activity, CRM field evidence, review/reject, exhausted retry | Accuracy sample accepted by Owner; cost and retention monitored | Not run |
+| PA-09 | OpenAI transcription/call notes | Implemented | Transcript, automatic structured note, Inbox right rail, lead activity, CRM field evidence, exhausted retry | Accuracy sample accepted by Owner; cost and retention monitored | Not run |
 | PA-10 | RentCast | Implemented | Exact subject match, closed comp evidence, AVM benchmark, mismatch and missing-data behavior | Accuracy/cost sample and provider failure monitoring | Not run |
 | PA-11 | RealEstateAPI | Implemented | Record enrichment, coordinates/media when available, candidate evidence, missing-photo behavior, credit use | Accuracy/cost sample and duplicate-refresh controls | Not run |
 | PA-12 | Resend | Implemented; reliability hardened in tree | Outbound/reply, restricted auto/manual routing denial, attachment limit, signature failure, early lifecycle retry, route-checkpoint survival, UUID lease fencing, dead letter, manager reason/audit requeue | Production mailbox/domain plus malware scanner or accepted safe-attachment procedure | Not run |
@@ -659,8 +659,8 @@ Stop recording if policy, routing, signature validation, access, or retention be
 
 ### 5. Transcript, Notes, And CRM Fields
 
-- [ ] Confirm call intelligence moves through queued, processing, and `needs_review`/completed
-  without remaining stuck.
+- [ ] Confirm call intelligence moves through queued, processing, and automatically posted without
+  remaining stuck.
 - [ ] Confirm the transcript is grounded in the correct recording and speaker/time segments are
   usable.
 - [ ] Confirm the structured summary and qualification notes appear in the Inbox right-side call
@@ -669,7 +669,8 @@ Stop recording if policy, routing, signature validation, access, or retention be
   overwrite stronger human-confirmed facts without a visible conflict.
 - [ ] Compare motivation, timeline, condition, occupancy, asking price, mortgage, next action, and
   appointment details to the actual call.
-- [ ] Correct any error, approve or reject the note, and confirm the decision/audit history remains.
+- [ ] Correct any CRM error or add a clarifying internal note, and confirm the original audit
+  history remains.
 - [ ] Exercise one safe failed/exhausted job and confirm the authorized **Retry call intelligence**
   action requeues it once provider health is restored.
 

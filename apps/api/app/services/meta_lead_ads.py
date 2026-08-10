@@ -1,5 +1,4 @@
 import re
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
@@ -24,13 +23,10 @@ from app.integrations.twilio_messaging import (
 from app.models.foundation import (
     ActivityEvent,
     AuditEvent,
-    Contact,
     Lead,
     MetaLeadEvent,
-    Notification,
     Property,
     StaffLeadAlert,
-    User,
 )
 from app.schemas.public_intake import SellerIntakeCreate
 from app.schemas.staff_lead_alerts import (
@@ -45,6 +41,11 @@ from app.services.property_validation import (
     validate_property_with_provider,
 )
 from app.services.public_intake import create_public_seller_lead, get_default_organization
+from app.services.staff_lead_alerts import (
+    eligible_staff_alert_recipients,
+    queue_staff_lead_alerts_for_lead,
+    recover_recent_unalerted_website_lead,
+)
 
 META_CONTACT_CONSENT_VERSION = "meta-lead-form-contact-v1"
 META_CONTACT_CONSENT_WORDING = (
@@ -63,13 +64,6 @@ STAFF_ALERT_REQUEUEABLE_STATUSES = {
 STAFF_ALERT_PROVIDER_FAILURE_STATUSES = {"canceled", "failed", "undelivered"}
 logger = structlog.get_logger()
 
-
-@dataclass(frozen=True)
-class StaffAlertRecipientDiagnostics:
-    active_opted_in: int
-    ready: int
-    missing_phone: int
-    invalid_phone: int
 
 FIELD_ALIASES = {
     "name": ("full_name", "name", "your_name"),
@@ -490,184 +484,15 @@ def queue_staff_lead_alerts(db: Session, event: MetaLeadEvent) -> int:
             reason="missing_lead",
         )
         return 0
-    contact = db.get(Contact, lead.contact_id)
-    property_record = db.get(Property, lead.property_id)
-    recipients, diagnostics = eligible_staff_alert_recipients(
-        db, organization_id=event.organization_id
+    return queue_staff_lead_alerts_for_lead(
+        db,
+        lead=lead,
+        source_type="facebook_lead_form",
+        source_event_id=event.id,
+        source_label="Facebook",
+        source_entity_type="meta_lead_event",
+        meta_lead_event_id=event.id,
     )
-    created = 0
-    existing_count = 0
-    for recipient in recipients:
-        phone = format_e164(recipient.voice_forwarding_number or "")
-        assert phone is not None
-        existing = db.scalar(
-            select(StaffLeadAlert.id).where(
-                StaffLeadAlert.meta_lead_event_id == event.id,
-                StaffLeadAlert.recipient_user_id == recipient.id,
-            )
-        )
-        if existing is not None:
-            existing_count += 1
-            continue
-        contact_name = contact.legal_name if contact else "New seller"
-        market = (
-            property_record.city
-            or property_record.county
-            or property_record.state
-            if property_record
-            else "Georgia"
-        )
-        asset_label = lead.asset_class.title()
-        db.add(
-            StaffLeadAlert(
-                organization_id=event.organization_id,
-                meta_lead_event_id=event.id,
-                lead_id=lead.id,
-                recipient_user_id=recipient.id,
-                recipient_phone=phone,
-                message_body=(
-                    f"New Facebook {asset_label} lead: {contact_name}, {market}. "
-                    f"Open Stonegate: https://www.stonegatehb.com/os/leads/{lead.id}"
-                ),
-                status="pending",
-                attempt_count=0,
-                last_attempt_at=None,
-                next_attempt_at=None,
-                sent_at=None,
-                delivered_at=None,
-                provider=None,
-                provider_message_id=None,
-                provider_response=None,
-                last_error=None,
-            )
-        )
-        created += 1
-    queue_snapshot = {
-        "lead_id": str(lead.id),
-        "active_opted_in_recipients": diagnostics.active_opted_in,
-        "ready_recipients": diagnostics.ready,
-        "recipients_missing_phone": diagnostics.missing_phone,
-        "recipients_with_invalid_phone": diagnostics.invalid_phone,
-        "alerts_created": created,
-        "alerts_already_present": existing_count,
-    }
-    if created:
-        audit_action = "communication.staff_lead_alerts_queued"
-        audit_reason = "Queued internal SMS alerts for active opted-in staff recipients."
-    elif existing_count:
-        audit_action = "communication.staff_lead_alerts_already_queued"
-        audit_reason = "Internal SMS alerts already existed for every eligible staff recipient."
-    else:
-        audit_action = "communication.staff_lead_alerts_not_queued"
-        audit_reason = "No internal SMS alert could be queued for this processed Meta lead."
-    db.add(
-        AuditEvent(
-            organization_id=event.organization_id,
-            actor_user_id=None,
-            actor_type="system",
-            action=audit_action,
-            entity_type="meta_lead_event",
-            entity_id=event.id,
-            previous_value=None,
-            new_value=queue_snapshot,
-            reason=audit_reason,
-        )
-    )
-    log = logger.info if created or existing_count else logger.warning
-    log("staff_lead_alert_queue_evaluated", event_id=str(event.id), **queue_snapshot)
-    if not created and not existing_count:
-        record_staff_alert_queue_gap(db, event=event, lead=lead)
-    db.flush()
-    return created
-
-
-def eligible_staff_alert_recipients(
-    db: Session,
-    *,
-    organization_id: UUID | None = None,
-) -> tuple[list[User], StaffAlertRecipientDiagnostics]:
-    statement = select(User).where(
-        User.is_active.is_(True),
-        User.lead_alert_sms_enabled.is_(True),
-    )
-    if organization_id is not None:
-        statement = statement.where(User.organization_id == organization_id)
-    opted_in = list(db.scalars(statement).all())
-    ready: list[User] = []
-    missing_phone = 0
-    invalid_phone = 0
-    for user in opted_in:
-        if not user.voice_forwarding_number:
-            missing_phone += 1
-            continue
-        if format_e164(user.voice_forwarding_number) is None:
-            invalid_phone += 1
-            continue
-        ready.append(user)
-    return ready, StaffAlertRecipientDiagnostics(
-        active_opted_in=len(opted_in),
-        ready=len(ready),
-        missing_phone=missing_phone,
-        invalid_phone=invalid_phone,
-    )
-
-
-def record_staff_alert_queue_gap(
-    db: Session,
-    *,
-    event: MetaLeadEvent,
-    lead: Lead,
-) -> None:
-    event_type = "lead.staff_sms_alert_not_queued"
-    existing_activity = db.scalar(
-        select(ActivityEvent.id).where(
-            ActivityEvent.organization_id == event.organization_id,
-            ActivityEvent.entity_type == "lead",
-            ActivityEvent.entity_id == lead.id,
-            ActivityEvent.event_type == event_type,
-        )
-    )
-    if existing_activity is None:
-        db.add(
-            ActivityEvent(
-                organization_id=event.organization_id,
-                actor_user_id=None,
-                entity_type="lead",
-                entity_id=lead.id,
-                event_type=event_type,
-                summary=(
-                    "Internal new-lead SMS was not queued because no active opted-in staff "
-                    "cellphone was eligible."
-                ),
-            )
-        )
-    if lead.assigned_user_id is None:
-        return
-    existing_notification = db.scalar(
-        select(Notification.id).where(
-            Notification.organization_id == event.organization_id,
-            Notification.recipient_user_id == lead.assigned_user_id,
-            Notification.dedupe_key == f"staff-lead-alert-gap:{event.id}",
-        )
-    )
-    if existing_notification is None:
-        db.add(
-            Notification(
-                organization_id=event.organization_id,
-                recipient_user_id=lead.assigned_user_id,
-                notification_type="staff_lead_alert_not_queued",
-                title="New lead text alert was not queued",
-                body=(
-                    "This Facebook lead reached the CRM, but no active opted-in staff "
-                    "cellphone was eligible for the internal SMS alert."
-                ),
-                entity_type="lead",
-                entity_id=lead.id,
-                action_url=f"/os/leads/{lead.id}",
-                dedupe_key=f"staff-lead-alert-gap:{event.id}",
-                read_at=None,
-            )
-        )
 
 
 def recover_recent_unalerted_meta_lead(db: Session) -> int:
@@ -731,6 +556,7 @@ def process_next_staff_lead_alert(
 ) -> UUID | None:
     if settings.staff_lead_alert_sms_mode == "disabled":
         return None
+    recover_recent_unalerted_website_lead(db)
     recover_recent_unalerted_meta_lead(db)
     now = datetime.now(UTC)
     configured = not settings.staff_lead_alert_configuration_blockers
@@ -761,6 +587,8 @@ def process_next_staff_lead_alert(
             "staff_lead_alert_delivery_blocked",
             alert_id=str(alert.id),
             event_id=str(alert.meta_lead_event_id),
+            source_type=alert.source_type,
+            source_event_id=str(alert.source_event_id),
             lead_id=str(alert.lead_id),
             attempt_count=alert.attempt_count,
             blockers=list(settings.staff_lead_alert_configuration_blockers),
@@ -781,8 +609,11 @@ def process_next_staff_lead_alert(
                 channel="sms",
                 recipient=alert.recipient_phone,
                 body=alert.message_body,
-                idempotency_key=f"meta-lead-alert:{alert.id}",
-                metadata={"purpose": "staff_new_lead_alert"},
+                idempotency_key=f"staff-lead-alert:{alert.id}",
+                metadata={
+                    "purpose": "staff_new_lead_alert",
+                    "source_type": alert.source_type,
+                },
             ),
             dry_run=settings.staff_lead_alert_sms_mode == "simulate",
         )
@@ -802,6 +633,8 @@ def process_next_staff_lead_alert(
             "staff_lead_alert_delivery_failed",
             alert_id=str(alert.id),
             event_id=str(alert.meta_lead_event_id),
+            source_type=alert.source_type,
+            source_event_id=str(alert.source_event_id),
             lead_id=str(alert.lead_id),
             status=alert.status,
             attempt_count=alert.attempt_count,
@@ -824,6 +657,8 @@ def process_next_staff_lead_alert(
         "staff_lead_alert_delivery_accepted",
         alert_id=str(alert.id),
         event_id=str(alert.meta_lead_event_id),
+        source_type=alert.source_type,
+        source_event_id=str(alert.source_event_id),
         lead_id=str(alert.lead_id),
         provider=alert.provider,
         provider_message_id=alert.provider_message_id,
@@ -866,6 +701,8 @@ def update_staff_alert_delivery_status(
         "staff_lead_alert_delivery_status_updated",
         alert_id=str(alert.id),
         event_id=str(alert.meta_lead_event_id),
+        source_type=alert.source_type,
+        source_event_id=str(alert.source_event_id),
         lead_id=str(alert.lead_id),
         provider_message_id=message_sid,
         status=message_status,

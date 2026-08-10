@@ -528,9 +528,17 @@ function CallTranscriptPanel({
         {notes ? (
           <section className={styles.notesReview} aria-label="AI call-note review">
             <div className={styles.notesReviewHeader}>
-              <strong>Review draft</strong>
+              <strong>
+                {transcript.status === "approved" ? "Automatic call summary" : "Processing note"}
+              </strong>
               <span>{notes.confidence}% AI confidence</span>
             </div>
+            {transcript.status === "approved" ? (
+              <p className={styles.mutedText}>
+                Saved automatically to this conversation and the seller record. No approval is
+                required.
+              </p>
+            ) : null}
             <label>
               Summary
               <textarea

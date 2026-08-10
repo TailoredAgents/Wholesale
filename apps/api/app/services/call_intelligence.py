@@ -59,7 +59,8 @@ loan balance, or payoff amount in mortgage_balance; use mortgage_or_title for ot
 ownership, or title context. Use null or an empty list when the call does not support a field.
 Keep seller language precise and operational.
 Evidence entries must point to the supplied segment index and start time. This is a draft for
-human review and must not claim that Stonegate made a binding offer or contractual commitment."""
+internal CRM documentation and must not claim that Stonegate made a binding offer or contractual
+commitment."""
 LAND_CALL_INTELLIGENCE_PROMPT = """This call concerns vacant land. Capture only explicit
 seller statements for parcel/APN, acreage, legal description, access or road frontage,
 utilities, zoning or intended use, septic or perc testing, taxes or HOA, and terrain or
@@ -141,11 +142,7 @@ def validate_call_notes_payload_for_asset(payload: object, asset_class: object) 
 def resolve_transcript_asset_class(db: Session, transcript: CallTranscript) -> str:
     recording = db.get(CallRecording, transcript.recording_id)
     call = db.get(CallRecord, recording.call_record_id) if recording is not None else None
-    lead = (
-        db.get(Lead, call.lead_id)
-        if call is not None and call.lead_id is not None
-        else None
-    )
+    lead = db.get(Lead, call.lead_id) if call is not None and call.lead_id is not None else None
     if lead is not None:
         return normalize_asset_class(lead.asset_class)
     return normalize_asset_class(
@@ -183,7 +180,7 @@ def enqueue_call_transcript(
         approved_by_user_id=None,
         approved_at=None,
         error_message=None,
-        transcript_metadata={"attempts": 0, "human_review_required": True},
+        transcript_metadata={"attempts": 0, "human_review_required": False},
     )
     db.add(transcript)
     db.flush()
@@ -259,6 +256,64 @@ def process_next_call_transcript(
     transcript_id = transcript.id
     process_call_transcript(db, transcript_id, settings)
     return transcript_id
+
+
+def process_next_pending_call_note_approval(
+    db: Session,
+    _settings: Settings,
+) -> UUID | None:
+    """Automatically post one legacy call-note draft that still awaits approval."""
+
+    candidate_id = db.scalar(
+        select(CallTranscript.id)
+        .where(CallTranscript.status == "needs_review")
+        .order_by(CallTranscript.created_at.asc())
+        .limit(1)
+    )
+    if candidate_id is None:
+        return None
+    candidate = db.get(CallTranscript, candidate_id)
+    if candidate is None:
+        return None
+    recording = db.get(CallRecording, candidate.recording_id)
+    call = db.get(CallRecord, recording.call_record_id) if recording is not None else None
+    if call is None or call.lead_id is None:
+        candidate.status = "completed"
+        cancel_legacy_call_note_approval(db, candidate)
+        db.commit()
+        return candidate.id
+    lead = lock_organization_lead(
+        db,
+        organization_id=candidate.organization_id,
+        lead_id=call.lead_id,
+    )
+    transcript = db.scalar(
+        select(CallTranscript)
+        .where(
+            CallTranscript.id == candidate_id,
+            CallTranscript.status == "needs_review",
+        )
+        .execution_options(populate_existing=True)
+        .with_for_update()
+    )
+    if transcript is None:
+        return None
+    if lead is None or lead.archived_at is not None or lead.stage_key in INACTIVE_LEAD_STAGES:
+        transcript.status = "completed"
+        transcript.transcript_metadata = {
+            **(transcript.transcript_metadata or {}),
+            "human_review_required": False,
+            "note_posting_mode": "skipped_inactive_lead",
+        }
+        cancel_legacy_call_note_approval(db, transcript)
+        db.commit()
+        return transcript.id
+    raw_notes = (transcript.transcript_metadata or {}).get("structured_notes")
+    notes = validate_call_notes_payload_for_asset(raw_notes, lead.asset_class)
+    auto_approve_call_notes(db, transcript, call, lead, notes)
+    complete_auto_call_note_run(db, transcript, notes.summary)
+    db.commit()
+    return transcript.id
 
 
 def process_call_transcript(
@@ -477,7 +532,7 @@ def process_call_transcript(
         )
         processing_completed_at = datetime.now(UTC)
         transcript.confidence_score = confidence
-        transcript.status = "needs_review" if lead_is_active else "completed"
+        transcript.status = "processing" if lead_is_active else "completed"
         transcript.error_message = None
         transcript.transcript_metadata = {
             **metadata,
@@ -485,7 +540,8 @@ def process_call_transcript(
             "structured_notes": notes.model_dump(mode="json"),
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
-            "human_review_required": lead_is_active,
+            "human_review_required": False,
+            "note_posting_mode": "automatic",
             "conversation_context": "seller" if lead is not None else "buyer",
             "asset_class": asset_class,
             "evidence_coverage_percent": evidence_coverage_percent(notes),
@@ -494,8 +550,8 @@ def process_call_transcript(
             ),
             "crm_auto_populated_values": auto_populated_values,
             "closed_lead_historical_evidence": bool(lead is not None and not lead_is_active),
+            "ai_run_id": str(run.id),
         }
-        approval: ApprovalRequest | None = None
         if lead is not None and lead_is_active:
             if auto_populated_values:
                 auto_populated_fields = ", ".join(auto_populated_values)
@@ -522,14 +578,9 @@ def process_call_transcript(
                         reason="Transcript-grounded call qualification populated empty CRM fields.",
                     )
                 )
-            approval = ensure_call_notes_approval(db, transcript, call, lead, notes)
-            transcript.transcript_metadata = {
-                **(transcript.transcript_metadata or {}),
-                "approval_request_id": str(approval.id),
-            }
-            run.status = "needs_review"
-        else:
-            run.status = "completed"
+            auto_approve_call_notes(db, transcript, call, lead, notes)
+            db.flush()
+        run.status = "completed"
         run.output_summary = notes.summary[:4000]
         run.input_tokens = input_tokens
         run.output_tokens = output_tokens
@@ -551,18 +602,13 @@ def process_call_transcript(
         }
         run.latency_ms = round((time.perf_counter() - started_monotonic) * 1000)
         run.completed_at = datetime.now(UTC)
-        transcript.transcript_metadata = {
-            **(transcript.transcript_metadata or {}),
-            "ai_run_id": str(run.id),
-        }
         if operation_event_id is not None:
             mark_call_intelligence_ai_work(
                 db,
                 event_id=operation_event_id,
-                status="needs_review" if lead_is_active else "completed",
+                status="completed",
                 run_id=run.id,
                 summary=notes.summary,
-                approval_request_id=approval.id if approval is not None else None,
             )
         db.commit()
         db.refresh(transcript)
@@ -762,13 +808,14 @@ def review_call_transcript(
     if payload.status == "approved":
         transcript.approved_by_user_id = principal.user_id
         transcript.approved_at = datetime.now(UTC)
-        apply_approved_call_notes(
+        apply_call_notes(
             db,
-            principal,
             transcript,
             call,
             lead,
             notes,
+            actor_user_id=principal.user_id,
+            human_approved=True,
             apply_field_updates=payload.apply_field_updates,
             create_follow_up_task=payload.create_follow_up_task,
         )
@@ -863,16 +910,18 @@ def ensure_call_intelligence_agent(
             organization_id=organization_id,
             key=CALL_INTELLIGENCE_AGENT_KEY,
             name="Call Intelligence",
-            description="Transcribes seller calls and drafts evidence-backed acquisition notes.",
+            description="Transcribes seller calls and posts evidence-backed internal CRM notes.",
             status="active",
             model_name=model_name,
             risk_level="medium",
-            requires_human_approval=True,
+            requires_human_approval=False,
         )
         db.add(agent)
         db.flush()
     elif agent.model_name != model_name:
         agent.model_name = model_name
+    if agent.requires_human_approval:
+        agent.requires_human_approval = False
     prompt = db.scalar(
         select(AiPromptVersion).where(
             AiPromptVersion.agent_definition_id == agent.id,
@@ -1019,14 +1068,117 @@ def numeric_value(value: object) -> float:
     return 0.0
 
 
-def apply_approved_call_notes(
+def auto_approve_call_notes(
     db: Session,
-    principal: Principal,
+    transcript: CallTranscript,
+    call: CallRecord,
+    lead: Lead,
+    notes: CallNotes,
+) -> None:
+    now = datetime.now(UTC)
+    previous_status = transcript.status
+    transcript.status = "approved"
+    transcript.approved_by_user_id = None
+    transcript.approved_at = now
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "human_review_required": False,
+        "note_posting_mode": "automatic",
+        "auto_approved_at": now.isoformat(),
+        "review_decision_notes": None,
+    }
+    apply_call_notes(
+        db,
+        transcript,
+        call,
+        lead,
+        notes,
+        actor_user_id=call.actor_user_id,
+        human_approved=False,
+        apply_field_updates=[],
+        create_follow_up_task=False,
+    )
+    cancel_legacy_call_note_approval(db, transcript)
+    db.add(
+        ActivityEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="call_notes.auto_posted",
+            summary="AI call summary was automatically added to the seller record.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=lead.organization_id,
+            actor_user_id=None,
+            actor_type="ai",
+            action="call_notes.auto_post",
+            entity_type="call_transcript",
+            entity_id=transcript.id,
+            previous_value={"status": previous_status},
+            new_value={
+                "status": "approved",
+                "note_posting_mode": "automatic",
+                "crm_fields_auto_populated": list(
+                    (transcript.transcript_metadata or {}).get("crm_auto_populated_values") or {}
+                ),
+            },
+            reason="Transcript-grounded internal call notes are configured for automatic posting.",
+        )
+    )
+
+
+def cancel_legacy_call_note_approval(db: Session, transcript: CallTranscript) -> None:
+    approval = get_call_notes_approval(db, transcript)
+    if approval is None or approval.status != "pending":
+        return
+    approval.status = "cancelled"
+    approval.decision_notes = "Call summaries now post automatically without an approval step."
+    approval.decided_at = datetime.now(UTC)
+
+
+def complete_auto_call_note_run(
+    db: Session,
+    transcript: CallTranscript,
+    summary: str,
+) -> None:
+    raw_run_id = (transcript.transcript_metadata or {}).get("ai_run_id")
+    if not isinstance(raw_run_id, str):
+        return
+    try:
+        run_id = UUID(raw_run_id)
+    except ValueError:
+        return
+    run = db.get(AiRunLog, run_id)
+    if run is None:
+        return
+    run.status = "completed"
+    run.run_metadata = {
+        **(run.run_metadata or {}),
+        "note_posting_mode": "automatic",
+        "human_review_required": False,
+    }
+    if run.orchestrator_event_id is not None:
+        mark_call_intelligence_ai_work(
+            db,
+            event_id=run.orchestrator_event_id,
+            status="completed",
+            run_id=run.id,
+            summary=summary,
+        )
+
+
+def apply_call_notes(
+    db: Session,
     transcript: CallTranscript,
     call: CallRecord,
     lead: Lead,
     notes: CallNotes,
     *,
+    actor_user_id: UUID | None,
+    human_approved: bool,
     apply_field_updates: list[str],
     create_follow_up_task: bool,
 ) -> None:
@@ -1057,23 +1209,24 @@ def apply_approved_call_notes(
 
     db.add(
         CommunicationRecord(
-            organization_id=principal.organization_id,
+            organization_id=transcript.organization_id,
             conversation_id=call.conversation_id,
             lead_id=call.lead_id,
             contact_id=call.contact_id,
-            actor_user_id=principal.user_id,
+            actor_user_id=actor_user_id,
             direction="internal",
             channel="note",
             status="logged",
             provider="openai_reviewed",
             provider_message_id=f"call-notes:{transcript.id}",
-            subject="Approved call summary",
+            subject="Call summary" if not human_approved else "Approved call summary",
             body=format_approved_notes(notes)[:4000],
             occurred_at=datetime.now(UTC),
             external_payload=None,
             communication_metadata={
                 "call_transcript_id": str(transcript.id),
-                "human_approved": True,
+                "human_approved": human_approved,
+                "automatically_posted": not human_approved,
             },
         )
     )
@@ -1081,7 +1234,7 @@ def apply_approved_call_notes(
         follow_up_at = parse_follow_up_at(notes.follow_up_at)
         db.add(
             Task(
-                organization_id=principal.organization_id,
+                organization_id=transcript.organization_id,
                 lead_id=lead.id,
                 responsible_user_id=lead.assigned_user_id or call.actor_user_id,
                 task_type="call_follow_up",
@@ -1183,8 +1336,7 @@ def crm_field_is_empty(value: object) -> bool:
 
 def evidence_supports_land_field(notes: LandStructuredCallNotes, field: str) -> bool:
     return any(
-        evidence.field == field and evidence.supporting_text.strip()
-        for evidence in notes.evidence
+        evidence.field == field and evidence.supporting_text.strip() for evidence in notes.evidence
     )
 
 

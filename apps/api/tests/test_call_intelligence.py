@@ -23,15 +23,15 @@ from app.models.foundation import (
     Conversation,
     Lead,
     Property,
-    Task,
 )
 from app.schemas.leads import LeadCloseOutRequest
-from app.schemas.voice import CallTranscriptReview, StructuredCallNotes
+from app.schemas.voice import StructuredCallNotes
 from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
     enqueue_call_transcript,
     process_call_transcript,
     process_next_call_transcript,
+    process_next_pending_call_note_approval,
 )
 from app.services.leads import close_out_lead
 
@@ -193,7 +193,7 @@ def test_close_out_during_transcription_failure_keeps_ai_work_dismissed(
     assert operation_event.last_error.startswith("Lead closed out:")
 
 
-def test_call_transcription_auto_populates_empty_fields_before_review(
+def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     db_session: Session,
     api_db_override: None,
     monkeypatch: MonkeyPatch,
@@ -450,7 +450,7 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
 
     processed = process_call_transcript(db_session, transcript.id, settings)
 
-    assert processed.status == "needs_review"
+    assert processed.status == "approved"
     assert processed.transcript_text
     assert processed.confidence_score == 88
     assert audio_transcription_calls == 1
@@ -469,14 +469,17 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
     )
     assert auto_population_event is not None
     assert "desired_timeline" in auto_population_event.summary
-    lead.occupancy_status = "Tenant occupied"
-    db_session.commit()
-    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 1
+    assert db_session.scalar(select(func.count()).select_from(ApprovalRequest)) == 0
     assert db_session.scalar(select(func.count()).select_from(AiRunLog)) == 2
     run_keys = set(db_session.scalars(select(AiRunLog.idempotency_key)))
     assert len(run_keys) == 2
     assert all(key and ":manual:1:attempt:" in key for key in run_keys)
-    ai_run = db_session.scalar(select(AiRunLog).where(AiRunLog.status == "needs_review"))
+    ai_run = db_session.scalar(
+        select(AiRunLog).where(
+            AiRunLog.status == "completed",
+            AiRunLog.error_message.is_(None),
+        )
+    )
     assert ai_run is not None
     assert ai_run.input_tokens == 2000
     assert ai_run.output_tokens == 500
@@ -494,70 +497,10 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
         )
     )
     assert operation_event is not None
-    assert operation_event.status == "needs_review"
+    assert operation_event.status == "completed"
     assert ai_run.orchestrator_event_id == operation_event.id
 
     client = TestClient(app)
-    approval = db_session.scalar(select(ApprovalRequest))
-    assert approval is not None
-    approval_list = client.get(
-        "/api/v1/approvals",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-    )
-    assert approval_list.status_code == 200
-    assert approval_list.json()["items"][0]["review_url"] == "/os/inbox"
-    blind_decision = client.patch(
-        f"/api/v1/approvals/{approval.id}/decision",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json={"status": "approved", "decision_notes": "Approve without the call."},
-    )
-    assert blind_decision.status_code == 422
-
-    reviewed_notes = {
-        **notes_payload,
-        "property_condition": "Roof replacement needed",
-    }
-    payload = CallTranscriptReview(
-        status="approved",
-        structured_notes=StructuredCallNotes.model_validate(reviewed_notes),
-        decision_notes="Checked against the recording.",
-        apply_field_updates=[
-            "motivation",
-            "timeline",
-            "property_condition",
-            "occupancy_status",
-            "asking_price",
-            "mortgage_balance",
-        ],
-        create_follow_up_task=True,
-    )
-    review_response = client.patch(
-        f"/api/v1/voice/transcripts/{transcript.id}/review",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json=payload.model_dump(mode="json"),
-    )
-    assert review_response.status_code == 200
-    assert review_response.json()["status"] == "approved"
-    db_session.refresh(operation_event)
-    assert operation_event.status == "completed"
-    assert (operation_event.payload or {})["review_outcome"] == "approved"
-    db_session.refresh(lead)
-    assert lead.motivation == "Existing verified motivation"
-    assert lead.desired_timeline == "30 days"
-    assert lead.property_condition == "Roof replacement needed"
-    assert lead.occupancy_status == "Tenant occupied"
-    assert lead.asking_price == "$180,000"
-    assert lead.mortgage_balance == "$92,000 payoff"
-    assert lead.next_follow_up_at is not None
-    assert lead.next_follow_up_at.replace(tzinfo=UTC) == datetime(2026, 7, 20, 18, 0, tzinfo=UTC)
-    assert (
-        db_session.scalar(
-            select(func.count())
-            .select_from(CommunicationRecord)
-            .where(CommunicationRecord.provider == "openai_reviewed")
-        )
-        == 1
-    )
     approved_note = db_session.scalar(
         select(CommunicationRecord).where(CommunicationRecord.provider == "openai_reviewed")
     )
@@ -565,7 +508,13 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
     assert approved_note.lead_id == lead.id
     assert approved_note.contact_id == lead.contact_id
     assert approved_note.conversation_id == conversation.id
+    assert approved_note.subject == "Call summary"
     assert "Mortgage balance/payoff: $92,000 payoff" in approved_note.body
+    assert approved_note.communication_metadata == {
+        "call_transcript_id": str(transcript.id),
+        "human_approved": False,
+        "automatically_posted": True,
+    }
     lead_detail = client.get(
         f"/api/v1/leads/{lead.id}",
         headers={"X-Dev-User-Email": OWNER_EMAIL},
@@ -573,48 +522,18 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
     assert lead_detail.status_code == 200, lead_detail.text
     lead_payload = lead_detail.json()
     assert lead_payload["desired_timeline"] == "30 days"
-    assert lead_payload["property_condition"] == "Roof replacement needed"
-    assert lead_payload["occupancy_status"] == "Tenant occupied"
-    assert lead_payload["asking_price"] == "$180,000"
-    assert lead_payload["mortgage_balance"] == "$92,000 payoff"
-    assert lead_payload["next_follow_up_at"] == "2026-07-20T18:00:00"
+    assert lead_payload["property_condition"] == "Roof needs replacement"
+    assert lead_payload["occupancy_status"] == "Owner occupied"
     assert lead_payload["communications"][0]["id"] == str(approved_note.id)
     assert lead_payload["communications"][0]["direction"] == "internal"
     assert lead_payload["communications"][0]["channel"] == "note"
-    assert any(task["task_type"] == "call_follow_up" for task in lead_payload["open_tasks"])
+    assert not lead_payload["open_tasks"]
     db_session.refresh(transcript)
-    review_metrics = (transcript.transcript_metadata or {}).get("review_metrics")
-    assert isinstance(review_metrics, dict)
-    assert review_metrics["changed_fields"] == ["property_condition"]
-    assert review_metrics["field_agreement_percent"] == 93
-    quality_response = client.get(
-        "/api/v1/ai",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-    )
-    assert quality_response.status_code == 200
-    quality = quality_response.json()["call_intelligence_quality"]
-    assert quality["reviewed_calls"] == 1
-    assert quality["approved_calls"] == 1
-    assert quality["average_field_agreement"] == 93
-    assert quality["autonomy_status"] == "human_review_required"
-    assert (
-        db_session.scalar(
-            select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
-        )
-        == 1
-    )
-
-    follow_up_task = db_session.scalar(select(Task).where(Task.task_type == "call_follow_up"))
-    assert follow_up_task is not None
-    assert follow_up_task.due_at is not None
-    assert follow_up_task.due_at.replace(tzinfo=UTC) == datetime(2026, 7, 20, 18, 0, tzinfo=UTC)
-
-    repeated = client.patch(
-        f"/api/v1/voice/transcripts/{transcript.id}/review",
-        headers={"X-Dev-User-Email": OWNER_EMAIL},
-        json=payload.model_dump(mode="json"),
-    )
-    assert repeated.status_code == 200
+    metadata = transcript.transcript_metadata or {}
+    assert metadata["note_posting_mode"] == "automatic"
+    assert metadata["human_review_required"] is False
+    assert metadata["approved_note_logged"] is True
+    assert metadata["follow_up_task_created"] is False
     assert (
         db_session.scalar(
             select(func.count())
@@ -623,9 +542,52 @@ def test_call_transcription_auto_populates_empty_fields_before_review(
         )
         == 1
     )
+
+    legacy_metadata = dict(transcript.transcript_metadata or {})
+    legacy_metadata.pop("applied_at", None)
+    transcript.status = "needs_review"
+    transcript.approved_at = None
+    transcript.transcript_metadata = {
+        **legacy_metadata,
+        "human_review_required": True,
+        "note_posting_mode": "legacy_review",
+    }
+    db_session.delete(approved_note)
+    legacy_approval = ApprovalRequest(
+        organization_id=organization.id,
+        requested_by_user_id=None,
+        assigned_to_user_id=owner.id,
+        decided_by_user_id=None,
+        request_type="call_notes_review",
+        entity_type="call_transcript",
+        entity_id=transcript.id,
+        status="pending",
+        title="Review AI call notes",
+        summary=notes_payload["summary"],
+        decision_notes=None,
+        due_at=None,
+        decided_at=None,
+        approval_metadata={"lead_id": str(lead.id)},
+    )
+    db_session.add(legacy_approval)
+    ai_run.status = "needs_review"
+    operation_event.status = "needs_review"
+    db_session.commit()
+
+    assert process_next_pending_call_note_approval(db_session, settings) == transcript.id
+    db_session.refresh(transcript)
+    db_session.refresh(legacy_approval)
+    db_session.refresh(ai_run)
+    db_session.refresh(operation_event)
+    assert transcript.status == "approved"
+    assert legacy_approval.status == "cancelled"
+    assert ai_run.status == "completed"
+    assert operation_event.status == "completed"
     assert (
         db_session.scalar(
-            select(func.count()).select_from(Task).where(Task.task_type == "call_follow_up")
+            select(func.count())
+            .select_from(CommunicationRecord)
+            .where(CommunicationRecord.provider == "openai_reviewed")
         )
         == 1
     )

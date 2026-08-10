@@ -47,6 +47,7 @@ from app.services.property_identity import (
     refresh_property_identity_keys,
 )
 from app.services.property_intelligence import enqueue_property_research
+from app.services.staff_lead_alerts import queue_staff_lead_alerts_for_lead
 from app.services.tasks import ensure_speed_to_lead_task
 
 ACTIVE_LEAD_STAGES = {
@@ -151,23 +152,33 @@ def create_public_seller_lead(
                 user_agent=user_agent,
             )
         )
-    db.add(
-        LeadFormSubmission(
-            organization_id=organization.id,
-            lead_id=lead.id,
-            landing_page=payload.attribution.landing_page,
-            referrer=payload.attribution.referrer,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            raw_payload={
-                **payload.model_dump(mode="json"),
-                "_intake_source": intake_source,
-                "_provider_record_id": provider_record_id,
-            },
-            enrichment_token_hash=hash_enrichment_token(enrichment_token),
-            enrichment_expires_at=enrichment_expires_at,
-        )
+    submission = LeadFormSubmission(
+        organization_id=organization.id,
+        lead_id=lead.id,
+        landing_page=payload.attribution.landing_page,
+        referrer=payload.attribution.referrer,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        raw_payload={
+            **payload.model_dump(mode="json"),
+            "_intake_source": intake_source,
+            "_provider_record_id": provider_record_id,
+            "_matched_existing_lead": matched_existing_lead,
+        },
+        enrichment_token_hash=hash_enrichment_token(enrichment_token),
+        enrichment_expires_at=enrichment_expires_at,
     )
+    db.add(submission)
+    db.flush()
+    if intake_source == "seller_website" and not matched_existing_lead:
+        queue_staff_lead_alerts_for_lead(
+            db,
+            lead=lead,
+            source_type="website_form",
+            source_event_id=submission.id,
+            source_label="Website",
+            source_entity_type="lead_form_submission",
+        )
     db.add_all(
         [
             create_attribution_touch(organization.id, lead.id, "first_touch", payload),

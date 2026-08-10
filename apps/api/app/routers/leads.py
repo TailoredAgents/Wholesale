@@ -50,6 +50,11 @@ from app.schemas.leads import (
     UnderwritingManualComparableCreate,
     UnderwritingManualComparableRead,
 )
+from app.schemas.underwriting_comp_copilot import (
+    CompCopilotAnswerRead,
+    CompCopilotAskRequest,
+    CompCopilotThreadRead,
+)
 from app.services.acquisition_operations import update_appointment
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.leads import (
@@ -94,6 +99,10 @@ from app.services.repair_estimates import (
     create_repair_estimate,
     get_repair_catalog,
     list_repair_estimates,
+)
+from app.services.underwriting_comp_copilot import (
+    ask_comp_copilot,
+    get_comp_copilot_thread,
 )
 from app.services.underwriting_manual_comps import (
     create_manual_comparable,
@@ -626,6 +635,57 @@ def apply_underwriting_comp_review(
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return analysis
+
+
+@router.get(
+    "/{lead_id}/underwriting/market-analysis/{analysis_id}/copilot",
+)
+def read_underwriting_comp_copilot(
+    lead_id: UUID,
+    analysis_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_full_leads_dependency)],
+) -> CompCopilotThreadRead:
+    thread = get_comp_copilot_thread(
+        db,
+        principal,
+        lead_id,
+        analysis_id,
+        get_settings(),
+    )
+    if thread is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found.")
+    return thread
+
+
+@router.post(
+    "/{lead_id}/underwriting/market-analysis/{analysis_id}/copilot/messages",
+    status_code=201,
+)
+def create_underwriting_comp_copilot_message(
+    lead_id: UUID,
+    analysis_id: UUID,
+    payload: CompCopilotAskRequest,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(edit_leads_dependency)],
+) -> CompCopilotAnswerRead:
+    try:
+        answer = ask_comp_copilot(
+            db,
+            principal,
+            lead_id,
+            analysis_id,
+            get_settings(),
+            question=payload.question,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+    if answer is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found.")
+    return answer
 
 
 @router.get("/{lead_id}/underwriting/market-analysis/{analysis_id}/report.pdf")

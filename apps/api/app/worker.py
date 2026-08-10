@@ -13,7 +13,10 @@ from app.core.observability import initialize_error_monitoring
 from app.integrations.operations_alerts import send_operational_failure_alert
 from app.services.acquisition_operations import process_next_acquisition_reminder
 from app.services.ai_operations import process_next_ai_operation
-from app.services.call_intelligence import process_next_call_transcript
+from app.services.call_intelligence import (
+    process_next_call_transcript,
+    process_next_pending_call_note_approval,
+)
 from app.services.email import sync_next_email_account
 from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
@@ -55,6 +58,7 @@ WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("property_intelligence", process_next_property_research),
     ("ai_operations", process_next_ai_operation),
     ("call_transcription", process_next_call_transcript),
+    ("call_note_auto_post", process_next_pending_call_note_approval),
     ("recording_retention", purge_next_expired_recording),
     ("email_sync", sync_next_email_account),
     ("resend_email_events", process_next_resend_event),

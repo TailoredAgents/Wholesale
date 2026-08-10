@@ -39,6 +39,14 @@ const calibrationOutcome = readFileSync(
   resolve(webRoot, "src/app/leads/[leadId]/calibration-outcome-form.tsx"),
   "utf8",
 );
+const compCopilot = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/comp-copilot-panel.tsx"),
+  "utf8",
+);
+const comparableMap = readFileSync(
+  resolve(webRoot, "src/app/leads/[leadId]/comparable-location-map.tsx"),
+  "utf8",
+);
 const reportService = readFileSync(
   resolve(repositoryRoot, "apps/api/app/services/underwriting_reports.py"),
   "utf8",
@@ -187,4 +195,24 @@ test("U4 presents provider provenance, conflicts, and AI recommendations as revi
   assert.match(marketValue, /comp_intelligence/);
   assert.match(marketValue, /Comp source coverage/);
   assert.match(marketValue, /deduplicated before weighting/);
+});
+
+test("Comp Copilot stays tied to immutable evidence and human review", () => {
+  assert.match(marketValue, /<CompCopilotPanel/);
+  assert.match(compCopilot, /Stonegate Comp Copilot/);
+  assert.match(compCopilot, /V3 math remains authoritative/);
+  assert.match(compCopilot, /analysisId/);
+  assert.match(compCopilot, /suggested_actions/);
+  assert.match(compCopilot, /onSuggestedAction/);
+  assert.match(comparableReview, /id="comparable-review"/);
+});
+
+test("Comparable location review uses a real interactive map", () => {
+  assert.match(comparableReview, /<ComparableLocationMap/);
+  assert.match(comparableMap, /new maplibre\.Map/);
+  assert.match(comparableMap, /fitBounds/);
+  assert.match(comparableMap, /item\.included \? "Included" : "Excluded"/);
+  assert.match(comparableMap, /includedMarker/);
+  assert.match(comparableMap, /excludedMarker/);
+  assert.match(comparableMap, /conditionOverrides/);
 });

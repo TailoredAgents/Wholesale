@@ -25,10 +25,13 @@ from app.models.foundation import (
     LeadManagementCase,
     OfflineConversionExport,
     Property,
+    StaffLeadAlert,
     Task,
+    User,
 )
 from app.routers import public as public_router
 from app.services.bootstrap import bootstrap_foundation
+from app.services.meta_lead_ads import process_next_staff_lead_alert
 from app.services.request_rate_limit import (
     FixedWindowRateLimiter,
     RequestBodyTooLargeError,
@@ -161,6 +164,64 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert submission is not None
     assert submission.enrichment_token_hash
     assert payload["enrichment_token"] not in str(submission.raw_payload)
+
+
+def test_public_seller_intake_queues_source_independent_staff_alert(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    owner = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=public_payload())
+
+    assert response.status_code == 201, response.text
+    submission = db_session.scalar(select(LeadFormSubmission))
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert submission is not None
+    assert alert is not None
+    assert alert.meta_lead_event_id is None
+    assert alert.source_type == "website_form"
+    assert alert.source_event_id == submission.id
+    assert alert.message_body.startswith("New Website House lead:")
+    assert process_next_staff_lead_alert(
+        db_session,
+        Settings(STAFF_LEAD_ALERT_SMS_MODE="simulate"),
+    ) == alert.id
+    db_session.refresh(alert)
+    assert alert.status == "simulated"
+
+
+def test_staff_alert_worker_recovers_recent_unalerted_website_lead(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    owner = db_session.scalar(select(User).where(User.email == "owner@example.com"))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.lead_alert_sms_enabled = False
+    db_session.commit()
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=public_payload())
+    assert response.status_code == 201, response.text
+    assert db_session.scalar(select(StaffLeadAlert)) is None
+
+    owner.lead_alert_sms_enabled = True
+    db_session.commit()
+    alert_id = process_next_staff_lead_alert(
+        db_session,
+        Settings(STAFF_LEAD_ALERT_SMS_MODE="simulate"),
+    )
+
+    alert = db_session.get(StaffLeadAlert, alert_id)
+    assert alert is not None
+    assert alert.source_type == "website_form"
+    assert alert.meta_lead_event_id is None
+    assert alert.status == "simulated"
 
 
 def test_public_land_intake_preserves_asset_and_parcel_identity(

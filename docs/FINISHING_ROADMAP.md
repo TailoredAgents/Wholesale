@@ -558,8 +558,9 @@ Using company-controlled addresses:
 
 ### Current Status
 
-Stonegate's dedicated seller-inquiry A2P campaign is approved, and internal Facebook lead alerts
-have prior controlled-delivery evidence through Stonegate's direct-number setup. Repeat that alert
+Stonegate's dedicated seller-inquiry A2P campaign is approved, and internal new-lead alerts for
+website and Facebook intake have prior controlled-delivery evidence through Stonegate's
+direct-number setup. Repeat that alert
 acceptance after the worker credential correction before relying on it for a live ad window. Full
 seller SMS acceptance, shared acquisitions Voice routing, and production Voice acceptance remain.
 A Messaging Service is optional for the direct-number mode. Another company's campaign, number, or
@@ -622,8 +623,8 @@ webhooks must not be used.
 - external-action contracts and zero-delivery simulations
 - event-driven Lead Manager preparation for website, manual, prospecting-handoff, and inbound-call
   leads, with assigned review in Tasks and accepted briefs logged as internal notes
-- Call Intelligence linkage from recording and transcript processing through human review to the
-  shared orchestrator-event and run history
+- Call Intelligence linkage from recording and transcript processing through automatic internal
+  note placement to the shared orchestrator-event and run history
 
 ### Remaining Actions
 

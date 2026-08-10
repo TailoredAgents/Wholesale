@@ -60,7 +60,7 @@ must use Stonegate Home Buyers.
 | Clerk authentication | Implemented and active |
 | PostgreSQL data layer | Implemented and active |
 | Resend two-way email | Implemented and configured with UUID-fenced leases, route checkpoints, bounded retry, restricted routing, and manager-only dead-letter recovery; controlled mailbox acceptance and malware decision remain |
-| Twilio SMS | Implemented; internal Facebook lead alerts have prior delivery evidence but require repeat acceptance after the worker credential correction; seller-facing SMS acceptance remains |
+| Twilio SMS | Implemented; internal new-lead alerts cover website and Facebook intake and have prior delivery evidence, but require repeat acceptance after the worker credential correction; seller-facing SMS acceptance remains |
 | Twilio Voice | Implemented and processing recordings/transcripts; full routing, recording, failure-recovery, retention, and deletion acceptance remains |
 | RentCast property data | Implemented; provider coverage varies by address |
 | RealEstateAPI property intelligence | Implemented and active; controlled property research passed |
@@ -659,7 +659,8 @@ redirect to their new owners.
 3. The lead is assigned to acquisitions; owners can become watchers.
 4. The original caller loses prospect editing access after handoff but the original activity
    remains attributable.
-5. Website inquiries enter the same Lead Manager queue through a separate consented intake path.
+5. Website inquiries enter the same Lead Manager queue through a separate consented intake path and
+   queue the same opted-in staff SMS alerts used by Facebook intake.
 6. The Lead Manager accepts, returns for correction, or terminally rejects the handoff with a
    structured decision code.
 7. A handoff counts as an accepted warm lead only after accepted status, right-party contact,
@@ -742,6 +743,11 @@ redirect to their new owners.
 14. Investor and client PDFs use the same immutable analysis with different disclosure boundaries.
    Investor reports include guided repair decisions, ranges, evidence, catalog version, and items
    to verify; PDFs remain available when repairs are not walkthrough-confirmed.
+   The same immutable analysis owns a persistent Comp Copilot thread. Its answers cite sanitized
+   saved evidence and can navigate the operator to comp, condition, micro-market, or refresh work,
+   but cannot change evidence, state a price, or exercise valuation or approval authority. The
+   interactive Location view plots the subject plus selected and excluded sales from saved
+   coordinates without another provider lookup.
 15. A human creates a negotiation plan tied to one saved underwriting version.
 16. Approval establishes opening, target, stretch, and hard-ceiling authority.
 17. Concessions and price discussions are appended to the negotiation ledger.
@@ -998,18 +1004,21 @@ When recording is deliberately enabled:
    commitments, and next action.
 5. transcript-grounded values immediately fill only empty CRM qualification fields and create an
    audit/activity record; existing staff-entered values are not overwritten.
-6. the narrative draft appears beside the recording in Inbox, where a human can compare the audio,
-   correct an auto-filled value, approve or reject the notes, and optionally create follow-up work.
-7. approved notes become an internal conversation note that also appears in the seller history.
+6. the transcript-grounded narrative posts automatically as an internal conversation note and
+   appears in Inbox, the seller record, communication history, and recent activity. No approval
+   request is created.
+7. staff can correct an inaccurate CRM value or add a clarifying internal note. A proposed next
+   action remains context only and does not create a task automatically.
 8. successful transcription is checkpointed before structured note generation, so a later note
    failure can reuse the saved transcript without paying to transcribe the same call again.
 9. temporary failures retry with exponential delay. Repeated failures become `exhausted`, and an
    authorized user can queue an audited manual retry from Inbox.
-10. the AI run and orchestrator event close with the same human decision, and retention or early
-   deletion remains tracked.
+10. the AI run and orchestrator event close automatically after the note is saved, and retention or
+   early deletion remains tracked. Legacy notes left in `needs_review` are automatically posted by
+   the worker and their obsolete approval requests are cancelled.
 
 The integration is not launch-ready unless Voice, the approved recording-authorization policy,
-transcription, OpenAI, failure visibility, retention, deletion, and human review/apply have passed
+transcription, OpenAI, failure visibility, retention, deletion, and automatic note placement have passed
 together. A spoken disclosure is optional in the Owner-selected Georgia-only one-party mode, whose
 operating policy still requires documented production acceptance.
 

@@ -362,9 +362,9 @@ risks, confidence, and evidence. Select **Accept brief** when it is useful and a
 adds it as an internal note on that seller's existing timeline. Select **Reject** when it is wrong
 or unhelpful. Neither choice contacts the seller or completes your actual follow-up task.
 
-Call-note reviews open in Inbox because you must compare the narrative draft with the recording and
-transcript. Eligible empty CRM fields may already be populated from transcript evidence; correct
-any inaccurate value during review, and approve or reject the narrative note separately.
+Call summaries appear automatically in Inbox and the seller record after transcription. Eligible
+empty CRM fields may also be populated from transcript evidence. No note approval is required;
+correct an inaccurate CRM value or add a clarifying internal note when needed.
 
 Communication tasks open the conversation. Appointment tasks open the calendar. Other tasks open
 the full lead.

@@ -163,8 +163,8 @@ def enqueue_call_intelligence_ai_work(
         status="processing",
         payload={
             "capability_key": "call.summarize",
-            "title": "Review AI call notes",
-            "summary": "Stonegate is transcribing the call and preparing structured seller notes.",
+            "title": "Prepare AI call notes",
+            "summary": "Stonegate is transcribing the call and preparing the internal seller note.",
             "priority": "high",
             "assigned_user_id": str(assigned_user_id) if assigned_user_id else None,
             "source_url": source_url,

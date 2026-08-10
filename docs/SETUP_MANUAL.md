@@ -608,14 +608,14 @@ When ready:
 Stonegate's Disposition Copilot ranks reviewed internal and provider candidates. It should not
 silently import or contact every result.
 
-## Facebook Lead Forms And Staff Text Alerts
+## Website And Facebook Lead Staff Text Alerts
 
 Facebook lead forms use a different connection from the website Pixel. The Pixel measures site
 activity; Zapier delivers each instant-form submission to Stonegate, and the worker performs the
 normal CRM intake. No Meta developer app or Graph API token is required.
 
 1. Finish the Zapier connection, one-action mapping, and Render Page-ID steps in
-   [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#zapier-facebook-lead-ads-intake-and-staff-alerts).
+   [SETUP_REFERENCE.md](./SETUP_REFERENCE.md#website-and-zapier-lead-intake-staff-alerts).
 2. Use this Stonegate action URL:
    `https://api.stonegatehb.com/api/v1/webhooks/zapier/facebook-leads`.
 3. Submit one Facebook test lead containing name, phone or email, property street address, city,
@@ -624,7 +624,7 @@ normal CRM intake. No Meta developer app or Graph API token is required.
    speed-to-lead work, normal intake notifications, and a provider-confirmed ZIP/county when the
    address matched confidently.
 5. Under **Settings > Communications**, save each alert recipient's cellphone and enable
-   **Text new Facebook leads**.
+   **Text new leads**.
 6. Activate staff texts only after the Twilio campaign/use case is approved. Confirm one delivered
    alert per enabled employee using a controlled test lead.
 

@@ -330,7 +330,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       email: values.email.trim() || null,
       preferred_contact_method: values.preferred_contact_method,
       reason_for_selling: null,
-      desired_timeline: null,
+      desired_timeline: values.desired_timeline,
       asking_price: null,
       mortgage_balance: null,
       comments: null,
@@ -447,7 +447,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
           property_condition: values.property_condition || null,
           occupancy_status: values.occupancy_status || null,
           reason_for_selling: values.reason_for_selling || null,
-          desired_timeline: values.desired_timeline || null,
           asking_price: values.asking_price.trim() || null,
           mortgage_balance: values.mortgage_balance.trim() || null,
           comments: values.comments.trim() || null,
@@ -723,6 +722,30 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               />
             </Field>
           </div>
+          <Field
+            label="When would you ideally like to sell?"
+            name="desired_timeline"
+            error={errors.desired_timeline}
+            required
+          >
+            <select
+              id="desired_timeline"
+              name="desired_timeline"
+              value={values.desired_timeline}
+              onChange={(event) => updateValue("desired_timeline", event.target.value)}
+              aria-invalid={Boolean(errors.desired_timeline)}
+              aria-describedby={
+                errors.desired_timeline ? "desired_timeline-error" : undefined
+              }
+            >
+              <option value="">Select your preferred timeline</option>
+              <option value="asap">As soon as possible</option>
+              <option value="within_30_days">Within 30 days</option>
+              <option value="within_one_to_three_months">Within one to three months</option>
+              <option value="within_three_to_six_months">Within three to six months</option>
+              <option value="exploring">I am only exploring my options</option>
+            </select>
+          </Field>
         </fieldset>
       ) : null}
 
@@ -921,40 +944,23 @@ function EnrichmentForm({
         </span>
       </div>
 
-      <div className={styles.gridTwo}>
-        <Field label="Property type" name="property_type" hint="Optional">
-          <select
-            id="property_type"
-            name="property_type"
-            value={values.property_type}
-            onChange={(event) => updateValue("property_type", event.target.value)}
-          >
-            <option value="">Select if known</option>
-            <option value="single_family">Single-family house</option>
-            <option value="townhouse">Townhouse</option>
-            <option value="condo">Condo</option>
-            <option value="multi_family">Multi-family property</option>
-            <option value="mobile_manufactured">Mobile or manufactured home</option>
-            <option value="land">Land</option>
-            <option value="other">Other</option>
-          </select>
-        </Field>
-        <Field label="Preferred timeline" name="desired_timeline" hint="Optional">
-          <select
-            id="desired_timeline"
-            name="desired_timeline"
-            value={values.desired_timeline}
-            onChange={(event) => updateValue("desired_timeline", event.target.value)}
-          >
-            <option value="">Select if known</option>
-            <option value="asap">As soon as reasonably possible</option>
-            <option value="within_30_days">Within 30 days</option>
-            <option value="within_60_90_days">Within 60-90 days</option>
-            <option value="flexible">Flexible</option>
-            <option value="just_exploring">Just exploring</option>
-          </select>
-        </Field>
-      </div>
+      <Field label="Property type" name="property_type" hint="Optional">
+        <select
+          id="property_type"
+          name="property_type"
+          value={values.property_type}
+          onChange={(event) => updateValue("property_type", event.target.value)}
+        >
+          <option value="">Select if known</option>
+          <option value="single_family">Single-family house</option>
+          <option value="townhouse">Townhouse</option>
+          <option value="condo">Condo</option>
+          <option value="multi_family">Multi-family property</option>
+          <option value="mobile_manufactured">Mobile or manufactured home</option>
+          <option value="land">Land</option>
+          <option value="other">Other</option>
+        </select>
+      </Field>
 
       <div className={styles.gridTwo}>
         <Field label="Current condition" name="property_condition" hint="Optional">
@@ -1114,6 +1120,9 @@ function validateStep(step: number, values: FormValues): FieldErrors {
     if (!/^\d{5}(?:-\d{4})?$/.test(values.property_postal_code.trim())) {
       errors.property_postal_code = "Enter a valid 5-digit ZIP code.";
     }
+    if (!values.desired_timeline) {
+      errors.desired_timeline = "Select when you would ideally like to sell.";
+    }
   }
   if (step === 1) {
     if (!values.name.trim()) errors.name = "Enter your name.";
@@ -1168,7 +1177,6 @@ function hasOptionalDetails(values: FormValues) {
     values.property_condition,
     values.occupancy_status,
     values.reason_for_selling,
-    values.desired_timeline,
     values.asking_price,
     values.mortgage_balance,
     values.comments,

@@ -925,8 +925,13 @@ def get_call_intelligence_quality(
         .limit(1000)
     ).all()
     total = len(transcripts)
-    approved = sum(item.status == "approved" for item in transcripts)
-    rejected = sum(item.status == "rejected" for item in transcripts)
+    human_reviewed_transcripts = [
+        item
+        for item in transcripts
+        if (item.transcript_metadata or {}).get("note_posting_mode") != "automatic"
+    ]
+    approved = sum(item.status == "approved" for item in human_reviewed_transcripts)
+    rejected = sum(item.status == "rejected" for item in human_reviewed_transcripts)
     pending = sum(item.status == "needs_review" for item in transcripts)
     failed = sum(item.status == "failed" for item in transcripts)
     reviewed = approved + rejected

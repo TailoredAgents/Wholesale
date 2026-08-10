@@ -749,20 +749,17 @@ history into separate channel threads.
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| Call Intelligence status | Shows queued, processing, temporary failure, stopped/exhausted, or ready-for-review state | Processing starts from the completed recording; no separate generation button is required |
+| Call Intelligence status | Shows queued, processing, temporary failure, stopped/exhausted, or automatically posted state | Processing starts from the completed recording; no separate generation or approval button is required |
 | **Retry call intelligence** | Resets an exhausted transcript's attempt counter and queues the same call for another audited run | Visible only after repeated failures stop automatic retry and requires recording access |
-| Summary | Drafts the overall call result | Human review required |
-| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the draft |
+| Summary | Adds the transcript-grounded call result to Inbox and the seller record | Internal only and posted automatically |
+| Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the CRM record |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
 | Mortgage and title | Extracts possible debt or ownership concerns | Must be verified by staff |
-| Repairs / Objections / Commitments | Structures operational follow-up context | Human review required |
-| Next action / Follow-up date | Proposes the next task | Does not create a task unless selected |
+| Repairs / Objections / Commitments | Structures operational follow-up context | Saved in the automatic internal summary |
+| Next action / Follow-up date | Preserves suggested next-step context | Does not create a task automatically |
 | Supporting timestamps | Opens the transcript evidence behind an extracted item | Requires diarized transcript evidence |
-| Review auto-filled CRM fields | Corrects transcript-populated CRM values during note review | Existing staff-entered values remain unchanged |
-| Create follow-up task | Creates the reviewed proposed task | Optional approval choice |
-| **Approve** | Saves the reviewed notes and selected low-risk updates | Requires review permission |
-| **Reject** | Records that the full AI narrative should not be used | Auto-filled factual fields remain editable on the lead |
-| Approved call summary | Adds the reviewed narrative as an internal note in the conversation timeline and seller history | Never sent to the seller; remains linked to the transcript and reviewer |
+| Correct CRM fact | Changes an inaccurate transcript-populated value from the seller record | Existing staff-entered values remain unchanged unless a person edits them |
+| Automatic call summary | Adds the narrative as an internal note in the conversation timeline, seller history, and recent activity | Never sent to the seller; remains linked to the transcript and AI audit |
 
 ### Email Administration
 
@@ -802,7 +799,7 @@ button provides the number-level inbound webhook without exposing credentials.
 | --- | --- | --- |
 | Staff cellphone | Stores an employee's private forwarding destination | Enter in `+1...` format; never shown to sellers or buyers |
 | Ring cellphone | Adds that cellphone to the company line's forwarding group | Requires a valid cellphone; answering requires pressing 1 |
-| Text new Facebook leads | Opts that employee into internal SMS alerts for Facebook instant-form leads delivered through Zapier | Requires a saved personal cellphone and live staff-alert provider readiness |
+| Text new leads | Opts that employee into internal SMS alerts for new seller leads from the website, Facebook forms, and supported future intake sources | Requires a saved personal cellphone and live staff-alert provider readiness |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |
@@ -1176,7 +1173,7 @@ appraisal or permission to promise a seller a price.
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Tasks > Needs Approval view | Limits the unified work queue to governed requests and AI review | Without `audit:view`, it lists only request types covered by the viewer's permissions; `audit:view` is the sole blanket read authority and does not grant decision authority |
-| Approval row | Shows source, deadline, owner, status, and warnings | Requires read scope for that approval type; call-note review also follows its recording/lead assignment rules |
+| Approval row | Shows source, deadline, owner, status, and warnings | Requires read scope for that approval type; call summaries no longer enter this queue |
 | Source link | Opens the underlying lead, transaction, finance record, or AI review | Used when the decision needs full context |
 | Decision note | Records reasoning for approval or rejection | Required by some approval types |
 | **Approve** | Authorizes the requested governed action | Server checks the request type: offer authority, contract sending, AI changes, or acquisition follow-up each requires its own permission |

@@ -544,8 +544,12 @@ async function auditJourney(browser, viewport) {
   if (!(await page.locator("#property_city-error").isVisible())) {
     record(viewport.name, "validation", "Property step did not expose field errors.");
   }
+  if (!(await page.locator("#desired_timeline-error").isVisible())) {
+    record(viewport.name, "validation", "Property step did not require a seller timeline.");
+  }
   await page.locator("#property_city").fill("Atlanta");
   await page.locator("#property_postal_code").fill("30303");
+  await page.locator("#desired_timeline").selectOption("within_30_days");
   await page.getByRole("button", { name: /Continue/ }).click();
   await checkPage(page, viewport.name, "contact");
   await page.getByRole("button", { name: "Back" }).click();
@@ -619,7 +623,7 @@ async function auditJourney(browser, viewport) {
     property_condition: null,
     occupancy_status: null,
     reason_for_selling: null,
-    desired_timeline: null,
+    desired_timeline: "within_30_days",
     asking_price: null,
     mortgage_balance: null,
     preferred_contact_method: "sms",
@@ -652,7 +656,6 @@ async function auditJourney(browser, viewport) {
   await page.locator("#property_condition").selectOption("major_repairs");
   await page.locator("#occupancy_status").selectOption("vacant");
   await page.locator("#reason_for_selling").selectOption("repairs_or_condition");
-  await page.locator("#desired_timeline").selectOption("within_30_days");
   await page.locator("#asking_price").fill("200,000");
   await page.locator("#mortgage_balance").fill("90,000");
   await page.locator("#comments").fill("Older roof and kitchen updates are likely.");
@@ -674,7 +677,6 @@ async function auditJourney(browser, viewport) {
     property_condition: "major_repairs",
     occupancy_status: "vacant",
     reason_for_selling: "repairs_or_condition",
-    desired_timeline: "within_30_days",
     asking_price: "200,000",
     mortgage_balance: "90,000",
   })) {
@@ -686,7 +688,7 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "enrichment-link", "Enrichment was not securely linked to the request.");
   }
 
-  await page.reload({ waitUntil: "networkidle" });
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByText("Thanks. Stonegate has the property request.").waitFor({ timeout: 8_000 });
   if (state.submissions.length !== 2) record(viewport.name, "durable-confirmation", state.submissions.length);
   await checkPage(page, viewport.name, "confirmation");

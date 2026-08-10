@@ -8,10 +8,10 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
-  X,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
+import { ComparableLocationMap } from "./comparable-location-map";
 import styles from "./page.module.css";
 
 export type CompCondition = "unknown" | "as_is" | "renovated";
@@ -137,6 +137,11 @@ type ComparableReviewWorkbenchProps = {
   comparables: MarketComparable[];
   conditionOverrides: Record<string, CompCondition>;
   disabled: boolean;
+  focusRequest?: {
+    compKey: string | null;
+    nonce: number;
+    view: ReviewView;
+  } | null;
   onApply: () => void;
   onConditionChange: (compKey: string, condition: CompCondition) => void;
   onRestoreRecommendation: () => void;
@@ -153,6 +158,7 @@ export function ComparableReviewWorkbench({
   comparables,
   conditionOverrides,
   disabled,
+  focusRequest = null,
   onApply,
   onConditionChange,
   onRestoreRecommendation,
@@ -162,12 +168,18 @@ export function ComparableReviewWorkbench({
   saving,
   subject,
 }: ComparableReviewWorkbenchProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => {
+    if (!focusRequest?.compKey) return "";
+    const target = comparables.find(
+      (comp, index) => comparableKey(comp, index) === focusRequest.compKey,
+    );
+    return target?.formatted_address ?? focusRequest.compKey;
+  });
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>("all");
   const [gradeFilter, setGradeFilter] = useState("all");
   const [levelFilter, setLevelFilter] = useState("all");
   const [sort, setSort] = useState<ReviewSort>("fit");
-  const [view, setView] = useState<ReviewView>("compare");
+  const [view, setView] = useState<ReviewView>(focusRequest?.view ?? "compare");
 
   const filteredComparables = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -220,7 +232,11 @@ export function ComparableReviewWorkbench({
   ] as string[];
 
   return (
-    <section className={styles.compWorkbench} aria-label="Comparable review workbench">
+    <section
+      className={styles.compWorkbench}
+      aria-label="Comparable review workbench"
+      id="comparable-review"
+    >
       <header className={styles.compWorkbenchHeader}>
         <div>
           <span className={styles.sectionEyebrow}>Evidence decision</span>
@@ -324,8 +340,9 @@ export function ComparableReviewWorkbench({
       </div>
 
       {view === "location" ? (
-        <ComparableLocationView
+        <ComparableLocationMap
           comparables={filteredComparables}
+          conditionOverrides={conditionOverrides}
           requestedAddress={requestedAddress}
           review={review}
           subject={subject}
@@ -731,114 +748,6 @@ function ComparisonRow({
       <span role="cell">{formatDifference(subjectValue, compValue, unit, year)}</span>
     </div>
   );
-}
-
-function ComparableLocationView({
-  comparables,
-  requestedAddress,
-  review,
-  subject,
-}: {
-  comparables: MarketComparable[];
-  requestedAddress: string;
-  review: Record<string, CompReviewDraft>;
-  subject: SubjectProperty;
-}) {
-  const points = relativeLocationPoints(subject, comparables);
-  return (
-    <div className={styles.compLocationLayout}>
-      <div className={styles.compLocationPlot}>
-        <span className={styles.compassNorth}>N</span>
-        <span className={styles.compassEast}>E</span>
-        <span className={styles.compassSouth}>S</span>
-        <span className={styles.compassWest}>W</span>
-        <div className={styles.locationRingInner} />
-        <div className={styles.locationRingOuter} />
-        <div className={styles.subjectLocationDot} title={requestedAddress}>
-          S
-        </div>
-        {points.map(({ comp, left, top }, index) => {
-          const compKey = comparableKey(comp, comparables.indexOf(comp));
-          const included = review[compKey]?.included ?? comp.selection_status !== "rejected";
-          return (
-            <div
-              className={`${styles.compLocationDot} ${
-                included ? styles.locationIncluded : styles.locationExcluded
-              }`}
-              key={compKey}
-              style={{ left: `${left}%`, top: `${top}%` }}
-              title={`${comp.formatted_address ?? "Comparable"}: ${formatDistance(
-                comp.distance_miles,
-                comp.direction_from_subject,
-              )}`}
-            >
-              {index + 1}
-            </div>
-          );
-        })}
-        {!points.length ? (
-          <div className={styles.locationUnavailable}>
-            Coordinate positions are unavailable for the filtered sales.
-          </div>
-        ) : null}
-      </div>
-      <div className={styles.compLocationLegend}>
-        <div>
-          <strong>Relative location</strong>
-          <span>{requestedAddress}</span>
-          <small>Distance and direction evidence; not a parcel or neighborhood boundary map.</small>
-        </div>
-        {comparables.map((comp, index) => {
-          const compKey = comparableKey(comp, index);
-          const included = review[compKey]?.included ?? comp.selection_status !== "rejected";
-          const pointIndex = points.findIndex((point) => point.comp === comp);
-          return (
-            <div className={styles.compLocationLegendRow} key={compKey}>
-              <span data-included={included}>{pointIndex >= 0 ? pointIndex + 1 : "-"}</span>
-              <div>
-                <strong>{comp.formatted_address ?? "Unknown address"}</strong>
-                <small>
-                  {formatDistance(comp.distance_miles, comp.direction_from_subject)} / Grade {comp.comp_grade ?? "--"}
-                </small>
-              </div>
-              {included ? <Check aria-label="Included" size={15} /> : <X aria-label="Excluded" size={15} />}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function relativeLocationPoints(subject: SubjectProperty, comparables: MarketComparable[]) {
-  if (
-    typeof subject.latitude !== "number" ||
-    typeof subject.longitude !== "number"
-  ) {
-    return [];
-  }
-  const positioned = comparables.flatMap((comp) =>
-    typeof comp.latitude === "number" && typeof comp.longitude === "number"
-      ? [
-          {
-            comp,
-            x:
-              (comp.longitude - subject.longitude!) *
-              Math.cos((subject.latitude! * Math.PI) / 180),
-            y: comp.latitude - subject.latitude!,
-          },
-        ]
-      : [],
-  );
-  const maxOffset = Math.max(
-    ...positioned.map((point) => Math.hypot(point.x, point.y)),
-    0.00001,
-  );
-  return positioned.map((point) => ({
-    comp: point.comp,
-    left: 50 + (point.x / maxOffset) * 38,
-    top: 50 - (point.y / maxOffset) * 38,
-  }));
 }
 
 function comparableKey(comp: MarketComparable, index: number) {

@@ -368,7 +368,7 @@ export function VoiceLineSettings() {
                   name="lead_alert_sms_enabled"
                   type="checkbox"
                 />
-                <span>Text new Facebook leads</span>
+                <span>Text new leads</span>
               </label>
               <button disabled={busyId === `user:${user.id}`} type="submit">
                 <Save aria-hidden="true" size={15} />

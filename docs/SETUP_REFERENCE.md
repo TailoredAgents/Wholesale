@@ -36,7 +36,7 @@ This is the maintainer reference for exact variables, URLs, and commands. Use
 | AI | OpenAI | Configured; Copilot pilots pending |
 | Property data | RentCast + RealEstateAPI | Active; controlled property research passed |
 | Operational email | Resend | Configured; controlled acceptance pending |
-| SMS | Twilio | Seller-inquiry A2P approved; repeat internal Facebook lead-alert acceptance after the worker credential correction |
+| SMS | Twilio | Seller-inquiry A2P approved; website and Facebook staff alerts are implemented; repeat internal new-lead alert acceptance after the worker credential correction |
 | Voice | Twilio | Implemented and processing calls; complete routing, recording, recovery, retention, and deletion acceptance pending |
 | E-signature | SignWell | Configuration and acceptance pending |
 | Buyer data | DealMachine | Optional and disabled; safe to remove after subscription cancellation |
@@ -340,7 +340,7 @@ Variables:
 - `UNDERWRITING_V3_SHADOW_ENABLED=false`
 - `UNDERWRITING_REALESTATEAPI_COMPS_MODE=candidate`
 - `UNDERWRITING_DEALMACHINE_COMPS_MODE=disabled`
-- `UNDERWRITING_AI_COMP_ANALYST_MODE=disabled`
+- `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`
 - optional `ATTOM_API_KEY` placeholder
 
 V3 is the single live Stonegate Valuation method. V2.2 is retained only for historical reads and an
@@ -400,9 +400,16 @@ ineligible, dropped, and conflicting sales. Reused snapshots show zero current-r
 preserving original source cost and latency. RealEstateAPI and RentCast estimates remain external
 benchmarks; Stonegate's screened comp math remains the valuation conclusion.
 
-Set `UNDERWRITING_AI_COMP_ANALYST_MODE=draft` only after OpenAI is configured. The draft analyst
-can organize comp review work and explain deterministic range drivers, but its strict output
-contract excludes ARV, offers, value ranges, weights, and dollar adjustments.
+Production enables `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`. With `AI_ENABLED=true` and a valid
+OpenAI key, the draft analyst and persistent Comp Copilot can organize comp review work and explain
+deterministic evidence. Without those prerequisites, Comp Copilot remains available with bounded
+deterministic guidance. The strict contract excludes ARV, offers, value ranges, weights, dollar
+adjustments, and approval authority.
+
+Each Copilot thread belongs to one immutable market-analysis ID. It stores messages, citations,
+suggested navigation actions, model use, and token counts. It uses saved analysis and structured
+inspection metadata and does not make a RentCast or RealEstateAPI request. Apply migration `0096`
+before deploying the web application that exposes this workspace.
 
 Acceptance:
 
@@ -806,11 +813,16 @@ Meta rejects events older than seven days; the worker expires those instead of r
 request. Delivery remains one event per request so one invalid event cannot reject unrelated
 events.
 
-## Zapier Facebook Lead Ads Intake And Staff Alerts
+## Website And Zapier Lead Intake Staff Alerts
 
-This is separate from the Pixel and Conversions API. The Pixel reports activity back to Meta;
-Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead. Stonegate
-does not use a Meta developer app, Graph access token, or direct Meta webhook for lead intake.
+The public **Get a Cash Offer** form creates a Stonegate lead directly. It requires the property
+street, city, state, seller timeline, and contact information before submission. Its browser
+`Contact` event and matching server conversion use the same event ID for Meta deduplication.
+
+Facebook instant forms are separate from the Pixel and Conversions API. The Pixel reports activity
+back to Meta; Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead.
+Stonegate does not use a Meta developer app, Graph access token, or direct Meta webhook for lead
+intake.
 
 Processing variables needed on both **oakwell-api** and **oakwell-worker**:
 
@@ -836,6 +848,9 @@ legitimate Zap replay does not consume another accepted-lead slot.
 
 The worker also needs `PROPERTY_DATA_PROVIDER=rentcast` and `RENTCAST_API_KEY` for automatic
 address enrichment. It needs the complete Twilio SMS configuration when staff alerts are live.
+Website and Facebook intake both create source-tagged alerts for every active user who has a valid
+cellphone and **Text new leads** enabled. The worker also recovers a recent website submission when
+a recipient was not alert-ready at intake, without sending duplicates.
 
 The endpoint is:
 
@@ -960,7 +975,7 @@ should receive them:
 
 1. Open **Settings > Communications > Staff ring settings**.
 2. Enter the employee's personal cellphone in `+1...` format.
-3. Select **Text new Facebook leads** and save.
+3. Select **Text new leads** and save.
 4. Leave `STAFF_LEAD_ALERT_SMS_MODE=disabled` until Stonegate confirms its Twilio registration and
    direct sender/campaign or optional Messaging Service covers this internal notification use case,
    and each employee has agreed to receive the alerts.
@@ -992,7 +1007,7 @@ alerts cannot be resent through that endpoint.
 
 If a worker log contains `meta_lead_ads` for a lead but no `staff_lead_alerts`, first find the
 matching `staff_lead_alert_queue_evaluated` event. If `ready_recipients=0`, correct the employee's
-cellphone or **Text new Facebook leads** preference. If an alert exists but delivery is blocked,
+cellphone or **Text new leads** preference. If an alert exists but delivery is blocked,
 correct the listed worker configuration. A Twilio Console message appears only after
 `staff_lead_alert_delivery_accepted`; its absence before that event is expected.
 

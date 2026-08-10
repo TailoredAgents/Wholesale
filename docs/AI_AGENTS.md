@@ -171,7 +171,7 @@ after prompts, tools, schemas, retrieval, and representative evals have plateaue
 | Prospecting Intelligence | Rank records, explain priority, flag data gaps | Campaign records, vendor data, suppression evidence, property facts | Internal recommendation |
 | Inbound Lead | Triage seller inquiries, identify urgency, draft first response | CRM, consent, inbox, calendar | Approved external templates after pilot |
 | Lead Manager Support | Find qualification gaps, stale leads, and next actions for the human Lead Manager | CRM, tasks, inbox, calendar, approved scripts | Low-risk internal tasks |
-| Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Empty-field evidence auto-fill; reviewed narrative notes and follow-up tasks |
+| Call Intelligence | Transcribe, separate speakers, extract facts and commitments | Twilio recordings, OpenAI transcription, CRM | Empty-field evidence auto-fill and automatic internal call summaries; no automatic follow-up task |
 | Appointment Preparation | Produce seller brief, questions, logistics, and risk flags | CRM, qualification, underwriting, internal calendar, optional routes | Internal brief |
 | Underwriting And Comp | Prepare evidence, exclusions, ranges, scenarios, and reports | RentCast, RealEstateAPI, later MLS/RESO or ATTOM, deterministic calculators | Recommendation only |
 | Negotiation Coach | Prepare questions, objections, options, and ceiling warnings | Approved underwriting, offer authority, seller history | Internal coaching only |
@@ -316,12 +316,12 @@ Promotion requires:
 5. A documented rollback trigger and kill switch.
 6. Explicit owner approval for the exact next autonomy level.
 
-Call intelligence keeps human approval for narrative notes and proposed follow-up tasks until at
-least 50 calls have been reviewed, field agreement and evidence coverage are at least 90%, reviewer
-rejection is no more than 5%, and processing failure is no more than 2%. Empty qualification fields
-may populate immediately from transcript evidence under the non-overwrite and audit rules. Passing
-makes broader autonomy eligible for a narrow pilot; it does not authorize seller messages, offers,
-contracts, or financial actions.
+Call Intelligence posts transcript-grounded narrative summaries automatically as internal CRM
+notes and immediately fills eligible empty qualification fields under the non-overwrite and audit
+rules. It does not create a follow-up task, send a seller message, overwrite a confirmed fact, make
+an offer, modify a contract, or take a financial action. Staff sample recordings and correct CRM
+facts or add clarifying notes as part of quality monitoring; broader autonomy still requires the
+normal evaluated promotion process.
 
 ## Observability, Security, And Cost
 

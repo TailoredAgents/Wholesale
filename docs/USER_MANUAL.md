@@ -47,7 +47,7 @@ The complete internal workflow is implemented:
 The following still require external configuration, approval, or production acceptance:
 
 - Controlled Resend production mailbox acceptance.
-- Repeat the internal Facebook lead-alert delivery test after the worker credential correction;
+- Repeat the internal new-lead alert delivery test after the worker credential correction;
   seller-facing SMS production acceptance remains pending.
 - Twilio cellphone forwarding and inbound routing acceptance.
 - Call recording until the market-specific authorization and retention policy are approved.
@@ -76,7 +76,7 @@ Current Land pilot controls include:
 
 - House/Land selection on manual lead creation, Inbox email conversion, campaigns, imports, and
   approved VA/Lead Manager scripts.
-- Land propagation through warm handoff, the Lead Queue, staff Facebook-lead text alerts, call
+- Land propagation through warm handoff, the Lead Queue, staff new-lead text alerts, call
   intelligence, Activity, and AI context.
 - Parcel/APN capture and Land-specific seller facts such as acreage, access/frontage, utilities,
   stated zoning/use, septic/perc, taxes/HOA, and known terrain or environmental concerns.
@@ -703,8 +703,8 @@ The seller uses **Get a Cash Offer** on the public site.
 
 The form collects:
 
-- Property address and property type.
-- Condition, occupancy, timeline, and seller situation.
+- Property address, required selling timeline, and optional property type.
+- Condition, occupancy, and seller situation.
 - Optional asking price, mortgage, and repair context.
 - Name, phone, email, preferred contact method, and permission to contact.
 - Separate optional SMS consent.
@@ -717,7 +717,8 @@ After submission:
 3. The system creates or reuses the seller, property, lead, and conversation.
 4. Consent and attribution are retained even when the submission matches an existing lead.
 5. A speed-to-lead task is created.
-6. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
+6. Each active staff member with **Text new leads** enabled is queued one SMS alert.
+7. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
 
 Use the public form to test seller intake with your own controlled information. Do not repeatedly
 submit a real seller to diagnose an internal visibility problem.
@@ -1074,17 +1075,19 @@ When recording and transcription are active:
 
 1. Open the call in the timeline.
 2. Play the recording only when your role permits it.
-3. Compare the transcript and structured notes with the audio.
-4. Review proposed motivation, timeline, condition, occupancy, asking price, commitments, and
-   follow-up.
-5. Review the eligible empty CRM fields that Call Intelligence already populated from transcript
-   evidence. Existing staff-entered values are never overwritten.
-6. Correct any inaccurate auto-filled value while reviewing the narrative, then approve or reject
-   the note draft.
-7. Keep the human-reviewed decision in the audit history. An exhausted job exposes **Retry call
-   intelligence** on the same call after the provider is healthy.
+3. Read the automatic call summary. Stonegate adds it to the Inbox conversation, seller record,
+   communication history, and recent activity as soon as processing succeeds; no approval is
+   required.
+4. Review motivation, timeline, condition, occupancy, asking price, commitments, and follow-up
+   context when those facts matter to the next action.
+5. Call Intelligence immediately fills eligible empty CRM fields supported by the transcript.
+   Existing staff-entered values are never overwritten.
+6. Correct an inaccurate CRM value in the seller record or add a clarifying internal note. The
+   original transcript-grounded summary remains linked to the call for audit.
+7. An exhausted job exposes **Retry call intelligence** on the same call after the provider is
+   healthy. A suggested next action does not create a task automatically.
 
-Early audio deletion requires a reason. Deleting audio does not erase the call, transcript review,
+Early audio deletion requires a reason. Deleting audio does not erase the call, transcript,
 or audit evidence.
 
 ### Change Ownership Or Add Watchers
@@ -1180,8 +1183,8 @@ New seller leads can also create an assigned AI brief. Open it in **Needs Approv
 summary, recommended next step, missing qualification facts, questions, risks, confidence, and
 evidence. **Accept brief** adds a labeled internal note to the seller timeline; **Reject** records
 that the draft should not be used. This review never messages the seller, overwrites lead facts,
-or replaces the employee's primary next action. Call-note reviews open in Inbox so the recording
-and transcript remain visible during the decision.
+or replaces the employee's primary next action. Call summaries post automatically in Inbox and the
+seller record; they do not create approval work or replace the employee's next action.
 
 ## 7. Calendar And Scheduling
 
@@ -1534,10 +1537,13 @@ Review the result from top to bottom:
 7. Open **External benchmarks** only when comparison context is useful. RentCast and RealEstateAPI
    estimates in this section are excluded from ARV and offer math. Older saved analyses may retain
    a clearly labeled legacy DealMachine benchmark.
-8. When **AI Comp Analyst draft** is present, review its include/exclude/review suggestions,
-   condition hypotheses, micro-market concerns, missing questions, range explanations, and cited
-   evidence IDs. Accept, correct, or reject the suggestions through the normal comp review; the AI
-   cannot change the set, set a weight, confirm condition, or calculate a price.
+8. Use **Comp Copilot** to ask what is lowering confidence, which comp needs attention, what
+   condition evidence is missing, or why the supported range is wide. Its thread is saved only to
+   the currently displayed immutable analysis. Open each citation before acting. Suggested-action
+   buttons take you to the applicable comp review, condition review, micro-market view, or refresh
+   control; they do not change data. When the separate **AI Comp Analyst draft** is present, review
+   its structured include/exclude/review suggestions the same way. Neither feature can change the
+   comp set, set a weight, confirm condition, calculate a price, or approve an offer.
 9. Open **Why this confidence score** and read every factor.
 10. Open **Secondary public evidence** and investigate any conflict.
    Review every **AI-discovered closed sale** link before using a material number with a seller.
@@ -1569,8 +1575,11 @@ Review the result from top to bottom:
    - Adjust **Evidence weight** only when the record deserves more or less influence.
    - Open **Evidence and rationale** for the engine reason, condition support, warnings,
      verification notes, and source link.
-   - Use **Location** to compare relative coordinate position and available distance/direction. It
-     is not a parcel, school-boundary, or neighborhood-boundary map.
+   - Use **Location** to open the road map, recenter on all plotted evidence, select a numbered pin,
+     and compare the subject with selected and excluded sales. The side list remains synchronized
+     with the pins. A green ring means Renovated, an amber ring means As-is, and a gray ring means
+     condition is Unknown. The map uses already-saved coordinates, does not spend a provider
+     credit, and is not a parcel, school-boundary, or neighborhood-boundary map.
    - Use **Restore system set** only to return inclusion choices and weights to the engine's saved
      recommendation; it does not erase condition classifications.
 15. Select **Apply review and recalculate**. This creates a new analysis and preserves the original.
@@ -1675,10 +1684,10 @@ only blanket approval-read authority and still does not let you decide a request
 4. Approve, reject, or cancel only if your role has authority.
 5. Add specific decision notes.
 
-Typical requests include offer ceilings, concessions, contract sends, call-note reviews, and AI
-capability promotions. Call-note review is completed with the recording and transcript in Inbox.
-Some requests can be decided directly in Tasks. When complete source evidence is required, Tasks
-intentionally sends you to the originating workspace for the decision.
+Typical requests include offer ceilings, concessions, contract sends, and AI capability
+promotions. Call summaries are not approval requests; they post automatically with their
+transcript and audit link. Some requests can be decided directly in Tasks. When complete source
+evidence is required, Tasks intentionally sends you to the originating workspace for the decision.
 
 An approval does not prove the underlying real-world event happened. For example, funding still
 requires funding evidence.

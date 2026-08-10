@@ -322,6 +322,32 @@ or affect valuation and offer math. Invalid evidence references or price-authori
 the entire draft. Disabled, failed, rejected, and insufficient runs leave the deterministic
 analysis available and record their status without blocking underwriting.
 
+### Comp Copilot
+
+The valuation workspace also provides a persistent Comp Copilot thread for each immutable V3
+analysis. It explains that saved analysis, identifies evidence gaps, compares selected and
+excluded sales, and proposes review actions. Every answer cites supplied analysis evidence. A
+thread never follows the lead into a newer analysis, so later questions cannot silently blend two
+different valuation snapshots.
+
+The Copilot receives sanitized subject facts, deterministic confidence and range diagnostics,
+selected and rejected comp records, provider conflicts, cited public sources, and structured field
+inspection facts. It may receive inspection-photo counts, areas, captions, and review status, but
+not private contact data or the photo files themselves. Staff must inspect the actual media and
+confirm each comparable's condition in the normal review controls.
+
+Suggested actions only navigate the operator to the relevant evidence, comp, condition control,
+or refresh control. They do not execute a review decision. The Copilot cannot state or recommend
+prices, ARV, offers, ranges, dollar adjustments, weights, or approval authority. Unknown citations,
+unknown comp keys, pricing language, or authority language reject the AI draft and return bounded
+deterministic guidance instead. The saved message, citations, action proposals, model use, and
+requesting operator remain auditable.
+
+The comparable **Location** view uses the coordinates already saved with the subject and sales. It
+shows a road map with the subject, selected and excluded sales, and condition status; it does not
+perform another property-data request or affect comp selection. Missing coordinates remain
+visible as a data gap rather than being guessed.
+
 ## Controlled Secondary Research
 
 On a fresh complete analysis, the existing OpenAI Responses API integration may run one bounded
@@ -1004,7 +1030,7 @@ and no AI suggestion becomes a confirmed repair fact silently.
 - Existing camera capture remains attached to the immutable field inspection. Browser dictation
   can append text to inspector notes; no separate audio or duplicate inspection record is created.
 - `underwriting.analyze` is now a supervised Acquisitions Copilot repair-scope capability. It can
-  read the appointment brief, seller/qualification facts, approved call notes, current
+  read the appointment brief, seller/qualification facts, saved call notes, current
   underwriting, inspection observations, repair items, and photo metadata/captions. It does not
   receive raw photo bytes in this phase and cannot set a price, offer, or confirmed repair fact.
 - Structured AI suggestions require Accept, Correct, or Reject review. Applying an accepted or

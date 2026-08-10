@@ -1,0 +1,279 @@
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(260px, 0.75fr);
+  min-height: 480px;
+  overflow: hidden;
+  border: 1px solid #dfe4df;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.mapFrame {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  background: #e7ece8;
+}
+
+.mapCanvas {
+  position: absolute;
+  inset: 0;
+}
+
+.recenter {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid rgba(28, 48, 39, 0.16);
+  border-radius: 8px;
+  color: #2b493b;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 14px rgba(31, 49, 41, 0.12);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.mapLegend {
+  position: absolute;
+  z-index: 2;
+  right: 10px;
+  bottom: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #45564d;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(31, 49, 41, 0.12);
+  font-size: 0.64rem;
+  font-weight: 750;
+}
+
+.mapLegend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.mapLegend span::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2f6f4e;
+  content: "";
+}
+
+.mapLegend span[data-kind="subject"]::before {
+  background: #183c2b;
+}
+
+.mapLegend span[data-kind="excluded"]::before {
+  background: #9d4a44;
+}
+
+.mapError {
+  position: absolute;
+  z-index: 3;
+  right: 12px;
+  bottom: 12px;
+  left: 12px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  color: #8d342e;
+  background: rgba(255, 240, 237, 0.96);
+  font-size: 0.72rem;
+}
+
+.marker {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  background: #2f6f4e;
+  box-shadow: 0 4px 12px rgba(25, 47, 37, 0.32);
+  cursor: pointer;
+  font: 800 0.7rem/1 system-ui, sans-serif;
+}
+
+.marker:hover,
+.marker:focus-visible {
+  z-index: 3;
+  outline: 3px solid rgba(47, 111, 78, 0.24);
+  transform: scale(1.12);
+}
+
+.subjectMarker {
+  width: 32px;
+  height: 32px;
+  background: #183c2b;
+}
+
+.includedMarker {
+  background: #2f6f4e;
+}
+
+.excludedMarker {
+  background: #9d4a44;
+  opacity: 0.85;
+}
+
+.renovatedMarker {
+  box-shadow: 0 0 0 4px rgba(62, 139, 91, 0.22), 0 4px 12px rgba(25, 47, 37, 0.32);
+}
+
+.asIsMarker {
+  box-shadow: 0 0 0 4px rgba(190, 136, 50, 0.25), 0 4px 12px rgba(25, 47, 37, 0.32);
+}
+
+.list {
+  max-height: 480px;
+  overflow-y: auto;
+  border-left: 1px solid #e1e5e1;
+  background: #fbfcfa;
+}
+
+.list > header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 13px 14px;
+  border-bottom: 1px solid #e1e5e1;
+  background: rgba(251, 252, 250, 0.96);
+}
+
+.list > header strong {
+  color: #263c31;
+  font-size: 0.78rem;
+}
+
+.list > header span {
+  color: #7b877f;
+  font-size: 0.65rem;
+}
+
+.list > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 27px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 0;
+  border-bottom: 1px solid #e8ebe8;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.list > button:hover,
+.list > button[aria-pressed="true"] {
+  background: #edf4ef;
+}
+
+.list > button > span {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #9d4a44;
+  font-size: 0.66rem;
+  font-weight: 800;
+}
+
+.list > button[data-included="true"] > span {
+  background: #2f6f4e;
+}
+
+.list button div {
+  min-width: 0;
+}
+
+.list button strong,
+.list button small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list button strong {
+  color: #2e4137;
+  font-size: 0.72rem;
+}
+
+.list button small {
+  margin-top: 3px;
+  color: #77847c;
+  font-size: 0.64rem;
+}
+
+.list > p {
+  margin: 0;
+  padding: 24px 16px;
+  color: #77847c;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.fallback {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 180px;
+  padding: 24px;
+  border: 1px dashed #cfd7d1;
+  border-radius: 14px;
+  color: #2f6f4e;
+  background: #f7f9f6;
+}
+
+.fallback strong,
+.fallback span {
+  display: block;
+}
+
+.fallback strong {
+  color: #2a4035;
+  font-size: 0.84rem;
+}
+
+.fallback span {
+  margin-top: 3px;
+  color: #758178;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .mapFrame,
+  .mapCanvas {
+    min-height: 420px;
+  }
+
+  .list {
+    max-height: 300px;
+    border-top: 1px solid #e1e5e1;
+    border-left: 0;
+  }
+}
