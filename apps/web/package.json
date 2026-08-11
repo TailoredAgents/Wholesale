@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "audit:ia": "node --test scripts/os-ia-contract.test.mjs",
+    "audit:performance": "node --test scripts/public-performance-contract.test.mjs",
     "audit:underwriting": "node --test scripts/underwriting-workspace-contract.test.mjs",
     "baseline:ia": "node scripts/os-ia-baseline.mjs",
     "audit:os": "node scripts/os-quality-audit.mjs",

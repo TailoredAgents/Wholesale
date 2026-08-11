@@ -1,3 +1,4 @@
+import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
 import { Suspense, type ReactNode } from "react";
 
@@ -28,10 +29,12 @@ export default async function OsLayout({ children }: { children: ReactNode }) {
     (approval) => approval.status === "pending",
   ).length;
   return (
-    <Suspense fallback={null}>
-      <OsShell pendingApprovalCount={pendingApprovalCount} profile={profile}>
-        {children}
-      </OsShell>
-    </Suspense>
+    <ClerkProvider>
+      <Suspense fallback={null}>
+        <OsShell pendingApprovalCount={pendingApprovalCount} profile={profile}>
+          {children}
+        </OsShell>
+      </Suspense>
+    </ClerkProvider>
   );
 }

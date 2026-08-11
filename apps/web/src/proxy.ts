@@ -25,5 +25,11 @@ export default clerkConfigured
   : proxyWithoutClerk;
 
 export const config = {
-  matcher: ["/((?!_next|.*\\..*).*)", "/", "/(api|trpc)(.*)", "/__clerk/:path*"],
+  matcher: [
+    "/os/:path*",
+    "/leads/:path*",
+    "/sign-in/:path*",
+    "/sign-up/:path*",
+    "/__clerk/:path*",
+  ],
 };

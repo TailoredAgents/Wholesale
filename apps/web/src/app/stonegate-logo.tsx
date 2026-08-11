@@ -22,6 +22,7 @@ export function StonegateLogo({
         aria-hidden="true"
         className={styles.mark}
         height={512}
+        sizes="44px"
         src="/brand/stonegate-mark.png"
         width={512}
       />

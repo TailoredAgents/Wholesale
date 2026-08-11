@@ -82,6 +82,7 @@ function sourceRouteLiterals() {
     const source = readFileSync(path, "utf8");
     for (const match of source.matchAll(literalPattern)) {
       if (match[2] === "/os(.*)") continue;
+      if (match[2].includes(":path*")) continue;
       literals.push({
         path: relative(webRoot, path).replaceAll("\\", "/"),
         value: match[2],

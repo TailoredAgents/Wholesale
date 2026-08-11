@@ -153,6 +153,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
 
   useEffect(() => {
     try {
+      const queryAddress = new URLSearchParams(window.location.search).get("address")?.trim() ?? "";
+      const preferredAddress = initialAddress || queryAddress;
       const savedConfirmation = parseStoredValue<Confirmation>(confirmationStorageKey);
       if (savedConfirmation) {
         setConfirmation(savedConfirmation);
@@ -168,7 +170,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         setValues((current) => ({
           ...current,
           ...draft.values,
-          property_address: initialAddress || draft.values.property_address || "",
+          property_address: preferredAddress || draft.values.property_address || "",
           consent_to_contact: false,
           sms_consent: false,
         }));
@@ -177,6 +179,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         void recordConversionEvent(apiBaseUrl, "form_restore", {
           restored_step: Math.min(Math.max(draft.activeStep + 1, 1), steps.length),
         });
+      } else if (preferredAddress) {
+        setValues((current) => ({ ...current, property_address: preferredAddress }));
       }
     } finally {
       setHasRestoredDraft(true);

@@ -13,14 +13,7 @@ export const metadata: Metadata = {
   alternates: { canonical: "/get-a-cash-offer" },
 };
 
-type GetCashOfferPageProps = {
-  searchParams: Promise<{ address?: string | string[] }>;
-};
-
-export default async function GetCashOfferPage({ searchParams }: GetCashOfferPageProps) {
-  const params = await searchParams;
-  const initialAddress = Array.isArray(params.address) ? params.address[0] : params.address;
-
+export default function GetCashOfferPage() {
   return (
     <main className={styles.page}>
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
@@ -46,7 +39,7 @@ export default async function GetCashOfferPage({ searchParams }: GetCashOfferPag
             ))}
           </div>
         </div>
-        <CashOfferForm initialAddress={initialAddress ?? ""} />
+        <CashOfferForm />
       </section>
       <PublicSiteFooter />
     </main>

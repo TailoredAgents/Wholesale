@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { ClerkProvider } from "@clerk/nextjs";
 import { siteConfig } from "./site-config";
 import { WebVitalsReporter } from "./web-vitals-reporter";
 import { MetaPixel } from "./meta-pixel";
@@ -32,11 +31,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <ClerkProvider>
-          {children}
-          <MetaPixel />
-          <WebVitalsReporter />
-        </ClerkProvider>
+        {children}
+        <MetaPixel />
+        <WebVitalsReporter />
       </body>
     </html>
   );
