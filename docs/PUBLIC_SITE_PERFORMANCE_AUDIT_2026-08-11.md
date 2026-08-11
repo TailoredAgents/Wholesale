@@ -67,6 +67,27 @@ The following also passed:
 
 The production build manifest confirms both public target pages are pre-rendered.
 
+## Production Acceptance
+
+Render successfully deployed commit `d900e41` at 11:39 UTC on August 11, 2026. A fresh production
+mobile Lighthouse capture after deployment produced:
+
+| Page | Performance | FCP | LCP | TBT | CLS | Transfer | Requests |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Homepage | 77 | 1.66 s | 6.09 s | 96 ms | 0 | 0.70 MB | 34 |
+| Cash offer | 100 | 0.91 s | 1.81 s | 63 ms | 0 | 0.48 MB | 31 |
+
+Compared with the pre-change capture, the homepage transferred 37% fewer bytes and made 29% fewer
+requests; its FCP improved 38% and LCP improved 22%. The cash-offer page transferred 47% fewer bytes
+and made 37% fewer requests; its FCP improved 46% and LCP improved 30%.
+
+Both public traces contained zero Clerk requests. The cash-offer response changed from private,
+non-cacheable delivery to a one-year static cache. Facebook Pixel still loaded and sent its browser
+events.
+
+These are individual lab runs and will vary. The improvement is directionally strong, but real-user
+Core Web Vitals after representative ad traffic remain the correct conversion-performance measure.
+
 ## Deliberately Preserved
 
 - Meta Pixel and conversion events remain enabled for advertising attribution.
@@ -74,13 +95,10 @@ The production build manifest confirms both public target pages are pre-rendered
 - The hero artwork was not recompressed or visually altered.
 - No page sections, styles, text, forms, or user-facing interactions changed.
 
-## Post-Deployment Acceptance
+## Ongoing Acceptance
 
-After Render deploys this commit:
+The immediate deployment checks are complete. Continue with:
 
-1. Confirm public page traces contain no Clerk handshake or Clerk browser bundle.
-2. Repeat the production mobile Lighthouse captures for both target pages.
-3. Confirm the cash-offer route is cacheable and homepage address prefill still works.
-4. Confirm Meta PageView, ViewContent, form-start, and lead events still appear in Events Manager.
-5. Review production LCP, INP, and CLS after enough real traffic exists; use those field metrics for
+1. Confirm Meta PageView, ViewContent, form-start, and lead events remain visible in Events Manager.
+2. Review production LCP, INP, and CLS after enough real traffic exists; use those field metrics for
    any further optimization decision.
