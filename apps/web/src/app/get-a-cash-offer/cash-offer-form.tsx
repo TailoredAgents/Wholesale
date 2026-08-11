@@ -246,7 +246,16 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   function updateValue<Name extends FieldName>(name: Name, value: FormValues[Name]) {
     handleFormStart();
     setValues((current) => ({ ...current, [name]: value }));
-    if (errors[name]) setErrors((current) => ({ ...current, [name]: undefined }));
+    if (name === "preferred_contact_method") {
+      setErrors((current) => ({
+        ...current,
+        phone: undefined,
+        email: undefined,
+        sms_consent: undefined,
+      }));
+    } else if (errors[name]) {
+      setErrors((current) => ({ ...current, [name]: undefined }));
+    }
   }
 
   function moveToStep(nextStep: number) {
@@ -649,7 +658,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       </div>
 
       <div className={styles.stepIntro}>
-        <p>Required step</p>
+        <p>{step.label} details</p>
         <h2 ref={stepHeadingRef} tabIndex={-1}>{step.title}</h2>
         <span>{stepDescription(step.key)}</span>
       </div>
@@ -684,7 +693,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             <input
               id="property_address"
               name="property_address"
-              autoComplete="street-address"
+              autoCapitalize="words"
+              autoComplete="section-property address-line1"
+              enterKeyHint="next"
+              required
               value={values.property_address}
               onChange={(event) => updateValue("property_address", event.target.value)}
               aria-invalid={Boolean(errors.property_address)}
@@ -697,7 +709,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               <input
                 id="property_city"
                 name="property_city"
-                autoComplete="address-level2"
+                autoCapitalize="words"
+                autoComplete="section-property address-level2"
+                enterKeyHint="next"
+                required
                 value={values.property_city}
                 onChange={(event) => updateValue("property_city", event.target.value)}
                 aria-invalid={Boolean(errors.property_city)}
@@ -714,8 +729,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               <input
                 id="property_postal_code"
                 name="property_postal_code"
-                autoComplete="postal-code"
+                autoComplete="section-property postal-code"
+                enterKeyHint="next"
                 inputMode="numeric"
+                required
                 value={values.property_postal_code}
                 onChange={(event) => updateValue("property_postal_code", event.target.value)}
                 aria-invalid={Boolean(errors.property_postal_code)}
@@ -735,6 +752,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             <select
               id="desired_timeline"
               name="desired_timeline"
+              required
               value={values.desired_timeline}
               onChange={(event) => updateValue("desired_timeline", event.target.value)}
               aria-invalid={Boolean(errors.desired_timeline)}
@@ -770,7 +788,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             <input
               id="name"
               name="name"
-              autoComplete="name"
+              autoCapitalize="words"
+              autoComplete="section-contact name"
+              enterKeyHint="next"
+              required
               value={values.name}
               onChange={(event) => updateValue("name", event.target.value)}
               aria-invalid={Boolean(errors.name)}
@@ -783,17 +804,25 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               label="Phone"
               name="phone"
               error={errors.phone}
-              hint="Required for phone or text follow-up"
+              hint={
+                values.preferred_contact_method === "email"
+                  ? "Optional"
+                  : "Selected follow-up"
+              }
+              required={values.preferred_contact_method !== "email"}
             >
               <input
                 id="phone"
                 name="phone"
-                autoComplete="tel"
+                type="tel"
+                autoComplete="section-contact tel"
+                enterKeyHint="next"
                 inputMode="tel"
+                required={values.preferred_contact_method !== "email"}
                 value={values.phone}
                 onChange={(event) => updateValue("phone", event.target.value)}
                 aria-invalid={Boolean(errors.phone)}
-                aria-describedby={errors.phone ? "phone-error" : undefined}
+                aria-describedby={errors.phone ? "phone-hint phone-error" : "phone-hint"}
                 placeholder="404-555-0100"
               />
             </Field>
@@ -801,17 +830,24 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               label="Email"
               name="email"
               error={errors.email}
-              hint="Required for email follow-up"
+              hint={
+                values.preferred_contact_method === "email"
+                  ? "Selected follow-up"
+                  : "Optional"
+              }
+              required={values.preferred_contact_method === "email"}
             >
               <input
                 id="email"
                 name="email"
                 type="email"
-                autoComplete="email"
+                autoComplete="section-contact email"
+                enterKeyHint="next"
+                required={values.preferred_contact_method === "email"}
                 value={values.email}
                 onChange={(event) => updateValue("email", event.target.value)}
                 aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? "email-error" : undefined}
+                aria-describedby={errors.email ? "email-hint email-error" : "email-hint"}
                 placeholder="jane@example.com"
               />
             </Field>
@@ -849,6 +885,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               name="consent_to_contact"
               type="checkbox"
               checked={values.consent_to_contact}
+              required
               onChange={(event) => updateValue("consent_to_contact", event.target.checked)}
               aria-invalid={Boolean(errors.consent_to_contact)}
               aria-describedby={
@@ -1106,7 +1143,8 @@ function Field({
     <label className={styles.field} htmlFor={name}>
       <span>
         <strong>{label}</strong>
-        {required ? <em>Required</em> : hint ? <small>{hint}</small> : null}
+        {required ? <span className={styles.visuallyHidden}> (required)</span> : null}
+        {hint ? <small id={`${name}-hint`}>{hint}</small> : null}
       </span>
       {children}
       {error ? <p className={styles.fieldError} id={`${name}-error`}>{error}</p> : null}
@@ -1192,8 +1230,10 @@ function containsNumber(value: string) {
 }
 
 function stepDescription(key: (typeof steps)[number]["key"]) {
-  if (key === "property") return "We use this to identify the house and local market.";
-  return "Phone or email is required. Text messaging always requires separate permission.";
+  if (key === "property") {
+    return "Complete these details so we can identify the house and local market.";
+  }
+  return "Enter your name and either a phone number or email—whichever you prefer. Text-message consent is separate and optional.";
 }
 
 function storeConfirmation(confirmation: Confirmation) {

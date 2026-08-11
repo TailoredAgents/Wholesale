@@ -260,16 +260,11 @@
   font-size: 13px;
 }
 
-.field em,
 .field small {
   color: #4f5c55;
   font-size: 10px;
   font-style: normal;
   font-weight: 600;
-}
-
-.field em {
-  color: #7f3b31;
 }
 
 .field input,

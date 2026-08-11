@@ -539,6 +539,46 @@ async function auditJourney(browser, viewport) {
   if ((await page.locator("#property_address").inputValue()) !== "123 Main St") {
     record(viewport.name, "address-prefill", "Homepage address was not preserved.");
   }
+  const propertyFieldSemantics = await page.evaluate(() =>
+    Object.fromEntries(
+      ["property_address", "property_city", "property_postal_code", "desired_timeline"].map(
+        (id) => {
+          const control = document.getElementById(id);
+          return [
+            id,
+            {
+              autocomplete: control?.getAttribute("autocomplete") ?? null,
+              required: control?.hasAttribute("required") ?? false,
+            },
+          ];
+        },
+      ),
+    ),
+  );
+  const expectedPropertyAutocomplete = {
+    property_address: "section-property address-line1",
+    property_city: "section-property address-level2",
+    property_postal_code: "section-property postal-code",
+    desired_timeline: null,
+  };
+  for (const [field, autocomplete] of Object.entries(expectedPropertyAutocomplete)) {
+    if (
+      !propertyFieldSemantics[field]?.required ||
+      propertyFieldSemantics[field]?.autocomplete !== autocomplete
+    ) {
+      record(viewport.name, "form-autofill", {
+        field,
+        expected: { autocomplete, required: true },
+        actual: propertyFieldSemantics[field],
+      });
+    }
+  }
+  if (
+    (await page.getByText("Required step", { exact: true }).count()) ||
+    (await page.locator("#cash-offer-form em").filter({ hasText: "Required" }).count())
+  ) {
+    record(viewport.name, "requirement-presentation", "Required fields use warning-like badges.");
+  }
 
   await page.getByRole("button", { name: /Continue/ }).click();
   if (!(await page.locator("#property_city-error").isVisible())) {
@@ -557,6 +597,54 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "back-navigation", "Property answer was not preserved.");
   }
   await page.getByRole("button", { name: /Continue/ }).click();
+  const contactFieldSemantics = await page.evaluate(() =>
+    Object.fromEntries(
+      ["name", "phone", "email", "consent_to_contact"].map((id) => {
+        const control = document.getElementById(id);
+        return [
+          id,
+          {
+            autocomplete: control?.getAttribute("autocomplete") ?? null,
+            required: control?.hasAttribute("required") ?? false,
+            type: control?.getAttribute("type") ?? null,
+          },
+        ];
+      }),
+    ),
+  );
+  const expectedContactSemantics = {
+    name: { autocomplete: "section-contact name", required: true, type: null },
+    phone: { autocomplete: "section-contact tel", required: true, type: "tel" },
+    email: { autocomplete: "section-contact email", required: false, type: "email" },
+    consent_to_contact: { autocomplete: null, required: true, type: "checkbox" },
+  };
+  for (const [field, expected] of Object.entries(expectedContactSemantics)) {
+    const actual = contactFieldSemantics[field];
+    if (
+      !actual ||
+      actual.autocomplete !== expected.autocomplete ||
+      actual.required !== expected.required ||
+      actual.type !== expected.type
+    ) {
+      record(viewport.name, "form-autofill", { field, expected, actual });
+    }
+  }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="email"])')
+    .click();
+  if (
+    (await page.locator("#phone").getAttribute("required")) !== null ||
+    (await page.locator("#email").getAttribute("required")) === null
+  ) {
+    record(
+      viewport.name,
+      "conditional-requirement",
+      "Phone and email requirements did not follow the selected contact method.",
+    );
+  }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
+    .click();
   if (screenshotDirectory) {
     await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-contact-${viewport.name}.png` });
   }
@@ -565,6 +653,22 @@ async function auditJourney(browser, viewport) {
   if (!(await page.locator("#name-error").isVisible())) {
     record(viewport.name, "validation", "Contact step did not expose field errors.");
   }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="email"])')
+    .click();
+  if (
+    (await page.locator("#phone-error").count()) ||
+    (await page.locator("#email-error").count())
+  ) {
+    record(
+      viewport.name,
+      "conditional-requirement",
+      "Switching contact methods left an obsolete phone or email error visible.",
+    );
+  }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
+    .click();
   await page.locator("#name").fill("Jane Seller");
   await page.locator("#phone").fill("404-555-0100");
   await page.locator('label:has(input[name="preferred_contact_method"][value="sms"])').click();
@@ -573,6 +677,19 @@ async function auditJourney(browser, viewport) {
   if (!(await page.locator("#sms_consent-error").isVisible())) {
     record(viewport.name, "sms-consent", "Text preference did not require separate SMS consent.");
   }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
+    .click();
+  if (await page.locator("#sms_consent-error").count()) {
+    record(
+      viewport.name,
+      "conditional-requirement",
+      "Leaving text follow-up did not clear the obsolete SMS-consent error.",
+    );
+  }
+  await page
+    .locator('label:has(input[name="preferred_contact_method"][value="sms"])')
+    .click();
   await page.locator("#sms_consent").check();
   await checkFocusedControlClearance(
     page,
