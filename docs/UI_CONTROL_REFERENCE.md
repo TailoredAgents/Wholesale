@@ -698,7 +698,7 @@ history into separate channel threads.
 
 | Control or item | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
-| SMS event | Shows inbound or outbound text, delivery state, and timestamp | Read-only after provider submission |
+| SMS event | Shows inbound or outbound text, delivery state, and timestamp; a newly sent live Twilio message refreshes quietly for about 30 seconds while delivery is pending | Read-only after provider submission; use **Refresh** if a carrier reports after the automatic window |
 | Email event | Shows sender, recipients, subject, body, attachments, and delivery state | Read-only after send |
 | Call event | Shows direction, outcome, duration, recording, and transcript status | Depends on voice integration |
 | Internal note | Shares staff-only context in the timeline | Never sent to the seller |

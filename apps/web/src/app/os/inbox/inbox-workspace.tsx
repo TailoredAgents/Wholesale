@@ -44,6 +44,11 @@ import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
+import {
+  pendingOutboundTwilioSmsKey,
+  SMS_DELIVERY_REFRESH_INTERVAL_MS,
+  SMS_DELIVERY_REFRESH_MAX_ATTEMPTS,
+} from "./sms-delivery";
 import { SmsPermissionControl } from "../_components/sms-permission-control";
 import styles from "./inbox.module.css";
 
@@ -842,6 +847,12 @@ export function InboxWorkspace({
     [apiBaseUrl, getHeaders],
   );
 
+  const pendingSmsDeliveryKey = useMemo(
+    () => pendingOutboundTwilioSmsKey(detail?.timeline ?? []),
+    [detail?.timeline],
+  );
+  const openConversationId = detail?.id ?? null;
+
   const loadEmailConfiguration = useCallback(async () => {
     const [aliasesPayload, templatesPayload] = await Promise.all([
       request<{
@@ -1105,6 +1116,48 @@ export function InboxWorkspace({
     }, 0);
     return () => window.clearTimeout(handle);
   }, [loadDetail, selectedId]);
+
+  useEffect(() => {
+    if (!openConversationId || !pendingSmsDeliveryKey) return;
+
+    const conversationId = openConversationId;
+    let active = true;
+    let attemptCount = 0;
+    let timer: number | null = null;
+
+    async function refreshPendingSmsDelivery() {
+      attemptCount += 1;
+      try {
+        const refreshed = await request<ConversationDetail>(
+          `/api/v1/inbox/conversations/${conversationId}`,
+        );
+        if (!active) return;
+        setDetail((current) => (current?.id === conversationId ? refreshed : current));
+        if (
+          !pendingOutboundTwilioSmsKey(refreshed.timeline) ||
+          attemptCount >= SMS_DELIVERY_REFRESH_MAX_ATTEMPTS
+        ) {
+          return;
+        }
+      } catch {
+        if (!active || attemptCount >= SMS_DELIVERY_REFRESH_MAX_ATTEMPTS) return;
+      }
+
+      timer = window.setTimeout(
+        () => void refreshPendingSmsDelivery(),
+        SMS_DELIVERY_REFRESH_INTERVAL_MS,
+      );
+    }
+
+    timer = window.setTimeout(
+      () => void refreshPendingSmsDelivery(),
+      SMS_DELIVERY_REFRESH_INTERVAL_MS,
+    );
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [openConversationId, pendingSmsDeliveryKey, request]);
 
   useEffect(() => {
     if (detail?.conversation_type !== "general" || !me?.permissions.includes("leads:edit")) {

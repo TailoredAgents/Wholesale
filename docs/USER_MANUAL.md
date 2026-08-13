@@ -934,6 +934,11 @@ starts a new company email. **Email ready** opens sender settings or owner admin
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
 
+After a live SMS is sent, the open thread quietly refreshes its delivery state for about 30 seconds
+so **Queued** normally advances to **Sent**, **Delivered**, **Failed**, or **Undelivered** without a
+page reload. If a carrier reports later than that window, select **Refresh** to retrieve the latest
+provider state.
+
 ### Record SMS Permission Obtained Elsewhere
 
 The Inbox right sidebar and the seller record's Contact panel show **SMS permission: Permissioned**

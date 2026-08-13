@@ -466,6 +466,57 @@ test("Calendar owns one quick appointment workflow with contextual entry points"
   assert.match(inbox, /view=appointment&schedule=1&lead=/);
 });
 
+test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {
+  const delivery = loadTypeScriptModule(
+    resolve(osSourceRoot, "inbox/sms-delivery.ts"),
+  );
+  const now = Date.parse("2026-08-13T21:00:00Z");
+  const makeItem = (id, status, overrides = {}) => ({
+    id,
+    direction: "outbound",
+    channel: "sms",
+    status,
+    provider: "twilio",
+    occurred_at: "2026-08-13T20:59:00Z",
+    ...overrides,
+  });
+
+  assert.equal(delivery.SMS_DELIVERY_REFRESH_INTERVAL_MS, 2_000);
+  assert.equal(delivery.SMS_DELIVERY_REFRESH_MAX_ATTEMPTS, 15);
+  assert.equal(delivery.SMS_DELIVERY_AUTO_REFRESH_RECENCY_MS, 5 * 60_000);
+  assert.equal(
+    delivery.pendingOutboundTwilioSmsKey(
+      [
+        makeItem("queued-message", "queued"),
+        makeItem("sent-message", "sent"),
+        makeItem("delivered-message", "delivered"),
+        makeItem("inbound-message", "queued", { direction: "inbound" }),
+        makeItem("simulated-message", "queued", { provider: "simulated" }),
+        makeItem("old-message", "queued", { occurred_at: "2026-08-13T20:00:00Z" }),
+      ],
+      now,
+    ),
+    "queued-message|sent-message",
+  );
+  assert.equal(
+    delivery.pendingOutboundTwilioSmsKey(
+      [
+        makeItem("delivered-message", "delivered"),
+        makeItem("failed-message", "failed"),
+        makeItem("undelivered-message", "undelivered"),
+      ],
+      now,
+    ),
+    "",
+  );
+
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  assert.match(inbox, /if \(!openConversationId \|\| !pendingSmsDeliveryKey\) return/);
+  assert.match(inbox, /attemptCount >= SMS_DELIVERY_REFRESH_MAX_ATTEMPTS/);
+  assert.match(inbox, /current\?\.id === conversationId \? refreshed : current/);
+  assert.match(inbox, /window\.clearTimeout\(timer\)/);
+});
+
 test("Property lead editing stays collapsed until the operator asks to open it", () => {
   const leadRecord = readFileSync(
     resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),
