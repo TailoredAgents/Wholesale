@@ -23,8 +23,8 @@ export default function GetCashOfferPage() {
           <p className={styles.eyebrow}>No-obligation property review</p>
           <h1>Tell us about the house. We will review the direct-sale option.</h1>
           <p>
-            The address and a phone number or email are enough to start. Additional property
-            details are optional and can help Stonegate prepare for the first conversation.
+            The address and a phone number are enough to start. Additional property details and an
+            email address are optional and can help Stonegate prepare for the first conversation.
           </p>
           <div className={styles.trustStack}>
             {[

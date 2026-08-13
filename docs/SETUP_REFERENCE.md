@@ -792,9 +792,9 @@ The direct Meta integration combines the browser Pixel with server-side Conversi
   Pixel ID and access token are present on both the API and worker services.
 
 Implemented events are `PageView` from the Pixel, deduplicated browser/server `ViewContent` and
-`Contact`, and server-side `Schedule` from the CRM appointment outcome. Browser and server copies
-of `ViewContent` and `Contact` use the same event name and event ID. Server delivery includes the
-source URL and user agent; Contact also uses hashed email and external ID plus IP, `fbc`, and `fbp`
+`Lead`, and server-side `QualifiedLead` and `Schedule` from later CRM outcomes. Browser and server
+copies of `ViewContent` and `Lead` use the same event name and event ID. Server delivery includes
+the source URL and user agent; Lead also uses hashed email and external ID plus IP, `fbc`, and `fbp`
 when available. The phone hash is deliberately withheld from Meta because the current mobile
 privacy promise excludes sharing mobile information for third-party marketing.
 
@@ -804,7 +804,7 @@ Acceptance sequence:
 2. Add the Pixel ID to the web, API, and worker variables described above.
 3. Add Meta's Test Events code to the API and worker, switch delivery to `live`, and redeploy.
 4. Visit a public page and submit one controlled seller test lead.
-5. In Test Events, confirm browser and server `ViewContent` and `Contact` arrive and deduplicate.
+5. In Test Events, confirm browser and server `ViewContent` and `Lead` arrive and deduplicate.
 6. Confirm Event Match Quality includes the expected non-phone match keys.
 7. Remove the test event code, redeploy, and monitor deduplication, freshness, coverage, and match
    quality during the first campaigns.
@@ -817,7 +817,7 @@ events.
 
 The public **Get a Cash Offer** form creates a Stonegate lead directly. It requires the property
 street, city, state, seller timeline, and contact information before submission. Its browser
-`Contact` event and matching server conversion use the same event ID for Meta deduplication.
+`Lead` event and matching server conversion use the same event ID for Meta deduplication.
 
 Facebook instant forms are separate from the Pixel and Conversions API. The Pixel reports activity
 back to Meta; Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead.

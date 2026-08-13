@@ -633,13 +633,13 @@ async function auditJourney(browser, viewport) {
     .locator('label:has(input[name="preferred_contact_method"][value="email"])')
     .click();
   if (
-    (await page.locator("#phone").getAttribute("required")) !== null ||
+    (await page.locator("#phone").getAttribute("required")) === null ||
     (await page.locator("#email").getAttribute("required")) === null
   ) {
     record(
       viewport.name,
       "conditional-requirement",
-      "Phone and email requirements did not follow the selected contact method.",
+      "Phone did not remain required when email follow-up was selected.",
     );
   }
   await page
@@ -653,17 +653,23 @@ async function auditJourney(browser, viewport) {
   if (!(await page.locator("#name-error").isVisible())) {
     record(viewport.name, "validation", "Contact step did not expose field errors.");
   }
+  if (
+    !(await page.locator("#phone-error").isVisible()) ||
+    (await page.locator("#phone-error").textContent()) !== "Phone number is required."
+  ) {
+    record(viewport.name, "validation", "Missing phone did not expose the required error.");
+  }
   await page
     .locator('label:has(input[name="preferred_contact_method"][value="email"])')
     .click();
   if (
-    (await page.locator("#phone-error").count()) ||
+    !(await page.locator("#phone-error").isVisible()) ||
     (await page.locator("#email-error").count())
   ) {
     record(
       viewport.name,
       "conditional-requirement",
-      "Switching contact methods left an obsolete phone or email error visible.",
+      "Switching contact methods cleared the mandatory phone error or left an obsolete email error.",
     );
   }
   await page

@@ -620,7 +620,7 @@ def test_public_page_view_queues_deduplicated_meta_view_content(
     assert export.payload_snapshot["fbp"] == "fb.1.1785875287.987654321"
 
 
-def test_public_seller_intake_queues_hashed_meta_contact(
+def test_public_seller_intake_queues_hashed_meta_lead(
     db_session: Session,
     api_db_override: None,
 ) -> None:
@@ -628,9 +628,9 @@ def test_public_seller_intake_queues_hashed_meta_contact(
     client = TestClient(app)
     payload = public_payload()
     payload["meta_browser_event"] = {
-        "event_id": "meta-contact-event-123",
+        "event_id": "meta-lead-event-123",
         "event_source_url": "https://stonegatehb.com/get-a-cash-offer",
-        "fbc": "fb.1.1785875287.contact-click",
+        "fbc": "fb.1.1785875287.lead-click",
         "fbp": "fb.1.1785875287.123456789",
     }
 
@@ -643,8 +643,8 @@ def test_public_seller_intake_queues_hashed_meta_contact(
     assert response.status_code == 201
     export = db_session.scalar(select(OfflineConversionExport))
     assert export is not None
-    assert export.event_name == "Contact"
-    assert export.event_key == "meta-contact-event-123"
+    assert export.event_name == "Lead"
+    assert export.event_key == "meta-lead-event-123"
     assert export.lead_id is not None
     assert export.payload_snapshot["email_hashes"]
     assert export.payload_snapshot["phone_hashes"]
@@ -653,15 +653,15 @@ def test_public_seller_intake_queues_hashed_meta_contact(
     assert "4045551212" not in str(export.payload_snapshot)
     meta_payload = build_meta_payload(export, Settings())
     meta_event = meta_payload["data"][0]
-    assert meta_event["event_name"] == "Contact"
-    assert meta_event["event_id"] == "meta-contact-event-123"
+    assert meta_event["event_name"] == "Lead"
+    assert meta_event["event_id"] == "meta-lead-event-123"
     assert meta_event["action_source"] == "website"
     assert meta_event["event_source_url"].endswith("/get-a-cash-offer")
     assert meta_event["user_data"]["em"]
     assert meta_event["user_data"]["external_id"]
     assert meta_event["user_data"]["client_ip_address"] == "testclient"
     assert meta_event["user_data"]["client_user_agent"] == "pytest-browser"
-    assert meta_event["user_data"]["fbc"] == "fb.1.1785875287.contact-click"
+    assert meta_event["user_data"]["fbc"] == "fb.1.1785875287.lead-click"
     assert meta_event["user_data"]["fbp"] == "fb.1.1785875287.123456789"
     assert "ph" not in meta_event["user_data"]
 
@@ -707,6 +707,43 @@ def test_public_seller_intake_requires_consent(
     response = client.post("/api/v1/public/seller-leads", json=payload)
 
     assert response.status_code == 422
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+@pytest.mark.parametrize("phone_value", [None, "", "   "])
+def test_public_seller_intake_requires_phone_even_with_email(
+    db_session: Session,
+    api_db_override: None,
+    phone_value: str | None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["phone"] = phone_value
+    payload["preferred_contact_method"] = "email"
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "phone number is required" in str(response.json())
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+
+
+@pytest.mark.parametrize("phone_value", ["not-a-number", "404555121", "1" * 16])
+def test_public_seller_intake_rejects_incomplete_phone_numbers(
+    db_session: Session,
+    api_db_override: None,
+    phone_value: str,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["phone"] = phone_value
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "Enter a complete phone number" in str(response.json())
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 

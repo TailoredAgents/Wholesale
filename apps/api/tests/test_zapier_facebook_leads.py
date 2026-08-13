@@ -759,6 +759,27 @@ def test_zapier_lead_without_contact_information_requires_review(
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
+def test_zapier_email_only_lead_still_enters_crm(
+    db_session: Session,
+    api_db_override: None,
+    zapier_settings: Settings,
+) -> None:
+    seed_owner(db_session)
+    payload = webhook_payload("987654321012350")
+    payload.pop("phone_number")
+    response = post_lead(TestClient(app), payload)
+    assert response.status_code == 200
+
+    event_id = process_next_meta_lead_event(db_session, zapier_settings)
+
+    event = db_session.get(MetaLeadEvent, event_id)
+    assert event is not None
+    assert event.status == "processed"
+    assert event.lead_id is not None
+    assert db_session.get(Lead, event.lead_id) is not None
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+
+
 def test_zapier_intake_failure_retries_without_losing_event(
     db_session: Session,
     api_db_override: None,

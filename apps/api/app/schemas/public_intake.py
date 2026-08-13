@@ -137,6 +137,19 @@ class SellerIntakeCreate(BaseModel):
         return self
 
 
+class WebsiteSellerIntakeCreate(SellerIntakeCreate):
+    phone: str | None = Field(max_length=40)
+
+    @model_validator(mode="after")
+    def require_website_phone(self) -> "WebsiteSellerIntakeCreate":
+        if not self.phone or not self.phone.strip():
+            raise ValueError("A phone number is required.")
+        digits = "".join(character for character in self.phone if character.isdigit())
+        if not 10 <= len(digits) <= 15:
+            raise ValueError("Enter a complete phone number.")
+        return self
+
+
 class SellerIntakeResponse(BaseModel):
     lead_id: UUID
     contact_id: UUID

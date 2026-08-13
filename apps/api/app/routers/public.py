@@ -9,10 +9,10 @@ from app.schemas.marketing_experiments import PublicExperimentResponse
 from app.schemas.public_intake import (
     ConversionEventCreate,
     ConversionEventResponse,
-    SellerIntakeCreate,
     SellerIntakeEnrichmentCreate,
     SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
+    WebsiteSellerIntakeCreate,
 )
 from app.schemas.trust_proof import PublicTrustProofResponse
 from app.services.conversion_events import record_public_conversion_event
@@ -47,7 +47,7 @@ def read_public_trust_proofs(
 
 @router.post("/seller-leads", status_code=201)
 def create_seller_lead_from_public_form(
-    payload: SellerIntakeCreate,
+    payload: WebsiteSellerIntakeCreate,
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     user_agent: Annotated[str | None, Header(alias="User-Agent")] = None,

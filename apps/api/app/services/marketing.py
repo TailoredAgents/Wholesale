@@ -101,7 +101,7 @@ def enqueue_meta_web_conversion(
     occurred_at: datetime | None = None,
 ) -> OfflineConversionExport | None:
     """Queue a Meta server event that shares its ID with the browser Pixel event."""
-    if event_name not in {"ViewContent", "Contact"}:
+    if event_name not in {"ViewContent", "Lead"}:
         raise ValueError(f"Unsupported immediate Meta web event: {event_name}")
     existing = db.scalar(
         select(OfflineConversionExport.id).where(

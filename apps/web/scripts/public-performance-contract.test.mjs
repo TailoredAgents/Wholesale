@@ -36,6 +36,18 @@ test("cash-offer page stays static while preserving address-query restoration", 
   assert.match(form, /preferredAddress \|\| draft\.values\.property_address/);
 });
 
+test("successful cash-offer submissions report one deduplicated Meta Lead", () => {
+  const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  assert.match(
+    form,
+    /trackMetaPixelEvent\("Lead", metaBrowserEvent\.event_id\)/,
+  );
+  assert.doesNotMatch(
+    form,
+    /trackMetaPixelEvent\("Contact", metaBrowserEvent\.event_id\)/,
+  );
+});
+
 test("public images expose right-sized responsive candidates", () => {
   assert.match(read("src/app/stonegate-logo.tsx"), /sizes="44px"/);
   const nextConfig = read("next.config.ts");

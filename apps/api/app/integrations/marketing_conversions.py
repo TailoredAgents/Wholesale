@@ -11,12 +11,13 @@ from app.models.foundation import OfflineConversionExport
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_INGEST_URL = "https://datamanager.googleapis.com/v1/events:ingest"
 META_EVENT_NAMES = {
-    "qualified_lead": "Lead",
+    "qualified_lead": "QualifiedLead",
     "appointment_scheduled": "Schedule",
     "contract_signed": "ContractSigned",
     "funded_deal": "Purchase",
     "ViewContent": "ViewContent",
     "Contact": "Contact",
+    "Lead": "Lead",
 }
 
 

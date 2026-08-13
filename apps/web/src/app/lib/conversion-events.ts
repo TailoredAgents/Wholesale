@@ -176,7 +176,7 @@ export function initializeMetaPixel() {
 }
 
 export function trackMetaPixelEvent(
-  eventName: "PageView" | "ViewContent" | "Contact",
+  eventName: "PageView" | "ViewContent" | "Lead",
   eventId?: string,
 ) {
   initializeMetaPixel();

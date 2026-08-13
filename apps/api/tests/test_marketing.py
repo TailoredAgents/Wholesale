@@ -364,12 +364,17 @@ def test_conversion_queue_covers_each_outcome_and_platform(
         }
     )
     google_export = next(item for item in exports if item.platform == "google_ads")
-    meta_export = next(item for item in exports if item.platform == "meta")
+    meta_export = next(
+        item
+        for item in exports
+        if item.platform == "meta" and item.event_name == "qualified_lead"
+    )
     google_payload = build_google_payload(google_export, live_settings)
     meta_payload = build_meta_payload(meta_export, live_settings)
     assert google_payload["events"][0]["transactionId"] == google_export.event_key
     assert google_payload["events"][0]["adIdentifiers"]["gclid"] == "google-click-456"
     assert meta_payload["data"][0]["event_id"] == meta_export.event_key
+    assert meta_payload["data"][0]["event_name"] == "QualifiedLead"
     assert meta_payload["data"][0]["user_data"]["fbc"].endswith("meta-click-456")
     assert meta_payload["data"][0]["user_data"]["client_user_agent"]
     assert "alex.seller@example.com" not in json.dumps(google_payload)
@@ -402,6 +407,7 @@ def test_scheduling_a_lead_automatically_queues_meta_schedule(
             "property_state": "GA",
             "property_postal_code": "30307",
             "name": "Taylor Seller",
+            "phone": "4045550188",
             "email": "taylor@example.com",
             "preferred_contact_method": "email",
             "consent_to_contact": True,

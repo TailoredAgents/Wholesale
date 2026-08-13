@@ -206,7 +206,7 @@ def create_public_seller_lead(
         enqueue_meta_web_conversion(
             db,
             event=conversion_event,
-            event_name="Contact",
+            event_name="Lead",
             event_id=payload.meta_browser_event.event_id,
             event_source_url=payload.meta_browser_event.event_source_url,
             fbc=payload.meta_browser_event.fbc,

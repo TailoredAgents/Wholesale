@@ -249,7 +249,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     if (name === "preferred_contact_method") {
       setErrors((current) => ({
         ...current,
-        phone: undefined,
         email: undefined,
         sms_consent: undefined,
       }));
@@ -392,7 +391,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         enriched: false,
       };
       hasSubmitted.current = true;
-      trackMetaPixelEvent("Contact", metaBrowserEvent.event_id);
+      trackMetaPixelEvent("Lead", metaBrowserEvent.event_id);
       isSubmitting.current = false;
       setConfirmation(nextConfirmation);
       setSubmitState({ status: "idle", message: "" });
@@ -800,17 +799,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
             />
           </Field>
           <div className={styles.gridTwo}>
-            <Field
-              label="Phone"
-              name="phone"
-              error={errors.phone}
-              hint={
-                values.preferred_contact_method === "email"
-                  ? "Optional"
-                  : "Selected follow-up"
-              }
-              required={values.preferred_contact_method !== "email"}
-            >
+            <Field label="Phone" name="phone" error={errors.phone} required>
               <input
                 id="phone"
                 name="phone"
@@ -818,11 +807,11 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
                 autoComplete="section-contact tel"
                 enterKeyHint="next"
                 inputMode="tel"
-                required={values.preferred_contact_method !== "email"}
+                required
                 value={values.phone}
                 onChange={(event) => updateValue("phone", event.target.value)}
                 aria-invalid={Boolean(errors.phone)}
-                aria-describedby={errors.phone ? "phone-hint phone-error" : "phone-hint"}
+                aria-describedby={errors.phone ? "phone-error" : undefined}
                 placeholder="404-555-0100"
               />
             </Field>
@@ -1168,27 +1157,19 @@ function validateStep(step: number, values: FormValues): FieldErrors {
   }
   if (step === 1) {
     if (!values.name.trim()) errors.name = "Enter your name.";
-    if (!values.phone.trim() && !values.email.trim()) {
-      errors.phone = "Enter a phone number or email address.";
-      errors.email = "Enter a phone number or email address.";
-    }
-    if (values.phone && values.phone.replace(/\D/g, "").length < 10) {
+    if (!values.phone.trim()) {
+      errors.phone = "Phone number is required.";
+    } else if (
+      values.phone.replace(/\D/g, "").length < 10 ||
+      values.phone.replace(/\D/g, "").length > 15
+    ) {
       errors.phone = "Enter a complete phone number.";
     }
     if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
       errors.email = "Enter a valid email address.";
     }
-    if (values.preferred_contact_method === "phone" && !values.phone.trim()) {
-      errors.phone = "Enter a phone number for phone follow-up.";
-    }
     if (values.preferred_contact_method === "email" && !values.email.trim()) {
       errors.email = "Enter an email address for email follow-up.";
-    }
-    if (values.preferred_contact_method === "sms" && !values.phone.trim()) {
-      errors.phone = "Enter a phone number for text follow-up.";
-    }
-    if (values.sms_consent && !values.phone.trim()) {
-      errors.phone = "Enter a phone number to consent to text messages.";
     }
     if (values.preferred_contact_method === "sms" && !values.sms_consent) {
       errors.sms_consent =
@@ -1233,7 +1214,7 @@ function stepDescription(key: (typeof steps)[number]["key"]) {
   if (key === "property") {
     return "Complete these details so we can identify the house and local market.";
   }
-  return "Enter your name and either a phone number or email—whichever you prefer. Text-message consent is separate and optional.";
+  return "Enter your name and phone number. Email is optional unless you choose email follow-up. Text-message consent is separate and optional.";
 }
 
 function storeConfirmation(confirmation: Confirmation) {
