@@ -1245,6 +1245,7 @@ class ConsentRecord(UuidPrimaryKeyMixin, TimestampMixin, Base):
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     wording_version: Mapped[str] = mapped_column(String(80), nullable=False)
     wording: Mapped[str] = mapped_column(String(1000), nullable=False)
+    normalized_address: Mapped[str | None] = mapped_column(String(320), nullable=True)
     captured_ip: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 

@@ -12,6 +12,7 @@ from app.models.foundation import (
     ConsentRecord,
 )
 from app.schemas.buyers import BuyerCreate, BuyerCriteriaRead, BuyerRead
+from app.services.communication_compliance import format_e164
 from app.services.inbox import ensure_buyer_conversation
 
 BUYER_TYPES = {"cash_buyer", "landlord", "flipper", "builder", "hedge_fund", "agent"}
@@ -107,6 +108,7 @@ def create_buyer(db: Session, principal: Principal, payload: BuyerCreate) -> Buy
                 source="buyer_crm_manual",
                 wording_version="buyer-sms-v1",
                 wording="Buyer confirmed opt-in for one-to-one Stonegate text messages.",
+                normalized_address=format_e164(payload.phone),
                 captured_ip=None,
                 user_agent=None,
                 created_at=now,
@@ -146,6 +148,8 @@ def validate_buyer_payload(payload: BuyerCreate) -> None:
         raise ValueError(f"Unsupported buyer status: {payload.status}")
     if payload.proof_of_funds_status not in PROOF_OF_FUNDS_STATUSES:
         raise ValueError(f"Unsupported proof of funds status: {payload.proof_of_funds_status}")
+    if payload.sms_consent and format_e164(payload.phone) is None:
+        raise ValueError("A valid phone number is required to record buyer SMS consent.")
 
 
 def get_criteria_by_buyer_id(

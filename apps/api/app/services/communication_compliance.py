@@ -60,6 +60,10 @@ def evaluate_sms_eligibility(
             ConsentRecord.organization_id == contact.organization_id,
             ConsentRecord.contact_id == contact.id,
             ConsentRecord.channel == "sms",
+            (
+                (ConsentRecord.normalized_address == recipient)
+                | ConsentRecord.normalized_address.is_(None)
+            ),
         )
         .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
     )

@@ -24,7 +24,7 @@ const faqs = [
   { question: "Will Stonegate inspect the property?", answer: "Property access or verification may be needed before closing. The exact review and any related contract rights should be stated in the written purchase agreement." },
   { question: "Could the purchase contract be assigned to another investor?", answer: "Possibly. Stonegate may purchase directly or assign contractual purchase rights when the written agreement permits it. The contract controls the parties' rights, and sellers may seek independent legal advice before signing." },
   { question: "What parts of Metro Atlanta does Stonegate serve?", answer: "Metro Atlanta is Stonegate's initial operating focus, but coverage is confirmed from the complete property address and current team capacity. Properties outside the immediate area can still be submitted for an honest coverage check." },
-  { question: "How will Stonegate contact me?", answer: "We use the phone or email information you provide for the property inquiry. Text messaging is optional and requires separate consent. You can reply STOP to opt out of texts or call Stonegate for help." },
+  { question: "How will Stonegate contact me?", answer: "We use the phone or email information you provide for the property inquiry. Text messaging is optional and requires the separate unchecked SMS consent box. You can reply STOP to opt out of texts or call Stonegate for help." },
 ];
 
 export default function FaqsPage() {

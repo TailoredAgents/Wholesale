@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
+from app.services.communication_compliance import format_e164
 
 CONTACT_CONSENT_WORDINGS = {
     "seller-contact-web-v2": (
@@ -129,8 +130,8 @@ class SellerIntakeCreate(BaseModel):
             raise ValueError("Either phone or email is required.")
         if not self.consent_to_contact:
             raise ValueError("Consent to contact is required.")
-        if self.sms_consent and not self.phone:
-            raise ValueError("A phone number is required to consent to text messages.")
+        if self.sms_consent and format_e164(self.phone) is None:
+            raise ValueError("A valid phone number is required to consent to text messages.")
         if self.preferred_contact_method == "sms" and not self.sms_consent:
             raise ValueError("Text message consent is required when text is selected.")
         if self.preferred_contact_method == "phone" and not self.phone:

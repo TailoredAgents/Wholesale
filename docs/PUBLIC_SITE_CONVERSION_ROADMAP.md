@@ -1,13 +1,13 @@
 # Stonegate Public Site Conversion Roadmap
 
-Last updated: July 30, 2026
+Last updated: August 13, 2026
 
 ## Purpose
 
 This roadmap governs the conversion-focused upgrade of the customer-facing Stonegate Home Buyers
 website. The objective is to increase qualified seller inquiries and appointments while preserving
 the current premium design, honest direct-offer positioning, fast loading, accessibility, and
-separate SMS consent.
+separate optional SMS consent.
 
 The website should optimize for qualified appointments and contracts, not raw form submissions.
 No phase may add invented reviews, unsupported transaction counts, false urgency, guaranteed
@@ -19,7 +19,7 @@ The public site already provides:
 
 - a Georgia-specific address-first homepage offer
 - a two-step selling-options inquiry with optional post-submission property details
-- separate contact and SMS consent
+- passive phone/email authorization on submission with a separate optional SMS checkbox
 - draft recovery, duplicate handling, and submission recovery
 - phone-click, page-view, offer-start, form-step, abandonment, and submission measurement
 - real-user LCP, INP, and CLS reporting
@@ -77,14 +77,14 @@ Status: **Implemented**. Branded production verification follows the Render depl
 - Issue a random, 24-hour, one-purpose enrichment token whose hash is stored with the intake
   submission; the token can add optional context to that lead but cannot read or edit other data.
 - Preserve draft recovery, duplicate handling, validation, attribution, failure recovery, and
-  separate SMS consent.
+  versioned phone/email and optional SMS consent evidence.
 - Preserve direct address entry so intake never depends on a third-party address provider.
 
 ### Exit Criteria
 
 - A seller can submit a valid inquiry with only the minimum necessary information.
 - Optional enrichment remains connected to the same lead.
-- Existing consent and conversion evidence remains intact.
+- Existing phone/email, optional SMS, and conversion evidence remains intact.
 - Automated desktop and mobile submission and recovery tests pass.
 
 ## Phase PC3: Mobile Conversion Experience

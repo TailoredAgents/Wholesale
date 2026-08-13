@@ -19,7 +19,7 @@ export default function TermsPage() {
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>
         <h1>Terms &amp; Conditions</h1>
-        <p className={styles.effective}>Effective July 18, 2026</p>
+        <p className={styles.effective}>Effective August 13, 2026</p>
         <p className={styles.intro}>
           These Terms &amp; Conditions govern your use of the Stonegate Home Buyers website,
           property inquiry services, and text-messaging program.
@@ -49,12 +49,12 @@ export default function TermsPage() {
         <section className={styles.smsNotice}>
           <h2>Stonegate Home Buyers SMS program</h2>
           <p>
-            When you separately check the SMS consent box on our property-review form, you agree to
-            receive recurring automated text messages from Stonegate Home Buyers about your
-            property inquiry, qualification questions, appointments, possible selling options, and
-            related follow-up. Message frequency varies based on your inquiry and interactions.
-            Message and data rates may apply. Consent to receive text messages is not a condition
-            of purchasing or selling property or receiving an offer.
+            When you separately check the optional SMS consent box on our property-review form, you
+            agree to receive recurring automated text messages from Stonegate Home Buyers about
+            your property inquiry, qualification questions, appointments, possible selling options,
+            and related follow-up. Message frequency varies based on your inquiry and interactions.
+            Message and data rates may apply. Consent to receive text messages is not a condition of
+            purchasing or selling property or receiving an offer.
           </p>
         </section>
 

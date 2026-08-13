@@ -44,6 +44,7 @@ import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
+import { SmsPermissionControl } from "../_components/sms-permission-control";
 import styles from "./inbox.module.css";
 
 type Me = {
@@ -1246,6 +1247,11 @@ export function InboxWorkspace({
   const canUseSms =
     me?.permissions.includes("communications:send_sms") ||
     me?.permissions.includes("communications:send_assigned_sms");
+  const canManageSmsPermission =
+    me?.permissions.includes("leads:edit") ||
+    me?.permissions.includes("communications:send_sms") ||
+    (me?.permissions.includes("communications:send_assigned_sms") &&
+      detail?.assigned_user_id === me.user_id);
   const canUseEmail =
     me?.permissions.includes("communications:send_email") ||
     me?.permissions.includes("communications:send_assigned_email");
@@ -2503,26 +2509,38 @@ export function InboxWorkspace({
                     </div>
                   ))}
                 </div>
-                <div
-                  className={
-                    detail.sms_eligibility.can_send
-                      ? styles.contactSmsReady
-                      : styles.contactSmsBlocked
-                  }
-                >
-                  {detail.sms_eligibility.can_send ? (
-                    <ShieldCheck size={14} aria-hidden="true" />
-                  ) : (
-                    <ShieldAlert size={14} aria-hidden="true" />
-                  )}
-                  <span>
-                    {detail.sms_eligibility.can_send
-                      ? "SMS eligible"
-                      : detail.sms_eligibility.is_suppressed
-                        ? "SMS suppressed"
-                        : `SMS consent ${labelize(detail.sms_eligibility.consent_status)}`}
-                  </span>
-                </div>
+                {detail.lead_id ? (
+                  <SmsPermissionControl
+                    canManage={Boolean(canManageSmsPermission)}
+                    fallbackConsentStatus={detail.sms_eligibility.consent_status}
+                    isSuppressed={detail.sms_eligibility.is_suppressed}
+                    key={`${detail.lead_id}:${detail.sms_eligibility.consent_status}:${Number(detail.sms_eligibility.is_suppressed)}:${detail.last_activity_at ?? "initial"}`}
+                    leadId={detail.lead_id}
+                    onSaved={() => loadDetail(detail.id)}
+                    phoneNumber={primaryPhone?.value ?? detail.sms_eligibility.recipient}
+                  />
+                ) : (
+                  <div
+                    className={
+                      detail.sms_eligibility.can_send
+                        ? styles.contactSmsReady
+                        : styles.contactSmsBlocked
+                    }
+                  >
+                    {detail.sms_eligibility.can_send ? (
+                      <ShieldCheck size={14} aria-hidden="true" />
+                    ) : (
+                      <ShieldAlert size={14} aria-hidden="true" />
+                    )}
+                    <span>
+                      {detail.sms_eligibility.can_send
+                        ? "SMS eligible"
+                        : detail.sms_eligibility.is_suppressed
+                          ? "SMS suppressed"
+                          : `SMS consent ${labelize(detail.sms_eligibility.consent_status)}`}
+                    </span>
+                  </div>
+                )}
                 <div
                   className={
                     detail.voice_eligibility.can_call

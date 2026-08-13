@@ -47,6 +47,7 @@ from app.schemas.leads import (
     RepairCatalogRead,
     RepairEstimateCreate,
     RepairEstimateRead,
+    SmsPermissionUpdate,
     UnderwritingManualComparableCreate,
     UnderwritingManualComparableRead,
 )
@@ -77,6 +78,7 @@ from app.services.leads import (
     preview_lead_market_value,
     reopen_lead,
     restore_lead,
+    update_lead_sms_permission,
     update_lead_staff_details,
     update_lead_stage,
     validate_lead_property_address,
@@ -127,6 +129,11 @@ schedule_appointments_dependency = require_any_permission(
     PermissionKeys.SCHEDULE_ASSIGNED_APPOINTMENTS,
 )
 delete_leads_dependency = require_permission(PermissionKeys.DELETE_OR_ARCHIVE_RECORDS)
+sms_permission_dependency = require_any_permission(
+    PermissionKeys.EDIT_LEADS,
+    PermissionKeys.SEND_SMS,
+    PermissionKeys.SEND_ASSIGNED_SMS,
+)
 
 
 @router.get("")
@@ -189,6 +196,29 @@ def create_lead_note(
     principal: Annotated[Principal, Depends(edit_leads_dependency)],
 ) -> LeadDetail:
     lead = add_lead_note(db, principal, lead_id, payload)
+    if lead is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
+    return lead
+
+
+@router.patch("/{lead_id}/sms-permission")
+def record_lead_sms_permission(
+    lead_id: UUID,
+    payload: SmsPermissionUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(sms_permission_dependency)],
+) -> LeadDetail:
+    try:
+        lead = update_lead_sms_permission(db, principal, lead_id, payload)
+    except LeadLifecycleConflictError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
     if lead is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lead not found.")
     return lead

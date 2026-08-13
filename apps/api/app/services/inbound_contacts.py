@@ -103,6 +103,7 @@ def _create_unknown_seller_sms_conversation(
         organization_id=line.organization_id,
         contact_id=contact.id,
         party_label="Seller",
+        normalized_address=normalized,
     )
     enqueue_lead_created_ai_work(db, lead, source="inbound_sms")
     db.add(
@@ -167,6 +168,7 @@ def _create_unknown_buyer_sms_conversation(
         organization_id=line.organization_id,
         contact_id=contact.id,
         party_label="Buyer",
+        normalized_address=normalized,
     )
     db.add(
         ActivityEvent(
@@ -187,6 +189,7 @@ def _record_inbound_sms_consent(
     organization_id: UUID,
     contact_id: UUID,
     party_label: str,
+    normalized_address: str,
 ) -> None:
     now = datetime.now(UTC)
     db.add(
@@ -198,6 +201,7 @@ def _record_inbound_sms_consent(
             source="inbound_sms",
             wording_version="contact-initiated-sms-v1",
             wording=f"{party_label} initiated an SMS conversation with Stonegate.",
+            normalized_address=normalized_address,
             captured_ip=None,
             user_agent=None,
             created_at=now,

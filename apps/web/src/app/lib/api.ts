@@ -1461,10 +1461,13 @@ export type LeadDetail = LeadListItem & {
     email: string;
   }>;
   consent_records: Array<{
+    id: string;
     channel: string;
     status: string;
     source: string;
     wording_version: string;
+    wording: string;
+    normalized_address: string | null;
     captured_ip: string | null;
     created_at: string;
   }>;

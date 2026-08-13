@@ -33,7 +33,8 @@ const expectations = [
   },
   {
     title: "Choose how we respond",
-    detail: "Select phone, email, or separately authorized text messaging on the request form.",
+    detail:
+      "Choose a phone call or email, and optionally authorize text messages with the separate checkbox.",
   },
   {
     title: "Confirm coverage first",

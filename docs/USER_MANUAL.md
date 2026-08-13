@@ -705,10 +705,13 @@ selling options that may fit the property and situation.
 The form collects:
 
 - Property address and required selling timeline first.
-- Name, required phone number, optional email, preferred contact method, and permission to contact.
+- Name, required phone number, optional email, and a preferred phone or email follow-up method.
+- A passive disclosure explaining that submitting the form authorizes Stonegate to follow up by
+  phone or email about the property inquiry and possible selling options.
+- A separate optional, unchecked SMS consent box for recurring text messages about the property
+  inquiry, appointments, and possible selling options. SMS consent is not saved in browser drafts.
 - Optional post-submission details such as property type, condition, occupancy, seller situation,
   asking price, mortgage balance, repairs, and comments.
-- Separate optional SMS consent.
 - Marketing attribution and privacy-safe conversion evidence.
 
 After submission:
@@ -720,6 +723,10 @@ After submission:
 5. A speed-to-lead task is created.
 6. Each active staff member with **Text new leads** enabled is queued one SMS alert.
 7. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
+
+The staff alert in step 6 is an internal operational message to an employee who separately enabled
+that preference. It is unaffected by the website's seller-facing SMS choice and does not create
+seller SMS consent.
 
 Use the public form to test seller intake with your own controlled information. Do not repeatedly
 submit a real seller to diagnose an internal visibility problem.
@@ -926,6 +933,27 @@ starts a new company email. **Email ready** opens sender settings or owner admin
 
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
+
+### Record SMS Permission Obtained Elsewhere
+
+The Inbox right sidebar and the seller record's Contact panel show **SMS permission: Permissioned**
+or **Not permissioned**. If the seller granted or withdrew permission outside the website form, an
+authorized employee can document it without creating a second lead:
+
+1. Open the seller in **Inbox** or open the full seller record.
+2. In the Contact panel, expand **Edit SMS permission**.
+3. Choose **Permissioned** or **Not permissioned**.
+4. Choose where the decision came from: phone call, in person, Facebook, seller text, written form,
+   or another documented source.
+5. Enter a specific evidence note, including when and how the seller communicated the decision.
+6. Select **Save SMS permission**.
+
+Stonegate appends the change rather than replacing prior evidence. The source, evidence note,
+employee, timestamp, activity event, and audit history remain available for review. Never mark a
+seller permissioned based only on possession of a phone number. A carrier-level **STOP** cannot be
+manually overridden; the seller must text **START** from that number before SMS can resume.
+The saved permission is tied to the phone number shown in the editor; if the primary number changes,
+record permission for the new number before texting it.
 
 ### Understand Response State
 
@@ -1384,6 +1412,11 @@ The full lead record has seven sections:
 
 Use the lead record when you need the complete evidence chain. Use focused workspaces for daily
 queue execution.
+
+The Contact panel also shows the latest **SMS permission** state. Authorized staff may append a
+grant or revocation with its real source and a required evidence note; the Activity and audit
+history preserve each change. A seller's **STOP** remains blocked until that seller sends
+**START**.
 
 In **Property > Property Intelligence**, use the property map to confirm the general location,
 pan or zoom around the neighborhood, and select **Recenter** to return to the saved property pin.
@@ -2338,7 +2371,11 @@ Possible reasons include:
 - Contact-hour or frequency policy blocks the action.
 - The user lacks permission or assignment.
 
-Do not override suppression or use another business's Messaging Service.
+If permission was obtained by phone, in person, Facebook, seller text, or a written record, use
+**Edit SMS permission** in the Inbox right sidebar or seller Contact panel and save the source plus
+a specific evidence note. Do not override a seller's **STOP** or company suppression, and do not
+use another business's Messaging Service. Only a new **START** from the seller can restore a
+carrier-level STOP.
 
 ### Voice, Recording, Or Email Is Unavailable
 

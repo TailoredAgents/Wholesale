@@ -14,6 +14,7 @@ import { CompleteTaskButton } from "../../complete-task-button";
 import { getBuyers, getLeadDetail, getWorkspaceProfile, type LeadDetail } from "../../lib/api";
 import { LeadLifecycleActions } from "../../os/leads/lead-lifecycle-actions";
 import { RecordTimeline } from "../../os/_components/record-timeline";
+import { SmsPermissionControl } from "../../os/_components/sms-permission-control";
 import { AppointmentForm } from "./appointment-form";
 import { AppointmentOutcomeForm } from "./appointment-outcome-form";
 import { BuyerOfferForm } from "./buyer-offer-form";
@@ -138,7 +139,13 @@ function SectionHeader({ title, meta }: { title: string; meta?: string }) {
   );
 }
 
-function ContactPanel({ lead }: { lead: LeadDetail }) {
+function ContactPanel({
+  canManageSmsPermission,
+  lead,
+}: {
+  canManageSmsPermission: boolean;
+  lead: LeadDetail;
+}) {
   const methods = uniqueBy(
     lead.contact_methods,
     (method) => `${method.method_type}:${method.value.toLowerCase()}`,
@@ -161,6 +168,19 @@ function ContactPanel({ lead }: { lead: LeadDetail }) {
         <div><dt>Source</dt><dd>{labelize(lead.source)}</dd></div>
         <div><dt>Temperature</dt><dd>{labelize(lead.lead_temperature)}</dd></div>
       </dl>
+      <SmsPermissionControl
+        canManage={canManageSmsPermission}
+        disabled={Boolean(lead.archived_at)}
+        initialRecords={lead.consent_records}
+        leadId={lead.id}
+        phoneNumber={
+          lead.contact_methods.find(
+            (method) => method.method_type === "phone" && method.is_primary,
+          )?.value ??
+          lead.contact_methods.find((method) => method.method_type === "phone")?.value ??
+          null
+        }
+      />
     </section>
   );
 }
@@ -300,9 +320,11 @@ function InternalNotesPanel({ lead }: { lead: LeadDetail }) {
 
 function OverviewTab({
   activeAppointment,
+  canManageSmsPermission,
   lead,
 }: {
   activeAppointment: LeadDetail["appointments"][number] | undefined;
+  canManageSmsPermission: boolean;
   lead: LeadDetail;
 }) {
   const appointmentWorkspaceHref = activeAppointment
@@ -317,7 +339,7 @@ function OverviewTab({
         <RecentActivityPanel lead={lead} />
       </div>
       <aside className={styles.sideColumn}>
-        <ContactPanel lead={lead} />
+        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
         <PropertyPanel lead={lead} />
         <section className={styles.sectionPanel}>
           <SectionHeader title="Record controls" />
@@ -357,7 +379,13 @@ function OverviewTab({
   );
 }
 
-function CommunicationsTab({ lead }: { lead: LeadDetail }) {
+function CommunicationsTab({
+  canManageSmsPermission,
+  lead,
+}: {
+  canManageSmsPermission: boolean;
+  lead: LeadDetail;
+}) {
   const timeline = [
     ...lead.communications.map((item) => ({
       id: `communication-${item.id}`,
@@ -391,7 +419,7 @@ function CommunicationsTab({ lead }: { lead: LeadDetail }) {
         </div>
       </section>
       <aside className={styles.sideColumn}>
-        <ContactPanel lead={lead} />
+        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
         <section className={styles.sectionPanel}>
           <SectionHeader title="Communication actions" />
           <ActionDisclosure label="Log call, text, or email">
@@ -663,7 +691,7 @@ function DealTab({ lead, buyers }: { lead: LeadDetail; buyers: Awaited<ReturnTyp
 }
 
 function HistoryTab({ lead }: { lead: LeadDetail }) {
-  const consents = uniqueBy(lead.consent_records, (item) => `${item.channel}:${item.status}:${item.source}:${item.wording_version}`);
+  const consents = lead.consent_records;
   const touches = uniqueBy(lead.attribution_touches, (item) => `${item.touch_type}:${item.source}:${item.medium}:${item.campaign}`);
   return (
     <div className={styles.historyGrid}>
@@ -675,10 +703,11 @@ function HistoryTab({ lead }: { lead: LeadDetail }) {
         <div className={styles.recordList}>
           {consents.map((record) => (
             <article
-              key={`${record.channel}-${record.status}-${record.source}-${record.wording_version}-${record.created_at}`}
+              key={record.id}
             >
               <div className={styles.recordTitle}><strong>{labelize(record.status)} consent</strong><span>{labelize(record.channel)}</span></div>
-              <p>{labelize(record.source)} / wording {record.wording_version}</p>
+              <p>{record.wording}</p>
+              <small>{labelize(record.source)} / wording {record.wording_version}</small>
               <small>{formatDate(record.created_at)}</small>
             </article>
           ))}
@@ -706,19 +735,27 @@ function HistoryTab({ lead }: { lead: LeadDetail }) {
   );
 }
 
-function ActivityTab({ lead }: { lead: LeadDetail }) {
+function ActivityTab({
+  canManageSmsPermission,
+  lead,
+}: {
+  canManageSmsPermission: boolean;
+  lead: LeadDetail;
+}) {
   return (
     <div className={styles.activityWorkspace}>
-      <CommunicationsTab lead={lead} />
+      <CommunicationsTab canManageSmsPermission={canManageSmsPermission} lead={lead} />
       <HistoryTab lead={lead} />
     </div>
   );
 }
 
 function PropertyTab({
+  canManageSmsPermission,
   lead,
   editLeadOpen,
 }: {
+  canManageSmsPermission: boolean;
   lead: LeadDetail;
   editLeadOpen: boolean;
 }) {
@@ -747,7 +784,7 @@ function PropertyTab({
         </details>
       </div>
       <aside className={styles.sideColumn}>
-        <ContactPanel lead={lead} />
+        <ContactPanel canManageSmsPermission={canManageSmsPermission} lead={lead} />
         <QualificationPanel lead={lead} />
       </aside>
     </div>
@@ -1141,7 +1178,7 @@ function ArchivedLeadRecord({ lead }: { lead: LeadDetail }) {
           <ReadOnlyBuyerOffersPanel lead={lead} />
         </div>
         <aside className={styles.sideColumn}>
-          <ContactPanel lead={lead} />
+          <ContactPanel canManageSmsPermission={false} lead={lead} />
           <ReadOnlyPropertyPanel lead={lead} />
           <section className={styles.sectionPanel}>
             <SectionHeader title="Record history" meta="Read only" />
@@ -1187,6 +1224,12 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
 
   const phone = lead.contact_methods.find((method) => method.method_type === "phone")?.value;
   const email = lead.contact_methods.find((method) => method.method_type === "email")?.value;
+  const canManageSmsPermission = Boolean(
+    profile?.permissions.includes("leads:edit") ||
+      profile?.permissions.includes("communications:send_sms") ||
+      (profile?.permissions.includes("communications:send_assigned_sms") &&
+        lead.assigned_user_id === profile.user_id),
+  );
   const lastContact = lead.communications[0]?.occurred_at ?? null;
   const tabHref = (tab: LeadTab, options?: { editLead?: boolean }) => {
     const values = new URLSearchParams({ tab });
@@ -1297,11 +1340,24 @@ export async function LeadDetailView({ params, searchParams }: LeadPageProps) {
 
           <section className={styles.tabContent}>
             {activeTab === "summary" ? (
-              <OverviewTab activeAppointment={activeAppointment} lead={lead} />
+              <OverviewTab
+                activeAppointment={activeAppointment}
+                canManageSmsPermission={canManageSmsPermission}
+                lead={lead}
+              />
             ) : null}
-            {activeTab === "activity" ? <ActivityTab lead={lead} /> : null}
+            {activeTab === "activity" ? (
+              <ActivityTab
+                canManageSmsPermission={canManageSmsPermission}
+                lead={lead}
+              />
+            ) : null}
             {activeTab === "property" ? (
-              <PropertyTab editLeadOpen={editLeadOpen} lead={lead} />
+              <PropertyTab
+                canManageSmsPermission={canManageSmsPermission}
+                editLeadOpen={editLeadOpen}
+                lead={lead}
+              />
             ) : null}
             {activeTab === "valuation" ? (
               lead.asset_class === "land"

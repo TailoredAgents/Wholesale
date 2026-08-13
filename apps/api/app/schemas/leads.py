@@ -148,12 +148,34 @@ class LeadAssignableUserRead(BaseModel):
 
 
 class ConsentRecordRead(BaseModel):
+    id: UUID
     channel: str
     status: str
     source: str
     wording_version: str
+    wording: str
+    normalized_address: str | None = None
     captured_ip: str | None
     created_at: datetime
+
+
+class SmsPermissionUpdate(BaseModel):
+    status: Literal["granted", "revoked"]
+    source: Literal[
+        "phone_call",
+        "in_person",
+        "facebook",
+        "inbound_sms",
+        "website_form",
+        "written_form",
+        "other",
+    ]
+    evidence_note: str = Field(min_length=3, max_length=500)
+
+    @field_validator("evidence_note", mode="before")
+    @classmethod
+    def strip_evidence_note(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class AttributionTouchRead(BaseModel):

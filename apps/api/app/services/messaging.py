@@ -681,6 +681,7 @@ def apply_sms_preference(
             source="twilio_advanced_opt_out",
             wording_version="twilio-keyword-v1",
             wording=f"Seller sent {preference} by SMS.",
+            normalized_address=normalized_address,
             captured_ip=None,
             user_agent=None,
             created_at=now,

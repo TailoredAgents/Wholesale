@@ -75,6 +75,7 @@ from app.models.foundation import (
     RoleAssignment,
     RoleCredit,
     RolePermission,
+    SuppressionRecord,
     Task,
     Transaction,
     TransactionChecklistItem,
@@ -130,6 +131,7 @@ from app.schemas.leads import (
     PipelineStageCount,
     PropertyValidationRead,
     RepairEstimateItemInput,
+    SmsPermissionUpdate,
     SourcePerformance,
     TransactionChecklistItemRead,
     TransactionRead,
@@ -144,6 +146,7 @@ from app.schemas.leads import (
     UnderwritingVersionRead,
     UnderwritingVersionRepairSnapshot,
 )
+from app.services.communication_compliance import format_e164
 from app.services.inbox import (
     add_automatic_owner_watchers,
     ensure_primary_conversation,
@@ -625,7 +628,7 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
             ConsentRecord.organization_id == principal.organization_id,
             ConsentRecord.contact_id == lead.contact_id,
         )
-        .order_by(ConsentRecord.created_at.desc())
+        .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
     ).all()
     attribution_touches = db.scalars(
         select(AttributionTouch)
@@ -789,10 +792,13 @@ def get_lead_detail(db: Session, principal: Principal, lead_id: UUID) -> LeadDet
         ],
         consent_records=[
             ConsentRecordRead(
+                id=record.id,
                 channel=record.channel,
                 status=record.status,
                 source=record.source,
                 wording_version=record.wording_version,
+                wording=record.wording,
+                normalized_address=record.normalized_address,
                 captured_ip=record.captured_ip,
                 created_at=record.created_at,
             )
@@ -3099,6 +3105,149 @@ def create_lead_buyer_offer(
                 "proof_of_funds_received": offer.proof_of_funds_received,
             },
             reason="Manual buyer offer entry",
+        )
+    )
+    db.commit()
+    return get_lead_detail(db, principal, lead_id)
+
+
+SMS_PERMISSION_SOURCE_LABELS = {
+    "phone_call": "phone call",
+    "in_person": "in-person conversation",
+    "facebook": "Facebook message or form with explicit SMS permission",
+    "inbound_sms": "seller text explicitly granting or withdrawing SMS permission",
+    "website_form": "website form",
+    "written_form": "written form",
+    "other": "other documented source",
+}
+
+
+def update_lead_sms_permission(
+    db: Session,
+    principal: Principal,
+    lead_id: UUID,
+    payload: SmsPermissionUpdate,
+) -> LeadDetail | None:
+    lead = get_scoped_lead(
+        db,
+        principal,
+        lead_id,
+        include_archived=True,
+        for_update=True,
+    )
+    if lead is None:
+        return None
+    require_lead_open_for_work(lead)
+    has_global_authority = (
+        PermissionKeys.EDIT_LEADS in principal.permission_keys
+        or PermissionKeys.SEND_SMS in principal.permission_keys
+    )
+    if not has_global_authority and lead.assigned_user_id != principal.user_id:
+        raise PermissionError(
+            "Assigned SMS permission may only be recorded on a lead assigned to you."
+        )
+    contact = db.get(Contact, lead.contact_id)
+    if contact is None:
+        raise RuntimeError("lead is missing its seller contact")
+    phone_method = db.scalar(
+        select(ContactMethod)
+        .where(
+            ContactMethod.organization_id == principal.organization_id,
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == "phone",
+        )
+        .order_by(ContactMethod.is_primary.desc(), ContactMethod.created_at.asc())
+    )
+    recipient = format_e164(phone_method.value) if phone_method is not None else None
+    if payload.status == "granted" and recipient is None:
+        raise ValueError("Add a valid seller phone number before recording SMS permission.")
+
+    active_suppression = (
+        db.scalar(
+            select(SuppressionRecord).where(
+                SuppressionRecord.organization_id == principal.organization_id,
+                SuppressionRecord.channel == "sms",
+                SuppressionRecord.normalized_address == recipient,
+                SuppressionRecord.status == "active",
+            )
+        )
+        if recipient is not None
+        else None
+    )
+    if active_suppression is not None:
+        raise ValueError(
+            "The seller replied STOP. This status is locked until the seller sends START."
+        )
+
+    latest = db.scalar(
+        select(ConsentRecord)
+        .where(
+            ConsentRecord.organization_id == principal.organization_id,
+            ConsentRecord.contact_id == contact.id,
+            ConsentRecord.channel == "sms",
+        )
+        .order_by(ConsentRecord.created_at.desc(), ConsentRecord.id.desc())
+    )
+    source_label = SMS_PERMISSION_SOURCE_LABELS[payload.source]
+    permission_label = "granted" if payload.status == "granted" else "not granted"
+    wording = (
+        f"Stonegate staff documented SMS permission as {permission_label} from {source_label}. "
+        f"SMS number: {recipient or 'not available'}. Evidence: {payload.evidence_note}"
+    )
+    captured_at = datetime.now(UTC)
+    record = ConsentRecord(
+        organization_id=principal.organization_id,
+        contact_id=contact.id,
+        channel="sms",
+        status=payload.status,
+        source=payload.source,
+        wording_version="staff-documented-sms-v1",
+        wording=wording,
+        normalized_address=recipient,
+        captured_ip=None,
+        user_agent=None,
+        created_at=captured_at,
+        updated_at=captured_at,
+    )
+    db.add(record)
+    db.flush()
+    db.add(
+        ActivityEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            entity_type="lead",
+            entity_id=lead.id,
+            event_type="lead.sms_permission_updated",
+            summary=f"SMS permission recorded as {permission_label} from {source_label}.",
+        )
+    )
+    db.add(
+        AuditEvent(
+            organization_id=principal.organization_id,
+            actor_user_id=principal.user_id,
+            actor_type="user",
+            action="lead.sms_permission_update",
+            entity_type="lead",
+            entity_id=lead.id,
+            previous_value=(
+                {
+                    "status": latest.status,
+                    "source": latest.source,
+                    "normalized_address": latest.normalized_address,
+                    "wording_version": latest.wording_version,
+                    "created_at": latest.created_at.isoformat(),
+                }
+                if latest is not None
+                else None
+            ),
+            new_value={
+                "status": payload.status,
+                "source": payload.source,
+                "normalized_address": recipient,
+                "wording_version": record.wording_version,
+                "evidence_note": payload.evidence_note,
+            },
+            reason="Staff documented seller SMS permission",
         )
     )
     db.commit()

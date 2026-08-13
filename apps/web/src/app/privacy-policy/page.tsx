@@ -19,7 +19,7 @@ export default function PrivacyPolicyPage() {
       <article className={styles.content}>
         <p className={styles.eyebrow}>Stonegate Home Buyers</p>
         <h1>Privacy Policy</h1>
-        <p className={styles.effective}>Effective August 4, 2026</p>
+        <p className={styles.effective}>Effective August 13, 2026</p>
         <p className={styles.intro}>
           This Privacy Policy explains how Stonegate Home Buyers collects, uses, discloses, and
           protects information when you visit our website, request a property offer, call us, or
@@ -71,11 +71,12 @@ export default function PrivacyPolicyPage() {
             Buyers.
           </p>
           <p>
-            If you separately opt in, Stonegate Home Buyers may send recurring automated messages
-            about your property inquiry, qualification questions, appointments, possible selling
-            options, and related follow-up. Message frequency varies. Message and data rates may
-            apply. Reply STOP to unsubscribe or HELP for help. Text-message consent is not a
-            condition of requesting or accepting an offer. See our{" "}
+            If you separately opt in using the optional unchecked SMS box, Stonegate Home Buyers
+            may send recurring automated messages about your property inquiry, qualification
+            questions, appointments, possible selling options, and related follow-up. Message
+            frequency varies. Message and data rates may apply. Reply STOP to unsubscribe or HELP
+            for help. Text-message consent is not a condition of requesting or accepting an offer.
+            See our{" "}
             <Link href="/terms">Terms &amp; Conditions</Link> for complete program terms.
           </p>
         </section>

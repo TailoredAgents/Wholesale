@@ -35,6 +35,7 @@ from app.schemas.public_intake import (
 )
 from app.services.ai_operations import enqueue_lead_created_ai_work
 from app.services.bootstrap import bootstrap_foundation
+from app.services.communication_compliance import format_e164
 from app.services.conversion_events import record_conversion_event, with_meta_browser_metadata
 from app.services.inbox import ensure_primary_conversation
 from app.services.lead_manager import ensure_inbound_case
@@ -151,6 +152,7 @@ def create_public_seller_lead(
             )
         )
     if payload.sms_consent:
+        sms_recipient = format_e164(payload.phone)
         db.add(
             ConsentRecord(
                 organization_id=organization.id,
@@ -160,6 +162,7 @@ def create_public_seller_lead(
                 source="seller_website",
                 wording_version=resolved_sms_consent_version,
                 wording=resolved_sms_consent_wording,
+                normalized_address=sms_recipient,
                 captured_ip=ip_address,
                 user_agent=user_agent,
             )

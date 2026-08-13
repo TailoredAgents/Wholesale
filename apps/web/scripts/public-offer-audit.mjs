@@ -603,7 +603,7 @@ async function auditJourney(browser, viewport) {
   await page.getByRole("button", { name: /Continue/ }).click();
   const contactFieldSemantics = await page.evaluate(() =>
     Object.fromEntries(
-      ["name", "phone", "email", "consent_to_contact"].map((id) => {
+      ["name", "phone", "email", "sms_consent"].map((id) => {
         const control = document.getElementById(id);
         return [
           id,
@@ -620,7 +620,7 @@ async function auditJourney(browser, viewport) {
     name: { autocomplete: "section-contact name", required: true, type: null },
     phone: { autocomplete: "section-contact tel", required: true, type: "tel" },
     email: { autocomplete: "section-contact email", required: false, type: "email" },
-    consent_to_contact: { autocomplete: null, required: true, type: "checkbox" },
+    sms_consent: { autocomplete: null, required: false, type: "checkbox" },
   };
   for (const [field, expected] of Object.entries(expectedContactSemantics)) {
     const actual = contactFieldSemantics[field];
@@ -633,13 +633,11 @@ async function auditJourney(browser, viewport) {
       record(viewport.name, "form-autofill", { field, expected, actual });
     }
   }
-  const visibleContactConsent = (await page.locator('label:has(#consent_to_contact) > span').innerText())
-    .replace(/\s+/g, " ")
-    .trim();
-  if (visibleContactConsent !== contactConsentWording) {
+  const contactDisclosure = page.getByText(contactConsentWording, { exact: true });
+  if ((await contactDisclosure.count()) !== 1 || !(await contactDisclosure.isVisible())) {
     record(viewport.name, "contact-consent-copy", {
       expected: contactConsentWording,
-      actual: visibleContactConsent,
+      matches: await contactDisclosure.count(),
     });
   }
   const visibleSmsConsent = (await page.locator('label:has(#sms_consent) > span').innerText())
@@ -650,6 +648,17 @@ async function auditJourney(browser, viewport) {
       expected: smsConsentWording,
       actual: visibleSmsConsent,
     });
+  }
+  if (await page.locator("#sms_consent").isChecked()) {
+    record(viewport.name, "sms-consent-default", "Optional SMS consent was checked by default.");
+  }
+  for (const selector of ["#consent_to_contact", 'input[name="preferred_contact_method"][value="sms"]']) {
+    if (await page.locator(selector).count()) {
+      record(viewport.name, "removed-consent-control", {
+        selector,
+        message: "The website should use submission consent for phone/email and a separate optional SMS checkbox.",
+      });
+    }
   }
   await page
     .locator('label:has(input[name="preferred_contact_method"][value="email"])')
@@ -699,26 +708,6 @@ async function auditJourney(browser, viewport) {
     .click();
   await page.locator("#name").fill("Jane Seller");
   await page.locator("#phone").fill("404-555-0100");
-  await page.locator('label:has(input[name="preferred_contact_method"][value="sms"])').click();
-  await page.locator("#consent_to_contact").check();
-  await page.getByRole("button", { name: "Review My Selling Options" }).click();
-  if (!(await page.locator("#sms_consent-error").isVisible())) {
-    record(viewport.name, "sms-consent", "Text preference did not require separate SMS consent.");
-  }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
-    .click();
-  if (await page.locator("#sms_consent-error").count()) {
-    record(
-      viewport.name,
-      "conditional-requirement",
-      "Leaving text follow-up did not clear the obsolete SMS-consent error.",
-    );
-  }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="sms"])')
-    .click();
-  await page.locator("#sms_consent").check();
   await checkFocusedControlClearance(
     page,
     viewport,
@@ -726,15 +715,20 @@ async function auditJourney(browser, viewport) {
     "offer-submit",
   );
   await page.waitForTimeout(20);
-  const storedDraft = await page.evaluate(() => JSON.parse(sessionStorage.getItem("stonegate_cash_offer_draft_v1") ?? "{}"));
-  if (storedDraft.values?.sms_consent || storedDraft.values?.consent_to_contact) {
-    record(viewport.name, "consent-persistence", "Consent checkboxes were persisted in the draft.");
-  }
   await page.getByRole("button", { name: "Review My Selling Options" }).click();
   const recoverableError = page.getByText("Stonegate could not save the request yet. Please try again.");
   await recoverableError.waitFor();
   if ((await page.locator("#name").inputValue()) !== "Jane Seller") {
     record(viewport.name, "submission-recovery", "A failed submission did not preserve the seller's answers.");
+  }
+  if (state.submissions.at(-1)?.sms_consent !== false) {
+    record(viewport.name, "sms-consent-payload", "An unchecked SMS box did not submit false.");
+  }
+  await page.locator("#sms_consent").check();
+  await page.waitForTimeout(20);
+  const storedDraft = await page.evaluate(() => JSON.parse(sessionStorage.getItem("stonegate_cash_offer_draft_v1") ?? "{}"));
+  if ("sms_consent" in (storedDraft.values ?? {}) || "consent_to_contact" in (storedDraft.values ?? {})) {
+    record(viewport.name, "consent-persistence", "Consent evidence was persisted in the browser draft.");
   }
   await page.getByRole("button", { name: "Review My Selling Options" }).click();
   const confirmationHeading = page.getByText("Thanks. Stonegate has your property request.");
@@ -771,7 +765,7 @@ async function auditJourney(browser, viewport) {
     desired_timeline: "within_30_days",
     asking_price: null,
     mortgage_balance: null,
-    preferred_contact_method: "sms",
+    preferred_contact_method: "phone",
     consent_to_contact: true,
     consent_wording_version: "seller-contact-web-v3",
     sms_consent: true,

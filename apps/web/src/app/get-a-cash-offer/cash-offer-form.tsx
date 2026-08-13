@@ -52,9 +52,7 @@ type FormValues = {
   name: string;
   phone: string;
   email: string;
-  preferred_contact_method: "phone" | "email" | "sms";
-  consent_to_contact: boolean;
-  sms_consent: boolean;
+  preferred_contact_method: "phone" | "email";
   company_website: string;
 };
 
@@ -95,8 +93,6 @@ const initialValues: FormValues = {
   phone: "",
   email: "",
   preferred_contact_method: "phone",
-  consent_to_contact: false,
-  sms_consent: false,
   company_website: "",
 };
 
@@ -129,6 +125,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     ...initialValues,
     property_address: initialAddress,
   });
+  const [smsConsent, setSmsConsent] = useState(false);
   const [activeStep, setActiveStep] = useState(0);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [submitState, setSubmitState] = useState<SubmitState>({ status: "idle", message: "" });
@@ -167,12 +164,18 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         draftStorageKey,
       );
       if (draft) {
+        const restoredValues = { ...draft.values } as Partial<FormValues> & {
+          consent_to_contact?: boolean;
+          sms_consent?: boolean;
+        };
+        delete restoredValues.consent_to_contact;
+        delete restoredValues.sms_consent;
+        restoredValues.preferred_contact_method =
+          restoredValues.preferred_contact_method === "email" ? "email" : "phone";
         setValues((current) => ({
           ...current,
-          ...draft.values,
+          ...restoredValues,
           property_address: preferredAddress || draft.values.property_address || "",
-          consent_to_contact: false,
-          sms_consent: false,
         }));
         setActiveStep(Math.min(Math.max(draft.activeStep, 0), steps.length - 1));
         hasTrackedFormStart.current = true;
@@ -189,15 +192,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
 
   useEffect(() => {
     if (!hasRestoredDraft || confirmation) return;
-    const draftValues = {
-      ...values,
-      consent_to_contact: false,
-      sms_consent: false,
-    };
     try {
       window.sessionStorage.setItem(
         draftStorageKey,
-        JSON.stringify({ values: draftValues, activeStep, savedAt: Date.now() }),
+        JSON.stringify({ values, activeStep, savedAt: Date.now() }),
       );
     } catch {
       // The form remains fully usable when storage is unavailable.
@@ -250,7 +248,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       setErrors((current) => ({
         ...current,
         email: undefined,
-        sms_consent: undefined,
       }));
     } else if (errors[name]) {
       setErrors((current) => ({ ...current, [name]: undefined }));
@@ -346,11 +343,11 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       asking_price: null,
       mortgage_balance: null,
       comments: null,
-      consent_to_contact: values.consent_to_contact,
+      consent_to_contact: true,
       consent_wording_version: "seller-contact-web-v3",
-      sms_consent: values.sms_consent,
-      company_website: values.company_website,
+      sms_consent: smsConsent,
       sms_consent_wording_version: "seller-sms-web-v3",
+      company_website: values.company_website,
       conversion_session_id: getConversionSessionId(),
       experiment_key: experiment?.experiment_key ?? null,
       experiment_variant: experiment?.experiment_variant ?? null,
@@ -502,6 +499,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     hasTrackedFormAbandon.current = false;
     completedSteps.current.clear();
     setValues(initialValues);
+    setSmsConsent(false);
     setActiveStep(0);
     setErrors({});
     setConfirmation(null);
@@ -847,7 +845,6 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               {[
                 { value: "phone", label: "Phone call" },
                 { value: "email", label: "Email" },
-                { value: "sms", label: "Text message" },
               ].map((option) => (
                 <label key={option.value}>
                   <input
@@ -867,56 +864,27 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               ))}
             </div>
           </fieldset>
-
-          <label className={`${styles.consent} ${errors.consent_to_contact ? styles.consentError : ""}`}>
+          <p className={styles.consentDisclosure}>{consentWording}</p>
+          <label className={styles.smsConsent}>
             <input
-              id="consent_to_contact"
-              name="consent_to_contact"
+              id="sms_consent"
+              name="sms_consent"
               type="checkbox"
-              checked={values.consent_to_contact}
-              required
-              onChange={(event) => updateValue("consent_to_contact", event.target.checked)}
-              aria-invalid={Boolean(errors.consent_to_contact)}
-              aria-describedby={
-                errors.consent_to_contact ? "consent_to_contact-error" : undefined
-              }
+              checked={smsConsent}
+              onChange={(event) => {
+                handleFormStart();
+                setSmsConsent(event.target.checked);
+              }}
             />
-            <span>{consentWording}</span>
+            <span>
+              By checking this optional box, I agree to receive recurring automated text messages
+              from Stonegate Home Buyers about my property inquiry, appointments, and possible
+              selling options at the number provided. Message frequency varies. Message and data
+              rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of
+              purchase. See our <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
+              <Link href="/privacy-policy">Privacy Policy</Link>.
+            </span>
           </label>
-          {errors.consent_to_contact ? (
-            <p className={styles.fieldError} id="consent_to_contact-error">
-              {errors.consent_to_contact}
-            </p>
-          ) : null}
-
-          <div className={styles.smsConsentBlock}>
-            <p>
-              <strong>Optional text-message consent</strong>
-              <span>Leave unchecked to receive only your selected non-SMS follow-up.</span>
-            </p>
-            <label className={`${styles.consent} ${errors.sms_consent ? styles.consentError : ""}`}>
-              <input
-                id="sms_consent"
-                name="sms_consent"
-                type="checkbox"
-                checked={values.sms_consent}
-                onChange={(event) => updateValue("sms_consent", event.target.checked)}
-                aria-invalid={Boolean(errors.sms_consent)}
-                aria-describedby={errors.sms_consent ? "sms_consent-error" : undefined}
-              />
-              <span>
-                By checking this optional box, I agree to receive recurring automated text messages
-                from Stonegate Home Buyers about my property inquiry, appointments, and possible
-                selling options at the number provided. Message frequency varies. Message and data rates may
-                apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
-                See our <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
-                <Link href="/privacy-policy">Privacy Policy</Link>.
-              </span>
-            </label>
-            {errors.sms_consent ? (
-              <p className={styles.fieldError} id="sms_consent-error">{errors.sms_consent}</p>
-            ) : null}
-          </div>
         </fieldset>
       ) : null}
 
@@ -944,7 +912,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         <p className={styles[submitState.status]} role="status">{submitState.message}</p>
       ) : null}
       <p className={styles.formPrivacy}>
-        Your information is used to review this property inquiry. SMS consent is optional.
+        Your information is used to review this property inquiry and follow up about possible
+        selling options. Text messages are optional.
       </p>
     </form>
   );
@@ -1171,14 +1140,6 @@ function validateStep(step: number, values: FormValues): FieldErrors {
     if (values.preferred_contact_method === "email" && !values.email.trim()) {
       errors.email = "Enter an email address for email follow-up.";
     }
-    if (values.preferred_contact_method === "sms" && !values.sms_consent) {
-      errors.sms_consent =
-        "Check the optional SMS consent box to select text messages, or choose phone or email.";
-    }
-    if (!values.consent_to_contact) {
-      errors.consent_to_contact =
-        "Confirm that Stonegate may contact you by phone or email about this property.";
-    }
   }
   return errors;
 }
@@ -1214,7 +1175,7 @@ function stepDescription(key: (typeof steps)[number]["key"]) {
   if (key === "property") {
     return "Complete these details so we can identify the property and local market.";
   }
-  return "Enter your name and phone number. Email is optional unless you choose email follow-up. Text-message consent is separate and optional.";
+  return "Enter your name and phone number. Email and text-message permission are optional.";
 }
 
 function storeConfirmation(confirmation: Confirmation) {

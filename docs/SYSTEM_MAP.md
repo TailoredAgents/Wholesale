@@ -242,7 +242,7 @@ Role-specific default routes include:
 | Route | Purpose |
 | --- | --- |
 | `/` | Main address-first direct-offer experience |
-| `/get-a-cash-offer` | Two-step seller inquiry, separate SMS opt-in, and optional follow-up details |
+| `/get-a-cash-offer` | Two-step seller inquiry, passive phone/email authorization, separate optional SMS opt-in, and optional follow-up details |
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
@@ -257,10 +257,13 @@ Role-specific default routes include:
 
 ### 6.2 Seller Intake
 
-The two required steps collect the property address, seller identity, contact information,
-preferred contact method, and consent. The lead is accepted at that point. The confirmation offers
-an optional section for timing, condition, occupancy, asking-price, mortgage, and seller context;
-a random 24-hour token connects those answers to the same lead without exposing CRM access.
+The two required steps collect the property address, seller identity, contact information, and a
+preferred phone or email follow-up method. The contact step displays the phone/email authorization
+as passive text; submitting the form is that authorization action and records
+`consent_to_contact=true`. A separate unchecked box optionally records recurring automated SMS
+consent. The lead is accepted at that point. The confirmation offers an optional section for
+timing, condition, occupancy, asking-price, mortgage, and seller context; a random 24-hour token
+connects those answers to the same lead without exposing CRM access.
 
 At mobile widths, every public page also provides fixed **Call** and **Get Offer** actions. Their
 conversion events include the mobile placement and source route. This bar belongs to the public
@@ -307,11 +310,26 @@ Duplicate active submissions are matched using normalized phone, email, and prop
 Stonegate keeps the new form, attribution, and consent evidence while avoiding unnecessary
 duplicate active leads.
 
-### 6.3 SMS Consent
+### 6.3 Contact Authorization And SMS Consent
 
-SMS consent is a separate unchecked choice. Evidence includes the consent wording version,
-timestamp, source, IP address, and user agent. General permission to contact does not silently
-become consent for recurring automated SMS.
+The public property form displays the versioned phone/email disclosure next to the final action and
+submits `consent_to_contact=true` when the seller sends the inquiry. Recurring automated SMS consent
+is a separate unchecked choice. When checked, evidence includes the `seller-sms-web-v3` wording
+version, timestamp, source, IP address, and user agent. The checkbox is never required, selected by
+default, persisted in a browser draft, or inferred from general permission to contact.
+
+Internal new-lead SMS alerts are a separate operational use case sent only to employees who enabled
+the staff alert preference; the seller-facing checkbox does not control those alerts.
+
+The seller record Contact panel and Inbox right sidebar show the latest SMS state as
+**Permissioned** or **Not permissioned**. Authorized staff can append a grant or revocation when
+the seller communicates the decision through a phone call, in person, Facebook, an inbound seller
+text, a written form, or another documented source. Every staff entry requires an evidence note
+and preserves source, actor, timestamp, activity, and audit history. It does not rewrite earlier
+consent evidence. An active Twilio **STOP** suppression cannot be manually overridden; the seller
+must send **START** from the same number before SMS permission can be restored.
+New SMS permission records are also bound to the normalized phone number that was permissioned, so
+replacing a seller's primary number does not silently transfer prior permission to the new number.
 
 ### 6.4 Conversion Measurement
 
@@ -370,6 +388,8 @@ not presented as competing navigation.
 - Views include Mine, Unassigned, Team, Needs Reply, Unread, Appointments, My Addresses, team
   inboxes, and authorized restricted inboxes.
 - Supports lead, buyer, transaction, and general email contexts.
+- The seller context in the right pane shows the current SMS permission state and lets authorized
+  staff append a sourced, evidenced grant or revocation without leaving the conversation.
 
 **Tasks (`/os/tasks`)**
 
@@ -963,12 +983,17 @@ The Twilio SMS implementation supports:
 - delivery, failure, and inbound state
 - STOP and START processing
 - suppression and consent controls
+- an editable **Permissioned / Not permissioned** seller-context control for authorized staff, with
+  required source and evidence-note capture plus append-only activity and audit history
 - number normalization
 - organization and permission scope
 
 Stonegate's dedicated seller-inquiry A2P campaign must show approved in Twilio before production
 SMS acceptance. Do not use another
 company's Messaging Service, campaign, number, or consent description.
+
+Manual staff documentation never bypasses an active carrier STOP. Only the seller's inbound START
+message removes that suppression and restores SMS eligibility.
 
 ### 10.5 Voice
 

@@ -73,6 +73,11 @@ def test_create_and_list_buyer_with_criteria(
     assert context_link is not None
     assert str(context_link.buyer_id) == created["id"]
     assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
+    sms_consent = db_session.scalar(
+        select(ConsentRecord).where(ConsentRecord.channel == "sms")
+    )
+    assert sms_consent is not None
+    assert sms_consent.normalized_address == "+14045550199"
     assert (
         int(
             db_session.scalar(
@@ -125,3 +130,19 @@ def test_create_buyer_rejects_invalid_type(
     )
 
     assert response.status_code == 422
+
+
+def test_create_buyer_rejects_sms_consent_for_an_invalid_phone(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+
+    response = TestClient(app).post(
+        "/api/v1/buyers",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"name": "Invalid SMS Buyer", "phone": "bad-number", "sms_consent": True},
+    )
+
+    assert response.status_code == 422
+    assert "valid phone number" in response.text

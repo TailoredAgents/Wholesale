@@ -595,9 +595,14 @@ The campaign must reference the current branded public URLs:
 - `https://www.stonegatehb.com/privacy-policy`
 - `https://www.stonegatehb.com/terms`
 
-The consent description must match the actual separate unchecked checkbox and actual message use.
-Do not claim keyword opt-in unless it is truly supported. Do not describe purchased-list cold SMS
-if the campaign is for consented seller inquiries.
+The campaign consent description must match the actual separate unchecked SMS checkbox, its
+`seller-sms-web-v3` wording, and actual message use. Do not claim keyword opt-in unless it is truly
+supported, and do not describe purchased-list cold SMS if the campaign is for consented seller
+inquiries.
+
+Internal new-lead SMS alerts are a separate staff operational use case. They remain available to
+employees who explicitly enable the relevant staff alert preference and do not depend on seller
+SMS consent from the public property form.
 
 ### Acceptance
 

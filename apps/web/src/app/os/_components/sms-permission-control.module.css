@@ -1,0 +1,145 @@
+.control {
+  display: grid;
+  gap: 8px;
+}
+
+.permissioned,
+.notPermissioned {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 9px 10px;
+  border: 1px solid;
+  border-radius: 7px;
+}
+
+.permissioned {
+  border-color: #bad7c7;
+  background: #f0f8f3;
+  color: #19583b;
+}
+
+.notPermissioned {
+  border-color: #e1c9a8;
+  background: #fff9ef;
+  color: #76501d;
+}
+
+.permissioned svg,
+.notPermissioned svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.permissioned span,
+.notPermissioned span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.permissioned strong,
+.notPermissioned strong {
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.permissioned small,
+.notPermissioned small {
+  color: inherit;
+  font-size: 9px;
+  line-height: 1.4;
+  opacity: 0.82;
+}
+
+.editor {
+  border-top: 1px solid #e1e7e3;
+  padding-top: 7px;
+}
+
+.editor summary {
+  width: fit-content;
+  color: #1d5a3d;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.editor form {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.editor label {
+  display: grid;
+  gap: 4px;
+  color: #435149;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.editor select,
+.editor textarea {
+  width: 100%;
+  border: 1px solid #c9d2cd;
+  border-radius: 6px;
+  background: #fff;
+  color: #25352d;
+  font: inherit;
+  font-size: 11px;
+}
+
+.editor select {
+  min-height: 36px;
+  padding: 6px 8px;
+}
+
+.editor textarea {
+  min-height: 66px;
+  padding: 8px;
+  resize: vertical;
+}
+
+.editor button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: #1d5a3d;
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.editor button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.success,
+.error,
+.numberNotice,
+.stopNotice {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.numberNotice {
+  color: #536159;
+}
+
+.stopNotice {
+  color: #8b382f;
+  font-weight: 750;
+}
+
+.success {
+  color: #19583b;
+}
+
+.error {
+  color: #a13f35;
+}

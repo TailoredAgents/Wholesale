@@ -22,6 +22,7 @@ from app.models.foundation import (
     AuditEvent,
     BuyerOffer,
     CommunicationRecord,
+    ConsentRecord,
     Contact,
     ContactMethod,
     Conversation,
@@ -29,15 +30,22 @@ from app.models.foundation import (
     Deal,
     Lead,
     OfferNegotiationPlan,
+    Permission,
     Property,
     RepairEstimate,
+    Role,
+    RoleAssignment,
+    RolePermission,
+    SuppressionRecord,
     Task,
     Transaction,
     TransactionChecklistItem,
     UnderwritingMarketAnalysis,
     UnderwritingVersion,
+    User,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.communication_compliance import evaluate_sms_eligibility
 from app.services.leads import cached_market_data_snapshot_is_reusable
 
 OWNER_EMAIL = "owner@example.com"
@@ -171,6 +179,340 @@ def test_create_and_list_lead(
         )
         == 1
     )
+
+
+def test_staff_can_record_and_change_sms_permission_with_evidence(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    payload["phone"] = "(404) 555-0114"
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    lead_id = created.json()["id"]
+
+    granted = client.patch(
+        f"/api/v1/leads/{lead_id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "granted",
+            "source": "phone_call",
+            "evidence_note": "Seller said we may text during the August 13 intake call.",
+        },
+    )
+
+    assert granted.status_code == 200, granted.text
+    sms_records = [
+        record for record in granted.json()["consent_records"] if record["channel"] == "sms"
+    ]
+    assert len(sms_records) == 1
+    assert sms_records[0]["status"] == "granted"
+    assert sms_records[0]["source"] == "phone_call"
+    assert sms_records[0]["wording_version"] == "staff-documented-sms-v1"
+    assert sms_records[0]["normalized_address"] == "+14045550114"
+    assert "August 13 intake call" in sms_records[0]["wording"]
+    assert "+14045550114" in sms_records[0]["wording"]
+    lead = db_session.get(Lead, UUID(lead_id))
+    assert lead is not None
+    contact = db_session.get(Contact, lead.contact_id)
+    assert contact is not None
+    assert evaluate_sms_eligibility(db_session, contact).consent_status == "granted"
+
+    revoked = client.patch(
+        f"/api/v1/leads/{lead_id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "revoked",
+            "source": "in_person",
+            "evidence_note": "Seller asked us not to text during the property visit.",
+        },
+    )
+
+    assert revoked.status_code == 200, revoked.text
+    sms_records = [
+        record for record in revoked.json()["consent_records"] if record["channel"] == "sms"
+    ]
+    assert [record["status"] for record in sms_records] == ["revoked", "granted"]
+    db_session.expire_all()
+    assert evaluate_sms_eligibility(db_session, contact).consent_status == "revoked"
+    stored_records = db_session.scalars(
+        select(ConsentRecord)
+        .where(ConsentRecord.channel == "sms")
+        .order_by(ConsentRecord.created_at.asc(), ConsentRecord.id.asc())
+    ).all()
+    assert [(record.status, record.source) for record in stored_records] == [
+        ("granted", "phone_call"),
+        ("revoked", "in_person"),
+    ]
+    permission_activity = db_session.scalars(
+        select(ActivityEvent).where(ActivityEvent.event_type == "lead.sms_permission_updated")
+    ).all()
+    assert len(permission_activity) == 2
+    permission_audits = db_session.scalars(
+        select(AuditEvent).where(AuditEvent.action == "lead.sms_permission_update")
+    ).all()
+    assert len(permission_audits) == 2
+    assert permission_audits[-1].previous_value["status"] == "granted"
+    assert permission_audits[-1].new_value["status"] == "revoked"
+    assert permission_audits[-1].new_value["normalized_address"] == "+14045550114"
+
+
+def test_staff_sms_permission_requires_valid_phone_and_evidence(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    assert created.status_code == 201, created.text
+    lead_id = created.json()["id"]
+
+    no_phone = client.patch(
+        f"/api/v1/leads/{lead_id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "granted",
+            "source": "facebook",
+            "evidence_note": "Seller explicitly agreed in Messenger.",
+        },
+    )
+    assert no_phone.status_code == 422
+    assert "valid seller phone number" in no_phone.text
+
+    short_note = client.patch(
+        f"/api/v1/leads/{lead_id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={"status": "granted", "source": "facebook", "evidence_note": "  x  "},
+    )
+    assert short_note.status_code == 422
+
+
+def test_staff_can_record_not_permissioned_without_a_phone(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=lead_payload(),
+    )
+    assert created.status_code == 201, created.text
+
+    response = client.patch(
+        f"/api/v1/leads/{created.json()['id']}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "revoked",
+            "source": "phone_call",
+            "evidence_note": "Seller asked not to receive texts and no number is on file.",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    record = next(
+        item for item in response.json()["consent_records"] if item["channel"] == "sms"
+    )
+    assert record["status"] == "revoked"
+    assert "SMS number: not available" in record["wording"]
+
+
+def test_staff_sms_permission_does_not_follow_a_changed_phone_number(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    payload["phone"] = "(404) 555-0114"
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    lead = db_session.get(Lead, UUID(created.json()["id"]))
+    assert lead is not None
+    granted = client.patch(
+        f"/api/v1/leads/{lead.id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "granted",
+            "source": "phone_call",
+            "evidence_note": "Seller explicitly approved texts to the current number.",
+        },
+    )
+    assert granted.status_code == 200, granted.text
+    contact = db_session.get(Contact, lead.contact_id)
+    assert contact is not None
+    phone = db_session.scalar(
+        select(ContactMethod).where(
+            ContactMethod.contact_id == contact.id,
+            ContactMethod.method_type == "phone",
+        )
+    )
+    assert phone is not None
+    assert evaluate_sms_eligibility(db_session, contact).consent_status == "granted"
+
+    phone.value = "(404) 555-0199"
+    phone.normalized_value = "4045550199"
+    db_session.commit()
+
+    eligibility = evaluate_sms_eligibility(db_session, contact)
+    assert eligibility.consent_status == "missing"
+    assert not eligibility.can_send
+
+
+def test_assigned_sms_staff_cannot_change_another_leads_permission(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    owner_headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    custom_role = Role(
+        organization_id=owner.organization_id,
+        key="assigned_sms_with_global_view_test",
+        name="Assigned SMS With Global View Test",
+    )
+    assigned_user = User(
+        organization_id=owner.organization_id,
+        email="assigned-sms@example.com",
+        display_name="Assigned SMS",
+        is_active=True,
+    )
+    db_session.add_all([custom_role, assigned_user])
+    db_session.flush()
+    permissions = db_session.scalars(
+        select(Permission).where(
+            Permission.key.in_(("leads:view", "communications:send_assigned_sms"))
+        )
+    ).all()
+    assert len(permissions) == 2
+    db_session.add(
+        RoleAssignment(
+            organization_id=owner.organization_id,
+            user_id=assigned_user.id,
+            role_id=custom_role.id,
+        )
+    )
+    db_session.add_all(
+        RolePermission(
+            organization_id=owner.organization_id,
+            role_id=custom_role.id,
+            permission_id=permission.id,
+        )
+        for permission in permissions
+    )
+    db_session.commit()
+    assigned_payload = lead_payload()
+    assigned_payload["phone"] = "(404) 555-0114"
+    assigned = client.post("/api/v1/leads", headers=owner_headers, json=assigned_payload)
+    assert assigned.status_code == 201, assigned.text
+    assigned_lead = db_session.get(Lead, UUID(assigned.json()["id"]))
+    assert assigned_lead is not None
+    assigned_lead.assigned_user_id = assigned_user.id
+    db_session.commit()
+    other_payload = lead_payload()
+    other_payload["phone"] = "(404) 555-0199"
+    other_property = cast(dict[str, object], other_payload["property"])
+    other_property["street_address"] = "999 Other Street"
+    other = client.post("/api/v1/leads", headers=owner_headers, json=other_payload)
+    assert other.status_code == 201, other.text
+    assigned_headers = {"X-Dev-User-Email": "assigned-sms@example.com"}
+    permission_payload = {
+        "status": "granted",
+        "source": "phone_call",
+        "evidence_note": "Seller explicitly gave SMS permission during the call.",
+    }
+
+    allowed = client.patch(
+        f"/api/v1/leads/{assigned.json()['id']}/sms-permission",
+        headers=assigned_headers,
+        json=permission_payload,
+    )
+    forbidden = client.patch(
+        f"/api/v1/leads/{other.json()['id']}/sms-permission",
+        headers=assigned_headers,
+        json=permission_payload,
+    )
+
+    assert allowed.status_code == 200, allowed.text
+    assert forbidden.status_code in {403, 404}
+
+
+def test_staff_cannot_override_a_seller_stop_with_manual_permission(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_owner(db_session)
+    client = TestClient(app)
+    payload = lead_payload()
+    payload["phone"] = "(404) 555-0114"
+    created = client.post(
+        "/api/v1/leads",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json=payload,
+    )
+    assert created.status_code == 201, created.text
+    lead = db_session.get(Lead, UUID(created.json()["id"]))
+    assert lead is not None
+    db_session.add(
+        SuppressionRecord(
+            organization_id=lead.organization_id,
+            contact_id=lead.contact_id,
+            channel="sms",
+            normalized_address="+14045550114",
+            status="active",
+            reason="Seller texted STOP",
+            source="twilio_advanced_opt_out",
+            provider="twilio",
+            external_event_id="SM-stop-test",
+            suppressed_at=lead.created_at,
+            lifted_at=None,
+            suppression_metadata={"opt_out_type": "STOP"},
+        )
+    )
+    db_session.commit()
+
+    response = client.patch(
+        f"/api/v1/leads/{lead.id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "granted",
+            "source": "phone_call",
+            "evidence_note": "Staff tried to override the prior STOP.",
+        },
+    )
+
+    assert response.status_code == 422
+    assert "seller replied STOP" in response.text
+
+    revoke_response = client.patch(
+        f"/api/v1/leads/{lead.id}/sms-permission",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+        json={
+            "status": "revoked",
+            "source": "phone_call",
+            "evidence_note": "Staff tried to replace the carrier STOP record.",
+        },
+    )
+    assert revoke_response.status_code == 422
+    assert "locked until the seller sends START" in revoke_response.text
+    assert db_session.scalar(select(func.count()).select_from(ConsentRecord)) == 0
 
 
 def test_land_lead_is_inferred_from_property_type_and_filterable(

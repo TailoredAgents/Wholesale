@@ -59,7 +59,7 @@ def public_payload() -> dict[str, object]:
         "mortgage_balance": "90000",
         "comments": "Needs repairs",
         "consent_to_contact": True,
-        "sms_consent": True,
+        "sms_consent": False,
         "conversion_session_id": "session-intake-123",
         "attribution": {
             "landing_page": "/get-a-cash-offer",
@@ -106,17 +106,16 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert int(db_session.scalar(select(func.count()).select_from(LeadManagementCase)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(ContactMethod)) or 0) == 2
-    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 3
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 1
 
     consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
-    assert {consent.channel for consent in consents} == {"email", "phone", "sms"}
+    assert {consent.channel for consent in consents} == {"email", "phone"}
     assert all(consent.status == "granted" for consent in consents)
     assert all(consent.captured_ip == "testclient" for consent in consents)
-    non_sms_consents = [consent for consent in consents if consent.channel != "sms"]
-    assert all(consent.wording_version == "seller-contact-web-v3" for consent in non_sms_consents)
+    assert all(consent.wording_version == "seller-contact-web-v3" for consent in consents)
     assert all(
         consent.wording
         == (
@@ -124,16 +123,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
             "phone call or email about your property inquiry and possible selling options. "
             "This permission does not include text messages."
         )
-        for consent in non_sms_consents
-    )
-    sms_consent = next(consent for consent in consents if consent.channel == "sms")
-    assert sms_consent.wording_version == "seller-sms-web-v3"
-    assert sms_consent.wording == (
-        "By checking this optional box, I agree to receive recurring automated text messages "
-        "from Stonegate Home Buyers about my property inquiry, appointments, and possible "
-        "selling options at the number provided. Message frequency varies. Message and data "
-        "rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of "
-        "purchase. See our Terms & Conditions and Privacy Policy."
+        for consent in consents
     )
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
@@ -180,7 +170,17 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     submission = db_session.scalar(select(LeadFormSubmission))
     assert submission is not None
     assert submission.enrichment_token_hash
+    assert submission.raw_payload["consent_to_contact"] is True
+    assert submission.raw_payload["sms_consent"] is False
     assert payload["enrichment_token"] not in str(submission.raw_payload)
+    audit_event = db_session.scalar(
+        select(AuditEvent).where(AuditEvent.action == "lead.public_create")
+    )
+    assert audit_event is not None
+    assert audit_event.new_value is not None
+    assert audit_event.new_value["consent_wording_version"] == "seller-contact-web-v3"
+    assert audit_event.new_value["sms_consent"] is False
+    assert audit_event.new_value["sms_consent_wording_version"] is None
 
 
 def test_public_intake_preserves_supported_older_consent_wording(
@@ -190,6 +190,7 @@ def test_public_intake_preserves_supported_older_consent_wording(
     seed_org(db_session)
     payload = public_payload()
     payload["consent_wording_version"] = "seller-contact-web-v2"
+    payload["sms_consent"] = True
     payload["sms_consent_wording_version"] = "seller-sms-web-v2"
 
     response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
@@ -826,6 +827,49 @@ def test_public_seller_intake_does_not_grant_sms_without_separate_opt_in(
     assert {consent.channel for consent in consents} == {"email", "phone"}
 
 
+def test_public_seller_intake_preserves_explicit_api_sms_opt_in(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    client = TestClient(app)
+    payload = public_payload()
+    payload["preferred_contact_method"] = "sms"
+    payload["sms_consent"] = True
+
+    response = client.post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201
+    consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
+    assert {consent.channel for consent in consents} == {"email", "phone", "sms"}
+    sms_consent = next(consent for consent in consents if consent.channel == "sms")
+    assert sms_consent.wording_version == "seller-sms-web-v3"
+    assert sms_consent.normalized_address == "+14045551212"
+    assert sms_consent.wording == (
+        "By checking this optional box, I agree to receive recurring automated text messages "
+        "from Stonegate Home Buyers about my property inquiry, appointments, and possible "
+        "selling options at the number provided. Message frequency varies. Message and data "
+        "rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of "
+        "purchase. See our Terms & Conditions and Privacy Policy."
+    )
+
+
+def test_public_seller_intake_rejects_sms_opt_in_for_an_invalid_phone(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload["phone"] = "not-a-phone"
+    payload["sms_consent"] = True
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "valid phone number" in response.text
+    assert db_session.scalar(select(func.count()).select_from(ConsentRecord)) == 0
+
+
 def test_public_seller_intake_requires_sms_opt_in_when_text_is_preferred(
     db_session: Session,
     api_db_override: None,
@@ -902,7 +946,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     assert int(db_session.scalar(select(func.count()).select_from(Property)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
     assert int(db_session.scalar(select(func.count()).select_from(Task)) or 0) == 1
-    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 6
+    assert int(db_session.scalar(select(func.count()).select_from(ConsentRecord)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(LeadFormSubmission)) or 0) == 2
     assert int(db_session.scalar(select(func.count()).select_from(AttributionTouch)) or 0) == 4
     assert int(db_session.scalar(select(func.count()).select_from(ConversionEvent)) or 0) == 2

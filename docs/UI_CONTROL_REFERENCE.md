@@ -129,7 +129,7 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | **Back** | Returns to the prior step | Hidden on the first step |
 | **Continue** | Validates the current step, records step completion, and advances | Validation errors focus the first invalid field |
 | Error summary links | Move focus to the field needing correction | Appears only after validation fails |
-| Saved browser draft | Restores unfinished non-consent answers for up to 24 hours | Consent boxes intentionally do not restore |
+| Saved browser draft | Restores unfinished non-consent answers for up to 24 hours | SMS consent intentionally does not persist or restore |
 
 ### Property Step
 
@@ -147,10 +147,10 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | Your name | Creates or updates the seller identity | Required |
 | Phone | Primary contact number | A complete phone number is required for every website inquiry |
 | Email | Contact method for email | A valid address is required when email is selected |
-| Preferred follow-up method | Records phone, email, or SMS preference | SMS also requires the separate SMS checkbox |
-| Contact authorization | Authorizes phone or email about the property inquiry and possible selling options | Required to submit |
-| Optional SMS consent | Separately records recurring automated SMS consent and wording version | Requires a phone number; remains optional unless SMS is selected |
-| **Review My Selling Options** | Submits one seller inquiry, consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
+| Preferred follow-up method | Records a phone-call or email preference | Phone is selected initially; email requires a valid email address |
+| Contact authorization disclosure | Explains that submitting authorizes phone or email follow-up about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
+| Optional SMS consent | Separately records recurring automated SMS consent and the `seller-sms-web-v3` wording version | Unchecked initially, never required, and never saved in the browser draft |
+| **Review My Selling Options** | Submits one seller inquiry, phone/email authorization evidence, optional SMS consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
@@ -158,6 +158,9 @@ administration is in Settings. My Setup remains available to every signed-in emp
 The confirmation reference is the first eight characters of the accepted lead ID. A message that
 the request matched an existing record means Stonegate updated one history instead of creating a
 duplicate.
+
+This seller-facing SMS choice does not change internal **Text new leads** alerts. Those alerts are
+operational messages sent only to employees who separately enabled the staff preference.
 
 ### Optional Property Details
 
@@ -687,6 +690,7 @@ history into separate channel threads.
 | Mailbox group: **Restricted** | Shows restricted correspondence only to authorized roles | Hidden without permission |
 | Search | Finds a conversation by seller, property, phone, email, or message context | Searches visible records only |
 | Conversation row | Opens the unified timeline and seller detail panel | Requires conversation access |
+| Right-panel **SMS permission** | Shows **Permissioned** or **Not permissioned** for the selected seller | Read-only status is visible with the seller context; editing requires lead-edit or SMS-send authority |
 | **Compose** | Opens the global email composer without requiring a property lead | Requires outbound email permission and an active sender |
 | **Refresh** | Reloads conversation and provider status | Available while Inbox is open |
 | Mobile **Inbox / Thread / Details** | Changes the active pane on narrow screens | Mobile layout only |
@@ -724,6 +728,21 @@ history into separate channel threads.
 | Message body | Contains the SMS, email, call note, or internal note | Required before send/save |
 | **Send** | Sends the selected external message | Disabled when provider, consent, sender, recipient, or content requirements fail |
 | **Save note / Log communication** | Adds an internal or manually logged event | Does not contact the seller |
+
+### SMS Permission
+
+| Control or field | Purpose and effect | Availability and common blocker |
+| --- | --- | --- |
+| **SMS permission: Permissioned / Not permissioned** | Shows the latest recorded seller SMS decision in the Inbox right sidebar and seller-record Contact panel | A missing or revoked record remains **Not permissioned** |
+| **Edit SMS permission** | Opens the staff documentation form | Available to authorized lead-edit or SMS-send staff while the lead is open |
+| Status | Records a new permission grant or revocation | Appends a new record; it does not rewrite prior evidence |
+| Where was this decision confirmed? | Identifies phone call, in person, Facebook, seller text, written form, or another documented source | Required for every staff-recorded change |
+| Evidence note | Explains when and how the seller granted or withdrew permission | Required; use specific factual evidence rather than an assumption |
+| **Save SMS permission** | Appends the permission record for the displayed phone number and writes activity and audit history | A grant requires a valid seller phone number; a not-permissioned decision can still be recorded without one |
+
+A seller's carrier-level **STOP** is an absolute suppression. Staff cannot manually replace it with
+a permission grant; the seller must send **START** from that phone number before SMS can resume.
+Permission recorded for one number does not transfer when the primary phone number changes.
 
 ### Cellphone Calling
 
@@ -957,6 +976,7 @@ changing ownership or stage does not create a second record.
 | Contact type / value | Edits any seller phone number or email address | Phone and email format validation applies |
 | Primary | Chooses the preferred phone and preferred email used first by Stonegate | One primary is maintained per contact type |
 | Remove contact method | Deletes an incorrect or obsolete phone number or email address | Cannot leave the lead without any phone or email |
+| **SMS permission: Permissioned / Not permissioned** | Shows and edits the latest documented seller SMS decision from the Contact panel | Authorized staff may append a sourced grant or revocation with a required evidence note; carrier **STOP** requires seller **START** |
 | Property address / City / State / ZIP | Edits the subject property | Address required for market analysis |
 | Source / Campaign | Records acquisition attribution | Options come from configured operations data |
 | Motivation / Timeline / Condition / Occupancy | Saves qualification facts | Unknown is valid until confirmed |
