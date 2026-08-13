@@ -138,18 +138,19 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | Property street address | Identifies the subject street address | Required; at least three characters |
 | City | Identifies the Georgia city | Required |
 | ZIP code | Supports market, duplicate, and property matching | Required; five digits or ZIP+4 |
+| Desired selling timeline | Records when the seller would ideally like to sell | Required |
 
 ### Contact Step
 
 | Control or field | Purpose and effect | Availability and common blocker |
 | --- | --- | --- |
 | Your name | Creates or updates the seller identity | Required |
-| Phone | Contact method for phone or SMS | A complete number is required when phone or text is selected |
+| Phone | Primary contact number | A complete phone number is required for every website inquiry |
 | Email | Contact method for email | A valid address is required when email is selected |
 | Preferred follow-up method | Records phone, email, or SMS preference | SMS also requires the separate SMS checkbox |
-| Contact authorization | Authorizes phone or email about this property request | Required to submit |
+| Contact authorization | Authorizes phone or email about the property inquiry and possible selling options | Required to submit |
 | Optional SMS consent | Separately records recurring automated SMS consent and wording version | Requires a phone number; remains optional unless SMS is selected |
-| **Request My Cash Offer** | Submits one seller inquiry, consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
+| **Review My Selling Options** | Submits one seller inquiry, consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |
@@ -170,7 +171,6 @@ change staff-reviewed information.
 | Current condition | Move-in ready, minor repairs, major repairs, full renovation, or not sure | Optional |
 | Occupancy | Owner occupied, tenant occupied, vacant, inherited/estate, or other | Optional |
 | Main reason for considering a sale | Inherited, repairs, relocation, landlord, financial change, vacant, other, or exploring | Optional |
-| Preferred timeline | ASAP, 30 days, 60-90 days, flexible, or exploring | Optional |
 | Price you would like to consider | Seller expectation, not a Stonegate valuation | Optional; numbers only |
 | Estimated mortgage balance | Preliminary debt context, not verified payoff | Optional; numbers only |
 | Repairs, access, ownership, or timing details | Context that helps prepare the first conversation | Optional; maximum 1,000 characters |

@@ -51,8 +51,8 @@ export default function PrivacyPolicyPage() {
         <section>
           <h2>How we use information</h2>
           <ul>
-            <li>Review your property and respond to your cash-offer request.</li>
-            <li>Schedule appointments and communicate about the property or offer process.</li>
+            <li>Review your property and respond to your property inquiry.</li>
+            <li>Schedule appointments and communicate about possible selling options.</li>
             <li>Operate, secure, analyze, and improve our website and business systems.</li>
             <li>Maintain consent, suppression, transaction, and compliance records.</li>
             <li>Prevent fraud, enforce our terms, and meet legal obligations.</li>
@@ -72,8 +72,8 @@ export default function PrivacyPolicyPage() {
           </p>
           <p>
             If you separately opt in, Stonegate Home Buyers may send recurring automated messages
-            about your property inquiry, qualification questions, appointments, cash-offer
-            updates, and related follow-up. Message frequency varies. Message and data rates may
+            about your property inquiry, qualification questions, appointments, possible selling
+            options, and related follow-up. Message frequency varies. Message and data rates may
             apply. Reply STOP to unsubscribe or HELP for help. Text-message consent is not a
             condition of requesting or accepting an offer. See our{" "}
             <Link href="/terms">Terms &amp; Conditions</Link> for complete program terms.

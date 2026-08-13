@@ -5,21 +5,46 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 
 from app.domain.assets import LAND_ASSET_CLASS, asset_class_for_property_type
 
-CONSENT_WORDING_VERSION = "seller-contact-web-v2"
-CONSENT_WORDING = (
-    "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
-    "phone call or email about your property and cash offer request. This permission "
-    "does not include text messages."
-)
-SMS_CONSENT_WORDING_VERSION = "seller-sms-web-v2"
-SMS_CONSENT_WORDING = (
-    "By checking this optional box, I agree to receive recurring automated text "
-    "messages from Stonegate Home Buyers about my property inquiry, appointments, "
-    "and cash offer updates at the number provided. Message frequency varies. "
-    "Message and data rates may apply. Reply STOP to opt out or HELP for help. "
-    "Consent is not a condition of purchase. See the Stonegate Home Buyers Terms "
-    "and Conditions and Privacy Policy."
-)
+CONTACT_CONSENT_WORDINGS = {
+    "seller-contact-web-v2": (
+        "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
+        "phone call or email about your property and cash offer request. This permission "
+        "does not include text messages."
+    ),
+    "seller-contact-web-v3": (
+        "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
+        "phone call or email about your property inquiry and possible selling options. "
+        "This permission does not include text messages."
+    ),
+}
+CONSENT_WORDING_VERSION = "seller-contact-web-v3"
+CONSENT_WORDING = CONTACT_CONSENT_WORDINGS[CONSENT_WORDING_VERSION]
+
+SMS_CONSENT_WORDINGS = {
+    "seller-sms-web-v1": (
+        "Yes, I agree to receive recurring automated text messages from Stonegate Home Buyers "
+        "about my property inquiry, appointments, and cash offer updates at the number provided. "
+        "Message frequency varies. Message and data rates may apply. Reply STOP to opt out or "
+        "HELP for help. Consent is not a condition of purchase. See our Terms & Conditions and "
+        "Privacy Policy."
+    ),
+    "seller-sms-web-v2": (
+        "By checking this optional box, I agree to receive recurring automated text messages "
+        "from Stonegate Home Buyers about my property inquiry, appointments, and cash offer "
+        "updates at the number provided. Message frequency varies. Message and data rates may "
+        "apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. "
+        "See our Terms & Conditions and Privacy Policy."
+    ),
+    "seller-sms-web-v3": (
+        "By checking this optional box, I agree to receive recurring automated text messages "
+        "from Stonegate Home Buyers about my property inquiry, appointments, and possible "
+        "selling options at the number provided. Message frequency varies. Message and data "
+        "rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of "
+        "purchase. See our Terms & Conditions and Privacy Policy."
+    ),
+}
+SMS_CONSENT_WORDING_VERSION = "seller-sms-web-v3"
+SMS_CONSENT_WORDING = SMS_CONSENT_WORDINGS[SMS_CONSENT_WORDING_VERSION]
 
 
 class SellerIntakeAttribution(BaseModel):
@@ -96,6 +121,10 @@ class SellerIntakeCreate(BaseModel):
     def require_contact_channel(self) -> "SellerIntakeCreate":
         if self.company_website:
             raise ValueError("Invalid form submission.")
+        if self.consent_wording_version not in CONTACT_CONSENT_WORDINGS:
+            raise ValueError("Unsupported contact-consent wording version.")
+        if self.sms_consent_wording_version not in SMS_CONSENT_WORDINGS:
+            raise ValueError("Unsupported SMS-consent wording version.")
         if not self.phone and not self.email:
             raise ValueError("Either phone or email is required.")
         if not self.consent_to_contact:

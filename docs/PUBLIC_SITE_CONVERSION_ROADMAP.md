@@ -18,7 +18,7 @@ offers, guaranteed closing dates, or claims Stonegate cannot consistently fulfil
 The public site already provides:
 
 - a Georgia-specific address-first homepage offer
-- a two-step cash-offer form with optional post-submission property details
+- a two-step selling-options inquiry with optional post-submission property details
 - separate contact and SMS consent
 - draft recovery, duplicate handling, and submission recovery
 - phone-click, page-view, offer-start, form-step, abandonment, and submission measurement
@@ -71,7 +71,8 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 - Reduce the initial journey to Property, Contact, and Confirmation.
 - Create the lead as soon as the minimum valid property and contact information is submitted.
-- Move condition, occupancy, repairs, mortgage, motivation, timing, and comments into an optional
+- Keep the seller's desired timeline in the initial property step, and move condition, occupancy,
+  repairs, mortgage, motivation, and comments into an optional
   post-submission enrichment step.
 - Issue a random, 24-hour, one-purpose enrichment token whose hash is stored with the intake
   submission; the token can add optional context to that lead but cannot read or edit other data.

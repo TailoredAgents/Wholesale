@@ -8,8 +8,9 @@ import { CashOfferForm } from "./cash-offer-form";
 import styles from "./page.module.css";
 
 export const metadata: Metadata = {
-  title: "Get a Cash Offer for Your Georgia House | Stonegate",
-  description: "Share a Georgia property address and request a no-obligation, direct cash offer review from Stonegate Home Buyers.",
+  title: "Explore Ways to Sell Your Georgia House | Stonegate",
+  description:
+    "Tell Stonegate about your Georgia property and request a no-obligation review of the selling options that may fit your situation.",
   alternates: { canonical: "/get-a-cash-offer" },
 };
 
@@ -20,17 +21,18 @@ export default function GetCashOfferPage() {
       <PublicSiteHeader />
       <section className={styles.hero}>
         <div className={styles.copy}>
-          <p className={styles.eyebrow}>No-obligation property review</p>
-          <h1>Tell us about the house. We will review the direct-sale option.</h1>
+          <p className={styles.eyebrow}>No-pressure property review</p>
+          <h1>Let&apos;s find the selling option that fits your situation.</h1>
           <p>
-            The address and a phone number are enough to start. Additional property details and an
-            email address are optional and can help Stonegate prepare for the first conversation.
+            Tell us a little about your Georgia property. We&apos;ll review the property, learn what
+            matters most to you, and walk you through the options that may fit&mdash;from a quick,
+            as-is sale to other ways of selling. No pressure. No obligation.
           </p>
           <div className={styles.trustStack}>
             {[
-              ["No obligation", "Requesting a review does not commit you to sell."],
-              ["As-is condition", "No repairs, cleaning, or staging are required to start."],
-              ["Optional texting", "SMS requires a separate checkbox and is never required."],
+              ["Start as-is", "No repairs, cleaning, or staging are needed."],
+              ["Understand your options", "We explain the potential paths and tradeoffs clearly."],
+              ["You decide", "There is no pressure or obligation to move forward."],
             ].map(([title, detail]) => (
               <p key={title}>
                 <Check size={18} aria-hidden="true" />

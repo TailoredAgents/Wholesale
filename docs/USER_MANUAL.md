@@ -699,14 +699,15 @@ evidence in this table exists.
 
 ## 1. Public Seller Intake
 
-The seller uses **Get a Cash Offer** on the public site.
+The seller starts from **Get a Cash Offer** on the public site, then requests a review of the
+selling options that may fit the property and situation.
 
 The form collects:
 
-- Property address, required selling timeline, and optional property type.
-- Condition, occupancy, and seller situation.
-- Optional asking price, mortgage, and repair context.
-- Name, phone, email, preferred contact method, and permission to contact.
+- Property address and required selling timeline first.
+- Name, required phone number, optional email, preferred contact method, and permission to contact.
+- Optional post-submission details such as property type, condition, occupancy, seller situation,
+  asking price, mortgage balance, repairs, and comments.
 - Separate optional SMS consent.
 - Marketing attribution and privacy-safe conversion evidence.
 

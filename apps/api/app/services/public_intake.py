@@ -26,10 +26,8 @@ from app.models.foundation import (
     User,
 )
 from app.schemas.public_intake import (
-    CONSENT_WORDING,
-    CONSENT_WORDING_VERSION,
-    SMS_CONSENT_WORDING,
-    SMS_CONSENT_WORDING_VERSION,
+    CONTACT_CONSENT_WORDINGS,
+    SMS_CONSENT_WORDINGS,
     SellerIntakeCreate,
     SellerIntakeEnrichmentCreate,
     SellerIntakeEnrichmentResponse,
@@ -84,11 +82,25 @@ def create_public_seller_lead(
     ip_address: str | None,
     user_agent: str | None,
     intake_source: str = "seller_website",
-    contact_consent_wording_version: str = CONSENT_WORDING_VERSION,
-    contact_consent_wording: str = CONSENT_WORDING,
+    contact_consent_wording_version: str | None = None,
+    contact_consent_wording: str | None = None,
     provider_record_id: str | None = None,
     notification_source_label: str = "public website",
 ) -> SellerIntakeResponse:
+    if (contact_consent_wording_version is None) != (contact_consent_wording is None):
+        raise ValueError("Contact-consent wording and version must be provided together.")
+    resolved_contact_consent_version = (
+        contact_consent_wording_version
+        if contact_consent_wording_version is not None
+        else payload.consent_wording_version
+    )
+    resolved_contact_consent_wording = (
+        contact_consent_wording
+        if contact_consent_wording is not None
+        else CONTACT_CONSENT_WORDINGS[payload.consent_wording_version]
+    )
+    resolved_sms_consent_version = payload.sms_consent_wording_version
+    resolved_sms_consent_wording = SMS_CONSENT_WORDINGS[resolved_sms_consent_version]
     submitted_at = datetime.now(UTC)
     enrichment_token = secrets.token_urlsafe(32)
     enrichment_expires_at = submitted_at + ENRICHMENT_TOKEN_LIFETIME
@@ -132,8 +144,8 @@ def create_public_seller_lead(
                 channel=channel,
                 status="granted",
                 source=intake_source,
-                wording_version=contact_consent_wording_version,
-                wording=contact_consent_wording,
+                wording_version=resolved_contact_consent_version,
+                wording=resolved_contact_consent_wording,
                 captured_ip=ip_address,
                 user_agent=user_agent,
             )
@@ -146,8 +158,8 @@ def create_public_seller_lead(
                 channel="sms",
                 status="granted",
                 source="seller_website",
-                wording_version=SMS_CONSENT_WORDING_VERSION,
-                wording=SMS_CONSENT_WORDING,
+                wording_version=resolved_sms_consent_version,
+                wording=resolved_sms_consent_wording,
                 captured_ip=ip_address,
                 user_agent=user_agent,
             )
@@ -251,10 +263,10 @@ def create_public_seller_lead(
             new_value={
                 "source": lead.source,
                 "stage_key": lead.stage_key,
-                "consent_wording_version": contact_consent_wording_version,
+                "consent_wording_version": resolved_contact_consent_version,
                 "sms_consent": payload.sms_consent,
                 "sms_consent_wording_version": (
-                    SMS_CONSENT_WORDING_VERSION if payload.sms_consent else None
+                    resolved_sms_consent_version if payload.sms_consent else None
                 ),
                 "matched_existing_lead": matched_existing_lead,
             },
@@ -306,13 +318,13 @@ def create_public_seller_lead(
         property_id=property_record.id,
         duplicate_status="matched_existing_lead" if matched_existing_lead else "created",
         matched_existing_lead=matched_existing_lead,
-        consent_wording_version=contact_consent_wording_version,
+        consent_wording_version=resolved_contact_consent_version,
         enrichment_token=enrichment_token,
         enrichment_expires_at=enrichment_expires_at,
         message=(
-            "Thanks. We received your updated information."
+            "Thanks. We received your updated property information."
             if matched_existing_lead
-            else "Thanks. Your information was received."
+            else "Thanks. Your property inquiry was received."
         ),
     )
 

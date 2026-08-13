@@ -49,9 +49,9 @@ export default function TermsPage() {
         <section className={styles.smsNotice}>
           <h2>Stonegate Home Buyers SMS program</h2>
           <p>
-            When you separately check the SMS consent box on our cash-offer form, you agree to
+            When you separately check the SMS consent box on our property-review form, you agree to
             receive recurring automated text messages from Stonegate Home Buyers about your
-            property inquiry, qualification questions, appointments, cash-offer updates, and
+            property inquiry, qualification questions, appointments, possible selling options, and
             related follow-up. Message frequency varies based on your inquiry and interactions.
             Message and data rates may apply. Consent to receive text messages is not a condition
             of purchasing or selling property or receiving an offer.

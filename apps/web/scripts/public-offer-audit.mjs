@@ -11,6 +11,10 @@ const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 const executablePath = process.env.CHROME_EXECUTABLE_PATH ??
   (existsSync(macChrome) ? macChrome : undefined);
 const findings = [];
+const contactConsentWording =
+  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
+const smsConsentWording =
+  "By checking this optional box, I agree to receive recurring automated text messages from Stonegate Home Buyers about my property inquiry, appointments, and possible selling options at the number provided. Message frequency varies. Message and data rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase. See our Terms & Conditions and Privacy Policy.";
 
 if (screenshotDirectory) mkdirSync(screenshotDirectory, { recursive: true });
 
@@ -83,10 +87,10 @@ async function installApiStubs(page, state) {
         property_id: "33333333-2222-4333-8444-555555555555",
         duplicate_status: "created",
         matched_existing_lead: false,
-        consent_wording_version: "seller-contact-web-v2",
+        consent_wording_version: "seller-contact-web-v3",
         enrichment_token: "test-enrichment-token-that-is-long-enough-for-the-api",
         enrichment_expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-        message: "Thanks. Your information was received.",
+        message: "Thanks. Your property inquiry was received.",
       }),
     });
   });
@@ -629,6 +633,24 @@ async function auditJourney(browser, viewport) {
       record(viewport.name, "form-autofill", { field, expected, actual });
     }
   }
+  const visibleContactConsent = (await page.locator('label:has(#consent_to_contact) > span').innerText())
+    .replace(/\s+/g, " ")
+    .trim();
+  if (visibleContactConsent !== contactConsentWording) {
+    record(viewport.name, "contact-consent-copy", {
+      expected: contactConsentWording,
+      actual: visibleContactConsent,
+    });
+  }
+  const visibleSmsConsent = (await page.locator('label:has(#sms_consent) > span').innerText())
+    .replace(/\s+/g, " ")
+    .trim();
+  if (visibleSmsConsent !== smsConsentWording) {
+    record(viewport.name, "sms-consent-copy", {
+      expected: smsConsentWording,
+      actual: visibleSmsConsent,
+    });
+  }
   await page
     .locator('label:has(input[name="preferred_contact_method"][value="email"])')
     .click();
@@ -649,7 +671,7 @@ async function auditJourney(browser, viewport) {
     await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-contact-${viewport.name}.png` });
   }
 
-  await page.getByRole("button", { name: "Request My Cash Offer" }).click();
+  await page.getByRole("button", { name: "Review My Selling Options" }).click();
   if (!(await page.locator("#name-error").isVisible())) {
     record(viewport.name, "validation", "Contact step did not expose field errors.");
   }
@@ -679,7 +701,7 @@ async function auditJourney(browser, viewport) {
   await page.locator("#phone").fill("404-555-0100");
   await page.locator('label:has(input[name="preferred_contact_method"][value="sms"])').click();
   await page.locator("#consent_to_contact").check();
-  await page.getByRole("button", { name: "Request My Cash Offer" }).click();
+  await page.getByRole("button", { name: "Review My Selling Options" }).click();
   if (!(await page.locator("#sms_consent-error").isVisible())) {
     record(viewport.name, "sms-consent", "Text preference did not require separate SMS consent.");
   }
@@ -700,7 +722,7 @@ async function auditJourney(browser, viewport) {
   await checkFocusedControlClearance(
     page,
     viewport,
-    page.getByRole("button", { name: "Request My Cash Offer" }),
+    page.getByRole("button", { name: "Review My Selling Options" }),
     "offer-submit",
   );
   await page.waitForTimeout(20);
@@ -708,14 +730,14 @@ async function auditJourney(browser, viewport) {
   if (storedDraft.values?.sms_consent || storedDraft.values?.consent_to_contact) {
     record(viewport.name, "consent-persistence", "Consent checkboxes were persisted in the draft.");
   }
-  await page.getByRole("button", { name: "Request My Cash Offer" }).click();
+  await page.getByRole("button", { name: "Review My Selling Options" }).click();
   const recoverableError = page.getByText("Stonegate could not save the request yet. Please try again.");
   await recoverableError.waitFor();
   if ((await page.locator("#name").inputValue()) !== "Jane Seller") {
     record(viewport.name, "submission-recovery", "A failed submission did not preserve the seller's answers.");
   }
-  await page.getByRole("button", { name: "Request My Cash Offer" }).click();
-  const confirmationHeading = page.getByText("Thanks. Stonegate has the property request.");
+  await page.getByRole("button", { name: "Review My Selling Options" }).click();
+  const confirmationHeading = page.getByText("Thanks. Stonegate has your property request.");
   try {
     await confirmationHeading.waitFor({ timeout: 8_000 });
   } catch {
@@ -751,7 +773,9 @@ async function auditJourney(browser, viewport) {
     mortgage_balance: null,
     preferred_contact_method: "sms",
     consent_to_contact: true,
+    consent_wording_version: "seller-contact-web-v3",
     sms_consent: true,
+    sms_consent_wording_version: "seller-sms-web-v3",
   })) {
     if (payload?.[key] !== expected) record(viewport.name, "payload", { key, expected, actual: payload?.[key] });
   }
@@ -812,7 +836,7 @@ async function auditJourney(browser, viewport) {
   }
 
   await page.reload({ waitUntil: "domcontentloaded" });
-  await page.getByText("Thanks. Stonegate has the property request.").waitFor({ timeout: 8_000 });
+  await page.getByText("Thanks. Stonegate has your property request.").waitFor({ timeout: 8_000 });
   if (state.submissions.length !== 2) record(viewport.name, "durable-confirmation", state.submissions.length);
   await checkPage(page, viewport.name, "confirmation");
   if (screenshotDirectory) {

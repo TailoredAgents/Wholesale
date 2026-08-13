@@ -27,7 +27,7 @@ import { TrackedPhoneLink } from "../tracked-phone-link";
 import styles from "./page.module.css";
 
 const consentWording =
-  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property and cash offer request. This permission does not include text messages.";
+  "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
 const draftStorageKey = "stonegate_cash_offer_draft_v1";
 const confirmationStorageKey = "stonegate_cash_offer_confirmation_v1";
 const storageLifetimeMs = 24 * 60 * 60 * 1000;
@@ -347,10 +347,10 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       mortgage_balance: null,
       comments: null,
       consent_to_contact: values.consent_to_contact,
-      consent_wording_version: "seller-contact-web-v2",
+      consent_wording_version: "seller-contact-web-v3",
       sms_consent: values.sms_consent,
       company_website: values.company_website,
-      sms_consent_wording_version: "seller-sms-web-v2",
+      sms_consent_wording_version: "seller-sms-web-v3",
       conversion_session_id: getConversionSessionId(),
       experiment_key: experiment?.experiment_key ?? null,
       experiment_variant: experiment?.experiment_variant ?? null,
@@ -382,7 +382,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       const nextConfirmation: Confirmation = {
         message:
           result.message ??
-          "Thanks. Your request was received. The acquisitions team will review it next.",
+          "Thanks. Your request was received. The Stonegate team will review the property and available options next.",
         reference: result.lead_id.slice(0, 8).toUpperCase(),
         matchedExistingLead: result.matched_existing_lead,
         submittedAt: new Date().toISOString(),
@@ -527,7 +527,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         <div className={styles.confirmationStatus} role="status" aria-live="polite">
           <CircleCheck size={34} aria-hidden="true" />
           <p className={styles.eyebrow}>Request received</p>
-          <h2>Thanks. Stonegate has the property request.</h2>
+          <h2>Thanks. Stonegate has your property request.</h2>
           <p>{confirmation.message}</p>
           <p className={styles.reference}>
             Request reference: <strong>{confirmation.reference}</strong>
@@ -542,8 +542,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
 
         <div className={styles.nextSteps}>
           <div><strong>1. Review</strong><span>We check the property and local market.</span></div>
-          <div><strong>2. Follow up</strong><span>A real person contacts you the way you selected.</span></div>
-          <div><strong>3. Compare</strong><span>You decide whether a direct offer makes sense.</span></div>
+          <div><strong>2. Understand</strong><span>A real person contacts you to learn what matters most.</span></div>
+          <div><strong>3. Compare</strong><span>We explain the available paths so you can decide.</span></div>
         </div>
 
         {canEnrich ? (
@@ -618,7 +618,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     >
       <div className={styles.progressHeader}>
         <div>
-          <p className={styles.eyebrow}>Cash offer request</p>
+          <p className={styles.eyebrow}>Property review</p>
           <span>Step {activeStep + 1} of {steps.length}</span>
         </div>
         <progress
@@ -906,8 +906,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               />
               <span>
                 By checking this optional box, I agree to receive recurring automated text messages
-                from Stonegate Home Buyers about my property inquiry, appointments, and cash offer
-                updates at the number provided. Message frequency varies. Message and data rates may
+                from Stonegate Home Buyers about my property inquiry, appointments, and possible
+                selling options at the number provided. Message frequency varies. Message and data rates may
                 apply. Reply STOP to opt out or HELP for help. Consent is not a condition of purchase.
                 See our <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
                 <Link href="/privacy-policy">Privacy Policy</Link>.
@@ -934,7 +934,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
           type="submit"
         >
           {activeStep === steps.length - 1 ? (
-            submitState.status === "submitting" ? "Sending request..." : "Request My Cash Offer"
+            submitState.status === "submitting" ? "Sending request..." : "Review My Selling Options"
           ) : (
             <>Continue <ArrowRight size={17} aria-hidden="true" /></>
           )}
@@ -1212,7 +1212,7 @@ function containsNumber(value: string) {
 
 function stepDescription(key: (typeof steps)[number]["key"]) {
   if (key === "property") {
-    return "Complete these details so we can identify the house and local market.";
+    return "Complete these details so we can identify the property and local market.";
   }
   return "Enter your name and phone number. Email is optional unless you choose email follow-up. Text-message consent is separate and optional.";
 }

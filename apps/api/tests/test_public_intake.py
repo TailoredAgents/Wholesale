@@ -97,7 +97,7 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
 
     assert response.status_code == 201
     payload = response.json()
-    assert payload["message"] == "Thanks. Your information was received."
+    assert payload["message"] == "Thanks. Your property inquiry was received."
     assert payload["duplicate_status"] == "created"
     assert payload["matched_existing_lead"] is False
     assert len(payload["enrichment_token"]) >= 32
@@ -115,9 +115,26 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert {consent.channel for consent in consents} == {"email", "phone", "sms"}
     assert all(consent.status == "granted" for consent in consents)
     assert all(consent.captured_ip == "testclient" for consent in consents)
+    non_sms_consents = [consent for consent in consents if consent.channel != "sms"]
+    assert all(consent.wording_version == "seller-contact-web-v3" for consent in non_sms_consents)
+    assert all(
+        consent.wording
+        == (
+            "By submitting this form, you authorize Stonegate Home Buyers to contact you by "
+            "phone call or email about your property inquiry and possible selling options. "
+            "This permission does not include text messages."
+        )
+        for consent in non_sms_consents
+    )
     sms_consent = next(consent for consent in consents if consent.channel == "sms")
-    assert sms_consent.wording_version == "seller-sms-web-v2"
-    assert "Reply STOP to opt out or HELP for help." in sms_consent.wording
+    assert sms_consent.wording_version == "seller-sms-web-v3"
+    assert sms_consent.wording == (
+        "By checking this optional box, I agree to receive recurring automated text messages "
+        "from Stonegate Home Buyers about my property inquiry, appointments, and possible "
+        "selling options at the number provided. Message frequency varies. Message and data "
+        "rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of "
+        "purchase. See our Terms & Conditions and Privacy Policy."
+    )
     property_record = db_session.scalar(select(Property))
     assert property_record is not None
     assert property_record.normalized_address_key == "55 auburn ave|atlanta|GA|30303"
@@ -164,6 +181,52 @@ def test_public_seller_intake_creates_lead_consent_and_attribution(
     assert submission is not None
     assert submission.enrichment_token_hash
     assert payload["enrichment_token"] not in str(submission.raw_payload)
+
+
+def test_public_intake_preserves_supported_older_consent_wording(
+    db_session: Session,
+    api_db_override: None,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload["consent_wording_version"] = "seller-contact-web-v2"
+    payload["sms_consent_wording_version"] = "seller-sms-web-v2"
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 201, response.text
+    assert response.json()["consent_wording_version"] == "seller-contact-web-v2"
+    consents = db_session.scalars(select(ConsentRecord).order_by(ConsentRecord.channel)).all()
+    non_sms_consents = [consent for consent in consents if consent.channel != "sms"]
+    assert all(consent.wording_version == "seller-contact-web-v2" for consent in non_sms_consents)
+    assert all("cash offer request" in consent.wording for consent in non_sms_consents)
+    sms_consent = next(consent for consent in consents if consent.channel == "sms")
+    assert sms_consent.wording_version == "seller-sms-web-v2"
+    assert "cash offer updates" in sms_consent.wording
+
+
+@pytest.mark.parametrize(
+    ("field", "version"),
+    [
+        ("consent_wording_version", "seller-contact-web-unknown"),
+        ("sms_consent_wording_version", "seller-sms-web-unknown"),
+    ],
+)
+def test_public_intake_rejects_unknown_consent_wording_version(
+    db_session: Session,
+    api_db_override: None,
+    field: str,
+    version: str,
+) -> None:
+    seed_org(db_session)
+    payload = public_payload()
+    payload[field] = version
+
+    response = TestClient(app).post("/api/v1/public/seller-leads", json=payload)
+
+    assert response.status_code == 422
+    assert "wording version" in response.text
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
 
 
 def test_public_seller_intake_queues_source_independent_staff_alert(
@@ -831,6 +894,7 @@ def test_public_seller_intake_matches_duplicate_active_lead(
     second = second_response.json()
     assert second["duplicate_status"] == "matched_existing_lead"
     assert second["matched_existing_lead"] is True
+    assert second["message"] == "Thanks. We received your updated property information."
     assert second["lead_id"] == first["lead_id"]
     assert second["contact_id"] == first["contact_id"]
     assert second["property_id"] == first["property_id"]
