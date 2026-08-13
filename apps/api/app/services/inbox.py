@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.auth import Principal
@@ -74,6 +74,7 @@ from app.services.communication_compliance import (
     evaluate_sms_eligibility,
     evaluate_voice_eligibility,
 )
+from app.services.document_storage import read_content
 from app.services.lead_lifecycle import lock_organization_lead, require_lead_open_for_work
 from app.services.mailbox_notifications import (
     MAILBOX_NOTIFICATION_TYPES,
@@ -1291,6 +1292,7 @@ def get_conversation_detail(
     email_attachments = (
         db.scalars(
             select(EmailAttachment)
+            .options(defer(EmailAttachment.content_data))
             .where(
                 EmailAttachment.organization_id == principal.organization_id,
                 EmailAttachment.communication_record_id.in_(communication_ids),
@@ -1477,6 +1479,11 @@ def get_conversation_detail(
                         filename=attachment.filename,
                         content_type=attachment.content_type,
                         size_bytes=attachment.size_bytes,
+                        content_url=(
+                            f"/api/v1/inbox/attachments/{attachment.id}/content"
+                            if attachment.storage_provider
+                            else f"/api/v1/email/attachments/{attachment.id}"
+                        ),
                     )
                     for attachment in attachments_by_communication_id.get(item.id, [])
                 ],
@@ -1587,6 +1594,32 @@ def get_conversation_detail(
             blockers=list(voice_eligibility.blockers),
         ),
     )
+
+
+def get_inbox_attachment_content(
+    db: Session,
+    principal: Principal,
+    attachment_id: UUID,
+) -> tuple[EmailAttachment, bytes] | None:
+    attachment = db.scalar(
+        select(EmailAttachment).where(
+            EmailAttachment.id == attachment_id,
+            EmailAttachment.organization_id == principal.organization_id,
+        )
+    )
+    if attachment is None or not attachment.storage_provider:
+        return None
+    communication = db.get(CommunicationRecord, attachment.communication_record_id)
+    if communication is None or communication.conversation_id is None:
+        return None
+    if get_scoped_conversation(db, principal, communication.conversation_id) is None:
+        return None
+    content = read_content(
+        provider=attachment.storage_provider,
+        key=attachment.storage_key,
+        database_bytes=attachment.content_data,
+    )
+    return attachment, content
 
 
 def mark_conversation_read(

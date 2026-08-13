@@ -934,6 +934,17 @@ starts a new company email. **Email ready** opens sender settings or owner admin
 The timeline keeps SMS, email, calls, recordings, transcripts, internal notes, and provider events
 together. Switching composer modes does not hide prior channels.
 
+When a seller texts photos, the inbound item is labeled **MMS** and the photos appear inline in that
+same conversation. Select a photo to open the full image, or use its download control to save a
+copy. A message that contains only photos still appears in the timeline; it does not need a text
+caption. Non-browser photo formats appear as a secure downloadable attachment instead of a broken
+preview.
+
+MMS photos remain private to users who can open that Inbox conversation. Stonegate stores its own
+copy rather than making the seller's Twilio media link public. After MMS support is deployed, the
+communications worker also attempts to restore photos from already-received Twilio MMS events when
+Twilio still retains the media, so the seller does not normally need to resend recent photos.
+
 After a live SMS is sent, the open thread quietly refreshes its delivery state for about 30 seconds
 so **Queued** normally advances to **Sent**, **Delivered**, **Failed**, or **Undelivered** without a
 page reload. If a carrier reports later than that window, select **Refresh** to retrieve the latest

@@ -17,6 +17,11 @@ from app.integrations.communications import (
     OutboundMessageRequest,
     OutboundMessageResult,
 )
+from app.integrations.twilio_media import (
+    TwilioDownloadedMedia,
+    TwilioInboundMedia,
+    TwilioMediaClient,
+)
 from app.integrations.twilio_messaging import TwilioMessagingProvider
 from app.main import app
 from app.models.foundation import (
@@ -27,6 +32,7 @@ from app.models.foundation import (
     ConsentRecord,
     Contact,
     Conversation,
+    EmailAttachment,
     Lead,
     StaffLeadAlert,
     SuppressionRecord,
@@ -35,9 +41,11 @@ from app.models.foundation import (
 )
 from app.services.bootstrap import bootstrap_foundation
 from app.services.meta_lead_ads import process_next_staff_lead_alert
+from app.services.twilio_mms import process_next_twilio_mms_media
 
 OWNER_EMAIL = "owner@example.com"
 AUTH_TOKEN = "test-auth-token"
+ACCOUNT_SID = "AC00000000000000000000000000000000"
 MESSAGING_SERVICE_SID = "MG00000000000000000000000000000000"
 STONEGATE_FROM_NUMBER = "+16785417725"
 WEBHOOK_BASE_URL = "https://api.stonegate.test"
@@ -115,11 +123,25 @@ class FakeTwilioClient:
         self.messages = FakeMessagesResource()
 
 
+class FakeTwilioMediaClient(TwilioMediaClient):
+    def __init__(self, payloads: dict[int, bytes]) -> None:
+        self.payloads = payloads
+        self.downloads: list[TwilioInboundMedia] = []
+
+    def download(self, media: TwilioInboundMedia) -> TwilioDownloadedMedia:
+        self.downloads.append(media)
+        return TwilioDownloadedMedia(
+            content=self.payloads[media.index],
+            content_type=media.content_type,
+            filename=f"seller-photo-{media.index + 1}.jpg",
+        )
+
+
 @pytest.fixture
 def twilio_settings(monkeypatch: MonkeyPatch) -> Iterator[None]:
     values = {
         "TWILIO_SMS_ENABLED": "true",
-        "TWILIO_ACCOUNT_SID": "AC00000000000000000000000000000000",
+        "TWILIO_ACCOUNT_SID": ACCOUNT_SID,
         "TWILIO_AUTH_TOKEN": AUTH_TOKEN,
         "TWILIO_SMS_FROM_NUMBER": STONEGATE_FROM_NUMBER,
         "TWILIO_WEBHOOK_BASE_URL": WEBHOOK_BASE_URL,
@@ -224,6 +246,13 @@ def post_signed_twilio(
             content=urlencode(payload),
             headers=signed_twilio_headers(path, payload),
         ),
+    )
+
+
+def twilio_media_url(message_sid: str, media_sid: str) -> str:
+    return (
+        f"https://api.twilio.com/2010-04-01/Accounts/{ACCOUNT_SID}"
+        f"/Messages/{message_sid}/Media/{media_sid}"
     )
 
 
@@ -551,6 +580,210 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     assert latest_consent is not None
     assert latest_consent.status == "granted"
     assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+
+def test_photo_only_mms_retains_multiple_images_once_and_serves_them_privately(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    message_sid = "SM00000000000000000000000000000020"
+    first_media_sid = "ME00000000000000000000000000000001"
+    second_media_sid = "ME00000000000000000000000000000002"
+    payload = {
+        "From": "+14045551212",
+        "To": "+14045550000",
+        "MessagingServiceSid": MESSAGING_SERVICE_SID,
+        "Body": "",
+        "MessageSid": message_sid,
+        "NumMedia": "2",
+        "MediaUrl0": twilio_media_url(message_sid, first_media_sid),
+        "MediaContentType0": "image/jpeg",
+        "MediaUrl1": twilio_media_url(message_sid, second_media_sid),
+        "MediaContentType1": "image/jpeg",
+    }
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+    duplicate = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+
+    assert response.status_code == 200, response.text
+    assert duplicate.status_code == 200, duplicate.text
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == f"inbound:{message_sid}"
+        )
+    )
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == message_sid
+        )
+    )
+    assert event is not None
+    assert communication is not None
+    assert event.processing_status == "media_pending"
+    assert event.payload["NumMedia"] == "2"
+    assert communication.body == ""
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(CommunicationRecord)
+                .where(CommunicationRecord.provider_message_id == message_sid)
+            )
+            or 0
+        )
+        == 1
+    )
+
+    first_image = b"\xff\xd8\xff\xe0first-photo"
+    second_image = b"\xff\xd8\xff\xe0second-photo"
+    media_client = FakeTwilioMediaClient({0: first_image, 1: second_image})
+    processed_event_id = process_next_twilio_mms_media(
+        db_session,
+        get_settings(),
+        client=media_client,
+    )
+
+    assert processed_event_id == event.id
+    db_session.expire_all()
+    event = db_session.get(CommunicationProviderEvent, event.id)
+    attachments = db_session.scalars(
+        select(EmailAttachment)
+        .where(EmailAttachment.communication_record_id == communication.id)
+        .order_by(EmailAttachment.provider_attachment_id.asc())
+    ).all()
+    assert event is not None
+    assert event.processing_status == "media_processed"
+    assert event.payload["_mms"] == {
+        "stored_count": 2,
+        "stored_bytes": len(first_image) + len(second_image),
+    }
+    assert [item.provider_attachment_id for item in attachments] == [
+        first_media_sid,
+        second_media_sid,
+    ]
+    assert [item.content_data for item in attachments] == [first_image, second_image]
+    assert all(item.storage_provider == "database" for item in attachments)
+    assert [item.index for item in media_client.downloads] == [0, 1]
+
+    replay_after_retention = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+    assert replay_after_retention.status_code == 200, replay_after_retention.text
+    assert process_next_twilio_mms_media(db_session, get_settings(), client=media_client) is None
+    assert (
+        int(
+            db_session.scalar(
+                select(func.count())
+                .select_from(EmailAttachment)
+                .where(EmailAttachment.communication_record_id == communication.id)
+            )
+            or 0
+        )
+        == 2
+    )
+    assert len(media_client.downloads) == 2
+
+    detail = client.get(
+        f"/api/v1/inbox/conversations/{conversation.id}",
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert detail.status_code == 200, detail.text
+    timeline_item = next(
+        item
+        for item in detail.json()["timeline"]
+        if item["id"] == str(communication.id)
+    )
+    assert timeline_item["body"] == ""
+    assert len(timeline_item["attachments"]) == 2
+    assert payload["MediaUrl0"] not in detail.text
+    content_url = timeline_item["attachments"][0]["content_url"]
+    assert content_url == f"/api/v1/inbox/attachments/{attachments[0].id}/content"
+
+    unauthenticated = client.get(content_url)
+    assert unauthenticated.status_code == 401
+    image_response = client.get(
+        content_url,
+        headers={"X-Dev-User-Email": OWNER_EMAIL},
+    )
+    assert image_response.status_code == 200
+    assert image_response.content == first_image
+    assert image_response.headers["content-type"] == "image/jpeg"
+    assert image_response.headers["cache-control"] == "private, no-store"
+    assert image_response.headers["x-content-type-options"] == "nosniff"
+    assert image_response.headers["content-disposition"].startswith("inline;")
+
+
+def test_mms_worker_recovers_media_from_a_legacy_processed_provider_event(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    seed_consent_lead(db_session, client)
+    message_sid = "SM00000000000000000000000000000021"
+    media_sid = "ME00000000000000000000000000000003"
+    payload = {
+        "From": "+14045551212",
+        "To": "+14045550000",
+        "Body": "Here is the outside.",
+        "MessageSid": message_sid,
+        "NumMedia": "1",
+        "MediaUrl0": twilio_media_url(message_sid, media_sid),
+        "MediaContentType0": "image/jpeg",
+    }
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+    assert response.status_code == 200, response.text
+    event = db_session.scalar(
+        select(CommunicationProviderEvent).where(
+            CommunicationProviderEvent.external_event_id == f"inbound:{message_sid}"
+        )
+    )
+    assert event is not None
+    assert event.processing_status == "media_pending"
+    event.processing_status = "processed"
+    event.processed_at = event.received_at
+    db_session.commit()
+
+    image = b"\xff\xd8\xff\xe0legacy-photo"
+    media_client = FakeTwilioMediaClient({0: image})
+    processed_event_id = process_next_twilio_mms_media(
+        db_session,
+        get_settings(),
+        client=media_client,
+    )
+
+    assert processed_event_id == event.id
+    db_session.expire_all()
+    recovered_event = db_session.get(CommunicationProviderEvent, event.id)
+    attachment = db_session.scalar(
+        select(EmailAttachment).where(EmailAttachment.provider_attachment_id == media_sid)
+    )
+    assert recovered_event is not None
+    assert recovered_event.processing_status == "media_processed"
+    assert attachment is not None
+    assert attachment.content_data == image
+    assert attachment.attachment_metadata == {
+        "source": "twilio_mms",
+        "media_index": 0,
+        "storage_status": "retained",
+    }
 
 
 def test_unknown_dispositions_sms_creates_reviewable_buyer_conversation(

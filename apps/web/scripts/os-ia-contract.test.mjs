@@ -517,6 +517,21 @@ test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {
   assert.match(inbox, /window\.clearTimeout\(timer\)/);
 });
 
+test("Inbox renders private inbound MMS photos inline", () => {
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const attachment = readFileSync(resolve(osSourceRoot, "inbox/message-attachment.tsx"), "utf8");
+
+  assert.match(inbox, /item\.channel === "sms" && item\.attachments\.length > 0/);
+  assert.match(inbox, /\? "MMS"/);
+  assert.match(inbox, /item\.body\.trim\(\)/);
+  assert.match(inbox, /<MessageAttachment/);
+  assert.match(attachment, /headers: await getHeaders\(\)/);
+  assert.match(attachment, /cache: "no-store"/);
+  assert.match(attachment, /URL\.revokeObjectURL/);
+  assert.match(attachment, /<Image[\s\S]*unoptimized/);
+  assert.match(attachment, /target="_blank"/);
+});
+
 test("Property lead editing stays collapsed until the operator asks to open it", () => {
   const leadRecord = readFileSync(
     resolve(applicationSourceRoot, "app/leads/[leadId]/lead-detail-view.tsx"),

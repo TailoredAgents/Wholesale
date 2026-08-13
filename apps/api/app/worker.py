@@ -49,6 +49,7 @@ from app.services.staff_lead_alerts import (
     eligible_staff_alert_recipients,
     eligible_staff_inbound_message_alert_recipients,
 )
+from app.services.twilio_mms import process_next_twilio_mms_media
 from app.services.voice import purge_next_expired_recording
 
 logger = structlog.get_logger()
@@ -57,6 +58,7 @@ WorkerOperation = Callable[[Session, Settings], UUID | None]
 WORKER_OPERATIONS: tuple[tuple[str, WorkerOperation], ...] = (
     ("meta_lead_ads", process_next_meta_lead_event),
     ("staff_lead_alerts", process_next_staff_lead_alert),
+    ("twilio_mms_media", process_next_twilio_mms_media),
     ("meta_address_enrichment", process_next_meta_address_enrichment),
     ("property_intelligence", process_next_property_research),
     ("ai_operations", process_next_ai_operation),

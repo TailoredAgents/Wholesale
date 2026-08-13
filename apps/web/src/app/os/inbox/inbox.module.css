@@ -713,10 +713,12 @@
 
 .messageAttachments {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 5px;
 }
 
-.messageAttachments button {
+.messageFileAttachment {
+  grid-column: 1 / -1;
   width: 100%;
   min-height: 34px;
   padding: 6px 8px;
@@ -733,7 +735,7 @@
   cursor: pointer;
 }
 
-.messageAttachments span {
+.messageFileAttachment span {
   overflow: hidden;
   font-size: 10px;
   font-weight: 800;
@@ -741,8 +743,121 @@
   white-space: nowrap;
 }
 
-.messageAttachments button small {
+.messageFileAttachment small {
   white-space: nowrap;
+}
+
+.messageFileAttachment:disabled {
+  cursor: wait;
+  opacity: 0.75;
+}
+
+.messageMediaAttachment {
+  min-width: 0;
+  margin: 0;
+  border: 1px solid rgba(104, 112, 115, 0.2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.76);
+  overflow: hidden;
+}
+
+.messageMediaPreview {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: #e9ecea;
+  display: block;
+  overflow: hidden;
+}
+
+.messageMediaPreview img {
+  object-fit: cover;
+  transition: transform 160ms ease;
+}
+
+.messageMediaPreview:hover img {
+  transform: scale(1.02);
+}
+
+.messageMediaAttachment figcaption {
+  min-height: 32px;
+  padding: 5px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.messageMediaAttachment figcaption > span {
+  min-width: 0;
+  color: var(--text-soft);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 9px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageMediaAttachment figcaption button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.messageMediaAttachment figcaption button:hover {
+  background: var(--brand-soft);
+}
+
+.messageMediaLoading,
+.messageMediaFallback {
+  min-height: 118px;
+  padding: 14px;
+  border: 1px solid rgba(104, 112, 115, 0.2);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.76);
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.messageMediaFallback {
+  font: inherit;
+  cursor: pointer;
+}
+
+.messageMediaLoading span,
+.messageMediaFallback span {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.messageMediaFallback small {
+  font-size: 9px;
+}
+
+.attachmentSpinner {
+  animation: attachment-spin 800ms linear infinite;
+}
+
+@keyframes attachment-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .callMessage {
@@ -2293,6 +2408,10 @@
 
   .timeline {
     padding: 15px 11px;
+  }
+
+  .messageAttachments {
+    grid-template-columns: 1fr;
   }
 
   .composerTabs button {

@@ -12,6 +12,7 @@ from app.integrations.communications import (
     OutboundMessageRequest,
     SimulatedCommunicationProvider,
 )
+from app.integrations.twilio_media import twilio_inbound_media_count
 from app.integrations.twilio_messaging import (
     TwilioMessagingError,
     get_twilio_messaging_provider,
@@ -401,6 +402,7 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     sender = required_twilio_value(payload, "From")
     recipient = required_twilio_value(payload, "To")
     body = payload.get("Body", "").strip()
+    media_count = twilio_inbound_media_count(payload)
     opt_out_type = classify_opt_out(payload, body)
     sender_line = find_sms_line_by_number(db, organization.id, recipient)
     conversation_type = (
@@ -488,11 +490,13 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             "opt_out_type": opt_out_type,
             "voice_line_id": str(sender_line.id) if sender_line is not None else None,
             "department_key": sender_line.department_key if sender_line is not None else None,
+            "media_count": media_count,
         },
         communication_metadata={
             "source": "twilio_webhook",
             "sender_number": recipient,
             "voice_line_id": str(sender_line.id) if sender_line is not None else None,
+            "media_count": media_count,
         },
     )
     db.add(communication)
@@ -525,7 +529,11 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             summary=(
                 f"Inbound {party_label} SMS received ({opt_out_type})."
                 if opt_out_type
-                else f"Inbound {party_label} SMS received."
+                else (
+                    f"Inbound {party_label} MMS received with {media_count} photo(s)."
+                    if media_count
+                    else f"Inbound {party_label} SMS received."
+                )
             ),
         )
     )
@@ -537,8 +545,8 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             sender_line=sender_line,
             sender_phone=sender,
         )
-    event.processing_status = "processed"
-    event.processed_at = datetime.now(UTC)
+    event.processing_status = "media_pending" if media_count else "processed"
+    event.processed_at = None if media_count else datetime.now(UTC)
     db.commit()
     return event.processing_status
 

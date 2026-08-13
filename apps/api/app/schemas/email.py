@@ -317,3 +317,4 @@ class EmailAttachmentRead(BaseModel):
     filename: str
     content_type: str
     size_bytes: int
+    content_url: str | None = None

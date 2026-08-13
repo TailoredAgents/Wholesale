@@ -41,6 +41,10 @@ import {
 } from "./email-admin-panel";
 import { GlobalEmailCompose } from "./global-email-compose";
 import {
+  MessageAttachment,
+  type MessageAttachmentData,
+} from "./message-attachment";
+import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
@@ -121,12 +125,7 @@ type TimelineItem = {
   recording_retention_expires_at: string | null;
   recording_deleted_at: string | null;
   transcript: CallTranscript | null;
-  attachments: Array<{
-    id: string;
-    filename: string;
-    content_type: string;
-    size_bytes: number;
-  }>;
+  attachments: MessageAttachmentData[];
 };
 
 type CallNoteEvidence = {
@@ -1468,32 +1467,6 @@ export function InboxWorkspace({
     emailIdempotencyKeyRef.current = null;
   }
 
-  async function downloadEmailAttachment(attachmentId: string, filename: string) {
-    setError(null);
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/email/attachments/${attachmentId}`, {
-        headers: await getHeaders(),
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null);
-        throw new Error(displayError(payload, "The attachment could not be downloaded."));
-      }
-      const url = URL.createObjectURL(await response.blob());
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = filename;
-      anchor.click();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (attachmentError) {
-      setError(
-        attachmentError instanceof Error
-          ? attachmentError.message
-          : "The attachment could not be downloaded.",
-      );
-    }
-  }
-
   async function submitCommunication(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detail || !body.trim()) return;
@@ -1941,26 +1914,30 @@ export function InboxWorkspace({
                       key={item.id}
                     >
                       <div className={styles.messageMeta}>
-                        <span>{labelize(item.channel)}</span>
+                        <span>
+                          {item.channel === "sms" && item.attachments.length > 0
+                            ? "MMS"
+                            : labelize(item.channel)}
+                        </span>
                         <time>{formatDateTime(item.occurred_at)}</time>
                       </div>
                       {item.subject ? <strong>{item.subject}</strong> : null}
-                      <p>{item.body}</p>
+                      {item.body.trim() ? <p>{item.body}</p> : null}
                       {item.attachments.length > 0 ? (
                         <div className={styles.messageAttachments}>
                           {item.attachments.map((attachment) => (
-                            <button
+                            <MessageAttachment
+                              apiBaseUrl={apiBaseUrl}
+                              attachment={attachment}
+                              formatSize={formatFileSize}
+                              getHeaders={getHeaders}
                               key={attachment.id}
-                              onClick={() =>
-                                void downloadEmailAttachment(attachment.id, attachment.filename)
+                              senderLabel={
+                                item.direction === "inbound"
+                                  ? detail.seller_name
+                                  : item.actor_display_name || "Stonegate"
                               }
-                              title={`Download ${attachment.filename}`}
-                              type="button"
-                            >
-                              <Paperclip size={13} aria-hidden="true" />
-                              <span>{attachment.filename}</span>
-                              <small>{formatFileSize(attachment.size_bytes)}</small>
-                            </button>
+                            />
                           ))}
                         </div>
                       ) : null}

@@ -981,6 +981,10 @@ The Twilio SMS implementation supports:
 - signed inbound and delivery callbacks
 - provider event idempotency
 - delivery, failure, and inbound state
+- inbound MMS photo capture with authenticated inline Inbox previews and downloads
+- private document retention instead of browser-visible Twilio media URLs
+- worker retry and automatic recovery of retained pre-deployment MMS events when provider media is
+  still available
 - STOP and START processing
 - suppression and consent controls
 - an editable **Permissioned / Not permissioned** seller-context control for authorized staff, with

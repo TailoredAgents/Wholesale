@@ -561,6 +561,9 @@ Do not share another business's campaign or number.
   **Settings > Communications**)
 - `TWILIO_WEBHOOK_BASE_URL=https://api.stonegatehb.com`
 - `TWILIO_VALIDATE_WEBHOOK_SIGNATURES=true`
+- `TWILIO_MMS_MAX_MEDIA_BYTES` (optional; defaults to `10000000` bytes per photo)
+- `TWILIO_MMS_MAX_TOTAL_BYTES` (optional; defaults to `25000000` bytes per message)
+- `TWILIO_MMS_MAX_ATTEMPTS` (optional; defaults to `5` worker attempts)
 - SMS timezone and contact-hour variables
 
 `TWILIO_MESSAGING_SERVICE_SID` is optional. Stonegate's direct-number setup sends from
@@ -568,7 +571,9 @@ Do not share another business's campaign or number.
 
 The Account SID, sending credential, direct sender number, and webhook base URL must be present on
 both **oakwell-api** and **oakwell-worker**. The API validates callbacks; the worker performs staff
-lead-alert sends.
+lead-alert sends and retains inbound MMS photos. The worker can download Twilio media with the
+existing Account SID and Auth Token, or with the existing Twilio API key SID and secret pair. MMS
+does not require another vendor account or a separate media API key.
 
 The Auth Token is not the Account SID. Twilio displays them as separate values in the account
 console.
@@ -586,6 +591,24 @@ Delivery status callback supplied automatically by Stonegate on each outbound me
 ```text
 POST https://api.stonegatehb.com/api/v1/webhooks/twilio/messaging/status
 ```
+
+### Inbound Photos And Recovery
+
+The same signed **A message comes in** webhook accepts SMS and MMS. The API saves the message and
+Twilio media references immediately; the communications worker then downloads each photo, applies
+the configured type and size limits, and writes it to Stonegate's private document storage. Inbox
+users receive attachment bytes only through the authenticated Stonegate API. Do not expose or save
+the original Twilio media URL in the browser.
+
+Keep the communications worker running with the Twilio credentials listed above and a working
+`DOCUMENT_STORAGE_PROVIDER`. Database storage works for the current rollout; use the configured
+private S3-compatible storage when production volume warrants it. The existing retention and
+malware-scanning settings apply to MMS photos too.
+
+After this feature is deployed, the worker also scans retained Twilio inbound-event payloads that
+reported media before MMS storage was available. It automatically recovers those already-received
+photos when Twilio still makes the media available. The operation is idempotent, so webhook replays
+and worker retries do not create duplicate attachments.
 
 ### A2P Evidence
 
@@ -610,10 +633,13 @@ After campaign approval and direct-number configuration:
 
 1. Send a controlled outbound SMS.
 2. Confirm sent, delivered, and failed states.
-3. Reply and confirm the same conversation.
-4. Test STOP, blocked send, START, and HELP behavior.
-5. Replay callbacks and confirm no duplicate timeline records.
-6. Confirm staff assignments do not break the seller thread.
+3. Reply with one photo, then a photo-only message with two photos; confirm all three appear inline
+   in the same Inbox thread and can be opened and downloaded by an authorized user.
+4. Replay one MMS callback and restart the worker; confirm the photos are not duplicated. If a real
+   pre-deployment MMS exists, confirm its retained photos are recovered automatically.
+5. Test STOP, blocked send, START, and HELP behavior.
+6. Confirm staff assignments do not break the seller thread and an unauthorized user cannot fetch
+   its private attachment URL.
 
 ## Twilio Voice
 

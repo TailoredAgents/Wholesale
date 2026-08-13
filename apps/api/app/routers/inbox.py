@@ -1,7 +1,8 @@
 from typing import Annotated
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.auth import Principal, require_any_permission, require_permission
@@ -28,6 +29,7 @@ from app.services.inbox import (
     classify_general_conversation,
     convert_general_conversation_to_lead,
     get_conversation_detail,
+    get_inbox_attachment_content,
     get_mailbox_response_overview,
     handoff_conversation,
     link_general_conversation_to_lead,
@@ -45,6 +47,9 @@ from app.services.messaging import (
 )
 
 router = APIRouter(prefix="/api/v1/inbox", tags=["inbox"])
+INLINE_ATTACHMENT_CONTENT_TYPES = frozenset(
+    {"image/gif", "image/jpeg", "image/png", "image/webp"}
+)
 view_inbox_dependency = require_any_permission(
     PermissionKeys.VIEW_CONVERSATIONS,
     PermissionKeys.VIEW_ASSIGNED_CONVERSATIONS,
@@ -114,6 +119,39 @@ def mark_inbox_conversation_read(
     if conversation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
     return conversation
+
+
+@router.get("/attachments/{attachment_id}/content")
+def read_inbox_attachment(
+    attachment_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(view_inbox_dependency)],
+) -> Response:
+    try:
+        result = get_inbox_attachment_content(db, principal, attachment_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Attachment not found.")
+    attachment, content = result
+    safe_name = quote(attachment.filename)
+    disposition = (
+        "inline"
+        if attachment.content_type.lower() in INLINE_ATTACHMENT_CONTENT_TYPES
+        else "attachment"
+    )
+    return Response(
+        content=content,
+        media_type=attachment.content_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": f"{disposition}; filename*=UTF-8''{safe_name}",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.post("/conversations/{conversation_id}/convert-to-lead", status_code=201)
