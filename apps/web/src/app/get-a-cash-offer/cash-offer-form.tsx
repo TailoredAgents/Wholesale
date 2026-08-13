@@ -34,7 +34,7 @@ const storageLifetimeMs = 24 * 60 * 60 * 1000;
 
 const steps = [
   { key: "property", label: "Property", title: "Where is the property?" },
-  { key: "contact", label: "Contact", title: "How should Stonegate follow up?" },
+  { key: "contact", label: "Contact", title: "How can Stonegate reach you?" },
 ] as const;
 
 type FormValues = {
@@ -52,7 +52,6 @@ type FormValues = {
   name: string;
   phone: string;
   email: string;
-  preferred_contact_method: "phone" | "email";
   company_website: string;
 };
 
@@ -92,7 +91,6 @@ const initialValues: FormValues = {
   name: "",
   phone: "",
   email: "",
-  preferred_contact_method: "phone",
   company_website: "",
 };
 
@@ -170,8 +168,8 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
         };
         delete restoredValues.consent_to_contact;
         delete restoredValues.sms_consent;
-        restoredValues.preferred_contact_method =
-          restoredValues.preferred_contact_method === "email" ? "email" : "phone";
+        delete (restoredValues as Partial<FormValues> & { preferred_contact_method?: string })
+          .preferred_contact_method;
         setValues((current) => ({
           ...current,
           ...restoredValues,
@@ -244,12 +242,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   function updateValue<Name extends FieldName>(name: Name, value: FormValues[Name]) {
     handleFormStart();
     setValues((current) => ({ ...current, [name]: value }));
-    if (name === "preferred_contact_method") {
-      setErrors((current) => ({
-        ...current,
-        email: undefined,
-      }));
-    } else if (errors[name]) {
+    if (errors[name]) {
       setErrors((current) => ({ ...current, [name]: undefined }));
     }
   }
@@ -337,7 +330,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       name: values.name.trim(),
       phone: values.phone.trim() || null,
       email: values.email.trim() || null,
-      preferred_contact_method: values.preferred_contact_method,
+      preferred_contact_method: "phone",
       reason_for_selling: null,
       desired_timeline: values.desired_timeline,
       asking_price: null,
@@ -796,74 +789,36 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
               placeholder="Jane Seller"
             />
           </Field>
-          <div className={styles.gridTwo}>
-            <Field label="Phone" name="phone" error={errors.phone} required>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                autoComplete="section-contact tel"
-                enterKeyHint="next"
-                inputMode="tel"
-                required
-                value={values.phone}
-                onChange={(event) => updateValue("phone", event.target.value)}
-                aria-invalid={Boolean(errors.phone)}
-                aria-describedby={errors.phone ? "phone-error" : undefined}
-                placeholder="404-555-0100"
-              />
-            </Field>
-            <Field
-              label="Email"
+          <Field label="Phone" name="phone" error={errors.phone} required>
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              autoComplete="section-contact tel"
+              enterKeyHint="next"
+              inputMode="tel"
+              required
+              value={values.phone}
+              onChange={(event) => updateValue("phone", event.target.value)}
+              aria-invalid={Boolean(errors.phone)}
+              aria-describedby={errors.phone ? "phone-error" : undefined}
+              placeholder="404-555-0100"
+            />
+          </Field>
+          <Field label="Email" name="email" error={errors.email} hint="Optional">
+            <input
+              id="email"
               name="email"
-              error={errors.email}
-              hint={
-                values.preferred_contact_method === "email"
-                  ? "Selected follow-up"
-                  : "Optional"
-              }
-              required={values.preferred_contact_method === "email"}
-            >
-              <input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="section-contact email"
-                enterKeyHint="next"
-                required={values.preferred_contact_method === "email"}
-                value={values.email}
-                onChange={(event) => updateValue("email", event.target.value)}
-                aria-invalid={Boolean(errors.email)}
-                aria-describedby={errors.email ? "email-hint email-error" : "email-hint"}
-                placeholder="jane@example.com"
-              />
-            </Field>
-          </div>
-          <fieldset className={styles.contactPreference}>
-            <legend>Preferred follow-up method</legend>
-            <div>
-              {[
-                { value: "phone", label: "Phone call" },
-                { value: "email", label: "Email" },
-              ].map((option) => (
-                <label key={option.value}>
-                  <input
-                    type="radio"
-                    name="preferred_contact_method"
-                    value={option.value}
-                    checked={values.preferred_contact_method === option.value}
-                    onChange={() =>
-                      updateValue(
-                        "preferred_contact_method",
-                        option.value as FormValues["preferred_contact_method"],
-                      )
-                    }
-                  />
-                  <span>{option.label}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
+              type="email"
+              autoComplete="section-contact email"
+              enterKeyHint="next"
+              value={values.email}
+              onChange={(event) => updateValue("email", event.target.value)}
+              aria-invalid={Boolean(errors.email)}
+              aria-describedby={errors.email ? "email-hint email-error" : "email-hint"}
+              placeholder="jane@example.com"
+            />
+          </Field>
           <p className={styles.consentDisclosure}>{consentWording}</p>
           <label className={styles.smsConsent}>
             <input
@@ -902,7 +857,7 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
           type="submit"
         >
           {activeStep === steps.length - 1 ? (
-            submitState.status === "submitting" ? "Sending request..." : "Review My Selling Options"
+            submitState.status === "submitting" ? "Sending request..." : "Request My Options Review"
           ) : (
             <>Continue <ArrowRight size={17} aria-hidden="true" /></>
           )}
@@ -1136,9 +1091,6 @@ function validateStep(step: number, values: FormValues): FieldErrors {
     }
     if (values.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(values.email)) {
       errors.email = "Enter a valid email address.";
-    }
-    if (values.preferred_contact_method === "email" && !values.email.trim()) {
-      errors.email = "Enter an email address for email follow-up.";
     }
   }
   return errors;

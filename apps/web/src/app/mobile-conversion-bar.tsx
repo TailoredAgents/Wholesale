@@ -47,7 +47,7 @@ export function MobileConversionBar() {
         }}
       >
         <House size={18} aria-hidden="true" />
-        Get Offer
+        See My Options
       </Link>
     </nav>
   );

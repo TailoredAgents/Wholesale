@@ -81,9 +81,9 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | Open navigation / Close navigation | Opens or closes the mobile navigation menu | Appears on smaller screens |
 | How It Works, Selling Situations, FAQs, About | Opens seller education pages | Navigation only |
 | Displayed phone number | Starts a phone call and records an anonymous call-click conversion event | Requires a device capable of calling |
-| **Get a Cash Offer** | Opens `/get-a-cash-offer` | Always available |
+| **See My Selling Options** | Opens `/get-a-cash-offer` | Standard public header and footer only; the form page uses a focused logo-and-phone shell |
 | Mobile **Call** bar action | Starts a phone call and records the mobile placement and source page | Fixed to the bottom of public pages at 720px wide or below; never appears in the OS |
-| Mobile **Get Offer** bar action | Opens the cash-offer page and records the mobile placement and source page | On the cash-offer page, scrolls to the current form instead of clearing it |
+| Mobile **See My Options** bar action | Opens the seller-options page and records the mobile placement and source page | On the form page, scrolls to the current form instead of clearing it |
 | Privacy Policy | Opens current data-use terms | Always available |
 | Terms & Conditions | Opens current website and SMS program terms | Always available |
 
@@ -146,11 +146,10 @@ administration is in Settings. My Setup remains available to every signed-in emp
 | --- | --- | --- |
 | Your name | Creates or updates the seller identity | Required |
 | Phone | Primary contact number | A complete phone number is required for every website inquiry |
-| Email | Contact method for email | A valid address is required when email is selected |
-| Preferred follow-up method | Records a phone-call or email preference | Phone is selected initially; email requires a valid email address |
+| Email | Additional contact method | Optional; must be valid when entered |
 | Contact authorization disclosure | Explains that submitting authorizes phone or email follow-up about the property inquiry and possible selling options | Displayed as passive text; there is no checkbox because submitting the form is the authorization action |
 | Optional SMS consent | Separately records recurring automated SMS consent and the `seller-sms-web-v3` wording version | Unchecked initially, never required, and never saved in the browser draft |
-| **Review My Selling Options** | Submits one seller inquiry, phone/email authorization evidence, optional SMS consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
+| **Request My Options Review** | Submits one seller inquiry with phone follow-up, phone/email authorization evidence, optional SMS consent evidence, attribution, and duplicate-match evidence | Disabled while sending; validation or API errors leave answers on screen |
 | **Add property details** | Opens optional post-submission questions without delaying or duplicating the accepted request | Available on confirmation for 24 hours |
 | **Call Stonegate** | Calls the displayed Stonegate number after successful submission | Available on confirmation |
 | **Submit another property** | Clears confirmation and form storage, then starts a fresh property request | Available on confirmation |

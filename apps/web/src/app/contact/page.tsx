@@ -32,9 +32,9 @@ const expectations = [
     detail: "An address lets the team confirm location and prepare the first review.",
   },
   {
-    title: "Choose how we respond",
+    title: "Know what happens next",
     detail:
-      "Choose a phone call or email, and optionally authorize text messages with the separate checkbox.",
+      "Stonegate calls to discuss the property. Email is optional, and text messages require separate permission.",
   },
   {
     title: "Confirm coverage first",
@@ -145,7 +145,7 @@ export default function ContactPage() {
             <span>
               <small>Request availability</small>
               <strong>{siteConfig.inquiryAvailability}</strong>
-              <em>A team member follows up using the contact method you choose.</em>
+              <em>A team member follows up about the property inquiry.</em>
             </span>
           </div>
         </div>

@@ -93,13 +93,13 @@ Status: **Implemented**. Branded production verification follows the Render depl
 
 ### Work
 
-- Add a compact mobile action bar with Call and Get Offer actions.
+- Add a compact mobile action bar with **Call** and **See My Options** actions.
 - Keep actions available while scrolling without covering forms, consent language, errors, legal
   text, or the operating-system Help bubble.
 - Improve mobile menu and tap-target behavior.
 - Verify phone, tablet, and desktop layouts.
 - Record the action, placement, device context, and source route without delaying navigation.
-- On the cash-offer page, return **Get Offer** to the active form instead of restarting the
+- On the seller-options page, return **See My Options** to the active form instead of restarting the
   seller's work.
 
 ### Exit Criteria

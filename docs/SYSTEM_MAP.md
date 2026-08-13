@@ -242,7 +242,7 @@ Role-specific default routes include:
 | Route | Purpose |
 | --- | --- |
 | `/` | Main address-first direct-offer experience |
-| `/get-a-cash-offer` | Two-step seller inquiry, passive phone/email authorization, separate optional SMS opt-in, and optional follow-up details |
+| `/get-a-cash-offer` | Focused two-step seller inquiry with a logo-and-phone header, passive phone/email authorization, separate optional SMS opt-in, and optional follow-up details |
 | `/how-it-works` | Direct-sale process and expectations |
 | `/about` | Stonegate company information |
 | `/faqs` | Seller questions and tradeoffs |
@@ -265,7 +265,7 @@ consent. The lead is accepted at that point. The confirmation offers an optional
 timing, condition, occupancy, asking-price, mortgage, and seller context; a random 24-hour token
 connects those answers to the same lead without exposing CRM access.
 
-At mobile widths, every public page also provides fixed **Call** and **Get Offer** actions. Their
+At mobile widths, every public page also provides fixed **Call** and **See My Options** actions. Their
 conversion events include the mobile placement and source route. This bar belongs to the public
 footer boundary, so it is never mounted in the operating system or authentication pages.
 

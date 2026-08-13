@@ -699,13 +699,13 @@ evidence in this table exists.
 
 ## 1. Public Seller Intake
 
-The seller starts from **Get a Cash Offer** on the public site, then requests a review of the
+The seller starts from **See My Selling Options** on the public site, then requests a review of the
 selling options that may fit the property and situation.
 
 The form collects:
 
 - Property address and required selling timeline first.
-- Name, required phone number, optional email, and a preferred phone or email follow-up method.
+- Name, required phone number, and optional email. Stonegate follows up by phone by default.
 - A passive disclosure explaining that submitting the form authorizes Stonegate to follow up by
   phone or email about the property inquiry and possible selling options.
 - A separate optional, unchecked SMS consent box for recurring text messages about the property

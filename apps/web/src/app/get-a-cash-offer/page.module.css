@@ -444,58 +444,6 @@
   text-align: right;
 }
 
-.contactPreference {
-  display: grid;
-  gap: 8px;
-  border: 0;
-}
-
-.contactPreference legend {
-  color: #27382f;
-  font-size: 13px;
-  font-weight: 850;
-}
-
-.contactPreference > div {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.contactPreference label {
-  cursor: pointer;
-}
-
-.contactPreference input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.contactPreference span {
-  min-height: 42px;
-  display: grid;
-  place-items: center;
-  padding: 8px;
-  border: 1px solid #c4cec8;
-  border-radius: 6px;
-  color: #435149;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.contactPreference input:checked + span {
-  border-color: #1d5a3d;
-  background: #e7f0ea;
-  color: #17482f;
-  box-shadow: inset 0 0 0 1px #1d5a3d;
-}
-
-.contactPreference input:focus-visible + span {
-  outline: 3px solid rgba(185, 133, 45, 0.72);
-  outline-offset: 3px;
-}
-
 .consentDisclosure {
   margin: 2px 0 0;
   padding-top: 12px;
@@ -844,15 +792,6 @@
   .choiceGrid,
   .occupancyGrid {
     gap: 7px;
-  }
-
-  .contactPreference > div {
-    grid-template-columns: 1fr;
-  }
-
-  .contactPreference span {
-    justify-content: start;
-    padding-left: 13px;
   }
 
   .formActions {

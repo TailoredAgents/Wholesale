@@ -71,6 +71,39 @@
   color: #183d2a;
 }
 
+.conversionHeader {
+  min-height: 68px;
+}
+
+.conversionInner {
+  min-height: 68px;
+}
+
+.conversionPhone {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  color: #1d5a3d;
+  white-space: nowrap;
+}
+
+.conversionPhoneLabel {
+  color: #536159;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.conversionPhone strong {
+  font-size: 15px;
+}
+
+.conversionPhone:hover strong {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 1060px) {
   .menuButton {
     display: inline-grid;
@@ -120,5 +153,40 @@
 
   .brand strong {
     font-size: 16px;
+  }
+
+  .conversionInner {
+    width: calc(100% - 24px);
+    gap: 12px;
+  }
+
+  .conversionPhoneLabel {
+    display: none;
+  }
+
+  .conversionPhone strong {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 360px) {
+  .conversionInner .brand {
+    --stonegate-logo-size: 34px;
+  }
+
+  .conversionInner .brand strong {
+    font-size: 14px;
+  }
+
+  .conversionInner .brand span span:last-child {
+    display: none;
+  }
+
+  .conversionPhone {
+    gap: 4px;
+  }
+
+  .conversionPhone strong {
+    font-size: 12px;
   }
 }

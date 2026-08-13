@@ -820,8 +820,8 @@ events.
 
 ## Website And Zapier Lead Intake Staff Alerts
 
-The public **Get a Cash Offer** form creates a Stonegate lead directly. It requires the property
-street, city, state, seller timeline, and contact information before submission. Its browser
+The public **See My Selling Options** form creates a Stonegate lead directly. It requires the property
+street, city, state, ZIP code, seller timeline, and contact information before submission. Its browser
 `Lead` event and matching server conversion use the same event ID for Meta deduplication.
 
 Facebook instant forms are separate from the Pixel and Conversions API. The Pixel reports activity

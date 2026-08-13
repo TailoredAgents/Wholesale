@@ -18,7 +18,7 @@ export default function GetCashOfferPage() {
   return (
     <main className={styles.page}>
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
-      <PublicSiteHeader />
+      <PublicSiteHeader variant="conversion" />
       <section className={styles.hero}>
         <div className={styles.copy}>
           <p className={styles.eyebrow}>No-pressure property review</p>
@@ -43,7 +43,7 @@ export default function GetCashOfferPage() {
         </div>
         <CashOfferForm />
       </section>
-      <PublicSiteFooter />
+      <PublicSiteFooter variant="conversion" />
     </main>
   );
 }

@@ -84,6 +84,26 @@
   color: #8fa097;
 }
 
+.conversionFooter {
+  grid-template-columns: minmax(240px, 1fr) auto;
+  align-items: end;
+  padding-top: 36px;
+}
+
+.conversionLegal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px 22px;
+  color: #ffffff;
+  font-weight: 750;
+}
+
+.conversionLegal a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 720px) {
   .footer {
     grid-template-columns: 1fr;
@@ -98,5 +118,13 @@
   .disclosure,
   .copyright {
     grid-column: auto;
+  }
+
+  .conversionFooter {
+    grid-template-columns: 1fr;
+  }
+
+  .conversionLegal {
+    justify-content: flex-start;
   }
 }

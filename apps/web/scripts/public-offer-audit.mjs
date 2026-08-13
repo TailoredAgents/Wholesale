@@ -134,7 +134,7 @@ async function checkMobileActionBar(page, viewport, expectedOfferHref, step) {
     return;
   }
   const call = bar.getByRole("link", { name: "Call" });
-  const offer = bar.getByRole("link", { name: "Get Offer" });
+  const offer = bar.getByRole("link", { name: "See My Options" });
   const measurements = await bar.evaluate((element) => {
     const barRect = element.getBoundingClientRect();
     const targets = [...element.querySelectorAll("a")].map((target) => {
@@ -528,6 +528,26 @@ async function auditJourney(browser, viewport) {
   await page.getByLabel("Property address").first().fill("123 Main St");
   await page.getByRole("button", { name: /Start My Offer|Get My Cash Offer/ }).first().click();
   await page.waitForURL(/\/get-a-cash-offer\?address=123\+Main\+St/);
+  if (await page.getByRole("navigation", { name: "Primary navigation" }).count()) {
+    record(viewport.name, "offer-shell", "The focused offer page still exposes primary navigation.");
+  }
+  const landingHome = page.getByRole("link", { name: "Stonegate Home Buyers home" });
+  if ((await landingHome.count()) !== 1 || (await landingHome.getAttribute("href")) !== "/") {
+    record(viewport.name, "offer-shell", "The focused offer page is missing its linked company logo.");
+  }
+  const landingPhone = page.locator('header a[href="tel:+16785417725"]');
+  if ((await landingPhone.count()) !== 1) {
+    record(viewport.name, "offer-shell", "The focused offer page is missing its tap-to-call header action.");
+  }
+  for (const [name, href] of [
+    ["Privacy Policy", "/privacy-policy"],
+    ["Terms & Conditions", "/terms"],
+  ]) {
+    const legalLink = page.getByRole("navigation", { name: "Legal information" }).getByRole("link", { name });
+    if ((await legalLink.count()) !== 1 || (await legalLink.getAttribute("href")) !== href) {
+      record(viewport.name, "offer-shell", `The focused offer page is missing ${name}.`);
+    }
+  }
   await checkMobileActionBar(
     page,
     viewport,
@@ -537,7 +557,7 @@ async function auditJourney(browser, viewport) {
   if (viewport.width <= 720) {
     await page
       .getByRole("navigation", { name: "Quick seller actions" })
-      .getByRole("link", { name: "Get Offer" })
+      .getByRole("link", { name: "See My Options" })
       .click();
   }
   if ((await page.locator("#property_address").inputValue()) !== "123 Main St") {
@@ -652,35 +672,29 @@ async function auditJourney(browser, viewport) {
   if (await page.locator("#sms_consent").isChecked()) {
     record(viewport.name, "sms-consent-default", "Optional SMS consent was checked by default.");
   }
-  for (const selector of ["#consent_to_contact", 'input[name="preferred_contact_method"][value="sms"]']) {
+  for (const selector of ["#consent_to_contact", 'input[name="preferred_contact_method"]']) {
     if (await page.locator(selector).count()) {
       record(viewport.name, "removed-consent-control", {
         selector,
-        message: "The website should use submission consent for phone/email and a separate optional SMS checkbox.",
+        message: "The website should use phone follow-up by default and a separate optional SMS checkbox.",
       });
     }
   }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="email"])')
-    .click();
   if (
     (await page.locator("#phone").getAttribute("required")) === null ||
-    (await page.locator("#email").getAttribute("required")) === null
+    (await page.locator("#email").getAttribute("required")) !== null
   ) {
     record(
       viewport.name,
-      "conditional-requirement",
-      "Phone did not remain required when email follow-up was selected.",
+      "contact-requirement",
+      "Phone must remain required while email remains optional.",
     );
   }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
-    .click();
   if (screenshotDirectory) {
     await page.screenshot({ fullPage: true, path: `${screenshotDirectory}/offer-contact-${viewport.name}.png` });
   }
 
-  await page.getByRole("button", { name: "Review My Selling Options" }).click();
+  await page.getByRole("button", { name: "Request My Options Review" }).click();
   if (!(await page.locator("#name-error").isVisible())) {
     record(viewport.name, "validation", "Contact step did not expose field errors.");
   }
@@ -690,32 +704,16 @@ async function auditJourney(browser, viewport) {
   ) {
     record(viewport.name, "validation", "Missing phone did not expose the required error.");
   }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="email"])')
-    .click();
-  if (
-    !(await page.locator("#phone-error").isVisible()) ||
-    (await page.locator("#email-error").count())
-  ) {
-    record(
-      viewport.name,
-      "conditional-requirement",
-      "Switching contact methods cleared the mandatory phone error or left an obsolete email error.",
-    );
-  }
-  await page
-    .locator('label:has(input[name="preferred_contact_method"][value="phone"])')
-    .click();
   await page.locator("#name").fill("Jane Seller");
   await page.locator("#phone").fill("404-555-0100");
   await checkFocusedControlClearance(
     page,
     viewport,
-    page.getByRole("button", { name: "Review My Selling Options" }),
+    page.getByRole("button", { name: "Request My Options Review" }),
     "offer-submit",
   );
   await page.waitForTimeout(20);
-  await page.getByRole("button", { name: "Review My Selling Options" }).click();
+  await page.getByRole("button", { name: "Request My Options Review" }).click();
   const recoverableError = page.getByText("Stonegate could not save the request yet. Please try again.");
   await recoverableError.waitFor();
   if ((await page.locator("#name").inputValue()) !== "Jane Seller") {
@@ -730,7 +728,7 @@ async function auditJourney(browser, viewport) {
   if ("sms_consent" in (storedDraft.values ?? {}) || "consent_to_contact" in (storedDraft.values ?? {})) {
     record(viewport.name, "consent-persistence", "Consent evidence was persisted in the browser draft.");
   }
-  await page.getByRole("button", { name: "Review My Selling Options" }).click();
+  await page.getByRole("button", { name: "Request My Options Review" }).click();
   const confirmationHeading = page.getByText("Thanks. Stonegate has your property request.");
   try {
     await confirmationHeading.waitFor({ timeout: 8_000 });

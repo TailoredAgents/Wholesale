@@ -32,8 +32,19 @@ test("cash-offer page stays static while preserving address-query restoration", 
   const page = read("src/app/get-a-cash-offer/page.tsx");
   const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
   assert.doesNotMatch(page, /searchParams/);
+  assert.match(page, /<PublicSiteHeader variant="conversion" \/>/);
+  assert.match(page, /<PublicSiteFooter variant="conversion" \/>/);
   assert.match(form, /window\.location\.search/);
   assert.match(form, /preferredAddress \|\| draft\.values\.property_address/);
+  assert.doesNotMatch(form, /name="preferred_contact_method"/);
+  assert.match(form, /preferred_contact_method: "phone"/);
+});
+
+test("standard public pages keep the full navigation shell", () => {
+  const homePage = read("src/app/page.tsx");
+  assert.match(homePage, /<PublicSiteHeader \/>/);
+  assert.match(homePage, /<PublicSiteFooter \/>/);
+  assert.doesNotMatch(homePage, /variant="conversion"/);
 });
 
 test("successful cash-offer submissions report one deduplicated Meta Lead", () => {
