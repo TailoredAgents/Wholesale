@@ -35,12 +35,16 @@ class VoiceLineUserRead(BaseModel):
     voice_forwarding_number: str | None
     voice_forwarding_enabled: bool
     lead_alert_sms_enabled: bool
+    inbound_message_alert_sms_enabled: bool
 
 
 class VoiceForwardingUpdate(BaseModel):
     voice_forwarding_number: str | None = Field(default=None, max_length=80)
     voice_forwarding_enabled: bool = False
     lead_alert_sms_enabled: bool = False
+    # Optional during the rollout so a briefly cached older Settings client cannot erase the
+    # migration-backfilled preference by omitting this newly introduced field.
+    inbound_message_alert_sms_enabled: bool | None = None
 
 
 class VoiceLineTeamRead(BaseModel):

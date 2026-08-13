@@ -253,7 +253,7 @@ def test_public_seller_intake_queues_source_independent_staff_alert(
     assert alert.message_body.startswith("New Website House lead:")
     assert process_next_staff_lead_alert(
         db_session,
-        Settings(STAFF_LEAD_ALERT_SMS_MODE="simulate"),
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
     ) == alert.id
     db_session.refresh(alert)
     assert alert.status == "simulated"
@@ -277,7 +277,7 @@ def test_staff_alert_worker_recovers_recent_unalerted_website_lead(
     db_session.commit()
     alert_id = process_next_staff_lead_alert(
         db_session,
-        Settings(STAFF_LEAD_ALERT_SMS_MODE="simulate"),
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
     )
 
     alert = db_session.get(StaffLeadAlert, alert_id)

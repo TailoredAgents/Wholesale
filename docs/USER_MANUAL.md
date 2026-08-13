@@ -942,6 +942,19 @@ Assignment, watchers, team membership, and mailbox grants determine who receives
 When an unanswered thread reaches the owner-escalation threshold, the Owner receives an alert.
 Replying or otherwise resolving the wait state clears the associated response alert.
 
+### Handle An Incoming Text
+
+An incoming seller or buyer text is saved in Inbox immediately and marks the thread unread and
+needing a reply. When the responsible employee has **Settings > Communications > Text inbound
+messages** enabled, Stonegate also texts that employee a minimal alert with an Inbox link. Open the
+link and reply from Stonegate; do not reply to the personal-phone alert.
+
+If Stonegate does not recognize the sender, an Acquisitions text creates a reviewable seller lead
+with **Address pending**, while a Dispositions text creates a reviewable buyer thread. Rename the
+contact and complete the missing information after confirming who sent it. Compliance keywords and
+texts from configured employee cellphones are ignored so they cannot create fake leads or alert
+loops.
+
 ### Send An Email In An Existing Thread
 
 1. Select the conversation.

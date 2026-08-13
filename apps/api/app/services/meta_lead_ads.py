@@ -586,10 +586,17 @@ def process_next_staff_lead_alert(
         logger.error(
             "staff_lead_alert_delivery_blocked",
             alert_id=str(alert.id),
-            event_id=str(alert.meta_lead_event_id),
+            event_id=(
+                str(alert.meta_lead_event_id)
+                if alert.meta_lead_event_id is not None
+                else None
+            ),
             source_type=alert.source_type,
             source_event_id=str(alert.source_event_id),
-            lead_id=str(alert.lead_id),
+            lead_id=str(alert.lead_id) if alert.lead_id is not None else None,
+            conversation_id=(
+                str(alert.conversation_id) if alert.conversation_id is not None else None
+            ),
             attempt_count=alert.attempt_count,
             blockers=list(settings.staff_lead_alert_configuration_blockers),
         )
@@ -604,15 +611,24 @@ def process_next_staff_lead_alert(
     try:
         result = delivery_provider.send(
             OutboundMessageRequest(
-                lead_id=str(alert.lead_id),
+                lead_id=str(alert.lead_id) if alert.lead_id is not None else None,
                 contact_id=str(alert.recipient_user_id),
                 channel="sms",
                 recipient=alert.recipient_phone,
                 body=alert.message_body,
                 idempotency_key=f"staff-lead-alert:{alert.id}",
                 metadata={
-                    "purpose": "staff_new_lead_alert",
+                    "purpose": (
+                        "staff_inbound_sms_alert"
+                        if alert.source_type == "inbound_sms"
+                        else "staff_new_lead_alert"
+                    ),
                     "source_type": alert.source_type,
+                    "conversation_id": (
+                        str(alert.conversation_id)
+                        if alert.conversation_id is not None
+                        else ""
+                    ),
                 },
             ),
             dry_run=settings.staff_lead_alert_sms_mode == "simulate",
@@ -632,10 +648,17 @@ def process_next_staff_lead_alert(
         logger.error(
             "staff_lead_alert_delivery_failed",
             alert_id=str(alert.id),
-            event_id=str(alert.meta_lead_event_id),
+            event_id=(
+                str(alert.meta_lead_event_id)
+                if alert.meta_lead_event_id is not None
+                else None
+            ),
             source_type=alert.source_type,
             source_event_id=str(alert.source_event_id),
-            lead_id=str(alert.lead_id),
+            lead_id=str(alert.lead_id) if alert.lead_id is not None else None,
+            conversation_id=(
+                str(alert.conversation_id) if alert.conversation_id is not None else None
+            ),
             status=alert.status,
             attempt_count=alert.attempt_count,
             next_attempt_at=(
@@ -656,10 +679,15 @@ def process_next_staff_lead_alert(
     logger.info(
         "staff_lead_alert_delivery_accepted",
         alert_id=str(alert.id),
-        event_id=str(alert.meta_lead_event_id),
+        event_id=(
+            str(alert.meta_lead_event_id) if alert.meta_lead_event_id is not None else None
+        ),
         source_type=alert.source_type,
         source_event_id=str(alert.source_event_id),
-        lead_id=str(alert.lead_id),
+        lead_id=str(alert.lead_id) if alert.lead_id is not None else None,
+        conversation_id=(
+            str(alert.conversation_id) if alert.conversation_id is not None else None
+        ),
         provider=alert.provider,
         provider_message_id=alert.provider_message_id,
         status=alert.status,
@@ -700,10 +728,15 @@ def update_staff_alert_delivery_status(
     log(
         "staff_lead_alert_delivery_status_updated",
         alert_id=str(alert.id),
-        event_id=str(alert.meta_lead_event_id),
+        event_id=(
+            str(alert.meta_lead_event_id) if alert.meta_lead_event_id is not None else None
+        ),
         source_type=alert.source_type,
         source_event_id=str(alert.source_event_id),
-        lead_id=str(alert.lead_id),
+        lead_id=str(alert.lead_id) if alert.lead_id is not None else None,
+        conversation_id=(
+            str(alert.conversation_id) if alert.conversation_id is not None else None
+        ),
         provider_message_id=message_sid,
         status=message_status,
         error_code=error_code,

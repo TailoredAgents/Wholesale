@@ -40,11 +40,16 @@ from app.services.communication_compliance import (
     format_e164,
     phone_lookup_values,
 )
+from app.services.inbound_contacts import create_unknown_inbound_sms_conversation
 from app.services.inbox import get_scoped_conversation, update_conversation_activity
 from app.services.lead_lifecycle import (
     LeadLifecycleConflictError,
     lock_organization_lead,
     require_lead_open_for_work,
+)
+from app.services.staff_lead_alerts import (
+    is_staff_cellphone,
+    queue_staff_inbound_sms_alert,
 )
 
 STOP_WORDS = {"cancel", "end", "quit", "stop", "stopall", "unsubscribe"}
@@ -396,17 +401,27 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     sender = required_twilio_value(payload, "From")
     recipient = required_twilio_value(payload, "To")
     body = payload.get("Body", "").strip()
+    opt_out_type = classify_opt_out(payload, body)
     sender_line = find_sms_line_by_number(db, organization.id, recipient)
     conversation_type = (
         "buyer"
         if sender_line is not None and sender_line.purpose_key == "buyer_relations"
         else "lead"
     )
-    conversation = find_conversation_by_phone(
+    staff_sender = is_staff_cellphone(
         db,
-        organization.id,
-        sender,
-        conversation_type=conversation_type,
+        organization_id=organization.id,
+        phone_number=sender,
+    )
+    conversation = (
+        None
+        if staff_sender
+        else find_conversation_by_phone(
+            db,
+            organization.id,
+            sender,
+            conversation_type=conversation_type,
+        )
     )
     event = CommunicationProviderEvent(
         organization_id=organization.id,
@@ -422,11 +437,28 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
     )
     db.add(event)
     db.flush()
-    if conversation is None:
-        event.processing_status = "unmatched"
+    if staff_sender:
+        event.processing_status = "ignored_staff_sender"
         event.processed_at = datetime.now(UTC)
         db.commit()
         return event.processing_status
+    if conversation is None:
+        if sender_line is None:
+            event.processing_status = "unmatched"
+            event.processed_at = datetime.now(UTC)
+            db.commit()
+            return event.processing_status
+        if opt_out_type in {"STOP", "START", "HELP"}:
+            event.processing_status = "ignored_compliance_keyword"
+            event.processed_at = datetime.now(UTC)
+            db.commit()
+            return event.processing_status
+        conversation = create_unknown_inbound_sms_conversation(
+            db,
+            line=sender_line,
+            sender=sender,
+        )
+        event.conversation_id = conversation.id
 
     lead = db.get(Lead, conversation.lead_id) if conversation.lead_id is not None else None
     contact = db.get(Contact, conversation.contact_id)
@@ -434,7 +466,6 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
         raise RuntimeError("Matched Twilio seller conversation is missing lead context.")
     if contact is None:
         raise RuntimeError("Matched Twilio conversation is missing contact context.")
-    opt_out_type = classify_opt_out(payload, body)
     occurred_at = datetime.now(UTC)
     communication = CommunicationRecord(
         organization_id=organization.id,
@@ -465,6 +496,7 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
         },
     )
     db.add(communication)
+    db.flush()
     update_conversation_activity(
         conversation,
         direction="inbound",
@@ -497,6 +529,14 @@ def process_twilio_inbound(db: Session, payload: dict[str, str]) -> str:
             ),
         )
     )
+    if opt_out_type not in {"STOP", "START", "HELP"}:
+        queue_staff_inbound_sms_alert(
+            db,
+            communication=communication,
+            conversation=conversation,
+            sender_line=sender_line,
+            sender_phone=sender,
+        )
     event.processing_status = "processed"
     event.processed_at = datetime.now(UTC)
     db.commit()

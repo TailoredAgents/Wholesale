@@ -800,6 +800,7 @@ button provides the number-level inbound webhook without exposing credentials.
 | Staff cellphone | Stores an employee's private forwarding destination | Enter in `+1...` format; never shown to sellers or buyers |
 | Ring cellphone | Adds that cellphone to the company line's forwarding group | Requires a valid cellphone; answering requires pressing 1 |
 | Text new leads | Opts that employee into internal SMS alerts for new seller leads from the website, Facebook forms, and supported future intake sources | Requires a saved personal cellphone and live staff-alert provider readiness |
+| Text inbound messages | Opts that employee into internal SMS alerts when a seller or buyer texts a Stonegate line | Requires a saved personal cellphone; alerts route to the conversation owner first, then the company line's primary and fallback owners |
 | Phone number | Registers a company-owned Twilio number in Stonegate | Must already belong to the company Twilio account |
 | Department | Identifies the line as Acquisitions, Dispositions, or Company general | Automatically sets the matching seller, buyer, or general purpose |
 | Primary owner | Sets the first responsible employee for an unowned or directly routed call | Must be an active Stonegate user |

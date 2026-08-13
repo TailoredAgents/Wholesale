@@ -985,6 +985,14 @@ should receive them:
    `delivered`. The alert contains the seller name, market, and a Stonegate lead link, but excludes
    the seller's phone number and street address.
 
+**Text inbound messages** is a separate employee preference that uses the same live Twilio staff
+alert delivery mode. For each seller or buyer text, Stonegate sends one internal alert to the first
+eligible responsible employee: the conversation owner, the company line's primary/team owner, the
+line fallback, then an organization owner. The alert identifies the contact and links to Inbox but
+does not copy the customer's message onto a personal phone. A previously unknown number creates a
+reviewable seller lead on Acquisitions or buyer thread on Dispositions; STOP, START, HELP, and
+messages from configured staff cellphones do not create records or notification loops.
+
 Production forbids staff-alert `simulate` mode. Disabling alerts never disables Meta lead
 ingestion. When the use case is approved and the controlled delivery test is ready,
 `STAFF_LEAD_ALERT_SMS_MODE=live` must be present on both the API and worker.
@@ -1004,6 +1012,11 @@ administrator with `communications:manage_voice_lines` can also use the audited 
 `POST /api/v1/voice/staff-lead-alerts/{meta_lead_event_id}/requeue` after correcting the cause. A
 meaningful reason is required, current employee opt-in is rechecked, and queued, sent, or delivered
 alerts cannot be resent through that endpoint.
+
+Inbound-message readiness is reported independently as
+`staff_inbound_message_alert_readiness_failed`; queue decisions are logged as
+`staff_inbound_sms_alert_queue_evaluated`. Correct the **Text inbound messages** preference or
+cellphone when that route has no eligible recipient.
 
 If a worker log contains `meta_lead_ads` for a lead but no `staff_lead_alerts`, first find the
 matching `staff_lead_alert_queue_evaluated` event. If `ready_recipients=0`, correct the employee's

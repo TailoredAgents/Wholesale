@@ -1430,6 +1430,7 @@ telemarketing, recording, or real-estate advice.
 | Meta Pixel and Conversions API | Browser/server ad conversions | Implemented | Active; controlled browser/server acceptance passed |
 | Zapier + Meta Lead Ads | Facebook instant-form CRM intake | Implemented intentionally secretless endpoint with Page/form restrictions, burst and daily circuits, payload limits, deduplication, attribution, audit payloads, and retries | Controlled ingestion passed; residual caller-provenance risk is monitored |
 | Twilio staff lead alerts | Internal new-lead notification | Implemented with per-employee opt-in and delivery callbacks | Prior controlled delivery exists; repeat acceptance is pending after the worker credential correction |
+| Twilio inbound-message staff alerts | Assigned-owner/fallback cellphone notification with Inbox link; unknown seller/buyer sender capture and loop protection | Implemented with independent per-employee opt-in, durable deduplication, retries, and delivery callbacks | Controlled production acceptance pending |
 
 ## 21. Data Domain Map
 

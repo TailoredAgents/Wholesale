@@ -22,7 +22,6 @@ from app.services.lead_manager import process_next_escalation
 from app.services.mailbox_notifications import process_next_mailbox_notification
 from app.services.marketing import process_next_marketing_conversion
 from app.services.meta_lead_ads import (
-    eligible_staff_alert_recipients,
     process_next_meta_address_enrichment,
     process_next_meta_lead_event,
     process_next_staff_lead_alert,
@@ -45,6 +44,10 @@ from app.services.property_intelligence import (
 from app.services.resend_email_events import (
     process_next_resend_event,
     recover_next_received_email,
+)
+from app.services.staff_lead_alerts import (
+    eligible_staff_alert_recipients,
+    eligible_staff_inbound_message_alert_recipients,
 )
 from app.services.voice import purge_next_expired_recording
 
@@ -99,6 +102,10 @@ def run_worker(stop_event: threading.Event) -> None:
     with SessionLocal() as db:
         register_worker(db)
         _recipients, staff_alert_recipients = eligible_staff_alert_recipients(db)
+        (
+            _inbound_recipients,
+            inbound_message_alert_recipients,
+        ) = eligible_staff_inbound_message_alert_recipients(db)
     staff_alert_blockers = list(settings.staff_lead_alert_configuration_blockers)
     logger.info(
         "worker_started",
@@ -112,6 +119,18 @@ def run_worker(stop_event: threading.Event) -> None:
         staff_lead_alert_ready_recipients=staff_alert_recipients.ready,
         staff_lead_alert_recipients_missing_phone=staff_alert_recipients.missing_phone,
         staff_lead_alert_recipients_with_invalid_phone=staff_alert_recipients.invalid_phone,
+        staff_inbound_message_alert_active_opted_in_recipients=(
+            inbound_message_alert_recipients.active_opted_in
+        ),
+        staff_inbound_message_alert_ready_recipients=(
+            inbound_message_alert_recipients.ready
+        ),
+        staff_inbound_message_alert_recipients_missing_phone=(
+            inbound_message_alert_recipients.missing_phone
+        ),
+        staff_inbound_message_alert_recipients_with_invalid_phone=(
+            inbound_message_alert_recipients.invalid_phone
+        ),
     )
     if staff_alert_blockers or not staff_alert_recipients.ready:
         logger.warning(
@@ -123,6 +142,17 @@ def run_worker(stop_event: threading.Event) -> None:
             ready_recipients=staff_alert_recipients.ready,
             recipients_missing_phone=staff_alert_recipients.missing_phone,
             recipients_with_invalid_phone=staff_alert_recipients.invalid_phone,
+        )
+    if staff_alert_blockers or not inbound_message_alert_recipients.ready:
+        logger.warning(
+            "staff_inbound_message_alert_readiness_failed",
+            mode=settings.staff_lead_alert_sms_mode,
+            configured=not staff_alert_blockers,
+            blockers=staff_alert_blockers,
+            active_opted_in_recipients=inbound_message_alert_recipients.active_opted_in,
+            ready_recipients=inbound_message_alert_recipients.ready,
+            recipients_missing_phone=inbound_message_alert_recipients.missing_phone,
+            recipients_with_invalid_phone=inbound_message_alert_recipients.invalid_phone,
         )
     heartbeat_thread = threading.Thread(
         target=run_heartbeat,

@@ -161,6 +161,7 @@ def list_voice_line_users(db: Session, principal: Principal) -> list[VoiceLineUs
             voice_forwarding_number=user.voice_forwarding_number,
             voice_forwarding_enabled=user.voice_forwarding_enabled,
             lead_alert_sms_enabled=user.lead_alert_sms_enabled,
+            inbound_message_alert_sms_enabled=user.inbound_message_alert_sms_enabled,
         )
         for user in users
     ]
@@ -190,6 +191,13 @@ def update_user_voice_forwarding(
         raise ValueError("Enter a cellphone number before enabling forwarding.")
     if payload.lead_alert_sms_enabled and formatted is None:
         raise ValueError("Enter a cellphone number before enabling new-lead text alerts.")
+    inbound_message_alert_sms_enabled = (
+        user.inbound_message_alert_sms_enabled
+        if payload.inbound_message_alert_sms_enabled is None
+        else payload.inbound_message_alert_sms_enabled
+    )
+    if inbound_message_alert_sms_enabled and formatted is None:
+        raise ValueError("Enter a cellphone number before enabling inbound-message text alerts.")
     company_line = (
         db.scalar(
             select(VoiceLine.id).where(
@@ -206,10 +214,12 @@ def update_user_voice_forwarding(
         "voice_forwarding_number": user.voice_forwarding_number,
         "voice_forwarding_enabled": user.voice_forwarding_enabled,
         "lead_alert_sms_enabled": user.lead_alert_sms_enabled,
+        "inbound_message_alert_sms_enabled": user.inbound_message_alert_sms_enabled,
     }
     user.voice_forwarding_number = formatted
     user.voice_forwarding_enabled = payload.voice_forwarding_enabled
     user.lead_alert_sms_enabled = payload.lead_alert_sms_enabled
+    user.inbound_message_alert_sms_enabled = inbound_message_alert_sms_enabled
     db.add(
         AuditEvent(
             organization_id=principal.organization_id,
@@ -223,8 +233,9 @@ def update_user_voice_forwarding(
                 "voice_forwarding_number": formatted,
                 "voice_forwarding_enabled": payload.voice_forwarding_enabled,
                 "lead_alert_sms_enabled": payload.lead_alert_sms_enabled,
+                "inbound_message_alert_sms_enabled": inbound_message_alert_sms_enabled,
             },
-            reason="Updated staff call destination and operational lead-alert preference",
+            reason="Updated staff call destination and operational text-alert preferences",
         )
     )
     db.commit()
@@ -235,6 +246,7 @@ def update_user_voice_forwarding(
         voice_forwarding_number=user.voice_forwarding_number,
         voice_forwarding_enabled=user.voice_forwarding_enabled,
         lead_alert_sms_enabled=user.lead_alert_sms_enabled,
+        inbound_message_alert_sms_enabled=user.inbound_message_alert_sms_enabled,
     )
 
 

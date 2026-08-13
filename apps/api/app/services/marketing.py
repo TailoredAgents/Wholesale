@@ -1037,7 +1037,10 @@ def get_measurement_summary(
     ).all()
     staff_alert_rows = db.execute(
         select(StaffLeadAlert.status, func.count(StaffLeadAlert.id))
-        .where(StaffLeadAlert.organization_id == principal.organization_id)
+        .where(
+            StaffLeadAlert.organization_id == principal.organization_id,
+            StaffLeadAlert.source_type != "inbound_sms",
+        )
         .group_by(StaffLeadAlert.status)
     ).all()
     event_counts = {

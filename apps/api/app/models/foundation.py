@@ -61,6 +61,12 @@ class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
         default=False,
         server_default="false",
     )
+    inbound_message_alert_sms_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
 
 
 class Role(UuidPrimaryKeyMixin, TimestampMixin, Base):
@@ -5187,7 +5193,18 @@ class StaffLeadAlert(UuidPrimaryKeyMixin, TimestampMixin, Base):
     )
     source_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     source_event_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
-    lead_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("leads.id"), index=True)
+    lead_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("leads.id"),
+        index=True,
+        nullable=True,
+    )
+    conversation_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("conversations.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
     recipient_user_id: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), index=True)
     recipient_phone: Mapped[str] = mapped_column(String(40), nullable=False)
     message_body: Mapped[str] = mapped_column(String(1000), nullable=False)

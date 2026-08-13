@@ -2,6 +2,7 @@ from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import cast
 from urllib.parse import urlencode
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.integrations.communications import (
     OutboundMessageRequest,
     OutboundMessageResult,
@@ -19,17 +20,21 @@ from app.integrations.communications import (
 from app.integrations.twilio_messaging import TwilioMessagingProvider
 from app.main import app
 from app.models.foundation import (
+    Buyer,
     CommunicationDispatch,
     CommunicationProviderEvent,
     CommunicationRecord,
     ConsentRecord,
     Contact,
     Conversation,
+    Lead,
+    StaffLeadAlert,
     SuppressionRecord,
     User,
     VoiceLine,
 )
 from app.services.bootstrap import bootstrap_foundation
+from app.services.meta_lead_ads import process_next_staff_lead_alert
 
 OWNER_EMAIL = "owner@example.com"
 AUTH_TOKEN = "test-auth-token"
@@ -61,6 +66,29 @@ class FakeTwilioProvider:
                 "status": "queued",
                 "to": request.recipient,
             },
+        )
+
+
+class CapturingStaffAlertProvider:
+    provider_name = "twilio"
+
+    def __init__(self) -> None:
+        self.requests: list[OutboundMessageRequest] = []
+        self.dry_runs: list[bool] = []
+
+    def send(
+        self,
+        request: OutboundMessageRequest,
+        *,
+        dry_run: bool = True,
+    ) -> OutboundMessageResult:
+        self.requests.append(request)
+        self.dry_runs.append(dry_run)
+        return OutboundMessageResult(
+            provider="twilio",
+            provider_message_id="SM00000000000000000000000000000999",
+            status="queued",
+            raw_payload={"status": "queued"},
         )
 
 
@@ -137,6 +165,42 @@ def seed_consent_lead(db: Session, client: TestClient) -> Conversation:
     conversation = db.scalar(select(Conversation))
     assert conversation is not None
     return conversation
+
+
+def add_voice_line(
+    db: Session,
+    *,
+    organization_id: UUID,
+    phone_number: str,
+    assigned_user_id: UUID | None = None,
+    fallback_user_id: UUID | None = None,
+    purpose_key: str = "seller_conversations",
+) -> VoiceLine:
+    buyer_line = purpose_key == "buyer_relations"
+    line = VoiceLine(
+        organization_id=organization_id,
+        assigned_user_id=assigned_user_id,
+        fallback_user_id=fallback_user_id,
+        assigned_team_id=None,
+        provider="twilio",
+        provider_phone_number_id=None,
+        phone_number=phone_number,
+        label="Stonegate Dispositions" if buyer_line else "Stonegate Acquisitions",
+        department_key="dispositions" if buyer_line else "acquisitions",
+        purpose_key=purpose_key,
+        status="active",
+        is_default=not buyer_line,
+        inbound_route="assigned_user",
+        ring_strategy="simultaneous",
+        coverage_timezone="America/New_York",
+        coverage_start_hour=0,
+        coverage_end_hour=24,
+        missed_call_action="fallback_then_voicemail",
+        line_metadata={"source": "test"},
+    )
+    db.add(line)
+    db.flush()
+    return line
 
 
 def signed_twilio_headers(path: str, payload: dict[str, str]) -> dict[str, str]:
@@ -399,6 +463,12 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
 ) -> None:
     client = TestClient(app)
     conversation = seed_consent_lead(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.inbound_message_alert_sms_enabled = True
+    conversation.assigned_user_id = owner.id
+    db_session.commit()
     inbound_path = "/api/v1/webhooks/twilio/messaging/incoming"
     base_payload = {
         "From": "+14045551212",
@@ -424,6 +494,23 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
         )
         == 1
     )
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == base_payload["MessageSid"]
+        )
+    )
+    alerts = db_session.scalars(select(StaffLeadAlert)).all()
+    assert communication is not None
+    assert len(alerts) == 1
+    alert = alerts[0]
+    assert alert.source_type == "inbound_sms"
+    assert alert.source_event_id == communication.id
+    assert alert.lead_id == conversation.lead_id
+    assert alert.conversation_id == conversation.id
+    assert alert.recipient_user_id == owner.id
+    assert alert.recipient_phone == "+14045550123"
+    assert "I can talk tomorrow" not in alert.message_body
+    assert f"conversation={conversation.id}" in alert.message_body
     db_session.expire_all()
     updated_conversation = db_session.get(Conversation, conversation.id)
     assert updated_conversation is not None
@@ -463,9 +550,10 @@ def test_inbound_sms_is_validated_idempotent_and_updates_opt_out_state(
     )
     assert latest_consent is not None
     assert latest_consent.status == "granted"
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
 
 
-def test_dispositions_number_does_not_attach_buyer_sms_to_seller_conversation(
+def test_unknown_dispositions_sms_creates_reviewable_buyer_conversation(
     db_session: Session,
     api_db_override: None,
     twilio_settings: None,
@@ -516,15 +604,301 @@ def test_dispositions_number_does_not_attach_buyer_sms_to_seller_conversation(
         )
     )
     assert event is not None
-    assert event.processing_status == "unmatched"
-    assert (
-        db_session.scalar(
-            select(CommunicationRecord).where(
-                CommunicationRecord.provider_message_id == "SM00000000000000000000000000000012"
-            )
+    assert event.processing_status == "processed"
+    communication = db_session.scalar(
+        select(CommunicationRecord).where(
+            CommunicationRecord.provider_message_id == "SM00000000000000000000000000000012"
         )
-        is None
     )
+    buyer_conversation = db_session.scalar(
+        select(Conversation).where(Conversation.conversation_type == "buyer")
+    )
+    buyer = db_session.scalar(select(Buyer))
+    assert communication is not None
+    assert buyer_conversation is not None
+    assert buyer is not None
+    assert communication.conversation_id == buyer_conversation.id
+    assert communication.lead_id is None
+    assert buyer_conversation.lead_id is None
+    assert buyer_conversation.conversation_metadata is not None
+    assert buyer_conversation.conversation_metadata["unknown_sender_review_required"] is True
+    assert conversation.id != buyer_conversation.id
+
+
+def test_inbound_sms_alert_falls_back_when_conversation_owner_is_not_opted_in(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.inbound_message_alert_sms_enabled = False
+    fallback = User(
+        organization_id=conversation.organization_id,
+        email="fallback@example.com",
+        display_name="Fallback",
+        is_active=True,
+        voice_forwarding_number="+14045550124",
+        voice_forwarding_enabled=True,
+        lead_alert_sms_enabled=False,
+        inbound_message_alert_sms_enabled=True,
+    )
+    db_session.add(fallback)
+    db_session.flush()
+    conversation.assigned_user_id = owner.id
+    line = add_voice_line(
+        db_session,
+        organization_id=conversation.organization_id,
+        phone_number="+14045550009",
+        assigned_user_id=owner.id,
+        fallback_user_id=fallback.id,
+    )
+    db_session.commit()
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        {
+            "From": "+14045551212",
+            "To": line.phone_number,
+            "Body": "Please call me this afternoon.",
+            "MessageSid": "SM00000000000000000000000000000112",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    assert alert.recipient_user_id == fallback.id
+    assert alert.recipient_phone == "+14045550124"
+
+
+def test_unknown_acquisitions_sms_creates_reviewable_seller_lead_once(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    result = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = result.admin_user
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.inbound_message_alert_sms_enabled = True
+    line = add_voice_line(
+        db_session,
+        organization_id=result.organization.id,
+        phone_number="+14045550010",
+        assigned_user_id=owner.id,
+    )
+    db_session.commit()
+    payload = {
+        "From": "+14045559876",
+        "To": line.phone_number,
+        "Body": "I would like to discuss selling my house.",
+        "MessageSid": "SM00000000000000000000000000000113",
+    }
+
+    first = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+    duplicate = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        payload,
+    )
+
+    assert first.status_code == 200, first.text
+    assert duplicate.status_code == 200, duplicate.text
+    lead = db_session.scalar(select(Lead))
+    conversation = db_session.scalar(select(Conversation))
+    contact = db_session.scalar(select(Contact))
+    communication = db_session.scalar(select(CommunicationRecord))
+    consent = db_session.scalar(select(ConsentRecord))
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert lead is not None
+    assert lead.source == "inbound_sms"
+    assert conversation is not None
+    assert conversation.lead_id == lead.id
+    assert conversation.conversation_type == "lead"
+    assert conversation.conversation_metadata is not None
+    assert conversation.conversation_metadata["unknown_sender_review_required"] is True
+    assert contact is not None
+    assert contact.contact_type == "seller"
+    assert communication is not None
+    assert communication.conversation_id == conversation.id
+    assert communication.lead_id == lead.id
+    assert consent is not None
+    assert consent.source == "inbound_sms"
+    assert alert is not None
+    assert alert.conversation_id == conversation.id
+    assert alert.recipient_user_id == owner.id
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 1
+
+
+@pytest.mark.parametrize(
+    ("keyword", "opt_out_type"),
+    [("STOP", "STOP"), ("START", "START"), ("HELP", "HELP")],
+)
+def test_unknown_compliance_keyword_does_not_create_contact_or_lead(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+    keyword: str,
+    opt_out_type: str,
+) -> None:
+    client = TestClient(app)
+    result = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    line = add_voice_line(
+        db_session,
+        organization_id=result.organization.id,
+        phone_number="+14045550011",
+        assigned_user_id=result.admin_user.id if result.admin_user else None,
+    )
+    db_session.commit()
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        {
+            "From": "+14045559877",
+            "To": line.phone_number,
+            "Body": keyword,
+            "OptOutType": opt_out_type,
+            "MessageSid": f"SM00000000000000000000000000000{len(keyword):03d}",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    event = db_session.scalar(select(CommunicationProviderEvent))
+    assert event is not None
+    assert event.processing_status == "ignored_compliance_keyword"
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Buyer)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(Conversation)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 0
+
+
+def test_staff_cellphone_texting_company_line_is_ignored_to_prevent_alert_loop(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_consent_lead(db_session, client)
+    owner = db_session.scalar(select(User).where(User.email == OWNER_EMAIL))
+    assert owner is not None
+    # This number already matches the seeded seller conversation. Staff identity must take
+    # precedence so replying to an operational alert can never feed back into that thread.
+    owner.voice_forwarding_number = "+14045551212"
+    owner.inbound_message_alert_sms_enabled = True
+    line = add_voice_line(
+        db_session,
+        organization_id=conversation.organization_id,
+        phone_number="+14045550012",
+        assigned_user_id=owner.id,
+    )
+    db_session.commit()
+
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        {
+            "From": owner.voice_forwarding_number,
+            "To": line.phone_number,
+            "Body": "Replying from my personal phone should not create a seller.",
+            "MessageSid": "SM00000000000000000000000000000114",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    event = db_session.scalar(select(CommunicationProviderEvent))
+    assert event is not None
+    assert event.processing_status == "ignored_staff_sender"
+    assert int(db_session.scalar(select(func.count()).select_from(Contact)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(Lead)) or 0) == 1
+    assert int(db_session.scalar(select(func.count()).select_from(CommunicationRecord)) or 0) == 0
+    assert int(db_session.scalar(select(func.count()).select_from(StaffLeadAlert)) or 0) == 0
+    db_session.refresh(conversation)
+    assert conversation.unread_count == 0
+
+
+def test_inbound_buyer_sms_alert_delivery_supports_nullable_lead_context(
+    db_session: Session,
+    api_db_override: None,
+    twilio_settings: None,
+) -> None:
+    client = TestClient(app)
+    result = bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    owner = result.admin_user
+    assert owner is not None
+    owner.voice_forwarding_number = "+14045550123"
+    owner.inbound_message_alert_sms_enabled = True
+    line = add_voice_line(
+        db_session,
+        organization_id=result.organization.id,
+        phone_number="+14045550013",
+        assigned_user_id=owner.id,
+        purpose_key="buyer_relations",
+    )
+    db_session.commit()
+    response = post_signed_twilio(
+        client,
+        "/api/v1/webhooks/twilio/messaging/incoming",
+        {
+            "From": "+14045559878",
+            "To": line.phone_number,
+            "Body": "Please add me to your cash buyer list.",
+            "MessageSid": "SM00000000000000000000000000000115",
+        },
+    )
+    assert response.status_code == 200, response.text
+    alert = db_session.scalar(select(StaffLeadAlert))
+    assert alert is not None
+    assert alert.lead_id is None
+    assert alert.conversation_id is not None
+    provider = CapturingStaffAlertProvider()
+
+    processed_id = process_next_staff_lead_alert(
+        db_session,
+        Settings.model_validate({"STAFF_LEAD_ALERT_SMS_MODE": "simulate"}),
+        provider,
+    )
+
+    assert processed_id == alert.id
+    assert provider.dry_runs == [True]
+    assert len(provider.requests) == 1
+    request = provider.requests[0]
+    assert request.lead_id is None
+    assert request.metadata["purpose"] == "staff_inbound_sms_alert"
+    assert request.metadata["source_type"] == "inbound_sms"
+    assert request.metadata["conversation_id"] == str(alert.conversation_id)
+    db_session.refresh(alert)
+    assert alert.status == "simulated"
 
 
 def test_twilio_webhooks_reject_invalid_signatures_and_services(

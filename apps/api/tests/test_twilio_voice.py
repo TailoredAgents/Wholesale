@@ -193,6 +193,70 @@ def test_sms_and_voice_contact_hours_are_independent(monkeypatch: MonkeyPatch) -
     get_settings.cache_clear()
 
 
+def test_staff_text_alert_preferences_are_independent_and_audited(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    seed_voice_lead(db_session, client)
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+    line_payload = client.get("/api/v1/voice/lines", headers=headers).json()
+    owner = next(user for user in line_payload["users"] if user["email"] == OWNER_EMAIL)
+    assert owner["inbound_message_alert_sms_enabled"] is False
+
+    response = client.patch(
+        f"/api/v1/voice/users/{owner['id']}/forwarding",
+        headers=headers,
+        json={
+            "voice_forwarding_number": "+14045550100",
+            "voice_forwarding_enabled": True,
+            "lead_alert_sms_enabled": False,
+            "inbound_message_alert_sms_enabled": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["lead_alert_sms_enabled"] is False
+    assert response.json()["inbound_message_alert_sms_enabled"] is True
+    audit = db_session.scalar(
+        select(AuditEvent)
+        .where(AuditEvent.action == "communication.voice_forwarding_update")
+        .order_by(AuditEvent.created_at.desc())
+    )
+    assert audit is not None
+    assert audit.new_value is not None
+    assert audit.previous_value is not None
+    assert audit.previous_value["inbound_message_alert_sms_enabled"] is False
+    assert audit.new_value["lead_alert_sms_enabled"] is False
+    assert audit.new_value["inbound_message_alert_sms_enabled"] is True
+
+    legacy_client_update = client.patch(
+        f"/api/v1/voice/users/{owner['id']}/forwarding",
+        headers=headers,
+        json={
+            "voice_forwarding_number": "+14045550100",
+            "voice_forwarding_enabled": True,
+            "lead_alert_sms_enabled": False,
+        },
+    )
+    assert legacy_client_update.status_code == 200, legacy_client_update.text
+    assert legacy_client_update.json()["inbound_message_alert_sms_enabled"] is True
+
+    missing_cellphone = client.patch(
+        f"/api/v1/voice/users/{owner['id']}/forwarding",
+        headers=headers,
+        json={
+            "voice_forwarding_number": None,
+            "voice_forwarding_enabled": False,
+            "lead_alert_sms_enabled": False,
+            "inbound_message_alert_sms_enabled": True,
+        },
+    )
+    assert missing_cellphone.status_code == 422
+    assert "cellphone" in missing_cellphone.json()["detail"].lower()
+
+
 def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     db_session: Session,
     api_db_override: None,
