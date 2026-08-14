@@ -20,14 +20,15 @@ export default function GetCashOfferPage() {
       <PublicConversionTracker metadata={{ page: "cash_offer" }} />
       <PublicSiteHeader variant="conversion" />
       <section className={styles.hero}>
-        <div className={styles.copy}>
-          <p className={styles.eyebrow}>No-pressure property review</p>
-          <h1>Let&apos;s find the selling option that fits your situation.</h1>
-          <p>
-            Tell us a little about your Georgia property. We&apos;ll review the property, learn what
-            matters most to you, and walk you through the options that may fit&mdash;from a quick,
-            as-is sale to other ways of selling. No pressure. No obligation.
-          </p>
+        <div className={styles.leftRail}>
+          <div className={styles.copy}>
+            <p className={styles.eyebrow}>No-pressure property review</p>
+            <h1>Let&apos;s find the selling option that fits your situation.</h1>
+            <p>
+              Tell us about your Georgia property. We&apos;ll review it, learn what matters most, and
+              explain the selling options that may fit. No pressure. No obligation.
+            </p>
+          </div>
           <div className={styles.trustStack}>
             {[
               ["Start as-is", "No repairs, cleaning, or staging are needed."],

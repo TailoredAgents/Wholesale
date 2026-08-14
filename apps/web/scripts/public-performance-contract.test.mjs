@@ -59,6 +59,34 @@ test("successful cash-offer submissions report one deduplicated Meta Lead", () =
   );
 });
 
+test("seller intake does not wait on optional experiment tracking", () => {
+  const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const conversions = read("src/app/lib/conversion-events.ts");
+  assert.doesNotMatch(form, /await getConversionExperimentContext\(apiBaseUrl\)/);
+  assert.match(form, /experimentContextRef\.current/);
+  assert.doesNotMatch(form, /getStoredConversionExperimentContext\(\)/);
+  assert.match(conversions, /experimentRequestTimeoutMs/);
+  assert.doesNotMatch(conversions, /latestStoredExperiment/);
+});
+
+test("cash-offer address autocomplete remains optional and mobile-first", () => {
+  const form = read("src/app/get-a-cash-offer/cash-offer-form.tsx");
+  const address = read("src/app/get-a-cash-offer/property-address-field.tsx");
+  const page = read("src/app/get-a-cash-offer/page.tsx");
+  const styles = read("src/app/get-a-cash-offer/page.module.css");
+  assert.match(form, /<PropertyAddressField/);
+  assert.match(address, /\/api\/v1\/public\/address-suggestions/);
+  assert.match(address, /Enter address manually/);
+  assert.match(address, /role="combobox"/);
+  assert.match(address, /role="listbox"/);
+  assert.match(address, /activeIndex >= 0 \? activeIndex : 0/);
+  assert.match(address, /styles\.manualAddressCollapsed/);
+  assert.match(address, /onPointerDownCapture/);
+  assert.match(page, /className={styles\.leftRail}/);
+  assert.match(styles, /\.leftRail\s*{[^}]*display:\s*contents;/s);
+  assert.match(styles, /\.form,\s*\.confirmation\s*{[^}]*order:\s*2;/s);
+});
+
 test("public images expose right-sized responsive candidates", () => {
   assert.match(read("src/app/stonegate-logo.tsx"), /sizes="44px"/);
   const nextConfig = read("next.config.ts");

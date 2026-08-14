@@ -1,6 +1,6 @@
 # Stonegate Public Site Conversion Roadmap
 
-Last updated: August 13, 2026
+Last updated: August 14, 2026
 
 ## Purpose
 
@@ -78,7 +78,11 @@ Status: **Implemented**. Branded production verification follows the Render depl
   submission; the token can add optional context to that lead but cannot read or edit other data.
 - Preserve draft recovery, duplicate handling, validation, attribution, failure recovery, and
   versioned phone/email and optional SMS consent evidence.
-- Preserve direct address entry so intake never depends on a third-party address provider.
+- Offer RealEstateAPI property-address suggestions that fill city, state, and ZIP from one selection.
+- Preserve direct manual address entry so intake never depends on a third-party provider, and retain
+  the returned state instead of silently labeling every property as Georgia.
+- Keep the complete address controls mounted and reveal them when the address field is engaged so
+  browser-saved addresses can still populate city, state, and ZIP.
 
 ### Exit Criteria
 
@@ -94,6 +98,9 @@ Status: **Implemented**. Branded production verification follows the Render depl
 ### Work
 
 - Add a compact mobile action bar with **Call** and **See My Options** actions.
+- Put the short promise and form before the supporting trust rows on narrow screens so paid social
+  visitors reach the first field sooner without removing the proof points.
+- Use 16-pixel mobile form controls, a compact progress header, and readable consent text.
 - Keep actions available while scrolling without covering forms, consent language, errors, legal
   text, or the operating-system Help bubble.
 - Improve mobile menu and tap-target behavior.

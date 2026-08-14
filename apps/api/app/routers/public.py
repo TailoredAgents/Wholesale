@@ -1,14 +1,17 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.core.database import get_db
+from app.integrations.realestateapi_client import RealEstateAPIClient, RealEstateAPIError
 from app.schemas.marketing_experiments import PublicExperimentResponse
 from app.schemas.public_intake import (
     ConversionEventCreate,
     ConversionEventResponse,
+    PublicAddressSuggestion,
+    PublicAddressSuggestionsResponse,
     SellerIntakeEnrichmentCreate,
     SellerIntakeEnrichmentResponse,
     SellerIntakeResponse,
@@ -25,6 +28,48 @@ from app.services.request_rate_limit import (
 from app.services.trust_proof import get_public_trust_proofs
 
 router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+
+@router.get("/address-suggestions")
+def read_public_address_suggestions(
+    request: Request,
+    response: Response,
+    q: Annotated[str, Query(min_length=3, max_length=160)],
+    limit: Annotated[int, Query(ge=1, le=6)] = 6,
+) -> PublicAddressSuggestionsResponse:
+    response.headers["Cache-Control"] = "no-store"
+    clean_query = " ".join(q.split())
+    if len(clean_query) < 3:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Address search must contain at least 3 characters.",
+        )
+    enforce_public_address_suggestions_rate_limit(request)
+    settings = get_settings()
+    if not settings.realestateapi_api_key:
+        return PublicAddressSuggestionsResponse(available=False)
+    try:
+        suggestions = RealEstateAPIClient(settings).autocomplete_addresses(
+            clean_query,
+            max_results=limit,
+            preferred_state="GA",
+        )
+    except RealEstateAPIError:
+        return PublicAddressSuggestionsResponse(available=False)
+    return PublicAddressSuggestionsResponse(
+        available=True,
+        suggestions=[
+            PublicAddressSuggestion(
+                provider_id=suggestion.provider_id,
+                label=suggestion.label,
+                street_address=suggestion.street_address,
+                city=suggestion.city,
+                state=suggestion.state,
+                postal_code=suggestion.postal_code,
+            )
+            for suggestion in suggestions
+        ],
+    )
 
 
 @router.get("/experiments")
@@ -122,6 +167,19 @@ def enforce_public_conversion_event_rate_limit(request: Request) -> None:
         limit=settings.public_conversion_event_rate_limit_requests,
         window_seconds=settings.public_conversion_event_rate_limit_window_seconds,
         detail="Too many conversion events. Please wait before trying again.",
+    )
+
+
+def enforce_public_address_suggestions_rate_limit(request: Request) -> None:
+    settings = get_settings()
+    if not settings.public_intake_rate_limit_enabled:
+        return
+    enforce_public_rate_limit(
+        request,
+        route_key="address-suggestion:read",
+        limit=settings.public_conversion_event_rate_limit_requests,
+        window_seconds=settings.public_conversion_event_rate_limit_window_seconds,
+        detail="Too many address searches. Please wait before trying again.",
     )
 
 

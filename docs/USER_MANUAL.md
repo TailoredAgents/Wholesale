@@ -704,7 +704,11 @@ selling options that may fit the property and situation.
 
 The form collects:
 
-- Property address and required selling timeline first.
+- One property-address search and the required selling timeline first. Selecting a suggested
+  property fills city, state, and ZIP automatically; **Enter address manually** remains available
+  when a suggestion is missing, incorrect, or temporarily unavailable. City, state, and ZIP also
+  appear as the seller engages the address control so browser-saved addresses can fill the complete
+  address instead of only the street.
 - Name, required phone number, and optional email. Stonegate follows up by phone by default.
 - A passive disclosure explaining that submitting the form authorizes Stonegate to follow up by
   phone or email about the property inquiry and possible selling options.
@@ -723,6 +727,10 @@ After submission:
 5. A speed-to-lead task is created.
 6. Each active staff member with **Text new leads** enabled is queued one SMS alert.
 7. Staff sees the lead in **All Leads**, **Lead Queue**, **Inbox**, and relevant dashboard queues.
+
+Address suggestions use the existing RealEstateAPI configuration and are intentionally fail-open.
+Autocomplete failure never disables **Continue** or submission; the seller can enter the complete
+address manually, and Stonegate stores the actual state supplied or selected.
 
 The staff alert in step 6 is an internal operational message to an employee who separately enabled
 that preference. It is unaffected by the website's seller-facing SMS choice and does not create

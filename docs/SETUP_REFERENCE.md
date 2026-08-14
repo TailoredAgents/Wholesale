@@ -343,6 +343,11 @@ Variables:
 - `UNDERWRITING_AI_COMP_ANALYST_MODE=draft`
 - optional `ATTOM_API_KEY` placeholder
 
+`REALESTATEAPI_API_KEY` also enables the public seller form's full-address suggestions through the
+provider's free AutoComplete endpoint. The API key remains server-side. If it is absent, rate
+limited, or temporarily unavailable, the public endpoint returns no suggestions and the seller can
+continue through manual street, city, state, and ZIP entry.
+
 V3 is the single live Stonegate Valuation method. V2.2 is retained only for historical reads and an
 engineering rollback; staff do not choose between versions. Keep shadow mode disabled in normal
 operation.
@@ -846,9 +851,11 @@ events.
 
 ## Website And Zapier Lead Intake Staff Alerts
 
-The public **See My Selling Options** form creates a Stonegate lead directly. It requires the property
-street, city, state, ZIP code, seller timeline, and contact information before submission. Its browser
-`Lead` event and matching server conversion use the same event ID for Meta deduplication.
+The public **See My Selling Options** form creates a Stonegate lead directly. Its property search can
+fill street, city, state, and ZIP from RealEstateAPI autocomplete, while manual address entry remains
+available and independent of the provider. A complete address, seller timeline, name, and phone are
+required before submission. Its browser `Lead` event and matching server conversion use the same
+event ID for Meta deduplication.
 
 Facebook instant forms are separate from the Pixel and Conversions API. The Pixel reports activity
 back to Meta; Zapier moves each submitted Facebook instant form into Stonegate as a real CRM lead.

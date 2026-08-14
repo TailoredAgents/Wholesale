@@ -135,9 +135,11 @@ administration is in Settings. My Setup remains available to every signed-in emp
 
 | Field | Purpose and accepted value | Requirement |
 | --- | --- | --- |
-| Property street address | Identifies the subject street address | Required; at least three characters |
-| City | Identifies the Georgia city | Required |
-| ZIP code | Supports market, duplicate, and property matching | Required; five digits or ZIP+4 |
+| Property address | Suggests matching properties after three characters and fills street, city, state, and ZIP from the selected result; keeps the supporting fields available for browser-saved address autofill | Required; suggestions require RealEstateAPI but never block manual entry |
+| **Enter address manually** / **Edit address** | Opens the city, state, and ZIP controls when the seller prefers manual entry or needs to correct a suggestion | Always available; provider outages automatically preserve this path |
+| City | Identifies the property city during manual entry | Required |
+| State | Preserves the property's actual two-letter state instead of assuming Georgia | Required during manual entry |
+| ZIP code | Supports market, duplicate, and property matching during manual entry | Required; five digits or ZIP+4 |
 | Desired selling timeline | Records when the seller would ideally like to sell | Required |
 
 ### Contact Step

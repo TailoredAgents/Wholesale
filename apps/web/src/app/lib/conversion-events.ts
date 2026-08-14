@@ -57,6 +57,7 @@ const conversionSessionKey = "stonegate_conversion_session_id_v2";
 const attributionStorageKey = "stonegate_conversion_attribution_v1";
 const experimentVisitorKey = "stonegate_experiment_visitor_id_v1";
 const experimentAssignmentKey = "stonegate_experiment_assignments_v1";
+const experimentRequestTimeoutMs = 2_500;
 let fallbackSessionId: string | null = null;
 let experimentRequest: Promise<ConversionExperimentContext | null> | null = null;
 
@@ -197,9 +198,12 @@ export async function getConversionExperimentContext(
 async function loadExperimentContext(
   apiBaseUrl: string,
 ): Promise<ConversionExperimentContext | null> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), experimentRequestTimeoutMs);
   try {
     const response = await fetch(`${apiBaseUrl}/api/v1/public/experiments`, {
       cache: "no-store",
+      signal: controller.signal,
     });
     if (!response.ok) throw new Error("Experiment endpoint unavailable.");
     const payload = (await response.json()) as { experiments?: PublicExperiment[] };
@@ -207,7 +211,9 @@ async function loadExperimentContext(
     if (!experiment) return null;
     return assignExperiment(experiment);
   } catch {
-    return latestStoredExperiment();
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 
@@ -282,13 +288,6 @@ function readStoredAssignments(): Record<string, StoredAssignment> {
   } catch {
     return {};
   }
-}
-
-function latestStoredExperiment(): ConversionExperimentContext | null {
-  const assignments = Object.values(readStoredAssignments()).sort(
-    (left, right) => Date.parse(right.assigned_at) - Date.parse(left.assigned_at),
-  );
-  return assignments[0] ?? null;
 }
 
 export async function recordConversionEvent(

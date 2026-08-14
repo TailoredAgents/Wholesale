@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 
 import {
+  type ConversionExperimentContext,
   createMetaBrowserEvent,
   getConversionAttribution,
   getConversionExperimentContext,
@@ -25,6 +26,10 @@ import { siteConfig } from "../site-config";
 import { TrackedEmailLink } from "../tracked-email-link";
 import { TrackedPhoneLink } from "../tracked-phone-link";
 import styles from "./page.module.css";
+import {
+  PropertyAddressField,
+  type PropertyAddressValue,
+} from "./property-address-field";
 
 const consentWording =
   "By submitting this form, you authorize Stonegate Home Buyers to contact you by phone call or email about your property inquiry and possible selling options. This permission does not include text messages.";
@@ -40,6 +45,7 @@ const steps = [
 type FormValues = {
   property_address: string;
   property_city: string;
+  property_state: string;
   property_postal_code: string;
   property_type: string;
   property_condition: string;
@@ -79,6 +85,7 @@ type Confirmation = {
 const initialValues: FormValues = {
   property_address: "",
   property_city: "",
+  property_state: "GA",
   property_postal_code: "",
   property_type: "",
   property_condition: "",
@@ -141,10 +148,17 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
   const activeStepRef = useRef(activeStep);
   const completedSteps = useRef(new Set<number>());
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const experimentContextRef = useRef<ConversionExperimentContext | null>(null);
 
   useEffect(() => {
     activeStepRef.current = activeStep;
   }, [activeStep]);
+
+  useEffect(() => {
+    void getConversionExperimentContext(apiBaseUrl).then((experiment) => {
+      experimentContextRef.current = experiment;
+    });
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     try {
@@ -247,6 +261,24 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
     }
   }
 
+  function updateAddress(address: PropertyAddressValue) {
+    handleFormStart();
+    setValues((current) => ({
+      ...current,
+      property_address: address.street_address,
+      property_city: address.city,
+      property_state: address.state,
+      property_postal_code: address.postal_code,
+    }));
+    setErrors((current) => ({
+      ...current,
+      property_address: undefined,
+      property_city: undefined,
+      property_state: undefined,
+      property_postal_code: undefined,
+    }));
+  }
+
   function moveToStep(nextStep: number) {
     setActiveStep(nextStep);
     setErrors({});
@@ -317,12 +349,12 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       completed_steps: steps.length,
     });
 
-    const experiment = await getConversionExperimentContext(apiBaseUrl);
+    const experiment = experimentContextRef.current;
     const metaBrowserEvent = createMetaBrowserEvent();
     const payload = {
       property_address: values.property_address.trim(),
       property_city: values.property_city.trim(),
-      property_state: "GA",
+      property_state: values.property_state.trim().toUpperCase(),
       property_postal_code: values.property_postal_code.trim(),
       property_type: null,
       property_condition: null,
@@ -674,65 +706,23 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
       {activeStep === 0 ? (
         <fieldset className={styles.stepFields}>
           <legend className={styles.visuallyHidden}>Property location</legend>
-          <Field
-            label="Property street address"
-            name="property_address"
-            error={errors.property_address}
-            required
-          >
-            <input
-              id="property_address"
-              name="property_address"
-              autoCapitalize="words"
-              autoComplete="section-property address-line1"
-              enterKeyHint="next"
-              required
-              value={values.property_address}
-              onChange={(event) => updateValue("property_address", event.target.value)}
-              aria-invalid={Boolean(errors.property_address)}
-              aria-describedby={errors.property_address ? "property_address-error" : undefined}
-              placeholder="123 Main St"
-            />
-          </Field>
-          <div className={styles.gridTwo}>
-            <Field label="City" name="property_city" error={errors.property_city} required>
-              <input
-                id="property_city"
-                name="property_city"
-                autoCapitalize="words"
-                autoComplete="section-property address-level2"
-                enterKeyHint="next"
-                required
-                value={values.property_city}
-                onChange={(event) => updateValue("property_city", event.target.value)}
-                aria-invalid={Boolean(errors.property_city)}
-                aria-describedby={errors.property_city ? "property_city-error" : undefined}
-                placeholder="Atlanta"
-              />
-            </Field>
-            <Field
-              label="ZIP code"
-              name="property_postal_code"
-              error={errors.property_postal_code}
-              required
-            >
-              <input
-                id="property_postal_code"
-                name="property_postal_code"
-                autoComplete="section-property postal-code"
-                enterKeyHint="next"
-                inputMode="numeric"
-                required
-                value={values.property_postal_code}
-                onChange={(event) => updateValue("property_postal_code", event.target.value)}
-                aria-invalid={Boolean(errors.property_postal_code)}
-                aria-describedby={
-                  errors.property_postal_code ? "property_postal_code-error" : undefined
-                }
-                placeholder="30303"
-              />
-            </Field>
-          </div>
+          <PropertyAddressField
+            apiBaseUrl={apiBaseUrl}
+            value={{
+              street_address: values.property_address,
+              city: values.property_city,
+              state: values.property_state,
+              postal_code: values.property_postal_code,
+            }}
+            errors={{
+              street_address: errors.property_address,
+              city: errors.property_city,
+              state: errors.property_state,
+              postal_code: errors.property_postal_code,
+            }}
+            onChange={updateAddress}
+            onStart={handleFormStart}
+          />
           <Field
             label="When would you ideally like to sell?"
             name="desired_timeline"
@@ -831,13 +821,16 @@ export function CashOfferForm({ initialAddress = "" }: CashOfferFormProps) {
                 setSmsConsent(event.target.checked);
               }}
             />
-            <span>
-              By checking this optional box, I agree to receive recurring automated text messages
-              from Stonegate Home Buyers about my property inquiry, appointments, and possible
-              selling options at the number provided. Message frequency varies. Message and data
-              rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition of
-              purchase. See our <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
-              <Link href="/privacy-policy">Privacy Policy</Link>.
+            <span className={styles.smsConsentCopy}>
+              <strong>Text me about my property inquiry (optional)</strong>
+              <small>
+                By checking this optional box, I agree to receive recurring automated text messages
+                from Stonegate Home Buyers about my property inquiry, appointments, and possible
+                selling options at the number provided. Message frequency varies. Message and data
+                rates may apply. Reply STOP to opt out or HELP for help. Consent is not a condition
+                of purchase. See our <Link href="/terms">Terms &amp; Conditions</Link> and{" "}
+                <Link href="/privacy-policy">Privacy Policy</Link>.
+              </small>
             </span>
           </label>
         </fieldset>
@@ -1072,6 +1065,9 @@ function validateStep(step: number, values: FormValues): FieldErrors {
       errors.property_address = "Enter the property street address.";
     }
     if (!values.property_city.trim()) errors.property_city = "Enter the property city.";
+    if (!/^[A-Za-z]{2}$/.test(values.property_state.trim())) {
+      errors.property_state = "Enter a valid 2-letter state.";
+    }
     if (!/^\d{5}(?:-\d{4})?$/.test(values.property_postal_code.trim())) {
       errors.property_postal_code = "Enter a valid 5-digit ZIP code.";
     }

@@ -55,6 +55,25 @@ async function installApiStubs(page, state) {
     state.events.push(route.request().postDataJSON());
     await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({ id: crypto.randomUUID(), event_type: "test" }) });
   });
+  await page.route("**/api/v1/public/address-suggestions?*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        suggestions: [
+          {
+            provider_id: "audit-property-123",
+            label: "123 Main St, Atlanta, GA 30303",
+            street_address: "123 Main St",
+            city: "Atlanta",
+            state: "GA",
+            postal_code: "30303",
+          },
+        ],
+      }),
+    });
+  });
   await page.route("**/api/v1/public/seller-leads/enrichment", async (route) => {
     state.enrichments.push(route.request().postDataJSON());
     await route.fulfill({
@@ -563,9 +582,17 @@ async function auditJourney(browser, viewport) {
   if ((await page.locator("#property_address").inputValue()) !== "123 Main St") {
     record(viewport.name, "address-prefill", "Homepage address was not preserved.");
   }
+  await page.locator("#property_address").focus();
+  const addressOption = page.getByRole("option", { name: "123 Main St, Atlanta, GA 30303" });
+  await addressOption.waitFor();
+  await page.locator("#property_address").press("Enter");
+  if ((await page.locator("#property_address").inputValue()) !== "123 Main St, Atlanta, GA 30303") {
+    record(viewport.name, "address-autocomplete", "The selected address was not shown in the field.");
+  }
+  await page.getByRole("button", { name: "Edit address" }).click();
   const propertyFieldSemantics = await page.evaluate(() =>
     Object.fromEntries(
-      ["property_address", "property_city", "property_postal_code", "desired_timeline"].map(
+      ["property_address", "property_city", "property_state", "property_postal_code", "desired_timeline"].map(
         (id) => {
           const control = document.getElementById(id);
           return [
@@ -582,6 +609,7 @@ async function auditJourney(browser, viewport) {
   const expectedPropertyAutocomplete = {
     property_address: "section-property address-line1",
     property_city: "section-property address-level2",
+    property_state: "section-property address-level1",
     property_postal_code: "section-property postal-code",
     desired_timeline: null,
   };
@@ -604,6 +632,8 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "requirement-presentation", "Required fields use warning-like badges.");
   }
 
+  await page.locator("#property_city").fill("");
+  await page.locator("#property_postal_code").fill("");
   await page.getByRole("button", { name: /Continue/ }).click();
   if (!(await page.locator("#property_city-error").isVisible())) {
     record(viewport.name, "validation", "Property step did not expose field errors.");
@@ -612,6 +642,7 @@ async function auditJourney(browser, viewport) {
     record(viewport.name, "validation", "Property step did not require a seller timeline.");
   }
   await page.locator("#property_city").fill("Atlanta");
+  await page.locator("#property_state").fill("GA");
   await page.locator("#property_postal_code").fill("30303");
   await page.locator("#desired_timeline").selectOption("within_30_days");
   await page.getByRole("button", { name: /Continue/ }).click();
@@ -660,7 +691,7 @@ async function auditJourney(browser, viewport) {
       matches: await contactDisclosure.count(),
     });
   }
-  const visibleSmsConsent = (await page.locator('label:has(#sms_consent) > span').innerText())
+  const visibleSmsConsent = (await page.locator('label:has(#sms_consent) small').innerText())
     .replace(/\s+/g, " ")
     .trim();
   if (visibleSmsConsent !== smsConsentWording) {
@@ -756,6 +787,7 @@ async function auditJourney(browser, viewport) {
   if (state.submissions.length !== 2) record(viewport.name, "submission-count", state.submissions.length);
   const payload = state.submissions.at(-1);
   for (const [key, expected] of Object.entries({
+    property_state: "GA",
     property_type: null,
     property_condition: null,
     occupancy_status: null,

@@ -16,9 +16,11 @@
   align-items: start;
 }
 
-.copy {
+.leftRail {
   position: sticky;
   top: 24px;
+  display: grid;
+  gap: 28px;
   padding-top: 18px;
 }
 
@@ -47,7 +49,6 @@
 
 .trustStack {
   display: grid;
-  margin-top: 28px;
 }
 
 .trustStack p {
@@ -302,6 +303,165 @@
   background: #fff9f8;
 }
 
+.addressControl {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  gap: 9px;
+}
+
+.addressSearch {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: center;
+  border: 1px solid #bfcac3;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.addressSearch > svg {
+  justify-self: center;
+  color: #557064;
+}
+
+.addressSearch input {
+  border: 0;
+  border-radius: 0;
+}
+
+.addressSearch:focus-within {
+  border-color: #1d5a3d;
+  outline: 3px solid rgba(29, 90, 61, 0.15);
+}
+
+.addressSearch:has(input[aria-invalid="true"]) {
+  border-color: #a33f32;
+  background: #fff9f8;
+}
+
+.addressSearch input:focus {
+  outline: 0;
+}
+
+.addressGuidance {
+  color: #5f6d65;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.addressSuggestions {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid #c4d0c8;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 16px 32px rgba(16, 35, 25, 0.14);
+  list-style: none;
+}
+
+.addressSuggestions li + li {
+  border-top: 1px solid #e3e9e5;
+}
+
+.addressSuggestions button {
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 0;
+  background: #ffffff;
+  color: #26372e;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addressSuggestions button[aria-selected="true"],
+.addressSuggestions button:hover {
+  background: #edf5f0;
+  color: #17482f;
+}
+
+.addressSuggestions svg {
+  color: #1d5a3d;
+}
+
+.addressStatus {
+  min-height: 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  color: #617068;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.addressStatus button {
+  min-height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1d5a3d;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.addressConfirmed {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #1d5a3d;
+  font-weight: 800;
+}
+
+.manualAddress {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #d9e1dc;
+  border-radius: 6px;
+  background: #f8faf9;
+}
+
+.manualAddressCollapsed {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  clip-path: inset(50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.manualAddress > p {
+  color: #536159;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.manualAddressGrid {
+  display: grid;
+  grid-template-columns: minmax(90px, 0.65fr) minmax(120px, 1fr);
+  gap: 12px;
+}
+
+.manualCity {
+  grid-column: 1 / -1;
+}
+
 .fieldError {
   color: #95372d;
   font-size: 12px;
@@ -485,6 +645,24 @@
   font-weight: 800;
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.smsConsentCopy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.smsConsentCopy strong {
+  color: #314139;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.smsConsentCopy small {
+  color: #5f6c65;
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .formActions {
@@ -740,9 +918,22 @@
     grid-template-columns: 1fr;
   }
 
+  .leftRail {
+    display: contents;
+  }
+
   .copy {
-    position: static;
+    order: 1;
     padding-top: 0;
+  }
+
+  .form,
+  .confirmation {
+    order: 2;
+  }
+
+  .trustStack {
+    order: 3;
   }
 
   .copy h1 {
@@ -779,7 +970,7 @@
   }
 
   .progressHeader ol {
-    gap: 3px;
+    display: none;
   }
 
   .progressHeader li button {
@@ -800,6 +991,29 @@
 
   .nextButton {
     width: 100%;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    font-size: 16px;
+  }
+
+  .consentDisclosure,
+  .formPrivacy,
+  .smsConsent {
+    font-size: 12px;
+  }
+
+  .addressGuidance,
+  .addressStatus,
+  .manualAddress > p,
+  .smsConsentCopy small {
+    font-size: 12px;
+  }
+
+  .smsConsentCopy strong {
+    font-size: 13px;
   }
 
   .nextSteps div + div {

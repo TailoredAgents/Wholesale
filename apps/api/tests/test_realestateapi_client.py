@@ -48,6 +48,146 @@ def test_property_detail_requests_exact_match_and_standard_comps() -> None:
     assert result.comparables[0]["id"] == 456
 
 
+def test_address_autocomplete_requests_full_addresses_and_prefers_georgia() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v2/AutoComplete"
+        assert request.headers["x-api-key"] == "re_test_secret"
+        assert request.content == b'{"search":"313 Vineyard","search_types":["A"]}'
+        return httpx.Response(
+            200,
+            json={
+                "statusCode": 200,
+                "data": [
+                    {
+                        "id": "out-of-state",
+                        "searchType": "A",
+                        "title": "313 Vineyard Ave, Charlotte, NC, 28202",
+                        "address": "313 Vineyard Ave, Charlotte, NC, 28202",
+                        "street": "Vineyard Ave",
+                        "city": "Charlotte",
+                        "state": "NC",
+                        "zip": "28202",
+                        "latitude": 35.2271,
+                        "owner": {"name": "Must not be exposed"},
+                    },
+                    {
+                        "id": 12345,
+                        "searchType": "A",
+                        "title": "313 Vineyard Dr, Dallas, GA, 30132",
+                        "address": "313 Vineyard Dr, Dallas, GA, 30132",
+                        "street": "Vineyard Dr",
+                        "city": "Dallas",
+                        "state": "ga",
+                        "zip": "30132",
+                    },
+                    {
+                        "id": "not-an-address",
+                        "searchType": "C",
+                        "title": "Dallas, GA",
+                        "city": "Dallas",
+                        "state": "GA",
+                        "zip": "30132",
+                    },
+                ],
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        suggestions = RealEstateAPIClient(_settings(), client=client).autocomplete_addresses(
+            "  313   Vineyard  ",
+            max_results=2,
+        )
+
+    assert [suggestion.provider_id for suggestion in suggestions] == ["12345", "out-of-state"]
+    assert suggestions[0].street_address == "313 Vineyard Dr"
+    assert suggestions[0].state == "GA"
+    assert suggestions[1].state == "NC"
+    assert set(vars(suggestions[0])) == {
+        "provider_id",
+        "label",
+        "street_address",
+        "city",
+        "state",
+        "postal_code",
+    }
+
+
+def test_address_autocomplete_normalizes_nested_shape_and_discards_unsafe_records() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            200,
+            json={
+                "statusCode": 200,
+                "data": {
+                    "results": [
+                        {
+                            "propertyId": "nested-1",
+                            "search_type": "A",
+                            "title": "55 Auburn Ave, Atlanta, GA 30303",
+                            "address": {
+                                "address": "55 Auburn Ave, Atlanta, GA 30303",
+                                "house": "55",
+                                "street": "Auburn Ave",
+                                "city": "Atlanta",
+                                "state": "GA",
+                                "postalCode": "30303",
+                                "county": "Fulton",
+                            },
+                            "api_key": "provider-secret-that-must-not-leak",
+                        },
+                        {
+                            "id": "incomplete",
+                            "searchType": "A",
+                            "title": "Auburn Ave, Atlanta, GA",
+                            "street": "Auburn Ave",
+                            "city": "Atlanta",
+                            "state": "GA",
+                        },
+                        {
+                            "id": "oversized",
+                            "searchType": "A",
+                            "title": "x" * 301,
+                            "address": "x" * 301,
+                            "street": "1 Main St",
+                            "city": "Atlanta",
+                            "state": "GA",
+                            "zip": "30303",
+                        },
+                    ]
+                },
+            },
+        )
+    )
+
+    with httpx.Client(transport=transport) as client:
+        suggestions = RealEstateAPIClient(_settings(), client=client).autocomplete_addresses(
+            "55 Auburn"
+        )
+
+    assert len(suggestions) == 2
+    assert suggestions[0].provider_id == "nested-1"
+    assert suggestions[0].street_address == "55 Auburn Ave"
+    assert "provider-secret" not in repr(suggestions[0])
+    assert suggestions[1].label == "1 Main St, Atlanta, GA 30303"
+    assert "x" * 50 not in repr(suggestions[1])
+
+
+def test_address_autocomplete_provider_errors_do_not_expose_credentials() -> None:
+    transport = httpx.MockTransport(
+        lambda _request: httpx.Response(
+            429,
+            json={"statusMessage": "Rate limit reached"},
+        )
+    )
+    with (
+        httpx.Client(transport=transport) as client,
+        pytest.raises(RealEstateAPIError, match="HTTP 429") as caught,
+    ):
+        RealEstateAPIClient(_settings(), client=client).autocomplete_addresses("55 Auburn")
+
+    assert "re_test_secret" not in str(caught.value)
+
+
 def test_property_detail_supports_county_scoped_apn_without_residential_comps() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.path == "/v2/PropertyDetail"

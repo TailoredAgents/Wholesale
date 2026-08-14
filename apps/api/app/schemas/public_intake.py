@@ -83,6 +83,20 @@ class ConversionEventResponse(BaseModel):
     event_type: str
 
 
+class PublicAddressSuggestion(BaseModel):
+    provider_id: str | None = Field(default=None, max_length=128)
+    label: str = Field(min_length=1, max_length=300)
+    street_address: str = Field(min_length=1, max_length=200)
+    city: str = Field(min_length=1, max_length=120)
+    state: str = Field(min_length=2, max_length=2)
+    postal_code: str = Field(min_length=5, max_length=10)
+
+
+class PublicAddressSuggestionsResponse(BaseModel):
+    available: bool
+    suggestions: list[PublicAddressSuggestion] = Field(default_factory=list, max_length=6)
+
+
 class SellerIntakeCreate(BaseModel):
     property_address: str = Field(default="", max_length=255)
     property_city: str = Field(default="", max_length=120)
