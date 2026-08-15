@@ -570,19 +570,120 @@ test("Inbox call intelligence includes a safely derived completed-note quick rea
   assert.match(inbox, /<strong>Quick read<\/strong>/);
 });
 
-test("Inbox call recordings play after loading and full transcripts are exportable", () => {
+test("Inbox call recordings use a private authenticated player with complete controls", () => {
   const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
   const player = readFileSync(resolve(osSourceRoot, "inbox/call-recording-player.tsx"), "utf8");
+  const inboxStyles = readFileSync(resolve(osSourceRoot, "inbox/inbox.module.css"), "utf8");
 
-  assert.match(player, /autoPlay/);
-  assert.match(player, /audioRef\.current[\s\S]*\.play\(\)/);
+  assert.match(player, /\/api\/v1\/voice\/recordings\/\$\{recordingId\}\/media/);
+  assert.match(player, /headers: await getHeaders\(\)/);
+  assert.match(player, /cache: "no-store"/);
+  assert.match(player, /signal: controller\.signal/);
+  assert.match(player, /response\.blob\(\)/);
   assert.match(player, /blob\.size === 0/);
+  assert.match(player, /URL\.createObjectURL/);
+  assert.match(player, /URL\.revokeObjectURL/);
+  assert.match(player, /abortControllerRef\.current\?\.abort\(\)/);
+  assert.doesNotMatch(player, /api\.twilio\.com|RecordingUrl|provider_recording_id/);
+
+  assert.match(player, /audio\.play\(\)/);
+  assert.match(player, /audio\.pause\(\)/);
+  assert.match(player, /Pause call recording/);
+  assert.match(player, /Play call recording/);
+  assert.match(player, /aria-label="Go back 10 seconds"/);
+  assert.match(player, /aria-label="Go forward 10 seconds"/);
+  assert.match(player, /aria-label="Recording position"/);
+  assert.match(player, /aria-valuetext=\{playbackAriaValue\(currentTime, duration\)\}/);
+  assert.match(player, /formatPlaybackTime\(currentTime\)[\s\S]*formatPlaybackTime\(duration\)/);
+  assert.match(player, /aria-label="Playback speed"/);
+  assert.match(player, /CALL_PLAYBACK_RATES\.map/);
+  assert.match(player, /Unmute recording/);
+  assert.match(player, /Mute recording/);
+  assert.match(player, /aria-label="Recording volume"/);
   assert.match(player, /Download call audio/);
+
+  assert.match(player, /stonegate:call-playback:/);
+  assert.match(player, /window\.sessionStorage\.getItem\(sessionKey\)/);
+  assert.match(player, /window\.sessionStorage\.setItem/);
+  assert.match(player, /window\.sessionStorage\.removeItem\(sessionKey\)/);
+  assert.match(player, /stonegate:active-call-player/);
+  assert.match(player, /window\.addEventListener\(ACTIVE_CALL_PLAYER_EVENT/);
+  assert.match(player, /new CustomEvent\(ACTIVE_CALL_PLAYER_EVENT/);
+  assert.match(player, /activeRecordingId !== recordingId[\s\S]*persistPlayback\(\)[\s\S]*clearMedia\(\)/);
+  assert.match(player, /metadataAbortControllerRef\.current\?\.abort\(\)/);
+  assert.match(player, /waitForMetadata\(audio, controller\.signal\)/);
+  assert.match(player, /signal\?\.addEventListener\("abort", handleAbort/);
+  assert.match(player, /if \(isAbortError\(error\)\) return/);
+  assert.match(player, /role="group"/);
+  assert.match(inboxStyles, /container: recording-player \/ inline-size/);
+  assert.match(inboxStyles, /@container recording-player \(max-width: 500px\)/);
+  assert.match(inboxStyles, /\.transcriptSegmentHeader > button[\s\S]*min-height: 44px/);
+
+  assert.match(player, /useImperativeHandle\(ref, \(\) => \(\{ seekTo \}\)/);
+  assert.match(inbox, /Play recording from \$\{formatDuration/);
+  assert.match(inbox, /onSeekToSeconds\(Math\.max\(0, segment\.start \?\? 0\)\)/);
+  assert.match(inbox, /recordingPlayerRefs\.current\[item\.recording_id as string\]\?\.seekTo/);
+  assert.match(inbox, /\{ play: true \}/);
   assert.match(inbox, /className=\{styles\.fullTranscriptPanel\}/);
   assert.match(inbox, /Download transcript \(\.txt\)/);
   assert.match(inbox, /\/api\/v1\/voice\/transcripts\/\$\{transcript\.id\}\/download/);
   assert.match(inbox, /headers: await getHeaders\(\)/);
   assert.match(inbox, /cache: "no-store"/);
+});
+
+test("Call playback helpers clamp unsafe media values and restore safe session progress", () => {
+  const playback = loadTypeScriptModule(resolve(osSourceRoot, "inbox/call-playback.ts"));
+
+  assert.deepEqual(Array.from(playback.CALL_PLAYBACK_RATES), [0.75, 1, 1.25, 1.5, 2]);
+  assert.equal(playback.clampPlaybackTime(-4, 60), 0);
+  assert.equal(playback.clampPlaybackTime(90, 60), 60);
+  assert.equal(playback.clampPlaybackTime(Number.NaN, 60), 0);
+  assert.equal(playback.clampPlaybackTime(Number.POSITIVE_INFINITY, 60), 0);
+  assert.equal(playback.clampPlaybackTime(25, Number.NaN), 25);
+  assert.equal(playback.skipPlaybackTime(4, -10, 60), 0);
+  assert.equal(playback.skipPlaybackTime(55, 10, 60), 60);
+  assert.equal(playback.skipPlaybackTime(Number.NaN, 10, 60), 0);
+
+  assert.equal(playback.formatPlaybackTime(Number.NaN), "0:00");
+  assert.equal(playback.formatPlaybackTime(59.9), "0:59");
+  assert.equal(playback.formatPlaybackTime(60), "1:00");
+  assert.equal(playback.formatPlaybackTime(3599), "59:59");
+  assert.equal(playback.formatPlaybackTime(3600), "1:00:00");
+  assert.equal(playback.formatPlaybackTime(3661), "1:01:01");
+  assert.equal(
+    playback.playbackAriaValue(61, 120),
+    "1 minute 1 second of 2 minutes",
+  );
+
+  assert.equal(playback.parseCallPlaybackSession(null, 100), null);
+  assert.equal(playback.parseCallPlaybackSession("not-json", 100), null);
+  assert.equal(
+    playback.parseCallPlaybackSession('{"position":"25","rate":1}', 100),
+    null,
+  );
+  assert.equal(
+    playback.parseCallPlaybackSession('{"position":25,"rate":3}', 100),
+    null,
+  );
+  assert.equal(
+    playback.parseCallPlaybackSession('{"position":1e999,"rate":1}', 100),
+    null,
+  );
+
+  const restored = playback.parseCallPlaybackSession('{"position":25,"rate":1.25}', 100);
+  assert.equal(restored.position, 25);
+  assert.equal(restored.rate, 1.25);
+  const negative = playback.parseCallPlaybackSession('{"position":-5,"rate":1}', 100);
+  assert.equal(negative.position, 0);
+  const completed = playback.parseCallPlaybackSession('{"position":99,"rate":1.5}', 100);
+  assert.equal(completed.position, 0);
+  assert.equal(completed.rate, 1.5);
+  const metadataPending = playback.parseCallPlaybackSession(
+    '{"position":25,"rate":0.75}',
+    Number.NaN,
+  );
+  assert.equal(metadataPending.position, 25);
+  assert.equal(metadataPending.rate, 0.75);
 });
 
 test("Inbox renders private inbound MMS photos inline", () => {

@@ -1141,15 +1141,18 @@ staff cellphones. The employee presses 1 to accept the business call.
 When recording and transcription are active:
 
 1. Open the call in the timeline.
-2. Select **Play recording**. Stonegate securely loads the audio and starts it; if the browser blocks
-   automatic playback, use the displayed audio control. The adjacent download control saves the
-   audio file.
+2. Select **Play recording**. Stonegate securely loads the audio and starts it. The compact player
+   supports play/pause, 10-second rewind and skip, scrubbing, elapsed and total time, playback speed,
+   mute and volume, and audio download. Starting another call pauses the current one.
+   Stonegate remembers the call position and speed for the current browser session only, without
+   automatically restarting playback. If loading fails, use **Retry** on the player.
 3. Read the automatic call summary. Use **Quick read** at the bottom for the seller's main reason,
    timing, stated numbers, and next step. Stonegate adds the full note to the Inbox conversation,
    seller record, communication history, and recent activity as soon as processing succeeds; no
    approval is required.
 4. Open **Full transcript** directly beneath the AI notes to read the complete speaker-separated
-   call. Select **Download transcript (.txt)** to save a timestamped copy.
+   call. Select a transcript timestamp to jump the recording to that moment. Select
+   **Download transcript (.txt)** to save a timestamped copy.
 5. Review motivation, timeline, condition, occupancy, asking price, commitments, and follow-up
    context when those facts matter to the next action.
 6. Call Intelligence immediately fills eligible empty CRM fields supported by the transcript.

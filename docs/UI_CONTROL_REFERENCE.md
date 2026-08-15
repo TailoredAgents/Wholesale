@@ -705,8 +705,9 @@ history into separate channel threads.
 | Email event | Shows sender, recipients, subject, body, attachments, and delivery state | Read-only after send |
 | Call event | Shows direction, outcome, duration, recording, and transcript status | Depends on voice integration |
 | Internal note | Shares staff-only context in the timeline | Never sent to the seller |
-| Full transcript | Opens the complete speaker-separated call text and downloads a timestamped `.txt` copy | Requires a completed transcription and recording access for the user's role |
-| **Play recording** | Securely loads and starts the retained call audio; the adjacent control downloads it | Requires recording access for the user's role; a browser may require one press on its displayed audio control |
+| Full transcript | Opens the complete speaker-separated call text, jumps playback from a selected timestamp, and downloads a timestamped `.txt` copy | Requires a completed transcription and recording access for the user's role |
+| Call recording player | Securely loads retained call audio with play/pause, 10-second rewind and skip, scrubbing, elapsed/total time, speed, mute/volume, and download controls | Requires recording access; only one call plays at a time, and position and speed resume for the current browser session only |
+| **Retry** | Loads the recording again after a network or media error | Appears when recording playback fails; loading and buffering status appear in the player |
 | **Delete recording** | Removes retained audio after a reason is entered | Authorized roles only; transcript and audit history are handled separately |
 | Mark unread/read | Changes the user's unread state for the conversation | Does not change another user's unread state |
 | Lead/property link | Opens the related seller record | Requires lead access |

@@ -19,6 +19,7 @@ import {
   NotebookPen,
   Phone,
   PhoneCall,
+  Play,
   Plus,
   Paperclip,
   RefreshCw,
@@ -48,7 +49,10 @@ import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
-import { CallRecordingPlayer } from "./call-recording-player";
+import {
+  CallRecordingPlayer,
+  type CallRecordingPlayerHandle,
+} from "./call-recording-player";
 import { buildCallQuickRead } from "./call-quick-read";
 import {
   pendingOutboundTwilioSmsKey,
@@ -472,6 +476,7 @@ function CallTranscriptPanel({
   onError,
   onReview,
   onRetry,
+  onSeekToSeconds,
 }: {
   transcript: CallTranscript;
   apiBaseUrl: string;
@@ -489,6 +494,7 @@ function CallTranscriptPanel({
     },
   ) => Promise<void>;
   onRetry: (transcriptId: string) => Promise<void>;
+  onSeekToSeconds?: (seconds: number) => void;
 }) {
   const [notes, setNotes] = useState<StructuredCallNotes | null>(transcript.structured_notes);
   const [selectedFields, setSelectedFields] = useState<string[]>(
@@ -805,10 +811,24 @@ function CallTranscriptPanel({
                 {transcriptSegments.length > 0 ? (
                   transcriptSegments.map((segment, index) => (
                     <p key={`${segment.start ?? 0}-${index}`}>
-                      <strong>
-                        {segment.speaker || "Speaker"} ·{" "}
-                        {formatDuration(Math.round(segment.start ?? 0))}
-                      </strong>
+                      <span className={styles.transcriptSegmentHeader}>
+                        <strong>{segment.speaker || "Speaker"}</strong>
+                        {onSeekToSeconds ? (
+                          <button
+                            aria-label={`Play recording from ${formatDuration(
+                              Math.round(segment.start ?? 0),
+                            )}`}
+                            onClick={() => onSeekToSeconds(Math.max(0, segment.start ?? 0))}
+                            title="Jump recording to this moment"
+                            type="button"
+                          >
+                            <Play size={10} aria-hidden="true" />
+                            {formatDuration(Math.round(segment.start ?? 0))}
+                          </button>
+                        ) : (
+                          <span>at {formatDuration(Math.round(segment.start ?? 0))}</span>
+                        )}
+                      </span>
                       <span>{segment.text}</span>
                     </p>
                   ))
@@ -845,6 +865,7 @@ export function InboxWorkspace({
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
+  const recordingPlayerRefs = useRef<Record<string, CallRecordingPlayerHandle | null>>({});
   const initialSelectionAppliedRef = useRef(false);
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -1995,6 +2016,11 @@ export function InboxWorkspace({
                                   apiBaseUrl={apiBaseUrl}
                                   getHeaders={getHeaders}
                                   onError={setError}
+                                  ref={(player) => {
+                                    const recordingId = item.recording_id as string;
+                                    if (player) recordingPlayerRefs.current[recordingId] = player;
+                                    else delete recordingPlayerRefs.current[recordingId];
+                                  }}
                                   recordingId={item.recording_id}
                                 />
                               ) : item.recording_status === "deleted" ? (
@@ -2090,6 +2116,16 @@ export function InboxWorkspace({
                               onError={setError}
                               onReview={reviewTranscript}
                               onRetry={retryTranscript}
+                              onSeekToSeconds={
+                                item.recording_id && item.recording_status === "completed"
+                                  ? (seconds) => {
+                                      void recordingPlayerRefs.current[item.recording_id as string]?.seekTo(
+                                        seconds,
+                                        { play: true },
+                                      );
+                                    }
+                                  : undefined
+                              }
                               transcript={item.transcript}
                             />
                           ) : null}

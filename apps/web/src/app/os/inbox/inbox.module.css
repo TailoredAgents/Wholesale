@@ -895,16 +895,13 @@
   cursor: pointer;
 }
 
-.callMetadata audio {
-  width: min(260px, 65%);
-  height: 30px;
-}
-
 .recordingControls {
   min-width: 0;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 6px;
 }
 
@@ -914,19 +911,130 @@
 }
 
 .recordingPlayer {
+  container: recording-player / inline-size;
+  width: min(100%, 620px);
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid rgba(59, 111, 77, 0.2);
+  border-radius: 7px;
+  background: rgba(248, 251, 248, 0.9);
+  display: grid;
+  gap: 7px;
+  outline: none;
+}
+
+.recordingPlayer:focus-visible {
+  box-shadow: 0 0 0 2px rgba(59, 111, 77, 0.2);
+}
+
+.recordingAudioEngine {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.recordingLoadActions,
+.recordingTransportControls,
+.recordingUtilityControls {
   min-width: 0;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.recordingControlsGrid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(150px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.recordingTimelineControl {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto;
+  align-items: center;
   gap: 6px;
 }
 
-.recordingPlayer small {
-  flex-basis: 100%;
+.recordingTimelineControl input,
+.recordingVolumeRange {
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.recordingTimelineControl > span {
+  min-width: 72px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.recordingUtilityControls select {
+  min-height: 28px;
+  padding: 0 4px;
+  border: 1px solid #bdd2c4;
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.recordingVolumeRange {
+  width: 64px;
+}
+
+.callMetadata .recordingPrimaryButton {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.recordingLoadActions button:disabled,
+.recordingControlsGrid button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.recordingStatus,
+.recordingKeyboardHint {
   color: var(--muted);
   font-size: 9px;
+  line-height: 1.35;
+}
+
+.recordingStatus[role="alert"] {
+  color: #9a3d36;
+}
+
+.recordingKeyboardHint {
+  display: none;
   text-align: right;
+}
+
+.recordingPlayer:focus-within .recordingKeyboardHint {
+  display: block;
+}
+
+@container recording-player (max-width: 500px) {
+  .recordingControlsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .recordingTransportControls,
+  .recordingUtilityControls {
+    flex-wrap: wrap;
+  }
 }
 
 .callMetadata .deleteRecordingButton {
@@ -1330,6 +1438,33 @@
 .transcriptText p span {
   font-size: 11px;
   line-height: 1.45;
+}
+
+.transcriptSegmentHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transcriptSegmentHeader > button {
+  min-height: 22px;
+  padding: 0 6px;
+  border: 1px solid rgba(59, 111, 77, 0.24);
+  border-radius: 999px;
+  background: rgba(59, 111, 77, 0.07);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font: inherit;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.transcriptSegmentHeader > button:hover {
+  background: rgba(59, 111, 77, 0.13);
 }
 
 .systemEvent {
@@ -2576,12 +2711,48 @@
   }
 
   .callMetadata {
+    width: 100%;
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .callMetadata audio {
+  .recordingControls,
+  .recordingPlayer {
     width: 100%;
+  }
+
+  .recordingControls {
+    justify-content: flex-start;
+  }
+
+  .recordingControlsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .recordingTransportControls,
+  .recordingUtilityControls {
+    flex-wrap: wrap;
+  }
+
+  .recordingPlayer button,
+  .recordingPlayer select {
+    min-height: 44px;
+  }
+
+  .recordingTimelineControl {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .recordingVolumeRange {
+    width: min(140px, 34vw);
+  }
+
+  .transcriptText > div {
+    max-height: 45vh;
+  }
+
+  .transcriptSegmentHeader > button {
+    min-height: 44px;
   }
 
   .notesGrid {
