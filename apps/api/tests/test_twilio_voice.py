@@ -35,6 +35,7 @@ from app.models.foundation import (
 )
 from app.services.bootstrap import bootstrap_foundation
 from app.services.communication_compliance import (
+    evaluate_voice_eligibility,
     is_within_sms_allowed_hours,
     is_within_voice_allowed_hours,
 )
@@ -191,6 +192,33 @@ def test_sms_and_voice_contact_hours_are_independent(monkeypatch: MonkeyPatch) -
     assert is_within_sms_allowed_hours(settings, now=late_evening) is True
     assert is_within_voice_allowed_hours(settings, now=late_evening) is False
     get_settings.cache_clear()
+
+
+def test_manual_staff_call_remains_available_outside_contact_hours(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    seed_voice_lead(db_session, client)
+    contact = db_session.scalar(select(Contact))
+    assert contact is not None
+    monkeypatch.setenv("TWILIO_VOICE_ALLOWED_START_HOUR", "9")
+    monkeypatch.setenv("TWILIO_VOICE_ALLOWED_END_HOUR", "20")
+    get_settings.cache_clear()
+    late_evening = datetime(2026, 7, 17, 21, 30, tzinfo=ZoneInfo("America/New_York"))
+
+    eligibility = evaluate_voice_eligibility(
+        db_session,
+        contact,
+        settings=get_settings(),
+        now=late_evening,
+    )
+
+    assert eligibility.within_allowed_hours is False
+    assert eligibility.can_call is True
+    assert not any("outside" in blocker.lower() for blocker in eligibility.blockers)
 
 
 def test_staff_text_alert_preferences_are_independent_and_audited(
