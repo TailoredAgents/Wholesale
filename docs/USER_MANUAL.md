@@ -1141,18 +1141,22 @@ staff cellphones. The employee presses 1 to accept the business call.
 When recording and transcription are active:
 
 1. Open the call in the timeline.
-2. Play the recording only when your role permits it.
+2. Select **Play recording**. Stonegate securely loads the audio and starts it; if the browser blocks
+   automatic playback, use the displayed audio control. The adjacent download control saves the
+   audio file.
 3. Read the automatic call summary. Use **Quick read** at the bottom for the seller's main reason,
    timing, stated numbers, and next step. Stonegate adds the full note to the Inbox conversation,
    seller record, communication history, and recent activity as soon as processing succeeds; no
    approval is required.
-4. Review motivation, timeline, condition, occupancy, asking price, commitments, and follow-up
+4. Open **Full transcript** directly beneath the AI notes to read the complete speaker-separated
+   call. Select **Download transcript (.txt)** to save a timestamped copy.
+5. Review motivation, timeline, condition, occupancy, asking price, commitments, and follow-up
    context when those facts matter to the next action.
-5. Call Intelligence immediately fills eligible empty CRM fields supported by the transcript.
+6. Call Intelligence immediately fills eligible empty CRM fields supported by the transcript.
    Existing staff-entered values are never overwritten.
-6. Correct an inaccurate CRM value in the seller record or add a clarifying internal note. The
+7. Correct an inaccurate CRM value in the seller record or add a clarifying internal note. The
    original transcript-grounded summary remains linked to the call for audit.
-7. An exhausted job exposes **Retry call intelligence** on the same call after the provider is
+8. An exhausted job exposes **Retry call intelligence** on the same call after the provider is
    healthy. A suggested next action does not create a task automatically.
 
 Early audio deletion requires a reason. Deleting audio does not erase the call, transcript,

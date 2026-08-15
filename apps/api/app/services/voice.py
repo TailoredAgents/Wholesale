@@ -1325,6 +1325,24 @@ def get_scoped_recording(
     return recording
 
 
+def get_scoped_transcript(
+    db: Session,
+    principal: Principal,
+    transcript_id: UUID,
+) -> CallTranscript | None:
+    transcript = db.scalar(
+        select(CallTranscript).where(
+            CallTranscript.id == transcript_id,
+            CallTranscript.organization_id == principal.organization_id,
+        )
+    )
+    if transcript is None:
+        return None
+    if get_scoped_recording(db, principal, transcript.recording_id) is None:
+        return None
+    return transcript
+
+
 def delete_recording(
     db: Session,
     principal: Principal,

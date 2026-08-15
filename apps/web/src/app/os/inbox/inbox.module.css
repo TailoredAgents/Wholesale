@@ -913,6 +913,22 @@
   font-size: 10px;
 }
 
+.recordingPlayer {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.recordingPlayer small {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: 9px;
+  text-align: right;
+}
+
 .callMetadata .deleteRecordingButton {
   width: 28px;
   min-width: 28px;
@@ -997,7 +1013,7 @@
 }
 
 .transcriptPanel > summary,
-.transcriptText > summary {
+.fullTranscriptPanel > summary {
   min-height: 32px;
   color: var(--text-soft);
   display: flex;
@@ -1009,10 +1025,49 @@
   cursor: pointer;
 }
 
-.transcriptPanel > summary > span:first-child {
+.transcriptPanel > summary > span:first-child,
+.fullTranscriptPanel > summary > span:first-child {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.fullTranscriptPanel {
+  margin-top: 2px;
+  border-top: 1px solid rgba(104, 112, 115, 0.16);
+}
+
+.fullTranscriptPanel > summary > span:last-child {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.fullTranscriptBody {
+  display: grid;
+  gap: 8px;
+}
+
+.fullTranscriptBody > button {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--brand-strong);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  justify-self: start;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.fullTranscriptBody > button:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 
 .transcriptStatus {

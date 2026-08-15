@@ -570,6 +570,21 @@ test("Inbox call intelligence includes a safely derived completed-note quick rea
   assert.match(inbox, /<strong>Quick read<\/strong>/);
 });
 
+test("Inbox call recordings play after loading and full transcripts are exportable", () => {
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  const player = readFileSync(resolve(osSourceRoot, "inbox/call-recording-player.tsx"), "utf8");
+
+  assert.match(player, /autoPlay/);
+  assert.match(player, /audioRef\.current[\s\S]*\.play\(\)/);
+  assert.match(player, /blob\.size === 0/);
+  assert.match(player, /Download call audio/);
+  assert.match(inbox, /className=\{styles\.fullTranscriptPanel\}/);
+  assert.match(inbox, /Download transcript \(\.txt\)/);
+  assert.match(inbox, /\/api\/v1\/voice\/transcripts\/\$\{transcript\.id\}\/download/);
+  assert.match(inbox, /headers: await getHeaders\(\)/);
+  assert.match(inbox, /cache: "no-store"/);
+});
+
 test("Inbox renders private inbound MMS photos inline", () => {
   const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
   const attachment = readFileSync(resolve(osSourceRoot, "inbox/message-attachment.tsx"), "utf8");

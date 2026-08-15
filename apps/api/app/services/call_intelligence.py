@@ -1069,6 +1069,29 @@ def normalize_segments(segments: list[dict[str, object]]) -> list[dict[str, obje
     return normalized
 
 
+def render_call_transcript_text(transcript: CallTranscript) -> str:
+    lines: list[str] = []
+    for segment in transcript.speaker_segments or []:
+        text = segment.get("text")
+        if not isinstance(text, str) or not text.strip():
+            continue
+        speaker = str(segment.get("speaker") or "Speaker").strip() or "Speaker"
+        start = numeric_value(segment.get("start"))
+        lines.append(f"[{format_transcript_timestamp(start)}] {speaker}: {text.strip()}")
+    if lines:
+        return "\n\n".join(lines)
+    return (transcript.transcript_text or "").strip()
+
+
+def format_transcript_timestamp(seconds: float) -> str:
+    total_seconds = max(0, int(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds_remaining = divmod(remainder, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{seconds_remaining:02d}"
+    return f"{minutes:02d}:{seconds_remaining:02d}"
+
+
 def numeric_value(value: object) -> float:
     if isinstance(value, int | float):
         return float(value)

@@ -10,6 +10,7 @@ import {
   ChevronRight,
   CircleAlert,
   Clock3,
+  Download,
   FileText,
   Inbox,
   Mail,
@@ -18,7 +19,6 @@ import {
   NotebookPen,
   Phone,
   PhoneCall,
-  Play,
   Plus,
   Paperclip,
   RefreshCw,
@@ -48,6 +48,7 @@ import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
+import { CallRecordingPlayer } from "./call-recording-player";
 import { buildCallQuickRead } from "./call-quick-read";
 import {
   pendingOutboundTwilioSmsKey,
@@ -465,12 +466,18 @@ function textToList(value: string) {
 
 function CallTranscriptPanel({
   transcript,
+  apiBaseUrl,
   canReview,
+  getHeaders,
+  onError,
   onReview,
   onRetry,
 }: {
   transcript: CallTranscript;
+  apiBaseUrl: string;
   canReview: boolean;
+  getHeaders: () => Promise<Record<string, string>>;
+  onError: (message: string) => void;
   onReview: (
     transcriptId: string,
     payload: {
@@ -493,9 +500,17 @@ function CallTranscriptPanel({
   const [decisionNotes, setDecisionNotes] = useState("");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "saving">("idle");
   const [retryStatus, setRetryStatus] = useState<"idle" | "saving">("idle");
+  const [transcriptDownloadStatus, setTranscriptDownloadStatus] = useState<"idle" | "saving">(
+    "idle",
+  );
   const quickReadItems = notes
     ? buildCallQuickRead(notes, transcript.quick_read_summary)
     : [];
+  const transcriptSegments = transcript.speaker_segments.filter((segment) =>
+    Boolean(segment.text?.trim()),
+  );
+  const hasFullTranscript =
+    transcriptSegments.length > 0 || Boolean(transcript.transcript_text?.trim());
 
   const updateNote = <K extends keyof StructuredCallNotes>(
     key: K,
@@ -520,18 +535,48 @@ function CallTranscriptPanel({
     }
   };
 
+  const downloadTranscript = async () => {
+    setTranscriptDownloadStatus("saving");
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/voice/transcripts/${transcript.id}/download`,
+        {
+          headers: await getHeaders(),
+          cache: "no-store",
+        },
+      );
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(displayError(payload, "Transcript could not be downloaded."));
+      }
+      const url = URL.createObjectURL(await response.blob());
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `stonegate-call-transcript-${transcript.id}.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Transcript could not be downloaded.");
+    } finally {
+      setTranscriptDownloadStatus("idle");
+    }
+  };
+
   return (
-    <details className={styles.transcriptPanel}>
-      <summary>
-        <span>
-          <Bot size={14} aria-hidden="true" />
-          AI call intelligence
-        </span>
-        <span className={styles.transcriptStatus} data-status={transcript.status}>
-          {labelize(transcript.status)}
-        </span>
-      </summary>
-      <div className={styles.transcriptBody}>
+    <>
+      <details className={styles.transcriptPanel}>
+        <summary>
+          <span>
+            <Bot size={14} aria-hidden="true" />
+            AI call intelligence
+          </span>
+          <span className={styles.transcriptStatus} data-status={transcript.status}>
+            {labelize(transcript.status)}
+          </span>
+        </summary>
+        <div className={styles.transcriptBody}>
         {transcript.error_message ? (
           <p className={styles.transcriptError}>{transcript.error_message}</p>
         ) : null}
@@ -729,29 +774,55 @@ function CallTranscriptPanel({
             ) : null}
           </div>
         )}
-        {transcript.speaker_segments.length > 0 ? (
-          <details className={styles.transcriptText}>
-            <summary>Full transcript</summary>
-            <div>
-              {transcript.speaker_segments.map((segment, index) => (
-                <p key={`${segment.start ?? 0}-${index}`}>
-                  <strong>
-                    {segment.speaker || "Speaker"} ·{" "}
-                    {formatDuration(Math.round(segment.start ?? 0))}
-                  </strong>
-                  <span>{segment.text}</span>
-                </p>
-              ))}
+        </div>
+      </details>
+      {hasFullTranscript ? (
+        <details className={styles.fullTranscriptPanel}>
+          <summary>
+            <span>
+              <FileText size={14} aria-hidden="true" />
+              Full transcript
+            </span>
+            <span>
+              {transcriptSegments.length > 0
+                ? `${transcriptSegments.length} segments`
+                : "Complete call text"}
+            </span>
+          </summary>
+          <div className={styles.fullTranscriptBody}>
+            <button
+              disabled={transcriptDownloadStatus === "saving"}
+              onClick={() => void downloadTranscript()}
+              type="button"
+            >
+              <Download size={13} aria-hidden="true" />
+              {transcriptDownloadStatus === "saving"
+                ? "Downloading transcript"
+                : "Download transcript (.txt)"}
+            </button>
+            <div className={styles.transcriptText}>
+              <div>
+                {transcriptSegments.length > 0 ? (
+                  transcriptSegments.map((segment, index) => (
+                    <p key={`${segment.start ?? 0}-${index}`}>
+                      <strong>
+                        {segment.speaker || "Speaker"} ·{" "}
+                        {formatDuration(Math.round(segment.start ?? 0))}
+                      </strong>
+                      <span>{segment.text}</span>
+                    </p>
+                  ))
+                ) : (
+                  <p>
+                    <span>{transcript.transcript_text}</span>
+                  </p>
+                )}
+              </div>
             </div>
-          </details>
-        ) : transcript.transcript_text ? (
-          <details className={styles.transcriptText}>
-            <summary>Full transcript</summary>
-            <p>{transcript.transcript_text}</p>
-          </details>
-        ) : null}
-      </div>
-    </details>
+          </div>
+        </details>
+      ) : null}
+    </>
   );
 }
 
@@ -774,7 +845,6 @@ export function InboxWorkspace({
   const timelineEndRef = useRef<HTMLDivElement>(null);
   const smsIdempotencyKeyRef = useRef<string | null>(null);
   const emailIdempotencyKeyRef = useRef<string | null>(null);
-  const recordingUrlsRef = useRef<Record<string, string>>({});
   const initialSelectionAppliedRef = useRef(false);
   const [me, setMe] = useState<Me | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -817,8 +887,6 @@ export function InboxWorkspace({
   const [assigneeId, setAssigneeId] = useState("");
   const [queueKey, setQueueKey] = useState("acquisitions_follow_up");
   const [handoffReason, setHandoffReason] = useState("Reassigned from the shared inbox.");
-  const [recordingUrls, setRecordingUrls] = useState<Record<string, string>>({});
-  const [recordingLoadingId, setRecordingLoadingId] = useState<string | null>(null);
   const [recordingDeleteTarget, setRecordingDeleteTarget] = useState<string | null>(null);
   const [recordingDeleteReason, setRecordingDeleteReason] = useState("");
   const [recordingDeleteStatus, setRecordingDeleteStatus] = useState<"idle" | "deleting">("idle");
@@ -1031,35 +1099,6 @@ export function InboxWorkspace({
     }
   }, [detail, forwardedCallStatus, loadConversations, loadDetail, me, request]);
 
-  const loadRecording = useCallback(
-    async (recordingId: string) => {
-      if (recordingUrlsRef.current[recordingId]) return;
-      setRecordingLoadingId(recordingId);
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/v1/voice/recordings/${recordingId}/media`, {
-          headers: await getHeaders(),
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => null);
-          throw new Error(displayError(payload, "Recording could not be loaded."));
-        }
-        const url = URL.createObjectURL(await response.blob());
-        recordingUrlsRef.current[recordingId] = url;
-        setRecordingUrls((current) => ({ ...current, [recordingId]: url }));
-      } catch (recordingError) {
-        setError(
-          recordingError instanceof Error
-            ? recordingError.message
-            : "Recording could not be loaded.",
-        );
-      } finally {
-        setRecordingLoadingId(null);
-      }
-    },
-    [apiBaseUrl, getHeaders],
-  );
-
   async function submitRecordingDeletion(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!detail || !recordingDeleteTarget || recordingDeleteReason.trim().length < 10) return;
@@ -1070,16 +1109,6 @@ export function InboxWorkspace({
         method: "DELETE",
         body: JSON.stringify({ reason: recordingDeleteReason.trim() }),
       });
-      const objectUrl = recordingUrlsRef.current[recordingDeleteTarget];
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-        delete recordingUrlsRef.current[recordingDeleteTarget];
-        setRecordingUrls((current) => {
-          const next = { ...current };
-          delete next[recordingDeleteTarget];
-          return next;
-        });
-      }
       setRecordingDeleteTarget(null);
       setRecordingDeleteReason("");
       await loadDetail(detail.id);
@@ -1207,15 +1236,6 @@ export function InboxWorkspace({
   useEffect(() => {
     timelineEndRef.current?.scrollIntoView({ block: "end" });
   }, [detail?.id, detail?.timeline.length]);
-
-  useEffect(
-    () => () => {
-      for (const url of Object.values(recordingUrlsRef.current)) {
-        URL.revokeObjectURL(url);
-      }
-    },
-    [],
-  );
 
   const counts = useMemo(() => {
     const currentUserId = me?.user_id;
@@ -1971,26 +1991,12 @@ export function InboxWorkspace({
                               {item.recording_id &&
                               item.recording_status === "completed" &&
                               me?.permissions.includes("communications:access_recordings") ? (
-                                recordingUrls[item.recording_id] ? (
-                                  <audio
-                                    controls
-                                    preload="none"
-                                    src={recordingUrls[item.recording_id]}
-                                  >
-                                    Call recording
-                                  </audio>
-                                ) : (
-                                  <button
-                                    disabled={recordingLoadingId === item.recording_id}
-                                    onClick={() => void loadRecording(item.recording_id as string)}
-                                    type="button"
-                                  >
-                                    <Play size={13} aria-hidden="true" />
-                                    {recordingLoadingId === item.recording_id
-                                      ? "Loading"
-                                      : "Play recording"}
-                                  </button>
-                                )
+                                <CallRecordingPlayer
+                                  apiBaseUrl={apiBaseUrl}
+                                  getHeaders={getHeaders}
+                                  onError={setError}
+                                  recordingId={item.recording_id}
+                                />
                               ) : item.recording_status === "deleted" ? (
                                 <span>
                                   Audio deleted
@@ -2072,13 +2078,16 @@ export function InboxWorkspace({
                           {item.transcript &&
                           me?.permissions.includes("communications:access_recordings") ? (
                             <CallTranscriptPanel
+                              apiBaseUrl={apiBaseUrl}
                               canReview={Boolean(
                                 detail.lead_id &&
                                 me.permissions.includes("leads:edit") &&
                                 item.recording_status === "completed" &&
                                 me.permissions.includes("communications:access_recordings"),
                               )}
+                              getHeaders={getHeaders}
                               key={item.transcript.id}
+                              onError={setError}
                               onReview={reviewTranscript}
                               onRetry={retryTranscript}
                               transcript={item.transcript}

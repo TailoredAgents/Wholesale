@@ -33,7 +33,12 @@ from app.schemas.voice import (
     VoiceRecordingRead,
     VoiceSessionRead,
 )
-from app.services.call_intelligence import retry_call_transcript, review_call_transcript
+from app.services.call_intelligence import (
+    render_call_transcript_text,
+    retry_call_transcript,
+    review_call_transcript,
+    transcript_to_read,
+)
 from app.services.lead_lifecycle import LeadLifecycleConflictError
 from app.services.meta_lead_ads import (
     requeue_staff_lead_alerts,
@@ -47,6 +52,7 @@ from app.services.voice import (
     create_voice_session,
     delete_recording,
     get_scoped_recording,
+    get_scoped_transcript,
     get_voice_provider_readiness,
     list_voice_line_teams,
     list_voice_line_users,
@@ -296,6 +302,8 @@ def read_voice_recording_media(
         headers={
             "Cache-Control": "private, no-store",
             "Content-Disposition": f'inline; filename="stonegate-call-{recording.id}.mp3"',
+            "Content-Length": str(len(media.content)),
+            "X-Content-Type-Options": "nosniff",
         },
     )
 
@@ -324,6 +332,46 @@ def delete_voice_recording(
     if recording is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recording not found.")
     return recording
+
+
+@router.get("/transcripts/{transcript_id}")
+def read_voice_transcript(
+    transcript_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_dependency)],
+) -> CallTranscriptRead:
+    transcript = get_scoped_transcript(db, principal, transcript_id)
+    if transcript is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found.")
+    return transcript_to_read(db, transcript)
+
+
+@router.get("/transcripts/{transcript_id}/download")
+def download_voice_transcript(
+    transcript_id: UUID,
+    db: Annotated[Session, Depends(get_db)],
+    principal: Annotated[Principal, Depends(recording_dependency)],
+) -> Response:
+    transcript = get_scoped_transcript(db, principal, transcript_id)
+    if transcript is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Transcript not found.")
+    content = render_call_transcript_text(transcript)
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Transcript text is not ready.",
+        )
+    return Response(
+        content=f"{content}\n",
+        media_type="text/plain; charset=utf-8",
+        headers={
+            "Cache-Control": "private, no-store",
+            "Content-Disposition": (
+                f'attachment; filename="stonegate-call-transcript-{transcript.id}.txt"'
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @router.patch("/transcripts/{transcript_id}/review")

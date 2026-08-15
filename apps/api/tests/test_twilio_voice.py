@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from twilio.request_validator import RequestValidator  # type: ignore[import-untyped]
 
 from app.core.config import get_settings
+from app.integrations.twilio_recordings import TwilioRecordingMedia
 from app.integrations.twilio_voice_calls import TwilioVoiceCallResult
 from app.main import app
 from app.models.foundation import (
@@ -26,6 +27,7 @@ from app.models.foundation import (
     Contact,
     Conversation,
     Lead,
+    Organization,
     Role,
     RoleAssignment,
     Task,
@@ -176,6 +178,93 @@ def create_intent(client: TestClient, conversation: Conversation) -> dict[str, o
     )
     assert response.status_code == 201
     return cast(dict[str, object], response.json())
+
+
+def create_call_assets(
+    db: Session,
+    conversation: Conversation,
+    *,
+    provider_suffix: str,
+    recording_status: str = "completed",
+    transcript_status: str = "completed",
+    transcript_text: str | None = "Agent greeted the seller. Seller wants to move in 30 days.",
+    speaker_segments: list[dict[str, object]] | None = None,
+) -> tuple[CallRecording, CallTranscript]:
+    call = CallRecord(
+        organization_id=conversation.organization_id,
+        conversation_id=conversation.id,
+        lead_id=conversation.lead_id,
+        contact_id=conversation.contact_id,
+        actor_user_id=conversation.assigned_user_id,
+        communication_record_id=None,
+        voice_line_id=None,
+        call_intent_id=None,
+        provider="twilio",
+        provider_call_id=f"CA-{provider_suffix}",
+        child_provider_call_id=None,
+        direction="outbound",
+        status="completed",
+        from_number=STONEGATE_NUMBER,
+        to_number=SELLER_NUMBER,
+        started_at=datetime.now(ZoneInfo("UTC")),
+        answered_at=datetime.now(ZoneInfo("UTC")),
+        ended_at=datetime.now(ZoneInfo("UTC")),
+        duration_seconds=90,
+        disposition=None,
+        recording_consent_status="one_party_consent",
+        call_metadata=None,
+    )
+    db.add(call)
+    db.flush()
+    recording = CallRecording(
+        organization_id=conversation.organization_id,
+        call_record_id=call.id,
+        provider="twilio",
+        provider_recording_id=f"RE-{provider_suffix}",
+        status=recording_status,
+        media_reference=f"twilio://recordings/RE-{provider_suffix}",
+        duration_seconds=90,
+        channel_count=2,
+        consent_status="one_party_consent",
+        recorded_at=datetime.now(ZoneInfo("UTC")),
+        retention_expires_at=None,
+        deleted_at=None,
+        deleted_by_user_id=None,
+        deletion_reason=None,
+        recording_metadata=None,
+    )
+    db.add(recording)
+    db.flush()
+    transcript = CallTranscript(
+        organization_id=conversation.organization_id,
+        recording_id=recording.id,
+        provider="openai",
+        model_name="gpt-4o-transcribe-diarize",
+        status=transcript_status,
+        language="en",
+        transcript_text=transcript_text,
+        speaker_segments=(
+            speaker_segments
+            if speaker_segments is not None
+            else [
+                {
+                    "index": 0,
+                    "speaker": "Seller",
+                    "start": 12.4,
+                    "end": 17.8,
+                    "text": "I want to move in 30 days.",
+                }
+            ]
+        ),
+        confidence_score=95,
+        approved_by_user_id=None,
+        approved_at=None,
+        error_message=None,
+        transcript_metadata=None,
+    )
+    db.add(transcript)
+    db.commit()
+    return recording, transcript
 
 
 def test_sms_and_voice_contact_hours_are_independent(monkeypatch: MonkeyPatch) -> None:
@@ -979,6 +1068,226 @@ def test_recording_callback_is_private_idempotent_and_visible_in_timeline(
     assert call_item["recording_status"] == "completed"
     assert call_item["recording_retention_expires_at"]
     assert call_item["transcript"]["status"] == "queued"
+
+
+def test_recording_media_and_transcript_download_are_private_and_playable(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    recording, transcript = create_call_assets(
+        db_session,
+        conversation,
+        provider_suffix="private-media",
+    )
+    monkeypatch.setattr(
+        "app.routers.voice.download_twilio_recording",
+        lambda *_args: TwilioRecordingMedia(b"ID3-test-audio", "audio/mpeg"),
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    media = client.get(
+        f"/api/v1/voice/recordings/{recording.id}/media",
+        headers=headers,
+    )
+    assert media.status_code == 200
+    assert media.content == b"ID3-test-audio"
+    assert media.headers["content-type"] == "audio/mpeg"
+    assert media.headers["content-length"] == str(len(media.content))
+    assert media.headers["cache-control"] == "private, no-store"
+    assert media.headers["x-content-type-options"] == "nosniff"
+    assert media.headers["content-disposition"].startswith("inline;")
+
+    transcript_response = client.get(
+        f"/api/v1/voice/transcripts/{transcript.id}",
+        headers=headers,
+    )
+    assert transcript_response.status_code == 200
+    assert transcript_response.json()["transcript_text"].startswith("Agent greeted")
+
+    transcript_download = client.get(
+        f"/api/v1/voice/transcripts/{transcript.id}/download",
+        headers=headers,
+    )
+    assert transcript_download.status_code == 200
+    assert transcript_download.headers["content-type"] == "text/plain; charset=utf-8"
+    assert transcript_download.headers["cache-control"] == "private, no-store"
+    assert transcript_download.headers["x-content-type-options"] == "nosniff"
+    assert transcript_download.headers["content-disposition"].endswith('.txt"')
+    assert transcript_download.text == "[00:12] Seller: I want to move in 30 days.\n"
+
+    recording.status = "deleted"
+    recording.deleted_at = datetime.now(ZoneInfo("UTC"))
+    recording.media_reference = None
+    db_session.commit()
+
+    preserved_download = client.get(
+        f"/api/v1/voice/transcripts/{transcript.id}/download",
+        headers=headers,
+    )
+    assert preserved_download.status_code == 200
+    assert "Seller: I want to move in 30 days." in preserved_download.text
+
+
+def test_recording_and_transcript_routes_require_recording_access(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    recording, transcript = create_call_assets(
+        db_session,
+        conversation,
+        provider_suffix="permission-test",
+    )
+    administrator_role = db_session.scalar(select(Role).where(Role.key == "administrator"))
+    assert administrator_role is not None
+    user = User(
+        organization_id=conversation.organization_id,
+        email="administrator@example.com",
+        display_name="Administrator",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        RoleAssignment(
+            organization_id=conversation.organization_id,
+            user_id=user.id,
+            role_id=administrator_role.id,
+        )
+    )
+    db_session.commit()
+    headers = {"X-Dev-User-Email": user.email}
+
+    assert (
+        client.get(
+            f"/api/v1/voice/recordings/{recording.id}/media",
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/api/v1/voice/transcripts/{transcript.id}",
+            headers=headers,
+        ).status_code
+        == 403
+    )
+    assert (
+        client.get(
+            f"/api/v1/voice/transcripts/{transcript.id}/download",
+            headers=headers,
+        ).status_code
+        == 403
+    )
+
+
+def test_recording_and_transcript_routes_enforce_scope_and_readiness(
+    db_session: Session,
+    api_db_override: None,
+    voice_settings: None,
+) -> None:
+    client = TestClient(app)
+    conversation = seed_voice_lead(db_session, client)
+    recording, transcript = create_call_assets(
+        db_session,
+        conversation,
+        provider_suffix="not-ready",
+        recording_status="processing",
+        transcript_status="queued",
+        transcript_text=None,
+        speaker_segments=[],
+    )
+    headers = {"X-Dev-User-Email": OWNER_EMAIL}
+
+    media = client.get(
+        f"/api/v1/voice/recordings/{recording.id}/media",
+        headers=headers,
+    )
+    assert media.status_code == 409
+    assert media.json()["detail"] == "Recording is not ready."
+    transcript_status = client.get(
+        f"/api/v1/voice/transcripts/{transcript.id}",
+        headers=headers,
+    )
+    assert transcript_status.status_code == 200
+    assert transcript_status.json()["status"] == "queued"
+    transcript_download = client.get(
+        f"/api/v1/voice/transcripts/{transcript.id}/download",
+        headers=headers,
+    )
+    assert transcript_download.status_code == 409
+    assert transcript_download.json()["detail"] == "Transcript text is not ready."
+
+    other_organization = Organization(
+        name="Other Company",
+        slug="other-company",
+        is_active=True,
+    )
+    db_session.add(other_organization)
+    db_session.flush()
+    other_contact = Contact(
+        organization_id=other_organization.id,
+        legal_name="Other Seller",
+        preferred_name=None,
+        contact_type="seller",
+        assigned_user_id=None,
+    )
+    db_session.add(other_contact)
+    db_session.flush()
+    other_conversation = Conversation(
+        organization_id=other_organization.id,
+        conversation_type="general",
+        lead_id=None,
+        contact_id=other_contact.id,
+        assigned_user_id=None,
+        assigned_team_id=None,
+        source_alias_id=None,
+        visibility_scope="standard",
+        status="open",
+        queue_key="unassigned",
+        priority="normal",
+        unread_count=0,
+        last_activity_at=datetime.now(ZoneInfo("UTC")),
+        last_inbound_at=None,
+        last_outbound_at=None,
+        closed_at=None,
+        conversation_metadata=None,
+    )
+    db_session.add(other_conversation)
+    db_session.flush()
+    other_recording, other_transcript = create_call_assets(
+        db_session,
+        other_conversation,
+        provider_suffix="other-company",
+    )
+
+    assert (
+        client.get(
+            f"/api/v1/voice/recordings/{other_recording.id}/media",
+            headers=headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/v1/voice/transcripts/{other_transcript.id}",
+            headers=headers,
+        ).status_code
+        == 404
+    )
+    assert (
+        client.get(
+            f"/api/v1/voice/transcripts/{other_transcript.id}/download",
+            headers=headers,
+        ).status_code
+        == 404
+    )
 
 
 def test_recording_can_use_georgia_one_party_policy_without_announcement(
