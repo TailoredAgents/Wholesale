@@ -48,6 +48,7 @@ import {
   GeneralEmailActions,
   type LinkableLead,
 } from "./general-email-actions";
+import { buildCallQuickRead } from "./call-quick-read";
 import {
   pendingOutboundTwilioSmsKey,
   SMS_DELIVERY_REFRESH_INTERVAL_MS,
@@ -178,6 +179,7 @@ type CallTranscript = {
   }>;
   confidence_score: number | null;
   structured_notes: StructuredCallNotes | null;
+  quick_read_summary: string | null;
   approval_request_id: string | null;
   approved_by_user_id: string | null;
   approved_at: string | null;
@@ -491,6 +493,9 @@ function CallTranscriptPanel({
   const [decisionNotes, setDecisionNotes] = useState("");
   const [reviewStatus, setReviewStatus] = useState<"idle" | "saving">("idle");
   const [retryStatus, setRetryStatus] = useState<"idle" | "saving">("idle");
+  const quickReadItems = notes
+    ? buildCallQuickRead(notes, transcript.quick_read_summary)
+    : [];
 
   const updateNote = <K extends keyof StructuredCallNotes>(
     key: K,
@@ -675,6 +680,23 @@ function CallTranscriptPanel({
                   </button>
                 </div>
               </div>
+            ) : null}
+            {["approved", "completed"].includes(transcript.status) &&
+            quickReadItems.length > 0 ? (
+              <section className={styles.callQuickRead} aria-label="Quick read">
+                <div className={styles.callQuickReadHeader}>
+                  <strong>Quick read</strong>
+                  <span>Key points from this call</span>
+                </div>
+                <dl className={styles.callQuickReadList}>
+                  {quickReadItems.map((item) => (
+                    <div key={item.label}>
+                      <dt>{item.label}</dt>
+                      <dd>{item.value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
             ) : null}
           </section>
         ) : (

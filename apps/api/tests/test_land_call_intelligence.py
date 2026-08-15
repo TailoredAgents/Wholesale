@@ -75,7 +75,9 @@ def test_house_schema_and_prompt_remain_unchanged_while_land_schema_is_strict() 
     assert set(LAND_QUALIFICATION_FIELDS) <= set(land_schema["properties"])
     assert call_notes_model_for_asset("house") is StructuredCallNotes
     assert call_notes_model_for_asset("land") is LandStructuredCallNotes
-    assert call_notes_system_prompt("house prompt", "house") == "house prompt"
+    house_prompt = call_notes_system_prompt("house prompt", "house")
+    assert house_prompt.startswith("house prompt")
+    assert "clear English using Latin-script" in house_prompt
     land_prompt = call_notes_system_prompt("house prompt", "land")
     assert "Never conclude or" in land_prompt
     assert "buildability" in land_prompt
@@ -126,9 +128,7 @@ def test_land_call_notes_fill_only_empty_evidence_backed_crm_fields() -> None:
     assert lead.occupancy_status == "Vacant land"
     assert lead.asking_price == "$75,000"
     assert lead.qualification_context["acreage"] == "5.2 acres"
-    assert lead.qualification_context["utilities"] == (
-        "County utility map verified water at road"
-    )
+    assert lead.qualification_context["utilities"] == ("County utility map verified water at road")
     assert lead.qualification_context["parcel_id"] == "12-345-678-901"
     assert property_record.parcel_id == "12-345-678-901"
     assert "qualification_context.acreage" in populated

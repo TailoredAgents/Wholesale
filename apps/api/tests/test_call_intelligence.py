@@ -28,10 +28,12 @@ from app.schemas.leads import LeadCloseOutRequest
 from app.schemas.voice import StructuredCallNotes
 from app.services.bootstrap import bootstrap_foundation
 from app.services.call_intelligence import (
+    call_notes_system_prompt,
     enqueue_call_transcript,
     process_call_transcript,
     process_next_call_transcript,
     process_next_pending_call_note_approval,
+    transcript_to_read,
 )
 from app.services.leads import close_out_lead
 
@@ -43,6 +45,15 @@ def test_call_note_schema_is_valid_for_openai_strict_mode() -> None:
 
     validate_strict_json_schema(schema)
     assert set(schema["properties"]) == set(schema["required"])
+
+
+def test_call_note_runtime_prompt_requires_complete_plain_english_fields() -> None:
+    prompt = call_notes_system_prompt("Active database prompt", "house")
+
+    assert prompt.startswith("Active database prompt")
+    assert "clear English using Latin-script" in prompt
+    assert "no more than about 90 characters" in prompt
+    assert "ending mid-sentence" in prompt
 
 
 def test_close_out_during_transcription_failure_keeps_ai_work_dismissed(
@@ -413,7 +424,18 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
         nonlocal structured_response_calls
         structured_response_calls += 1
         if structured_response_calls == 1:
-            raise ValueError("Temporary note-generation failure.")
+            malformed_payload = {
+                **notes_payload,
+                "timeline": "Seller may travel after Monday but will not make the長",
+            }
+            return (
+                malformed_payload,
+                {
+                    "input_tokens": 2000,
+                    "output_tokens": 500,
+                    "total_tokens": 2500,
+                },
+            )
         return (
             notes_payload,
             {
@@ -436,6 +458,8 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     )
     first_attempt = process_call_transcript(db_session, transcript.id, settings)
     assert first_attempt.status == "failed"
+    assert first_attempt.error_message is not None
+    assert "unexpected non-English characters" in first_attempt.error_message
     assert first_attempt.transcript_text
     assert audio_transcription_calls == 1
     checkpoint = (first_attempt.transcript_metadata or {}).get("transcription_checkpoint")
@@ -510,6 +534,8 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     assert approved_note.conversation_id == conversation.id
     assert approved_note.subject == "Call summary"
     assert "Mortgage balance/payoff: $92,000 payoff" in approved_note.body
+    assert "Quick read:" in approved_note.body
+    assert "Numbers: asking $180,000; payoff $92,000 payoff" in approved_note.body
     assert approved_note.communication_metadata == {
         "call_transcript_id": str(transcript.id),
         "human_approved": False,
@@ -530,6 +556,12 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
     assert not lead_payload["open_tasks"]
     db_session.refresh(transcript)
     metadata = transcript.transcript_metadata or {}
+    assert metadata["quick_read_summary"] == (
+        "Why: Relocating\n"
+        "Numbers: asking $180,000; payoff $92,000 payoff\n"
+        "Timing: 30 days\n"
+        "Next: Confirm property appointment"
+    )
     assert metadata["note_posting_mode"] == "automatic"
     assert metadata["human_review_required"] is False
     assert metadata["approved_note_logged"] is True
@@ -542,6 +574,27 @@ def test_call_transcription_auto_populates_fields_and_posts_notes_automatically(
         )
         == 1
     )
+
+    legacy_notes = dict(notes_payload)
+    legacy_notes["timeline"] = "Seller may travel after Monday but will not make the長"
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "structured_notes": legacy_notes,
+    }
+    db_session.commit()
+    legacy_read = transcript_to_read(db_session, transcript)
+    assert legacy_read.structured_notes is not None
+    assert legacy_read.structured_notes.timeline is not None
+    assert "長" in legacy_read.structured_notes.timeline
+    assert legacy_read.quick_read_summary is not None
+    assert "長" not in legacy_read.quick_read_summary
+    assert "Timing:" not in legacy_read.quick_read_summary
+    assert "Next: Confirm property appointment" in legacy_read.quick_read_summary
+    transcript.transcript_metadata = {
+        **(transcript.transcript_metadata or {}),
+        "structured_notes": notes_payload,
+    }
+    db_session.commit()
 
     legacy_metadata = dict(transcript.transcript_metadata or {})
     legacy_metadata.pop("applied_at", None)

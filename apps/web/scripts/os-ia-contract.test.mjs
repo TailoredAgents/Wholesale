@@ -517,6 +517,59 @@ test("Inbox quietly refreshes pending live Twilio SMS delivery states", () => {
   assert.match(inbox, /window\.clearTimeout\(timer\)/);
 });
 
+test("Inbox call intelligence includes a safely derived completed-note quick read", () => {
+  const quickRead = loadTypeScriptModule(
+    resolve(osSourceRoot, "inbox/call-quick-read.ts"),
+  );
+  const items = quickRead.buildCallQuickRead({
+    summary:
+      "Seller is considering relocating closer to family. Additional details are intentionally excluded from the compact presentation.",
+    motivation: "Health and safety concerns make maintaining the property difficult.",
+    timeline: "No firm sale deadline was established.",
+    asking_price: "$100,000",
+    mortgage_balance: "$62,000",
+    next_action: "Verify title, value, repairs, and current occupancy before discussing an offer.",
+  });
+
+  assert.equal(
+    items.map((item) => item.label).join("|"),
+    "Bottom line|Why now|Timing|Numbers|Next step",
+  );
+  assert.equal(items[0].value, "Seller is considering relocating closer to family.");
+  assert.equal(items[3].value, "Asking $100,000 / Payoff $62,000");
+
+  const backendSummary = quickRead.buildCallQuickRead(
+    {
+      summary: "Long-form summary that should not be used.",
+      motivation: null,
+      timeline: null,
+      asking_price: null,
+      mortgage_balance: null,
+      next_action: null,
+    },
+    "Motivated seller; verify the foundation repair before pricing.",
+  );
+  assert.equal(
+    backendSummary[0].value,
+    "Motivated seller; verify the foundation repair before pricing.",
+  );
+  assert.equal(backendSummary.length, 1);
+
+  const contaminatedTimeline = quickRead.buildCallQuickRead({
+    summary: "Seller is considering relocating closer to family.",
+    motivation: "Health and safety concerns.",
+    timeline: "Seller will not make the長 drive without an offer.",
+    asking_price: "$100,000",
+    mortgage_balance: "$62,000",
+    next_action: "Verify title and value.",
+  });
+  assert.equal(contaminatedTimeline.some((item) => item.label === "Timing"), false);
+
+  const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
+  assert.match(inbox, /\["approved", "completed"\]\.includes\(transcript\.status\)/);
+  assert.match(inbox, /<strong>Quick read<\/strong>/);
+});
+
 test("Inbox renders private inbound MMS photos inline", () => {
   const inbox = readFileSync(resolve(osSourceRoot, "inbox/inbox-workspace.tsx"), "utf8");
   const attachment = readFileSync(resolve(osSourceRoot, "inbox/message-attachment.tsx"), "utf8");

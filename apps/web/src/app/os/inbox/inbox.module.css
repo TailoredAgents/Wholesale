@@ -1128,6 +1128,62 @@
   gap: 7px;
 }
 
+.callQuickRead {
+  padding: 10px 11px;
+  border: 1px solid rgba(31, 94, 66, 0.2);
+  border-left: 3px solid var(--brand);
+  border-radius: 6px;
+  background: rgba(237, 244, 239, 0.72);
+  display: grid;
+  gap: 8px;
+}
+
+.callQuickReadHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.callQuickReadHeader strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.callQuickReadHeader span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.callQuickReadList {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.callQuickReadList > div {
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.callQuickReadList dt {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  text-transform: uppercase;
+}
+
+.callQuickReadList dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-line;
+}
+
 .reviewControls {
   padding-top: 9px;
   border-top: 1px solid var(--line);

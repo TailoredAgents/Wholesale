@@ -1141,9 +1141,10 @@ When recording and transcription are active:
 
 1. Open the call in the timeline.
 2. Play the recording only when your role permits it.
-3. Read the automatic call summary. Stonegate adds it to the Inbox conversation, seller record,
-   communication history, and recent activity as soon as processing succeeds; no approval is
-   required.
+3. Read the automatic call summary. Use **Quick read** at the bottom for the seller's main reason,
+   timing, stated numbers, and next step. Stonegate adds the full note to the Inbox conversation,
+   seller record, communication history, and recent activity as soon as processing succeeds; no
+   approval is required.
 4. Review motivation, timeline, condition, occupancy, asking price, commitments, and follow-up
    context when those facts matter to the next action.
 5. Call Intelligence immediately fills eligible empty CRM fields supported by the transcript.

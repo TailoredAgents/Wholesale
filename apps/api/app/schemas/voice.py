@@ -214,6 +214,7 @@ class CallTranscriptRead(BaseModel):
     speaker_segments: list[dict[str, object]]
     confidence_score: int | None
     structured_notes: CallNotes | None
+    quick_read_summary: str | None = Field(max_length=800)
     approval_request_id: UUID | None
     approved_by_user_id: UUID | None
     approved_at: datetime | None

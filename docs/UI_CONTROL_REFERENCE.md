@@ -773,6 +773,7 @@ Permission recorded for one number does not transfer when the primary phone numb
 | Call Intelligence status | Shows queued, processing, temporary failure, stopped/exhausted, or automatically posted state | Processing starts from the completed recording; no separate generation or approval button is required |
 | **Retry call intelligence** | Resets an exhausted transcript's attempt counter and queues the same call for another audited run | Visible only after repeated failures stop automatic retry and requires recording access |
 | Summary | Adds the transcript-grounded call result to Inbox and the seller record | Internal only and posted automatically |
+| **Quick read** | Shows a compact reason, stated numbers, timing, and next-step summary at the bottom of a completed call note | Derived from the saved structured note and never replaces the full transcript or evidence |
 | Motivation / Timeline / Condition / Occupancy | Extracts seller qualification details and immediately fills empty CRM fields | Never overwrites an existing value; staff can correct the CRM record |
 | Asking price | Extracts stated seller pricing | Never treated as an approved offer |
 | Mortgage and title | Extracts possible debt or ownership concerns | Must be verified by staff |

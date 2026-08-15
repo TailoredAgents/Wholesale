@@ -1,5 +1,7 @@
 import json
+import re
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -61,6 +63,12 @@ Keep seller language precise and operational.
 Evidence entries must point to the supplied segment index and start time. This is a draft for
 internal CRM documentation and must not claim that Stonegate made a binding offer or contractual
 commitment."""
+CALL_NOTES_OUTPUT_GUARD = """Write all CRM note fields in clear English using Latin-script
+words and standard punctuation. Never substitute CJK or other non-Latin characters to shorten
+an English phrase or fit a field limit. The timeline,
+property_condition, occupancy_status, asking_price, and mortgage_balance fields must each be
+a concise, complete thought of no more than about 90 characters. Omit secondary detail rather
+than ending mid-sentence, switching languages, or inventing an abbreviation."""
 LAND_CALL_INTELLIGENCE_PROMPT = """This call concerns vacant land. Capture only explicit
 seller statements for parcel/APN, acreage, legal description, access or road frontage,
 utilities, zoning or intended use, septic or perc testing, taxes or HOA, and terrain or
@@ -118,9 +126,10 @@ def call_notes_model_for_asset(asset_class: object) -> type[StructuredCallNotes]
 
 
 def call_notes_system_prompt(base_prompt: str, asset_class: object) -> str:
-    if normalize_asset_class(asset_class) != LAND_ASSET_CLASS:
-        return base_prompt
-    return f"{base_prompt}\n\n{LAND_CALL_INTELLIGENCE_PROMPT}"
+    prompts = [base_prompt, CALL_NOTES_OUTPUT_GUARD]
+    if normalize_asset_class(asset_class) == LAND_ASSET_CLASS:
+        prompts.append(LAND_CALL_INTELLIGENCE_PROMPT)
+    return "\n\n".join(prompts)
 
 
 def validate_call_notes_for_asset(notes: CallNotes, asset_class: object) -> CallNotes:
@@ -475,6 +484,7 @@ def process_call_transcript(
             reasoning_effort=settings.openai_reasoning_effort,
         )
         notes = notes_model.model_validate(notes_payload)
+        reject_unexpected_cjk_call_notes(notes)
         confidence = notes.confidence
         if isinstance(note_usage, int):
             note_usage = {
@@ -538,6 +548,7 @@ def process_call_transcript(
             **metadata,
             "processing_completed_at": processing_completed_at.isoformat(),
             "structured_notes": notes.model_dump(mode="json"),
+            "quick_read_summary": build_quick_read_summary(notes),
             "transcription_model": settings.openai_transcription_model,
             "notes_model": settings.openai_default_model,
             "human_review_required": False,
@@ -886,6 +897,7 @@ def transcript_to_read(db: Session, transcript: CallTranscript) -> CallTranscrip
         speaker_segments=transcript.speaker_segments or [],
         confidence_score=transcript.confidence_score,
         structured_notes=notes,
+        quick_read_summary=(build_quick_read_summary(notes) if notes is not None else None),
         approval_request_id=approval.id if approval else None,
         approved_by_user_id=transcript.approved_by_user_id,
         approved_at=transcript.approved_at,
@@ -1220,7 +1232,7 @@ def apply_call_notes(
             provider="openai_reviewed",
             provider_message_id=f"call-notes:{transcript.id}",
             subject="Call summary" if not human_approved else "Approved call summary",
-            body=format_approved_notes(notes)[:4000],
+            body=format_approved_notes(notes, max_length=4000),
             occurred_at=datetime.now(UTC),
             external_payload=None,
             communication_metadata={
@@ -1359,7 +1371,7 @@ def normalize_identifier_evidence(value: str) -> str:
     return "".join(character.lower() for character in value if character.isalnum())
 
 
-def format_approved_notes(notes: CallNotes) -> str:
+def format_approved_notes(notes: CallNotes, *, max_length: int | None = None) -> str:
     lines = [notes.summary]
     details = (
         ("Motivation", notes.motivation),
@@ -1396,7 +1408,92 @@ def format_approved_notes(notes: CallNotes) -> str:
     ):
         if values:
             lines.append(f"{label}: {'; '.join(values)}")
-    return "\n".join(lines)
+    quick_read = build_quick_read_summary(notes)
+    if quick_read:
+        lines.extend(("", "Quick read:", quick_read))
+    formatted = "\n".join(lines)
+    if max_length is None or len(formatted) <= max_length or not quick_read:
+        return formatted
+    quick_read_footer = f"\n\nQuick read:\n{quick_read}"
+    detail_limit = max_length - len(quick_read_footer)
+    if detail_limit <= 3:
+        return quick_read_footer[-max_length:]
+    detail_text = "\n".join(lines[:-3])
+    shortened_details = detail_text[: detail_limit - 3].rsplit(" ", 1)[0].rstrip()
+    return f"{shortened_details or detail_text[: detail_limit - 3]}...{quick_read_footer}"
+
+
+_CJK_CHARACTER_PATTERN = re.compile(
+    "[\u3040-\u30ff\u31f0-\u31ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff]"
+)
+
+
+def reject_unexpected_cjk_call_notes(notes: CallNotes) -> None:
+    """Prevent a malformed English model response from reaching CRM storage."""
+
+    # Evidence can legitimately quote a seller's name or words in another script. Guard the
+    # generated CRM prose, while preserving exact transcript evidence for multilingual calls.
+    for value in iter_note_strings(notes.model_dump(mode="json", exclude={"evidence"})):
+        if _CJK_CHARACTER_PATTERN.search(value):
+            raise CallIntelligenceError(
+                "Generated call notes contained unexpected non-English characters. "
+                "The response was rejected and will be retried."
+            )
+
+
+def iter_note_strings(value: object) -> Iterator[str]:
+    if isinstance(value, str):
+        yield value
+        return
+    if isinstance(value, dict):
+        for item in value.values():
+            yield from iter_note_strings(item)
+        return
+    if isinstance(value, list | tuple):
+        for item in value:
+            yield from iter_note_strings(item)
+
+
+def build_quick_read_summary(notes: CallNotes) -> str:
+    """Build a stable, compact scan view without another AI request."""
+
+    parts: list[str] = []
+    motivation = quick_read_value(notes.motivation, max_length=170)
+    if motivation:
+        parts.append(f"Why: {motivation}")
+
+    asking_price = quick_read_value(notes.asking_price, max_length=90)
+    mortgage_balance = quick_read_value(notes.mortgage_balance, max_length=90)
+    numbers = []
+    if asking_price:
+        numbers.append(f"asking {asking_price}")
+    if mortgage_balance:
+        numbers.append(f"payoff {mortgage_balance}")
+    if numbers:
+        parts.append(f"Numbers: {'; '.join(numbers)}")
+
+    timeline = quick_read_value(notes.timeline, max_length=130)
+    if timeline:
+        parts.append(f"Timing: {timeline}")
+
+    next_action = quick_read_value(notes.next_action, max_length=190)
+    if next_action:
+        parts.append(f"Next: {next_action}")
+
+    if not parts:
+        summary = quick_read_value(notes.summary, max_length=360)
+        return summary or ""
+    return "\n".join(parts)
+
+
+def quick_read_value(value: str | None, *, max_length: int) -> str | None:
+    if not value or _CJK_CHARACTER_PATTERN.search(value):
+        return None
+    normalized = " ".join(value.split())
+    if len(normalized) <= max_length:
+        return normalized
+    shortened = normalized[: max_length - 3].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return f"{shortened or normalized[: max_length - 3]}..."
 
 
 def parse_follow_up_at(value: str | None) -> datetime | None:
