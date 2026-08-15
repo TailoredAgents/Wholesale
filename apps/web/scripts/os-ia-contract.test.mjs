@@ -656,3 +656,24 @@ test("Leads exposes received timestamps and URL-backed sort controls", () => {
   assert.match(workspace, /className=\{styles\.received\} dateTime=\{lead\.created_at\}/);
   assert.ok(leadsRoute?.queryParameters.some((parameter) => parameter.name === "sort"));
 });
+
+test("Voice line settings make 24/7 staff ringing the visible default", () => {
+  const voiceSettings = readFileSync(
+    resolve(osSourceRoot, "settings/communications/voice-line-settings.tsx"),
+    "utf8",
+  );
+
+  assert.equal(
+    [...voiceSettings.matchAll(/coverage_start_hour: 0,/g)].length,
+    2,
+  );
+  assert.equal(
+    [...voiceSettings.matchAll(/coverage_end_hour: 24,/g)].length,
+    2,
+  );
+  assert.doesNotMatch(voiceSettings, /name="coverage_start_hour"/);
+  assert.doesNotMatch(voiceSettings, /name="coverage_end_hour"/);
+  assert.equal([...voiceSettings.matchAll(/<strong>24\/7 staff ringing<\/strong>/g)].length, 2);
+  assert.equal([...voiceSettings.matchAll(/name="coverage_timezone"/g)].length, 2);
+  assert.match(voiceSettings, /24\/7 staff ringing is always on/);
+});

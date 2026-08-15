@@ -1009,7 +1009,7 @@ The Twilio Voice implementation supports:
 - private-cellphone forwarding groups with first-answer-wins behavior
 - department call announcements and press-1 cellphone screening
 - active-user filtering, duplicate removal, and answer attribution
-- line-specific coverage windows, after-hours handling, voicemail, and missed-call tasks
+- 24/7 staff ringing, voicemail fallback, and missed-call tasks
 - outbound cellphone bridging with Stonegate caller ID and automatic conversation history
 - company-number-aware inbound routing
 - call status and dial result callbacks

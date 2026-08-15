@@ -62,8 +62,6 @@ type VoiceReadiness = {
   }>;
 };
 
-const hourOptions = Array.from({ length: 25 }, (_, hour) => hour);
-
 function purposeForDepartment(department: string) {
   if (department === "dispositions") return "buyer_relations";
   if (department === "general") return "company_general";
@@ -75,13 +73,6 @@ function labelize(value: string) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-}
-
-function formatHour(hour: number) {
-  if (hour === 24) return "Midnight (end of day)";
-  if (hour === 0) return "12 AM";
-  if (hour === 12) return "12 PM";
-  return `${hour > 12 ? hour - 12 : hour} ${hour > 12 ? "PM" : "AM"}`;
 }
 
 export function VoiceLineSettings() {
@@ -170,8 +161,8 @@ export function VoiceLineSettings() {
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
           ring_strategy: String(data.get("ring_strategy") ?? "simultaneous"),
           coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
-          coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
-          coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
+          coverage_start_hour: 0,
+          coverage_end_hour: 24,
           missed_call_action: String(
             data.get("missed_call_action") ?? "fallback_then_voicemail",
           ),
@@ -209,8 +200,8 @@ export function VoiceLineSettings() {
           inbound_route: String(data.get("inbound_route") ?? "conversation_owner"),
           ring_strategy: String(data.get("ring_strategy") ?? "sequential"),
           coverage_timezone: String(data.get("coverage_timezone") ?? "America/New_York"),
-          coverage_start_hour: Number(data.get("coverage_start_hour") ?? 9),
-          coverage_end_hour: Number(data.get("coverage_end_hour") ?? 20),
+          coverage_start_hour: 0,
+          coverage_end_hour: 24,
           missed_call_action: String(
             data.get("missed_call_action") ?? "fallback_then_voicemail",
           ),
@@ -276,7 +267,10 @@ export function VoiceLineSettings() {
         <div>
           <span>Twilio Voice</span>
           <h2>Company voice lines</h2>
-          <p>Keep phone numbers company-owned and control how inbound calls enter Stonegate.</p>
+          <p>
+            Keep phone numbers company-owned and control how inbound calls enter Stonegate. Every
+            active line rings enabled staff 24/7.
+          </p>
         </div>
         <Phone aria-hidden="true" size={20} />
       </header>
@@ -472,29 +466,22 @@ export function VoiceLineSettings() {
                 <option value="task_only">Create follow-up task</option>
               </select>
             </label>
-            <label>
-              <span>Coverage starts</span>
-              <select defaultValue={line.coverage_start_hour} name="coverage_start_hour">
-                {hourOptions.slice(0, 24).map((hour) => (
-                  <option key={hour} value={hour}>{formatHour(hour)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Coverage ends</span>
-              <select defaultValue={line.coverage_end_hour} name="coverage_end_hour">
-                {hourOptions.slice(1).map((hour) => (
-                  <option key={hour} value={hour}>{formatHour(hour)}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>Coverage timezone</span>
-              <select defaultValue={line.coverage_timezone} name="coverage_timezone">
-                <option value="America/New_York">Eastern</option>
-                <option value="America/Chicago">Central</option>
-              </select>
-            </label>
+            <div className={styles.alwaysOnCoverage}>
+              <CheckCircle2 aria-hidden="true" size={17} />
+              <span>
+                <strong>24/7 staff ringing</strong>
+                <small>
+                  Enabled staff phones ring at all hours. If nobody answers, the missed-call plan
+                  runs.
+                </small>
+              </span>
+            </div>
+            <input
+              name="coverage_timezone"
+              readOnly
+              type="hidden"
+              value={line.coverage_timezone}
+            />
             <label className={styles.checkLabel}>
               <input defaultChecked={line.is_default} name="is_default" type="checkbox" />
               <span>Default company line</span>
@@ -508,7 +495,10 @@ export function VoiceLineSettings() {
 
         <form className={styles.newVoiceLine} onSubmit={createLine}>
           <div className={styles.voiceLineHeading}>
-            <strong>Add company line</strong>
+            <div>
+              <strong>Add company line</strong>
+              <small>24/7 staff ringing is always on</small>
+            </div>
             <Plus aria-hidden="true" size={17} />
           </div>
           <label>
@@ -576,29 +566,22 @@ export function VoiceLineSettings() {
               <option value="task_only">Create follow-up task</option>
             </select>
           </label>
-          <label>
-            <span>Coverage starts</span>
-            <select defaultValue="9" name="coverage_start_hour">
-              {hourOptions.slice(0, 24).map((hour) => (
-                <option key={hour} value={hour}>{formatHour(hour)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Coverage ends</span>
-            <select defaultValue="20" name="coverage_end_hour">
-              {hourOptions.slice(1).map((hour) => (
-                <option key={hour} value={hour}>{formatHour(hour)}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Coverage timezone</span>
-            <select defaultValue="America/New_York" name="coverage_timezone">
-              <option value="America/New_York">Eastern</option>
-              <option value="America/Chicago">Central</option>
-            </select>
-          </label>
+          <div className={styles.alwaysOnCoverage}>
+            <CheckCircle2 aria-hidden="true" size={17} />
+            <span>
+              <strong>24/7 staff ringing</strong>
+              <small>
+                Enabled staff phones ring at all hours. If nobody answers, the missed-call plan
+                runs.
+              </small>
+            </span>
+          </div>
+          <input
+            name="coverage_timezone"
+            readOnly
+            type="hidden"
+            value="America/New_York"
+          />
           <label className={styles.checkLabel}>
             <input name="is_default" type="checkbox" />
             <span>Default company line</span>

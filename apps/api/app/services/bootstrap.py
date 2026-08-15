@@ -232,8 +232,8 @@ def ensure_default_voice_line(
             inbound_route="conversation_owner",
             ring_strategy="simultaneous",
             coverage_timezone=settings.twilio_voice_timezone,
-            coverage_start_hour=settings.twilio_voice_allowed_start_hour,
-            coverage_end_hour=settings.twilio_voice_allowed_end_hour,
+            coverage_start_hour=0,
+            coverage_end_hour=24,
             missed_call_action="fallback_then_voicemail",
             line_metadata={"source": "environment_bootstrap"},
         )
@@ -242,6 +242,8 @@ def ensure_default_voice_line(
         return line
     line.status = "active"
     line.is_default = True
+    line.coverage_start_hour = 0
+    line.coverage_end_hour = 24
     if line.assigned_user_id is None and admin_user is not None:
         line.assigned_user_id = admin_user.id
     return line

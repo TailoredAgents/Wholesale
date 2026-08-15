@@ -534,6 +534,41 @@
   color: var(--info) !important;
 }
 
+.alwaysOnCoverage {
+  grid-column: 1 / -1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  padding: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.alwaysOnCoverage > svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.alwaysOnCoverage > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.alwaysOnCoverage strong {
+  color: var(--brand-strong);
+  font-size: 11px;
+}
+
+.alwaysOnCoverage small {
+  color: var(--text-soft);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
 .checkLabel {
   min-height: 36px;
   grid-template-columns: auto 1fr;
@@ -608,6 +643,10 @@
   }
 
   .voiceLineHeading {
+    grid-column: auto;
+  }
+
+  .alwaysOnCoverage {
     grid-column: auto;
   }
 }

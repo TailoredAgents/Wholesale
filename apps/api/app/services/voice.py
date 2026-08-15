@@ -98,6 +98,8 @@ VOICE_LINE_MISSED_CALL_ACTIONS = {
     "voicemail",
     "task_only",
 }
+ALWAYS_ON_COVERAGE_START_HOUR = 0
+ALWAYS_ON_COVERAGE_END_HOUR = 24
 FINAL_CALL_STATUSES = {"completed", "busy", "failed", "no-answer", "canceled"}
 CALL_STATUS_RANK = {
     "queued": 0,
@@ -389,8 +391,8 @@ def create_voice_line(
         department_key=payload.department_key,
         purpose_key=payload.purpose_key,
         coverage_timezone=payload.coverage_timezone,
-        coverage_start_hour=payload.coverage_start_hour,
-        coverage_end_hour=payload.coverage_end_hour,
+        coverage_start_hour=ALWAYS_ON_COVERAGE_START_HOUR,
+        coverage_end_hour=ALWAYS_ON_COVERAGE_END_HOUR,
         missed_call_action=payload.missed_call_action,
         ring_strategy=payload.ring_strategy,
     )
@@ -422,8 +424,8 @@ def create_voice_line(
         inbound_route=payload.inbound_route,
         ring_strategy=payload.ring_strategy,
         coverage_timezone=payload.coverage_timezone,
-        coverage_start_hour=payload.coverage_start_hour,
-        coverage_end_hour=payload.coverage_end_hour,
+        coverage_start_hour=ALWAYS_ON_COVERAGE_START_HOUR,
+        coverage_end_hour=ALWAYS_ON_COVERAGE_END_HOUR,
         missed_call_action=payload.missed_call_action,
         line_metadata={"source": "voice_line_api"},
     )
@@ -470,17 +472,22 @@ def update_voice_line(
     department_key = payload.department_key or line.department_key
     purpose_key = payload.purpose_key or line.purpose_key
     coverage_timezone = payload.coverage_timezone or line.coverage_timezone
-    coverage_start_hour = (
-        payload.coverage_start_hour
-        if payload.coverage_start_hour is not None
-        else line.coverage_start_hour
-    )
-    coverage_end_hour = (
-        payload.coverage_end_hour
-        if payload.coverage_end_hour is not None
-        else line.coverage_end_hour
-    )
+    next_status = payload.status or line.status
     missed_call_action = payload.missed_call_action or line.missed_call_action
+    if next_status == "active":
+        coverage_start_hour = ALWAYS_ON_COVERAGE_START_HOUR
+        coverage_end_hour = ALWAYS_ON_COVERAGE_END_HOUR
+    else:
+        coverage_start_hour = (
+            payload.coverage_start_hour
+            if payload.coverage_start_hour is not None
+            else line.coverage_start_hour
+        )
+        coverage_end_hour = (
+            payload.coverage_end_hour
+            if payload.coverage_end_hour is not None
+            else line.coverage_end_hour
+        )
     ring_strategy = payload.ring_strategy or line.ring_strategy
     validate_line_ownership(
         db,
@@ -950,10 +957,6 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         raise VoiceConfigurationError("Inbound Stonegate Voice is not configured for this number.")
     existing = find_call(db, line.organization_id, provider_call_id=call_sid)
     if existing is not None:
-        if not is_within_line_coverage(line):
-            if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
-                return voicemail_twiml(settings, call_id=str(existing.id))
-            return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
         target_user_ids = resolve_inbound_users(db, line, existing.conversation_id)
         targets = resolve_inbound_targets(db, target_user_ids)
         if not targets:
@@ -1034,12 +1037,6 @@ def process_inbound_voice_request(db: Session, payload: dict[str, str]) -> str:
         payload=payload,
     )
     db.commit()
-    if not is_within_line_coverage(line):
-        if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
-            return voicemail_twiml(settings, call_id=str(call.id))
-        ensure_missed_call_task(db, call)
-        db.commit()
-        return hangup_twiml("Stonegate is currently closed. We will return your call shortly.")
     if not targets:
         if line.missed_call_action in {"voicemail", "fallback_then_voicemail"}:
             return voicemail_twiml(settings, call_id=str(call.id))
@@ -2038,22 +2035,6 @@ def validate_screening_target(
     if line is None or line.status != "active":
         raise VoiceConfigurationError("Stonegate voice line is unavailable.")
     return call, line, user
-
-
-def is_within_line_coverage(
-    line: VoiceLine,
-    *,
-    now: datetime | None = None,
-) -> bool:
-    local_now = now or datetime.now(ZoneInfo(line.coverage_timezone))
-    if local_now.tzinfo is None:
-        local_now = local_now.replace(tzinfo=ZoneInfo(line.coverage_timezone))
-    else:
-        local_now = local_now.astimezone(ZoneInfo(line.coverage_timezone))
-    hour = local_now.hour
-    if line.coverage_start_hour < line.coverage_end_hour:
-        return line.coverage_start_hour <= hour < line.coverage_end_hour
-    return hour >= line.coverage_start_hour or hour < line.coverage_end_hour
 
 
 def find_voice_line_by_number(db: Session, phone_number: str) -> VoiceLine | None:

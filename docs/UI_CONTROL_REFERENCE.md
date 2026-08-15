@@ -829,8 +829,8 @@ button provides the number-level inbound webhook without exposing credentials.
 | Fallback owner | Records the second responsible employee when the owner or primary is unavailable | Must differ from the primary owner |
 | Department team | Adds active team members to the shared ring group and grants them use of the line | Optional; manage membership under People & Access |
 | Ring strategy | Rings staff cellphones in owner-first order or all simultaneously | Twilio supports up to 10 total destinations per call |
-| Coverage starts / ends / timezone | Defines the staffed window enforced during inbound routing | Outside the window, Stonegate applies the missed-call plan |
-| Missed-call plan | Chooses voicemail or urgent-task behavior after no answer or outside coverage | Fallback targets are included in the ring sequence before voicemail |
+| 24/7 staff ringing | Confirms enabled staff phones ring at every hour | Fixed for active lines; the missed-call plan runs only after no answer or unavailable targets |
+| Missed-call plan | Chooses voicemail or urgent-task behavior after no answer or unavailable targets | Fallback targets are included in the ring sequence before voicemail |
 | Ownership ready | Confirms primary and fallback staff both have forwarding enabled | Does not mean Twilio provider acceptance has passed |
 | Label | Names the line by purpose or seat | Required |
 | Status | Activates or deactivates routing through the line | Deactivation preserves call history |

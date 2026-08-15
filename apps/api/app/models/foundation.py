@@ -1958,8 +1958,8 @@ class VoiceLine(UuidPrimaryKeyMixin, TimestampMixin, Base):
     coverage_timezone: Mapped[str] = mapped_column(
         String(80), nullable=False, server_default="America/New_York"
     )
-    coverage_start_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="9")
-    coverage_end_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="20")
+    coverage_start_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    coverage_end_hour: Mapped[int] = mapped_column(Integer, nullable=False, server_default="24")
     missed_call_action: Mapped[str] = mapped_column(
         String(80), nullable=False, server_default="fallback_then_voicemail"
     )

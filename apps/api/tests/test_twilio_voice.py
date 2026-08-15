@@ -142,8 +142,6 @@ def seed_voice_lead(db: Session, client: TestClient) -> Conversation:
     assert owner is not None
     owner.voice_forwarding_number = "+14045550100"
     owner.voice_forwarding_enabled = True
-    line.coverage_start_hour = 0
-    line.coverage_end_hour = 24
     db.commit()
     return conversation
 
@@ -219,6 +217,36 @@ def test_manual_staff_call_remains_available_outside_contact_hours(
     assert eligibility.within_allowed_hours is False
     assert eligibility.can_call is True
     assert not any("outside" in blocker.lower() for blocker in eligibility.blockers)
+
+
+def test_bootstrap_normalizes_existing_active_voice_line_to_always_on(
+    db_session: Session,
+    voice_settings: None,
+) -> None:
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+    line = db_session.scalar(select(VoiceLine))
+    assert line is not None
+    line.coverage_start_hour = 9
+    line.coverage_end_hour = 20
+    line.missed_call_action = "task_only"
+    db_session.commit()
+
+    bootstrap_foundation(
+        db_session,
+        organization_name="Stonegate Home Buyers",
+        admin_email=OWNER_EMAIL,
+        admin_name="Owner",
+    )
+
+    db_session.refresh(line)
+    assert line.coverage_start_hour == 0
+    assert line.coverage_end_hour == 24
+    assert line.missed_call_action == "task_only"
 
 
 def test_staff_text_alert_preferences_are_independent_and_audited(
@@ -340,7 +368,7 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
             "coverage_timezone": "America/New_York",
             "coverage_start_hour": 0,
             "coverage_end_hour": 24,
-            "missed_call_action": "fallback_then_voicemail",
+            "missed_call_action": "voicemail",
             "is_default": True,
         },
     )
@@ -352,6 +380,7 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     assert updated["fallback_user_name"] == "Devon"
     assert updated["coverage_start_hour"] == 0
     assert updated["coverage_end_hour"] == 24
+    assert updated["missed_call_action"] == "voicemail"
     assert updated["ownership_complete"] is True
 
     readiness_response = client.get("/api/v1/voice/readiness", headers=headers)
@@ -388,7 +417,7 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
             "coverage_timezone": "America/New_York",
             "coverage_start_hour": 9,
             "coverage_end_hour": 20,
-            "missed_call_action": "fallback_then_voicemail",
+            "missed_call_action": "task_only",
         },
     )
     assert dispositions_response.status_code == 201, dispositions_response.text
@@ -397,6 +426,9 @@ def test_phone_line_ownership_records_department_primary_fallback_and_coverage(
     assert dispositions["purpose_key"] == "buyer_relations"
     assert dispositions["assigned_user_name"] == "Devon"
     assert dispositions["fallback_user_name"] == "Owner"
+    assert dispositions["coverage_start_hour"] == 0
+    assert dispositions["coverage_end_hour"] == 24
+    assert dispositions["missed_call_action"] == "task_only"
     assert dispositions["ownership_complete"] is True
 
     owner_record = db_session.get(User, UUID(owner["id"]))
@@ -576,7 +608,7 @@ def test_shared_line_rings_multiple_users_and_attributes_the_answer(
     assert str(call.actor_user_id) == devon["id"]
 
 
-def test_after_hours_call_uses_voicemail_and_creates_follow_up(
+def test_inbound_call_rings_after_hours_then_uses_voicemail_on_no_answer(
     db_session: Session,
     api_db_override: None,
     voice_settings: None,
@@ -603,11 +635,26 @@ def test_after_hours_call_uses_voicemail_and_creates_follow_up(
     )
 
     assert inbound.status_code == 200, inbound.text
-    assert "<Record " in inbound.text
-    assert "voicemail-complete" in inbound.text
-    assert "<Client " not in inbound.text
+    assert "+14045550100" in inbound.text
+    assert "<Number " in inbound.text
+    assert "<Record " not in inbound.text
     call = db_session.scalar(select(CallRecord))
     assert call is not None
+
+    dial_result_path = f"/api/v1/webhooks/twilio/voice/dial-result?call_id={call.id}"
+    dial_result = post_signed(
+        client,
+        dial_result_path,
+        {
+            "CallSid": inbound_payload["CallSid"],
+            "DialCallSid": "CA00000000000000000000000000000086",
+            "DialCallStatus": "no-answer",
+        },
+    )
+    assert dial_result.status_code == 200, dial_result.text
+    assert "<Record " in dial_result.text
+    assert "voicemail-complete" in dial_result.text
+
     complete_path = f"/api/v1/webhooks/twilio/voice/voicemail-complete?call_id={call.id}"
     completed = post_signed(
         client,

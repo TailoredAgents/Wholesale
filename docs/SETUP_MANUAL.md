@@ -522,8 +522,8 @@ Voice, microphone access, API keys, and a TwiML App are not required.
    `TWILIO_VOICE_FROM_NUMBER` is optional legacy bootstrap configuration; active company lines in
    Stonegate are the source of truth for caller ID.
 5. In **Settings > Communications**, select Austin and Devon as the primary and fallback staff,
-   choose **Everyone at once**, set the coverage window and **Fallback, then voicemail**, and save
-   both company lines.
+   choose **Everyone at once**, confirm **24/7 staff ringing**, select **Fallback, then voicemail**,
+   and save both company lines.
 6. Under **Staff ring settings**, enter Austin's and Devon's cellphones in `+1...` format, enable
    **Ring cellphone**, and save each person.
 7. Keep `TWILIO_VOICE_RECORDING_ENABLED=false` for the first routing test. Voicemail uses its own

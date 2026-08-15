@@ -68,8 +68,8 @@ class VoiceLineCreate(BaseModel):
     inbound_route: str = Field(default="conversation_owner", max_length=80)
     ring_strategy: Literal["sequential", "simultaneous"] = "simultaneous"
     coverage_timezone: str = Field(default="America/New_York", min_length=3, max_length=80)
-    coverage_start_hour: int = Field(default=9, ge=0, le=23)
-    coverage_end_hour: int = Field(default=20, ge=1, le=24)
+    coverage_start_hour: int = Field(default=0, ge=0, le=23)
+    coverage_end_hour: int = Field(default=24, ge=1, le=24)
     missed_call_action: Literal["fallback_then_voicemail", "voicemail", "task_only"] = (
         "fallback_then_voicemail"
     )
